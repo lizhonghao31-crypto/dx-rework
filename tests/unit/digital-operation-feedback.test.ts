@@ -4,6 +4,9 @@ import {developmentActionReceipt,instructionActionReceipt,taskAuxiliaryReceipt,t
 const task=(patch:Partial<DigitalTask>={})=>({taskId:'paper',label:'纸样',routeVersion:2,state:'ready',canExecute:true,assigneeName:'TEST 师傅',...patch} as DigitalTask);
 describe('write receipts follow persisted facts',()=>{
  it('restores completion after reopening without an in-memory success receipt',()=>expect(taskWorkbenchFeedback(task({state:'completed'}),{busy:false,dirty:false,notice:'',pendingFiles:false})).toContain('本任务已完成'));
+ it('retains an unready attachment after another result commits without claiming that failed file was uploaded',()=>{
+  expect(taskWorkbenchFeedback(task({state:'completed'}),{busy:false,dirty:false,notice:'已保存',pendingFiles:true,unreadyFiles:true})).toBe('仍有附件尚未就绪，请核对上传状态');
+ });
  it('gives new edits and uploaded pending references priority over an older success receipt',()=>{
   expect(taskWorkbenchFeedback(task(),{busy:false,dirty:true,notice:'已保存',pendingFiles:false})).toContain('尚未提交');
   expect(taskWorkbenchFeedback(task(),{busy:false,dirty:true,notice:'已完成',pendingFiles:true})).toBe('附件已上传，尚未随本次办理提交');

@@ -16,8 +16,9 @@ export function developmentActionReceipt(path:string,body:{result?:unknown},subm
  return receipt+(ready.length?`当前可办理：${ready.map(task=>`${task.label}（${task.assigneeName??'等待分派'}）`).join('、')}。`:visible.some(task=>task.state==='pending')?'当前可见任务仍在等待前置或岗位安排。':'当前没有其他可见的可办理任务。');
 }
 
-export function taskWorkbenchFeedback(task:DigitalTask,{busy,dirty,notice,pendingFiles}:{busy:boolean;dirty:boolean;notice:string;pendingFiles:boolean}):string{
+export function taskWorkbenchFeedback(task:DigitalTask,{busy,dirty,notice,pendingFiles,unreadyFiles}:{busy:boolean;dirty:boolean;notice:string;pendingFiles:boolean;unreadyFiles?:boolean}):string{
  if(busy)return '正在处理，请勿重复提交';
+ if(unreadyFiles)return '仍有附件尚未就绪，请核对上传状态';
  if(pendingFiles)return '附件已上传，尚未随本次办理提交';
  if(dirty)return '办理输入尚未提交，切换页签会保留';
  if(notice)return notice;

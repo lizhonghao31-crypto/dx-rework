@@ -1,5 +1,6 @@
 import {afterAll,beforeAll,describe,expect,it,vi} from "vitest";
-import {randomUUID} from "node:crypto";
+import {randomUUID,createHash} from "node:crypto";
+import sharp from 'sharp';
 import {createServer,type Server} from "node:http";
 import {mkdtemp,mkdir,readFile,rm,writeFile} from "node:fs/promises";
 import {join,resolve,extname} from "node:path";
@@ -34,8 +35,9 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("S1 development read through original App and native signed identity",()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string;
- let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string;
+ let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string,uploadSourceId:string,uploadPaperId:string;
  const tokens=new Map<string,string>(),evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"development-read");
+ let loginRole:(role:string)=>Promise<string>;
  const path=(id:string)=>`/digital-production/sources/${id}/execution`;
  const get=(role:string,url:string)=>app.inject({method:"GET",url,headers:{cookie:"dx_rework_session="+tokens.get(role)}});
  beforeAll(async()=>{
@@ -48,6 +50,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const secret="TEST S1 development native browser ".repeat(3),root=new RootAuthority(f.db,"anchor-test","uat-root");
   const provider=new AcceptanceDingTalkProvider(f.db,"anchor-test",secret),store=new PostgresAuthStore(f.db,"anchor-test","uat-root");
   const auth=new AuthService(provider,store,"anchor-test",3600000,secret);
+  loginRole=async role=>(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token;
   employeeAccess=new EmployeeAccessService(f.db,"anchor-test",f.access,store,provider,{enabled:false,dingtalkUserId:undefined,secret:undefined},"uat-root");
   const config=loadConfig({NODE_ENV:"test",DATABASE_URL:url!,DINGTALK_CORP_ID:"anchor-test",DINGTALK_H5_APP_KEY:"TEST",DINGTALK_H5_APP_SECRET:secret,DINGTALK_WEB_CLIENT_ID:"TEST",DINGTALK_WEB_CLIENT_SECRET:secret,DINGTALK_QR_REDIRECT_URI:"https://architecture.invalid/auth/qr/callback",APP_BASE_PATH:"/",SESSION_SECRET:secret});
   const authenticate:typeof auth.authenticate=(token,context)=>auth.authenticate(token,context);
@@ -78,6 +81,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   };
   const own=await prepareHandling();sourceId=own.id;paperId=own.paperId;
   const commentOwn=await prepareHandling();commentSourceId=commentOwn.id;commentShippingId=commentOwn.shippingId;
+  const uploadOwn=await prepareHandling();uploadSourceId=uploadOwn.id;uploadPaperId=uploadOwn.paperId;
   foreignSourceId=(await prepare()).id;foreignTaskId=(await execution.read(f.root,foreignSourceId)).tasks.find(t=>t.taskKind==='development_materials')!.taskId;
   draftId=(await prepare(false)).id;
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentExecution:execution,developmentAttachments:f.attachments,quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
@@ -135,6 +139,72 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'当前办理',exact:true}).click();await technical.waitFor({state:'visible'});expect(await technical.getByLabel('原因',{exact:true}).inputValue()).toBe('TEST S1 尚未提交的技术原因');
    expect(errors).toEqual([]);await page.screenshot({path:join(evidence,'development-technical-1165.png'),fullPage:true});
   }catch(error){await page.screenshot({path:join(evidence,'failure.png'),fullPage:true});await writeFile(join(evidence,'failure-body.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
+ });
+ it('clears only acknowledged paper and sewing uploads after native completion, retaining the real unsaved guard',async()=>{
+  // The preceding authorization case deliberately revokes the old session's
+  // role. Use a fresh native login after its audited role restoration.
+  tokens.set('pattern-room-worker',await loginRole('pattern-room-worker'));
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('pattern-room-worker')!,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);
+  let artifactAttempt=0;
+  await context.route('**/*',async route=>{
+   const request=route.request(),url=new URL(request.url());
+   if(url.origin===base&&request.method()==='POST'&&url.pathname.endsWith('/technical/artifacts')){
+    artifactAttempt++;
+    if(artifactAttempt===1)return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:{message:'TEST临时拒绝，原输入保留'}})});
+    if(artifactAttempt===2){expect((await route.fetch()).status()).toBe(200);return route.abort('failed');}
+   }
+   if(url.origin===base||['data:','blob:'].includes(url.protocol))return route.continue();
+   if(url.origin!=='https://private.example.test'||request.method()!=='POST')return route.abort();
+   // Only the private object store is synthetic; intent, finalization, source
+   // access, technical versions and completion use the original authenticated API.
+   const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
+   const key=String(form.get('key')),file=form.get('file') as File,bytes=new Uint8Array(await file.arrayBuffer()),sha256=createHash('sha256').update(bytes).digest('hex');
+   expect(f.storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+   await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+  });
+  const leavingBlocked=()=>page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;});
+  try{
+   const allowed=await get('pattern-room-worker',path(uploadSourceId));expect(allowed.statusCode,allowed.body).toBe(200);
+   expect(allowed.json().tasks.find((task:{taskId:string})=>task.taskId===uploadPaperId)).toMatchObject({state:'ready',canExecute:true});
+   await page.goto(base+`/ui/digital-production?task=${uploadPaperId}&taskView=handle`);await page.getByRole('heading',{name:'纸样三件套',exact:true}).waitFor();
+   await page.getByLabel('选择PLT文件',{exact:true}).setInputFiles({name:'TEST-acknowledged-paper.plt',mimeType:'application/octet-stream',buffer:Buffer.from('IN;SP1;PU0,0;PD100,100;SP0;')});
+   await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('附件已上传，尚未随本次办理提交');expect(await leavingBlocked()).toBe(true);
+   await page.getByLabel('第1项用量单位',{exact:true}).fill('米');await page.getByLabel('第1项单件用量',{exact:true}).fill('1.5');
+   await page.getByLabel('尺码列（逗号或顿号分隔）',{exact:true}).fill('M');await page.getByLabel('基码',{exact:true}).selectOption('M');
+   await page.getByRole('button',{name:'添加测量部位',exact:true}).click();await page.getByLabel('第1部位名称',{exact:true}).fill('胸围');await page.getByLabel('胸围 M',{exact:true}).fill('48');
+   const rejected=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/technical/artifacts'));
+   await page.getByRole('button',{name:'发布技术成果',exact:true}).click();expect((await rejected).status()).toBe(409);
+   await page.getByRole('alert').filter({hasText:'TEST临时拒绝'}).waitFor();expect(await leavingBlocked()).toBe(true);expect(await page.getByText('已上传，尚未保存引用',{exact:false}).count()).toBe(1);
+   await page.getByRole('button',{name:'发布技术成果',exact:true}).click();await page.getByRole('alert').filter({hasText:'尚未确认本次提交是否成功'}).waitFor();
+   expect(await leavingBlocked()).toBe(true);expect(await page.getByText('已上传，尚未保存引用',{exact:false}).count()).toBe(1);
+   const published=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/technical/artifacts'));
+   await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();expect((await published).status()).toBe(200);
+   await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).not.toContain('尚未');
+   await expect.poll(leavingBlocked).toBe(false);
+   const complete=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/complete'));
+   await page.getByRole('button',{name:'纸样完成，交给下一位',exact:true}).click();expect((await complete).status()).toBe(200);
+   await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('已完成');await expect.poll(leavingBlocked).toBe(false);
+   const saved=await execution.read(f.people['pattern-room-worker']!,uploadSourceId),artifact=saved.technical!.artifacts.find(row=>row.status==='published')!;
+   expect(saved.tasks.find(task=>task.taskId===uploadPaperId)?.state).toBe('completed');expect(artifact.body.pltAttachmentIds).toHaveLength(1);expect(artifact.body.consumptionRows[0]?.consumption).toBe('1.5');
+   const original=(await f.db.query('SELECT status,object_key FROM attachments WHERE attachment_id=$1',[artifact.body.pltAttachmentIds[0]])).rows[0]!;
+   expect(original.status).toBe('ready');expect(f.storage.objectBytes.has(original.object_key)).toBe(true);expect(f.storage.deleted).not.toContain(original.object_key);
+   expect(saved.technical!.artifacts).toHaveLength(1);expect(artifactAttempt).toBe(3);
+   await page.screenshot({path:join(evidence,'acknowledged-paper-1165.png'),fullPage:true});
+   const cutting=saved.tasks.find(task=>task.taskKind==='development_cutting')!;
+   await execution.complete(f.root,uploadSourceId,{taskId:cutting.taskId,note:'TEST original actual cutting predecessor',attachmentIds:[]},randomUUID());
+   const sewing=(await execution.read(f.people['pattern-room-worker']!,uploadSourceId)).tasks.find(task=>task.taskKind==='development_sewing')!;
+   expect(sewing).toMatchObject({state:'ready',canExecute:true});
+   await page.goto(base+`/ui/digital-production?task=${sewing.taskId}&taskView=handle`);await page.getByRole('button',{name:'本单资料 · 车板成果上传',exact:true}).click();
+   const photo=await sharp({create:{width:2,height:2,channels:3,background:'white'}}).png().toBuffer();
+   await page.getByLabel('车板成果',{exact:true}).setInputFiles({name:'TEST-acknowledged-sewing.png',mimeType:'image/png',buffer:photo});
+   await page.getByText('已上传，尚未保存引用',{exact:false}).waitFor();await page.getByRole('button',{name:'当前办理',exact:true}).click();
+   await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('附件已上传，尚未随本次办理提交');expect(await leavingBlocked()).toBe(true);
+   const sewn=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/route'));
+   await page.getByRole('button',{name:'车板完成，交给下一位',exact:true}).click();expect((await sewn).status()).toBe(200);
+   await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('已完成');await expect.poll(leavingBlocked).toBe(false);
+   expect((await execution.read(f.root,uploadSourceId)).tasks.find(task=>task.taskId===sewing.taskId)?.state).toBe('completed');
+   await page.screenshot({path:join(evidence,'acknowledged-sewing-1165.png'),fullPage:true});
+  }catch(error){await page.screenshot({path:join(evidence,'upload-state-failure.png'),fullPage:true});await writeFile(join(evidence,'upload-state-failure.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
  });
  it('captures and supplements the original customer approval date in the authenticated App without creating another review',async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);

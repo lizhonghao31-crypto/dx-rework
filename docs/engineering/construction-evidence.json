@@ -1,39 +1,48 @@
 {
   "version": 1,
-  "base": "e3c0604824694e860f65163d9bbe10f3e4a0158f",
+  "base": "c30cca5d351d616cc7283b3bedf32c142328c240",
   "risk": "full",
-  "sourceFingerprint": "e787ddb9488e630ae12380f35fb8213afe43ac77257d751ef0fd7da7855ce808",
+  "sourceFingerprint": "8ce530aa42a993513d53bf4f328f0172a164e693b8f6031efe090e339492ece8",
   "rules": [
     {
-      "rule": "Read the native whole-order ship sample as current independently of production preparation identity, retain original perPO completion and date-target reminders, and never turn genuine missing facts or retired scope into completion.",
-      "source": "Dot2026-11-15 explicit authorization to continue delivered Acceptance progress defects; approved ship sample non-gate rule and original date-target reporting semantics; docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md2026-11-15 addendum.",
+      "rule": "Use one purpose-scoped pending development attachment state. Only an acknowledged command settles its actual references and previews; rejected/unknown commands and unrelated/later/unready files retain correct guard and retry state, without modifying persisted attachments or original work completion.",
+      "source": "User2026-11-15 delegated authorization through Dot; repeated isolated paper/sewing completed-but-pending evidence; docs/requirements/rework-ui-golden-source-v1.0.md2026-11-15 correction.",
       "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "tests/integration/journey-fact-model-postgres.test.ts"
+        "apps/web/src/development-submitted-uploads.ts",
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "apps/web/src/digital-operation-feedback.ts",
+        "apps/web/src/document-upload-previews.tsx",
+        "apps/web/src/task-workbench-sample.tsx",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/unit/development-submitted-uploads.test.ts",
+        "tests/unit/digital-operation-feedback.test.ts",
+        "tests/unit/document-upload-previews.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/ship-sample-service.ts",
-        "apps/api/src/production-platform/ship-sample-facts.ts",
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/journey-business-progress.ts",
-        "apps/api/src/production-platform/journey-visual-progress.ts",
-        "apps/api/src/production-platform/journey-selection-query.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts",
-        "apps/api/src/production-platform/reporting-metrics.ts"
+        "apps/web/src/development-technical-workspace.tsx",
+        "apps/web/src/development-external-pattern.tsx",
+        "apps/web/src/development-fabric-report.tsx",
+        "apps/web/src/development-result-upload.tsx",
+        "apps/web/src/use-digital-detail-navigation-guard.ts",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/digital-budget-panel.tsx",
+        "apps/web/src/production-instruction-panel.tsx",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/tools/attachments.ts"
       ],
       "oldTests": [
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/journey-visual-progress.test.ts",
-        "tests/unit/journey-fact-model.test.ts",
-        "tests/unit/journey-selection-facts.test.ts",
-        "tests/integration/journey-fact-model-postgres.test.ts",
-        "tests/integration/order-time-reading-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts"
+        "tests/unit/digital-operation-feedback.test.ts",
+        "tests/unit/attachment-upload-recovery.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
       ],
-      "initialization": "No business writes or schema changes. Original order confirmation already creates the whole-order sample; prep-scoped historical tasks retain original currentPrep matching. New calculation version rejects obsolete derived models and bounded original update queue rebuilds them. No full-database rebuild in GET, no new task copies, grants, timestamp fabrication or default-state backfill.",
-      "dateAndPermission": "Same actor policy, source-round/returned guards, same RR connection, perPO native sample facts, date-exclusive deadline and original reminders remain. Known date_target does not require a duration start; absent target or unverified completion is still unknown. Real unknown stages remain unknown, stage weights and completion denominators unchanged; no production/QC/packing hard gate added.",
-      "expectation": "Before and after original preparation, one real current sample replaces its placeholder; partial PO stays incomplete and allPO actual facts complete. Detail, indexed list and no-actor persisted models agree. Foreign role remains denied, repeat command does not duplicate facts. Existing retired-scope unknown, original history/clock, pagination and7070SQL remain covered.",
+      "newTests": [
+        "tests/unit/development-submitted-uploads.test.ts",
+        "tests/unit/document-upload-previews.test.ts"
+      ],
+      "initialization": "Pure client state correction, no database/schema/default/role changes. Compatibility arrays become views over existing purpose state. Original preview saved() calls in development/budget/instruction retain their default semantics; new optional purpose filtering is scoped to execution. Source/task/round reset and immutable request recovery remain original. Native positive case obtains a fresh signed login after the separate permission test restores its deliberately revoked fixture role.",
+      "dateAndPermission": "No clock/date/quantity/price change, task time remains original server occurrence. Real worker scope and same-session revocation/foreign-source denial remain tested. Success clears only posted IDs in mapped purposes; null or unready previews are preserved and cannot be described as uploaded. The old material automation input error and washing milestone questions are separate, not included as asserted product defects.",
+      "expectation": "Paper original three-part publication, deliberate409, committed response loss, same-command recovery and completion produce one artifact version and preserve stored file. Native sewing uploads through original document tab, completes once and has no false dirty prompt; genuine unsaved before both writes blocks leave. Pure tests retain failed/unrelated/shared-purpose/later refs and original feedback precedence. No UI layout redesign or live acceptance claim.",
       "checks": [
         "unit",
         "native"
@@ -44,46 +53,46 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest journey-business-progress, journey-visual-progress, journey-fact-model, journey-selection-facts unit suites --maxWorkers=1",
+      "command": "vitest development-submitted-uploads, document-upload-previews, digital-operation-feedback and attachment-upload-recovery --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 55,
+      "passed": 31,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "e3c0604824694e860f65163d9bbe10f3e4a0158f",
-      "sourceFingerprint": "e787ddb9488e630ae12380f35fb8213afe43ac77257d751ef0fd7da7855ce808",
-      "context": "Candidate working tree on exact release base e3c06048. Node22.22.2/npm10.9.9, maxWorkers1, marked low-privilege isolated PG16. Native original commands and same RR snapshot; no live writes or deployment. Whole-order sample keeps its original task/PO records and clocks.88-order7samples7070SQL/7100cap. Earlier red2cases are reproduction evidence, not current passing evidence.",
-      "startedAt": "2026-11-15T03:39:00.289Z",
-      "endedAt": "2026-11-15T03:39:07.235Z",
-      "log": "/tmp/effective-journey-unit.json",
-      "logSha256": "13cff8cc81ecf74a7e7a4d2c4ee386fbcda8c3515fb76026dfe5d565ae90f424",
+      "testedHead": "c30cca5d351d616cc7283b3bedf32c142328c240",
+      "sourceFingerprint": "8ce530aa42a993513d53bf4f328f0172a164e693b8f6031efe090e339492ece8",
+      "context": "Exact release base c30cca5d plus candidate source. Node22.22.2/npm10.9.9,maxWorkers1,low-privilege marked isolated PG16,actual pinned Chromium1194 at1165px. Original signed role/App/intent/finalize/artifact/complete/route APIs; only private object storage and explicit409/lost-response HTTP fault injection are synthetic. No live writes or deployment. Guard checked after actual response and render settle; failed/later/other-purpose files retained. Canonical old role-revocation and source-history cases remain.",
+      "startedAt": "2026-11-15T05:32:42.368Z",
+      "endedAt": "2026-11-15T05:32:45.692Z",
+      "log": "/tmp/upload-state-unit.json",
+      "logSha256": "70f1448e6091159023ec518c4828d367b9e5d31a537039c16db36020c8187856",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "13cff8cc81ecf74a7e7a4d2c4ee386fbcda8c3515fb76026dfe5d565ae90f424"
+          "sha256": "70f1448e6091159023ec518c4828d367b9e5d31a537039c16db36020c8187856"
         }
       ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /tmp/effective-journey-pg.sh: canonical PG runner journey-fact-model-postgres, order-time-reading-postgres and m01-journey-performance-postgres --maxWorkers=1",
+      "command": "bash /tmp/upload-state-pg.sh: canonical development-execution-read-native-browser-postgres with maxWorkers1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 26,
+      "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "e3c0604824694e860f65163d9bbe10f3e4a0158f",
-      "sourceFingerprint": "e787ddb9488e630ae12380f35fb8213afe43ac77257d751ef0fd7da7855ce808",
-      "context": "Candidate working tree on exact release base e3c06048. Node22.22.2/npm10.9.9, maxWorkers1, marked low-privilege isolated PG16. Native original commands and same RR snapshot; no live writes or deployment. Whole-order sample keeps its original task/PO records and clocks.88-order7samples7070SQL/7100cap. Earlier red2cases are reproduction evidence, not current passing evidence.",
-      "startedAt": "2026-11-15T03:38:59.438Z",
-      "endedAt": "2026-11-15T03:42:12.901Z",
-      "log": "/tmp/effective-journey-pg.json",
-      "logSha256": "71a140446bcfa97975baf603d96772c3dedf3b2584fb9c83c2decd4ee896133a",
+      "testedHead": "c30cca5d351d616cc7283b3bedf32c142328c240",
+      "sourceFingerprint": "8ce530aa42a993513d53bf4f328f0172a164e693b8f6031efe090e339492ece8",
+      "context": "Exact release base c30cca5d plus candidate source. Node22.22.2/npm10.9.9,maxWorkers1,low-privilege marked isolated PG16,actual pinned Chromium1194 at1165px. Original signed role/App/intent/finalize/artifact/complete/route APIs; only private object storage and explicit409/lost-response HTTP fault injection are synthetic. No live writes or deployment. Guard checked after actual response and render settle; failed/later/other-purpose files retained. Canonical old role-revocation and source-history cases remain.",
+      "startedAt": "2026-11-15T05:32:51.301Z",
+      "endedAt": "2026-11-15T05:33:20.122Z",
+      "log": "/tmp/upload-state-pg.json",
+      "logSha256": "77f5f77b2b672b2fd5537daa2741fb4ba8dcc3f514d821e6cb8501f7a4ed2a39",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "71a140446bcfa97975baf603d96772c3dedf3b2584fb9c83c2decd4ee896133a"
+          "sha256": "77f5f77b2b672b2fd5537daa2741fb4ba8dcc3f514d821e6cb8501f7a4ed2a39"
         }
       ]
     }
