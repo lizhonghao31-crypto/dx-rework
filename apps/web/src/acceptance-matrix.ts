@@ -376,11 +376,19 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     alias: "factory-payables",
     expectedRole: "factory_payables",
     requiredCapabilities: ["sourcing:view", "supplier_profile:read", "external_responsibility:payables_confirm"],
-    forbiddenCapabilities: ["sample:view_basic", "access:admin"],
+    forbiddenCapabilities: ["sample:view_basic", "access:admin", "receiving:create", "receiving:correct", "receiving:packing_manage", "receiving:resolve_difference", "receiving:export"],
     allowedModules: ["rework", "sourcing", "suppliers"],
     forbiddenModules: ["samples", "production"],
-    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardDeny, samplesDeny,
+      probe("receiving-board", "收货看板只读", "receiving/board?page=1", 200),
+      probe("receiving-export", "收货导出不开放", "receiving/board/export", 403),
+      probe("receiving-create-options", "收货录入不开放", "receiving/cutting-options", 403)],
     ruleRefs: {
+      ...approvedKeys("PERM-FACTORY-PAYABLES-RECEIVING-READ-001", [
+        "cap:receiving:create:deny", "cap:receiving:correct:deny", "cap:receiving:packing_manage:deny",
+        "cap:receiving:resolve_difference:deny", "cap:receiving:export:deny",
+        "http:receiving-board", "http:receiving-export", "http:receiving-create-options",
+      ]),
       ...approvedKeys("PERM-ROLE-PAYABLES-001", [
         "cap:sourcing:view:allow", "cap:external_responsibility:payables_confirm:allow", "cap:sample:view_basic:deny", "cap:access:admin:deny",
         "module:rework:allow", "module:sourcing:allow", "module:samples:deny", "module:production:deny",
