@@ -2,7 +2,7 @@
   "version": 1,
   "base": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
   "risk": "full",
-  "sourceFingerprint": "da17d158c361e2da12e9bc544d8c7ab8533844f8dcf6df520756bd476c12f02b",
+  "sourceFingerprint": "e1a7a52a05a04332df1eeedddb72f326c7d3ee2db53d874f53b1b3656230888f",
   "rules": [
     {
       "rule": "Keep the original independent-development sample completion date optional. Only an undated independent source route can skip date sufficiency comparison; required node durations, route, supply conditions and necessary actual evidence still must be computable. No invented dates or on-time result, no weakened formal PO/customer-date constraints.",
@@ -31,7 +31,8 @@
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
         "apps/api/src/production-platform/order-time-schedule.ts",
         "apps/api/src/production-platform/development-sla-enrollment.ts",
-        "scripts/acceptance/time-site-inventory.mjs"
+        "scripts/acceptance/time-site-inventory.mjs",
+        "tests/acceptance/supplychain-settings-browser.ts"
       ],
       "oldTests": [
         "tests/unit/order-time-requests.test.ts",
@@ -43,7 +44,7 @@
       "newTests": [],
       "initialization": "No database schema, stored version shape, settings, role, task identity or default date changes. Add an explicit not_applicable comparison result to the existing response enum; original App parser and application/arrangement consumers recognize it. The flag is an internal computed operation input, not accepted client intent. Existing snapshots/unknown targets remain unchanged, no date backfill or source auto-rearrangement. Existing native timing uses the frozen policy and real starts.",
       "dateAndPermission": "Only a source-only scope with an absent sample goal and the original independent-development operation branch can skip goal reasons. Explicit sample goals still compare; order/proposal or PO scope cannot borrow the flag. Unknown duration/calendar, required route/supply and missing terminal actual remain unknown. Exhausted unfinished windows remain lower bounds. Audit lateMinutes is null when no comparison occurred; original actor/capability/native command/idempotency and role revocation retained.",
-      "expectation": "Undated complete independent sample publishes once from the real designer App without a false application; returnDate remains null, no customer promise/PO/actual is generated. Original native1h window starts at publication, later arrangement preserves it, new framework company counterpart behaves consistently. Explicit late samples still apply through existing process, and missing formal delivery or real inputs still block. Original saved-source/quotation/qualified packing, lost receipt and same-session withdrawal browser regressions remain.",
+      "expectation": "Undated complete independent sample publishes once from the real designer App without a false application; returnDate remains null, no customer promise/PO/actual is generated. Original native1h window starts at publication, later arrangement preserves it, new framework company counterpart behaves consistently. Explicit late samples still apply through existing process, and missing formal delivery or real inputs still block. Original saved-source/quotation/qualified packing, lost receipt and same-session withdrawal browser regressions remain. Regression now waits actual publication/navigation/actionable controls instead of independent1s polling, deliberately proves in-flight publication is still draft, and checks the original read-only status after success. Same-table preview and revoked write wait actual evidence; all original assertion meanings remain.",
       "checks": [
         "unit",
         "native"
@@ -62,7 +63,7 @@
       "skipped": 0,
       "testedHead": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
       "sourceFingerprint": "da17d158c361e2da12e9bc544d8c7ab8533844f8dcf6df520756bd476c12f02b",
-      "context": "Exact release base2e04f8cf plus candidate; Node22.22.2/npm10.9.9. Local package contracts rebuilt with current worktree workspace links. Unit workers2; canonical business-chain workers1, isolated marked low-privilege PG16 and pinned Chromium1194. Actual signed designer1165px original App publication, original services and source arrangement; no live/production writes or deployment. During PG execution only an unrelated unit counterexample was corrected from intermediate to terminal missing actual, and documentation/inventory were updated; all PG/API/Web/contracts/helper/runtime inputs remained unchanged. Original strict unknown terminal/standards/supply and true PO-date guards remain.",
+      "context": "Exact release base2e04f8cf plus candidate; Node22.22.2/npm10.9.9. Local package contracts rebuilt with current worktree workspace links. Unit workers2; canonical business-chain workers1, isolated marked low-privilege PG16 and pinned Chromium1194. Actual signed designer1165px original App publication, original services and source arrangement; no live/production writes or deployment. During PG execution only an unrelated unit counterexample was corrected from intermediate to terminal missing actual, and documentation/inventory were updated; all PG/API/Web/contracts/helper/runtime inputs remained unchanged. Original strict unknown terminal/standards/supply and true PO-date guards remain. Reused exact original41unit report against input hashes matched to the reviewed d00e7783 checkout; only the browser regression changed.",
       "startedAt": "2026-11-15T07:27:13.881Z",
       "endedAt": "2026-11-15T07:27:14.897Z",
       "log": "/tmp/optional-sample-unit.json",
@@ -72,44 +73,39 @@
           "format": "vitest-json",
           "sha256": "1d48147c27f69fd28bde4d6f6fa85abbcede5cb69416822b5b49747dc41fd0fe"
         }
-      ]
-    },
-    {
-      "id": "native",
-      "kind": "tests",
-      "command": "bash /tmp/optional-sample-pg.sh: canonical order-time-requests-postgres and order-time-requests-browser-postgres --maxWorkers=1",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 25,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
-      "sourceFingerprint": "da17d158c361e2da12e9bc544d8c7ab8533844f8dcf6df520756bd476c12f02b",
-      "context": "Exact release base2e04f8cf plus candidate; Node22.22.2/npm10.9.9. Local package contracts rebuilt with current worktree workspace links. Unit workers2; canonical business-chain workers1, isolated marked low-privilege PG16 and pinned Chromium1194. Actual signed designer1165px original App publication, original services and source arrangement; no live/production writes or deployment. During PG execution only an unrelated unit counterexample was corrected from intermediate to terminal missing actual, and documentation/inventory were updated; all PG/API/Web/contracts/helper/runtime inputs remained unchanged. Original strict unknown terminal/standards/supply and true PO-date guards remain.",
-      "startedAt": "2026-11-15T07:26:40.054Z",
-      "endedAt": "2026-11-15T07:28:04.756Z",
-      "log": "/tmp/optional-sample-pg.json",
-      "logSha256": "65e8142c02d7b333b7b9a39dcfd5d2cbe9be2f1925555beb7c0bec0952b6ebc2",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "65e8142c02d7b333b7b9a39dcfd5d2cbe9be2f1925555beb7c0bec0952b6ebc2"
-        }
       ],
       "inputPaths": [
         "apps",
         "packages",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration",
-        "vitest.business-chain.config.ts",
+        "tests/unit",
         "vitest.config.ts",
         "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-database-safety.mjs"
+        "scripts/test-execution-config.mjs"
       ],
-      "inputFingerprint": "d12b83c8dae33f9f020387fa6bf48afabe4264717acd53656a03a4abab4f2323"
+      "inputFingerprint": "8a088856fc48cdd46a535632f253166a67f861ef927b0af5f264ceb132ce890e"
+    },
+    {
+      "id": "native",
+      "kind": "tests",
+      "command": "bash /tmp/optional-sample-browser-fixed.sh: canonical order-time-requests-browser-postgres --maxWorkers=1",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "d00e7783296fe4eda7b7ac512187f258f9469931",
+      "sourceFingerprint": "e1a7a52a05a04332df1eeedddb72f326c7d3ee2db53d874f53b1b3656230888f",
+      "context": "Node22.22.2/npm10.9.9, canonical long-correctness config workers1, isolated marked low-privilege PG16, pinned real Chromium1194. Original signed designer/manager App and real services. Only test transport is deliberately held before native publication, proving preflight200 is not publish completion; released once then actual POST200, immutable saved record, single native publish and original read-only current-version status required. All7browser cases passed, including late confirmation/cancel, lost receipt, same-session revoked403, qualified packing and washing. No timeout, permission, business guard or production code changed since reviewed d00e; no Light rerun or live writes. Previous Full43690969735 had417pass/2short-poll failures and unrun later stages; never represented as passed.",
+      "startedAt": "2026-11-15T08:14:23.935Z",
+      "endedAt": "2026-11-15T08:15:22.594Z",
+      "log": "/tmp/optional-sample-browser-fixed.json",
+      "logSha256": "3077bb7cf95dfe6eb087794f69bdcd5e5598d1cc585fd2d38e9d9a6b0c2b4312",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3077bb7cf95dfe6eb087794f69bdcd5e5598d1cc585fd2d38e9d9a6b0c2b4312"
+        }
+      ]
     }
   ]
 }

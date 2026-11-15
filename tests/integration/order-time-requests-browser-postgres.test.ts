@@ -54,12 +54,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    await tab.page.getByRole('button',{name:'发布开发单',exact:true}).waitFor();
    await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
-   await expect.poll(()=>tab.page.getByRole('button',{name:'发布开发单',exact:true}).isEnabled()).toBe(true);
+   // Locator.click owns native actionability, including the real asynchronous
+   // calendar/category-price loads. A separate1s poll is not that contract.
    await tab.page.getByRole('button',{name:'发布开发单',exact:true}).click();
    const application=tab.page.getByRole('region',{name:'本单时效申请'});
    await application.waitFor();await application.getByLabel('本单时效申请说明',{exact:true}).fill('TEST 确认原资料，申请安排本单时间');
-   await application.getByRole('button',{name:'提交时效调整申请',exact:true}).click();
-   await expect.poll(()=>new URL(tab.page.url()).searchParams.get('timeRequest')).not.toBeNull();
+   const opened=tab.page.waitForURL(url=>Boolean(url.searchParams.get('timeRequest')));
+   await application.getByRole('button',{name:'提交时效调整申请',exact:true}).click();await opened;
    const requestId=new URL(tab.page.url()).searchParams.get('timeRequest')!;await applyPage(tab.page);
    expect(await tab.page.getByRole('button',{name:'提交',exact:true}).count()).toBe(0);
    expect((await h.db.query('SELECT 1 FROM digital_production_task_access WHERE source_id=$1',[original.sourceId])).rowCount).toBe(0);
@@ -73,19 +74,34 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('publishes from the original designer App with its optional sample date empty, without a false time application or fabricated date',async()=>{
   const original=await source('optional-date',null),tab=await h.open(original.actor.actorId,1165,{},'/ui/digital-production?development='+original.sourceId);
+  let releasePublish=()=>{};
   try{
    await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
    const date=tab.page.getByLabel('预计样板完成日期',{exact:true});expect(await date.inputValue()).toBe('');
-   const publish=tab.page.getByRole('button',{name:'发布开发单',exact:true});await expect.poll(()=>publish.isEnabled()).toBe(true);
+   const publish=tab.page.getByRole('button',{name:'发布开发单',exact:true});
+   const path=`/api/digital-production/sources/${original.sourceId}/development/publish`;
+   let entered!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;}),pending=new Promise<void>(resolve=>{releasePublish=resolve;});
+   await tab.page.route('**'+path,async route=>{entered();await pending;await route.continue();});
+   const publication=tab.page.waitForResponse(response=>new URL(response.url()).pathname===path&&response.request().method()==='POST');
    const response=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/check'));
    await publish.click();const checked=await response;expect(checked.status()).toBe(200);expect(await checked.json()).toMatchObject({feasibility:'not_applicable',availableMinutes:null,lateMinutes:null});
-   await expect.poll(async()=>(await h.db.query('SELECT status FROM digital_development_documents WHERE source_id=$1',[original.sourceId])).rows[0]?.status).toBe('published');
+   // A successful preflight cannot certify the later publication. Hold only
+   // its transport before forwarding to prove the native draft/disabled state.
+   await started;expect((await h.db.query('SELECT status FROM digital_development_documents WHERE source_id=$1',[original.sourceId])).rows[0]?.status).toBe('draft');
+   expect(await tab.page.getByRole('button',{name:'保存中…',exact:true}).isDisabled()).toBe(true);
+   releasePublish();const receipt=await publication,body=await receipt.json();expect({status:receipt.status(),body}).toMatchObject({status:200,body:{status:'published',document:{returnDate:null}}});
+   expect((await h.db.query('SELECT status FROM digital_development_documents WHERE source_id=$1',[original.sourceId])).rows[0]?.status).toBe('published');
+   expect(h.requests.filter(request=>request.session===tab.session&&request.path===path)).toHaveLength(1);
    expect(await tab.page.getByRole('region',{name:'本单时效申请'}).count()).toBe(0);
    const stored=(await h.db.query('SELECT document,published_at,task_id FROM digital_development_documents WHERE source_id=$1',[original.sourceId])).rows[0];
    expect(stored.document.returnDate).toBeNull();expect(stored.published_at).not.toBeNull();expect(stored.task_id).not.toBeNull();
    expect((await h.db.query('SELECT 1 FROM digital_order_time_requests WHERE source_id=$1',[original.sourceId])).rowCount).toBe(0);
-   await tab.page.reload();await expect.poll(async()=>tab.page.locator('body').innerText()).toContain('已发布');
-  }finally{await tab.context.close();}
+   // Successful publication reloads the original read-only document, replacing
+   // the create-form caption. Wait for that actual current-version status.
+   const publishedStatus=tab.page.locator('.dx-doc-toolbar .dx-doc-status').filter({hasText:/^已发布 ·/});
+   await publishedStatus.waitFor();expect(await tab.page.getByRole('button',{name:'发布开发单',exact:true}).count()).toBe(0);
+   await tab.page.reload();await publishedStatus.waitFor();
+  }finally{releasePublish();await tab.context.close();}
  });
  it('R5-08 opens actual independent PLT, sizes, usage, comments and exact older files in the original authenticated App',async()=>{
   const s=await source('detail-documents','2027-02-20'),worker=h.f.people['pattern-room-worker']!,materialId=randomUUID(),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),execution=new DevelopmentExecutionService(h.db,true,h.patternOrders);
@@ -156,7 +172,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const inputs=tab.page.locator('.r5-time-table input[inputmode="decimal"]');
     for(let i=0;i<await inputs.count();i++){const input=inputs.nth(i);if(await input.isEnabled()){const row=input.locator('xpath=ancestor::tr');await row.getByRole('combobox',{name:/用时单位$/}).selectOption('minutes');await input.fill((await row.innerText()).includes('跟随所属工序')?'2':'10');}}
    }
-   await expect.poll(()=>tab.page.locator('.r5-time-sufficient').count()).toBe(1);
+   await tab.page.locator('.r5-time-sufficient').waitFor();expect(await tab.page.locator('.r5-time-sufficient').count()).toBe(1);
    for(const width of [1586,1165]){
     await tab.page.setViewportSize({width,height:992});await tab.page.getByRole('heading',{name:'本单时效调整',exact:false}).scrollIntoViewIfNeeded();expect(await tab.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
     const row=tab.page.locator('.r5-time-table tbody tr').filter({has:tab.page.getByRole('switch')}).first();
@@ -282,10 +298,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const previewed=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/requests/'+row.requestId+'/preview')&&response.status()===200);
    await tab.page.getByRole('navigation',{name:'本单时效阶段'}).getByRole('button',{name:'产品开发打板',exact:true}).click();
    await tab.page.getByLabel('开发纸样本次用时',{exact:true}).fill('0.5');await previewed;
-   await expect.poll(()=>tab.page.locator('.r5-time-changes').innerText()).toContain('30分钟');
+   await tab.page.locator('.r5-time-changes').getByText(/30分钟/).first().waitFor();
    await h.f.access.revokeRole(h.admin,assignment.assignment_id,'TEST 同一有效会话撤销时效办理角色');
-   await tab.page.getByRole('button',{name:'提交',exact:true}).click();const dialog=tab.page.getByRole('dialog',{name:'提交本单时效',exact:true});if(await dialog.count())await dialog.getByRole('button',{name:'确认',exact:true}).click();
-   await expect.poll(()=>h.requests.filter(call=>call.session===tab.session&&call.path.endsWith('/apply')).at(-1)?.status).toBe(403);
+   const denied=tab.page.waitForResponse(response=>response.url().endsWith('/apply')&&response.request().method()==='POST');
+   await tab.page.getByRole('button',{name:'提交',exact:true}).click();const dialog=tab.page.getByRole('dialog',{name:'提交本单时效',exact:true});await dialog.waitFor();await dialog.getByRole('button',{name:'确认',exact:true}).click();
+   expect((await denied).status()).toBe(403);
    expect(await tab.page.getByLabel('开发纸样本次用时',{exact:true}).inputValue()).toBe('0.5');expect((await h.db.query('SELECT state FROM digital_order_time_requests WHERE request_id=$1',[row.requestId])).rows[0].state).toBe('pending');
    expect(h.requests.filter(call=>call.session===tab.session&&call.status===401)).toHaveLength(0);
   }finally{await tab.context.close();}
@@ -317,7 +334,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('combobox',{name:/^洗水跟单/}).selectOption(h.f.people['embroidery-washing-merchandiser']!.actorId);
    const previewed=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.status()===200);
    await page.getByRole('combobox',{name:/^质检/}).selectOption(h.f.people.qc!.actorId);await previewed;
-   await expect.poll(()=>page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(true);
+   await page.getByRole('button',{name:'提交',exact:true}).and(page.locator(':enabled')).waitFor();
    const layout=await page.locator('.r5-time-table,.r5-time-changes').evaluateAll(elements=>elements.map(element=>({top:element.getBoundingClientRect().top,left:element.getBoundingClientRect().left,right:element.getBoundingClientRect().right})));
    expect(Math.abs(layout[0]!.top-layout[1]!.top)).toBeLessThan(2);
    expect(layout[1]!.left).toBeGreaterThanOrEqual(layout[0]!.right);
@@ -337,7 +354,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByLabel('洗水用时（小时）',{exact:true}).fill('3');
    const previewResponse=await secondPreview;expect(previewResponse.status()).toBe(200);
    const previewBody=await previewResponse.json();
-   await expect.poll(()=>page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(true);
+   await page.getByRole('button',{name:'提交',exact:true}).and(page.locator(':enabled')).waitFor();
    const secondConfirmation=previewBody.feasibility==='insufficient';
    // Hold only this command before forwarding: prove that pending submission
    // is not confused with persisted success, without sleeps or a longer poll.
