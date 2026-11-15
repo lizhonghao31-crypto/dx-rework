@@ -2,7 +2,7 @@ import {SaveDevelopmentAmendmentSchema,SubmitDevelopmentAmendmentSchema} from "@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { SaveDevelopmentSchema, PublishDevelopmentSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
+import { DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -23,6 +23,7 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const base = "/digital-production/sources/:sourceId/development";
   app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),id(request,"sourceId"),undefined,query.round);});
+  app.get(`${base}/submission-receipt`,async(request,reply)=>{const input=parse(DevelopmentSubmissionReceiptQuerySchema,request.query);reply.header('cache-control','private, no-store');return service.submissionReceipt(await actor(request),id(request,'sourceId'),input.operation,input.key);});
   app.get(`${base}/amendment`,async request=>{const input=parse(z.object({taskId:z.string().uuid()}).strict(),request.query);return service.readAmendment(await actor(request),id(request,"sourceId"),input.taskId);});
   app.put(`${base}/amendment`,async request=>service.saveAmendment(await actor(request),id(request,"sourceId"),parse(SaveDevelopmentAmendmentSchema,request.body),key(request)));
   app.post(`${base}/amendment/submit`,async request=>service.submitAmendment(await actor(request),id(request,"sourceId"),parse(SubmitDevelopmentAmendmentSchema,request.body),key(request)));

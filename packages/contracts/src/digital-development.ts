@@ -56,6 +56,14 @@ export const DevelopmentDocumentSchema = z.object({
 });
 export const SaveDevelopmentSchema = z.object({ expectedVersion: z.number().int().nonnegative(), document: DevelopmentDocumentSchema }).strict();
 export const PublishDevelopmentSchema = z.object({ expectedVersion: z.number().int().positive(), patternOrder:z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict().optional() }).strict();
+export const DevelopmentSubmissionReceiptQuerySchema=z.object({operation:z.enum(['publish','confirm']),key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)}).strict();
+/** Absence of a committed receipt is not proof that a request failed. */
+export const DevelopmentSubmissionReceiptSchema=z.union([
+ z.object({status:z.literal('unconfirmed')}).strict(),
+ z.object({status:z.literal('completed'),operation:z.literal('publish'),sourceId:z.string().uuid(),documentVersion:z.number().int().positive()}).strict(),
+ z.object({status:z.literal('completed'),operation:z.literal('confirm'),sourceId:z.string().uuid(),productionOrderId:z.string().uuid()}).strict(),
+]);
+export type DevelopmentSubmissionReceipt=z.infer<typeof DevelopmentSubmissionReceiptSchema>;
 export const DevelopmentOccurrenceSchema=z.discriminatedUnion('precision',[
  z.object({precision:z.literal('instant'),at:z.iso.datetime({offset:true})}).strict(),
  z.object({precision:z.literal('date'),date:z.iso.date()}).strict(),

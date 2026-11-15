@@ -1,114 +1,82 @@
 {
   "version": 1,
-  "base": "c06884cefadb3c83085b5302af1e58093732f99f",
+  "base": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
   "risk": "full",
-  "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
+  "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
   "rules": [
     {
-      "rule": "Select each real washing/inspection node using its complete generated scope+work identity. Factory washing110/121 and after-receipt109/120 anchors must survive local context validation, focused row/current detail, reload, original factory record and return with the same search/page. Keep old identities, roles, targets, clocks, quantities and task/record URLs unchanged.",
-      "source": "Dot/user confirmed F sample actual110/121char IDs exceeding focus/row100; same second-route ROLE symptom. User authorizes sequential implementation, normal Review/Full and one Light per PR. docs/requirements/rework-ui-golden-source-v1.0.md2026-11-15 navigation decision.",
+      "rule": "Read only the initiating actor/source/original operation+key committed submission receipt. An absent or in-flight receipt remains unconfirmed, never means request failed. Return only bounded completion identity/version, recheck current original object/active role and never disclose another actor command or saved document/prices.",
+      "source": "User via Dot authorizes sequential repair of C/D/E unknown publication/confirmation. Dot2026-11-15 audit supplement: admin operation_events is different from development audit_events; empty admin query cannot prove no execution. Original source/confirm transactions persist digital_production_commands; current platform permission/UI norms.",
       "writes": [
-        "packages/contracts/src/digital-production-journey.ts",
-        "tests/unit/journey-washing-projection.test.ts",
+        "packages/contracts/src/digital-development.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-routes.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-washing-projection.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-framework-nodes.tsx",
-        "apps/web/src/cockpit-node-rows.tsx",
-        "apps/web/src/node-materials-view.ts",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/factory-flow-panel.tsx"
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/whole-order-visibility.ts",
+        "apps/api/src/production-platform/development-amendment-service.ts",
+        "apps/api/src/app.ts",
+        "apps/api/src/production-platform/order-time-automatic.ts"
       ],
       "oldTests": [
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "tests/unit/digital-journey-projection.test.ts",
-        "tests/unit/journey-washing-projection.test.ts",
+        "tests/integration/digital-development-postgres.test.ts",
+        "tests/integration/digital-production-identity-postgres.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/journey-washing-projection.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/development-submit-recovery.test.ts"
       ],
-      "initialization": "Narrow shared return schema changes focus and row from100 to named bounded200 only. No ID truncation/hash/rename/migration and no source data, task, clock, role or original-record changes. Existing URLs and IDs remain compatible. New unit reproduces actual UUID-sized backend-generated virtual nodes; original native browser case adopts two washing routes through existing real order arrangement and reads real Journey DTO, instead of injecting a fake selected row. All new tests use existing managed fixture/resource/plan.",
-      "dateAndPermission": "Bound201 is rejected independently for focus/row; original search100/local-return/unknown-key/round validation stays. Original factory read/handling guards continue when links open; UI navigation issues no order business POST. Target dates, responsibility and read scopes are not inferred from the selected anchor. Candidate time inventory changed because the existing schema max-expression line hash changed, not a time source; refresh one entry only with narrow changed-site review, retain all older statuses and annotations.",
-      "expectation": "36units pass including old consumers, both route identities and unsafe bounds. With actual CJK support4native cases pass:4washing/check-node click/reload/original-record-return paths, original full Shell/home row geometry, compact rings and six-field long metadata across1165/1280/1366/1440/1920 at1x/1.25x.18unselected cases remain for Full, not labelled passed. Original washing screenshots and final1165CJK home/detail pixels actually opened. Final targeted lint/webtype/266preflight pass. First Full43710821843 failed on old-home190.171875px; failed original evidence preserved.",
+      "initialization": "Reuse existing immutable command table; no new migration or backfill. Authenticated original development GET route uses RR READ ONLY and no-store; receipt lookup binds actor_id and scoped publish/confirm command/key. Existing rows remain readable; malformed/foreign stored response cannot certify completion. Source visibility remains current, including deleted objects. Record does not infer C/D/E original server exception or terminal state without logs.",
+      "dateAndPermission": "No occurrence/clock/plan/date/reset/adoption/wage/quote/budget changes. Current original source visibility plus initiating designer active membership (Root original exception) rechecked. Root querying its own key cannot read another actor receipt; workers/unrelated sources denied. Isolated dedicated-role revoke tested in same signed browser cookie without Lab identity switching. Missing/uncommitted receipt does not authorize new identity or classify failure.",
+      "expectation": "5real App/PG cases pass,6unselected retained for canonical Full. Uncommitted publication remains unconfirmed until actual commit; afterwards exact source/version read. Root original-actor separation, unrelated worker and real same-cookie revocation deny. Lost committed publication/confirmation recovered via GET only; one original command/audit/order retained. Actual fixture proxy enforces no-store, original route adds private no-store. Empty admin audit is not used as proof.",
       "checks": [
-        "unit",
         "native",
+        "unit",
+        "api-types",
         "lint",
-        "types",
         "preflight"
       ]
     },
     {
-      "rule": "Linux native browser must render actual Chinese using existing committed OFL font in job-local temporary storage, preserving pinned Chromium install/real launch and original font configuration. Missing glyphs fail readiness; no APT/network font/system installation/product font override/tolerance relaxation.",
-      "source": "Actual failed Full43710821843 screenshot has missing Chinese glyphs; exact old-base c06884ce fontless native reproduction190.171875px at1165. Existing committed contract font/OFL licence and original browser readiness entry; current governance correction.",
+      "rule": "Preserve immutable original publication/confirmation intent after uncertain transport or malformed result. Original UI clearly marks pending, freezes alternate submit/save/intent, supports lookup without writes, and only explicit continue may query then replay captured exact path/body/version/key. Valid committed receipt returns to original record; publication never fabricates formal order success.",
+      "source": "Approved existing failure-retry/no-duplicate UX and user via Dot C/D/E recovery repair. Original confirmation kept key but only replayed writes; publication had no equivalent pending guard. Shared DevelopmentCreateForm serves new create, Resume and original designer confirm; current UI norm specifies read-first safe recovery, not global retries.",
       "writes": [
-        "scripts/ci/settings-browser-fonts.mjs",
-        "scripts/ci/settings-browser-fonts.test.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "apps/web/src/development-submit-recovery.ts",
+        "apps/web/src/digital-development-create-form.tsx",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/assets/contract-chinese.ttf",
-        "apps/api/src/assets/contract-chinese-LICENSE.txt",
-        ".github/workflows/ci.yml",
-        ".github/workflows/full-gate.yml",
-        "scripts/ci/full-gate-lanes.mjs"
+        "apps/web/src/digital-production-api.ts",
+        "apps/web/src/request-response-feedback.ts",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/internal-navigation.ts",
+        "apps/web/src/use-digital-detail-navigation-guard.ts"
       ],
       "oldTests": [
-        "scripts/ci/test-execution-contract.test.mjs"
+        "tests/unit/request-response-feedback.test.ts",
+        "tests/unit/development-create-size-optional.test.ts",
+        "tests/unit/digital-development.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "newTests": [
-        "scripts/ci/settings-browser-fonts.test.mjs",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "initialization": "Private Linux temporary font/cache directories; include inherited FONTCONFIG_FILE or original /etc/fonts/fonts.conf. Existing GITHUB_ENV exports config to later same-job suites. Missing/empty font or missing base config refuses before export. Non-Linux original setup untouched. Job-private files survive later suites and runner cleanup.",
-      "dateAndPermission": "No clock, package/dependency, apt, persistent system font, identity or business data changes. Actual CDP requires committed font family and8glyphs; pinned install/launch failure and timeout behavior retained. Missing-glyph failure is explicitly asserted before positive setup, not swallowed.",
-      "expectation": "24node tests pass including private file/XML/mode/original config/GITHUB_ENV behavior and source/base refusal. Real Chromium readiness refuses fontless glyphs then passes8actual Chinese glyphs; identical helper/font environment used in4passing full-App regressions. First CI and exact old baseline remain historical failures.",
+      "initialization": "No automatic retry or new persistent browser/customer-data store. Capture cloned original body/key in same page; preserve leave/unload guard and original source links. New and resumed create use same pending state. Read failure or unavailable receipt retains inputs/key, not another source/order; explicit replay uses original command transaction/idempotency guards. Receipt recovered publication returns original source for later normal customer confirmation.",
+      "dateAndPermission": "No fake dates/actuals, blanket success response or privilege expansion. Read receipt validates strict operation/source/version/order ID; foreign/malformed/empty responses remain unknown. Confirmed source docs/ordering/quote/budget are not changed by lookup. Existing real business validation, optional sample-date semantics, current actor scopes and source-order uniqueness unchanged.",
+      "expectation": "41unit cases pass (12new protocol plus29old request/development cases), including both-operation lookup no POST, completed receipt no replay, exact original replay, malformed/wrong-source/wrong-operation refusal and denied lookup no write.5native cases pass,6filtered not claimed passed: before-forward lost publish, actual committed lost publish and committed lost confirm recover without duplicate; original no-sample-date publish stays valid. Final1165screenshots of publish/confirm pending actually opened; pending header and frozen intent/form visible. Lint,web/API types,266preflight pass; one new route index reviewed narrowly with older annotations retained.",
       "checks": [
-        "font-unit",
-        "font-native",
-        "native",
-        "preflight",
-        "lint"
-      ]
-    },
-    {
-      "rule": "Retain original190px home row and full-date metadata without clipping with actual Chinese glyphs. Only current-task vertical whitespace and original six-field facts grid allocation change; retain typography, full content, columns, controls and business contracts.",
-      "source": "Full43710821843 unique row failure; exact c06884ce reproduction190.171875px. Real CJK exposed206.96875px row and149vs154px created-date overflow before narrow repairs. User authorized systemic CI-failure repair; original UI norm and strict assertions retained.",
-      "writes": [
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-home-r5.css",
-        "apps/web/src/cockpit-detail-r5.css",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-home-progress.tsx",
-        "apps/web/src/digital-cockpit-page.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
-      ],
-      "initialization": "No data migration/new UI state. One class on original task td changes top/bottom padding12to3; original identity facts grid fraction1.7to1.9 retains all six labels/values. Record actual viewport/height/DPR/font/cell diagnostics and screenshot before original <=190 assertion; threshold unchanged.",
-      "dateAndPermission": "No font-size reduction, date truncation, clipping/hidden text, duplication, clock/fact/route/permission changes. Original long-label no-overflow and alignment tests retain1x/1.25x scales; real navigation retains original authenticated roles.",
-      "expectation": "4native cases pass,18filtered not run. Actual rows1165=188.96875,1366=172.171875,1584=165 all <=190. Long metadata no-overflow/alignment passes1165/1280/1366/1440/1920 at1x/1.25x. Final Chinese home/detail screenshots opened. Exact old baseline counterexample verified without relabelling failed business suite.",
-      "checks": [
-        "native",
         "unit",
+        "native",
+        "web-types",
         "lint",
-        "types",
-        "baseline-counterexample"
+        "preflight"
       ]
     }
   ],
@@ -116,141 +84,104 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run tests/unit/journey-washing-projection.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/washing-nav-final-unit.json",
+      "command": "vitest run tests/unit/development-submit-recovery.test.ts tests/unit/request-response-feedback.test.ts tests/unit/development-create-size-optional.test.ts tests/unit/digital-development.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/submit-recovery-final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:43:09.772Z",
-      "endedAt": "2026-11-15T12:43:13.574Z",
-      "log": "/tmp/washing-nav-final-unit.log",
-      "logSha256": "65b8253092bc8c488bfc3f34ede7b371d7f903798555eb48a6b937e517e37119",
-      "passed": 36,
+      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
+      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
+      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
+      "startedAt": "2026-11-15T13:56:27.740Z",
+      "endedAt": "2026-11-15T13:56:32.487Z",
+      "log": "/tmp/submit-recovery-final-unit.log",
+      "logSha256": "1b099c305a0b1980b37f462ed0c0ee7d6fc023bf2c87d1bc67af4e6e1ea0d836",
+      "passed": 41,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d124a9aca8e21c4ff905266146a77965700ab900b70f4ad0a6f9a0719d95b4e9"
+          "sha256": "f429d473374a4134a88d95da3b348aa718e893e1318990ca7b86ad1edca4d4f9"
         }
       ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /tmp/washing-nav-cjk-final-pg.sh (original full Shell, compact rings, long metadata and native two-route washing adoption/navigation; canonical business-chain config, one worker)",
+      "command": "bash /tmp/submit-recovery-pg.sh (canonical original order-time browser suite: four new recovery/receipt/role cases plus original optional sample-date publication; maxWorkers1)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:38:45.939Z",
-      "endedAt": "2026-11-15T12:39:58.519Z",
-      "log": "/tmp/washing-nav-cjk-fixed-pg.log",
-      "logSha256": "5e4edf9f5db192c6688409de487fc29bfec3010ce3317b081b0753a45c13d09a",
-      "passed": 4,
+      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
+      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
+      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
+      "startedAt": "2026-11-15T13:56:07.629Z",
+      "endedAt": "2026-11-15T13:56:34.158Z",
+      "log": "/tmp/submit-recovery-native-final.log",
+      "logSha256": "1a73ba9082a819ce4a2fb5d81e011d10f6630542ef733b8e56bd6415f54ebcc3",
+      "passed": 5,
       "failed": 0,
-      "skipped": 18,
+      "skipped": 6,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "601ad5a6c01bfdfcba6cae420349062c9bc20d2d8cb23164609522299576f11e"
+          "sha256": "f86687de83a5c11a01b8d2d95af0124c3c45541c032b92eba5f5f475e20127ff"
         }
       ]
-    },
-    {
-      "id": "font-unit",
-      "kind": "tests",
-      "command": "node --test scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:38:39.000Z",
-      "endedAt": "2026-11-15T12:38:39.964Z",
-      "log": "/tmp/washing-nav-cjk-font-unit.tap",
-      "logSha256": "d219abeb3745622e819e5a694e4117fb15e461e572bf6449dc9b91a12b970cfc",
-      "passed": 24,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "d219abeb3745622e819e5a694e4117fb15e461e572bf6449dc9b91a12b970cfc"
-        }
-      ]
-    },
-    {
-      "id": "font-native",
-      "kind": "command",
-      "command": "node --input-type=module: actual prepareSettingsBrowser refuses missing Chinese glyphs, then original helper with committed private font launches and renders8Chinese glyphs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:38:39.000Z",
-      "endedAt": "2026-11-15T12:38:41.480Z",
-      "log": "/tmp/washing-nav-cjk-font-native.log",
-      "logSha256": "700a028fb99baefcfcdd2f9e6b73df7144d813ba62bcb6a6ae3d1d33f9226ed1"
-    },
-    {
-      "id": "baseline-counterexample",
-      "kind": "command",
-      "command": "node assertion on exact-base fontless native report/geometry: original suite must remain failed with190.171875px at1165; expected counterexample, not passing business tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:38:41.000Z",
-      "endedAt": "2026-11-15T12:38:41.512Z",
-      "log": "/tmp/washing-nav-baseline-proof.log",
-      "logSha256": "2c20f4057a6ebd36d20305226ae961431f2dd485ab90d92dd771c04aece185f2"
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "eslint apps/web/src/cockpit-home.tsx scripts/ci/prepare-settings-browser.mjs scripts/ci/settings-browser-fonts.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --max-warnings=0",
+      "command": "eslint apps/api/src/production-platform/development-routes.ts apps/api/src/production-platform/development-service.ts apps/web/src/development-submit-recovery.ts apps/web/src/digital-development-create-form.tsx packages/contracts/src/digital-development.ts tests/unit/development-submit-recovery.test.ts tests/integration/order-time-requests-browser-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:42:33.000Z",
-      "endedAt": "2026-11-15T12:42:33.495Z",
-      "log": "/tmp/washing-nav-final-lint.log",
+      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
+      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
+      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
+      "startedAt": "2026-11-15T13:52:15.000Z",
+      "endedAt": "2026-11-15T13:56:32.549Z",
+      "log": "/tmp/submit-recovery-final-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "id": "types",
+      "id": "web-types",
       "kind": "command",
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:42:34.000Z",
-      "endedAt": "2026-11-15T12:43:03.564Z",
-      "log": "/tmp/washing-nav-final-types.log",
+      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
+      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
+      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
+      "startedAt": "2026-11-15T13:52:19.000Z",
+      "endedAt": "2026-11-15T13:57:00.541Z",
+      "log": "/tmp/submit-recovery-final-web-types.log",
       "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd"
+    },
+    {
+      "id": "api-types",
+      "kind": "command",
+      "command": "npm run typecheck --workspace @dx-rework/api",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
+      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
+      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
+      "startedAt": "2026-11-15T13:52:50.000Z",
+      "endedAt": "2026-11-15T13:57:18.382Z",
+      "log": "/tmp/submit-recovery-final-api-types.log",
+      "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00"
     },
     {
       "id": "preflight",
       "kind": "command",
-      "command": "npm run test:preflight (266protocol cases and original migration/static checks)",
+      "command": "npm run test:preflight (266protocol tests plus original migration/static checks)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cfd59c516cf76d7ee6e83a283a598e077f32dc3",
-      "sourceFingerprint": "d029ca51454e659fa4f4c982155f2c9012968e023e7e67ab929a26b2ab765f10",
-      "context": "Node22.22.2/npm10.9.9; same locked third-party links and own workspace builds, not fresh npm ci. Vitest maxWorkers1, original business-chain config; Chromium1194 and existing committed OFL CJK font via private Fontconfig. Native tests: real full App/signed sessions/307migrations through0292, marked low-privilege isolatedPG16, owned512MiB tmpfs container and exact cleanup. No real data or deployment. Current source fingerprint unchanged after checks except excluded documentation. Command timestamps bound actual log capture; JSON suite timestamps use original report.",
-      "startedAt": "2026-11-15T12:43:03.000Z",
-      "endedAt": "2026-11-15T12:43:09.484Z",
-      "log": "/tmp/washing-nav-final-preflight.log",
-      "logSha256": "5620e0774f0d6fbfc3a5fb0208b7881996df04db93bfe67703ae461749a6999b"
+      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
+      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
+      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
+      "startedAt": "2026-11-15T13:52:17.000Z",
+      "endedAt": "2026-11-15T13:56:41.937Z",
+      "log": "/tmp/submit-recovery-final-preflight.log",
+      "logSha256": "324dcf664e2fff54543268e5e14464176581796f22f3f2b7cdbf62f265eb3851"
     }
   ]
 }
