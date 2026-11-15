@@ -1,3 +1,5 @@
+import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
+import type {JourneyNode} from '@dx-rework/contracts/digital-production-journey';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
@@ -114,7 +116,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 
  it('keeps ordered frozen craft labels and each selected task cutoff in the original cockpit',async()=>{
   configureTimelineAdoption(h.db,'fixed_v2');
-  const f=h.f,library=new SpecialCraftLibraryService(h.db),standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}},steps:import('@dx-rework/contracts/digital-craft').CraftStepChoice[]=[{craftKind:'embroidery',sequence:1}];
+  const f=h.f,library=new SpecialCraftLibraryService(h.db),standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}},steps:CraftStepChoice[]=[{craftKind:'embroidery',sequence:1}];
   for(const [index,name] of ['TEST 座舱激光','TEST 座舱烫钻'].entries()){const saved=await library.save(f.root,{id:null,expectedVersion:0,definition:{name,enabled:true,development:{...standard,minutes:60*(index+1)},bulk:standard}},randomUUID());steps.push({craftKind:'special',sequence:index+2,specialCraft:saved});}
   const created=await exerciseDevelopmentSlaNative(h.db,new TodoProjectionService(new TodoService(h.db)),f.root,f.people['pattern-room-worker']!.actorId,undefined,[['特殊工艺','免洗']],{fixedCraftSteps:steps}),sid=created[0]!.sourceId;
   const original=(await h.db.query(`SELECT t.task_id,p.step_id,p.route_position,r.entered_at,r.due_at FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) JOIN digital_timeline_task_positions p USING(task_id) JOIN LATERAL(SELECT entered_at,due_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true WHERE a.source_id=$1 AND p.phase='dispatch' ORDER BY p.route_position`,[sid])).rows;
@@ -125,7 +127,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     if(index)await tab.page.goto(h.base+'/ui/digital-cockpit?selected='+sid+'&expanded=development&focus='+native.task_id);
     await tab.page.locator('[data-view="order"][aria-busy="false"]').waitFor();
     const response=await tab.page.request.get(h.base+'/api/digital-production/journeys/'+sid+'?view=cockpit');expect(response.status()).toBe(200);
-    const dto=await response.json(),node=dto.stages.flatMap((stage:{nodes:import('@dx-rework/contracts/digital-production-journey').JourneyNode[]})=>stage.nodes).find((n:import('@dx-rework/contracts/digital-production-journey').JourneyNode)=>n.instanceId===native.task_id);
+    const dto=await response.json(),node=dto.stages.flatMap((stage:{nodes:JourneyNode[]})=>stage.nodes).find((n:JourneyNode)=>n.instanceId===native.task_id);
     expect(node).toMatchObject({label:index===0?'发绣花（工艺1）':`发${steps[index]!.specialCraft!.definition.name}（工艺${index+1}）`,timing:{actualStart:native.entered_at.toISOString(),target:{at:native.due_at.toISOString()}}});
     const current=tab.page.locator('.journey-current-panel');await current.getByRole('heading',{level:2}).waitFor();expect(await current.getByRole('heading',{level:2}).innerText()).toContain('当前节点：'+node.label);
     expect(await tab.page.locator('.cockpit-current-summary').innerText()).toContain('自身截止');
