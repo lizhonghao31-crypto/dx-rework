@@ -7,6 +7,13 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES 
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('keeps washing projection changes in the native quantity, fact model and request regression plan',()=>{
+ for(const file of ['journey-washing-facts','journey-washing-projection']){
+  const risk=classifyFullGatePaths([`apps/api/src/production-platform/${file}.ts`]);
+  for(const suite of ['bulk-washing','order-time-requests','journey-fact-model','m01-journey-performance'])expect(risk.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
+ }
+});
+
 it('maps factory promise and washing adoption adapters to original request and browser regressions',()=>{
  for(const name of ['factory-commitments','washing']){
   const risk=classifyFullGatePaths([`apps/api/src/production-platform/order-time-${name}.ts`]);

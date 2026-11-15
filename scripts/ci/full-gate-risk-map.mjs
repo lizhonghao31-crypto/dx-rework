@@ -188,7 +188,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
-  if(paths.some(path=>/journey-(?:time-framework|washing-facts)|time-framework-journey/.test(path))){
+  if(paths.some(path=>/journey-(?:time-framework|washing-(?:facts|projection))|time-framework-journey/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-requests-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/journey-fact-model-postgres.test.ts','tests/integration/m01-journey-performance-postgres.test.ts','tests/integration/bulk-washing-postgres.test.ts']);
     domains.add('time-framework-journey-reading');
   }
