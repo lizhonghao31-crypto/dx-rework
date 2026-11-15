@@ -75,6 +75,14 @@ export class BudgetWashingFeeService{
     // Budget completion is the original publication fact, not this later fee
     // revision. Its own version above records the fee approval timestamp.
     await db.query(`UPDATE digital_budget_documents SET version=$2,document=$3,status='published',updated_by=$4,updated_at=CURRENT_TIMESTAMP WHERE production_order_id=$1`,[orderId,version,JSON.stringify(next),actor.actorId]);
+    // Until an external sourcing case adopts the budget, its existing
+    // preparation follows the published version. Keep the original task and
+    // publication fact; linked sourcing/contracts retain their adopted basis.
+    // Sourcing creation holds this same lifecycle lock, so the link check and
+    // version advance cannot race a case adopting the previous version.
+    await db.query(`UPDATE digital_budget_preparations p SET budget_version=$2
+     WHERE p.production_order_id=$1 AND NOT EXISTS(
+      SELECT 1 FROM digital_production_child_links l WHERE l.production_order_id=p.production_order_id AND l.module='sourcing')`,[orderId,version]);
    }
    const linked=await linkWashingBudgetFeeWithClient(db,actor,orderId,input.lineId,input.expectedWashingVersion,{kind:'budget_row',version,rowId});
    const response=await this.read(actor,orderId,db);

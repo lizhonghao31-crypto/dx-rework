@@ -8,6 +8,8 @@
 
 `BudgetWashingFeesPanel`复用原预算单据章节、字段和离开守卫；只读核对与写入串行，未知回执保留原正文和键。`budget-washing-fee-result.ts`核具体订单、PO、版本、引用与金额行后才显示成功。预算首次完成事实不因补费用重写，新费用发布和引用历史独立可查，已采用外发与合同仍指向原版本。
 
+无外发关联时，费用发布更新原`digital_budget_preparations.budget_version`，保留原备办任务；有外发关联时保留采用版本。费用发布与原外发创建共用生命周期锁，原`readBudgetSourcing`继续严格要求当前版本一致，不放宽旧预算、图片及订单版本校验。
+
 ## 大货洗水真实返洗
 
 `bulk-washing-ledger.ts`沿原有效事件集计算首次数量和各不合格检查尚未返洗余量，返洗仅在原`send`／`factory_start`携带明确`reworkOfInspectionId`，后续发收和检查仍用原父事件身份。`bulk-washing-service.ts`在原生命周期锁、当前指派和范围版本检查内核余量、幂等及投影，不能跨PO或用返洗增加实收；原不合格及所有轮次留在不可变账。`bulk-washing-windows.ts`由每个真实开始与洗回生成各自责任窗，Journey保留这些独立窗口，活动返洗不借旧完成冒充全部完成。`bulk-washing-actions.ts`只投影当前可办理余量，不是授权源；原页面保留错误撤销，但真实返洗有独立入口和轮次。费用及已发预算／合同不因次数自动变更。

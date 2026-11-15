@@ -54,6 +54,33 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(adjusted.budgetVersion).toBe(4);expect((await budgets.read(primary,orderId)).totals?.cost).toBe('5');
   expect((await budgets.read(primary,orderId,undefined,3)).totals?.cost).toBe('7');expect((await washing.read(f.root,orderId)).scopes[0]!.fee?.unitPrice).toBe('0');
  });
+ it('advances an unlinked sourcing preparation through new and adjusted fees while retaining its task, timestamp and stale-command protection',async()=>{
+  let preparationTask:string|undefined;
+  const ready=await f.bulkReady('无',async(input,_key,primary)=>{
+   const orderId=input.digitalBudget!.productionOrderId,lineId=input.lineItems[0]!.lineId!;
+   const original=(await f.db.query('SELECT p.*,d.published_at FROM digital_budget_preparations p JOIN digital_budget_documents d USING(production_order_id) WHERE production_order_id=$1',[orderId])).rows[0];
+   preparationTask=original.task_id;expect(original.budget_version).toBe(2);
+   const duration={minutes:60,calendar:'continuous' as const,reminder:{enabled:true,percent:70}},db=await f.db.connect();
+   try{await db.query('BEGIN');await adoptBulkWashingWithClient(db,f.root,orderId,lineId,0,{arrangement:{mode:'after_receipt',reference:'TEST before sourcing',revision:1,accounting:'additional',washing:duration,inspection:duration},staff:{logisticsId:f.people['embroidery-washing-merchandiser']!.actorId,inspectorId:f.people.qc!.actorId},fee:{kind:'pending'},sourceRef:'TEST before sourcing'});await db.query('COMMIT');}finally{db.release();}
+   const supplement:BudgetWashingFeeInput={expectedVersion:2,lineId,expectedWashingVersion:1,reason:'TEST washing fee before sourcing',source:{kind:'new',row:{name:'大货洗水',specification:'',unit:'件',supplier:'TEST wash',consumption:'1',unitPrice:'2'}}};
+   const result=await service.publish(primary,orderId,supplement,randomUUID());expect(result.budgetVersion).toBe(3);
+   const prepared=await budgets.prepareSourcing(primary,orderId,3,f.attachments);
+   expect(prepared.budgetVersion).toBe(3);expect(prepared.budgetRows.some(row=>row.category==='洗水'&&row.unitPrice==='2')).toBe(true);
+   await expect(budgets.prepareSourcing(primary,orderId,2,f.attachments)).rejects.toMatchObject({code:'BUDGET_CONFLICT'});
+   const ref=result.lines[0]!.fee;if(ref.kind!=='budget_row')throw Error('Missing fee basis');
+   const adjusted=await service.publish(primary,orderId,{...supplement,expectedVersion:3,expectedWashingVersion:2,source:{kind:'adjust',rowId:ref.rowId,row:{name:'大货洗水',specification:'',unit:'件',supplier:'TEST wash',consumption:'1',unitPrice:'1'}}},randomUUID());expect(adjusted.budgetVersion).toBe(4);
+   const current=(await f.db.query('SELECT p.*,d.published_at FROM digital_budget_preparations p JOIN digital_budget_documents d USING(production_order_id) WHERE production_order_id=$1',[orderId])).rows[0];
+   expect(current).toEqual({...original,budget_version:4});
+   const stale={...input,attachmentIds:prepared.images.map(image=>image.attachmentId),digitalBudget:{productionOrderId:orderId,budgetVersion:3,orderVersion:prepared.orderVersion}};
+   await expect(f.sourcing.createCase(primary,stale,randomUUID())).rejects.toMatchObject({code:'BUDGET_CONFLICT'});
+   const latest=await budgets.prepareSourcing(primary,orderId,4,f.attachments);
+   input.attachmentIds=latest.images.map(image=>image.attachmentId);
+   input.digitalBudget={productionOrderId:orderId,budgetVersion:latest.budgetVersion,orderVersion:latest.orderVersion};
+  });
+  expect(ready.caseId).toBeTruthy();expect(ready.input.digitalBudget?.budgetVersion).toBe(4);
+  expect((await f.db.query('SELECT budget_version,task_id FROM digital_budget_preparations WHERE production_order_id=$1',[ready.id])).rows[0]).toEqual({budget_version:4,task_id:preparationTask});
+  expect((await f.db.query('SELECT state FROM digital_production_tasks WHERE task_id=$1',[preparationTask])).rows[0].state).toBe('completed');
+ });
  it('keeps original adopted quote basis when a newer quote exists and retains ordinary publication guards',async()=>{
   const x=await setup(),quote=new DigitalQuotationService(f.db,true),resource={kind:'order' as const,id:x.orderId};
   const before=await quote.read(f.root,resource),oldBudget=(await f.db.query('SELECT * FROM digital_budget_versions WHERE production_order_id=$1 AND version=2',[x.orderId])).rows[0];
