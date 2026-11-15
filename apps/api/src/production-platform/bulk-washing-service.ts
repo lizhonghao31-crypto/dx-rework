@@ -95,7 +95,10 @@ export class BulkWashingService{
    if(input.occurredAt&&Date.parse(input.occurredAt)>businessNow().getTime())washingConflict('实际发生时间不能晚于当前时间');
    if(input.kind!=='void'&&input.occurredAt&&own.availableAt&&Date.parse(input.occurredAt)<Date.parse(own.availableAt))washingConflict('实际发生时间早于本批可办理范围');
    if(input.kind==='inspection'&&input.qualifiedQuantity<input.quantity&&!input.note.trim())washingConflict('洗后不合格须说明质量问题');
-   if(input.kind==='send'&&input.quantity>own.ledger.sendable)washingConflict('送洗数量超过本批有效到仓合格余量');
+   if((input.kind==='send'||input.kind==='factory_start')&&input.reworkOfInspectionId){
+    const available=own.ledger.rework?.available.find(item=>item.inspectionId===input.reworkOfInspectionId);
+    if(!available||input.quantity>available.quantity)washingConflict('请选择本批真实不合格检查，返洗不得超过尚未投入的失败余量');
+   }else if(input.kind==='send'&&input.quantity>own.ledger.sendable)washingConflict('送洗数量超过本批有效到仓合格余量');
    const voided=new Set(events.filter(e=>e.scopeId===input.scopeId&&e.kind==='void').map(e=>String(e.payload.factId)));
    if(input.kind==='receipt_link'){
     const receipt=own.receipts?.find(r=>r.receiptId===input.receiptId&&r.quantityVersion===input.receiptQuantityVersion);

@@ -32,3 +32,12 @@ it('keeps a known overdue batch with another unknown batch instead of declaring 
  expect(result.nodes[0]!.ownSla.state).toBe('overdue');
  expect(result.nodes[0]!.ownSla.deadlineAt).toBeNull();
 });
+it('does not reuse the first wash completion while a real rejected piece is being rewashed',()=>{
+ const row=batch();row.ledger.qualified=29;row.ledger.complete=false;row.ledger.remaining=1;
+ row.windows.push({id:'rewash',kind:'washing',state:'active',startedAt:at(6),dueAt:at(8),completedAt:null,minutes:120,overdueMinutes:60});
+ const pending=journeyWashingFact([row],[plan],'red','bulk_return_washing',30,at(9));
+ expect(pending.businessCompleted).toBe(false);expect(pending.completed).toEqual({precision:'unknown'});
+ expect(pending.ownWindows).toHaveLength(2);expect(pending.ownWindows?.[0]).toMatchObject({complete:true,deadline:at(2)});
+ row.windows[2]={...row.windows[2]!,state:'completed',completedAt:at(9)};
+ expect(journeyWashingFact([row],[plan],'red','bulk_return_washing',30,at(10)).completed).toEqual({precision:'instant',at:at(9)});
+});

@@ -37,3 +37,18 @@ it('factory washing uses its actual start and never a receipt or planned date',(
  expect(row?.dueAt).toBe(at(6));expect(row?.overdueMinutes).toBe(60);
  expect(bulkWashingWindows({mode:'none'},[start],new Set(),at(20))).toEqual([]);
 });
+it.each(['after_receipt','factory'] as const)('opens independent rewash clocks without erasing the original failure on %s',mode=>{
+ const factory=mode==='factory',arrangement={...plan,mode};
+ const first=event('first',factory?'factory_start':'send',{quantity:2},0);
+ const returned=event('done',factory?'factory_complete':'return',{[factory?'startId':'sendId']:'first',quantity:2},5);
+ const failed=event('failed','inspection',{completionId:'done',quantity:2,qualifiedQuantity:1},10);
+ const original=bulkWashingWindows(arrangement,[first,returned,failed],new Set(),at(15));
+ const rewash=event('rewash',factory?'factory_start':'send',{quantity:1,reworkOfInspectionId:'failed'},12);
+ const active=bulkWashingWindows(arrangement,[first,returned,failed,rewash],new Set(),at(17));
+ expect(active.slice(0,2)).toEqual(original);expect(active[2]).toMatchObject({id:'rewash',state:'active',startedAt:at(12),dueAt:at(16),overdueMinutes:60});
+ const again=event('again',factory?'factory_complete':'return',{[factory?'startId':'sendId']:'rewash',quantity:1},17);
+ const qc=event('qc','inspection',{completionId:'again',quantity:1,qualifiedQuantity:1},18);
+ const completed=bulkWashingWindows(arrangement,[first,returned,failed,rewash,again,qc],new Set(),at(23));
+ expect(completed.slice(0,2)).toEqual(original);expect(completed[2]).toMatchObject({state:'completed',completedAt:at(17),overdueMinutes:60});
+ expect(completed[3]).toMatchObject({id:'again:qc',startedAt:at(17),dueAt:at(21),completedAt:at(18),overdueMinutes:0});
+});
