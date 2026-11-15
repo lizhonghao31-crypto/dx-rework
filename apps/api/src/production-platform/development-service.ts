@@ -14,7 +14,7 @@ import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { developmentPublishErrors, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet } from "@dx-rework/contracts/digital-development";
+import { DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentPublishErrors, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet } from "@dx-rework/contracts/digital-development";
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -78,6 +78,23 @@ export class DigitalDevelopmentService {
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
+  }
+  async submissionReceipt(actor:TrustedActorContext,sourceId:string,operation:'publish'|'confirm',key:string){
+    DevelopmentSubmissionReceiptQuerySchema.parse({operation,key});
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const source=await this.source(db,actor,sourceId);
+      // This is the initiating actor's receipt, not a new source of document,
+      // price or another actor's command visibility. Recheck current membership.
+      if(!source.can_view_order_draft||!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalNotFound();
+      const command=operation==='publish'?`development:${sourceId}:publish`:`confirm-source:${sourceId}`;
+      const stored=(await db.query('SELECT response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0]?.response;
+      const receipt=DevelopmentSubmissionReceiptSchema.parse(!stored?{status:'unconfirmed'}:operation==='publish'
+        ?{status:'completed',operation,sourceId:stored.sourceId===sourceId&&stored.status==='published'?stored.sourceId:null,documentVersion:stored.version}
+        :{status:'completed',operation,sourceId:stored.sourceId===sourceId?stored.sourceId:null,productionOrderId:stored.productionOrderId});
+      await db.query('COMMIT');return receipt;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   private async command<T>(actor: TrustedActorContext, sourceId: string, command: string, key: string, input: unknown, action: (db: PoolClient) => Promise<T>): Promise<T> {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) conflict("缺少有效操作标识");

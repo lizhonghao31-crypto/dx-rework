@@ -103,6 +103,97 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await tab.page.reload();await publishedStatus.waitFor();
   }finally{releasePublish();await tab.context.close();}
  });
+ for(const committed of [false,true])it(`recovers original development publication after an unknown response, committed=${committed}, without changing the command`,async()=>{
+  const original=await source('publish-recovery-'+committed,null),tab=await h.open(original.actor.actorId,1165,{},'/ui/digital-production?development='+original.sourceId);
+  const path=`/api/digital-production/sources/${original.sourceId}/development/publish`,attempts:Array<{key:string|null;body:string|null}>=[];
+  try{
+   await tab.page.route('**'+path,async route=>{
+    attempts.push({key:route.request().headers()['idempotency-key']??null,body:route.request().postData()});
+    if(attempts.length!==1){await route.continue();return;}
+    if(committed){const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);}
+    await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_UNKNOWN_PUBLICATION',message:'TEST原发布回执未取得'}})});
+   });
+   await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
+   await tab.page.getByRole('button',{name:'发布开发单',exact:true}).click();
+   const recovery=tab.page.getByRole('region',{name:'原提交结果待核对',exact:true});await recovery.waitFor();
+   await tab.page.locator('.dx-doc-toolbar .dx-doc-status').filter({hasText:/结果待核对/}).waitFor();
+   expect(await tab.page.getByRole('button',{name:'发布开发单',exact:true}).isDisabled()).toBe(true);
+   expect(await tab.page.getByRole('button',{name:'保存开发资料草稿',exact:true}).isDisabled()).toBe(true);
+   expect(await tab.page.getByRole('button',{name:'有确定客户订单',exact:true}).isDisabled()).toBe(true);
+   expect((await h.db.query('SELECT status FROM digital_development_documents WHERE source_id=$1',[original.sourceId])).rows[0].status).toBe(committed?'published':'draft');
+   await tab.page.screenshot({path:join(h.evidence,`development-publish-unknown-${committed}-1165.png`),fullPage:true});
+   const lookup=tab.page.waitForResponse(response=>response.request().method()==='GET'&&response.url().includes('/development/submission-receipt?'));
+   await recovery.getByRole('button',{name:'只读核对原提交结果',exact:true}).click();const read=await lookup;
+   expect(read.status(),await read.text()).toBe(200);expect(read.headers()['cache-control']).toContain('no-store');
+   expect((await read.json()).status).toBe(committed?'completed':'unconfirmed');expect(attempts).toHaveLength(1);
+   if(!committed){
+    await recovery.getByText('原资料和操作标识已保留；先只读核对回执，查不到仍保持待核。',{exact:false}).waitFor();
+    const retry=tab.page.waitForResponse(response=>new URL(response.url()).pathname===path&&response.request().method()==='POST');
+    await recovery.getByRole('button',{name:'沿原命令继续核对',exact:true}).click();expect((await retry).status()).toBe(200);
+    expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
+   }
+   await tab.page.locator('.dx-doc-toolbar .dx-doc-status').filter({hasText:/^已发布 ·/}).waitFor();
+   expect(await recovery.count()).toBe(0);
+   expect((await h.db.query('SELECT 1 FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[original.actor.actorId,`development:${original.sourceId}:publish`,attempts[0]!.key])).rowCount).toBe(1);
+   expect((await h.db.query("SELECT 1 FROM audit_events WHERE entity_id=$1 AND action='development_publish'",[original.sourceId])).rowCount).toBe(1);
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[original.sourceId])).rowCount).toBe(0);
+  }finally{await tab.context.close();}
+ });
+ it('only reads committed original-actor receipts, keeps an in-flight publication unknown and denies unrelated or revoked readers',async()=>{
+  const original=await source('receipt-snapshot',null),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),key=randomUUID(),db=await h.db.connect();
+  try{
+   await db.query('BEGIN');
+   const current=await forms.read(original.actor,original.sourceId,db),price=await new PatternRoomPriceService(h.db).quote(h.f.root,'category',original.category.price_id);
+   const published=await h.f.runtime.run(scene,original.actor,()=>forms.inTransaction(db).publish(original.actor,original.sourceId,current.version,key,{categoryId:original.category.price_id,priceVersion:price.version}));
+   expect(await forms.submissionReceipt(original.actor,original.sourceId,'publish',key)).toEqual({status:'unconfirmed'});
+   await db.query('COMMIT');
+   expect(await forms.submissionReceipt(original.actor,original.sourceId,'publish',key)).toEqual({status:'completed',operation:'publish',sourceId:original.sourceId,documentVersion:published.version});
+   expect(await forms.submissionReceipt(h.f.root,original.sourceId,'publish',key)).toEqual({status:'unconfirmed'});
+   expect(await forms.submissionReceipt(original.actor,original.sourceId,'confirm',key)).toEqual({status:'unconfirmed'});
+   await expect(forms.submissionReceipt(h.f.people['pattern-room-worker']!,original.sourceId,'publish',key)).rejects.toMatchObject({statusCode:404});
+   const person=await h.dedicated('sample_designer','TEST receipt revoke designer'),stale={...original.actor,actorId:person.id};
+   const owned=await new DigitalProductionIdentityService(h.db,true).createSource(stale,{developmentType:'头版',designStyleNo:'TEST-RECEIPT-REVOKE-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
+   const tab=await h.open(person.id,1165,{},'/ui/digital-production?development='+owned.sourceId);
+   try{
+    const endpoint=h.base+`/api/digital-production/sources/${owned.sourceId}/development/submission-receipt?operation=publish&key=${key}`;
+    expect((await tab.context.request.get(endpoint)).status()).toBe(200);
+    const cookie=(await tab.context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value;
+    await h.f.access.revokeRole(h.admin,person.assignmentId,'TEST revoke receipt reader in same session');
+    expect([401,403,404]).toContain((await tab.context.request.get(endpoint)).status());
+    expect((await tab.context.cookies()).find(item=>item.name==='dx_rework_session')!.value).toBe(cookie);
+    await expect(forms.submissionReceipt(stale,owned.sourceId,'publish',key)).rejects.toMatchObject({statusCode:404});
+   }finally{await tab.context.close();}
+  }finally{await db.query('ROLLBACK');db.release();}
+ });
+ it('recovers a committed customer confirmation through the same original designer page using only the receipt GET',async()=>{
+  const original=await source('confirm-recovery','2027-04-01','PD'),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  await h.f.runtime.run(scene,original.actor,async()=>{
+   const current=await forms.read(original.actor,original.sourceId),document={...current.document!,productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal' as const,order:{customerCode:'PD',productGroup:'男装',designStyleNo:original.designStyleNo,temporaryStyleNo:null,primaryMerchandiserId:h.f.people.merchandiser!.actorId,orderDate:'2027-01-07',contractDeliveryDate:null,lines:[{formalPoNo:original.designStyleNo+'-PO',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:'黑',colorForeign:null,deliveryDate:null,customerWarehouseArrivalDate:'2027-04-01',sizes:[{size:'M',quantity:'10'}]}]}}};
+   const saved=await forms.save(original.actor,original.sourceId,{expectedVersion:current.version,document:DevelopmentDocumentSchema.parse(document)},randomUUID()),price=await new PatternRoomPriceService(h.db).quote(h.f.root,'category',original.category.price_id);
+   await forms.publish(original.actor,original.sourceId,saved.version,randomUUID(),{categoryId:original.category.price_id,priceVersion:price.version});
+  });
+  const tab=await h.open(original.actor.actorId,1165,{},'/ui/digital-production?development='+original.sourceId),path=`/api/digital-production/sources/${original.sourceId}/confirm`;
+  let attempts=0,key='';
+  try{
+   await tab.page.route('**'+path,async route=>{
+    attempts++;key=route.request().headers()['idempotency-key']!;const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);
+    await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_LOST_CONFIRMATION',message:'TEST原确认回执未取得'}})});
+   });
+   await tab.page.getByRole('button',{name:'确认客户订单',exact:true}).click();
+   const recovery=tab.page.getByRole('region',{name:'原提交结果待核对',exact:true});await recovery.waitFor();
+   await tab.page.locator('.dx-doc-toolbar .dx-doc-status').filter({hasText:/结果待核对/}).waitFor();
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[original.sourceId])).rowCount).toBe(1);
+   expect(await tab.page.getByRole('button',{name:'确认客户订单',exact:true}).isDisabled()).toBe(true);
+   await tab.page.screenshot({path:join(h.evidence,'customer-confirmation-unknown-1165.png'),fullPage:true});
+   const read=tab.page.waitForResponse(response=>response.request().method()==='GET'&&response.url().includes('/development/submission-receipt?'));
+   await recovery.getByRole('button',{name:'只读核对原提交结果',exact:true}).click();
+   expect(await (await read).json()).toMatchObject({status:'completed',operation:'confirm',sourceId:original.sourceId});
+   await tab.page.getByRole('link',{name:'客户报价协作',exact:true}).waitFor();
+   expect(await recovery.count()).toBe(0);expect(attempts).toBe(1);
+   expect((await h.db.query('SELECT 1 FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[original.actor.actorId,`confirm-source:${original.sourceId}`,key])).rowCount).toBe(1);
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[original.sourceId])).rowCount).toBe(1);
+  }finally{await tab.context.close();}
+ });
  it('R5-08 opens actual independent PLT, sizes, usage, comments and exact older files in the original authenticated App',async()=>{
   const s=await source('detail-documents','2027-02-20'),worker=h.f.people['pattern-room-worker']!,materialId=randomUUID(),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),execution=new DevelopmentExecutionService(h.db,true,h.patternOrders);
   let paperId='',firstFile='';
