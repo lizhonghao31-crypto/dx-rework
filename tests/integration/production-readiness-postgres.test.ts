@@ -75,6 +75,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   const task=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind=$2",[ready.id,external?'bulk_cutting_external':'bulk_cutting'])).rows[0];
   const first=await nativeCuttingReadiness(f.db,[task.task_id]);
+  // This original legacy fixture has no new order-time adoption. Its external
+  // whole-task policy remains unlimited; PO-native clocks are separate.
+  const originalTasks=new DigitalProductionTaskService(f.db),taskRead=await run(()=>originalTasks.read(f.root,task.task_id)),taskHistory=await run(()=>originalTasks.history(f.root,task.task_id));
+  expect(taskRead.slaHours).toBe(external?null:24);expect(taskHistory.revisions.at(-1)?.hasSla).toBe(!external);
   expect(first).toHaveLength(1);expect(first[0]).toMatchObject({lineId:ready.lines[0]!.lineId,firstReadyAt:'2026-11-09T08:00:00.000Z'});
   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBeNull();
   await f.advance(scene,'2026-11-09T09:00:00.000Z');
@@ -119,6 +123,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(unknown.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='cutting_gate'&&node.current)?.actualAt).toBeNull();
   const correctedModel=await run(()=>new JourneyFactRepository(f.db).buildOne({kind:'order',id:ready.id}));
   expect(correctedModel.model.nodes.find(node=>node.key==='cutting_gate'&&node.current)?.actualAt).toBeNull();
+  if(external){
+   const legacy=(await f.db.query(`SELECT r.*,p.sla_seconds AS legacy_seconds FROM digital_production_deadline_revisions r JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`,[task.task_id])).rows[0];
+   expect(legacy.legacy_seconds).toBeNull();
+   // Explicit historical adopted-basis fixture over the same real external
+   // task. This is not a company publication or a fabricated PO readiness.
+   const basis={...legacy.sla_basis,seconds:86400,enteredAt:legacy.entered_at?.toISOString()??null,basis:['TEST finite external adopted history']};
+   await f.db.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis)
+    VALUES($1,$2,$3,$4,$5,$6,'correction',$7,$8,$9)`,[task.task_id,legacy.policy_node_key,legacy.policy_version,legacy.entered_at,legacy.warning_at,legacy.due_at,legacy.event_id,f.root.actorId,JSON.stringify(basis)]);
+   expect((await run(()=>originalTasks.read(f.root,task.task_id))).slaHours).toBe(24);
+   expect((await run(()=>originalTasks.history(f.root,task.task_id))).revisions.at(-1)?.hasSla).toBe(true);
+   expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual(corrected);
+  }
  });
  for(const external of [false,true])for(const poCount of [1,2])it(`P01 records legitimate 95-of-100 actual cutting readiness without borrowing sibling quantity (${external?'external':'internal'}, ${poCount} PO)`,async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);

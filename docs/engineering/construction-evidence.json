@@ -1,116 +1,128 @@
 {
   "version": 1,
-  "base": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
+  "base": "ae0420c047f5a66d5ca396d7572c5cfccc5c4939",
   "risk": "full",
-  "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+  "sourceFingerprint": "ef8fa0f410ea1493d9a6da7f9b2bd64416217472577166d851f086ee5929bb7a",
   "rules": [
     {
-      "rule": "Commercial unit corrections stay on the same physical material and native source-unit baseline, remain additive in current quotation assembly, and cannot overwrite original technical source, confirmed quote, budget or contract.",
-      "source": "User via Dot authorizes narrow commercial unit correction after published technical work; current native revision rekeys material on unit edit even though technical fingerprint directly excludes pricingUnit. Latest separate material/craft quotation dependencies and history protection remain approved. GitHub Codex Review4580314026 on f1fb2556 proved newly authorized unit+consumption could be cleared by old basis. Shared canonical consumption-basis function now binds only the current explicit authorized input; unit-only changes still invalidate old input.",
+      "rule": "Task history must use the exact persisted adopted duration presence just as task.read does: explicit unlimited does not resurrect an old finite policy; date targets remain deadlines. External-cutting explanation cannot universally deny a per-order adopted SLA or force a reference24h onto unadopted legacy orders.",
+      "source": "User via Dot authorizes continued queued external-cutting read/UI repair after1003; v27§4.2 inner/external reference24h and later955 per-PO real R remain, without company-current recomputation or historical backfill. OUTCUT field evidence only prefix supplied; this window does not claim a fresh field reproduction.",
       "writes": [
-        "packages/contracts/src/digital-quotation.ts",
-        "apps/api/src/production-platform/quotation-material-unit.ts",
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/quotation-material-unit.test.ts",
-        "docs/engineering/quotation-material-pricing-unit.md",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "tests/unit/customer-quotation.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "docs/requirements/platform-permission-golden-source-v1.0.md",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/bulk-preparation-panel.tsx",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/time-reading-clock-postgres.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json",
         "docs/requirements/rework-ui-golden-source-v1.0.md",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "docs/engineering/external-cutting-sla-display.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/quotation-budget-basis.ts",
-        "apps/api/src/production-platform/development-round-plan.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/migrations/0288_automatic_quotation_sources.sql",
-        "apps/api/src/production-platform/quotation-routes.ts",
-        "apps/web/src/digital-production-api.ts",
-        "apps/api/src/access/business-authority.ts",
-        "apps/api/migrations/0267_customer_quotation_budget_basis.sql"
+        "apps/api/src/production-platform/order-time-native-timing.ts",
+        "apps/api/src/production-platform/bulk-task-timing.ts",
+        "apps/api/src/production-platform/sla-task-policy.ts",
+        "apps/api/src/production-platform/task-readiness-facts.ts",
+        "apps/web/src/digital-production-tasks-panel.tsx",
+        "apps/api/migrations/0220_digital_production_tasks.sql",
+        "apps/api/migrations/0258_ship_sample_date_target.sql"
       ],
       "oldTests": [
-        "tests/unit/customer-quotation.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/time-reading-clock-postgres.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/digital-task-deadline.test.ts",
+        "tests/unit/digital-cockpit-time.test.ts"
       ],
       "newTests": [
-        "tests/unit/quotation-material-unit.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/time-reading-clock-postgres.test.ts"
       ],
-      "initialization": "Additive schemaVersion1 provenance, no migration/backfill. Actual compatibility floor29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd independently checked out and built own packages; native final source writes real metadata, exact older code reads it and changes IE row without losing material unit, formal usage, price override or provenance. No server switched. Pre-0288 manual schemas retain original row SQL and never reference absent assembly column. No catch-and-ignore or fixture migration added.",
-      "dateAndPermission": "Original quotation lifecycle transaction, current native active-role checks, expectedVersion and body/key replay retained. Unit field restricted to original current designer or Root and published automatic physical material. Simultaneous price/consumption/artifact fields each keep original independent permission. Quantity unit is exact, no conversion, zero price remains real. No source document, technical ID, completed review/task/R/deadline or immutable financial snapshot rewritten.",
-      "expectation": "87units and76realPG/native tests pass. Actual completed paper and review preserve physical IDs and clocks;22x1.25+10+3=40.5, unmatched unit clears only own consumption, zero+unit together honored, unchanged unit preserves manual quantity. Immutable confirmed quote and adopted budget preserved. Race succeeds once, changed-body original key rejects, unrelated/revoked roles deny. Original authenticated App recovers lost successful response with same key/body/version and denies same cookie after source-designer revocation;1165/390 screenshots opened. Native old manual quote and actual amendment guards pass. With and without formal artifacts, Root unit+manual2 retains2, unit-only invalidates prior3, simultaneous explicit artifact adoption retains actual source actor/version; designer unit authority alone does not grant consumption authority. Exact old29bd reader/writer preserves both new manual samples.",
+      "initialization": "No schema or new data format. JSON to_jsonb field access keeps old metadata-free revisions readable; no event rewrite or historical data migration. Read-only history CASE follows existing read CASE including explicitnull. Only changed task-service source-site inventory refreshed using supported reconciler; all previous manual annotations preserved.",
+      "dateAndPermission": "Native task/history object authorization remains original and denies unrelated worker. No role/capability/scope changes. No changes to actual occurrence, R,D, calendar, termination, completed history, adopted revision selection or per-PO readiness. UI changes only misleading original sentence, not layout/routes/controls.",
+      "expectation": "45 real lowprivPG tests and27units pass. Real original inner/outer2PO gates retain independent first-ready/correction/pause/resume behavior. Legacy outside task stays unlimited; separately declared finite external history over same real task agrees with read24h without changing PO readiness. Explicit finite/unlimited-over-old-finite/zero/metadata-free duration fixtures retain original tasks/events/revisions on reads. Existing genuine date-target and exclusive Beijing boundary tests remain passing. Types/lint/preflight266/secret pass; initial inventory preflight failure retained then supported candidate index updated, not business-time algorithm changed. No authenticated whole-App screenshot claimed for a copy-only edit.",
       "checks": [
         "unit",
+        "final-pg",
         "types",
         "lint",
         "preflight",
-        "secret",
-        "pg"
+        "secret"
       ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "vitest run quotation-material-unit customer-quotation full-gate-risk-map --maxWorkers1",
+      "command": "vitest run digital-task-read-boundary digital-task-deadline digital-cockpit-time --maxWorkers=1 --reporter=json",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
-      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
-      "startedAt": "2026-11-15T21:34:32.861Z",
-      "endedAt": "2026-11-15T21:34:34.233Z",
-      "log": "/tmp/quotation-unit-final-unit.log",
-      "logSha256": "10c214c70a1941015f37476d4c5a6692ac6dc4d437497ac2617916355fabfb98",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
-      "passed": 87,
+      "testedHead": "ae0420c047f5a66d5ca396d7572c5cfccc5c4939",
+      "sourceFingerprint": "ef8fa0f410ea1493d9a6da7f9b2bd64416217472577166d851f086ee5929bb7a",
+      "startedAt": "2026-11-15T22:10:46.195Z",
+      "endedAt": "2026-11-15T22:10:50.582Z",
+      "log": "/tmp/external-cutting-unit.log",
+      "logSha256": "1623dff7a8bca5eb5625914ee00feff8bb1c2c93b0096b0bbf102743e51b29c1",
+      "context": "Pinned Node22.22.2/npm10.9.9 via task toolchain PATH; same-lock third-party symlinks and own built workspace packages, not fresh npm ci. One local Vitest worker, original canonical configuration; no deployment or real business data/roles changed. Unit/PG fixtures exercise exact native histories and permission guards; explicit synthetic history rows are marked fixtures, not claimed actual adoption transactions. Source timing calculations and native per-PO clocks unchanged. Earlier default-toolchain build/type checks superseded by pinned successful build/types. Preflight protocol inputs unchanged by the later PG-only fixture correction.",
+      "passed": 27,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8e5455d45b2a16d3e6d2be4248a653ddb336002b9d5769169eb08dd401192750"
+          "sha256": "cd3ec5d3e8f63beeb9f3250ec836f87cf5a79f7271b110c8bfff433b533b05c2"
+        }
+      ]
+    },
+    {
+      "id": "final-pg",
+      "command": "bash /tmp/external-cutting-pg.sh; canonical vitest.business-chain.config.ts production-readiness-postgres and time-reading-clock-postgres --maxWorkers=1",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "ae0420c047f5a66d5ca396d7572c5cfccc5c4939",
+      "sourceFingerprint": "ef8fa0f410ea1493d9a6da7f9b2bd64416217472577166d851f086ee5929bb7a",
+      "startedAt": "2026-11-15T22:09:45.079Z",
+      "endedAt": "2026-11-15T22:11:25.110Z",
+      "log": "/tmp/external-cutting-final-pg.log",
+      "logSha256": "0d7f123ccdbd14af44a2dea769283a1f977359629767a4ca5b6b402b362f3ab4",
+      "context": "Pinned Node22.22.2/npm10.9.9 via task toolchain PATH; same-lock third-party symlinks and own built workspace packages, not fresh npm ci. One local Vitest worker, original canonical configuration; no deployment or real business data/roles changed. Unit/PG fixtures exercise exact native histories and permission guards; explicit synthetic history rows are marked fixtures, not claimed actual adoption transactions. Source timing calculations and native per-PO clocks unchanged. Earlier default-toolchain build/type checks superseded by pinned successful build/types. Preflight protocol inputs unchanged by the later PG-only fixture correction. Owned marked dx_rework_acceptance_clock_test under lowprivileged dx_rework_test, PostgreSQL16-bookworm512MiB tmpfs, exact owned docker stopped and schemas disposed; no production database. Initial 44passed/1failed was a new test wrongly imposing24h on the unadopted legacy external task; preserve genuine old rule, add separate declared adopted-basis fixture and rerun45pass.",
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "f31556a7ef1bfc32d3692add7fbf31018d7f15e21e36746d9a6ddae9c9aa51e9"
         }
       ]
     },
     {
       "id": "types",
-      "command": "npm run typecheck",
+      "command": "npm run typecheck (pinned toolchain)",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
-      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
-      "startedAt": "2026-11-15T21:09:20.000Z",
-      "endedAt": "2026-11-15T21:34:32.576Z",
-      "log": "/tmp/quotation-unit-final-types.log",
+      "testedHead": "ae0420c047f5a66d5ca396d7572c5cfccc5c4939",
+      "sourceFingerprint": "ef8fa0f410ea1493d9a6da7f9b2bd64416217472577166d851f086ee5929bb7a",
+      "startedAt": "2026-11-15T22:05:37.000Z",
+      "endedAt": "2026-11-15T22:07:20.124Z",
+      "log": "/tmp/external-cutting-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
+      "context": "Pinned Node22.22.2/npm10.9.9 via task toolchain PATH; same-lock third-party symlinks and own built workspace packages, not fresh npm ci. One local Vitest worker, original canonical configuration; no deployment or real business data/roles changed. Unit/PG fixtures exercise exact native histories and permission guards; explicit synthetic history rows are marked fixtures, not claimed actual adoption transactions. Source timing calculations and native per-PO clocks unchanged. Earlier default-toolchain build/type checks superseded by pinned successful build/types. Preflight protocol inputs unchanged by the later PG-only fixture correction."
     },
     {
       "id": "lint",
-      "command": "eslint actual changed source/tests --max-warnings=0",
+      "command": "eslint task-service bulk-preparation-panel production-readiness-postgres time-reading-clock-postgres --max-warnings=0",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
-      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
-      "startedAt": "2026-11-15T21:15:22.000Z",
-      "endedAt": "2026-11-15T21:34:34.272Z",
-      "log": "/tmp/quotation-unit-final-lint.log",
+      "testedHead": "ae0420c047f5a66d5ca396d7572c5cfccc5c4939",
+      "sourceFingerprint": "ef8fa0f410ea1493d9a6da7f9b2bd64416217472577166d851f086ee5929bb7a",
+      "startedAt": "2026-11-15T22:06:42.000Z",
+      "endedAt": "2026-11-15T22:09:35.495Z",
+      "log": "/tmp/external-cutting-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
+      "context": "Pinned Node22.22.2/npm10.9.9 via task toolchain PATH; same-lock third-party symlinks and own built workspace packages, not fresh npm ci. One local Vitest worker, original canonical configuration; no deployment or real business data/roles changed. Unit/PG fixtures exercise exact native histories and permission guards; explicit synthetic history rows are marked fixtures, not claimed actual adoption transactions. Source timing calculations and native per-PO clocks unchanged. Earlier default-toolchain build/type checks superseded by pinned successful build/types. Preflight protocol inputs unchanged by the later PG-only fixture correction."
     },
     {
       "id": "preflight",
@@ -118,13 +130,13 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
-      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
-      "startedAt": "2026-11-15T21:22:02.000Z",
-      "endedAt": "2026-11-15T21:34:43.141Z",
-      "log": "/tmp/quotation-unit-final-preflight.log",
-      "logSha256": "ec076466aa884c0e01b6b48a44194aa9d516bbfd8c02bf8fb4af85b053265928",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
+      "testedHead": "ae0420c047f5a66d5ca396d7572c5cfccc5c4939",
+      "sourceFingerprint": "ef8fa0f410ea1493d9a6da7f9b2bd64416217472577166d851f086ee5929bb7a",
+      "startedAt": "2026-11-15T22:07:34.000Z",
+      "endedAt": "2026-11-15T22:08:46.485Z",
+      "log": "/tmp/external-cutting-preflight.log",
+      "logSha256": "92369f38234c484020bf17b38bd4191aab515f3499ba871e4215602467b3f4b5",
+      "context": "Pinned Node22.22.2/npm10.9.9 via task toolchain PATH; same-lock third-party symlinks and own built workspace packages, not fresh npm ci. One local Vitest worker, original canonical configuration; no deployment or real business data/roles changed. Unit/PG fixtures exercise exact native histories and permission guards; explicit synthetic history rows are marked fixtures, not claimed actual adoption transactions. Source timing calculations and native per-PO clocks unchanged. Earlier default-toolchain build/type checks superseded by pinned successful build/types. Preflight protocol inputs unchanged by the later PG-only fixture correction."
     },
     {
       "id": "secret",
@@ -132,36 +144,13 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
-      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
-      "startedAt": "2026-11-15T21:23:19.000Z",
-      "endedAt": "2026-11-15T21:34:44.125Z",
-      "log": "/tmp/quotation-unit-final-secret.log",
+      "testedHead": "ae0420c047f5a66d5ca396d7572c5cfccc5c4939",
+      "sourceFingerprint": "ef8fa0f410ea1493d9a6da7f9b2bd64416217472577166d851f086ee5929bb7a",
+      "startedAt": "2026-11-15T22:08:46.000Z",
+      "endedAt": "2026-11-15T22:08:47.349Z",
+      "log": "/tmp/external-cutting-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
-    },
-    {
-      "id": "pg",
-      "command": "QUOTATION_UNIT_COMPAT_PROBE=/tmp/quotation-unit-run-compat.mts bash /tmp/quotation-unit-pg.sh (canonical original lowprivPG16, maxWorkers1)",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
-      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
-      "startedAt": "2026-11-15T21:33:38.451Z",
-      "endedAt": "2026-11-15T21:35:29.225Z",
-      "log": "/tmp/quotation-unit-final-pg.log",
-      "logSha256": "1ef53bd2ce83a6360188b0e0b4b09c7925a878dd2e736dc892bf81470fed78f7",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
-      "passed": 76,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8a2cc3c77faea098a9269732ff5a6b3e9c36caca3b6d5a42c966f0e773637ec9"
-        }
-      ]
+      "context": "Pinned Node22.22.2/npm10.9.9 via task toolchain PATH; same-lock third-party symlinks and own built workspace packages, not fresh npm ci. One local Vitest worker, original canonical configuration; no deployment or real business data/roles changed. Unit/PG fixtures exercise exact native histories and permission guards; explicit synthetic history rows are marked fixtures, not claimed actual adoption transactions. Source timing calculations and native per-PO clocks unchanged. Earlier default-toolchain build/type checks superseded by pinned successful build/types. Preflight protocol inputs unchanged by the later PG-only fixture correction."
     }
   ]
 }

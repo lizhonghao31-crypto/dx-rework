@@ -28,9 +28,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  const sources:Array<{id:string;at:string;mode:string}>=[];
  beforeAll(async()=>{f=await businessAnchorFixture(url!);workerPerson=(await f.db.query('SELECT person_id FROM business_people WHERE app_user_id=$1 AND active',[f.people['pattern-room-worker']!.actorId])).rows[0].person_id;},120000);
  afterAll(async()=>{await f?.dispose();});
- const makeSource=async()=>{
+ const makeSource=async(prefix='TEST-READ')=>{
   const designer=f.people['sample-designer']!,identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true);
-  const id=(await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-READ-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID())).sourceId;
+  const id=(await identity.createSource(designer,{developmentType:'头版',designStyleNo:`${prefix}-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID())).sourceId;
   const file=await f.image(designer),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:file,kind:'款图'}]});
   const draft=await forms.save(designer,id,{expectedVersion:0,document},randomUUID());await forms.publish(designer,id,draft.version,randomUUID());return id;
  };
@@ -92,6 +92,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const client=await f.db.connect();try{await client.query('BEGIN');await expect(sla.readWithClient(f.root,order.productionOrderId,client)).rejects.toThrow('Actual SLA event cannot be in the future');await client.query('ROLLBACK');}finally{client.release();}
   const clients=await Promise.all(Array.from({length:10},()=>f.db.connect()));try{const reads=await Promise.all(clients.map(db=>sla.readWithClient(f.root,order.productionOrderId,db,{mode:'read_projection'})));expect(reads.every(r=>r.time.scenarioId===scenario)).toBe(true);}finally{for(const db of clients)db.release();}
 
+ },testExecutionConfig.correctnessTimeoutMs);
+ it('keeps historical SLA presence aligned with the exact adopted duration without restarting task clocks',async()=>{
+  const id=await makeSource('TEST-HISTORY'),tasks=new DigitalProductionTaskService(f.db);
+  const original=(await f.db.query(`SELECT r.*,p.sla_seconds AS legacy_seconds FROM digital_production_tasks t
+   JOIN digital_production_task_access a USING(task_id) JOIN digital_production_deadline_revisions r USING(task_id)
+   JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version
+   WHERE a.source_id=$1 AND a.task_kind='development_materials' ORDER BY r.revision_id DESC LIMIT 1`,[id])).rows[0];
+  expect(Number(original.legacy_seconds)).toBeGreaterThan(0);
+  const cases=[{basis:null,mode:'duration',hours:Number(original.legacy_seconds)/3600,hasSla:true},
+   {basis:{seconds:3600,enteredAt:null,basis:['TEST historical adopted duration']},mode:'duration',hours:1,hasSla:true},
+   {basis:{seconds:null,enteredAt:null,basis:['TEST historical explicitly unlimited']},mode:'duration',hours:null,hasSla:false},
+   {basis:{seconds:0,enteredAt:null,basis:['TEST explicit zero-duration event']},mode:'duration',hours:0,hasSla:true}];
+  for(const item of cases){
+   // A declared historical read fixture, not a new real occurrence or a
+   // company-policy change. No actual task/event/PO facts are overwritten.
+   await f.db.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis,deadline_kind)
+    VALUES($1,$2,$3,NULL,NULL,NULL,'correction',$4,$5,$6,$7)`,[original.task_id,original.policy_node_key,original.policy_version,original.event_id,f.root.actorId,item.basis?JSON.stringify(item.basis):null,item.mode]);
+   const snapshot=async()=>JSON.stringify({tasks:(await f.db.query('SELECT to_jsonb(t) AS row FROM digital_production_tasks t WHERE task_id=$1',[original.task_id])).rows,events:(await f.db.query('SELECT to_jsonb(e) AS row FROM digital_production_task_events e WHERE task_id=$1 ORDER BY recorded_at,event_id',[original.task_id])).rows,revisions:(await f.db.query('SELECT to_jsonb(r) AS row FROM digital_production_deadline_revisions r WHERE task_id=$1 ORDER BY revision_id',[original.task_id])).rows});
+   const before=await snapshot(),read=await tasks.read(f.root,original.task_id),history=await tasks.history(f.root,original.task_id);
+   expect(read.slaHours).toBe(item.hours);expect(history.revisions.at(-1)).toMatchObject({hasSla:item.hasSla,deadlineMode:item.mode});
+   expect(await snapshot()).toBe(before);
+  }
+  await expect(tasks.history(f.people['worker-b']!,original.task_id)).rejects.toMatchObject({statusCode:404});
  },testExecutionConfig.correctnessTimeoutMs);
  it('reads at full pool capacity without ALS or nested borrowing and preserves scope checks',async()=>{
   const source=sources.find(s=>s.mode==='future')!,query=new DigitalJourneyQuery(f.db);
