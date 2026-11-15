@@ -78,7 +78,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const factoryCommitments:NonNullable<OrderTimeInput['factoryCommitments']>=[];
  const round=document?.round_number??1,development=document?.document as DevelopmentDocument|null;
  let frameworkRoute:SeriesRoute|undefined;
- let route:Pick<FixedTimelineInput,'work'|'consumers'>,production:OrderTimeProductionRoute|null=null,dates:Array<{po:string;date:string|null}>=[];
+ let route:Pick<FixedTimelineInput,'work'|'consumers'>,production:OrderTimeProductionRoute|null=null,dates:Array<{po:string;date:string|null}>=[],optionalDevelopmentGoal=false;
  const styleNo=source?.design_style_no??order?.design_style_no??(operation.kind==='direct_order'?operation.input.designStyleNo:''),missing:string[]=[];
  const adopted=sourceId?await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},round):null;
  const kinds=document?.revision?.route_nodes??['development_materials',...developmentSlaRoute(development??{craft:'无',washing:'免洗'},document?.output_kind??'整件样板',2)];
@@ -120,6 +120,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   route={work:bulk.work,consumers:bulk.consumers.map(consumer=>({...consumer,lineId:resource?.kind==='order'?consumer.lineId:null}))};
  }else{
   if(!dev)return conflict('请先保存本单开发资料');
+  optionalDevelopmentGoal=!development?.returnDate;
   route={work:dev.work,consumers:[{scopeRef:`source:${sourceId}:round:${round}`,lineId:null,nodeIds:dev.work.map(work=>work.id),ends:dev.previous?{[dev.previous]:development?.returnDate?{precision:'date',value:development.returnDate,source:'本轮样板要求完成日'}:{precision:'unknown',reason:'请填写样板要求完成日'}}:{}}]};
   dates=[{po:'样板',date:development?.returnDate??null}];
  }
@@ -201,7 +202,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  }
  if(washing)sourceVersion.washing=[...washing];
  sourceVersion.customerDates=dates;sourceVersion.workFacts=[...progress];sourceVersion.materialBounds=notBefore;
- const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings});
+ const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal});
  if(plan.company.framework&&frameworkRoute){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
   const created=resource?await orderTimeCreated(db,resource):null;

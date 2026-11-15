@@ -8,6 +8,29 @@ const at=(day:number)=>new Date(Date.UTC(2027,0,day,0)).toISOString();
 function input():OrderTimeInput{return {version:'order-time-input-v1',plan:{version:'order-time-plan-v1',revision:1,overrides:{},company:{version:'order-time-standard-v1',reference:'TEST frozen creation counterpart',revision:1,stageBufferMinutes:0,nodes:{a:{kind:'work',minutes:2880,calendar:'continuous',reminder:{enabled:true,percent:70}},b:{kind:'work',minutes:2880,calendar:'continuous',reminder:{enabled:true,percent:70}}}}},route:{complete:true,missing:[]},work:[{id:'a',parameterKey:'a',stage:2,dependsOn:[]},{id:'b',parameterKey:'b',stage:2,dependsOn:['a']}],scopes:[{scopeRef:'TEST actual PO',lineId:null,terminalIds:['b'],customerGoalIds:[],customerGoal:{precision:'instant',value:at(10),source:'TEST customer commitment'},goals:{b:{precision:'instant',value:at(10),source:'TEST customer commitment'}}}]};}
 const time={now:at(7),scenarioId:null,revision:0};
 describe('R5 per-order conditional remaining-time evaluation',()=>{
+ it('does not invent a deadline or on-time result for an independent sample with its optional completion date empty',()=>{
+  const value=input();value.scopes[0]!.scopeRef='source:TEST:round:1';value.scopes[0]!.customerGoal={precision:'unknown',reason:'未填写选填样板日期'};value.scopes[0]!.goals.b=value.scopes[0]!.customerGoal;
+  const original=structuredClone(value),args={value,time,progress:new Map(),sourceVersion:{},resource:{kind:'source' as const,id:'TEST source'},styleNo:'TEST',customerDates:[{po:'样板',date:null}],canRequest:true,canApply:false};
+  const checked=orderTimeCheck({...args,optionalDevelopmentGoal:true});
+  expect(checked).toMatchObject({feasibility:'not_applicable',availableMinutes:null,lateMinutes:null,requiredMinutes:5760,expectedEnd:at(11),coverage:[]});
+  expect(orderTimeCheck(args).feasibility).toBe('unknown');
+  expect(orderTimeCheck({...args,resource:{kind:'order',id:'TEST order'},optionalDevelopmentGoal:true}).feasibility).toBe('unknown');
+  value.scopes[0]!.scopeRef='po:TEST';expect(orderTimeCheck({...args,optionalDevelopmentGoal:true}).feasibility).toBe('unknown');
+  value.scopes[0]!.scopeRef=original.scopes[0]!.scopeRef;expect(value).toEqual(original);
+ });
+ it('keeps missing standards, material bounds, actual times and exhausted windows blocking an undated independent sample',()=>{
+  const value=input();value.scopes[0]!.scopeRef='source:TEST:round:1';value.scopes[0]!.customerGoal={precision:'unknown',reason:'选填日期未填'};
+  const progress=new Map<string,OrderTimeNativeProgress>(),check=()=>orderTimeCheck({value,time,progress,sourceVersion:{},resource:{kind:'source',id:'TEST source'},styleNo:'TEST',customerDates:[],canRequest:true,canApply:true,optionalDevelopmentGoal:true});
+  const rule=value.plan.company.nodes.b!;value.plan.company.nodes.b={...rule,minutes:null};expect(check().feasibility).toBe('unknown');value.plan.company.nodes.b=rule;
+  value.route={complete:false,missing:['原单面料未到位且没有预计到位日']};expect(check().coverage).toContain('原单面料未到位且没有预计到位日');value.route={complete:true,missing:[]};
+  progress.set('b',{completed:true,actualAt:null,readyAt:at(4),deadline:at(6)});expect(check().coverage).toContain('已完成但缺少可信完成时间');
+  progress.clear();progress.set('a',{completed:false,actualAt:null,readyAt:at(4),deadline:at(6)});expect(check()).toMatchObject({feasibility:'unknown',lateMinutes:null});expect(check().coverage).toContain('在办节点已超时，剩余工作时间尚未确认');
+ });
+ it('still evaluates an explicitly filled sample date and never treats it as optional missing',()=>{
+  const value=input();value.scopes[0]!.scopeRef='source:TEST:round:1';
+  const checked=orderTimeCheck({value,time,progress:new Map(),sourceVersion:{},resource:{kind:'source',id:'TEST source'},styleNo:'TEST',customerDates:[],canRequest:true,canApply:true,optionalDevelopmentGoal:true});
+  expect(checked).toMatchObject({feasibility:'insufficient',lateMinutes:1440});
+ });
  it('detects a full day short for7th start/10th promise with serial A+B of two days each without moving customer H',()=>{
   const value=input(),original=structuredClone(value),result=orderTimeRemaining(value,time,new Map());
   expect(result.scopes[0]).toMatchObject({feasibility:'insufficient',lateMinutes:1440,requiredSpanMinutes:5760,expectedEnd:{at:at(11)}});expect(value).toEqual(original);

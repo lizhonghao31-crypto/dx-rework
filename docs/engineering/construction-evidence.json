@@ -1,81 +1,52 @@
 {
   "version": 1,
-  "base": "e460956f30590c413b403b6f4bb59b9e0b5fd5e0",
+  "base": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
   "risk": "full",
-  "sourceFingerprint": "2c97580076d32f1806a918fc5c3c7878915e447e297c8d6b67aff3e5385e0c8c",
+  "sourceFingerprint": "da17d158c361e2da12e9bc544d8c7ab8533844f8dcf6df520756bd476c12f02b",
   "rules": [
     {
-      "rule": "Project only adopted normal washing and inspection work into Journey from its captured original PO quantities, facts and responsibility windows. Connect shipment dependency membership and effective progress/risk, retaining partial and unknown completion. Add original accessory-preparation detail without inventing a no-accessory applicability rule.",
-      "source": "Approved time-framework v27 normal washing and milestone dependencies; User2026-11-15 via Dot authorization after PR991 for confirmed washing/accessory detail omissions; docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md2026-11-15 correction.",
+      "rule": "Keep the original independent-development sample completion date optional. Only an undated independent source route can skip date sufficiency comparison; required node durations, route, supply conditions and necessary actual evidence still must be computable. No invented dates or on-time result, no weakened formal PO/customer-date constraints.",
+      "source": "Approved v27 independent development without a customer date must not invent reverse targets; Dot2026-11-14/15 repeated original App optional-field blocker, explicitly authorized restore optional behavior; docs/requirements/digital-sla-golden-source-20261023.md2026-11-15 correction.",
       "writes": [
-        "apps/api/src/production-platform/journey-washing-projection.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/journey-framework-events.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "tests/unit/journey-washing-projection.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-request-plan.ts",
+        "apps/api/src/production-platform/order-time-automatic.ts",
+        "apps/web/src/order-time-application.tsx",
+        "apps/web/src/order-time-request-page.tsx",
+        "packages/contracts/src/order-time-requests.ts",
+        "tests/unit/order-time-requests.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-washing-facts.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/journey-time-framework.ts",
-        "apps/api/src/production-platform/journey-business-progress.ts",
-        "apps/api/src/production-platform/journey-visual-progress.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-selection-clock.ts",
-        "apps/api/src/production-platform/journey-selection-query.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts",
-        "apps/api/src/production-platform/bulk-washing-service.ts",
-        "apps/api/src/production-platform/bulk-washing-repository.ts",
-        "apps/api/migrations/0290_bulk_washing.sql",
-        "apps/web/src/cockpit-milestones.tsx",
-        "apps/web/src/cockpit-framework-nodes.tsx",
-        "apps/web/src/cockpit-detail.tsx"
+        "apps/api/src/production-platform/development-service.ts",
+        "packages/contracts/src/digital-development.ts",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/order-time-native-commands.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-native-timing.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/order-time-schedule.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "scripts/acceptance/time-site-inventory.mjs"
       ],
       "oldTests": [
-        "tests/unit/journey-washing-facts.test.ts",
-        "tests/unit/journey-time-framework.test.ts",
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/journey-visual-progress.test.ts",
-        "tests/unit/cockpit-framework.test.ts",
+        "tests/unit/order-time-requests.test.ts",
+        "tests/unit/order-time-plan.test.ts",
+        "tests/unit/order-time-framework-submission.test.ts",
         "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/unit/journey-washing-projection.test.ts"
-      ],
-      "initialization": "No schema, role, settings or business writes. Existing native washing adoption/events already invalidate the same Journey model. Calculation version advances to washing-accessory-scope-v5 for existing bounded model rebuild; no GET backfill. Original snapshot whitelist retains facts, scope and windows; no staff/fee/cache fields added. Unadopted/none and legacy work lists do not gain washing work. Auxiliary references remain planningOnly under existing preparation display/count semantics.",
-      "dateAndPermission": "Original full-order timing authorization gates projection. No new actor/grant, no price, no inferred staff identity. References return to original factory/preparation pages which revalidate their original action scope. Every original PO/window/calendar/deadline and occurrence precision retained; no fabricated start/complete. Cancellation stops unfinished work and preserves completed facts. Empty auxiliary data does not mean not-applicable or complete.",
-      "expectation": "Factory/after-receipt washing and checks appear once per original adopted PO, under shipment dependency membership. Partial30 received/20 qualified does not finish100; wash and inspection separate, all PO required. Current stage, ratio and risk use the same effective nodes and known overdue survives unknown sibling. Actual UI table renders both work rows with full dates. Original real manager arrangement and stored model agree, no duplicate native tasks, queries or automatic30s refresh.",
+      "newTests": [],
+      "initialization": "No database schema, stored version shape, settings, role, task identity or default date changes. Add an explicit not_applicable comparison result to the existing response enum; original App parser and application/arrangement consumers recognize it. The flag is an internal computed operation input, not accepted client intent. Existing snapshots/unknown targets remain unchanged, no date backfill or source auto-rearrangement. Existing native timing uses the frozen policy and real starts.",
+      "dateAndPermission": "Only a source-only scope with an absent sample goal and the original independent-development operation branch can skip goal reasons. Explicit sample goals still compare; order/proposal or PO scope cannot borrow the flag. Unknown duration/calendar, required route/supply and missing terminal actual remain unknown. Exhausted unfinished windows remain lower bounds. Audit lateMinutes is null when no comparison occurred; original actor/capability/native command/idempotency and role revocation retained.",
+      "expectation": "Undated complete independent sample publishes once from the real designer App without a false application; returnDate remains null, no customer promise/PO/actual is generated. Original native1h window starts at publication, later arrangement preserves it, new framework company counterpart behaves consistently. Explicit late samples still apply through existing process, and missing formal delivery or real inputs still block. Original saved-source/quotation/qualified packing, lost receipt and same-session withdrawal browser regressions remain.",
       "checks": [
         "unit",
         "native"
-      ]
-    },
-    {
-      "rule": "Keep extracted washing projection changes in the canonical native quantity, request, persistence and performance regression plan, without weakening any quality gate.",
-      "source": "AGENTS.mdV3.1 actual impacted source/test mapping obligation; current original CI risk-map, native washing and Journey consumers.",
-      "writes": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/journey-fact-model-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts"
-      ],
-      "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "newTests": [],
-      "initialization": "Only extend the existing journey washing-family matcher to its extracted projection module; no workflow, retry policy, database identity, timeout or safety changes.",
-      "dateAndPermission": "Every PR still has one initial Light and original necessary Review/Full. No security/permission/date gate altered.",
-      "expectation": "An isolated projection-only diff selects original native washing, requests, stored-model and88-order suites. All previous risk-map assertions and preflight remain.",
-      "checks": [
-        "unit"
       ]
     }
   ],
@@ -83,60 +54,62 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest journey-washing-projection/washing-facts/time-framework/business-progress/visual-progress/cockpit-framework/full-gate-risk-map --maxWorkers=2",
+      "command": "vitest order-time-requests/order-time-plan/order-time-framework-submission --maxWorkers=2",
       "status": "passed",
       "exitCode": 0,
-      "passed": 146,
+      "passed": 41,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "e460956f30590c413b403b6f4bb59b9e0b5fd5e0",
-      "sourceFingerprint": "2c97580076d32f1806a918fc5c3c7878915e447e297c8d6b67aff3e5385e0c8c",
-      "context": "Exact authorized release base e460956f plus candidate inputs. Node22.22.2/npm10.9.9; unit workers2; original canonical long-correctness config, workers1, low-privilege marked isolated PG16. No live data or deployment. Native manager original check/arrange, two same-page washing versions, canonical Journey and stored fact construction; original washing role/quantity/receipt/void regressions. Final PG input scope captured unchanged before the separate CI risk-map/test addition. Earlier 88-order diagnostic retained7070 SQL, below7100, no threshold change; not represented as a rerun against changed source.",
-      "startedAt": "2026-11-15T06:27:20.519Z",
-      "endedAt": "2026-11-15T06:27:24.013Z",
-      "log": "/tmp/washing-projection-unit.json",
-      "logSha256": "2be341c4c18eabb4a76216e05fc65a233c5eabd8d73d788c53c7f46bc5e05ed9",
+      "testedHead": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
+      "sourceFingerprint": "da17d158c361e2da12e9bc544d8c7ab8533844f8dcf6df520756bd476c12f02b",
+      "context": "Exact release base2e04f8cf plus candidate; Node22.22.2/npm10.9.9. Local package contracts rebuilt with current worktree workspace links. Unit workers2; canonical business-chain workers1, isolated marked low-privilege PG16 and pinned Chromium1194. Actual signed designer1165px original App publication, original services and source arrangement; no live/production writes or deployment. During PG execution only an unrelated unit counterexample was corrected from intermediate to terminal missing actual, and documentation/inventory were updated; all PG/API/Web/contracts/helper/runtime inputs remained unchanged. Original strict unknown terminal/standards/supply and true PO-date guards remain.",
+      "startedAt": "2026-11-15T07:27:13.881Z",
+      "endedAt": "2026-11-15T07:27:14.897Z",
+      "log": "/tmp/optional-sample-unit.json",
+      "logSha256": "1d48147c27f69fd28bde4d6f6fa85abbcede5cb69416822b5b49747dc41fd0fe",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2be341c4c18eabb4a76216e05fc65a233c5eabd8d73d788c53c7f46bc5e05ed9"
+          "sha256": "1d48147c27f69fd28bde4d6f6fa85abbcede5cb69416822b5b49747dc41fd0fe"
         }
       ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /tmp/washing-projection-final-pg.sh: canonical order-time-requests-postgres and bulk-washing-postgres --maxWorkers=1",
+      "command": "bash /tmp/optional-sample-pg.sh: canonical order-time-requests-postgres and order-time-requests-browser-postgres --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 23,
+      "passed": 25,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "e460956f30590c413b403b6f4bb59b9e0b5fd5e0",
-      "sourceFingerprint": "9df45388d5d3127b44ebda7cb54425394ab7a13c856365b52d96b1957a21deb5",
-      "context": "Exact authorized release base e460956f plus candidate inputs. Node22.22.2/npm10.9.9; unit workers2; original canonical long-correctness config, workers1, low-privilege marked isolated PG16. No live data or deployment. Native manager original check/arrange, two same-page washing versions, canonical Journey and stored fact construction; original washing role/quantity/receipt/void regressions. Final PG input scope captured unchanged before the separate CI risk-map/test addition. Earlier 88-order diagnostic retained7070 SQL, below7100, no threshold change; not represented as a rerun against changed source.",
-      "startedAt": "2026-11-15T06:26:46.050Z",
-      "endedAt": "2026-11-15T06:27:27.777Z",
-      "log": "/tmp/washing-projection-final-pg.json",
-      "logSha256": "af84f03a6a26818ff4f97f77ebede7100717e3ddd4c2e7d5cc14141c9be28343",
+      "testedHead": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
+      "sourceFingerprint": "da17d158c361e2da12e9bc544d8c7ab8533844f8dcf6df520756bd476c12f02b",
+      "context": "Exact release base2e04f8cf plus candidate; Node22.22.2/npm10.9.9. Local package contracts rebuilt with current worktree workspace links. Unit workers2; canonical business-chain workers1, isolated marked low-privilege PG16 and pinned Chromium1194. Actual signed designer1165px original App publication, original services and source arrangement; no live/production writes or deployment. During PG execution only an unrelated unit counterexample was corrected from intermediate to terminal missing actual, and documentation/inventory were updated; all PG/API/Web/contracts/helper/runtime inputs remained unchanged. Original strict unknown terminal/standards/supply and true PO-date guards remain.",
+      "startedAt": "2026-11-15T07:26:40.054Z",
+      "endedAt": "2026-11-15T07:28:04.756Z",
+      "log": "/tmp/optional-sample-pg.json",
+      "logSha256": "65e8142c02d7b333b7b9a39dcfd5d2cbe9be2f1925555beb7c0bec0952b6ebc2",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "af84f03a6a26818ff4f97f77ebede7100717e3ddd4c2e7d5cc14141c9be28343"
+          "sha256": "65e8142c02d7b333b7b9a39dcfd5d2cbe9be2f1925555beb7c0bec0952b6ebc2"
         }
       ],
       "inputPaths": [
         "apps",
         "packages",
         "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
         "tests/integration",
         "vitest.business-chain.config.ts",
         "vitest.config.ts",
-        "scripts/test-execution-config.mjs",
         "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
         "scripts/test-database-safety.mjs"
       ],
-      "inputFingerprint": "5783124fa7a767f6b0d110fd2ea6dd35a4ec553f9a18cea6106264fccca0cd92"
+      "inputFingerprint": "d12b83c8dae33f9f020387fa6bf48afabe4264717acd53656a03a4abab4f2323"
     }
   ]
 }

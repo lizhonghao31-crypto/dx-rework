@@ -56,13 +56,13 @@ export function orderTimeInputFromRoute(plan:FrozenOrderTimePlan,route:Pick<Fixe
  * Completed work consumes no remaining budget. Begun work retains its original
  * R/D; an exhausted window has only "no earlier than now", never a fake C.
  * These temporary forward inputs are never saved as actuals or fixed B. */
-type RemainingResult={scopes:Array<{scopeRef:string;coverage:string[];expectedEnd:SlaTime|null;feasibility:'unknown'|'insufficient'|'sufficient';lateMinutes:number|null;requiredSpanMinutes:number|null}>;lowerBound:boolean};
-export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progress:ReadonlyMap<string,OrderTimeNativeProgress>,notBefore:Readonly<Record<string,SlaAnchor>>={}):RemainingResult{
+type RemainingResult={scopes:Array<{scopeRef:string;coverage:string[];expectedEnd:SlaTime|null;feasibility:'unknown'|'insufficient'|'sufficient'|'not_applicable';lateMinutes:number|null;requiredSpanMinutes:number|null}>;lowerBound:boolean};
+export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progress:ReadonlyMap<string,OrderTimeNativeProgress>,notBefore:Readonly<Record<string,SlaAnchor>>={},optionalDevelopmentGoal=false):RemainingResult{
  if(input.scopes.length>1||[...progress.keys()].some(key=>key.includes('|'))){
   const results=input.scopes.map(scope=>{
    const scoped=new Map(progress);for(const node of input.work){const ref=node.canonicalWorkRef??node.id,value=progress.get(scope.scopeRef+'|'+ref);if(value)scoped.set(ref,value);}
    for(const key of scoped.keys())if(key.includes('|'))scoped.delete(key);
-   return orderTimeRemaining({...input,scopes:[scope]},time,scoped,notBefore);
+   return orderTimeRemaining({...input,scopes:[scope]},time,scoped,notBefore,optionalDevelopmentGoal);
   });
   return {scopes:results.flatMap(result=>result.scopes),lowerBound:results.some(result=>result.lowerBound)};
  }
@@ -100,19 +100,23 @@ export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progre
    return actual?.completed?orderTimeCompletionBound(actual,time.now):arranged.find(node=>node.id===id)!.end;
   }),goal=slaAnchorTime(scope.customerGoal,'客户交期');
   const end=ends.length&&ends.every(value=>value.at)?ends.reduce((a,b)=>Date.parse(a.at!)>=Date.parse(b.at!)?a:b):null;
-  const coverage=[...new Set([...(input.route.complete?[]:input.route.missing),...arranged.flatMap(node=>{const original=byId.get(node.id)!,label=ORDER_TIME_NODES.find(entry=>entry.key===original.parameterKey)?.label??'流程交接';return [...node.start.reasons,...node.end.reasons].map(reason=>`${label}：${reason}`);}),...ends.flatMap(end=>end.reasons),...goal.reasons])];
-  const known=input.route.complete&&!coverage.length&&end?.at&&goal.at;
-  const difference=known?(Date.parse(end.at!)-Date.parse(goal.at!)+(goal.exclusive&&!end.exclusive&&end.at===goal.at?1:0))/60000:null;
-  return {scopeRef:scope.scopeRef,coverage,expectedEnd:known?end:null,feasibility:difference===null?'unknown' as const:difference>0?'insufficient' as const:'sufficient' as const,
+  // Only the original independent-development adapter can opt out of an
+  // absent optional sample goal. Route, durations, supply and actual evidence
+  // still have to be computable; a formal PO can never borrow this exception.
+  const goalOptional=optionalDevelopmentGoal&&scope.scopeRef.startsWith('source:')&&scope.customerGoal.precision==='unknown';
+  const coverage=[...new Set([...(input.route.complete?[]:input.route.missing),...arranged.flatMap(node=>{const original=byId.get(node.id)!,label=ORDER_TIME_NODES.find(entry=>entry.key===original.parameterKey)?.label??'流程交接';return [...node.start.reasons,...node.end.reasons].map(reason=>`${label}：${reason}`);}),...ends.flatMap(end=>end.reasons),...(goalOptional?[]:goal.reasons)])];
+  const known=input.route.complete&&!coverage.length&&end?.at&&(goalOptional||goal.at);
+  const difference=known&&goal.at?(Date.parse(end.at!)-Date.parse(goal.at!)+(goal.exclusive&&!end.exclusive&&end.at===goal.at?1:0))/60000:null;
+  return {scopeRef:scope.scopeRef,coverage,expectedEnd:known?end:null,feasibility:known&&goalOptional?'not_applicable' as const:difference===null?'unknown' as const:difference>0?'insufficient' as const:'sufficient' as const,
    lateMinutes:difference===null?null:Math.max(0,difference),requiredSpanMinutes:known?Math.max(0,(Date.parse(end.at!)-Date.parse(time.now))/60000):null};
  });
  return {scopes,lowerBound};
 }
 
-export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;progress:ReadonlyMap<string,OrderTimeNativeProgress>;sourceVersion:Record<string,unknown>;resource:OrderTimeCheckResult['resource'];styleNo:string;customerDates:OrderTimeCheckResult['customerDates'];canRequest:boolean;canApply:boolean;notBefore?:Readonly<Record<string,SlaAnchor>>;extraSettings?:ReadonlyMap<string,boolean>}):OrderTimeCheckResult{
- const {value,time}=input,{scopes,lowerBound}=orderTimeRemaining(value,time,input.progress,input.notBefore),coverage=[...new Set(scopes.flatMap(scope=>scope.coverage))];
- const computable=scopes.length>0&&scopes.every(scope=>scope.feasibility!=='unknown'),late=computable?Math.max(...scopes.map(scope=>scope.lateMinutes??0)):null;
- const known=computable&&(!lowerBound||late!>0);if(computable&&lowerBound&&late===0)coverage.push('在办节点已超时，剩余工作时间尚未确认');
+export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;progress:ReadonlyMap<string,OrderTimeNativeProgress>;sourceVersion:Record<string,unknown>;resource:OrderTimeCheckResult['resource'];styleNo:string;customerDates:OrderTimeCheckResult['customerDates'];canRequest:boolean;canApply:boolean;notBefore?:Readonly<Record<string,SlaAnchor>>;extraSettings?:ReadonlyMap<string,boolean>;optionalDevelopmentGoal?:boolean}):OrderTimeCheckResult{
+ const {value,time}=input,{scopes,lowerBound}=orderTimeRemaining(value,time,input.progress,input.notBefore,input.resource.kind==='source'&&input.optionalDevelopmentGoal===true),coverage=[...new Set(scopes.flatMap(scope=>scope.coverage))];
+ const computable=scopes.length>0&&scopes.every(scope=>scope.feasibility!=='unknown'),compared=scopes.filter(scope=>scope.feasibility!=='not_applicable'),late=computable&&compared.length?Math.max(...compared.map(scope=>scope.lateMinutes??0)):null;
+ const known=computable&&(!lowerBound||late!>0);if(computable&&lowerBound&&!(late!>0))coverage.push('在办节点已超时，剩余工作时间尚未确认');
  const required=computable?Math.max(...scopes.map(scope=>scope.requiredSpanMinutes??0)):null;
  const available=scopes.map(scope=>slaAnchorTime(value.scopes.find(row=>row.scopeRef===scope.scopeRef)!.customerGoal,'客户交期').at).filter((at):at is string=>Boolean(at));
  const catalog=new Map([...ORDER_TIME_NODES,...FRAMEWORK_TIME_NODES].map(node=>[node.key,node]));
@@ -126,7 +130,7 @@ export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;pro
  });
  for(const [key,begun]of input.extraSettings??[]){const node=catalog.get(key);if(node&&!rows.some(row=>row.parameterKey===key))rows.push({id:'setting:'+key,parameterKey:key,label:node.label,stage:node.stage,rule:orderTimeRule(value.plan,key)?.rule??null,originalRule:value.plan.company.nodes[key]??null,begun,preserveBegun:begun,includedIn:null});}
  return {enabled:true,fingerprint:digest({operation:input.sourceVersion,company:value.plan.company,work:value.work,scopes:value.scopes,scenario:time.scenarioId,revision:time.revision}),resource:input.resource,styleNo:input.styleNo,customerDates:input.customerDates,plan:value.plan,rows,coverage,
-  feasibility:!known?'unknown':late!>0?'insufficient':'sufficient',availableMinutes:available.length===scopes.length?Math.min(...available.map(at=>(Date.parse(at)-Date.parse(time.now))/60000)):null,
+  feasibility:!known?'unknown':!compared.length?'not_applicable':late!>0?'insufficient':'sufficient',availableMinutes:available.length===scopes.length?Math.min(...available.map(at=>(Date.parse(at)-Date.parse(time.now))/60000)):null,
   requiredMinutes:required,lateMinutes:late,expectedEnd:computable?scopes.reduce((at,scope)=>!at||Date.parse(scope.expectedEnd!.at!)>Date.parse(at)?scope.expectedEnd!.at!:at,null as string|null):null,
   forecastQuality:!computable?'unknown':lowerBound?'lower_bound':'conditional',canRequest:input.canRequest,canApply:input.canApply,sourceVersion:input.sourceVersion};
 }

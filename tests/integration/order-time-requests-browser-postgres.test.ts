@@ -40,7 +40,7 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 original App per-order time application, processing and recovery',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,scene:string;
- const source=async(label:string,date='2027-01-07',customerCode:string|null=null)=>h.f.runtime.run(scene,h.f.root,async()=>{
+ const source=async(label:string,date:string|null='2027-01-07',customerCode:string|null=null)=>h.f.runtime.run(scene,h.f.root,async()=>{
   const original=h.f.people['sample-designer']!,actor={...original,authorizationCapabilities:[...original.authorizationCapabilities!,'pattern_room:orders:view']};
   const designStyleNo='TEST-R507-UI-'+label+'-'+randomUUID(),item=await new DigitalProductionIdentityService(h.db,true).createSource(actor,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode},randomUUID());
   const category=(await h.db.query("SELECT price_id,name FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
@@ -70,6 +70,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   h=await supplychainSettingsBrowser(url!,process.env.R507_BROWSER_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'r507-ui-'+randomUUID()),{fullApp:true,orderTimeModel:true,orderTimeFlow:true});
   await new OrderTimeSettingsService(h.db,true,false).save(h.f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());
   scene=await h.f.scene('2027-01-07T15:00:00.000Z');h.setCollectionScene(scene);
+ });
+ it('publishes from the original designer App with its optional sample date empty, without a false time application or fabricated date',async()=>{
+  const original=await source('optional-date',null),tab=await h.open(original.actor.actorId,1165,{},'/ui/digital-production?development='+original.sourceId);
+  try{
+   await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
+   const date=tab.page.getByLabel('预计样板完成日期',{exact:true});expect(await date.inputValue()).toBe('');
+   const publish=tab.page.getByRole('button',{name:'发布开发单',exact:true});await expect.poll(()=>publish.isEnabled()).toBe(true);
+   const response=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/check'));
+   await publish.click();const checked=await response;expect(checked.status()).toBe(200);expect(await checked.json()).toMatchObject({feasibility:'not_applicable',availableMinutes:null,lateMinutes:null});
+   await expect.poll(async()=>(await h.db.query('SELECT status FROM digital_development_documents WHERE source_id=$1',[original.sourceId])).rows[0]?.status).toBe('published');
+   expect(await tab.page.getByRole('region',{name:'本单时效申请'}).count()).toBe(0);
+   const stored=(await h.db.query('SELECT document,published_at,task_id FROM digital_development_documents WHERE source_id=$1',[original.sourceId])).rows[0];
+   expect(stored.document.returnDate).toBeNull();expect(stored.published_at).not.toBeNull();expect(stored.task_id).not.toBeNull();
+   expect((await h.db.query('SELECT 1 FROM digital_order_time_requests WHERE source_id=$1',[original.sourceId])).rowCount).toBe(0);
+   await tab.page.reload();await expect.poll(async()=>tab.page.locator('body').innerText()).toContain('已发布');
+  }finally{await tab.context.close();}
  });
  it('R5-08 opens actual independent PLT, sizes, usage, comments and exact older files in the original authenticated App',async()=>{
   const s=await source('detail-documents','2027-02-20'),worker=h.f.people['pattern-room-worker']!,materialId=randomUUID(),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),execution=new DevelopmentExecutionService(h.db,true,h.patternOrders);
