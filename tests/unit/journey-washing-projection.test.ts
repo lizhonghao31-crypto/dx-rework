@@ -1,26 +1,27 @@
 import {expect,it} from 'vitest';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {JOURNEY_NODES,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {JOURNEY_NODES,JourneyReturnContextSchema,JOURNEY_NODE_ANCHOR_MAX_LENGTH,journeyReturnUrl,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {FixedScheduleBasis} from '../../apps/api/src/production-platform/fixed-schedule-basis.js';
 import {attachFixedJourneySchedule} from '../../apps/api/src/production-platform/fixed-schedule-basis.js';
 import {journeyBusinessProgress} from '../../apps/api/src/production-platform/journey-business-progress.js';
 import {journeyStages} from '../../apps/api/src/production-platform/journey-projection.js';
 import {journeyVisualProgress} from '../../apps/api/src/production-platform/journey-visual-progress.js';
 import {journeyWashingFact} from '../../apps/api/src/production-platform/journey-washing-facts.js';
+import {cockpitContext,cockpitReturnPath,journeyRecordHref,journeyDetailSelection} from '../../apps/web/src/digital-journey-cockpit-model.js';
 import {cockpitMilestones,milestoneContains} from '../../apps/web/src/cockpit-milestones.js';
 import {CockpitFrameworkNodes} from '../../apps/web/src/cockpit-framework-nodes.js';
 import type {BulkWashingScopeView} from '@dx-rework/contracts/bulk-washing';
 import type {WashingPlan} from '../../apps/api/src/production-platform/bulk-washing-repository.js';
 const at=(hour:number)=>new Date(Date.UTC(2027,0,1,hour)).toISOString(),unknown={precision:'unknown'} as const;
 const duration={minutes:120,calendar:'beijing_sunday_excluded' as const,reminder:{enabled:false,percent:70}};
-function fixture(mode:'factory'|'after_receipt'='after_receipt'){
- const key=mode==='factory'?'bulk_factory_washing':'bulk_return_washing',wash=key+':red',check=key+'_inspection:red';
+function fixture(mode:'factory'|'after_receipt'='after_receipt',lineId='red'){
+ const key=mode==='factory'?'bulk_factory_washing':'bulk_return_washing',wash=key+':'+lineId,check=key+'_inspection:'+lineId;
  const work=[wash,check].map((id,index)=>({id,canonicalWorkRef:id,stage:mode==='factory'?6:7,dependsOn:index?[wash]:[],start:at(index*2),end:at(index*2+2),minutes:120,calendar:'continuous' as const,responsibilitySlaRef:'original washing scope'}));
  const pending=()=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,notYetReady:true,evidenceRefs:[]});
- const scope={scopeRef:'po:red',lineId:'red',targetRevision:'TEST-v1',terminalIds:[check],customerGoal:at(48),plannedReadiness:true,work,facts:{[wash]:pending(),[check]:pending()}};
- const basis:FixedScheduleBasis={version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',scopeRevision:'v1',factRevision:'facts',pending:false,termination:null,scopes:[scope],framework:[{scopeRef:'po:red',lineId:'red',route:'B',reference:'TEST-v1',revision:1,effectiveAt:at(0),customerDate:'2027-01-02',milestones:[{key:'planned_shipment',date:'2027-01-02',at:at(40),plannedAt:at(4),workIds:[check],relatedWorkIds:[wash,check]}]}]};
- const item={id:'TEST-order',orderId:'TEST-order',createdAt:at(0),lines:[{id:'red',po:'TEST-red'}],stages:journeyStages(JOURNEY_NODES.map(definition=>({...definition,instanceId:definition.key,state:'not_applicable',progressApplicability:'not_applicable',current:true,round:null,occurrence:null,owner:null,operator:null,assignmentHistory:[],countsInProgress:false,expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'not_set',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null})))} as unknown as OrderJourney;
+ const scope={scopeRef:'po:'+lineId,lineId,targetRevision:'TEST-v1',terminalIds:[check],customerGoal:at(48),plannedReadiness:true,work,facts:{[wash]:pending(),[check]:pending()}};
+ const basis:FixedScheduleBasis={version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',scopeRevision:'v1',factRevision:'facts',pending:false,termination:null,scopes:[scope],framework:[{scopeRef:'po:'+lineId,lineId,route:'B',reference:'TEST-v1',revision:1,effectiveAt:at(0),customerDate:'2027-01-02',milestones:[{key:'planned_shipment',date:'2027-01-02',at:at(40),plannedAt:at(4),workIds:[check],relatedWorkIds:[wash,check]}]}]};
+ const item={id:'TEST-order',orderId:'TEST-order',createdAt:at(0),lines:[{id:lineId,po:'TEST-red'}],stages:journeyStages(JOURNEY_NODES.map(definition=>({...definition,instanceId:definition.key,state:'not_applicable',progressApplicability:'not_applicable',current:true,round:null,occurrence:null,owner:null,operator:null,assignmentHistory:[],countsInProgress:false,expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'not_set',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null})))} as unknown as OrderJourney;
  return {item,basis,key,wash,check};
 }
 const nodes=(item:OrderJourney)=>item.stages.flatMap(stage=>stage.nodes);
@@ -108,4 +109,26 @@ it('exposes the original accessory record without inferring not-applicable or co
  scope.facts[work.id]={...scope.facts[work.id]!,businessCompleted:true,completed:{precision:'date',date:'2027-01-01'},evidenceRefs:['original accessory preparation']};
  attachFixedJourneySchedule(item,basis,at(24),{nextChange:false});row=nodes(item).find(node=>node.key==='warehouse_accessories')!;
  expect(row).toMatchObject({state:'completed',actualDate:'2027-01-01',actualAt:null});expect(cockpitMilestones(item)[0]!.completed).toBe(true);
+});
+
+// Real UUID-sized scope/work identities reproduce the field sample, unlike the short red fixture.
+it.each(['factory','after_receipt'] as const)('round-trips complete %s washing and inspection identities through selection and original-record return links',mode=>{
+ const line='d2cfa6d0-cc53-4c95-b533-64acdd8345d4',orderId='26a6395a-6e97-4fb4-840a-d7991f7adfc1';
+ const {item,basis,key}=fixture(mode,line);item.id=orderId;item.orderId=orderId;
+ attachFixedJourneySchedule(item,basis,at(0),{nextChange:false});
+ const rows=nodes(item).filter(node=>node.key.startsWith(key));expect(rows).toHaveLength(2);
+ expect(rows.map(node=>node.instanceId.length)).toEqual(mode==='factory'?[110,121]:[109,120]);
+ for(const row of rows){
+  const input={selected:orderId,search:'TEST 中文 PO',page:2,milestone:'',expanded:'',focus:row.instanceId,row:row.instanceId,round:1};
+  const context=JourneyReturnContextSchema.parse(input),url=journeyReturnUrl(context);
+  expect(cockpitContext(url.slice(url.indexOf('?')))).toMatchObject(input);
+  expect(journeyDetailSelection(item,context).selected?.key).toBe(row.key);
+  const record=row.records[0]!,original=journeyRecordHref(record.url!,context,record.mode);
+  expect(new URL(original,'https://local.invalid').searchParams.get('factory')).toBe(orderId);
+  expect(cockpitReturnPath(original.slice(original.indexOf('?')))).toBe(url);
+ }
+ expect(JourneyReturnContextSchema.safeParse({focus:'x'.repeat(JOURNEY_NODE_ANCHOR_MAX_LENGTH+1)}).success).toBe(false);
+ expect(JourneyReturnContextSchema.safeParse({row:'x'.repeat(JOURNEY_NODE_ANCHOR_MAX_LENGTH+1)}).success).toBe(false);
+ expect(JourneyReturnContextSchema.safeParse({search:'x'.repeat(101)}).success).toBe(false);
+ expect(cockpitReturnPath('?returnTo=https%3A%2F%2Fexternal.invalid')).toBeNull();
 });

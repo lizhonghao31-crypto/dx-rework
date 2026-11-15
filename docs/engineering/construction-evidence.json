@@ -1,66 +1,48 @@
 {
   "version": 1,
-  "base": "826e464935da5d039915bfd54f01504d0f4075df",
+  "base": "c06884cefadb3c83085b5302af1e58093732f99f",
   "risk": "full",
-  "sourceFingerprint": "8adf6bd5e7ce4f291daac36dbcec5a1112b39974bab175039bd1d1d567ea5ad3",
+  "sourceFingerprint": "514a8785888015dbeff5f64c324a98729a5517e37254a438db007ba4854ade92",
   "rules": [
     {
-      "rule": "Factory read failure must settle within its own region. Assigned washing logistics/QC retain independently authorized washing controls; factory object denial, module denial, prices, assignments and native write guards remain unchanged. Preserve mounted same-order drafts while a refresh is pending and pause their interactions; clear failed/revoked DTOs and ignore stale reads across order changes/unmount/acknowledged writes.",
-      "source": "Dot2026-11-14/15 Acceptance assigned washing logistics and QC observed unrelated factory denial plus permanent loading; user authorized autonomous sequential fixes. docs/requirements/rework-ui-golden-source-v1.0.md2026-11-15 regional correction.",
+      "rule": "Select each real washing/inspection node using its complete generated scope+work identity. Factory washing110/121 and after-receipt109/120 anchors must survive local context validation, focused row/current detail, reload, original factory record and return with the same search/page. Keep old identities, roles, targets, clocks, quantities and task/record URLs unchanged.",
+      "source": "Dot/user confirmed F sample actual110/121char IDs exceeding focus/row100; same second-route ROLE symptom. User authorizes sequential implementation, normal Review/Full and one Light per PR. docs/requirements/rework-ui-golden-source-v1.0.md2026-11-15 navigation decision.",
       "writes": [
-        "apps/web/src/factory-flow-panel.tsx",
-        "apps/web/src/factory-flow-read.ts",
-        "tests/unit/factory-flow-read.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/bulk-washing-browser-postgres.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/unit/journey-washing-projection.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/bulk-washing-panel.tsx",
-        "apps/web/src/digital-production-api.ts",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/bulk-washing-service.ts",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts"
+        "apps/api/src/production-platform/journey-washing-projection.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-framework-nodes.tsx",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "apps/web/src/node-materials-view.ts",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/factory-flow-panel.tsx"
       ],
       "oldTests": [
-        "tests/integration/bulk-washing-browser-postgres.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/unit/journey-washing-projection.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/factory-flow-read.test.ts"
+        "tests/unit/journey-washing-projection.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "initialization": "No schema, role, endpoint, DTO, facts, settings, date/version or historical mutation. Shared fullApp fixture registers the actual existing factory service so404 comes from original policy rather than an absent route. Other cockpit/fixed-timeline fixtures already register their own native service and are unchanged. Original dedicated washing route still skips factory metadata.",
-      "dateAndPermission": "No clock, SLA, quantity, fee or policy changes. Assigned washing roles do not gain factory reads; native404 and403 remain. Unrelated worker is denied at AuthGate, unrelated designer denied per object. Current-order validation, response sequence and unmount guards clear stale private data. Optional personnel failure retains only the authorized factory sheet. Same-order pending refresh retains the original mounted DOM under inert and disabled controls; command/upload callbacks reject a pending read. Failed/revoked reads still clear the DTO, and order switches never borrow an old sheet. Receipt association still checks exact lineId on the same order/factory, without weakening source or quantity guards.",
-      "expectation": "Factory denial or transport failure no longer leaves a loading spinner or suppresses washing. Original retry clears read error after actual200; denied roles see no private factory fields or wash fee/foreign actions. Original signed logistics30sent/20returned, QC20qualified and same-session revoke still pass. Six hook race/failure cases and real App region cases cover current changes; Root recovery and1165px screenshots inspected. Review4577757297 is fixed by keeping same-order forms mounted during pending refresh. Native unchanged200 verifies all three applicable logistics/dispatch/ship-sample form DOM identities and exact unsaved values, no write sent. A real no-craft order intentionally has no logistics form; the logistics case uses a real printed route. A same-order/same-factory two-PO negative case excludes PO B from PO A candidates, rejects forged B receipt409 without changing revision, then permits the exact A receipt; PO B gains zero qualified coverage.",
+      "initialization": "Narrow shared return schema changes focus and row from100 to named bounded200 only. No ID truncation/hash/rename/migration and no source data, task, clock, role or original-record changes. Existing URLs and IDs remain compatible. New unit reproduces actual UUID-sized backend-generated virtual nodes; original native browser case adopts two washing routes through existing real order arrangement and reads real Journey DTO, instead of injecting a fake selected row. All new tests use existing managed fixture/resource/plan.",
+      "dateAndPermission": "Bound201 is rejected independently for focus/row; original search100/local-return/unknown-key/round validation stays. Original factory read/handling guards continue when links open; UI navigation issues no order business POST. Target dates, responsibility and read scopes are not inferred from the selected anchor. Candidate time inventory changed because the existing schema max-expression line hash changed, not a time source; refresh one entry only with narrow changed-site review, retain all older statuses and annotations.",
+      "expectation": "36unit cases pass (including both routes, exact four anchor lengths, selected row, safe original return and invalid lengths/local return). One targeted real App/PG browser case passes with4washing/check nodes: click selects correct current heading and URL, reload retains it, original factory link returns same complete focus/row and page2/search. Six other tests in the file intentionally not run by this local filter and remain for canonical Full, never labelled passed. Screenshots for both routes actually opened and inspected at1165; factory/return inspection focus and original layout visible. Full lint/typecheck and263preflight pass; only initial inventory mismatch was repaired before push.",
       "checks": [
         "unit",
-        "native"
-      ]
-    },
-    {
-      "rule": "Factory panel/read changes must retain canonical real washing browser/service regressions instead of omitting their authorization and independent loading consumers.",
-      "source": "AGENTS.md3/4 canonical test mapping for actual changed dependency; existing washing map expanded for extracted reader and original factory panel.",
-      "writes": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "reads": [
-        "scripts/ci/prepare-settings-browser.mjs",
-        "tests/integration/bulk-washing-browser-postgres.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
-      ],
-      "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "initialization": "Existing mapper only; no workflow triggers, Light policy, runner, timeout, safety or resource contract changes. Original browser suite remains recognized and uses pinned browser preparation.",
-      "dateAndPermission": "No application permissions or business clocks affected by mapping. Existing negative role assertions and original service constraints remain in canonical tests.",
-      "expectation": "Both factory-flow-panel and factory-flow-read source paths map the actual bulk washing PG/browser suites, plus existing risk-map expectations remain;76mapping tests passed.",
-      "checks": [
-        "unit"
+        "native",
+        "lint",
+        "types",
+        "preflight"
       ]
     }
   ],
@@ -68,48 +50,90 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run tests/unit/factory-flow-read.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=2",
+      "command": "vitest run tests/unit/journey-washing-projection.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts --maxWorkers=1 --reporter=json --outputFile=/tmp/washing-nav-unit-final.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 82,
+      "testedHead": "c06884cefadb3c83085b5302af1e58093732f99f",
+      "sourceFingerprint": "514a8785888015dbeff5f64c324a98729a5517e37254a438db007ba4854ade92",
+      "context": "Node22.22.2/npm10.9.9. Own workspace package links/builds and third-party dependency links from an identical release package-lock; not claimed fresh npm install. Vitest maxWorkers1, original canonical business-chain config. Actual Chromium headless_shell1194, real complete-App IIFE fixture with signed membership/session, actual307 migrations through0292 and low-privilege marked isolatedPG16. Bounded512MiB PGDATA tmpfs, owned exact container/schema cleanup; no real deployment or business data. Screenshots are local isolated TEST, not onsite acceptance.",
+      "startedAt": "2026-11-15T11:42:02.272Z",
+      "endedAt": "2026-11-15T11:42:06.013Z",
+      "log": "/tmp/washing-nav-unit-final.log",
+      "logSha256": "1f682334bcdfa110ed47d6bdffb1c10e0057c825e72ec7cbad909336a8d356c4",
+      "passed": 36,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "03db0418b6b67b86fb36fae2c1e00f207b340897",
-      "sourceFingerprint": "8adf6bd5e7ce4f291daac36dbcec5a1112b39974bab175039bd1d1d567ea5ad3",
-      "context": "React hook state/race/revocation and disabled washing route; full-gate mapping regressions. Actual Node22.22.2/npm10.9.9, jsdom, bounded workers2.",
-      "startedAt": "2026-11-15T09:19:05.481Z",
-      "endedAt": "2026-11-15T09:19:06.645Z",
-      "log": "/tmp/factory-read-unit-fixed.json",
-      "logSha256": "4dc5c6f07382014d1eab27fd5153f14ada50d8bf100191e6ee41a21100fca32b",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4dc5c6f07382014d1eab27fd5153f14ada50d8bf100191e6ee41a21100fca32b"
+          "sha256": "c1415291e7ee74ce1da2d6a9d975cbfff87aa1bf2d72f1a908259794633874a9"
         }
       ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /tmp/factory-read-pg-fixed.sh; canonical vitest.business-chain.config.ts bulk-washing-browser-postgres and bulk-washing-postgres --maxWorkers=1",
+      "command": "bash /tmp/washing-nav-pg.sh (canonical order-time browser suite filtered to adopts washing original grouped order page)",
       "status": "passed",
       "exitCode": 0,
-      "passed": 13,
+      "testedHead": "c06884cefadb3c83085b5302af1e58093732f99f",
+      "sourceFingerprint": "514a8785888015dbeff5f64c324a98729a5517e37254a438db007ba4854ade92",
+      "context": "Node22.22.2/npm10.9.9. Own workspace package links/builds and third-party dependency links from an identical release package-lock; not claimed fresh npm install. Vitest maxWorkers1, original canonical business-chain config. Actual Chromium headless_shell1194, real complete-App IIFE fixture with signed membership/session, actual307 migrations through0292 and low-privilege marked isolatedPG16. Bounded512MiB PGDATA tmpfs, owned exact container/schema cleanup; no real deployment or business data. Screenshots are local isolated TEST, not onsite acceptance.",
+      "startedAt": "2026-11-15T11:39:22.288Z",
+      "endedAt": "2026-11-15T11:40:05.735Z",
+      "log": "/tmp/washing-nav-pg.log",
+      "logSha256": "cc66e0efe9654f159e07c09c0bfb02c145e18d5e73f6dad2552cb938cb6eb787",
+      "passed": 1,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "03db0418b6b67b86fb36fae2c1e00f207b340897",
-      "sourceFingerprint": "8adf6bd5e7ce4f291daac36dbcec5a1112b39974bab175039bd1d1d567ea5ad3",
-      "context": "Original App/AuthService/native FactoryFlowService and BulkWashingService on owned marked low-privilege PG16, pinned real Chromium1194, workers1. Real assigned logistics/QC, unrelated worker module denial and unrelated designer object denial, actual same-session revocation. Root503 transport fault is explicitly TEST only and recovers through native200. Dedicated washing route and existing30/20 write flow preserved. Owned container removed by trap;1165px screenshot inspected. No deployed/live data, role or server changes. All13current cases pass, including refresh-held original GET/200 with retained actual DOM/value/no writes on applicable real craft and no-craft routes; same order, same factory, different PO receipt409 followed by correct receipt release. Initial new-test fixture/selector/unknown-vs-known-zero expectations were corrected against actual route and coverage semantics, not by changing backend guards, quantities, deadlines or timeout. Original failed local reports retained separately.",
-      "startedAt": "2026-11-15T09:19:11.389Z",
-      "endedAt": "2026-11-15T09:20:02.420Z",
-      "log": "/tmp/factory-read-pg-fixed.json",
-      "logSha256": "f520e19f35af474f802216882fc074e629502bd1d5710dd22cf31cdb0439c20d",
+      "skipped": 6,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f520e19f35af474f802216882fc074e629502bd1d5710dd22cf31cdb0439c20d"
+          "sha256": "fcc1bf1af81396ec1488521930e72bc16ad1e1701ed546b8696898ae6b52ec88"
         }
       ]
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "command": "npm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c06884cefadb3c83085b5302af1e58093732f99f",
+      "sourceFingerprint": "514a8785888015dbeff5f64c324a98729a5517e37254a438db007ba4854ade92",
+      "context": "Node22.22.2/npm10.9.9. Own workspace package links/builds and third-party dependency links from an identical release package-lock; not claimed fresh npm install. Vitest maxWorkers1, original canonical business-chain config. Actual Chromium headless_shell1194, real complete-App IIFE fixture with signed membership/session, actual307 migrations through0292 and low-privilege marked isolatedPG16. Bounded512MiB PGDATA tmpfs, owned exact container/schema cleanup; no real deployment or business data. Screenshots are local isolated TEST, not onsite acceptance.",
+      "startedAt": "2026-11-15T11:39:23.666Z",
+      "endedAt": "2026-11-15T11:40:02.679Z",
+      "log": "/tmp/washing-nav-lint.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
+    },
+    {
+      "id": "types",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c06884cefadb3c83085b5302af1e58093732f99f",
+      "sourceFingerprint": "514a8785888015dbeff5f64c324a98729a5517e37254a438db007ba4854ade92",
+      "context": "Node22.22.2/npm10.9.9. Own workspace package links/builds and third-party dependency links from an identical release package-lock; not claimed fresh npm install. Vitest maxWorkers1, original canonical business-chain config. Actual Chromium headless_shell1194, real complete-App IIFE fixture with signed membership/session, actual307 migrations through0292 and low-privilege marked isolatedPG16. Bounded512MiB PGDATA tmpfs, owned exact container/schema cleanup; no real deployment or business data. Screenshots are local isolated TEST, not onsite acceptance.",
+      "startedAt": "2026-11-15T11:40:02.687Z",
+      "endedAt": "2026-11-15T11:40:56.267Z",
+      "log": "/tmp/washing-nav-typecheck.log",
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
+    },
+    {
+      "id": "preflight",
+      "kind": "command",
+      "command": "npm run test:preflight",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c06884cefadb3c83085b5302af1e58093732f99f",
+      "sourceFingerprint": "514a8785888015dbeff5f64c324a98729a5517e37254a438db007ba4854ade92",
+      "context": "Node22.22.2/npm10.9.9. Own workspace package links/builds and third-party dependency links from an identical release package-lock; not claimed fresh npm install. Vitest maxWorkers1, original canonical business-chain config. Actual Chromium headless_shell1194, real complete-App IIFE fixture with signed membership/session, actual307 migrations through0292 and low-privilege marked isolatedPG16. Bounded512MiB PGDATA tmpfs, owned exact container/schema cleanup; no real deployment or business data. Screenshots are local isolated TEST, not onsite acceptance.",
+      "startedAt": "2026-11-15T11:41:55.644Z",
+      "endedAt": "2026-11-15T11:42:02.268Z",
+      "log": "/tmp/washing-nav-preflight-fixed.log",
+      "logSha256": "eb0db4e3f1ef3eeb511d902aa89d651bd64e429bb31e6413d1b92a3b65f51405"
     }
   ]
 }

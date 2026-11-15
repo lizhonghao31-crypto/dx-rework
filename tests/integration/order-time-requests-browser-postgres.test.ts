@@ -33,7 +33,7 @@ import {OrderClosureService} from '../../apps/api/src/production-platform/order-
 import {DeliveryCalendarQuery} from '../../apps/api/src/production-platform/delivery-calendar-query.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
-import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
+import {JourneyFilterSchema,journeyReturnUrl,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -374,6 +374,43 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(savedBody.check.washing[0]).toMatchObject({version:2,document:{arrangement:{washing:{minutes:180}}}});
    const savedPlans=(await h.db.query('SELECT document FROM digital_bulk_washing_plans WHERE production_order_id=$1 ORDER BY version',[orderId])).rows;
    expect(savedPlans).toHaveLength(2);expect(savedPlans[1].document.arrangement.washing.minutes).toBe(180);
+   // Actual adopted work produces110/121-character identities. Click, refresh,
+   // original record and return must all preserve the complete identity.
+   for(const mode of ['after_receipt','factory'] as const){
+    if(mode==='factory')await h.f.runtime.run(scene,h.f.root,async()=>{
+     const manager=h.f.people.owner!,resource={kind:'order' as const,id:orderId},operation={kind:'arrangement' as const,resource};
+     const current=(await requests.check(manager,operation)).washing![0]!;
+     const washing=[{lineId:current.lineId,expectedVersion:current.version,document:{...current.document!,arrangement:{...current.document!.arrangement,mode}}}];
+     const preview=await requests.check(manager,operation,{},washing);
+     await requests.arrange(manager,{resource,overrides:{},washing,fingerprint:preview.fingerprint,acceptLate:true},randomUUID());
+    });
+    const response=await page.request.get(h.base+`/api/digital-production/journeys/${orderId}?view=cockpit`);
+    expect(response.status()).toBe(200);const journey=await response.json() as OrderJourney;
+    const prefix=mode==='factory'?'bulk_factory_washing':'bulk_return_washing';
+    const nodes=journey.stages.flatMap(stage=>stage.nodes).filter(node=>node.key.startsWith(prefix));expect(nodes).toHaveLength(2);
+    const beforeNavigation=h.requests.length;
+    for(const node of nodes){
+     expect(node.instanceId.length).toBeGreaterThan(100);
+     await page.goto(h.base+journeyReturnUrl({selected:journey.id,search:'TEST-TIME06-UI-',page:2,milestone:'',expanded:''}));
+     await page.locator('[data-view=order][aria-busy=false]').waitFor();
+     const button=page.locator('.journey-node-panel').getByRole('button',{name:node.label,exact:true});await button.click();
+     await expect.poll(()=>new URL(page.url()).searchParams.get('focus')).toBe(node.instanceId);
+     expect(new URL(page.url()).searchParams.get('row')).toBe(node.instanceId);
+     const current=page.getByRole('region',{name:'当前节点详情'});expect(await current.getByRole('heading').innerText()).toContain(node.label);
+     expect(await button.getAttribute('aria-pressed')).toBe('true');
+     await page.reload();await page.locator('[data-view=order][aria-busy=false]').waitFor();
+     expect(await current.getByRole('heading').innerText()).toContain(node.label);
+     const link=current.getByRole('link',{name:'查看节点记录',exact:true}),href=new URL((await link.getAttribute('href'))!,h.base);
+     expect(href.searchParams.get('factory')).toBe(orderId);
+     const restore=new URL(href.searchParams.get('returnTo')!,h.base);
+     expect(restore.searchParams.get('focus')).toBe(node.instanceId);expect(restore.searchParams.get('row')).toBe(node.instanceId);
+     await link.click();await page.getByRole('region',{name:'工厂流程资料'}).getByRole('button',{name:'返回',exact:true}).click();
+     await page.locator('[data-view=order][aria-busy=false]').waitFor();expect(await current.getByRole('heading').innerText()).toContain(node.label);
+     expect(new URL(page.url()).searchParams.get('page')).toBe('2');expect(new URL(page.url()).searchParams.get('search')).toBe('TEST-TIME06-UI-');
+    }
+    expect(h.requests.slice(beforeNavigation).filter(request=>request.method==='POST'&&request.path.includes(`/orders/${orderId}/`))).toEqual([]);
+    await page.screenshot({path:join(h.evidence,`washing-${mode}-node-return-1165.png`),fullPage:true});
+   }
   }finally{await tab.context.close();}
  });
 
