@@ -51,3 +51,4 @@
 
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task-heading>strong {flex:1 1 auto;min-width:0;font-size:14px}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task .dx-badge {font-size:12px;padding:1px 4px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table td.cockpit-home-task-cell {padding-top:3px;padding-bottom:3px}

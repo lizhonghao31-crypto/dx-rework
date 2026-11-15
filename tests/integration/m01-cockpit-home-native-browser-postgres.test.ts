@@ -1,5 +1,6 @@
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {join} from 'node:path';
+import {writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
@@ -70,7 +71,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(h.evidence,`full-home-${width}.png`),fullPage:true});await page.screenshot({path:join(h.evidence,`viewport-home-${width}.png`)});
   }
   await page.goto(h.base+h.path({search:h.prefix+'02'}));await homeReady(page);
-  for(const width of [1165,1366,1584]){await page.setViewportSize({width,height:1003});const row=page.locator('.journey-orders tbody tr').first();expect((await row.boundingBox())!.height).toBeLessThanOrEqual(190);const cell=row.locator('.cockpit-home-client'),quantity=cell.getByLabel('下单数量'),clientBox=await cell.boundingBox(),quantityBox=await quantity.boundingBox();expect(Math.abs(clientBox!.x-quantityBox!.x)).toBeLessThan(1);await page.screenshot({path:join(h.evidence,`single-two-PO-home-${width}.png`),fullPage:true});}
+  for(const width of [1165,1366,1584]){await page.setViewportSize({width,height:1003});const row=page.locator('.journey-orders tbody tr').first();const geometry=await row.evaluate(element=>({width:innerWidth,height:element.getBoundingClientRect().height,dpr:devicePixelRatio,fonts:document.fonts.status,cells:[...element.children].map(cell=>({text:cell.textContent,height:cell.getBoundingClientRect().height,font:getComputedStyle(cell).fontFamily,fontSize:getComputedStyle(cell).fontSize,lineHeight:getComputedStyle(cell).lineHeight}))}));await writeFile(join(h.evidence,`single-two-PO-geometry-${width}.json`),JSON.stringify(geometry,null,2));await page.screenshot({path:join(h.evidence,`single-two-PO-before-check-${width}.png`),fullPage:true});expect(geometry.height).toBeLessThanOrEqual(190);const cell=row.locator('.cockpit-home-client'),quantity=cell.getByLabel('下单数量'),clientBox=await cell.boundingBox(),quantityBox=await quantity.boundingBox();expect(Math.abs(clientBox!.x-quantityBox!.x)).toBeLessThan(1);await page.screenshot({path:join(h.evidence,`single-two-PO-home-${width}.png`),fullPage:true});}
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'viewport-home-390.png')});
   }finally{await context.close();}
  });
