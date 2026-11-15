@@ -8,7 +8,12 @@ import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.j
 import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
 import {adoptBulkWashingWithClient} from '../../apps/api/src/production-platform/bulk-washing-repository.js';
 import {BulkWashingService} from '../../apps/api/src/production-platform/bulk-washing-service.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+const currentBeijingInput=()=>new Date(Date.now()+8*3600000).toISOString().slice(0,23).replace(/0+$/,'').replace(/\.$/,'');
 (url?describe:describe.skip)('normal bulk washing in original App',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,orderId:string,inspector:Awaited<ReturnType<typeof r5RoleFixture>>;
  beforeAll(async()=>{
@@ -100,6 +105,60 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const washing=foreign.page.locator('#factory-washing');await washing.getByRole('button',{name:'大货洗水',exact:true}).click();await washing.getByRole('alert').waitFor();
    expect(await washing.getByLabel('办理',{exact:true}).count()).toBe(0);expect(await washing.getByText('正在读取洗水记录…',{exact:true}).count()).toBe(0);expect(await factory.getByText(/当前批准加工厂/).count()).toBe(0);
   }finally{await foreign.context.close();}
+ });
+ it.each(['after_receipt','factory'] as const)('uses the original logistics and QC App for genuine failed-piece rewash on %s',async mode=>{
+  const f=h.f,ready=await f.bulkReady('无',undefined,1,undefined,{quantity:4}),id=ready.id;
+  const po=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows[0].line_id;
+  const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].cutting_order_id;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:4,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const flow=new FactoryFlowService(h.db),before=await flow.read(f.root,id);
+  await flow.dispatch(f.root,id,{expectedRevision:before.revision,supplierId:f.supplierId,note:'TEST rewash App factory'},randomUUID());
+  const production=(await flow.read(f.root,id)).productionId!,reporting=new ProductionReportingService(h.db),businessDate=beijingCalendarDate(new Date());
+  await reporting.report(f.root,production,{position:1,businessDate,quantity:4},randomUUID());await reporting.execute(f.root,production,'complete',{businessDate,confirmed:true},randomUUID());await reporting.execute(f.root,production,'ship',{businessDate,confirmed:true},randomUUID());
+  const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+  await new ReceivingService(h.db,undefined,undefined,new ProductionClosureService(h.db)).create(warehouse,{cuttingOrderId:cut,documentQuantity:4,actualQuantity:4,attachmentIds:[await f.image(warehouse)]},randomUUID());
+  const receipt=(await garmentQuality(h.db,id))[0]!;
+  await new GarmentQualityService(h.db).record(f.root,id,{receiptId:receipt.receiptId,quantityVersion:receipt.quantityVersion,qualifiedQuantity:4,occurredAt:new Date().toISOString(),problem:''},randomUUID());
+  const qc=await r5RoleFixture(h.db,f.access,{...f.root,requestId:randomUUID()},'quality_control'),logistics=f.people['embroidery-washing-merchandiser']!;
+  const duration={minutes:60,calendar:'continuous' as const,reminder:{enabled:true,percent:70}},db=await h.db.connect();
+  try{await db.query('BEGIN');await adoptBulkWashingWithClient(db,f.root,id,po,0,{arrangement:{mode,reference:'TEST original frozen batch',revision:1,accounting:'additional',washing:duration,inspection:duration},staff:{logisticsId:logistics.actorId,inspectorId:qc.actor.actorId},fee:{kind:'pending'},sourceRef:'TEST original adopted washing'});await db.query('COMMIT');}finally{db.release();}
+  const service=new BulkWashingService(h.db),command=async()=>{const scope=(await service.read(logistics,id)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:new Date().toISOString(),note:'TEST genuine colour defect'};};
+  const start=await service.record(logistics,id,{...await command(),kind:mode==='factory'?'factory_start':'send',quantity:4},randomUUID());
+  const done=await service.record(logistics,id,{...await command(),...(mode==='factory'?{kind:'factory_complete' as const,startId:start.eventId}:{kind:'return' as const,sendId:start.eventId}),quantity:4},randomUUID());
+  const failed=await service.record(qc.actor,id,{...await command(),kind:'inspection',completionId:done.eventId,quantity:4,qualifiedQuantity:3},randomUUID());
+  const original=(await service.read(f.root,id)).scopes[0]!,path=`/ui/digital-production?factory=${id}&factoryAction=washing`;
+  const tab=await h.open(logistics.actorId,1165,{},path);
+  try{
+   const panel=tab.page.locator('#factory-washing');await panel.locator('details > summary').first().click();
+   await panel.getByLabel('办理',{exact:true}).selectOption('rework');await panel.getByLabel('对应不合格检查',{exact:true}).selectOption(failed.eventId);
+   expect(await panel.getByLabel('本次数量',{exact:true}).getAttribute('max')).toBe('1');
+   await panel.getByLabel('本次数量',{exact:true}).fill('1');await panel.getByLabel('说明',{exact:true}).fill('TEST 真实色差返洗，不撤销原检查');
+   await panel.getByLabel('实际发生时间（北京时间，未知留空）',{exact:true}).fill(currentBeijingInput());
+   await panel.getByRole('button',{name:'保存',exact:true}).click();await panel.getByText('返洗发出／开始 1 · 返洗洗回／洗好 0 · 复检合格 0（不增加原收货数量）',{exact:true}).waitFor();
+   expect(await panel.getByLabel('办理',{exact:true}).inputValue()).toBe(mode==='factory'?'factory_complete':'return');
+   const options=panel.getByLabel('对应记录',{exact:true}).locator('option');expect(await options.count()).toBe(2);expect(await options.nth(1).innerText()).toContain('返洗第1轮');
+   await panel.getByLabel('对应记录',{exact:true}).selectOption({index:1});await panel.getByLabel('本次数量',{exact:true}).fill('1');
+   await panel.getByLabel('实际发生时间（北京时间，未知留空）',{exact:true}).fill(currentBeijingInput());
+   await panel.getByRole('button',{name:'保存',exact:true}).click();await panel.getByText('返洗发出／开始 1 · 返洗洗回／洗好 1 · 复检合格 0（不增加原收货数量）',{exact:true}).waitFor();
+   expect(await panel.getByLabel('合格数量',{exact:true}).count()).toBe(0);expect(await panel.getByText(/洗水费用：/).count()).toBe(0);
+   await tab.page.screenshot({path:join(h.evidence,`rewash-${mode}-logistics-1165.png`),fullPage:true});
+  }finally{await tab.context.close();}
+  const inspection=await h.open(qc.actor.actorId,390,{},path);
+  try{
+   const panel=inspection.page.locator('#factory-washing');await panel.locator('details > summary').first().click();
+   expect(await panel.getByLabel('办理',{exact:true}).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['inspection']);
+   const options=panel.getByLabel('对应记录',{exact:true}).locator('option');expect(await options.count()).toBe(2);expect(await options.nth(1).innerText()).toContain('返洗第1轮');
+   await panel.getByLabel('对应记录',{exact:true}).selectOption({index:1});expect(await panel.getByLabel('本次数量',{exact:true}).inputValue()).toBe('1');
+   await panel.getByLabel('合格数量',{exact:true}).fill('1');await panel.getByLabel('实际发生时间（北京时间，未知留空）',{exact:true}).fill(currentBeijingInput());await panel.getByRole('button',{name:'保存',exact:true}).click();
+   await panel.getByText('送洗 '+(mode==='after_receipt'?'4':'0')+' · 洗回／洗好 4 · 合格 4 · 剩余 0',{exact:true}).waitFor();
+   expect(await panel.getByLabel('对应记录',{exact:true}).locator('option').count()).toBe(1);expect(await panel.getByText(/洗水费用：/).count()).toBe(0);
+   const actual=(await service.read(f.root,id)).scopes[0]!;expect(actual.ledger).toMatchObject({qualified:4,complete:true,rework:{qualified:1,sent:1,washed:1}});
+   expect(actual.facts.find(fact=>fact.id===failed.eventId)).toMatchObject({voided:false,kind:'inspection',qualifiedQuantity:3});
+   expect(actual.windows.filter(window=>original.windows.some(prior=>prior.id===window.id))).toEqual(original.windows);
+   expect((await garmentQuality(h.db,id))[0]!.quantity).toBe(4);
+   await inspection.page.screenshot({path:join(h.evidence,`rewash-${mode}-qc-390.png`),fullPage:true});
+  }finally{await inspection.context.close();}
  });
  it('assigned logistics records30 sent and20 returned, then QC releases only20 in the same existing page',async()=>{
   const path=`/ui/digital-production?factory=${orderId}&factoryAction=washing`;

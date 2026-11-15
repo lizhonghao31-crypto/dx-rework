@@ -10,6 +10,39 @@ const checked:BulkWashingFact={...common,id:'qc',kind:'inspection',completionId:
 const duration={minutes:240,calendar:'continuous',reminder:{enabled:true,percent:70}};
 
 describe('normal bulk washing, isolated physical batch coverage',()=>{
+ it.each(['after_receipt','factory'] as const)('retains genuine failures and accepts only their rewashed remainder on %s',mode=>{
+  const start:BulkWashingFact=mode==='factory'?{...common,id:'first',kind:'factory_start',quantity:30}:{...send,id:'first'};
+  const done:BulkWashingFact=mode==='factory'?{...common,id:'done',kind:'factory_complete',startId:'first',quantity:30}:{...returned,id:'done',sendId:'first',quantity:30};
+  const failed:BulkWashingFact={...checked,id:'failed',completionId:'done',quantity:30,qualifiedQuantity:28};
+  const rewash:BulkWashingFact=mode==='factory'?{...start,id:'rewash',reworkOfInspectionId:'failed',quantity:2}:{...send,id:'rewash',reworkOfInspectionId:'failed',quantity:2};
+  const again:BulkWashingFact=mode==='factory'?{...common,id:'again',kind:'factory_complete',startId:'rewash',quantity:2}:{...returned,id:'again',sendId:'rewash',quantity:2};
+  const second:BulkWashingFact={...checked,id:'second',completionId:'again',quantity:2,qualifiedQuantity:1};
+  const facts=[start,done,failed];
+  expect(bulkWashingLedger(scope,mode,facts)).toMatchObject({qualified:28,remaining:2,rework:{available:[{inspectionId:'failed',quantity:2,round:1}]}});
+  facts.push(rewash,again,second);
+  expect(bulkWashingLedger(scope,mode,facts)).toMatchObject({conflict:false,washed:30,qualified:29,remaining:1,complete:false,rework:{sent:2,washed:2,qualified:1,available:[{inspectionId:'second',quantity:1,round:2}],rounds:{failed:0,rewash:1,second:1}}});
+  const thirdStart={...rewash,id:'third-start',quantity:1,reworkOfInspectionId:'second'};
+  const thirdReturn=mode==='factory'?{...again,id:'third-return',kind:'factory_complete' as const,startId:thirdStart.id}:{...again,id:'third-return',kind:'return' as const,sendId:thirdStart.id};
+  const thirdCheck={...checked,id:'third-check',completionId:thirdReturn.id,quantity:1,qualifiedQuantity:1,occurredAt:'2026-11-14T02:00:00.000Z'};
+  expect(bulkWashingLedger(scope,mode,[...facts,thirdStart,{...thirdReturn,quantity:1},thirdCheck])).toMatchObject({conflict:false,washed:30,qualified:30,remaining:0,complete:true,completedAt:thirdCheck.occurredAt,rework:{sent:3,washed:3,qualified:2,available:[],rounds:{'third-check':2}}});
+  expect(failed.qualifiedQuantity).toBe(28);expect(second.qualifiedQuantity).toBe(1);
+ });
+ it('reserves failed quantities once, across partial rounds and invalid ancestor/PO/version references',()=>{
+  const done={...returned,quantity:30},failed={...checked,quantity:30,qualifiedQuantity:28};
+  const rewash:BulkWashingFact={...send,id:'rewash',quantity:1,reworkOfInspectionId:'qc'};
+  const first=[send,done,failed,rewash];
+  expect(bulkWashingLedger(scope,'after_receipt',first).rework.available).toEqual([{inspectionId:'qc',quantity:1,round:1}]);
+  expect(bulkWashingLedger(scope,'after_receipt',[...first,{...rewash,id:'other'}]).conflict).toBe(false);
+  for(const facts of [
+   [...first,{...rewash,id:'other',quantity:2}],
+   [send,done,{...failed,qualifiedQuantity:30},rewash],
+   [send,done,rewash,failed],
+   [send,done,rewash],
+   [send,done,{...failed,scopeId:'blue'},rewash],
+   [send,done,{...failed,quantityVersion:'changed'},rewash],
+   [send,done,failed,{...rewash,occurredAt:'2026-11-12T00:00:00.000Z'}],
+  ])expect(bulkWashingLedger(scope,'after_receipt',facts)).toMatchObject({conflict:true,qualified:null,complete:false,rework:{available:[]}});
+ });
  it('first receipt30 and wash return20 never complete either that receipt or order100',()=>{
   const result=bulkWashingLedger(scope,'after_receipt',[send,returned,checked]);
   expect(result).toMatchObject({conflict:false,sent:30,washed:20,qualified:20,remaining:10,complete:false,completedAt:null,sendable:0});

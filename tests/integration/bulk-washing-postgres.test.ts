@@ -196,6 +196,61 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT document FROM digital_bulk_washing_plans WHERE plan_id=$1',[before.planId])).rows[0].document.fee.kind).toBe('budget_row');
  });
 
+ it.each(['after_receipt','factory'] as const)('preserves real failed checks through two rewash rounds, quantity locks and original receipt coverage on %s',async mode=>{
+  const ready=await f.bulkReady('无',undefined,1,undefined,{quantity:4}),id=ready.id;
+  const po=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows[0].line_id;
+  const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].cutting_order_id;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:4,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const flow=new FactoryFlowService(f.db),before=await flow.read(f.root,id);
+  await flow.dispatch(f.root,id,{expectedRevision:before.revision,supplierId:f.supplierId,note:'TEST rewash original factory'},randomUUID());
+  const production=(await flow.read(f.root,id)).productionId!,reporting=new ProductionReportingService(f.db),businessDate=beijingCalendarDate(new Date());
+  await reporting.report(f.root,production,{position:1,businessDate,quantity:4},randomUUID());
+  await reporting.execute(f.root,production,'complete',{businessDate,confirmed:true},randomUUID());await reporting.execute(f.root,production,'ship',{businessDate,confirmed:true},randomUUID());
+  const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+  await new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db)).create(warehouse,{cuttingOrderId:cut,documentQuantity:4,actualQuantity:4,attachmentIds:[await f.image(warehouse)]},randomUUID());
+  const receipt=(await garmentQuality(f.db,id))[0]!;
+  await new GarmentQualityService(f.db).record(f.root,id,{receiptId:receipt.receiptId,quantityVersion:receipt.quantityVersion,qualifiedQuantity:4,occurredAt:new Date().toISOString(),problem:''},randomUUID());
+  const qc=await r5RoleFixture(f.db,f.access,{...f.root,requestId:randomUUID()},'quality_control');
+  const db=await f.db.connect();try{await db.query('BEGIN');await adoptBulkWashingWithClient(db,f.root,id,po,0,{...adoption,fee:{kind:'pending'},staff:{logisticsId:logistics.actor.actorId,inspectorId:qc.actor.actorId},arrangement:{...adoption.arrangement,mode} as BulkWashingAdoption['arrangement']});await db.query('COMMIT');}finally{db.release();}
+  const read=async()=>(await service.read(logistics.actor,id)).scopes[0]!;
+  const command=async()=>{const own=await read();return {planId:own.planId,scopeId:own.scopeId,quantityVersion:own.quantityVersion,expectedRevision:own.revision,occurredAt:new Date().toISOString(),note:'TEST genuine colour defect, not an entry mistake'};};
+  const launch=async(quantity:number,reworkOfInspectionId?:string)=>service.record(logistics.actor,id,{...await command(),kind:mode==='factory'?'factory_start':'send',quantity,...(reworkOfInspectionId?{reworkOfInspectionId}:{})},randomUUID());
+  const finish=async(startId:string,quantity:number)=>service.record(logistics.actor,id,{...await command(),...(mode==='factory'?{kind:'factory_complete' as const,startId}:{kind:'return' as const,sendId:startId}),quantity},randomUUID());
+  const check=async(completionId:string,quantity:number,qualifiedQuantity:number)=>service.record(qc.actor,id,{...await command(),kind:'inspection',completionId,quantity,qualifiedQuantity},randomUUID());
+  const budgets=(await f.db.query('SELECT version,document,totals FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version',[id])).rows;
+  const first=await launch(4),done=await finish(first.eventId,4),failed=await check(done.eventId,4,3),original=await read();
+  expect(original.ledger).toMatchObject({qualified:3,remaining:1,washed:4,rework:{available:[{inspectionId:failed.eventId,quantity:1,round:1}]}});
+  expect((await bulkWashingTodos(f.db,logistics.actor)).some(row=>row.route.entityId===id&&row.taskTitle===(mode==='factory'?'关联工厂洗水与本批收货':'办理不合格返洗'))).toBe(true);
+  await expect(launch(2,failed.eventId)).rejects.toMatchObject({statusCode:409});await expect(launch(1,randomUUID())).rejects.toMatchObject({statusCode:409});
+  const input={...await command(),kind:mode==='factory'?'factory_start' as const:'send' as const,quantity:1,reworkOfInspectionId:failed.eventId},key=randomUUID();
+  await expect(service.record(qc.actor,id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+  const raced=await Promise.allSettled([service.record(logistics.actor,id,input,key),service.record(logistics.actor,id,input,randomUUID())]);
+  expect(raced.filter(result=>result.status==='fulfilled')).toHaveLength(1);const winner=raced.find(result=>result.status==='fulfilled')!;
+  if(winner.status!=='fulfilled')throw Error('Missing committed rewash');
+  if(raced[0]?.status==='fulfilled')expect(await service.record(logistics.actor,id,input,key)).toEqual(winner.value);
+  const active=await read();expect(active.windows.filter(window=>original.windows.some(prior=>prior.id===window.id))).toEqual(original.windows);
+  expect(active.windows.find(window=>window.id===winner.value.eventId)).toMatchObject({state:'active',minutes:60});
+  expect(active.ledger.rework?.available).toEqual([]);await expect(launch(1,failed.eventId)).rejects.toMatchObject({statusCode:409});
+  const returned=await finish(winner.value.eventId,1);
+  expect((await bulkWashingTodos(f.db,qc.actor)).some(row=>row.route.entityId===id&&row.taskTitle==='办理大货洗后检查')).toBe(true);
+  await expect(service.record(logistics.actor,id,{...await command(),kind:'inspection',completionId:returned.eventId,quantity:1,qualifiedQuantity:0},randomUUID())).rejects.toMatchObject({statusCode:403});
+  const failedAgain=await check(returned.eventId,1,0),second=await launch(1,failedAgain.eventId),secondReturn=await finish(second.eventId,1);
+  await check(secondReturn.eventId,1,1);const final=await read();
+  expect(final.ledger).toMatchObject({conflict:false,complete:true,qualified:4,remaining:0,washed:4,rework:{sent:2,washed:2,qualified:1,available:[]}});
+  expect(final.ledger.rework?.rounds[second.eventId]).toBe(2);expect(final.facts.find(fact=>fact.id===failed.eventId)).toMatchObject({voided:false,kind:'inspection',qualifiedQuantity:3});
+  expect(final.facts.find(fact=>fact.id===failedAgain.eventId)).toMatchObject({voided:false,kind:'inspection',qualifiedQuantity:0});
+  expect((await garmentQuality(f.db,id))[0]).toMatchObject({receiptId:receipt.receiptId,quantity:4,receivedAt:receipt.receivedAt});
+  if(mode==='factory'){
+   const link=async(completionId:string,quantity:number)=>service.record(logistics.actor,id,{...await command(),kind:'receipt_link',completionId,quantity,receiptId:receipt.receiptId,receiptQuantityVersion:receipt.quantityVersion},randomUUID());
+   await expect(link(done.eventId,4)).rejects.toMatchObject({statusCode:409});await expect(link(returned.eventId,1)).rejects.toMatchObject({statusCode:409});
+   await link(done.eventId,3);await link(secondReturn.eventId,1);
+  }
+  expect((await readWashingCoverage(f.db,id)).get(receipt.receiptId)).toBe(4);expect((await readPackingQualityCoverage(f.db,[id])).get(po)?.qualified).toBe(4);
+  expect((await f.db.query('SELECT version,document,totals FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version',[id])).rows).toEqual(budgets);
+  await service.record(f.root,id,{...await command(),kind:'void',factId:failed.eventId,reason:'TEST invalidated original evidence, retain descendants for investigation'},randomUUID());
+  expect((await read()).ledger).toMatchObject({conflict:true,qualified:null,complete:false});expect((await readWashingCoverage(f.db,id)).get(receipt.receiptId)).toBeNull();
+ });
  it('exempt orders need no washing assignment and invalid fee references cannot adopt or overwrite history',async()=>{
   const ready=await f.bulkReady('无'),po=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[ready.id])).rows[0].line_id;
   const db=await f.db.connect();try{

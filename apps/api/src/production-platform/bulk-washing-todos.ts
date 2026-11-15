@@ -26,7 +26,8 @@ export async function bulkWashingTodos(db:WashingDB,actor:TrustedActorContext,pr
    const live=scope.facts.filter(f=>!f.voided),pendingChecks=live.filter(f=>['return','factory_complete'].includes(f.kind)&&!live.some(q=>q.kind==='inspection'&&q.completionId===f.id));
    const candidates:Array<{key:string;label:string;due:string|null;role:string}>=[];
    const uncheckedLinks=scope.mode==='factory'&&scope.receipts?.some(r=>live.filter(f=>f.kind==='receipt_link'&&f.receiptId===r.receiptId&&f.receiptQuantityVersion===r.quantityVersion).reduce((n,f)=>n+f.quantity,0)<r.quantity);
-   if(scope.canLogistics&&(scope.ledger.conflict||scope.ledger.washed<scope.quantity||uncheckedLinks))candidates.push({key:'logistics',label:scope.ledger.conflict?'核对洗水批次范围':uncheckedLinks?'关联工厂洗水与本批收货':'办理大货洗水发收',due:scope.windows.filter(w=>w.kind==='washing'&&w.state==='active'&&w.dueAt).map(w=>w.dueAt!).sort()[0]??null,role:'embroidery_washing_merchandiser'});
+   const rework=scope.ledger.rework,pendingRework=Boolean(rework&&(rework.available.length||rework.sent>rework.washed));
+   if(scope.canLogistics&&(scope.ledger.conflict||scope.ledger.washed<scope.quantity||uncheckedLinks||pendingRework))candidates.push({key:'logistics',label:scope.ledger.conflict?'核对洗水批次范围':uncheckedLinks?'关联工厂洗水与本批收货':pendingRework?'办理不合格返洗':'办理大货洗水发收',due:scope.windows.filter(w=>w.kind==='washing'&&w.state==='active'&&w.dueAt).map(w=>w.dueAt!).sort()[0]??null,role:'embroidery_washing_merchandiser'});
    if(scope.canInspect)for(const check of pendingChecks)candidates.push({key:`qc:${check.id}`,label:'办理大货洗后检查',due:scope.windows.find(w=>w.id===`${check.id}:qc`)?.dueAt??null,role:'quality_control'});
    for(const candidate of candidates){
     const todoId=idFor(`bulk-washing:${scope.planId}:${scope.scopeId}:${candidate.key}`);if(projection?.todoId&&projection.todoId!==todoId)continue;

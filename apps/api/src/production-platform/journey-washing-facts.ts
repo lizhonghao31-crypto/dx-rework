@@ -16,7 +16,7 @@ export function journeyWashingFact(scopes:readonly BulkWashingScopeView[],plans:
   }));
  });
  const count=own.reduce((sum,s)=>sum+(inspection?s.ledger.qualified??0:s.ledger.washed),0);
- const complete=quantity!==null&&quantity>0&&own.length>0&&own.every(s=>!s.ledger.conflict)&&own.reduce((sum,s)=>sum+s.quantity,0)===quantity&&count===quantity;
+ const complete=quantity!==null&&quantity>0&&own.length>0&&own.every(s=>!s.ledger.conflict)&&own.reduce((sum,s)=>sum+s.quantity,0)===quantity&&count===quantity&&windows.every(w=>w.complete);
  const ends=windows.map(w=>w.completed),known=complete&&windows.length>0&&windows.every(w=>w.complete)&&ends.every(e=>e.precision==='instant');
  const starts=windows.map(w=>w.started),ready=starts.length>0&&starts.every(s=>s.precision==='instant')?{precision:'instant' as const,at:new Date(Math.min(...starts.map(s=>s.precision==='instant'?Date.parse(s.at):NaN))).toISOString()}:unknown;
  return {ready,clockStart:ready,businessCompleted:complete,completed:known?{precision:'instant',at:new Date(Math.max(...ends.map(e=>e.precision==='instant'?Date.parse(e.at):NaN))).toISOString()}:unknown,

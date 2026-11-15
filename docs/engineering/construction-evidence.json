@@ -1,333 +1,225 @@
 {
   "version": 1,
-  "base": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
+  "base": "cf623224ca32bed02e0b592b3de00061399847bf",
   "risk": "full",
-  "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
+  "sourceFingerprint": "f8d7b702b5a2150c4cccdd2c30cbb095c0f484058d0ea1f1f37263d7b879c965",
   "rules": [
     {
-      "rule": "Read only the initiating actor/source/original operation+key committed submission receipt. An absent or in-flight receipt remains unconfirmed, never means request failed. Return only bounded completion identity/version, recheck current original object/active role and never disclose another actor command or saved document/prices.",
-      "source": "User via Dot authorizes sequential repair of C/D/E unknown publication/confirmation. Dot2026-11-15 audit supplement: admin operation_events is different from development audit_events; empty admin query cannot prove no execution. Original source/confirm transactions persist digital_production_commands; current platform permission/UI norms.",
+      "rule": "Preserve real rejected checks and support genuine rewash only from each current failed inspection unconsumed remainder. Multi-round launches reserve rejected quantities once, retain first-pass received/washed counts and accumulate accepted unique garments once. Scope, quantity version, current role, sequence, lock and idempotency remain authoritative; withdrawal invalidates descendants and coverage.",
+      "source": "User via Dot authorizes genuine ROLE4washed/3qualified/1failed rewash repair, not void-as-rework. Existing approved time-framework27 washing scope/quantity rules and current sourcing/permission standards.",
       "writes": [
-        "packages/contracts/src/digital-development.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-routes.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "packages/contracts/src/bulk-washing.ts",
+        "apps/api/src/production-platform/bulk-washing-ledger.ts",
+        "apps/api/src/production-platform/bulk-washing-service.ts",
+        "tests/unit/bulk-washing-ledger.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md",
+        "docs/requirements/platform-permission-golden-source-v1.0.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/whole-order-visibility.ts",
-        "apps/api/src/production-platform/development-amendment-service.ts",
-        "apps/api/src/app.ts",
-        "apps/api/src/production-platform/order-time-automatic.ts"
+        "apps/api/src/production-platform/bulk-washing-repository.ts",
+        "apps/api/src/production-platform/bulk-washing-coverage.ts",
+        "apps/api/src/production-platform/packing-quality-coverage.ts",
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/production-platform/bulk-washing-routes.ts"
       ],
       "oldTests": [
-        "tests/integration/digital-development-postgres.test.ts",
-        "tests/integration/digital-production-identity-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/unit/bulk-washing-ledger.test.ts"
       ],
       "newTests": [
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/unit/development-submit-recovery.test.ts"
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/unit/bulk-washing-ledger.test.ts"
       ],
-      "initialization": "Reuse existing immutable command table; no new migration or backfill. Authenticated original development GET route uses RR READ ONLY and no-store; receipt lookup binds actor_id and scoped publish/confirm command/key. Existing rows remain readable; malformed/foreign stored response cannot certify completion. Source visibility remains current, including deleted objects. Record does not infer C/D/E original server exception or terminal state without logs.",
-      "dateAndPermission": "No occurrence/clock/plan/date/reset/adoption/wage/quote/budget changes. Current original source visibility plus initiating designer active membership (Root original exception) rechecked. Root querying its own key cannot read another actor receipt; workers/unrelated sources denied. Isolated dedicated-role revoke tested in same signed browser cookie without Lab identity switching. Missing/uncommitted receipt does not authorize new identity or classify failure.",
-      "expectation": "5real App/PG cases pass,6unselected retained for canonical Full. Uncommitted publication remains unconfirmed until actual commit; afterwards exact source/version read. Root original-actor separation, unrelated worker and real same-cookie revocation deny. Lost committed publication/confirmation recovered via GET only; one original command/audit/order retained. Actual fixture proxy enforces no-store, original route adds private no-store. Empty admin audit is not used as proof.",
+      "initialization": "Reuse immutable original event kinds and optional payload reworkOfInspectionId, no migration or backfill. Old no-rework rows keep original arithmetic. New events need this reader for correct operations; older programs may fail closed on cumulative movement rather than understand rewash, so do not claim arbitrary older rollback compatibility. Isolated actual lowpriv latest migrations and exact cleanup only.",
+      "dateAndPermission": "Original assigned washing logistics handles both routes, assigned QC alone inspects, Root correction remains separate. Foreign origin/scope/version, excess/duplicate/forward reference, true time reversal and orphan chain fail closed. Actual times remain actual or unknown; no synthetic receipt, shipment, wage, budget, quote or contract. Original factory/PO/receipt linkage constraints and cumulative qualified ceilings retained.",
+      "expectation": "Both routes original PG cover4firstwash/3accepted, two real rewash rounds1failed then1accepted, immutable original failures, concurrent launch once, exact idempotent result, narrow role denial, original windows/budget unchanged, only3+1factory allocations release4original received pieces. Root ancestor withdrawal removes release, history retained. Original correction/cross-PO/revocation cases remain in17passed.",
       "checks": [
-        "native",
         "unit",
-        "api-types",
+        "pg-native",
+        "types",
         "lint",
         "preflight"
       ]
     },
     {
-      "rule": "Preserve immutable original publication/confirmation intent after uncertain transport or malformed result. Original UI clearly marks pending, freezes alternate submit/save/intent, supports lookup without writes, and only explicit continue may query then replay captured exact path/body/version/key. Valid committed receipt returns to original record; publication never fabricates formal order success.",
-      "source": "Approved existing failure-retry/no-duplicate UX and user via Dot C/D/E recovery repair. Original confirmation kept key but only replayed writes; publication had no equivalent pending guard. Shared DevelopmentCreateForm serves new create, Resume and original designer confirm; current UI norm specifies read-first safe recovery, not global retries.",
+      "rule": "Keep each original responsibility window and open a separate actual washing/check window per rewash round. Pending genuine rewash remains actionable, original receipt-link todo priority retained, active rewash cannot borrow an old aggregate washing completion. Known old overdue windows survive alongside new clocks.",
+      "source": "Approved27 independent actual responsibility windows, user real defect/reinspection semantics and existing native todo/notification ownership. No resetting original dates or automatic fees.",
       "writes": [
-        "apps/web/src/development-submit-recovery.ts",
-        "apps/web/src/digital-development-create-form.tsx",
-        "tests/unit/development-submit-recovery.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "apps/api/src/production-platform/bulk-washing-todos.ts",
+        "apps/api/src/production-platform/journey-washing-facts.ts",
+        "tests/unit/bulk-washing-windows.test.ts",
+        "tests/unit/journey-washing-facts.test.ts",
+        "docs/architecture/business-module-boundaries.md"
       ],
       "reads": [
+        "apps/api/src/production-platform/bulk-washing-windows.ts",
+        "apps/api/src/production-platform/journey-washing-projection.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts"
+      ],
+      "oldTests": [
+        "tests/unit/bulk-washing-windows.test.ts",
+        "tests/unit/journey-washing-facts.test.ts",
+        "tests/unit/journey-washing-projection.test.ts",
+        "tests/unit/order-time-washing.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/bulk-washing-windows.test.ts",
+        "tests/unit/journey-washing-facts.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts"
+      ],
+      "initialization": "Original windows derive from immutable send/start and return/complete events, including new linked launches; original batch adopted policy frozen, later company settings not borrowed. Same native todo/notification identities, no duplicate physical tasks or new responsibility service. Existing zero/no-wash, missing time and termination handling retained.",
+      "dateAndPermission": "No plan/target/actual rewriting. Old batch completion/overdue remains fixed, new actual round opens own duration. Washing readiness remains actual, no planned date as fact. Native current-role checks still apply after revoke. Financial fields remain hidden from logistics/QC.",
+      "expectation": "47units cover separate clocks on both routes, old overdue unchanged, unknown completion no aging, termination freeze and active rewash aggregate not completed.17PG/native cases retain original persistence and notification/revocation cases and verify new logistics/QC todos and original factory receipt-link priority.",
+      "checks": [
+        "unit",
+        "pg-native",
+        "types",
+        "lint",
+        "preflight"
+      ]
+    },
+    {
+      "rule": "Offer genuine rejected-piece rewash in the original page with explicit failed inspection, remaining quantity and round. Filter exhausted wash returns and already inspected completions from normal candidates, show historical accepted/rejected counts and distinguish wash/check completion from actual receipt. Preserve original pending request/form and role boundaries.",
+      "source": "User-approved existing UI style and original factory/washing page; actual ROLE failing second-batch inspection requires real loop, not repeated check or Root void. Dot factory route wash-completed vs actual linked-receipt ambiguity recorded.",
+      "writes": [
+        "apps/web/src/bulk-washing-actions.ts",
+        "apps/web/src/bulk-washing-panel.tsx",
+        "tests/unit/bulk-washing-actions.test.ts",
+        "tests/integration/bulk-washing-browser-postgres.test.ts",
+        "docs/engineering/bulk-washing-reinspection-20261115.md"
+      ],
+      "reads": [
+        "apps/web/src/factory-flow-panel.tsx",
+        "apps/web/src/use-digital-detail-navigation-guard.ts",
         "apps/web/src/digital-production-api.ts",
-        "apps/web/src/request-response-feedback.ts",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/use-digital-detail-navigation-guard.ts"
+        "apps/api/src/production-platform/bulk-washing-service.ts"
       ],
       "oldTests": [
-        "tests/unit/request-response-feedback.test.ts",
-        "tests/unit/development-create-size-optional.test.ts",
-        "tests/unit/digital-development.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/bulk-washing-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/development-submit-recovery.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/bulk-washing-browser-postgres.test.ts",
+        "tests/unit/bulk-washing-actions.test.ts"
       ],
-      "initialization": "No automatic retry or new persistent browser/customer-data store. Capture cloned original body/key in same page; preserve leave/unload guard and original source links. New and resumed create use same pending state. Read failure or unavailable receipt retains inputs/key, not another source/order; explicit replay uses original command transaction/idempotency guards. Receipt recovered publication returns original source for later normal customer confirmation.",
-      "dateAndPermission": "No fake dates/actuals, blanket success response or privilege expansion. Read receipt validates strict operation/source/version/order ID; foreign/malformed/empty responses remain unknown. Confirmed source docs/ordering/quote/budget are not changed by lookup. Existing real business validation, optional sample-date semantics, current actor scopes and source-order uniqueness unchanged.",
-      "expectation": "41unit cases pass (12new protocol plus29old request/development cases), including both-operation lookup no POST, completed receipt no replay, exact original replay, malformed/wrong-source/wrong-operation refusal and denied lookup no write.5native cases pass,6filtered not claimed passed: before-forward lost publish, actual committed lost publish and committed lost confirm recover without duplicate; original no-sample-date publish stays valid. Final1165screenshots of publish/confirm pending actually opened; pending header and frozen intent/form visible. Lint,web/API types,266preflight pass; one new route index reviewed narrowly with older annotations retained.",
+      "initialization": "Optional ledger.rework preserves old fixture DTO compatibility. UI projection never replaces transactional permission/count guard. Existing same-order reload retains form and request state; no polling, extra navigation/page or persistent customer-data store. Existing old pending-command historical lack of key and newF unidentified preflight/confirm error not claimed resolved.",
+      "dateAndPermission": "Actual Beijing input uses original timestamp semantics, unknown stays unknown. Only assigned logistics sees rewash and only assigned QC checks; neither gets Root void or fee disclosure. Original normal send/return and same-cookie revoke tests retained. No real browser/Acceptance data changed.",
+      "expectation": "17PG/native passed, including both real signed-role rewash paths,1165logistics and390QC screenshots actually opened and inspected. Rewash candidate limited1, only new return inspectable,3+1accepted without extra receipt, original failure retained and original windows identical. Permission error/loading isolation and unsaved other forms still pass;47units/types/lint/preflight/secret pass.",
       "checks": [
         "unit",
-        "native",
-        "web-types",
+        "pg-native",
+        "types",
         "lint",
-        "preflight"
-      ]
-    },
-    {
-      "rule": "Original canonical legacy short-lead browser recovery must follow the new read-first protocol without losing its original one-publication, single-order, single-approval-consumption, authorization, source-switch or midnight protections.",
-      "source": "Actual failed Full43722465776, PGjob132838321796.25of26suites passed; first failure waited for retired original-command button and subsequent shared generator cases failed after interruption. Original current UI/receipt endpoint and11-case matrix independently verified, not a font/PG business-data failure.",
-      "writes": [
-        "tests/acceptance/m01-short-lead-native-browser.ts"
-      ],
-      "reads": [
-        "apps/web/src/development-submit-recovery.ts",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/short-lead-workspace.tsx",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/short-lead-service.ts"
-      ],
-      "oldTests": [
-        "tests/acceptance/m01-short-lead-native-browser.ts",
-        "tests/integration/m01-short-lead-native-browser-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/acceptance/m01-short-lead-native-browser.ts"
-      ],
-      "initialization": "Retain original full-App/realAuth/PG fixture and all11shared dependent cases. Update the existing recovery locator, replace expectation of duplicate confirm POST with exactly1POST and1successful GET bound to same original key/confirm operation. Verify1stored command,1order,1approval consumption and still1POST after source503. No extra fixture, timeout increase, case removal or source changes.",
-      "dateAndPermission": "Application and contract bytes remain exactly reviewed eebe790e. Original denied confirmation still retries exact content/key twice; only already-committed lost receipt now expects read-only recovery. All original source-switch/private approval/history, real same-session revoke and Beijing-midnight scenarios retained.11actual cases passed; oldFull remains failed.",
-      "expectation": "Entire original matrix11/11 passed,0skip. Root cause shared generator interruption resolved with stronger exact GET/key/operation and command count assertions. New helper lint and266preflight pass. Prior41units/5native/new-role proofs and source type/lint results reused only against input fingerprint captured before this test-only edit while original global source still matched; all their actual inputs remain unchanged. No new Light or independent Review required for pure test consumer repair; actual prior review SHA retained.",
-      "checks": [
-        "short-lead",
-        "repair-lint",
-        "preflight"
+        "preflight",
+        "secret"
       ]
     }
   ],
   "checks": [
     {
       "id": "unit",
+      "command": "vitest run seven washing ledger/window/work/projection/action/adoption unit files --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/washing-reinspection-unit.json",
       "kind": "tests",
-      "command": "vitest run tests/unit/development-submit-recovery.test.ts tests/unit/request-response-feedback.test.ts tests/unit/development-create-size-optional.test.ts tests/unit/digital-development.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/submit-recovery-final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
-      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
-      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
-      "startedAt": "2026-11-15T13:56:27.740Z",
-      "endedAt": "2026-11-15T13:56:32.487Z",
-      "log": "/tmp/submit-recovery-final-unit.log",
-      "logSha256": "1b099c305a0b1980b37f462ed0c0ee7d6fc023bf2c87d1bc67af4e6e1ea0d836",
-      "passed": 41,
+      "testedHead": "cf623224ca32bed02e0b592b3de00061399847bf",
+      "sourceFingerprint": "f8d7b702b5a2150c4cccdd2c30cbb095c0f484058d0ea1f1f37263d7b879c965",
+      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own workspace builds, not a fresh npm ci. Vitest maxWorkers1, canonical business-chain config, marked low-privilege isolated PG16 in owned bounded512MiB tmpfs container, actual original App/AuthService/native services and Chromium1194 with job-private committed CJK font. Exact owned container/schema cleanup confirmed. No deployed/real data. Command-only check timestamps bound the final validation batch (unit start through individual log completion), not claimed individual command durations.",
+      "startedAt": "2026-11-15T15:27:05.372Z",
+      "endedAt": "2026-11-15T15:27:10.225Z",
+      "log": "/tmp/washing-reinspection-unit.log",
+      "logSha256": "19ae9e47e8828e93e1c863fb5f73b695de7bf3701cccdadbb3eef6656728cc81",
+      "passed": 47,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f429d473374a4134a88d95da3b348aa718e893e1318990ca7b86ad1edca4d4f9"
+          "sha256": "1a121f43cc9887e07571ad6d1c9946656ca683efaf3eeae317a364e08e98a7d9"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/unit",
-        "tests/helpers",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
+      ]
     },
     {
-      "id": "native",
+      "id": "pg-native",
+      "command": "bash /tmp/washing-reinspection-pg.sh (original bulk-washing-postgres and bulk-washing-browser-postgres, canonical business-chain config, maxWorkers1)",
       "kind": "tests",
-      "command": "bash /tmp/submit-recovery-pg.sh (canonical original order-time browser suite: four new recovery/receipt/role cases plus original optional sample-date publication; maxWorkers1)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
-      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
-      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
-      "startedAt": "2026-11-15T13:56:07.629Z",
-      "endedAt": "2026-11-15T13:56:34.158Z",
-      "log": "/tmp/submit-recovery-native-final.log",
-      "logSha256": "1a73ba9082a819ce4a2fb5d81e011d10f6630542ef733b8e56bd6415f54ebcc3",
-      "passed": 5,
+      "testedHead": "cf623224ca32bed02e0b592b3de00061399847bf",
+      "sourceFingerprint": "f8d7b702b5a2150c4cccdd2c30cbb095c0f484058d0ea1f1f37263d7b879c965",
+      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own workspace builds, not a fresh npm ci. Vitest maxWorkers1, canonical business-chain config, marked low-privilege isolated PG16 in owned bounded512MiB tmpfs container, actual original App/AuthService/native services and Chromium1194 with job-private committed CJK font. Exact owned container/schema cleanup confirmed. No deployed/real data. Command-only check timestamps bound the final validation batch (unit start through individual log completion), not claimed individual command durations.",
+      "startedAt": "2026-11-15T15:27:12.263Z",
+      "endedAt": "2026-11-15T15:28:39.282Z",
+      "log": "/tmp/washing-reinspection-pg.log",
+      "logSha256": "1af81272752e8352bd1d3b81dd1e86574a5b1a264d95df4dafd48dd013fb667d",
+      "passed": 17,
       "failed": 0,
-      "skipped": 6,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f86687de83a5c11a01b8d2d95af0124c3c45541c032b92eba5f5f475e20127ff"
+          "sha256": "9d4fd330170fa973cb86ccaa46bfc6787b83c0f3c262ca9fd9dd618ee28e387b"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/unit",
-        "tests/helpers",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
+      ]
+    },
+    {
+      "id": "types",
+      "command": "npm run typecheck (all workspaces)",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "cf623224ca32bed02e0b592b3de00061399847bf",
+      "sourceFingerprint": "f8d7b702b5a2150c4cccdd2c30cbb095c0f484058d0ea1f1f37263d7b879c965",
+      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own workspace builds, not a fresh npm ci. Vitest maxWorkers1, canonical business-chain config, marked low-privilege isolated PG16 in owned bounded512MiB tmpfs container, actual original App/AuthService/native services and Chromium1194 with job-private committed CJK font. Exact owned container/schema cleanup confirmed. No deployed/real data. Command-only check timestamps bound the final validation batch (unit start through individual log completion), not claimed individual command durations.",
+      "startedAt": "2026-11-15T15:27:05.372Z",
+      "endedAt": "2026-11-15T15:28:48.099Z",
+      "log": "/tmp/washing-reinspection-types.log",
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
       "id": "lint",
+      "command": "npm run lint",
       "kind": "command",
-      "command": "eslint apps/api/src/production-platform/development-routes.ts apps/api/src/production-platform/development-service.ts apps/web/src/development-submit-recovery.ts apps/web/src/digital-development-create-form.tsx packages/contracts/src/digital-development.ts tests/unit/development-submit-recovery.test.ts tests/integration/order-time-requests-browser-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
-      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
-      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
-      "startedAt": "2026-11-15T13:52:15.000Z",
-      "endedAt": "2026-11-15T13:56:32.549Z",
-      "log": "/tmp/submit-recovery-final-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/unit",
-        "tests/helpers",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
-    },
-    {
-      "id": "web-types",
-      "kind": "command",
-      "command": "npm run typecheck --workspace @dx-rework/web",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
-      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
-      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
-      "startedAt": "2026-11-15T13:52:19.000Z",
-      "endedAt": "2026-11-15T13:57:00.541Z",
-      "log": "/tmp/submit-recovery-final-web-types.log",
-      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/unit",
-        "tests/helpers",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
-    },
-    {
-      "id": "api-types",
-      "kind": "command",
-      "command": "npm run typecheck --workspace @dx-rework/api",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
-      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
-      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
-      "startedAt": "2026-11-15T13:52:50.000Z",
-      "endedAt": "2026-11-15T13:57:18.382Z",
-      "log": "/tmp/submit-recovery-final-api-types.log",
-      "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/unit",
-        "tests/helpers",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
+      "testedHead": "cf623224ca32bed02e0b592b3de00061399847bf",
+      "sourceFingerprint": "f8d7b702b5a2150c4cccdd2c30cbb095c0f484058d0ea1f1f37263d7b879c965",
+      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own workspace builds, not a fresh npm ci. Vitest maxWorkers1, canonical business-chain config, marked low-privilege isolated PG16 in owned bounded512MiB tmpfs container, actual original App/AuthService/native services and Chromium1194 with job-private committed CJK font. Exact owned container/schema cleanup confirmed. No deployed/real data. Command-only check timestamps bound the final validation batch (unit start through individual log completion), not claimed individual command durations.",
+      "startedAt": "2026-11-15T15:27:05.372Z",
+      "endedAt": "2026-11-15T15:27:48.102Z",
+      "log": "/tmp/washing-reinspection-lint.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
       "id": "preflight",
+      "command": "npm run test:preflight (266protocol cases and migration/resource/static checks)",
       "kind": "command",
-      "command": "npm run test:preflight (266protocol cases plus original static/migration checks)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eebe790e373976265a50ba969a46c2d98b19f79a",
-      "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
-      "context": "SameNode22.22.2/npm10.9.9 own workspace, bounded test-only consumer repair; no new application/contract behavior. Actual log capture timestamps; no Light rerun or deployment.",
-      "startedAt": "2026-11-15T14:34:40.000Z",
-      "endedAt": "2026-11-15T14:34:46.131Z",
-      "log": "/tmp/submit-recovery-repair-preflight.log",
-      "logSha256": "96c57ae5d69b602abe0d253d57efe835243e93208fcc71dc166ab83e662c5942"
+      "testedHead": "cf623224ca32bed02e0b592b3de00061399847bf",
+      "sourceFingerprint": "f8d7b702b5a2150c4cccdd2c30cbb095c0f484058d0ea1f1f37263d7b879c965",
+      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own workspace builds, not a fresh npm ci. Vitest maxWorkers1, canonical business-chain config, marked low-privilege isolated PG16 in owned bounded512MiB tmpfs container, actual original App/AuthService/native services and Chromium1194 with job-private committed CJK font. Exact owned container/schema cleanup confirmed. No deployed/real data. Command-only check timestamps bound the final validation batch (unit start through individual log completion), not claimed individual command durations.",
+      "startedAt": "2026-11-15T15:27:05.372Z",
+      "endedAt": "2026-11-15T15:30:31.592Z",
+      "log": "/tmp/washing-reinspection-preflight.log",
+      "logSha256": "322a57e9a24eac513fe3ba6c78fc25e0887a7ce52f408064c5dc5f4aa7ab9a4e"
     },
     {
-      "id": "repair-lint",
+      "id": "secret",
+      "command": "npm run secret:scan",
       "kind": "command",
-      "command": "eslint tests/acceptance/m01-short-lead-native-browser.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eebe790e373976265a50ba969a46c2d98b19f79a",
-      "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
-      "context": "SameNode22.22.2/npm10.9.9 own workspace, bounded test-only consumer repair; no new application/contract behavior. Actual log capture timestamps; no Light rerun or deployment.",
-      "startedAt": "2026-11-15T14:34:38.000Z",
-      "endedAt": "2026-11-15T14:34:38.823Z",
-      "log": "/tmp/submit-recovery-repair-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "id": "short-lead",
-      "kind": "tests",
-      "command": "bash /tmp/submit-recovery-short-lead-pg.sh (entire original11-case shared short-lead App/auth/PG matrix, no filter, canonical business-chain config, one worker)",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "eebe790e373976265a50ba969a46c2d98b19f79a",
-      "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
-      "context": "Actual original native shared matrix, signed designer/owner/Root and dedicated same-cookie revocation, full migrations in marked low-privilege isolatedPG16, owned512MiB tmpfs and exact cleanup. Node22.22.2/npm10.9.9, Chromium1194 and committed job-private CJK. All11dependent cases really ran. No deployed environment or real data.",
-      "startedAt": "2026-11-15T14:32:25.195Z",
-      "endedAt": "2026-11-15T14:32:51.193Z",
-      "log": "/tmp/submit-recovery-short-lead.log",
-      "logSha256": "a55ade967d5ddfa30317cad886643ecb630c1a93f0967b5ed09bb0eba0ad0125",
-      "passed": 11,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "c752da3d862023d6835b42a57c6032c1f686c824f7b7cdb1816b9a5b3684560d"
-        }
-      ]
+      "testedHead": "cf623224ca32bed02e0b592b3de00061399847bf",
+      "sourceFingerprint": "f8d7b702b5a2150c4cccdd2c30cbb095c0f484058d0ea1f1f37263d7b879c965",
+      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own workspace builds, not a fresh npm ci. Vitest maxWorkers1, canonical business-chain config, marked low-privilege isolated PG16 in owned bounded512MiB tmpfs container, actual original App/AuthService/native services and Chromium1194 with job-private committed CJK font. Exact owned container/schema cleanup confirmed. No deployed/real data. Command-only check timestamps bound the final validation batch (unit start through individual log completion), not claimed individual command durations.",
+      "startedAt": "2026-11-15T15:27:05.372Z",
+      "endedAt": "2026-11-15T15:28:49.883Z",
+      "log": "/tmp/washing-reinspection-secret.log",
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
 }
