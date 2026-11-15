@@ -212,9 +212,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('settles failed external-paper previews only after the original receipt and a fresh completed task, preserving uncertain submissions',async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('pattern-room-supervisor')!,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);
-  let attempts=0,failNextRead=false;const commands:Array<{key:string|undefined;body:unknown}>=[];
+  let attempts=0,failNextRead=false,holdFinalPeople=false;const commands:Array<{key:string|undefined;body:unknown}>=[];
+  let releaseFinalPeople!:()=>void,finalPeopleRequested!:()=>void;
+  const finalPeopleHold=new Promise<void>(done=>{releaseFinalPeople=done;}),finalPeopleStarted=new Promise<void>(done=>{finalPeopleRequested=done;});
   await context.route('**/*',async route=>{
    const request=route.request(),url=new URL(request.url());
+   if(holdFinalPeople&&url.origin===base&&request.method()==='GET'&&url.pathname==='/api/digital-production/access/candidates'){
+    finalPeopleRequested();await finalPeopleHold;return route.continue();
+   }
    if(url.origin===base&&request.method()==='GET'&&url.pathname==='/api'+path(externalSourceId)&&failNextRead){failNextRead=false;return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'TEST fresh execution read unavailable'}})});}
    if(url.origin===base&&request.method()==='POST'&&url.pathname==='/api'+path(externalSourceId)+'/external-pattern'){
     attempts++;commands.push({key:request.headers()['idempotency-key'],body:request.postDataJSON()});
@@ -262,8 +267,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();
    await page.getByRole('alert').filter({hasText:'本次办理已提交，但最新资料暂未读取到'}).waitFor();
    expect(await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).count()).toBe(1);expect(await leavingBlocked()).toBe(true);
-   await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();
+   holdFinalPeople=true;await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();
+   await finalPeopleStarted;
    await page.getByText('本任务已完成',{exact:true}).waitFor();
+   // Native task state renders before the original candidate read finishes.
+   // Keep that read pending to prove completion feedback has not settled yet.
+   const originalFailure=page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true});
+   expect(await originalFailure.count()).toBe(1);expect(await page.getByRole('button',{name:'重新读取办理状态',exact:true}).isDisabled()).toBe(true);
+   releaseFinalPeople();await originalFailure.waitFor({state:'detached'});
    expect(await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).count()).toBe(0);
    const later=page.getByRole('button',{name:'移除失败附件 TEST-later-rejected.plt',exact:true});await later.waitFor();expect(await leavingBlocked()).toBe(true);
    await later.click();await later.waitFor({state:'detached'});await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('已提交');await expect.poll(leavingBlocked).toBe(false);expect(attempts).toBe(3);
@@ -273,7 +284,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const original=(await f.db.query('SELECT status,object_key FROM attachments WHERE attachment_id=$1',[record.attachmentIds[0]])).rows[0]!;
    expect(original.status).toBe('ready');expect(f.storage.objectBytes.has(original.object_key)).toBe(true);expect(f.storage.deleted).not.toContain(original.object_key);
    await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(evidence,'completed-external-paper-390.png'),fullPage:true});
-  }catch(error){await page.screenshot({path:join(evidence,'failed-preview-regression.png'),fullPage:true});await writeFile(join(evidence,'failed-preview-regression.txt'),await page.locator('body').innerText());await writeFile(join(evidence,'failed-preview-error.txt'),String(error));throw error;}finally{await context.close();}
+  }catch(error){await page.screenshot({path:join(evidence,'failed-preview-regression.png'),fullPage:true});await writeFile(join(evidence,'failed-preview-regression.txt'),await page.locator('body').innerText());await writeFile(join(evidence,'failed-preview-error.txt'),String(error));throw error;}finally{releaseFinalPeople();await context.close();}
  });
  it('captures and supplements the original customer approval date in the authenticated App without creating another review',async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);
