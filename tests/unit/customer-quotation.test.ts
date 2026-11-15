@@ -30,6 +30,8 @@ describe('PR02 confirmed customer total and reference differences',()=>{
  it('rejects malformed amounts, unknown fields and impossible confirmation quantity',()=>{
   for(const value of ['Infinity','NaN','1e4','-1','0.0000001'])expect(QuotationRowInputSchema.safeParse({expectedVersion:1,consumption:value}).success).toBe(false);
   expect(QuotationRowInputSchema.safeParse({expectedVersion:1,unitPrice:'2',canBypass:true}).success).toBe(false);
+  expect(QuotationRowInputSchema.safeParse({expectedVersion:1,pricingUnit:'米'}).success).toBe(true);
+  for(const pricingUnit of ['', ' ', 'x'.repeat(101)])expect(QuotationRowInputSchema.safeParse({expectedVersion:1,pricingUnit}).success).toBe(false);
   expect(QuotationConfirmationSchema.safeParse({...confirmation(),amountScope:'order_total',quantity:null}).success).toBe(false);
   expect(QuotationConfirmationSchema.safeParse({...confirmation(),sourceField:'cost'}).success).toBe(false);
  });

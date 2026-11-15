@@ -1,173 +1,86 @@
 {
   "version": 1,
-  "base": "08440321e9d0e67307c6966d2572e420d0e318b8",
+  "base": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
   "risk": "full",
-  "sourceFingerprint": "e4c38268f3a0c9086056e5634411a76333d2e51c58a438b18927b5db0a6b2206",
+  "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
   "rules": [
     {
-      "rule": "Failed local uploads remain retryable and may be individually removed without deleting ready attachments. Shared original upload consumers clear only the matching upload error, retaining unrelated business or unknown-command feedback.",
-      "source": "User authorizes all known Acceptance defects through Dot. Root real external-paper observation: rejected PLT followed by valid PNG and completed original task leaves failed no-id entry. Distinct from991. UI golden20261115 records this authorized narrow repair and existing no-data-delete boundaries.",
+      "rule": "Commercial unit corrections stay on the same physical material and native source-unit baseline, remain additive in current quotation assembly, and cannot overwrite original technical source, confirmed quote, budget or contract.",
+      "source": "User via Dot authorizes narrow commercial unit correction after published technical work; current native revision rekeys material on unit edit even though technical fingerprint directly excludes pricingUnit. Latest separate material/craft quotation dependencies and history protection remain approved. GitHub Codex Review4580314026 on f1fb2556 proved newly authorized unit+consumption could be cleared by old basis. Shared canonical consumption-basis function now binds only the current explicit authorized input; unit-only changes still invalidate old input.",
       "writes": [
-        "apps/web/src/document-upload-previews.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/production-instruction-panel.tsx",
-        "apps/web/src/digital-budget-panel.tsx",
-        "tests/unit/document-upload-previews.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/attachment-identity.tsx",
-        "apps/web/src/attachment-upload-recovery.ts",
-        "apps/web/src/development-submitted-uploads.ts",
-        "apps/web/src/digital-operation-feedback.ts"
-      ],
-      "oldTests": [
-        "tests/unit/document-upload-previews.test.ts",
-        "tests/unit/development-submitted-uploads.test.ts",
-        "tests/unit/digital-development-upload-selection.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/document-upload-previews.test.ts"
-      ],
-      "initialization": "Transient hook metadata only: purpose/task owner/attempt on local File, no schema, persistence, data migration or library/attachment deletion. All four existing hook callers keep their original upload/save commands and failure retry. Removing only failed no-id entries revokes the local object URL; ready and in-flight files cannot be removed through this action.",
-      "dateAndPermission": "No dates, plans, costs, quantities or authorization change. Shared callback clears current string only when identical to removed upload error. Uploaded private object/reference and original write gates remain authoritative.",
-      "expectation": "97unit cases pass: failed sibling survives ordinary save; explicit removal preserves ready/in-flight; completed snapshot preserves other task, purpose, later file/retry and ready reference. Real original supervisor App rejects invalidPLT, removes it with correct feedback and preserves validPNG native attachment.",
-      "checks": [
-        "unit",
-        "pg-native",
-        "types",
-        "lint",
-        "preflight"
-      ]
-    },
-    {
-      "rule": "Task completion may retire only its captured failed upload intents after a successful original command and fresh native completed task, including recovery from a known commit followed by failed reading. Rejected or uncertain writes and failed reads retain original state and body/key.",
-      "source": "User-authorized external-paper failed-entry repair. GitHub Review4579840297 proved file selection incorrectly set generic dirty state after explicit removal. Real native regression also proved successful receipt plus failed read left workbench dirty after recheck because completion callback was missing. Fix original completion/read recovery, not a new submission protocol or blanket clearing. Full43755576286 PG132940104658 sole browser failure asserted failure removal at first native completed-state paint, while load() still awaited its original candidate read. The controlled original request barrier now proves that intermediate state and waits for the actual settlement, not a fixed delay.",
-      "writes": [
-        "apps/web/src/digital-development-execution-panel.tsx",
-        "apps/web/src/development-external-pattern.tsx",
-        "apps/web/src/development-result-upload.tsx",
-        "apps/web/src/task-workbench-sample.tsx",
-        "tests/unit/digital-development-upload-selection.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "apps/api/src/production-platform/quotation-material-unit.ts",
+        "apps/api/src/production-platform/quotation-assembly.ts",
         "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/quotation-material-unit.test.ts",
+        "docs/engineering/quotation-material-pricing-unit.md",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "tests/unit/customer-quotation.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "docs/requirements/platform-permission-golden-source-v1.0.md",
         "docs/requirements/rework-ui-golden-source-v1.0.md",
-        "docs/engineering/failed-upload-preview-20261115.md"
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/web/src/development-technical-workspace.tsx",
-        "apps/web/src/development-submitted-uploads.ts",
-        "apps/web/src/task-workbench-sample.tsx",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-budget-basis.ts",
+        "apps/api/src/production-platform/development-round-plan.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/development-technical-repository.ts",
+        "apps/api/migrations/0288_automatic_quotation_sources.sql",
+        "apps/api/src/production-platform/quotation-routes.ts",
         "apps/web/src/digital-production-api.ts",
-        "apps/api/src/production-platform/development-execution-service.ts",
-        "apps/api/src/production-platform/development-execution-read.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "scripts/ci/prepare-settings-browser.mjs"
+        "apps/api/src/access/business-authority.ts",
+        "apps/api/migrations/0267_customer_quotation_budget_basis.sql"
       ],
       "oldTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/unit/customer-quotation.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts",
         "tests/integration/development-technical-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/unit/quotation-material-unit.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
-      "initialization": "Original operation ref captures exact source/upload epoch/task/purpose/attempt snapshot before first actual POST; original-key retries retain the same snapshot. Original task-bound upload inputs supply task identity. Fresh GET must confirm same task completed, not a generic200 or arbitrary sibling. Matching known commit recheck closes the original feedback phase; no extra business POST is sent by that read. Canonical risk map selects native execution/technical suites and original browser preparation.",
-      "dateAndPermission": "Native assignee supervisor, current original source/task/round authorization and private attachment grants remain.409 rejected, lost successful receipt, same-key replay,503read and laterGET tested distinctly. No actual time or cancellation semantics changed; old observed cancelled legacy timing/default two-clock differences remain separate bounded audit, not declared bugs or silently repaired.",
-      "expectation": "65realPG16/native cases pass, including original paper/sewing acknowledged-only settlement, true unsaved guard, same-session authorization and technical history. New external-paper case proves rejected/unknown/readfail retain failures; final GET-only recheck clears captured failure and stale dirty hint while later failed file remains removable in the completed view; failed-only removal permits leaving but real note edits remain guarded; exactly one actual receipt, original ready object retained and no storage delete. Actual1165failure and390completed screenshots opened; no Acceptance/production claim. Original candidate GET is deliberately held: task completed paint occurs while the original failure still exists and recheck stays disabled. Release then requires exact original failure detach, later failure preservation, and native one-receipt/no-delete/leave-guard assertions.",
+      "initialization": "Additive schemaVersion1 provenance, no migration/backfill. Actual compatibility floor29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd independently checked out and built own packages; native final source writes real metadata, exact older code reads it and changes IE row without losing material unit, formal usage, price override or provenance. No server switched. Pre-0288 manual schemas retain original row SQL and never reference absent assembly column. No catch-and-ignore or fixture migration added.",
+      "dateAndPermission": "Original quotation lifecycle transaction, current native active-role checks, expectedVersion and body/key replay retained. Unit field restricted to original current designer or Root and published automatic physical material. Simultaneous price/consumption/artifact fields each keep original independent permission. Quantity unit is exact, no conversion, zero price remains real. No source document, technical ID, completed review/task/R/deadline or immutable financial snapshot rewritten.",
+      "expectation": "87units and76realPG/native tests pass. Actual completed paper and review preserve physical IDs and clocks;22x1.25+10+3=40.5, unmatched unit clears only own consumption, zero+unit together honored, unchanged unit preserves manual quantity. Immutable confirmed quote and adopted budget preserved. Race succeeds once, changed-body original key rejects, unrelated/revoked roles deny. Original authenticated App recovers lost successful response with same key/body/version and denies same cookie after source-designer revocation;1165/390 screenshots opened. Native old manual quote and actual amendment guards pass. With and without formal artifacts, Root unit+manual2 retains2, unit-only invalidates prior3, simultaneous explicit artifact adoption retains actual source actor/version; designer unit authority alone does not grant consumption authority. Exact old29bd reader/writer preserves both new manual samples.",
       "checks": [
-        "pg-native",
         "unit",
         "types",
         "lint",
         "preflight",
-        "secret"
-      ]
-    },
-    {
-      "rule": "Original full authenticated App browser suites and multi-service washing-fee chain use the existing canonical long correctness configuration, keeping ordinary short PG tests strict and original financial assertions intact.",
-      "source": "Actual Full43752644393 postgres job132930617096:35pass, budget browser2not-run; beforeAll hook10s timeout under vitest.config.ts. Runtime metadata and helper9consumer audit proved only this full-App browser suite missed LONG_CORRECTNESS_TESTS. Follow-up Full43754049990 postgres job132935120456 proved the core fee chain also missed classification: first multi-service scenario exceeded ordinary5000ms, other34passed. Prior same-source local first scenario4.225s already approached that wrapper, not an application performance assertion. Existing shared allowance remains100000ms, no new value or lowered assertion.",
-      "writes": [
-        "scripts/test-suite-plan.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "docs/engineering/failed-upload-preview-20261115.md"
-      ],
-      "reads": [
-        "tests/integration/budget-washing-fees-postgres.test.ts",
-        "tests/integration/budget-washing-fees-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "scripts/test-execution-config.mjs",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "scripts/run-business-chain-gate.mjs",
-        "scripts/ci/prepare-settings-browser.mjs"
-      ],
-      "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/budget-washing-fees-postgres.test.ts",
-        "tests/integration/budget-washing-fees-browser-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "initialization": "No business service, migration, credentials, real roles/data or global timeout changes. Both actual fee business-chain suites use original existing business-chain config; browser startup, native identity, full-schema lowpriv fixture and original disposal remain. Guard inspects actual shared-browser consumers and verifies canonical config plus sole-suite browser preparation; ordinary shared-budget PG stays default strict.",
-      "dateAndPermission": "Financial and permission assertions unchanged. Latest65native/technical PG cases execute fresh after their browser input changed. Original types and seven unchanged fee cases reuse only actual captured input scopes whose byte fingerprints still match; no failed CI is approved as current-head proof.",
-      "expectation": "97unit/mapping/upload-selection cases and7actual guardedPG16 full fee service/authenticated budget App cases pass using configForSuite itself, not manually forcing a different config. Related lint/preflight/secret pass; original failed Full remains failed and is not cancelled. Non-db final result collected before next exacthead Full.",
-      "checks": [
-        "unit",
-        "pg-budget-browser",
-        "canonical-lint",
-        "preflight",
-        "secret"
+        "secret",
+        "pg"
       ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "vitest run document-upload-previews/development-submitted-uploads/full-gate-risk-map/digital-development-upload-selection --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/failed-upload-unit.json",
+      "command": "vitest run quotation-material-unit customer-quotation full-gate-risk-map --maxWorkers1",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b4ea003b2b1f9307db37c970b81ae28a579449d9",
-      "sourceFingerprint": "e4c38268f3a0c9086056e5634411a76333d2e51c58a438b18927b5db0a6b2206",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T20:28:59.826Z",
-      "endedAt": "2026-11-15T20:29:02.409Z",
-      "log": "/tmp/failed-upload-unit.log",
-      "logSha256": "3206b93bec5850aa56aeba9f4003cf811d9ac24f4924966231859ba88342e92c",
-      "passed": 97,
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:34:32.861Z",
+      "endedAt": "2026-11-15T21:34:34.233Z",
+      "log": "/tmp/quotation-unit-final-unit.log",
+      "logSha256": "10c214c70a1941015f37476d4c5a6692ac6dc4d437497ac2617916355fabfb98",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
+      "passed": 87,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a661a643804d5cc3d26d293ff535cc180a91cdf3e0a5e7caa867e6f0582e4c49"
-        }
-      ]
-    },
-    {
-      "id": "pg-native",
-      "command": "bash /tmp/failed-upload-pg.sh (original development execution App, execution and technical suites, canonical business-chain maxWorkers1)",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b4ea003b2b1f9307db37c970b81ae28a579449d9",
-      "sourceFingerprint": "e4c38268f3a0c9086056e5634411a76333d2e51c58a438b18927b5db0a6b2206",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T20:28:38.061Z",
-      "endedAt": "2026-11-15T20:30:11.561Z",
-      "log": "/tmp/failed-upload-pg.log",
-      "logSha256": "d59d040944ba82503aea0ae2056803835b870871371ae5340c57a95195563fa2",
-      "passed": 65,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "ab3ce87a68c4ec9eca328dddc338e7e7590522cef7c5e2019b3f4699d9a7612c"
+          "sha256": "8e5455d45b2a16d3e6d2be4248a653ddb336002b9d5769169eb08dd401192750"
         }
       ]
     },
@@ -177,35 +90,27 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a86e6af096cfc1d519f3c2459e947c152a6a5930",
-      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:07:16.000Z",
-      "endedAt": "2026-11-15T19:25:52.735Z",
-      "log": "/tmp/failed-upload-types.log",
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:09:20.000Z",
+      "endedAt": "2026-11-15T21:34:32.576Z",
+      "log": "/tmp/quotation-unit-final-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "972497f826dfcb8bb207e2f60098ecb4dff5cb8b801ad200ee617eaf8c3c579c"
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
       "id": "lint",
-      "command": "eslint original changed web and test files plus native phase-barrier regression --max-warnings=0",
+      "command": "eslint actual changed source/tests --max-warnings=0",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b4ea003b2b1f9307db37c970b81ae28a579449d9",
-      "sourceFingerprint": "e4c38268f3a0c9086056e5634411a76333d2e51c58a438b18927b5db0a6b2206",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:10:40.000Z",
-      "endedAt": "2026-11-15T20:29:02.461Z",
-      "log": "/tmp/failed-upload-final-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:15:22.000Z",
+      "endedAt": "2026-11-15T21:34:34.272Z",
+      "log": "/tmp/quotation-unit-final-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
       "id": "preflight",
@@ -213,13 +118,13 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b4ea003b2b1f9307db37c970b81ae28a579449d9",
-      "sourceFingerprint": "e4c38268f3a0c9086056e5634411a76333d2e51c58a438b18927b5db0a6b2206",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:08:23.000Z",
-      "endedAt": "2026-11-15T20:29:11.751Z",
-      "log": "/tmp/failed-upload-preflight.log",
-      "logSha256": "7d9e355191cfa186e0748102fb6b255c6a3632d27129ba949ac3c7120499efca"
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:22:02.000Z",
+      "endedAt": "2026-11-15T21:34:43.141Z",
+      "log": "/tmp/quotation-unit-final-preflight.log",
+      "logSha256": "ec076466aa884c0e01b6b48a44194aa9d516bbfd8c02bf8fb4af85b053265928",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
       "id": "secret",
@@ -227,71 +132,36 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b4ea003b2b1f9307db37c970b81ae28a579449d9",
-      "sourceFingerprint": "e4c38268f3a0c9086056e5634411a76333d2e51c58a438b18927b5db0a6b2206",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:10:13.000Z",
-      "endedAt": "2026-11-15T20:29:12.979Z",
-      "log": "/tmp/failed-upload-secret.log",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:23:19.000Z",
+      "endedAt": "2026-11-15T21:34:44.125Z",
+      "log": "/tmp/quotation-unit-final-secret.log",
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
-      "id": "pg-budget-browser",
-      "command": "bash /tmp/failed-upload-budget-pg.sh (configForSuite selects canonical business-chain for original budget App and full fee service chain, maxWorkers1)",
+      "id": "pg",
+      "command": "QUOTATION_UNIT_COMPAT_PROBE=/tmp/quotation-unit-run-compat.mts bash /tmp/quotation-unit-pg.sh (canonical original lowprivPG16, maxWorkers1)",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "84e750b33f30febf5ba792da0a0df01badf17c3a",
-      "sourceFingerprint": "c4f14537edfc794cbf6b043a4df5b4d701f2fcb92151c411c7ad4f2ea1bd8dd3",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:51:26.035Z",
-      "endedAt": "2026-11-15T19:52:05.217Z",
-      "log": "/tmp/failed-upload-budget-pg.log",
-      "logSha256": "d83f8362b53bef11294d8c82ff5a0c3c46b18227588afcfbd9e45edcb4d95235",
-      "passed": 7,
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:33:38.451Z",
+      "endedAt": "2026-11-15T21:35:29.225Z",
+      "log": "/tmp/quotation-unit-final-pg.log",
+      "logSha256": "1ef53bd2ce83a6360188b0e0b4b09c7925a878dd2e736dc892bf81470fed78f7",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
+      "passed": 76,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f663625ae9310e3965eecf728ac4c7fbb8be0f055889326624f2ed616c3e2770"
+          "sha256": "8a2cc3c77faea098a9269732ff5a6b3e9c36caca3b6d5a42c966f0e773637ec9"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests/integration/budget-washing-fees-postgres.test.ts",
-        "tests/integration/budget-washing-fees-browser-postgres.test.ts",
-        "tests/acceptance",
-        "tests/helpers",
-        "tests/fixtures",
-        "scripts/deploy",
-        "scripts/acceptance",
-        "scripts/ci",
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-database-safety.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-suite-plan.mjs",
-        "package.json",
-        "package-lock.json",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "0a7ee891a91f37804bfb4ec39370ce7b46876c5bfc59b9bcd9109d080ac51611"
-    },
-    {
-      "id": "canonical-lint",
-      "command": "eslint scripts/test-suite-plan.mjs tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
-      "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b4ea003b2b1f9307db37c970b81ae28a579449d9",
-      "sourceFingerprint": "e4c38268f3a0c9086056e5634411a76333d2e51c58a438b18927b5db0a6b2206",
-      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:37:55.000Z",
-      "endedAt": "2026-11-15T20:29:04.031Z",
-      "log": "/tmp/failed-upload-canonical-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ]
     }
   ]
 }
