@@ -2,7 +2,7 @@
   "version": 1,
   "base": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
   "risk": "full",
-  "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
+  "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
   "rules": [
     {
       "rule": "Read only the initiating actor/source/original operation+key committed submission receipt. An absent or in-flight receipt remains unconfirmed, never means request failed. Return only bounded completion identity/version, recheck current original object/active role and never disclose another actor command or saved document/prices.",
@@ -78,6 +78,35 @@
         "lint",
         "preflight"
       ]
+    },
+    {
+      "rule": "Original canonical legacy short-lead browser recovery must follow the new read-first protocol without losing its original one-publication, single-order, single-approval-consumption, authorization, source-switch or midnight protections.",
+      "source": "Actual failed Full43722465776, PGjob132838321796.25of26suites passed; first failure waited for retired original-command button and subsequent shared generator cases failed after interruption. Original current UI/receipt endpoint and11-case matrix independently verified, not a font/PG business-data failure.",
+      "writes": [
+        "tests/acceptance/m01-short-lead-native-browser.ts"
+      ],
+      "reads": [
+        "apps/web/src/development-submit-recovery.ts",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/short-lead-workspace.tsx",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/short-lead-service.ts"
+      ],
+      "oldTests": [
+        "tests/acceptance/m01-short-lead-native-browser.ts",
+        "tests/integration/m01-short-lead-native-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/acceptance/m01-short-lead-native-browser.ts"
+      ],
+      "initialization": "Retain original full-App/realAuth/PG fixture and all11shared dependent cases. Update the existing recovery locator, replace expectation of duplicate confirm POST with exactly1POST and1successful GET bound to same original key/confirm operation. Verify1stored command,1order,1approval consumption and still1POST after source503. No extra fixture, timeout increase, case removal or source changes.",
+      "dateAndPermission": "Application and contract bytes remain exactly reviewed eebe790e. Original denied confirmation still retries exact content/key twice; only already-committed lost receipt now expects read-only recovery. All original source-switch/private approval/history, real same-session revoke and Beijing-midnight scenarios retained.11actual cases passed; oldFull remains failed.",
+      "expectation": "Entire original matrix11/11 passed,0skip. Root cause shared generator interruption resolved with stronger exact GET/key/operation and command count assertions. New helper lint and266preflight pass. Prior41units/5native/new-role proofs and source type/lint results reused only against input fingerprint captured before this test-only edit while original global source still matched; all their actual inputs remain unchanged. No new Light or independent Review required for pure test consumer repair; actual prior review SHA retained.",
+      "checks": [
+        "short-lead",
+        "repair-lint",
+        "preflight"
+      ]
     }
   ],
   "checks": [
@@ -102,7 +131,23 @@
           "format": "vitest-json",
           "sha256": "f429d473374a4134a88d95da3b348aa718e893e1318990ca7b86ad1edca4d4f9"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
     },
     {
       "id": "native",
@@ -125,7 +170,23 @@
           "format": "vitest-json",
           "sha256": "f86687de83a5c11a01b8d2d95af0124c3c45541c032b92eba5f5f475e20127ff"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
     },
     {
       "id": "lint",
@@ -139,7 +200,23 @@
       "startedAt": "2026-11-15T13:52:15.000Z",
       "endedAt": "2026-11-15T13:56:32.549Z",
       "log": "/tmp/submit-recovery-final-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
     },
     {
       "id": "web-types",
@@ -153,7 +230,23 @@
       "startedAt": "2026-11-15T13:52:19.000Z",
       "endedAt": "2026-11-15T13:57:00.541Z",
       "log": "/tmp/submit-recovery-final-web-types.log",
-      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd"
+      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
     },
     {
       "id": "api-types",
@@ -167,21 +260,74 @@
       "startedAt": "2026-11-15T13:52:50.000Z",
       "endedAt": "2026-11-15T13:57:18.382Z",
       "log": "/tmp/submit-recovery-final-api-types.log",
-      "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00"
+      "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "32a3d7b2b7244b56e832f373a6236c843ad9c69568ade63bb51dd5226c8ef038"
     },
     {
       "id": "preflight",
       "kind": "command",
-      "command": "npm run test:preflight (266protocol tests plus original migration/static checks)",
+      "command": "npm run test:preflight (266protocol cases plus original static/migration checks)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a5c74f42fefae583811fa711d2b1b30f3f5a7e52",
-      "sourceFingerprint": "3dd414df97194a7645df3a8c3d0ef79766a1dc4ed2f034071646e3aa8895bc37",
-      "context": "Node22.22.2/npm10.9.9; identical release package-lock third-party links and own workspace builds (not fresh npm ci). Vitest maxWorkers1, native canonical business-chain config, real full App and signed UAT sessions, Chromium1194 with original job-private committed CJK font.307migrations through0292 in marked low-privilege isolatedPG16, bounded512MiB tmpfs and exact owned container/schema cleanup. No deployed environment or real data. Source frozen at current fingerprint; command dates bound original log capture and JSON execution timestamps are exact.",
-      "startedAt": "2026-11-15T13:52:17.000Z",
-      "endedAt": "2026-11-15T13:56:41.937Z",
-      "log": "/tmp/submit-recovery-final-preflight.log",
-      "logSha256": "324dcf664e2fff54543268e5e14464176581796f22f3f2b7cdbf62f265eb3851"
+      "testedHead": "eebe790e373976265a50ba969a46c2d98b19f79a",
+      "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
+      "context": "SameNode22.22.2/npm10.9.9 own workspace, bounded test-only consumer repair; no new application/contract behavior. Actual log capture timestamps; no Light rerun or deployment.",
+      "startedAt": "2026-11-15T14:34:40.000Z",
+      "endedAt": "2026-11-15T14:34:46.131Z",
+      "log": "/tmp/submit-recovery-repair-preflight.log",
+      "logSha256": "96c57ae5d69b602abe0d253d57efe835243e93208fcc71dc166ab83e662c5942"
+    },
+    {
+      "id": "repair-lint",
+      "kind": "command",
+      "command": "eslint tests/acceptance/m01-short-lead-native-browser.ts --max-warnings=0",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "eebe790e373976265a50ba969a46c2d98b19f79a",
+      "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
+      "context": "SameNode22.22.2/npm10.9.9 own workspace, bounded test-only consumer repair; no new application/contract behavior. Actual log capture timestamps; no Light rerun or deployment.",
+      "startedAt": "2026-11-15T14:34:38.000Z",
+      "endedAt": "2026-11-15T14:34:38.823Z",
+      "log": "/tmp/submit-recovery-repair-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "short-lead",
+      "kind": "tests",
+      "command": "bash /tmp/submit-recovery-short-lead-pg.sh (entire original11-case shared short-lead App/auth/PG matrix, no filter, canonical business-chain config, one worker)",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "eebe790e373976265a50ba969a46c2d98b19f79a",
+      "sourceFingerprint": "b46abbfb961e7574ab24ed8a190ad0dc1ef3e1b244e5474aea8cdfa937faf9ea",
+      "context": "Actual original native shared matrix, signed designer/owner/Root and dedicated same-cookie revocation, full migrations in marked low-privilege isolatedPG16, owned512MiB tmpfs and exact cleanup. Node22.22.2/npm10.9.9, Chromium1194 and committed job-private CJK. All11dependent cases really ran. No deployed environment or real data.",
+      "startedAt": "2026-11-15T14:32:25.195Z",
+      "endedAt": "2026-11-15T14:32:51.193Z",
+      "log": "/tmp/submit-recovery-short-lead.log",
+      "logSha256": "a55ade967d5ddfa30317cad886643ecb630c1a93f0967b5ed09bb0eba0ad0125",
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "c752da3d862023d6835b42a57c6032c1f686c824f7b7cdb1816b9a5b3684560d"
+        }
+      ]
     }
   ]
 }
