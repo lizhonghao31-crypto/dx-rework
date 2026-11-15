@@ -38,7 +38,7 @@ export const OrderTimeCheckResultSchema=z.object({
  enabled:z.boolean(),fingerprint:z.string().length(64),resource:z.object({kind:z.enum(['source','order','proposal']),id:z.string().uuid().nullable()}).strict(),
  styleNo:z.string(),customerDates:z.array(z.object({po:z.string(),date:z.iso.date().nullable()}).strict()),
  plan:FrozenOrderTimePlanSchema,rows:OrderTimeRowsSchema,coverage:z.array(z.string()),
- feasibility:z.enum(['sufficient','insufficient','unknown']),availableMinutes:z.number().nullable(),requiredMinutes:z.number().nullable(),lateMinutes:z.number().nullable(),expectedEnd:z.string().nullable(),forecastQuality:z.enum(['conditional','lower_bound','unknown']),
+ feasibility:z.enum(['sufficient','insufficient','unknown','not_applicable']),availableMinutes:z.number().nullable(),requiredMinutes:z.number().nullable(),lateMinutes:z.number().nullable(),expectedEnd:z.string().nullable(),forecastQuality:z.enum(['conditional','lower_bound','unknown']),
  factoryCommitments:z.array(z.object({lineId:z.string(),label:z.string(),date:z.string(),version:z.number().int().nonnegative(),source:z.string(),plannedReceipt:z.string().nullable(),lateMinutes:z.number().nonnegative().nullable(),status:z.enum(['sufficient','insufficient','unknown'])}).strict()).optional(),
  washing:z.array(z.object({lineId:z.uuid(),label:z.string(),version:z.number().int().nonnegative(),document:BulkWashingAdoptionSchema.nullable()}).strict()).optional(),
  framework:z.object({milestones:z.array(FrameworkMilestoneResultSchema.extend({scopeRef:z.string()})),riskAccepted:z.boolean()}).strict().optional(),

@@ -39,7 +39,7 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 native first-effective order time and one request transaction',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,requests:OrderTimeRequestService,standardId:string,native:PatternRoomOrderService;
- const make=async(date:string,withMaterial=false)=>{
+ const make=async(date:string|null,withMaterial=false)=>{
   const original=f.people['sample-designer']!,actor={...original,authorizationCapabilities:[...original.authorizationCapabilities!,'pattern_room:orders:view']},source=await identity.createSource(actor,{developmentType:'头版',designStyleNo:'TEST-R507-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
   const material=withMaterial?{materialId:randomUUID(),category:'主布',label:'TEST主布',supplier:'TEST',name:'TEST 已备主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}:null;
   const photo=await f.image(actor),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:date,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original business source',craft:'无',washing:'免洗',materials:material?[material]:[],files:[{attachmentId:photo,kind:'款图'}]});
@@ -58,6 +58,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query("SELECT current_setting('is_superuser') AS value")).rows[0].value).toBe('off');
  });
  afterAll(async()=>{await f?.dispose();});
+ it('publishes an undated independent sample with real node quotas and no invented promise, while retaining required-input guards',async()=>{
+  const scene=await f.scene('2027-01-08T00:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const row=await make(null),checked=await requests.check(row.actor,row.operation);
+   expect(checked).toMatchObject({feasibility:'not_applicable',availableMinutes:null,lateMinutes:null,requiredMinutes:300,customerDates:[{po:'样板',date:null}],coverage:[]});
+   const key=randomUUID(),sheet=await forms.publish(row.actor,row.sourceId,1,key,row.operation.kind==='development_publish'?row.operation.input.patternOrder:undefined);
+   expect(sheet).toMatchObject({status:'published',document:{returnDate:null}});
+   expect((await forms.publish(row.actor,row.sourceId,1,key,row.operation.kind==='development_publish'?row.operation.input.patternOrder:undefined)).version).toBe(sheet.version);
+   const task=await new DigitalProductionTaskService(f.db).read(row.actor,sheet.taskId!);
+   expect(task).toMatchObject({slaHours:1,enteredAt:'2027-01-08T00:00:00.000Z',dueAt:'2027-01-08T01:00:00.000Z'});
+   const saved=(await new OrderTimePlanRepository(f.db).current({kind:'source',id:row.sourceId}))!;
+   expect(saved.input.scopes[0]!.customerGoal.precision).toBe('unknown');
+   expect(Object.values(saved.targets).flatMap(scope=>Object.values(scope)).every(target=>target.start.at===null&&target.end.at===null)).toBe(true);
+   expect((await f.db.query("SELECT after_state FROM audit_events WHERE entity_id=$1 AND action='order_time_activated'",[row.sourceId])).rows[0].after_state.lateMinutes).toBeNull();
+   expect((await f.db.query('SELECT 1 FROM digital_order_time_requests WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+   const missing=await make(null,true),before=await forms.read(missing.actor,missing.sourceId);
+   const document={...before.document!,materials:before.document!.materials.map(material=>({...material,available:false,expectedDate:null}))};
+   const draft=await forms.save(missing.actor,missing.sourceId,{expectedVersion:before.version,document},randomUUID());
+   await expect(forms.publish(missing.actor,missing.sourceId,draft.version,randomUUID(),missing.operation.kind==='development_publish'?missing.operation.input.patternOrder:undefined)).rejects.toMatchObject({code:'ORDER_TIME_INPUT_REQUIRED'});
+   expect((await forms.read(missing.actor,missing.sourceId)).status).toBe('draft');
+   const unknownPo=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:false,designStyleNo:'TEST-missing-client-date-'+randomUUID(),orderDate:'2027-01-08',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-Po-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:null,sizes:[{size:'M',quantity:1}]}]});
+   expect((await requests.check(row.actor,{kind:'direct_order',input:unknownPo,route:{craftSteps:[],preshrink:false}})).feasibility).toBe('unknown');
+  });
+ });
  it('delivers one captured pre-deadline reminder through the real bounded todo scheduler, preserving later reminder counters and mute',async()=>{
   const scene=await f.scene('2027-01-06T00:00:00.000Z');let sourceId='',todoId='';
   await f.runtime.run(scene,f.root,async()=>{
@@ -523,6 +546,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await repo.current(resource))!.input.frameworkPlans).toEqual(customerSnapshot);
    expect(later.customerDates).toEqual(constrained.customerDates);
 
+  });
+ });
+
+ it('keeps an optional sample date empty after framework publication and preserves native windows through later source arrangement',async()=>{
+  const scene=await f.scene('2027-09-01T00:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const row=await make(null),checked=await requests.check(row.actor,row.operation);
+   expect(checked.plan.company.framework).toBeDefined();expect(checked).toMatchObject({feasibility:'not_applicable',lateMinutes:null,requiredMinutes:420});
+   const sheet=await forms.publish(row.actor,row.sourceId,1,randomUUID(),row.operation.kind==='development_publish'?row.operation.input.patternOrder:undefined);
+   const task=await new DigitalProductionTaskService(f.db).read(row.actor,sheet.taskId!),resource={kind:'source' as const,id:row.sourceId};
+   const model=await new JourneyFactRepository(f.db).buildOne(resource);
+   expect(model.model.nodes.find(node=>node.key==='development_materials')?.enteredAt).toBe(task.enteredAt);
+   const preview=await requests.check(f.root,{kind:'arrangement',resource});expect(preview.feasibility).toBe('not_applicable');
+   await requests.arrange(f.root,{resource,fingerprint:preview.fingerprint,overrides:{},acceptLate:false},randomUUID());
+   expect(await new DigitalProductionTaskService(f.db).read(row.actor,sheet.taskId!)).toMatchObject({enteredAt:task.enteredAt,dueAt:task.dueAt});
+   expect((await forms.read(row.actor,row.sourceId)).document!.returnDate).toBeNull();
+   const saved=(await new OrderTimePlanRepository(f.db).current(resource))!;expect(saved.input.scopes.every(scope=>scope.customerGoal.precision==='unknown')).toBe(true);expect(saved.input.frameworkPlans).toBeUndefined();
   });
  });
 

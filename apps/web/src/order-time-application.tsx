@@ -17,7 +17,7 @@ export function useOrderTimeApplication(onRequested?:()=>void){
   if(!enabled)return true;
   const turn=++generation.current,check=OrderTimeCheckResultSchema.parse(await digitalRequest('order-time/check','POST',{operation}));
   if(!live.current||turn!==generation.current)return false;
-  if(check.feasibility==='sufficient')return true;
+  if(check.feasibility==='sufficient'||check.feasibility==='not_applicable')return true;
   const next={operation,check};setIntent(next);setError('');setReason('');
   if(!check.canRequest&&!check.canApply&&check.feasibility==='insufficient'){
    const note='工艺变更后时间不足，请原单设计师接续提交时效调整申请';setReason(note);await send(next,note);
