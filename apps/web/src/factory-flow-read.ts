@@ -5,7 +5,7 @@ import {digitalRequest} from './digital-production-api.js';
 type Person={id:string;displayName:string;roles:string[]};
 type Reading={orderId:string;sheet:FactoryFlowSheet|null;people:Person[];loading:boolean;error:string;peopleError:string};
 /** Factory authorization and optional candidate loading are independent of
- * the washing region. Failed/revoked reads cannot leave another order's DTO. */
+ * washing. Keep same-order forms mounted while refreshing, clear denied data. */
 export function useFactoryFlowRead(orderId:string,enabled:boolean){
  const [state,setState]=useState<Reading|null>(null),sequence=useRef(0),active=useRef(orderId),mounted=useRef(false);
  active.current=orderId;
@@ -13,7 +13,7 @@ export function useFactoryFlowRead(orderId:string,enabled:boolean){
  const reload=async()=>{
   if(!enabled)return;
   const turn=++sequence.current;
-  setState({orderId,sheet:null,people:[],loading:true,error:'',peopleError:''});
+  setState(value=>({orderId,sheet:value?.orderId===orderId?value.sheet:null,people:value?.orderId===orderId?value.people:[],loading:true,error:'',peopleError:''}));
   try{
    const sheet=await digitalRequest<FactoryFlowSheet>(`orders/${orderId}/factory-flow`);
    if(sheet.orderId!==orderId||!Array.isArray(sheet.lines)||!Array.isArray(sheet.tasks))throw Error('工厂资料回执不完整');

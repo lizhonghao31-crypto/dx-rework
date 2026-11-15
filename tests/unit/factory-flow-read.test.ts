@@ -19,10 +19,10 @@ it('ends denied loading and retries the original factory read without retaining 
  request.mockResolvedValueOnce(sheet('TEST-a'));await act(async()=>{await value.reload();});
  expect(value).toMatchObject({sheet:{orderId:'TEST-a'},loading:false,readError:''});
 });
-it('clears a previous authorized snapshot while a new read is pending and after revocation',async()=>{
+it('keeps same-order forms mounted during refresh but clears the snapshot after revocation',async()=>{
  request.mockResolvedValueOnce(sheet('TEST-a'));await render();const next=deferred<FactoryFlowSheet>();request.mockReturnValueOnce(next.promise);
  let reading!:Promise<void>;await act(async()=>{reading=value.reload().catch(()=>undefined);});
- expect(value).toMatchObject({sheet:null,people:[],loading:true});
+ expect(value).toMatchObject({sheet:{orderId:'TEST-a'},people:[],loading:true});
  await act(async()=>{next.reject(Error('无权访问'));await reading;});expect(value).toMatchObject({sheet:null,loading:false,readError:'无权访问'});
 });
 it('keeps an authorized factory sheet when only optional personnel loading fails',async()=>{

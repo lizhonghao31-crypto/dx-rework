@@ -55,6 +55,35 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await washing.getByText(/收货批次.*合格 0 \/ 30/).count()).toBe(1);
   }finally{await tab.context.close();}
  });
+ it('preserves unsaved logistics, dispatch and ship-sample inputs through a same-order native refresh',async()=>{
+  const crafted=await h.f.bulkReady('印花'),cutter={...h.f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  const cuts=(await h.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[crafted.caseId])).rows;
+  for(const cut of cuts)await crafted.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await h.f.image(cutter)]},randomUUID());
+  // A real no-craft route intentionally has no logistics form. Exercise each
+  // form on its native applicable order rather than forging capability flags.
+  for(const id of [orderId,crafted.id]){
+   const tab=await h.open(h.f.root.actorId,1165,{},`/ui/digital-production?factory=${id}`);let release=()=>undefined;
+   try{
+    const factory=tab.page.getByRole('region',{name:'工厂流程资料'});await factory.getByText(/整款实裁：全部PO完成/).waitFor();
+    const fields:Array<{form:ReturnType<typeof factory.locator>;values:Record<string,string>}>=[];
+    if(id===crafted.id){
+     const movement=factory.locator('form:has(#factory-logistics)');fields.push({form:movement,values:{supplier:'TEST 未提交工艺厂',at:'2026-11-15T09:30',note:'TEST 未提交收发说明'}});
+    }else{
+     const dispatch=factory.locator('select[name=dispatchTimeMode]').locator('xpath=ancestor::form');expect(await dispatch.count()).toBe(1);await dispatch.locator('[name=dispatchTimeMode]').selectOption('manual');
+     fields.push({form:dispatch,values:{at:'2026-11-15T10:30',note:'TEST 未提交发厂说明'}});
+     await factory.getByText('船样记录',{exact:true}).click();fields.push({form:factory.locator('input[name=tracking]').locator('xpath=ancestor::form'),values:{at:'2026-11-15T11:30',tracking:'TEST-UNSAVED-TRACKING',note:'TEST 未提交船样说明'}});
+    }
+    for(const {form,values}of fields){for(const [name,value]of Object.entries(values))await form.locator(`[name=${name}]`).fill(value);await form.evaluate(node=>node.setAttribute('data-test-draft-mounted','true'));}
+    const gate=new Promise<void>(resolve=>{release=resolve;});await tab.page.route(`**/orders/${id}/factory-flow`,async route=>{await gate;await route.continue();});
+    const response=tab.page.waitForResponse(value=>value.url().endsWith('/factory-flow')&&value.request().method()==='GET');
+    await factory.getByRole('button',{name:'刷新',exact:true}).click();await factory.getByText('正在读取工厂资料…',{exact:true}).waitFor();
+    for(const {form,values}of fields){expect(await form.evaluate(node=>Boolean(node.closest('[inert]')))).toBe(true);for(const [name,value]of Object.entries(values))expect(await form.locator(`[name=${name}]`).inputValue()).toBe(value);}
+    release();expect((await response).status()).toBe(200);await factory.getByText('正在读取工厂资料…',{exact:true}).waitFor({state:'hidden'});
+    for(const {form,values}of fields){expect(await form.getAttribute('data-test-draft-mounted')).toBe('true');for(const [name,value]of Object.entries(values))expect(await form.locator(`[name=${name}]`).inputValue()).toBe(value);}
+    expect(h.requests.filter(call=>call.session===tab.session&&call.path.includes(`/orders/${id}/factory-flow`)&&call.method==='POST')).toEqual([]);
+   }catch(error){await tab.page.screenshot({path:join(h.evidence,'factory-draft-refresh-failure.png'),fullPage:true});throw error;}finally{release();await tab.context.close();}
+  }
+ });
  it('preserves both module and object denial for unrelated real users without granting factory or washing access',async()=>{
   const worker=await h.dedicated('worker'),tab=await h.open(worker.id,1165,{},`/ui/digital-production?factory=${orderId}`);
   try{

@@ -153,6 +153,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await bulkWashingTodos(f.db,logistics.actor)).some(t=>t.route.entityId===ready.id&&t.taskTitle==='关联工厂洗水与本批收货')).toBe(true);
  });
 
+ it('rejects another PO receipt from the same order and factory without changing either PO coverage',async()=>{
+  const ready=await f.bulkReady('无',undefined,2,undefined,{quantity:10}),lines=ready.input.lineItems.map(row=>row.lineId!);
+  const cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  for(const cut of cuts)await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const flow=new FactoryFlowService(f.db),before=await flow.read(f.root,ready.id);await flow.dispatch(f.root,ready.id,{expectedRevision:before.revision,supplierId:f.supplierId,note:'TEST same-order two-PO dispatch'},randomUUID());
+  const db=await f.db.connect();try{await db.query('BEGIN');for(const line of lines)await adoptBulkWashingWithClient(db,f.root,ready.id,line,0,{...adoption,fee:{kind:'pending'},staff:{...adoption.staff,inspectorId:f.people.qc!.actorId},arrangement:{...adoption.arrangement,mode:'factory'} as BulkWashingAdoption['arrangement']});await db.query('COMMIT');}finally{db.release();}
+  const command=async()=>{const scope=(await service.read(f.root,ready.id)).scopes.find(scope=>scope.lineId===lines[0])!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:new Date().toISOString(),note:'TEST cross-PO receipt isolation'};};
+  const start=await service.record(f.root,ready.id,{...await command(),kind:'factory_start',quantity:5},randomUUID());
+  const complete=await service.record(f.root,ready.id,{...await command(),kind:'factory_complete',startId:start.eventId,quantity:5},randomUUID());
+  await service.record(f.root,ready.id,{...await command(),kind:'inspection',completionId:complete.eventId,quantity:5,qualifiedQuantity:5},randomUUID());
+  const production=(await flow.read(f.root,ready.id)).productionId!,reporting=new ProductionReportingService(f.db),businessDate=beijingCalendarDate(new Date());
+  for(const position of [1,2])await reporting.report(f.root,production,{position,businessDate,quantity:10},randomUUID());
+  await reporting.execute(f.root,production,'complete',{businessDate,confirmed:true},randomUUID());await reporting.execute(f.root,production,'ship',{businessDate,confirmed:true},randomUUID());
+  const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},closure=new ProductionClosureService(f.db);
+  for(const cut of cuts)await new ReceivingService(f.db,undefined,undefined,closure).create(warehouse,{cuttingOrderId:cut.cutting_order_id,documentQuantity:5,actualQuantity:5,attachmentIds:[await f.image(warehouse)]},randomUUID());
+  const receipts=await garmentQuality(f.db,ready.id),own=receipts.find(row=>row.lineId===lines[0])!,other=receipts.find(row=>row.lineId===lines[1])!;
+  const scope=(await service.read(f.root,ready.id)).scopes.find(row=>row.lineId===lines[0])!;expect(scope.receipts?.map(row=>row.receiptId)).toEqual([own.receiptId]);
+  const link={...await command(),kind:'receipt_link' as const,completionId:complete.eventId,quantity:5};
+  await expect(service.record(f.root,ready.id,{...link,receiptId:other.receiptId,receiptQuantityVersion:other.quantityVersion},randomUUID())).rejects.toMatchObject({statusCode:409,message:'请选择本厂本PO有效收货和已检查的洗水批次'});
+  expect((await command()).expectedRevision).toBe(link.expectedRevision);expect((await readWashingCoverage(f.db,ready.id)).get(other.receiptId)).toBeNull();
+  await service.record(f.root,ready.id,{...link,receiptId:own.receiptId,receiptQuantityVersion:own.quantityVersion},randomUUID());
+  const coverage=await readWashingCoverage(f.db,ready.id);expect(coverage.get(own.receiptId)).toBe(5);expect(coverage.get(other.receiptId)).toBe(0);
+ });
  it('later inspector and duration adoption preserves the started batch clock without restoring revoked access',async()=>{
   const before=(await service.read(f.root,orderId)).scopes[0]!;
   expect(before.fee).toMatchObject({state:'referenced',version:2,name:'TEST大货洗水',unitPrice:'2',consumption:'1'});
