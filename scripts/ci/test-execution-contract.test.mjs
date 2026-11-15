@@ -151,14 +151,14 @@ test('shared correctness allowance is100seconds while strict defaults and finite
 });
 
 test('settings browser installs the pinned browser without APT and requires an actual launch',()=>{
- const calls=[];prepareSettingsBrowser((binary,args,options)=>{calls.push({binary,args,options});return {status:0};});
+ const calls=[];prepareSettingsBrowser((binary,args,options)=>{calls.push({binary,args,options});return {status:0};},()=>({family:'TEST committed CJK'}));
  assert.equal(calls.length,2);assert.equal(calls[0].binary,process.execPath);assert.deepEqual(calls[0].args,['node_modules/playwright-core/cli.js','install','chromium']);
- assert.ok(calls[1].args.at(-1).includes('chromium.launch'));assert.ok(calls[1].args.at(-1).includes('await browser.close()'));assert.equal(calls[1].options.timeout,60000);
+ assert.ok(calls[1].args.at(-1).includes('chromium.launch'));assert.ok(calls[1].args.at(-1).includes('await browser.close()'));assert.ok(calls[1].args.at(-1).includes('CSS.getPlatformFontsForNode'));assert.ok(calls[1].args.at(-1).includes('TEST committed CJK'));assert.equal(calls[1].options.timeout,60000);
 });
 test('settings browser never treats failed install, launch or timeout as ready',()=>{
- let calls=0;assert.throws(()=>prepareSettingsBrowser(()=>{calls++;return {status:1};}));assert.equal(calls,1);
- calls=0;assert.throws(()=>prepareSettingsBrowser(()=>({status:++calls===1?0:1})));assert.equal(calls,2);
- const timeout=new Error('TEST original launch timeout');calls=0;assert.throws(()=>prepareSettingsBrowser(()=>++calls===1?{status:0}:{error:timeout}),error=>error===timeout);
+ let calls=0;assert.throws(()=>prepareSettingsBrowser(()=>{calls++;return {status:1};},()=>null));assert.equal(calls,1);
+ calls=0;assert.throws(()=>prepareSettingsBrowser(()=>({status:++calls===1?0:1}),()=>null));assert.equal(calls,2);
+ const timeout=new Error('TEST original launch timeout');calls=0;assert.throws(()=>prepareSettingsBrowser(()=>++calls===1?{status:0}:{error:timeout},()=>null),error=>error===timeout);
 });
 test('settings browser uses the original canonical PG plan with an installed browser only when required',()=>{
  const file='tests/integration/m01-settings-native-browser-postgres.test.ts';

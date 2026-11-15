@@ -27,6 +27,8 @@
 
 ## 证据与例外
 
+2026-11-15 中文浏览器验收修正：Linux 原生浏览器准备复用仓库已提交、带 OFL 许可的合同中文字体，在本 job 临时目录通过 Fontconfig 补充字形，保留原系统配置。配置沿原 `GITHUB_ENV` 传给同 job 后续浏览器；不依赖 APT、网络字体、Root 安装或产品 CSS 字体替换。真实 Chromium 除原启动检查外，须用 CDP 确认八个中文探针字符实际使用该字体，否则准备失败。临时字体和缓存只归本 job，非 Linux 保留原平台配置；不修改仓库外持久系统字体。机制依据 [Fontconfig 配置文档](https://fontconfig.pages.freedesktop.org/fontconfig/fontconfig-user.html) 及 [Chrome 字体使用查询](https://chromedevtools.github.io/devtools-protocol/tot/CSS/#method-getPlatformFontsForNode)。原首页190px密度、无溢出及对齐断言保留，不能用缺字方框或放宽阈值代替真实中文验收。
+
 summary按实际outcome列成功、失败、取消、不适用及未执行。render/清理成功不等于Gate成功。操作者核证不是平台保护；未知服务器设置保持未知，不擅改required checks。用户明确接受某PR剩余风险而直接合并时，保留失败、未验范围和原文来源，绝不伪造Gate成功；该单次决定不扩大成长期豁免。
 
 Review服务恢复、连接器/CLI传输差异及有效授权按[协议](review-first-final-head-20261027.md)处理，不为无关平台波动重复跑全部业务检查。
