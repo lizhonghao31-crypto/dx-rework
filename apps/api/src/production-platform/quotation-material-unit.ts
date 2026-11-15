@@ -19,3 +19,6 @@ export function quotationMaterialPricingUnit(material:DevelopmentMaterial,raw:Qu
 export function quotationMaterialPriceBasis(material:DevelopmentMaterial,unit:string){
  return digest([material.unitPrice??'',unit,material.materialId,material.name,material.specification,material.supplier]);
 }
+export function quotationMaterialConsumptionBasis(material:DevelopmentMaterial,unit:string,commercialFingerprint:string,technicalAssigneeId:string|null){
+ return digest([material.materialId,material.name,material.specification,unit,commercialFingerprint,technicalAssigneeId]);
+}

@@ -2,11 +2,11 @@
   "version": 1,
   "base": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
   "risk": "full",
-  "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+  "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
   "rules": [
     {
       "rule": "Commercial unit corrections stay on the same physical material and native source-unit baseline, remain additive in current quotation assembly, and cannot overwrite original technical source, confirmed quote, budget or contract.",
-      "source": "User via Dot authorizes narrow commercial unit correction after published technical work; current native revision rekeys material on unit edit even though technical fingerprint directly excludes pricingUnit. Latest separate material/craft quotation dependencies and history protection remain approved.",
+      "source": "User via Dot authorizes narrow commercial unit correction after published technical work; current native revision rekeys material on unit edit even though technical fingerprint directly excludes pricingUnit. Latest separate material/craft quotation dependencies and history protection remain approved. GitHub Codex Review4580314026 on f1fb2556 proved newly authorized unit+consumption could be cleared by old basis. Shared canonical consumption-basis function now binds only the current explicit authorized input; unit-only changes still invalidate old input.",
       "writes": [
         "packages/contracts/src/digital-quotation.ts",
         "apps/api/src/production-platform/quotation-material-unit.ts",
@@ -49,7 +49,7 @@
       ],
       "initialization": "Additive schemaVersion1 provenance, no migration/backfill. Actual compatibility floor29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd independently checked out and built own packages; native final source writes real metadata, exact older code reads it and changes IE row without losing material unit, formal usage, price override or provenance. No server switched. Pre-0288 manual schemas retain original row SQL and never reference absent assembly column. No catch-and-ignore or fixture migration added.",
       "dateAndPermission": "Original quotation lifecycle transaction, current native active-role checks, expectedVersion and body/key replay retained. Unit field restricted to original current designer or Root and published automatic physical material. Simultaneous price/consumption/artifact fields each keep original independent permission. Quantity unit is exact, no conversion, zero price remains real. No source document, technical ID, completed review/task/R/deadline or immutable financial snapshot rewritten.",
-      "expectation": "87units and74realPG/native tests pass. Actual completed paper and review preserve physical IDs and clocks;22x1.25+10+3=40.5, unmatched unit clears only own consumption, zero+unit together honored, unchanged unit preserves manual quantity. Immutable confirmed quote and adopted budget preserved. Race succeeds once, changed-body original key rejects, unrelated/revoked roles deny. Original authenticated App recovers lost successful response with same key/body/version and denies same cookie after source-designer revocation;1165/390 screenshots opened. Native old manual quote and actual amendment guards pass.",
+      "expectation": "87units and76realPG/native tests pass. Actual completed paper and review preserve physical IDs and clocks;22x1.25+10+3=40.5, unmatched unit clears only own consumption, zero+unit together honored, unchanged unit preserves manual quantity. Immutable confirmed quote and adopted budget preserved. Race succeeds once, changed-body original key rejects, unrelated/revoked roles deny. Original authenticated App recovers lost successful response with same key/body/version and denies same cookie after source-designer revocation;1165/390 screenshots opened. Native old manual quote and actual amendment guards pass. With and without formal artifacts, Root unit+manual2 retains2, unit-only invalidates prior3, simultaneous explicit artifact adoption retains actual source actor/version; designer unit authority alone does not grant consumption authority. Exact old29bd reader/writer preserves both new manual samples.",
       "checks": [
         "unit",
         "types",
@@ -67,12 +67,12 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
-      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
-      "startedAt": "2026-11-15T21:21:59.523Z",
-      "endedAt": "2026-11-15T21:22:00.319Z",
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:34:32.861Z",
+      "endedAt": "2026-11-15T21:34:34.233Z",
       "log": "/tmp/quotation-unit-final-unit.log",
-      "logSha256": "b1954e19fcf946435157399786f8e0bfd5006b9ed3ebd79501c9b798429cac12",
+      "logSha256": "10c214c70a1941015f37476d4c5a6692ac6dc4d437497ac2617916355fabfb98",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
       "passed": 87,
       "failed": 0,
@@ -80,7 +80,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6ebf8cde1054c0dcd1adbdf3dfc4578a2b7b43f9ed719798dec4464cc7a510ea"
+          "sha256": "8e5455d45b2a16d3e6d2be4248a653ddb336002b9d5769169eb08dd401192750"
         }
       ]
     },
@@ -90,10 +90,10 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
-      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
       "startedAt": "2026-11-15T21:09:20.000Z",
-      "endedAt": "2026-11-15T21:21:59.233Z",
+      "endedAt": "2026-11-15T21:34:32.576Z",
       "log": "/tmp/quotation-unit-final-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
@@ -104,10 +104,10 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
-      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
       "startedAt": "2026-11-15T21:15:22.000Z",
-      "endedAt": "2026-11-15T21:22:00.361Z",
+      "endedAt": "2026-11-15T21:34:34.272Z",
       "log": "/tmp/quotation-unit-final-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
@@ -118,12 +118,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
-      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
       "startedAt": "2026-11-15T21:22:02.000Z",
-      "endedAt": "2026-11-15T21:23:19.882Z",
+      "endedAt": "2026-11-15T21:34:43.141Z",
       "log": "/tmp/quotation-unit-final-preflight.log",
-      "logSha256": "b69511d796dfcefd6541b21f6a4ad27485d6e110dcefc7c569866bf1222fc0b5",
+      "logSha256": "ec076466aa884c0e01b6b48a44194aa9d516bbfd8c02bf8fb4af85b053265928",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
@@ -132,10 +132,10 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
-      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
       "startedAt": "2026-11-15T21:23:19.000Z",
-      "endedAt": "2026-11-15T21:23:21.014Z",
+      "endedAt": "2026-11-15T21:34:44.125Z",
       "log": "/tmp/quotation-unit-final-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
@@ -146,20 +146,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
-      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
-      "startedAt": "2026-11-15T21:17:13.985Z",
-      "endedAt": "2026-11-15T21:18:44.072Z",
+      "testedHead": "f1fb2556ffef989b63af5bcec1d4414ffac5ca0b",
+      "sourceFingerprint": "115b3066c01260e3b2f98a4a8ffec6c29b6aee105e134a4c97b3cd53e54063d3",
+      "startedAt": "2026-11-15T21:33:38.451Z",
+      "endedAt": "2026-11-15T21:35:29.225Z",
       "log": "/tmp/quotation-unit-final-pg.log",
-      "logSha256": "2c8f52544eb67aa24b10d0a4ed66b9147f89cebe5f24604e45604db6201aff66",
+      "logSha256": "1ef53bd2ce83a6360188b0e0b4b09c7925a878dd2e736dc892bf81470fed78f7",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
-      "passed": 74,
+      "passed": 76,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2563f83137294b11b52cb345c4351916a60b5d922a8ed10b8c1d4a845d59005d"
+          "sha256": "8a2cc3c77faea098a9269732ff5a6b3e9c36caca3b6d5a42c966f0e773637ec9"
         }
       ]
     }

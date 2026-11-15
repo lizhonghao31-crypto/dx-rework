@@ -1,4 +1,4 @@
-import {quotationMaterialUnitBasis,quotationMaterialPriceBasis} from './quotation-material-unit.js';
+import {quotationMaterialConsumptionBasis,quotationMaterialUnitBasis,quotationMaterialPriceBasis} from './quotation-material-unit.js';
 import {isDeepStrictEqual} from 'node:util';
 import {assembleQuotation,quotationComplete,type AssembledQuotation} from './quotation-assembly.js';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
@@ -189,6 +189,9 @@ export class DigitalQuotationService{
     if(unit===(material!.pricingUnit??''))delete materialPricingUnits[rowId];
     else if(unitChanged||!materialPricingUnits[rowId])materialPricingUnits[rowId]={unit,sourceUnit:material!.pricingUnit??'',materialBasis:quotationMaterialUnitBasis(material!),actorId:actor.actorId,version,recordedAt:businessNow().toISOString()};
     assembly={...assembly!,materialPricingUnits};priceBasis=quotationMaterialPriceBasis(material!,unit);
+    // Only this command's explicitly authorized quantity may bind to the new
+    // unit. A unit-only correction still invalidates the old quantity basis.
+    if(unitChanged&&(input.consumption!==undefined||input.artifactConsumption))assembly.rows={...assembly.rows,[rowId]:{...component!,basis:quotationMaterialConsumptionBasis(material!,unit,technicalDocumentFingerprint({...c.sourceDocument!.document,craft:'无',washing:'免洗'}),a.technicalAssigneeId)}};
     if(unitChanged){
      delete sources[rowId];
      const original=priceSources[rowId];

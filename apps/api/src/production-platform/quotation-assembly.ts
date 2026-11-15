@@ -1,4 +1,4 @@
-import {quotationMaterialPriceBasis,quotationMaterialPricingUnit} from './quotation-material-unit.js';
+import {quotationMaterialConsumptionBasis,quotationMaterialPriceBasis,quotationMaterialPricingUnit} from './quotation-material-unit.js';
 import {notifySpecialCraftQuotes} from './special-craft-quotation-todos.js';
 import {craftStepIdentity,craftStepLabel,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {createHash,randomUUID} from 'node:crypto';
@@ -61,7 +61,7 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
  for(const m of document.materials.filter(m=>!isDevelopmentMaterialPlaceholder(m))){
   const id=m.materialId,tech=recipient('development_pattern',old?.assignments.find(a=>a.rowId===id)?.technicalAssigneeId??null),correction=quotationMaterialPricingUnit(m,old?.assembly?.materialPricingUnits?.[id]),unit=correction?.unit??m.pricingUnit??'';
   if(correction)materialPricingUnits[id]=correction;
-  const basis=digest([m.materialId,m.name,m.specification,unit,commercialFingerprint(document),tech]);
+  const basis=quotationMaterialConsumptionBasis(m,unit,commercialFingerprint(document),tech);
   const prior=old?.document.rows.find(r=>r.rowId===id),same=matches(id,basis,()=>digest([old!.assembly!.roundNumber,m.materialId,m.name,m.specification,unit,technicalDocumentFingerprint(legacyDocument!),tech]))
    &&(!legacyDocument||old?.assembly?.rows[id]?.dependencyVersion===2||commercialFingerprint(legacyDocument)===commercialFingerprint(document));
   const sourceConsumption=validArtifact?.artifact.body.consumptionRows.find(r=>r.materialId===id&&r.unit===unit);

@@ -144,11 +144,36 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   q=await quotes.read(p.designer,resource);q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'码',unitPrice:'0'},randomUUID());
   expect(q.complete).toBe(false);expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'码',unitPrice:'0',consumption:''});
   expect(q.rows.filter(row=>row.rowId!==p.materialId).map(row=>row.unitPrice)).toEqual(['10','3']);
-  q=await quotes.fillRow(f.root,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米',unitPrice:'0'},randomUUID());expect(calculateBudget(q.document!).cost).toBe('13');
+  q=await quotes.fillRow(f.root,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米',unitPrice:'0',consumption:'2'},randomUUID());expect(calculateBudget(q.document!).cost).toBe('13');expect(q.rows.find(row=>row.rowId===p.materialId)?.consumption).toBe('2');
   q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'1.5'},randomUUID());
   q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID());expect(q.rows.find(row=>row.rowId===p.materialId)?.consumption).toBe('1.5');
   expect((await quotes.read(p.designer,resource,undefined,frozen)).document!.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'米',consumption:'1.250000',unitPrice:'22'});
   expect((await budgets.read(f.root,order.productionOrderId)).document).toEqual(budgetBefore.document);
+ });
+
+
+ for(const hasArtifact of [false,true])it(`retains the authorized quantity submitted with a new unit without borrowing or clearing it (formal=${hasArtifact})`,async()=>{
+  const p=await prepare('无',{automatic:true,missingPricingUnit:true}),resource={kind:'source' as const,id:p.sourceId},quotes=new DigitalQuotationService(f.db,true),published=hasArtifact?await artifact(p):null;
+  let q=await quotes.read(p.designer,resource);const ie=q.document!.rows.find(row=>row.name==='IE加工单价')!;
+  q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.rowId===ie.rowId?{...a,priceAssigneeId:person('ie').actorId}:a)},randomUUID());
+  const before=q.version;
+  await expect(quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:before,pricingUnit:'米',consumption:'2'},randomUUID())).rejects.toMatchObject({statusCode:403});
+  expect((await quotes.read(p.designer,resource)).version).toBe(before);
+  q=await quotes.fillRow(f.root,resource,p.materialId,{expectedVersion:before,pricingUnit:'米',consumption:'2'},randomUUID());
+  expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'米',unitPrice:'20',consumption:'2',consumptionSource:{kind:'technical_manual',actorId:f.root.actorId,version:q.version}});
+  if(process.env.QUOTATION_UNIT_COMPAT_PROBE){
+   const schema=(await f.db.query('SELECT current_schema() AS schema')).rows[0].schema;
+   const proof=JSON.parse(execFileSync('node_modules/.bin/tsx',[process.env.QUOTATION_UNIT_COMPAT_PROBE],{input:JSON.stringify({schema,designer:p.designer,ie:person('ie'),resource,materialId:p.materialId,ieId:ie.rowId,expectedConsumption:'2',expectedPrice:'20'}),encoding:'utf8',env:process.env}));
+   expect(proof).toMatchObject({commit:'29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd',readNewUnit:true,preservedAfterNativeDifferentRowWrite:true});console.log('QUOTATION_UNIT_MANUAL_ROLLBACK_PROOF='+JSON.stringify(proof));q=await quotes.read(p.designer,resource);
+  }
+  q=await quotes.fillRow(f.root,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'码',consumption:'3'},randomUUID());expect(q.rows.find(row=>row.rowId===p.materialId)?.consumption).toBe('3');
+  if(published){
+   q=await quotes.fillRow(f.root,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米',artifactConsumption:{id:published.artifactSetId,version:published.version,materialId:p.materialId}},randomUUID());
+   expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({consumption:'1.250000',consumptionSource:{kind:'technical_artifact',actorId:f.root.actorId,version:q.version}});
+   q=await quotes.fillRow(f.root,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'码',consumption:'3'},randomUUID());
+  }
+  q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID());
+  expect(q.rows.find(row=>row.rowId===p.materialId)?.consumption).toBe(published?'1.250000':'');
  });
 
  it('serializes commercial unit correction and denies foreign or revoked designers without adopting another unit',async()=>{
