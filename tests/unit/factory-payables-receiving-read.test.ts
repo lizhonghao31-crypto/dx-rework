@@ -5,10 +5,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { OrderBoardPage } from "../../apps/web/src/order-board-page.js";
 import { Shell } from "../../apps/web/src/components.js";
 import { ACCEPTANCE_ROLE_MATRIX } from "../../apps/web/src/acceptance-matrix.js";
+import type * as AuthModule from "../../apps/web/src/auth.js";
 
 // UI transport fixture only; real role grants, authentication, reads and denial are covered in PostgreSQL.
 vi.mock("../../apps/web/src/auth.js", async importOriginal => ({
-  ...await importOriginal<typeof import("../../apps/web/src/auth.js")>(),
+  ...await importOriginal<typeof AuthModule>(),
   verifySession: async () => ({ status: "authorized", user: { id: "TEST-accountant", displayName: "TEST 加工厂应付会计",
     businessRoles: ["factory_payables"], capabilities: ["tools:user", "sourcing:view", "supplier_profile:read", "external_responsibility:payables_confirm"] } }),
 }));
@@ -29,8 +30,11 @@ it("keeps the native receiving navigation, history and evidence available withou
     receivingHistory: [{ receiptId: "TEST-receipt", sequence: 1, receiptDocumentQuantity: 10, actualQuantity: 8, defectiveQuantity: 1,
       cumulativeActualQuantity: 8, differenceQuantity: -2, receiverName: "TEST 仓管", receivedAt: "2026-11-15T02:00:00Z" }],
     rootCorrectable: true, rootDeletable: true, rootMutable: true, version: 1 };
-  const fetcher = vi.fn(async (_url: RequestInfo | URL, _options?: RequestInit) => ({ ok: true, json: async () => ({ date: "2026-11-15", startDate: "2026-11-15", endDate: "2026-11-15", mode: "range", status: "all",
-    kpis: { orderCount: 1, receivedQuantity: 8, abnormalOrderCount: 1, differenceQuantity: 2, differenceRate: 20 }, rows: [row], page: 1, pageSize: 15, totalCount: 1, totalPages: 1 }) }));
+  const fetcher = vi.fn(async (...args: [RequestInfo | URL, RequestInit?]) => {
+    if (args[1]?.method && args[1].method !== "GET") throw new Error("Read-only page attempted a write");
+    return { ok: true, json: async () => ({ date: "2026-11-15", startDate: "2026-11-15", endDate: "2026-11-15", mode: "range", status: "all",
+    kpis: { orderCount: 1, receivedQuantity: 8, abnormalOrderCount: 1, differenceQuantity: 2, differenceRate: 20 }, rows: [row], page: 1, pageSize: 15, totalCount: 1, totalPages: 1 }) };
+  });
   vi.stubGlobal("fetch", fetcher);
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   await act(async () => root!.render(createElement(Shell, { active: "订单回货", children: createElement(OrderBoardPage) })));
