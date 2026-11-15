@@ -2,10 +2,12 @@
 
 长期规则见[AGENTS §4–5](../../AGENTS.md)。本文件说明实现边界；历史单次授权、分组发布与旧预算不再作为默认规则。
 
-- PR push 只跑 light；必要 Review 后冻结候选，显式选择最终 Quick 或 Full。无关正文/同模式标题编辑不分配校验 runner，也不取消已有最终请求。
+- 每PR只在首次opened跑一次Light，后续任何修改、元数据和重试均不重跑；必要 Review 后冻结候选，显式选择最终 Quick 或 Full。无关正文/同模式标题编辑不分配校验 runner，也不取消已有最终请求。
 - Quick 不运行 PostgreSQL、恢复、打包或现场验收；Full 按实际 base→candidate 风险执行所需领域。未知执行风险不能当无风险。最终批准绑定准确 Head/base、等级、run/job/attempt 及实际回执。
 - 请求 ref 不可变，不删除重建、force、更换nonce或用noop触发。相同请求先 reconcile。过期 Head、失败、取消、全skip、空计划和缺阶段均不能签成功。
 - 实际预算由 `.github/workflows/ci.yml` 和 `full-gate.yml` 维护，文档不复制另一组值。超时先定位阶段和资源，不直接加大全局限制。
+
+当前Head没有可复用Light时，最终Quick/Full照常执行原检查，不以旧Head证据冒充新Head成功。保持准确Head/base和原门禁回执，不修改平台保护。
 
 ## 同Head light→Full复用
 

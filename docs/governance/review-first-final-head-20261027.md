@@ -4,7 +4,9 @@
 
 ## 请求与核证
 
-`node scripts/ci/pr-gate-controller.mjs request-final --pr <N> --head <Head40> --closeout <外置收口包>`只读核真实PR、当前目标tip、light、必要Review及[本批收口包](final-closeout-v1.md)；preview/apply均在新建引用前校验包、固定Head的construction摘要和实际报告，已有授权内加`--apply`创建唯一请求：
+每PR仅首次opened运行一次Light；之后任何修改均不再运行。当前Head没有成功Light不阻止显式最终请求，Quick/Full执行当前来源所需检查。仅完全相符的同Head已成功产物可复用，复用仍核原run/job/attempt及完整来源；旧Head、失败或取消的Light不能冒充当前通过。
+
+`node scripts/ci/pr-gate-controller.mjs request-final --pr <N> --head <Head40> --closeout <外置收口包>`只读核真实PR、当前目标tip、必要Review及[本批收口包](final-closeout-v1.md)；preview/apply均在新建引用前校验包、固定Head的construction摘要和实际报告，已有授权内加`--apply`创建唯一请求：
 
 `gate/{quick|full}/{PR}/{Head40}/{base40}/{baseRefBase64url}`
 

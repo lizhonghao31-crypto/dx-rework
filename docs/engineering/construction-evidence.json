@@ -2,7 +2,7 @@
   "version": 1,
   "base": "dce4dbbebfed84e5357036d405ce72e2ac49c510",
   "risk": "full",
-  "sourceFingerprint": "06a114dd172a103c347310ae28cbdfccc69ce1dc8d5fc0d89789875fd4393658",
+  "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
   "rules": [
     {
       "rule": "Order receiving card good quantity equals cumulative actual minus cumulative defective from the same stable group and date/search observation. It is not cumulative actual minus period defective, current-all defective or a new QC release. Include trusted current/historical correction and batch merge adjustments; genuine zero remains zero.",
@@ -36,13 +36,16 @@
       "source": "Same2026-11-15 user instruction and original approved inclusive-receipt distinction. Existing UI structure/styles retained; no new page or panel.",
       "writes": [
         "apps/web/src/order-board-page.tsx",
-        "tests/unit/order-board-good-quantity.test.ts"
+        "tests/unit/order-board-good-quantity.test.ts",
+        "package.json",
+        "package-lock.json"
       ],
       "reads": [
         "apps/web/src/received-quantity-label.tsx",
         "apps/web/src/received-quantity-label.css",
         "apps/web/src/order-board-page.css",
-        "apps/api/src/receiving/receiving-routes.ts"
+        "apps/api/src/receiving/receiving-routes.ts",
+        "vitest.config.ts"
       ],
       "oldTests": [
         "tests/unit/order-board-cutting-facts.test.ts",
@@ -53,12 +56,46 @@
       "newTests": [
         "tests/unit/order-board-good-quantity.test.ts"
       ],
-      "initialization": "Existing card location, CSS classes, number formatter and shared inclusive label usages preserved; good-card local label avoids changing shared ReceivedQuantityLabel. No API route or export shape/column change beyond additive JSON read field. Old API missing the additive field shows unknown instead of NaN or invented good count.",
+      "initialization": "Existing card location, CSS classes, number formatter and shared inclusive label usages preserved; good-card local label avoids changing shared ReceivedQuantityLabel. No API route or export shape/column change beyond additive JSON read field. Old API missing the additive field shows unknown instead of NaN or invented good count. Declare and pin the actual jsdom test environment in root devDependencies and lockfile; no shared-directory dependency assumption. Fresh npm ci then rebuilt current packages and11tests verifies canonical installation.",
       "dateAndPermission": "The card consumes the server derived snapshot. Date/search controls and native write/Root actions remain original; no access changes belong in this PR. All rows retain existing business status and difference controls from inclusive values.",
       "expectation": "Original OrderBoardPage mounted in React shows server67, genuine0 and missing projection unknown; top period30 remains labelled含次品数 and expanded history keeps original inclusive30/70. Existing card seven-column/cutting layout contracts, status/search/pagination and backend differences stay unchanged.",
       "checks": [
         "unit",
         "postgres"
+      ]
+    },
+    {
+      "rule": "Honor the user-approved one initial Light per PR on main too: later changes or metadata never allocate Light, final requests and merge still validate exact current head/base/review and actual completed final checks. Missing current Light means execute final checks, never relabel prior head as success or bypass source verification for actual reused artifacts.",
+      "source": "User explicitly: 一个pr light跑一次就够了，之后所有的变动都不用再跑. Already implemented and approved in release commits08cbefb9/4581b159; main retained older rules and its exact-head Light prerequisite would conflict with the current review-fix push. Minimal source rule port keeps main worker, budget, audit, permissions and server protection unchanged.",
+      "writes": [
+        ".github/workflows/ci.yml",
+        "AGENTS.md",
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/ci/pr-gate-protocol.mjs",
+        "scripts/ci/verify-actions-policy.mjs",
+        "scripts/ci/review-final-gate.test.mjs",
+        "scripts/ci/once-light.test.mjs"
+      ],
+      "reads": [
+        ".github/workflows/full-gate.yml",
+        "scripts/ci/ci-gate-runtime.mjs",
+        "scripts/ci/light-reuse.mjs",
+        "scripts/ci/final-closeout.mjs",
+        "scripts/ci/final-closeout.fixture.mjs"
+      ],
+      "oldTests": [
+        "scripts/ci/review-final-gate.test.mjs",
+        "scripts/ci/final-closeout.test.mjs",
+        "scripts/ci/light-reuse.test.mjs"
+      ],
+      "newTests": [
+        "scripts/ci/once-light.test.mjs"
+      ],
+      "initialization": "Main-specific adaptation, not a merge of release business code. Keep existing Full reusable worker/concurrency placement and30-minute budget; opened/run_attempt1 only, no cancellation of valid initial/final work. Policy validator, protocol event selection, operator request/merge and existing tests/docs agree. No default/real role, server protection, credential or deployment changes.",
+      "dateAndPermission": "Current accurate immutable head/base/mode and actual final receipt remain mandatory. No nonce, force, admin or rerun channel. Wrong ref, stale head/base, unresolved review, skipped/failed final are rejected. Full claimed verified_reuse still requires the actual exact-head Light source and rejects missing/older evidence.",
+      "expectation": "All52actual targeted protocol tests pass: later source/base/mode/body events and retries allocate no Light; absent/failed/cancelled/older/running Light cannot be required as a prerequisite or fake passed. Final own actual results still verified; claimed reuse missing/older source is rejected. Original initial Light43701745867 remains explicitly tied to6d47f641, not the repaired head.",
+      "checks": [
+        "protocol"
       ]
     }
   ],
@@ -72,17 +109,17 @@
       "passed": 11,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "dce4dbbebfed84e5357036d405ce72e2ac49c510",
-      "sourceFingerprint": "06a114dd172a103c347310ae28cbdfccc69ce1dc8d5fc0d89789875fd4393658",
-      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9; bounded workers2. React/jsdom original OrderBoardPage uses labelled synthetic response/session adapters only for display: server-projected67, real0 and missing field; unchanged inclusive KPI/history and original differences. Existing quantity, cutting, search, pagination tests retained.",
-      "startedAt": "2026-11-15T09:53:59.202Z",
-      "endedAt": "2026-11-15T09:54:01.376Z",
-      "log": "/tmp/main-good-unit.json",
-      "logSha256": "95992cc5c79471c163cc19b96cda0b04af1dd0812b0d2dffaa16ee366e3a224a",
+      "testedHead": "6d47f64188f6b188b15abbb2084e178a19015dec",
+      "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
+      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9; bounded workers2. React/jsdom original OrderBoardPage uses labelled synthetic response/session adapters only for display: server-projected67, real0 and missing field; unchanged inclusive KPI/history and original differences. Existing quantity, cutting, search, pagination tests retained. Review4577936125 fixed: exact jsdom30.1.3 declared/locked, prior symlink-only dependencies moved aside, fresh npm ci --ignore-scripts --no-audit --no-fund in this checkout, current local node_modules/jsdom resolves inside this worktree, current packages rebuilt. All11run again using this clean dependency tree. Previous local shared-dependency run was not proof of canonical installation.",
+      "startedAt": "2026-11-15T10:15:14.762Z",
+      "endedAt": "2026-11-15T10:15:16.205Z",
+      "log": "/tmp/main-good-clean-unit.json",
+      "logSha256": "7c697a711576cf9fabc2208e9d4313984076badc8ebd3fa537cd383ff4bde7af",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "95992cc5c79471c163cc19b96cda0b04af1dd0812b0d2dffaa16ee366e3a224a"
+          "sha256": "7c697a711576cf9fabc2208e9d4313984076badc8ebd3fa537cd383ff4bde7af"
         }
       ]
     },
@@ -95,19 +132,36 @@
       "passed": 34,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "dce4dbbebfed84e5357036d405ce72e2ac49c510",
-      "sourceFingerprint": "06a114dd172a103c347310ae28cbdfccc69ce1dc8d5fc0d89789875fd4393658",
-      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9, canonical workers1. Fresh marked local owned PG16, low-privilege dx_rework_test; original ReceivingService, immutable correction/merge events and original schema fixtures. All34tests pass, no skips; container stopped by trap. No deployed/live business data, production identity, permission, schema or date changes.",
-      "startedAt": "2026-11-15T09:54:29.312Z",
-      "endedAt": "2026-11-15T09:54:32.280Z",
+      "testedHead": "6d47f64188f6b188b15abbb2084e178a19015dec",
+      "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
+      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9, canonical workers1. Fresh marked local owned PG16, low-privilege dx_rework_test; original ReceivingService, immutable correction/merge events and original schema fixtures. All34tests pass, no skips; container stopped by trap. No deployed/live business data, production identity, permission, schema or date changes. Repeated against current clean installed dependency tree and candidate; same34real cases pass. Quantity production code remains byte-identical to reviewed6d47f641.",
+      "startedAt": "2026-11-15T10:14:37.242Z",
+      "endedAt": "2026-11-15T10:14:40.681Z",
       "log": "/tmp/main-good-pg.json",
-      "logSha256": "94983ea70f4523b50c3fda1a4b8ec47041b3a5d37fcaba72b37c4f890ec7f754",
+      "logSha256": "08e5d0b0988d18ec4377cb5b9b21a50a91754376933c7666c5d81a3d97325c97",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "94983ea70f4523b50c3fda1a4b8ec47041b3a5d37fcaba72b37c4f890ec7f754"
+          "sha256": "08e5d0b0988d18ec4377cb5b9b21a50a91754376933c7666c5d81a3d97325c97"
         }
       ]
+    },
+    {
+      "id": "protocol",
+      "kind": "tests",
+      "command": "node --test scripts/ci/once-light.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/light-reuse.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 52,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "6d47f64188f6b188b15abbb2084e178a19015dec",
+      "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
+      "context": "Node22.22.2/npm10.9.9 current main candidate.52actual node:test protocol assertions, no GitHub mutations: original workflow expressions, missing/failed/cancelled/old/running Light vs final own validation, wrong base/head/review/final/ref failures, mandatory exact-source verification when reuse is claimed. Real Actions validator and full109-case main preflight also passed. No Light re-run or skipped final check represented as success.",
+      "startedAt": "2026-11-15T10:15:58.250Z",
+      "endedAt": "2026-11-15T10:15:59.442Z",
+      "log": "/tmp/main-good-once-light.log",
+      "logSha256": "fd4f190babfe714bd6e674247ec97986af1d750f2e738bff899227c7640414c4"
     }
   ]
 }
