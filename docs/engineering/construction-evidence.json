@@ -2,7 +2,7 @@
   "version": 1,
   "base": "08440321e9d0e67307c6966d2572e420d0e318b8",
   "risk": "full",
-  "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
+  "sourceFingerprint": "37df248ce0b4e9473925a0da0aaff151d130a069153188ee9ab52763bd07cd90",
   "rules": [
     {
       "rule": "Failed local uploads remain retryable and may be individually removed without deleting ready attachments. Shared original upload consumers clear only the matching upload error, retaining unrelated business or unknown-command feedback.",
@@ -22,14 +22,15 @@
       ],
       "oldTests": [
         "tests/unit/document-upload-previews.test.ts",
-        "tests/unit/development-submitted-uploads.test.ts"
+        "tests/unit/development-submitted-uploads.test.ts",
+        "tests/unit/digital-development-upload-selection.test.ts"
       ],
       "newTests": [
         "tests/unit/document-upload-previews.test.ts"
       ],
       "initialization": "Transient hook metadata only: purpose/task owner/attempt on local File, no schema, persistence, data migration or library/attachment deletion. All four existing hook callers keep their original upload/save commands and failure retry. Removing only failed no-id entries revokes the local object URL; ready and in-flight files cannot be removed through this action.",
       "dateAndPermission": "No dates, plans, costs, quantities or authorization change. Shared callback clears current string only when identical to removed upload error. Uploaded private object/reference and original write gates remain authoritative.",
-      "expectation": "92unit cases pass: failed sibling survives ordinary save; explicit removal preserves ready/in-flight; completed snapshot preserves other task, purpose, later file/retry and ready reference. Real original supervisor App rejects invalidPLT, removes it with correct feedback and preserves validPNG native attachment.",
+      "expectation": "97unit cases pass: failed sibling survives ordinary save; explicit removal preserves ready/in-flight; completed snapshot preserves other task, purpose, later file/retry and ready reference. Real original supervisor App rejects invalidPLT, removes it with correct feedback and preserves validPNG native attachment.",
       "checks": [
         "unit",
         "pg-native",
@@ -46,6 +47,7 @@
         "apps/web/src/development-external-pattern.tsx",
         "apps/web/src/development-result-upload.tsx",
         "apps/web/src/task-workbench-sample.tsx",
+        "tests/unit/digital-development-upload-selection.test.ts",
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "tests/unit/full-gate-risk-map.test.ts",
@@ -83,29 +85,64 @@
         "preflight",
         "secret"
       ]
+    },
+    {
+      "rule": "Original full authenticated App browser suites use the existing canonical long correctness configuration, keeping ordinary PG tests strict and original browser/financial assertions intact.",
+      "source": "Actual Full43752644393 postgres job132930617096:35pass, budget browser2not-run; beforeAll hook10s timeout under vitest.config.ts. Runtime metadata and helper9consumer audit proved only this full-App browser suite missed LONG_CORRECTNESS_TESTS. Existing shared allowance remains100000ms, no new value or lowered assertion.",
+      "writes": [
+        "scripts/test-suite-plan.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "docs/engineering/failed-upload-preview-20261115.md"
+      ],
+      "reads": [
+        "tests/integration/budget-washing-fees-browser-postgres.test.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "scripts/test-execution-config.mjs",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "scripts/run-business-chain-gate.mjs",
+        "scripts/ci/prepare-settings-browser.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/budget-washing-fees-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "initialization": "No business service, migration, credentials, real roles/data or global timeout changes. Sole added long suite uses original existing business-chain config; browser startup, native identity, full-schema lowpriv fixture and original disposal remain. Guard inspects actual shared-browser consumers and verifies canonical config plus sole-suite browser preparation; ordinary nonbrowser fee PG stays default strict.",
+      "dateAndPermission": "Financial lost-receipt/idempotency, immutable budget history, same-cookie revoked publisher and unauthorized washing-role denial unchanged. Existing65native/technical PG and types are reused only under inputPaths/fingerprints captured while exact3028456c global source still matched, before this runner-list fix; their actual configs and inputs remain byte-identical. No old CI result used for new exacthead.",
+      "expectation": "97unit/mapping/upload-selection cases and2actual guardedPG16/authenticated budget App cases pass using configForSuite itself, not manually forcing a different config. Related lint/preflight/secret pass; original failed Full remains failed and is not cancelled. Non-db final result collected before next exacthead Full.",
+      "checks": [
+        "unit",
+        "pg-budget-browser",
+        "canonical-lint",
+        "preflight",
+        "secret"
+      ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "vitest run document-upload-previews/development-submitted-uploads/full-gate-risk-map --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/failed-upload-unit.json",
+      "command": "vitest run document-upload-previews/development-submitted-uploads/full-gate-risk-map/digital-development-upload-selection --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/failed-upload-unit.json",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
+      "sourceFingerprint": "37df248ce0b4e9473925a0da0aaff151d130a069153188ee9ab52763bd07cd90",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:25:53.063Z",
-      "endedAt": "2026-11-15T19:25:55.176Z",
+      "startedAt": "2026-11-15T19:40:51.411Z",
+      "endedAt": "2026-11-15T19:40:53.801Z",
       "log": "/tmp/failed-upload-unit.log",
-      "logSha256": "cfff1abf6aa7194a218b300b1761da4aa38f33fdeffd00e96c0b09d00d0b6d6c",
-      "passed": 92,
+      "logSha256": "12e2a3c3d340559f3bf3a9f98ef68528d0dc17a412dfefc32e5dce5908af6ac8",
+      "passed": 97,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "52d8e511691dea0517ec61d4ddbc0d9c12dc510693e797d8ab56a33969ea3518"
+          "sha256": "b774fadea3dcd3da0b73112d26f22221bf73f32f261df6cdec82f2bd6da92584"
         }
       ]
     },
@@ -130,7 +167,26 @@
           "format": "vitest-json",
           "sha256": "dcbf61e61ede4b333e9468178e939ade3946e014694b081717219ebc7671b316"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/fixtures",
+        "scripts/deploy",
+        "scripts/acceptance",
+        "scripts/ci",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-database-safety.mjs",
+        "scripts/test-execution-config.mjs",
+        "package.json",
+        "package-lock.json",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "4973ba7b57ab7c7a4fdde2671ab4db3fa2776bd9c0afc7f530a120f6c536013a"
     },
     {
       "id": "types",
@@ -144,19 +200,27 @@
       "startedAt": "2026-11-15T19:07:16.000Z",
       "endedAt": "2026-11-15T19:25:52.735Z",
       "log": "/tmp/failed-upload-types.log",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "972497f826dfcb8bb207e2f60098ecb4dff5cb8b801ad200ee617eaf8c3c579c"
     },
     {
       "id": "lint",
-      "command": "eslint changed eight web files, canonical risk map and three actual test files --max-warnings=0",
+      "command": "eslint changed eight web files, canonical risk map and four actual test files --max-warnings=0",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
+      "sourceFingerprint": "37df248ce0b4e9473925a0da0aaff151d130a069153188ee9ab52763bd07cd90",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
       "startedAt": "2026-11-15T19:10:40.000Z",
-      "endedAt": "2026-11-15T19:25:55.227Z",
+      "endedAt": "2026-11-15T19:40:53.854Z",
       "log": "/tmp/failed-upload-final-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
@@ -167,12 +231,12 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
+      "sourceFingerprint": "37df248ce0b4e9473925a0da0aaff151d130a069153188ee9ab52763bd07cd90",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
       "startedAt": "2026-11-15T19:08:23.000Z",
-      "endedAt": "2026-11-15T19:26:04.095Z",
+      "endedAt": "2026-11-15T19:41:02.098Z",
       "log": "/tmp/failed-upload-preflight.log",
-      "logSha256": "f4f250826ffb7aaf080fbe40877aabdf107951c41ad6eed83c01ddc64ff3c36c"
+      "logSha256": "39fcb8aec199da4b6ccf36d058be3a0e72eebfd74006b77d1573220799d6d2c3"
     },
     {
       "id": "secret",
@@ -181,12 +245,69 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
+      "sourceFingerprint": "37df248ce0b4e9473925a0da0aaff151d130a069153188ee9ab52763bd07cd90",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
       "startedAt": "2026-11-15T19:10:13.000Z",
-      "endedAt": "2026-11-15T19:26:04.931Z",
+      "endedAt": "2026-11-15T19:41:03.050Z",
       "log": "/tmp/failed-upload-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
+    },
+    {
+      "id": "pg-budget-browser",
+      "command": "bash /tmp/failed-upload-budget-pg.sh (configForSuite selects canonical business-chain for original real budget App, maxWorkers1)",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "f72967f365deea69b52ab5825d01483a587f1a8ccd6c136758aefee8d44e5c6a",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:38:02.121Z",
+      "endedAt": "2026-11-15T19:38:18.433Z",
+      "log": "/tmp/failed-upload-budget-pg.log",
+      "logSha256": "23f05bf3559594161037dec95aab892bbb77fe102b7b2eea5fc4acad7472cfed",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "6379fbe746233cfd5224c9e20f017ea6c6a87f553bad0d7a186907d25d41c4c8"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/fixtures",
+        "scripts/deploy",
+        "scripts/acceptance",
+        "scripts/ci",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-database-safety.mjs",
+        "scripts/test-execution-config.mjs",
+        "package.json",
+        "package-lock.json",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json",
+        "scripts/test-suite-plan.mjs"
+      ],
+      "inputFingerprint": "b0abafece309e4f0d7c9f895cb8388d433aa9852d8a1352ca29d790976125f5f"
+    },
+    {
+      "id": "canonical-lint",
+      "command": "eslint scripts/test-suite-plan.mjs tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "37df248ce0b4e9473925a0da0aaff151d130a069153188ee9ab52763bd07cd90",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:37:55.000Z",
+      "endedAt": "2026-11-15T19:37:55.908Z",
+      "log": "/tmp/failed-upload-canonical-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }

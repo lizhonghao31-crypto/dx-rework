@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import ts from "typescript";
 
 describe("development file selection survives asynchronous upload limits", () => {
-  for (const [path, expected] of [
-    ["development-document-fields.tsx", 1],
-    ["development-result-upload.tsx", 1],
-    ["development-fabric-report.tsx", 1],
+  for (const [path, expected, scope] of [
+    ["development-document-fields.tsx", 1, undefined],
+    ["development-result-upload.tsx", 1, "task"],
+    ["development-external-pattern.tsx", 1, "record"],
+    ["development-fabric-report.tsx", 1, undefined],
   ] as const) {
     it(path, async () => {
       const source = ts.createSourceFile(path, readFileSync(`apps/web/src/${path}`, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -32,12 +33,15 @@ describe("development file selection survives asynchronous upload limits", () =>
         const limits = new Promise<void>(resolve => { release = resolve; });
         const uploaded: File[] = [];
         let pending: Promise<void> | undefined;
-        const upload = (files: ArrayLike<File>) => {
+        let receivedTaskId:string|undefined;
+        const upload = (files: ArrayLike<File>,_purpose?:string,taskId?:string) => {
+          receivedTaskId=taskId;
           pending = (async () => { await limits; uploaded.push(...Array.from(files)); })();
           return pending;
         };
-        const onChange = new Function("upload", "purpose", `return (${handler})`)(upload,"工艺开发板");
+        const onChange = new Function("upload", "purpose", "task", "record", `return (${handler})`)(upload,"工艺开发板",{taskId:"TEST-current-result-task"},{taskId:"TEST-original-external-task"});
         onChange({ target: input, currentTarget: input });
+        expect(receivedTaskId).toBe(scope==='task'?"TEST-current-result-task":scope==='record'?"TEST-original-external-task":undefined);
         expect(liveFiles).toHaveLength(0);
         expect(uploaded).toHaveLength(0);
         release();
