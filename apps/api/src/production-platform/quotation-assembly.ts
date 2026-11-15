@@ -1,3 +1,4 @@
+import {quotationMaterialPriceBasis,quotationMaterialPricingUnit} from './quotation-material-unit.js';
 import {notifySpecialCraftQuotes} from './special-craft-quotation-todos.js';
 import {craftStepIdentity,craftStepLabel,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {createHash,randomUUID} from 'node:crypto';
@@ -54,10 +55,12 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
   return task?task.assignee_id:Object.hasOwn(plan,kind)?plan[kind]:fallback;
  };
  const rows:BudgetRow[]=[],assignments:QuotationAssignment[]=[],consumptions:AssembledQuotation['consumption_sources']={},prices:AssembledQuotation['price_sources']={};
+ const materialPricingUnits:NonNullable<QuotationAssembly['materialPricingUnits']>={};
  const refs:QuotationAssembly['rows']={},at=businessNow().toISOString(),nextVersion=appliedVersion??(old?.version??0)+1;
  const add=(row:BudgetRow,assignment:QuotationAssignment,ref:QuotationAssembly['rows'][string])=>{rows.push(row);assignments.push(assignment);refs[row.rowId]=ref;};
  for(const m of document.materials.filter(m=>!isDevelopmentMaterialPlaceholder(m))){
-  const id=m.materialId,tech=recipient('development_pattern',old?.assignments.find(a=>a.rowId===id)?.technicalAssigneeId??null),unit=m.pricingUnit??'';
+  const id=m.materialId,tech=recipient('development_pattern',old?.assignments.find(a=>a.rowId===id)?.technicalAssigneeId??null),correction=quotationMaterialPricingUnit(m,old?.assembly?.materialPricingUnits?.[id]),unit=correction?.unit??m.pricingUnit??'';
+  if(correction)materialPricingUnits[id]=correction;
   const basis=digest([m.materialId,m.name,m.specification,unit,commercialFingerprint(document),tech]);
   const prior=old?.document.rows.find(r=>r.rowId===id),same=matches(id,basis,()=>digest([old!.assembly!.roundNumber,m.materialId,m.name,m.specification,unit,technicalDocumentFingerprint(legacyDocument!),tech]))
    &&(!legacyDocument||old?.assembly?.rows[id]?.dependencyVersion===2||commercialFingerprint(legacyDocument)===commercialFingerprint(document));
@@ -77,7 +80,7 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
    // A changed/withdrawn artifact head still requires a valid new source above.
    consumption=prior?.consumption??'';consumptions[id]=old.consumption_sources[id]!;
   }
-  const priceBasis=digest([m.unitPrice??'',unit,m.materialId,m.name,m.specification,m.supplier]),override=old?.price_sources[id]?.documentPriceHash===priceBasis;
+  const priceBasis=quotationMaterialPriceBasis(m,unit),override=old?.price_sources[id]?.documentPriceHash===priceBasis;
   const unitPrice=override?prior?.unitPrice??'':m.unitPrice??'';
   if(override&&old?.price_sources[id])prices[id]=old.price_sources[id]!;
   else if(unitPrice!==''&&unit)prices[id]=same&&prior?.unitPrice===unitPrice&&old?.price_sources[id]?old.price_sources[id]!:{actorId:saved.revision?.updated_by??saved.updated_by??source.created_by,role:'development_document',version:saved.version,recordedAt:at};
@@ -122,7 +125,7 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
   const row=old!.document.rows.find(row=>row.rowId===id),assignment=old!.assignments.find(a=>a.rowId===id);
   if(row&&assignment)priorCraftRows[id]={row,assignment,ref,...(old!.price_sources[id]?{priceSource:old!.price_sources[id]}:{})};
  }
- const assembly:QuotationAssembly={...(Object.keys(priorCraftRows).length?{priorCraftRows}:{}),schemaVersion:1,sourceVersion:saved.version,roundNumber:round,fingerprint:digest([output,assignments,refs]),rows:refs};
+ const assembly:QuotationAssembly={...(Object.keys(priorCraftRows).length?{priorCraftRows}:{}),schemaVersion:1,sourceVersion:saved.version,roundNumber:round,...(Object.keys(materialPricingUnits).length?{materialPricingUnits}:{}),fingerprint:digest(Object.keys(materialPricingUnits).length?[output,assignments,refs,materialPricingUnits]:[output,assignments,refs]),rows:refs};
  if(old&&isDeepStrictEqual(old.document,output)&&isDeepStrictEqual(old.assignments,assignments)&&isDeepStrictEqual(old.consumption_sources,consumptions)&&isDeepStrictEqual(old.price_sources,prices)&&isDeepStrictEqual(old.assembly,assembly))return old;
  const quoteId=old?.quote_id??randomUUID();
  const result=await db.query(`INSERT INTO digital_quotation_documents(quote_id,source_id,production_order_id,version,document,assignments,consumption_sources,price_sources,assembly,updated_by)
