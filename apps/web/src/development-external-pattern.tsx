@@ -18,7 +18,7 @@ export function DevelopmentExternalPattern({controller}:{controller:ReturnType<t
    {record.receivedAt?<><p>实际收到 {date(record.receivedAt)} · {record.receivedBy}</p>{record.attachmentIds?.map((id,index)=><p key={id}><a href={urls.apiUrl(`digital-production/sources/${state.sheet.sourceId}/development/attachments/${id}`)} target="_blank" rel="noreferrer">外部纸样附件 {index+1}</a></p>)}</>:<>
     {task?.dueAt&&<p>应收到：{date(task.dueAt)}</p>}
     {task?.canExecute&&task.state==='ready'&&<form onSubmit={event=>{event.preventDefault();void run('external-pattern',{action:'receive',requestId:record.requestId,note:new FormData(event.currentTarget).get('note'),attachmentIds:externalFiles});}}><fieldset disabled={busy}>
-     {controller.previews.view}<label>收到的纸样附件<input type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value='';void upload(files,'外部纸样');}}/></label>
+     {controller.previews.view}<label>收到的纸样附件<input type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value='';void upload(files,'外部纸样',record.taskId);}}/></label>
      <p>{externalFiles.length?`已上传 ${externalFiles.length} 份，提交后保存。`:'请上传实际收到的纸样。'}</p><label>备注<input name="note" maxLength={1000}/></label><Button type="submit" disabled={!externalFiles.length}>记录已收到</Button>
     </fieldset></form>}
    </>}{(record.note||record.receiptNote)&&<details><summary>办理说明</summary><p>{record.note}</p><p>{record.receiptNote}</p></details>}</>:!state.canRequestExternalPattern&&<p>本轮尚无外部纸样请求记录。</p>}

@@ -1,19 +1,26 @@
 import {AttachmentName} from './attachment-identity.js';
 import {useEffect,useRef,useState} from 'react';
-type Preview={file:File;url:string;id?:string;error?:string;purpose?:string|undefined;retry?:((files:File[])=>unknown)|undefined};
+type Preview={file:File;url:string;attempt:number;id?:string;error?:string;purpose?:string|undefined;owner?:string|undefined;retry?:((files:File[])=>unknown)|undefined};
+export type UploadFailureSnapshot=ReadonlyArray<{file:File;purpose:string|undefined;owner:string|undefined;attempt:number}>;
 /** Local byte previews only; original upload and save commands own persistence. */
-export function useDocumentUploadPreviews(){
+export function useDocumentUploadPreviews(options:{onFailureRemoved?:(message:string)=>void}={}){
  const entries=useRef<Preview[]>([]),[,render]=useState(0);
  useEffect(()=>()=>{for(const entry of entries.current)URL.revokeObjectURL(entry.url);},[]);
  const refresh=()=>render(value=>value+1);
  const reset=()=>{for(const entry of entries.current)URL.revokeObjectURL(entry.url);entries.current=[];refresh();};
- const start=(files:File[],purpose?:string,retry?:(files:File[])=>unknown)=>{for(const file of files){const entry=entries.current.find(entry=>entry.file===file);if(entry){delete entry.error;entry.retry=retry;}else entries.current.push({file,url:URL.createObjectURL(file),purpose,retry});}refresh();};
+ const start=(files:File[],purpose?:string,retry?:(files:File[])=>unknown,owner?:string)=>{for(const file of files){const entry=entries.current.find(entry=>entry.file===file);if(entry){delete entry.error;entry.retry=retry;entry.attempt++;}else entries.current.push({file,url:URL.createObjectURL(file),purpose,owner,retry,attempt:0});}refresh();};
  const uploaded=(file:File,id:string)=>{const entry=entries.current.find(value=>value.file===file);if(entry){entry.id=id;delete entry.error;refresh();}};
  const failed=(file:File,error:string)=>{const entry=entries.current.find(value=>value.file===file);if(entry&&!entry.id){entry.error=error;refresh();}};
  const saved=(ids?:string[],purposes?:readonly string[])=>{entries.current=entries.current.filter(entry=>{if(!entry.id||ids&&!ids.includes(entry.id)||purposes&&(!entry.purpose||!purposes.includes(entry.purpose)))return true;URL.revokeObjectURL(entry.url);return false;});refresh();};
+ const discardFailed=(matches:(entry:Preview)=>boolean)=>{entries.current=entries.current.filter(entry=>{if(entry.id||!entry.error||!matches(entry))return true;URL.revokeObjectURL(entry.url);return false;});refresh();};
+ const removeFailed=(file:File)=>{const failed=entries.current.find(entry=>entry.file===file&&!entry.id&&entry.error);if(!failed)return;discardFailed(entry=>entry===failed);options.onFailureRemoved?.(failed.error!);};
+ const failedSnapshot=(purposes:readonly string[],owner?:string):UploadFailureSnapshot=>entries.current.filter(entry=>entry.error&&!entry.id&&entry.owner===owner&&entry.purpose&&purposes.includes(entry.purpose)).map(({file,purpose,owner,attempt})=>({file,purpose,owner,attempt}));
+ // A successful task may retire only the failures in its original snapshot.
+ // A later file/retry, another purpose and every uploaded reference survive.
+ const settleFailures=(snapshot:UploadFailureSnapshot)=>discardFailed(entry=>snapshot.some(saved=>saved.file===entry.file&&saved.purpose===entry.purpose&&saved.owner===entry.owner&&saved.attempt===entry.attempt));
  const url=(id:string,fallback:string)=>entries.current.find(entry=>entry.id===id)?.url??fallback;
  const identity=(id:string)=>{const file=entries.current.find(entry=>entry.id===id)?.file;return file?{filename:file.name,mimeType:file.type,sizeBytes:file.size}:undefined;};
- const renderPreviews=(purposes?:string[])=>{const visible=entries.current.filter(entry=>!purposes||entry.purpose&&purposes.includes(entry.purpose));return visible.length?<div className="document-upload-previews" aria-label="本次附件上传状态">{visible.map((entry,index)=><figure key={index}>{entry.file.type.startsWith('image/')?<img src={entry.url} alt={entry.file.name} style={{maxWidth:120,maxHeight:100}}/>:<a href={entry.url} target="_blank" rel="noreferrer">预览原附件</a>}<AttachmentName filename={entry.file.name}/><figcaption>{entry.purpose?`${entry.purpose} · `:''}{entry.error?`尚未就绪：${entry.error}`:entry.id?'已上传，尚未保存引用':'待上传 / 上传中'}</figcaption>{entry.error&&entry.retry&&<button type="button" onClick={()=>void entry.retry?.([entry.file])}>重试此附件</button>}</figure>)}</div>:null;};
+ const renderPreviews=(purposes?:string[])=>{const visible=entries.current.filter(entry=>!purposes||entry.purpose&&purposes.includes(entry.purpose));return visible.length?<div className="document-upload-previews" aria-label="本次附件上传状态">{visible.map((entry,index)=><figure key={index}>{entry.file.type.startsWith('image/')?<img src={entry.url} alt={entry.file.name} style={{maxWidth:120,maxHeight:100}}/>:<a href={entry.url} target="_blank" rel="noreferrer">预览原附件</a>}<AttachmentName filename={entry.file.name}/><figcaption>{entry.purpose?`${entry.purpose} · `:''}{entry.error?`尚未就绪：${entry.error}`:entry.id?'已上传，尚未保存引用':'待上传 / 上传中'}</figcaption>{entry.error&&entry.retry&&<button type="button" onClick={()=>void entry.retry?.([entry.file])}>重试此附件</button>}{entry.error&&!entry.id&&<button type="button" aria-label={`移除失败附件 ${entry.file.name}`} onClick={()=>removeFailed(entry.file)}>移除失败附件</button>}</figure>)}</div>:null;};
  const view=renderPreviews(),viewFor=(purposes:string[])=>renderPreviews(purposes);
- return {start,uploaded,failed,saved,reset,url,identity,view,viewFor,pending:entries.current.length>0,unready:entries.current.some(entry=>!entry.id)};
+ return {start,uploaded,failed,saved,reset,removeFailed,failedSnapshot,settleFailures,url,identity,view,viewFor,pending:entries.current.length>0,unready:entries.current.some(entry=>!entry.id)};
 }

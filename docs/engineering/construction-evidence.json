@@ -1,45 +1,37 @@
 {
   "version": 1,
-  "base": "3850a31bcb154d48b517f775153951bed4fe0061",
+  "base": "08440321e9d0e67307c6966d2572e420d0e318b8",
   "risk": "full",
-  "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
+  "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
   "rules": [
     {
-      "rule": "Separate the existing side-effect-free digital POST queries from possibly committed native commands at the real HTTP and client error boundaries. Share the exact original read route contract, retain status/code/request ID and safe business reasons, and keep all real command unknown-result semantics and permissions.",
-      "source": "User via Dot authorizes all known Acceptance repairs, particularly order-time/check POST mislabeled write unknown and F path unproven. Existing shared feedback and UI recovery rules; rework UI golden20261115 updated with this exact scope. Not a new grant, retry platform or inference about historical request terminal state.",
+      "rule": "Failed local uploads remain retryable and may be individually removed without deleting ready attachments. Shared original upload consumers clear only the matching upload error, retaining unrelated business or unknown-command feedback.",
+      "source": "User authorizes all known Acceptance defects through Dot. Root real external-paper observation: rejected PLT followed by valid PNG and completed original task leaves failed no-id entry. Distinct from991. UI golden20261115 records this authorized narrow repair and existing no-data-delete boundaries.",
       "writes": [
-        "packages/contracts/src/digital-production-read-requests.ts",
-        "packages/contracts/package.json",
-        "apps/api/src/app.ts",
-        "apps/api/src/platform/public-error-message.ts",
-        "apps/web/src/digital-production-api.ts",
-        "tests/integration/platform-method-error-feedback.test.ts",
-        "tests/unit/request-response-feedback.test.ts",
-        "tests/unit/public-error-message.test.ts"
+        "apps/web/src/document-upload-previews.tsx",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/production-instruction-panel.tsx",
+        "apps/web/src/digital-budget-panel.tsx",
+        "tests/unit/document-upload-previews.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-request-routes.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/access/pmc-readonly-http.ts",
-        "apps/api/src/access/member-module-http.ts",
-        "apps/web/src/request-response-feedback.ts",
-        "apps/web/src/request-failure-message.ts"
+        "apps/web/src/attachment-identity.tsx",
+        "apps/web/src/attachment-upload-recovery.ts",
+        "apps/web/src/development-submitted-uploads.ts",
+        "apps/web/src/digital-operation-feedback.ts"
       ],
       "oldTests": [
-        "tests/unit/request-response-feedback.test.ts",
-        "tests/unit/public-error-message.test.ts",
-        "tests/integration/platform-method-error-feedback.test.ts",
-        "tests/integration/request-identity-postgres.test.ts"
+        "tests/unit/document-upload-previews.test.ts",
+        "tests/unit/development-submitted-uploads.test.ts"
       ],
       "newTests": [
-        "tests/unit/request-response-feedback.test.ts",
-        "tests/integration/platform-method-error-feedback.test.ts"
+        "tests/unit/document-upload-previews.test.ts"
       ],
-      "initialization": "Additive explicit contracts export built in own workspace, no dependency/lock change, schema, migration, role, config, cache persistence or backfill. Real app uses registered routeOptions.url, not caller headers/path suffix. Legacy open server generic INTERNAL_ERROR read fallback becomes read failure without erasing safe domain errors.",
-      "dateAndPermission": "No time calculation, actual facts or authority change. GET/HEAD/read-only POST errors cannot create write-result uncertainty; all actual writes retain original key/body, confirmation, idempotency and status. Shared predicate not used in permission guards. Original current identity/context same request tests retained.",
-      "expectation": "122real unit/HTTP cases pass including all8known pure POST forms, dynamic request UUID, status/request-ID preservation, malformed/network reads, exact method/body/key and no automatic retry. Fake read-only header/suffix and real confirm/arrange/publish remain unknown commands. PG identity7pass.",
+      "initialization": "Transient hook metadata only: purpose/task owner/attempt on local File, no schema, persistence, data migration or library/attachment deletion. All four existing hook callers keep their original upload/save commands and failure retry. Removing only failed no-id entries revokes the local object URL; ready and in-flight files cannot be removed through this action.",
+      "dateAndPermission": "No dates, plans, costs, quantities or authorization change. Shared callback clears current string only when identical to removed upload error. Uploaded private object/reference and original write gates remain authoritative.",
+      "expectation": "92unit cases pass: failed sibling survives ordinary save; explicit removal preserves ready/in-flight; completed snapshot preserves other task, purpose, later file/retry and ready reference. Real original supervisor App rejects invalidPLT, removes it with correct feedback and preserves validPNG native attachment.",
       "checks": [
-        "unit-http",
+        "unit",
         "pg-native",
         "types",
         "lint",
@@ -47,69 +39,44 @@
       ]
     },
     {
-      "rule": "The original designer form must report which precheck failed before issuing publication or confirmation. Only an actually sent uncertain command owns its original captured body/key and recovery entry. Generic read/input failures must not claim a customer confirmation was sent.",
-      "source": "F Acceptance observation plus confirmed code chain: useOrderTimeApplication.inspect before actual publish/confirm POST, generic form caption falsely claiming confirmation receipt missing. User-authorized sequential fix; historical C/D/E/F operation and terminal state still unproved and never retried.",
+      "rule": "Task completion may retire only its captured failed upload intents after a successful original command and fresh native completed task, including recovery from a known commit followed by failed reading. Rejected or uncertain writes and failed reads retain original state and body/key.",
+      "source": "User-authorized external-paper failed-entry repair. New real native regression also proved successful receipt plus failed read left workbench dirty after recheck because completion callback was missing. Fix original completion/read recovery, not a new submission protocol or blanket clearing.",
       "writes": [
-        "apps/web/src/digital-development-create-form.tsx",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "docs/requirements/rework-ui-golden-source-v1.0.md"
-      ],
-      "reads": [
-        "apps/web/src/order-time-application.tsx",
-        "apps/web/src/development-submit-recovery.ts",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/production-instruction-panel.tsx",
-        "apps/api/src/production-platform/development-service.ts"
-      ],
-      "oldTests": [
-        "tests/unit/development-submit-recovery.test.ts",
-        "tests/integration/m01-short-lead-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
-      ],
-      "initialization": "Original entry, stored draft/source and commands reused. Only form error phase is transient local state, cleared with other errors; no persisted pending data, command key migration or new status endpoint. Existing actual-command wording and all original recovery semantics retained.",
-      "dateAndPermission": "No plan/time/date/quote or order-writing rule changed. Original designer authenticated App and native request checks remain. Test snapshots use explicit guarded owned scene; no real-time manufacturing facts, clock tolerance or fake terminal result introduced.",
-      "expectation": "Both actual1165publish and390confirm App cases fail check twice with zero native commands, enabled safe check retry and no submit recovery entry, then restored native check emits one successful original command. Prior committed/uncommitted publication and committed confirmation receipt GET recovery, short-lead approval and same-session identity cases all pass within31PG cases. Both new screenshots actually opened.",
-      "checks": [
-        "pg-native",
-        "unit-http",
-        "types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "Keep existing native query consumers and canonical browser/regression planning connected to the new shared read contract, without changing old business or historical timing semantics.",
-      "source": "AGENTS actual input->consumer->initialization->original test closure and user oneLight perPR normal Review/Full; approved original UI components and request boundaries.",
-      "writes": [
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "apps/web/src/development-external-pattern.tsx",
+        "apps/web/src/development-result-upload.tsx",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
-        "docs/engineering/read-check-feedback-20261115.md"
+        "tests/unit/full-gate-risk-map.test.ts",
+        "docs/requirements/rework-ui-golden-source-v1.0.md",
+        "docs/engineering/failed-upload-preview-20261115.md"
       ],
       "reads": [
-        "scripts/ci/prepare-settings-browser.mjs",
-        "scripts/ci/settings-browser-fonts.mjs",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/acceptance/m01-short-lead-native-browser.ts",
-        "apps/api/src/production-platform/journey-supervision.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/development-route-service.ts"
+        "apps/web/src/development-technical-workspace.tsx",
+        "apps/web/src/development-submitted-uploads.ts",
+        "apps/web/src/task-workbench-sample.tsx",
+        "apps/web/src/digital-production-api.ts",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "scripts/ci/prepare-settings-browser.mjs"
       ],
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/m01-short-lead-native-browser-postgres.test.ts",
-        "tests/integration/request-identity-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
       "newTests": [
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "initialization": "Canonical map explicitly includes original time App, short-lead App and request identity for new helper/shared error/form inputs. Native preparation remains original Chromium/CJK, no weakened browser/DB or permission guard. Legacy standalone harness command wording kept baseline, no unexecuted harness claimed passed.",
-      "dateAndPermission": "Cancelled old timing and default double-clock observations remain separate read-only audit, not claimed new bugs or silently repaired. No unknown cancellation/clock rule invented; explicit actual instants retain original value and precision. Failed external-paper attachment entry is separate from991 and not claimed fixed here.",
-      "expectation": "76existing risk-map assertions included in122pass;31realPG/native cases include11short-lead,13timeApp,7identity; all commands cleanup success. Types/lint/preflight/secret pass, source unchanged after tests, no deployment or production writes.",
+      "initialization": "Original operation ref captures exact source/upload epoch/task/purpose/attempt snapshot before first actual POST; original-key retries retain the same snapshot. Original task-bound upload inputs supply task identity. Fresh GET must confirm same task completed, not a generic200 or arbitrary sibling. Matching known commit recheck closes the original feedback phase; no extra business POST is sent by that read. Canonical risk map selects native execution/technical suites and original browser preparation.",
+      "dateAndPermission": "Native assignee supervisor, current original source/task/round authorization and private attachment grants remain.409 rejected, lost successful receipt, same-key replay,503read and laterGET tested distinctly. No actual time or cancellation semantics changed; old observed cancelled legacy timing/default two-clock differences remain separate bounded audit, not declared bugs or silently repaired.",
+      "expectation": "65realPG16/native cases pass, including original paper/sewing acknowledged-only settlement, true unsaved guard, same-session authorization and technical history. New external-paper case proves rejected/unknown/readfail retain failures; final GET-only recheck clears captured failure and stale dirty hint; exactly one actual receipt, original ready object retained and no storage delete. Actual1165failure and390completed screenshots opened; no Acceptance/production claim.",
       "checks": [
-        "unit-http",
         "pg-native",
+        "unit",
         "types",
         "lint",
         "preflight",
@@ -119,48 +86,48 @@
   ],
   "checks": [
     {
-      "id": "unit-http",
-      "command": "vitest run request-response-feedback/public-error-message/development-submit-recovery/full-gate-risk-map unit files and platform-method-error-feedback integration --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/read-check-unit.json",
+      "id": "unit",
+      "command": "vitest run document-upload-previews/development-submitted-uploads/full-gate-risk-map --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/failed-upload-unit.json",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
-      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
-      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
-      "startedAt": "2026-11-15T18:03:31.436Z",
-      "endedAt": "2026-11-15T18:03:38.967Z",
-      "log": "/tmp/read-check-unit.log",
-      "logSha256": "64cf98e4cc0126088accfc236ee9195767f7d892f6c470b704dc7bf191e3de48",
-      "passed": 122,
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:17:26.815Z",
+      "endedAt": "2026-11-15T19:17:28.549Z",
+      "log": "/tmp/failed-upload-unit.log",
+      "logSha256": "bfad04b34efa546f41be85326affe9ab33332187e4002ec43e3e59bf06d15e9e",
+      "passed": 92,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "587317e16dd386ecff13bef8172cbbcb4081117129baa5d3a10ac429e6e427db"
+          "sha256": "4b85f61dea0751b2c9493bbdba01c72b264b241939fb5a404ce6b8c8ff832470"
         }
       ]
     },
     {
       "id": "pg-native",
-      "command": "bash /tmp/read-check-pg.sh (original order-time requests App, short-lead native App and request identity; canonical business-chain maxWorkers1)",
+      "command": "bash /tmp/failed-upload-pg.sh (original development execution App, execution and technical suites, canonical business-chain maxWorkers1)",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
-      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
-      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
-      "startedAt": "2026-11-15T18:01:17.644Z",
-      "endedAt": "2026-11-15T18:03:44.877Z",
-      "log": "/tmp/read-check-pg.log",
-      "logSha256": "7ff47733f6183e167628b9ef37777d1910646f4eb7393facd9347d54aa3e5830",
-      "passed": 31,
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:16:32.281Z",
+      "endedAt": "2026-11-15T19:18:14.229Z",
+      "log": "/tmp/failed-upload-pg.log",
+      "logSha256": "778726cd988191f12ae46f41e5f952d91d44dfb83cb173fece91af66a7a319f2",
+      "passed": 65,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "67b611a130030a721d1e08890199aaccec2c10dd010735dd1b5f68214e6b8d40"
+          "sha256": "6700f8fd33e21797ddf2bb77df66384e9fda6ba046145e01ea592ea42547d98c"
         }
       ]
     },
@@ -170,27 +137,27 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
-      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
-      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
-      "startedAt": "2026-11-15T18:01:38.000Z",
-      "endedAt": "2026-11-15T18:02:39.826Z",
-      "log": "/tmp/read-check-types.log",
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:07:16.000Z",
+      "endedAt": "2026-11-15T19:17:26.495Z",
+      "log": "/tmp/failed-upload-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
       "id": "lint",
-      "command": "npm run lint",
+      "command": "eslint changed seven web files, canonical risk map and three actual test files --max-warnings=0",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
-      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
-      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
-      "startedAt": "2026-11-15T18:02:39.000Z",
-      "endedAt": "2026-11-15T18:03:21.795Z",
-      "log": "/tmp/read-check-lint.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:10:40.000Z",
+      "endedAt": "2026-11-15T19:17:28.599Z",
+      "log": "/tmp/failed-upload-final-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "id": "preflight",
@@ -198,13 +165,13 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
-      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
-      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
-      "startedAt": "2026-11-15T18:03:21.000Z",
-      "endedAt": "2026-11-15T18:03:30.023Z",
-      "log": "/tmp/read-check-preflight.log",
-      "logSha256": "1592288ddc09bff49c1256df893b590e5ac60f0d5b42b00188af1a559041ee5d"
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:08:23.000Z",
+      "endedAt": "2026-11-15T19:17:37.892Z",
+      "log": "/tmp/failed-upload-preflight.log",
+      "logSha256": "7ee07cc81f92873de293a2d67efbfa5ba6498fa997d724d7e0edea994f008646"
     },
     {
       "id": "secret",
@@ -212,12 +179,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
-      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
-      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
-      "startedAt": "2026-11-15T18:03:30.000Z",
-      "endedAt": "2026-11-15T18:03:31.063Z",
-      "log": "/tmp/read-check-secret.log",
+      "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
+      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
+      "startedAt": "2026-11-15T19:10:13.000Z",
+      "endedAt": "2026-11-15T19:17:38.812Z",
+      "log": "/tmp/failed-upload-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]

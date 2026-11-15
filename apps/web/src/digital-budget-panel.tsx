@@ -39,7 +39,7 @@ export async function budgetRequest(path:string,orderId:string,method="GET",body
  return value;
 }
 export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false,onVersionChange,onChapterChange }: { order: DigitalOrder; onClose: () => void; onChapterChange?:((chapter:string)=>void)|undefined; onVersionChange?:((version:number|undefined)=>void)|undefined; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
-  const previews=useDocumentUploadPreviews();
+  const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [initialVersion,setInitialVersion]=useState(requestedVersion);
   const [sheet, setSheet] = useState<BudgetSheet | null>(null), [doc, setDoc] = useState<BudgetDocument>(initial);
   const [uncertain,setUncertain]=useState(false),generation=useRef(0);

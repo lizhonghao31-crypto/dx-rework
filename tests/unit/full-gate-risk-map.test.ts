@@ -7,6 +7,13 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES 
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('keeps shared failed-upload state and native task completion in the real authenticated upload plan',()=>{
+ for(const name of ['document-upload-previews','digital-development-execution-panel','development-external-pattern','development-result-upload']){
+  const risk=classifyFullGatePaths([`apps/web/src/${name}.tsx`]);
+  for(const suite of ['development-execution-read-native-browser','digital-development-execution','development-technical'])expect(risk.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
+ }
+});
+
 it('keeps factory read-region changes in the original authenticated washing and factory browser plan',()=>{
  for(const file of ['apps/web/src/factory-flow-read.ts','apps/web/src/factory-flow-panel.tsx'])expect(classifyFullGatePaths([file]).mappedPostgresTests).toContain('tests/integration/bulk-washing-browser-postgres.test.ts');
 });

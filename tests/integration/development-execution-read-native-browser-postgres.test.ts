@@ -36,6 +36,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 (url?describe.sequential:describe.skip)("S1 development read through original App and native signed identity",()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string;
  let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string,uploadSourceId:string,uploadPaperId:string;
+ let externalSourceId:string,externalTaskId:string,externalRequestId:string;
  const tokens=new Map<string,string>(),evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"development-read");
  let loginRole:(role:string)=>Promise<string>;
  const path=(id:string)=>`/digital-production/sources/${id}/execution`;
@@ -82,6 +83,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const own=await prepareHandling();sourceId=own.id;paperId=own.paperId;
   const commentOwn=await prepareHandling();commentSourceId=commentOwn.id;commentShippingId=commentOwn.shippingId;
   const uploadOwn=await prepareHandling();uploadSourceId=uploadOwn.id;uploadPaperId=uploadOwn.paperId;
+  const externalOwn=await prepareHandling();externalSourceId=externalOwn.id;
+  const external=await execution.externalPattern(f.people['pattern-room-supervisor']!,externalSourceId,{action:'request',roundNumber:1,note:'TEST original external paper request'},randomUUID());
+  externalTaskId=external.taskId;externalRequestId=external.requestId;
   foreignSourceId=(await prepare()).id;foreignTaskId=(await execution.read(f.root,foreignSourceId)).tasks.find(t=>t.taskKind==='development_materials')!.taskId;
   draftId=(await prepare(false)).id;
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentExecution:execution,developmentAttachments:f.attachments,quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
@@ -205,6 +209,62 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await execution.read(f.root,uploadSourceId)).tasks.find(task=>task.taskId===sewing.taskId)?.state).toBe('completed');
    await page.screenshot({path:join(evidence,'acknowledged-sewing-1165.png'),fullPage:true});
   }catch(error){await page.screenshot({path:join(evidence,'upload-state-failure.png'),fullPage:true});await writeFile(join(evidence,'upload-state-failure.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
+ });
+ it('settles failed external-paper previews only after the original receipt and a fresh completed task, preserving uncertain submissions',async()=>{
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('pattern-room-supervisor')!,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);
+  let attempts=0,failNextRead=false;const commands:Array<{key:string|undefined;body:unknown}>=[];
+  await context.route('**/*',async route=>{
+   const request=route.request(),url=new URL(request.url());
+   if(url.origin===base&&request.method()==='GET'&&url.pathname==='/api'+path(externalSourceId)&&failNextRead){failNextRead=false;return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'TEST fresh execution read unavailable'}})});}
+   if(url.origin===base&&request.method()==='POST'&&url.pathname==='/api'+path(externalSourceId)+'/external-pattern'){
+    attempts++;commands.push({key:request.headers()['idempotency-key'],body:request.postDataJSON()});
+    if(attempts===1)return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:{message:'TEST临时拒收，原附件保留'}})});
+    if(attempts===2){expect((await route.fetch()).status()).toBe(200);return route.abort('failed');}
+    if(attempts===3)failNextRead=true;
+   }
+   if(url.origin===base||['data:','blob:'].includes(url.protocol))return route.continue();
+   if(url.origin!=='https://private.example.test'||request.method()!=='POST')return route.abort();
+   // Only object storage transport and explicitly named failures are synthetic.
+   // All successful intents, finalization, receipt, replay and reads use native services.
+   const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
+   const key=String(form.get('key')),file=form.get('file') as File,bytes=new Uint8Array(await file.arrayBuffer()),sha256=createHash('sha256').update(bytes).digest('hex');
+   expect(f.storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+   await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+  });
+  const leavingBlocked=()=>page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;});
+  try{
+   await page.goto(base+`/ui/digital-production?task=${externalTaskId}&taskView=handle`);
+   const upload=page.getByLabel('收到的纸样附件',{exact:true});await upload.waitFor();
+   await upload.setInputFiles({name:'TEST-remove-rejected.plt',mimeType:'application/octet-stream',buffer:Buffer.from('IN;SP0;')});
+   const remove=page.getByRole('button',{name:'移除失败附件 TEST-remove-rejected.plt',exact:true});await remove.waitFor();
+   await page.screenshot({path:join(evidence,'failed-external-paper-1165.png'),fullPage:true});
+   await remove.click();await remove.waitFor({state:'detached'});expect(await page.getByRole('alert').count()).toBe(0);
+   await upload.setInputFiles({name:'TEST-original-rejected.plt',mimeType:'application/octet-stream',buffer:Buffer.from('IN;SP0;')});
+   await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).waitFor();
+   const png=await sharp({create:{width:2,height:2,channels:3,background:'white'}}).png().toBuffer();
+   await upload.setInputFiles({name:'TEST-received-paper.png',mimeType:'image/png',buffer:png});
+   await page.getByText('已上传，尚未保存引用',{exact:false}).waitFor();expect(await leavingBlocked()).toBe(true);
+   const rejected=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/external-pattern'));
+   await page.getByRole('button',{name:'记录已收到',exact:true}).click();expect((await rejected).status()).toBe(409);
+   await page.getByRole('alert').filter({hasText:'TEST临时拒收'}).waitFor();expect(await page.getByText('已上传，尚未保存引用',{exact:false}).count()).toBe(1);
+   await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).waitFor();
+   expect((await execution.read(f.root,externalSourceId)).externalPatterns.find(row=>row.requestId===externalRequestId)?.receivedAt).toBeNull();
+   await page.getByRole('button',{name:'记录已收到',exact:true}).click();await page.getByRole('alert').filter({hasText:'尚未确认本次提交是否成功'}).waitFor();
+   expect(await leavingBlocked()).toBe(true);expect(await page.getByText('已上传，尚未保存引用',{exact:false}).count()).toBe(1);
+   const committed=await execution.read(f.root,externalSourceId);expect(committed.tasks.find(task=>task.taskId===externalTaskId)?.state).toBe('completed');
+   await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();
+   await page.getByRole('alert').filter({hasText:'本次办理已提交，但最新资料暂未读取到'}).waitFor();
+   expect(await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).count()).toBe(1);expect(await leavingBlocked()).toBe(true);
+   await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();
+   await page.getByText('本任务已完成',{exact:true}).waitFor();await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('已提交');await expect.poll(leavingBlocked).toBe(false);
+   expect(await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).count()).toBe(0);expect(attempts).toBe(3);
+   expect(commands[1]!.key).toBeTruthy();expect(commands[2]).toEqual(commands[1]);
+   const final=await execution.read(f.root,externalSourceId),record=final.externalPatterns.find(row=>row.requestId===externalRequestId)!;
+   expect(record.receivedAt).toBeTruthy();expect(record.attachmentIds).toHaveLength(1);expect(final.externalPatterns).toHaveLength(1);
+   const original=(await f.db.query('SELECT status,object_key FROM attachments WHERE attachment_id=$1',[record.attachmentIds[0]])).rows[0]!;
+   expect(original.status).toBe('ready');expect(f.storage.objectBytes.has(original.object_key)).toBe(true);expect(f.storage.deleted).not.toContain(original.object_key);
+   await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(evidence,'completed-external-paper-390.png'),fullPage:true});
+  }catch(error){await page.screenshot({path:join(evidence,'failed-preview-regression.png'),fullPage:true});await writeFile(join(evidence,'failed-preview-regression.txt'),await page.locator('body').innerText());await writeFile(join(evidence,'failed-preview-error.txt'),String(error));throw error;}finally{await context.close();}
  });
  it('captures and supplements the original customer approval date in the authenticated App without creating another review',async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);

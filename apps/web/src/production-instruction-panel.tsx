@@ -37,7 +37,7 @@ export async function instructionRequest(path:string,method='GET',body?:unknown,
  return value;
 }
 export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false,contained=false,onVersionChange }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; onVersionChange?:((version:number|undefined)=>void)|undefined; contained?:boolean;embedded?:boolean }) {
-  const previews=useDocumentUploadPreviews();
+  const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [sheet, setSheet] = useState<InstructionSheet | null>(null), [doc, setDoc] = useState<InstructionDocument | null>(null), [version, setVersion] = useState<number | undefined>(initialVersion);
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
   const [sourceReviewOpen,setSourceReviewOpen]=useState(false);

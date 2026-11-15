@@ -22,7 +22,7 @@ import {DevelopmentAssignmentTable} from "./development-assignment-table.js";
 import {DevelopmentMaterialCheck} from "./development-material-check.js";
 import {WorkbenchAction} from "./workbench-action.js";
 import {DevelopmentResultUpload} from "./development-result-upload.js";
-import {useDocumentUploadPreviews} from "./document-upload-previews.js";
+import {useDocumentUploadPreviews,type UploadFailureSnapshot} from "./document-upload-previews.js";
 import {DevelopmentFabricReport} from "./development-fabric-report.js";
 import {DocumentEntryScope,DocumentEntry} from "./document-entry-scope.js";
 import { SearchableSelect } from "./search-select.js";
@@ -42,7 +42,7 @@ type RouteFact={factId:string;kind:string;routeVersion:number;taskId:string|null
 export type ExternalPatternRecord={requestId:string;roundNumber:number;actualDeparture?:string|null;intervalVersion?:number;actualDepartureQuality?:string|null;departureHistory?:Array<{version:number;departedAt:string|null;quality:string;note:string;recordedAt:string;recordedBy:string}>;requestedAt:string;requestedBy:string;receivedAt:string|null;receivedBy:string|null;note:string;receiptNote:string|null;attachmentIds:string[]|null;taskId:string};
 type State={technical?:DevelopmentTechnicalState;externalPatterns?:ExternalPatternRecord[];canRequestExternalPattern?:boolean;sewingRecipientName?:string|null;slaEnrolled?:boolean;fixedCutting?:{version:number;assigneeId:string|null;assigneeName:string|null;valid:boolean;canConfigure:boolean}|null;reopenMaterialCheck?:{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}|null;materialVerification?:MaterialVerification|null;fabricCases?:FabricCase[];unifiedArrangement?:boolean;arrangement?:DevelopmentArrangement|null;materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;supplementCheckTaskId?:string|null;nextSteps?:Array<{taskId:string;label:string}>;canConfirmExecution?:boolean;patternPreparation?:{version:number;roundId:string;roundType:string;status:string;categorySaved:boolean;priceSaved:boolean;workerId:string|null;workerName:string|null}|null;patternOrder:{orderId:string}|null;routeFacts:RouteFact[];sheet:DevelopmentSheet;dispatch:{version:number;patternWorkerId:string;cuttingWorkerId:string;sewingWorkerId:string}|null;tasks:DigitalTask[];facts:{factId:string;taskId:string|null;kind:string;payload:{note?:string;recommendation?:string;decision?:string;attachmentIds?:string[];items?:Array<{materialId:string;physical:boolean;quantity:boolean;color:boolean;specification:boolean}>};recordedAt:string}[];canReportFabric:boolean;canDispatch:boolean;canDecideFabric:boolean;qrAvailable:boolean};
 export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onChanged,workspace=false,onPatternOrderLoaded,onPreassignedSewingLoaded}:{sourceId:string;materialRevision?:number;taskId?:string|undefined;onChanged?:((notice?:string)=>void)|undefined;workspace?:boolean;prioritizeMaterialCheck?:boolean;onPatternOrderLoaded?:((id:string|null)=>void)|undefined;onPreassignedSewingLoaded?:((person:{id:string;name:string}|null)=>void)|undefined}){
-  const previews=useDocumentUploadPreviews();
+  const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [state,setState]=useState<State|null>(null),[people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]),[peopleFor,setPeopleFor]=useState<string|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [technicalUploads,setTechnicalUploads]=useState<Partial<Record<DevelopmentUploadPurpose,string[]>>>({});
   // Compatibility fields are views of the same pending-reference state.
@@ -57,7 +57,7 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
   const uncertainWritePending=useRef(false),unresolvedWrite=useRef(false);
   const [readError,setReadError]=useState<Error|null>(null),[peopleError,setPeopleError]=useState<Error|null>(null),[reading,setReading]=useState(false),[peopleReading,setPeopleReading]=useState(false);
   const [tailReturn,setTailReturn]=useState<Record<string,boolean>>({});
-  const writing=useRef(false),operation=useRef<{payload:string;key:string;path:string;body:unknown;method:string}|null>(null),base=`sources/${sourceId}/execution`,urls=createWebUrls(import.meta.env.BASE_URL);
+  const writing=useRef(false),operation=useRef<{payload:string;key:string;path:string;body:unknown;method:string;uploadSource:string;uploadEpoch:number;uploadTaskId:string|undefined;uploadFailures:UploadFailureSnapshot}|null>(null),base=`sources/${sourceId}/execution`,urls=createWebUrls(import.meta.env.BASE_URL);
   useDigitalDetailNavigationGuard(uncertainWrite,busy,writing,"本次办理已提交但最新状态未确认；离开会丢失本页未保存输入与重试记录，仍要离开？");
   const loadVersion=useRef(0);
   const uploadEpoch=useRef(0),activeUpload=useRef(false);
@@ -84,7 +84,11 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
   };
   useEffect(()=>{void load();return()=>{loadVersion.current++;};},[sourceId,materialRevision]);
   useEffect(()=>{if(typeof window==="undefined"||!state)return;const id=taskId??new URLSearchParams(window.location.search).get("task");if(id)document.getElementById(`development-task-${id}`)?.scrollIntoView({block:"nearest"});},[taskId,state]);
-  const recheck=async()=>{if(writing.current)return;if(unresolvedWrite.current&&operation.current){const prior=operation.current;return run(prior.path,prior.body,prior.method,true);}writing.current=true;setBusy(true);try{const prior=operation.current,updated=await load();if(updated&&prior?.path==='material-verification'){setWriteOutcome({path:prior.path,phase:'complete'});onChanged?.(workspace?developmentActionReceipt(prior.path,prior.body as {result?:unknown},undefined,updated.tasks):undefined);}return updated;}finally{writing.current=false;setBusy(false);}};
+  const settleCompletedFailures=(prior:NonNullable<typeof operation.current>,next:State)=>{
+    if(prior.uploadSource!==next.sheet.sourceId||prior.uploadEpoch!==uploadEpoch.current||!prior.uploadTaskId)return;
+    if(next.tasks.some(task=>task.taskId===prior.uploadTaskId&&task.state==='completed'))previews.settleFailures(prior.uploadFailures);
+  };
+  const recheck=async()=>{if(writing.current)return;if(unresolvedWrite.current&&operation.current){const prior=operation.current;return run(prior.path,prior.body,prior.method,true);}writing.current=true;setBusy(true);try{const prior=operation.current,updated=await load();if(updated&&prior&&(committedWrite?.key===prior.key&&committedWrite.path===prior.path||prior.path==='material-verification')){settleCompletedFailures(prior,updated);setWriteOutcome({path:prior.path,phase:'complete'});onChanged?.(workspace?developmentActionReceipt(prior.path,prior.body as {result?:unknown},undefined,updated.tasks):undefined);}return updated;}finally{writing.current=false;setBusy(false);}};
   const run=async(path:string,body:unknown,method="POST",retry=false):Promise<State|undefined>=>{
     if(writing.current)return;
     if(unresolvedWrite.current&&!retry){setError("上次提交结果尚未确认，请先核对并重试原提交；不会重复产生业务记录。");return;}
@@ -92,7 +96,10 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
     const hadUnknown=unresolvedWrite.current;
     writing.current=true;setBusy(true);setError("");setWriteOutcome({path,phase:"writing"});
     const payload=JSON.stringify([path,body,method]);
-    if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId(),path,body,method};
+    const submittedUploads=submittedDevelopmentUploads(path,body),input=body as {taskId?:string;action?:string;requestId?:string}|null;
+    const uploadTaskId=input?.taskId??(path==='external-pattern'&&input?.action==='receive'?state?.externalPatterns?.find(record=>record.requestId===input.requestId)?.taskId:undefined);
+    if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId(),path,body,method,uploadSource:sourceId,uploadEpoch:uploadEpoch.current,uploadTaskId,uploadFailures:previews.failedSnapshot(submittedUploads.purposes,uploadTaskId)};
+    const submittedOperation=operation.current;
     try{
       const receipt=await digitalRequest(`${base}/${path}`,method,body,operation.current.key);
       if(path==='reopen-materials'){
@@ -102,7 +109,6 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
       }
       setCommittedWrite({path,key:operation.current.key});setWriteOutcome({path,phase:"committed"});
       unresolvedWrite.current=false;uncertainWritePending.current=true;setUncertainWrite(true);
-      const submittedUploads=submittedDevelopmentUploads(path,body);
       if(submittedUploads.ids.length){previews.saved(submittedUploads.ids,submittedUploads.purposes);setTechnicalUploads(current=>settleDevelopmentUploads(current,submittedUploads));}
       const submitted=state?.tasks.find(task=>task.taskId===(body as {taskId?:string})?.taskId);
       const completedCheck=path==="check"&&(body as {result?:string}).result==="通过";
@@ -115,6 +121,7 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
       }
       const updated=await load();
       if(!updated){setError(completedCheck?"核料已完成，正在打开本轮委派页。":"本次办理已提交，但最新资料暂未读取到，请重新读取；不要重复提交。");return;}
+      settleCompletedFailures(submittedOperation,updated);
       operation.current=null;setWriteOutcome({path,phase:"complete"});
       onChanged?.(workspace?developmentActionReceipt(path,body as {result?:unknown},submitted,updated.tasks):undefined);
       return updated;
@@ -124,7 +131,7 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
     }finally{writing.current=false;setBusy(false);}
   };
   const upload=async(selected:File[],purpose:DevelopmentUploadPurpose,forTaskId=taskId)=>{
-    if(!selected.length||writing.current)return;const context=uploadEpoch.current;activeUpload.current=true;previews.start(selected,purpose,files=>upload(files,purpose,forTaskId));writing.current=true;setBusy(true);setError('');
+    if(!selected.length||writing.current)return;const context=uploadEpoch.current;activeUpload.current=true;previews.start(selected,purpose,files=>upload(files,purpose,forTaskId),forTaskId);writing.current=true;setBusy(true);setError('');
     try{const limit=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
       for(const file of selected){if(context!==uploadEpoch.current)return;try{
         if(file.size>limit.maxUploadBytes)throw Error('文件超过原上传大小限制');
