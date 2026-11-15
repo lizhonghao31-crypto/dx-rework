@@ -14,7 +14,8 @@ it('runs every consumer of the original shared authenticated App browser with th
   expect(configForSuite(suite),suite).toBe('vitest.business-chain.config.ts');
   expect(settingsBrowserRequired({DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite}),suite).toBe(true);
  }
- expect(configForSuite('tests/integration/budget-washing-fees-postgres.test.ts')).toBe('vitest.config.ts');
+ expect(configForSuite('tests/integration/budget-washing-fees-postgres.test.ts')).toBe('vitest.business-chain.config.ts');
+ expect(configForSuite('tests/integration/digital-budget-shared-postgres.test.ts')).toBe('vitest.config.ts');
 });
 
 it('keeps shared failed-upload state and native task completion in the real authenticated upload plan',()=>{
