@@ -1,5 +1,6 @@
 import type {JourneyDiagnostic} from './platform/journey-diagnostic.js';
 import { publicErrorMessage } from "./platform/public-error-message.js";
+import {isDigitalProductionReadRequest} from '@dx-rework/contracts/digital-production-read-requests';
 import {registerAcceptanceClockRoutes} from './acceptance-clock/routes.js';
 import type {AcceptanceClockRuntime} from './acceptance-clock/runtime.js';
 import { configureChineseValidation } from "@dx-rework/contracts/validation-language";
@@ -303,6 +304,9 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   });
 
   app.setErrorHandler(async (error, request, reply) => {
+    // Use the registered route, not a caller-supplied header or path suffix.
+    // The original authorization and business command boundaries stay intact.
+    const reading=isDigitalProductionReadRequest(request.method,request.routeOptions.url??'');
     const known = error instanceof ApplicationError;
     const denied = error instanceof AuthDeniedError;
     const frameworkStatusCode = typeof error === "object"
@@ -322,7 +326,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     const response: ErrorResponse = {
       error: {
         code: known || denied ? error.code : frameworkClientError ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
-        message: known || denied ? publicErrorMessage(error,statusCode) : frameworkClientError ? "请求格式不正确，请检查填写内容" : ["GET","HEAD"].includes(request.method)?"资料读取未完成，请重新读取；仍失败时请管理员按请求编号核查":"原提交结果尚未确认，请先核对原记录，不要重复提交；仍不明确时请管理员按请求编号核查",
+        message: known || denied ? publicErrorMessage(error,statusCode,reading?'read':'write') : frameworkClientError ? "请求格式不正确，请检查填写内容" : reading?"资料读取未完成，请重新读取；仍失败时请管理员按请求编号核查":"原提交结果尚未确认，请先核对原记录，不要重复提交；仍不明确时请管理员按请求编号核查",
         requestId: request.id,
       },
     };

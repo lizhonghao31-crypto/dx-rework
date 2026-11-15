@@ -14,7 +14,7 @@ import { customerOrderDateError, initialCustomerDateErrors, digitalPoKey, initia
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development.css";
 import { SearchableSelect } from "./search-select.js";
-import { useContext, useEffect, useRef, useState, useId } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, useId } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { DigitalOrderCreateSchema, DigitalSourceCreateSchema, type DigitalCustomer, type DigitalOrder, type DigitalOrderInput, type DigitalSource, type CustomerOrderCalendar } from "@dx-rework/contracts/digital-production";
 import type { OrderJourney } from "@dx-rework/contracts/digital-production-journey";
@@ -36,6 +36,7 @@ import {customerPoDateLabel} from "./digital-workspace-copy.js";
 type CreatePicture = {id: string; file: File; preview: string; kind: DevelopmentDocument["files"][number]["kind"]; attachmentId?: string; error?: string | undefined};
 
 export type DevelopmentCreateIntent = "development" | "certain_order" | "confirm_order";
+type SubmissionPhase='preparing'|'publish_check'|'publish'|'confirm_check'|'confirm';
 export const developmentOrderOptionsPath=(sourceId:string|null)=>sourceId?`options?sourceId=${encodeURIComponent(sourceId)}`:'options';
 const newLine = (): DevelopmentOrderDraft["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: ""}]});
 export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: OrderJourney): DevelopmentOrderDraft {
@@ -87,7 +88,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [developmentType, setDevelopmentType] = useState<"头版" | "开发板">(existingDraft?.developmentType==="开发板"?"开发板":"头版");
   const [createdSource, setCreatedSource] = useState<string | null>(existingDraft?.sourceId ?? source?.sourceId ?? null);
   const [fixedCustomer, setFixedCustomer] = useState<string | null>(existingDraft?.customerCode ?? source?.customer ?? null);
-  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [busy, setBusy] = useState(false), [error, setErrorState] = useState("");
+  const [failedPhase,setFailedPhase]=useState<SubmissionPhase|null>(null);
+  const setError=useCallback((message:string)=>{setFailedPhase(null);setErrorState(message);},[]);
   const [errorField,setErrorField]=useState<string|null>(null);
   const [duplicateSource,setDuplicateSource]=useState<string|null>(null),sourceSearchSequence=useRef(0);
   const findExistingSource=async(value:string)=>{
@@ -215,6 +218,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const save = async (draftOnly = false):Promise<boolean> => {
     if (writing.current || pendingSubmission.current) return false;
     writing.current = true; setBusy(true); setError("");setErrorField(null);
+    let phase:SubmissionPhase='preparing';
     try {
       if(!form.designStyleNo.trim())throw new Error("请填写设计款号");
       if(withOrder&&!preorder&&!draftOnly&&!form.customerCode)throw new Error("请选择客户");
@@ -283,7 +287,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           if(!draftOnly){
             const body={expectedVersion:sheet.version,...(existingDraft?.revisionSource?.outputKind==='工艺布片'||!patternChoice?{}:{patternOrder:patternChoice})},payload=JSON.stringify(body);
             if(publishKey.current?.payload!==payload)publishKey.current={payload,key:createClientRequestId()};
+            phase='publish_check';
             if(!await timeApplication.inspect({kind:'development_publish',sourceId:id,input:{expectedVersion:body.expectedVersion,...(body.patternOrder?{patternOrder:body.patternOrder}:{})}},Boolean(sheet.orderTimeEnabled??calendar?.orderTimeEnabled)))return false;
+            phase='publish';
             const command:PendingDevelopmentSubmission={operation:'publish',sourceId:id,key:publishKey.current.key,body:structuredClone(body)};
             let publishedSheet:DevelopmentSheet;
             try{publishedSheet=await digitalRequest<DevelopmentSheet>(`${base}/publish`,"POST",command.body,command.key);developmentSubmissionResult(command,publishedSheet);}
@@ -295,11 +301,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       }
       let orderId: string | null = null;
       if (orderInput) {
+        phase='confirm_check';
         if(!await timeApplication.inspect({kind:'confirm_order',sourceId:id,input:orderInput},Boolean(calendar?.orderTimeEnabled)))return false;
         const payload = JSON.stringify(orderInput);
         if (orderKey.current?.payload !== payload) orderKey.current = {payload, key: createClientRequestId()};
         let order:DigitalOrder;
         const command:PendingDevelopmentSubmission={operation:'confirm',sourceId:id,body:structuredClone(orderInput),key:orderKey.current.key};
+        phase='confirm';
         try{order=await digitalRequest<DigitalOrder>(`sources/${id}/confirm`, "POST", command.body,command.key);developmentSubmissionResult(command,order);}
         catch(reason){if(reason instanceof DigitalRequestError&&reason.resultUnknown){pendingSubmission.current=command;setSubmissionUnknown(true);}throw reason;}
         orderId = order.productionOrderId;
@@ -314,6 +322,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       const field=issue?.path.at(-1),labels:Record<string,string>={designStyleNo:"设计款号",customerCode:"客户",productGroup:"产品分组",orderDate:"下单日期",color:"颜色",size:"尺码",quantity:"订购数量",lines:"PO 明细"};
       const prefix=issue?.path[0]==="lines"&&typeof issue.path[1]==="number"?`PO ${issue.path[1]+1} `:"";
       setError(issue?( /[\u3400-\u9fff]/.test(issue.message)?issue.message:`${prefix}${labels[String(field)]??"订购资料"}填写有误，请核实必填内容与允许范围`):(reason instanceof Error?reason.message.replaceAll("出货日期",customerPoDateLabel):"保存失败"));
+      setFailedPhase(phase);
       const message=reason instanceof Error?reason.message:"";
       const po=message.match(/PO (\d+)/)?.[1],index=typeof issue?.path[1]==='number'?issue.path[1]+1:null;
       const target=message.includes('客户下单日期')?'development-customer-order-date':field==='designStyleNo'||message.includes('设计款号')?'development-create-style':field==='customerCode'||message.includes('请选择客户')?'development-create-customer':po?`development-po-date-${po}`:index&&field==='color'?`development-po-color-${index}`:null;
@@ -337,7 +346,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {(createdSource||calendarError)&&<Button type="button" disabled={busy} onClick={()=>setCalendarRefresh(value=>value+1)}>重新读取本单日期</Button>}
     {duplicateSource&&<a href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${duplicateSource}`)}>打开已有开发档案</a>}
     {!busy&&!published&&!submissionUnknown&&savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，可返回列表后继续填写；发布和确认订单分别办理。</p>}
-    {createdSource&&error&&<p role="status">{developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
+    {createdSource&&error&&<p role="status">{failedPhase==='confirm_check'?"本单时效检查未完成，本次客户订单确认尚未发送；资料仍保留，请重新检查。":failedPhase==='publish_check'?"本单时效检查未完成，本次开发发布尚未发送；草稿仍保留，请重新检查。":submissionUnknown||failedPhase==='confirm'||failedPhase==='publish'?developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。":developmentPublished?"开发资料已发布；本次办理尚未完成，请按上方原因处理。":"本次办理尚未完成；已保存内容在原档案，当前输入仍保留。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
     {submissionUnknown&&<section aria-label="原提交结果待核对"><p role="status">{pendingSubmission.current?.operation==='publish'?'开发发布结果尚未确定，不能据此继续确认下单。':'正式确认结果尚未确定，尚不能显示已下单。'}原资料和操作标识已保留；先只读核对回执，查不到仍保持待核。</p><Button disabled={busy} onClick={()=>void recoverSubmission()}>只读核对原提交结果</Button><Button disabled={busy} onClick={()=>void recoverSubmission(true)}>沿原命令继续核对</Button></section>}
     <fieldset disabled={busy||!calendarReady||submissionUnknown}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">

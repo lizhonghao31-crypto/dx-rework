@@ -3,6 +3,16 @@ import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { hasInvalidDeclaredImageError } from "../../apps/web/src/attachment-upload.js";
 import { publicErrorMessage } from "../../apps/api/src/platform/public-error-message.js";
 describe("HTTP public error language", () => {
+  it('keeps an explicit read failure separate from a possibly committed command without changing domain errors',()=>{
+    for(const status of [408,500,502]){
+      const error=new ApplicationError('TEST_READ','TEST internal query',status);
+      expect(publicErrorMessage(error,status,'read')).toContain('读取未完成');
+      expect(publicErrorMessage(error,status,'read')).not.toContain('尚未确认');
+      expect(publicErrorMessage(error,status)).toContain('尚未确认');
+    }
+    expect(publicErrorMessage(new ApplicationError('VALIDATION_ERROR','Invalid input',400),400,'read')).toContain('读取条件');
+    expect(publicErrorMessage(new ApplicationError('TEST','请设计师补齐本单信息',409),409,'read')).toBe('请设计师补齐本单信息');
+  });
   it('keeps unmapped rolled-back 4xx definite while 408 and server failures stay unknown', () => {
     const message='Outbox idempotency key was used with different semantics';
     expect(publicErrorMessage(new ApplicationError('CONFLICT',message,409))).toContain('已被拒绝');

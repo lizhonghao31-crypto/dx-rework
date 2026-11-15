@@ -72,6 +72,37 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await new OrderTimeSettingsService(h.db,true,false).save(h.f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());
   scene=await h.f.scene('2027-01-07T15:00:00.000Z');h.setCollectionScene(scene);
  });
+ for(const operation of ['publish','confirm'] as const)it(`keeps a failed ${operation} precheck separate from an unsent native command in the original designer App`,async()=>{
+  const original=await source('precheck-'+operation,null,operation==='confirm'?'PD':null),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  if(operation==='confirm')await h.f.runtime.run(scene,original.actor,async()=>{
+   const current=await forms.read(original.actor,original.sourceId),document={...current.document!,productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal' as const,order:{customerCode:'PD',productGroup:'男装',designStyleNo:original.designStyleNo,temporaryStyleNo:null,primaryMerchandiserId:h.f.people.merchandiser!.actorId,orderDate:'2027-01-07',contractDeliveryDate:null,lines:[{formalPoNo:original.designStyleNo+'-PO',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:'黑',colorForeign:null,deliveryDate:null,customerWarehouseArrivalDate:'2027-04-01',sizes:[{size:'M',quantity:'10'}]}]}}};
+   const saved=await forms.save(original.actor,original.sourceId,{expectedVersion:current.version,document:DevelopmentDocumentSchema.parse(document)},randomUUID()),price=await new PatternRoomPriceService(h.db).quote(h.f.root,'category',original.category.price_id);
+   await forms.publish(original.actor,original.sourceId,saved.version,randomUUID(),{categoryId:original.category.price_id,priceVersion:price.version});
+  });
+  const tab=await h.open(original.actor.actorId,operation==='publish'?1165:390,{},'/ui/digital-production?development='+original.sourceId),path=`/api/digital-production/sources/${original.sourceId}/${operation==='publish'?'development/publish':'confirm'}`;
+  let checks=0;
+  try{
+   // Only the named check transport fails. Original auth, saved source, form,
+   // publication/confirmation commands and all later requests stay native.
+   await tab.page.route('**/api/digital-production/order-time/check',async route=>{checks++;await route.fulfill({status:500,contentType:'application/json',headers:{'x-request-id':'TEST-read-check-'+operation},body:JSON.stringify({error:{code:'INTERNAL_ERROR',message:'原提交结果尚未确认，请先核对原记录，不要重复提交'}})});});
+   if(operation==='publish')await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
+   const button=tab.page.getByRole('button',{name:operation==='publish'?'发布开发单':'确认客户订单',exact:true});
+   for(let attempt=0;attempt<2;attempt++){
+    const check=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/check')&&response.request().method()==='POST');
+    await button.click();expect((await check).status()).toBe(500);await tab.page.getByRole('status').filter({hasText:operation==='publish'?'本次开发发布尚未发送':'本次客户订单确认尚未发送'}).waitFor();
+    await expect.poll(()=>button.isEnabled()).toBe(true);
+    expect(await tab.page.getByRole('region',{name:'原提交结果待核对',exact:true}).count()).toBe(0);
+    expect(h.requests.filter(request=>request.session===tab.session&&request.method==='POST'&&request.path===path)).toHaveLength(0);
+   }
+   expect(checks).toBe(2);expect((await forms.read(original.actor,original.sourceId)).status).toBe(operation==='publish'?'draft':'published');
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[original.sourceId])).rowCount).toBe(0);
+   await tab.page.screenshot({path:join(h.evidence,`failed-${operation}-read-check.png`),fullPage:true});
+   await tab.page.unroute('**/api/digital-production/order-time/check');
+   const command=tab.page.waitForResponse(response=>new URL(response.url()).pathname===path&&response.request().method()==='POST');
+   await button.click();const response=await command;expect(response.status(),await response.text()).toBe(200);
+   expect(h.requests.filter(request=>request.session===tab.session&&request.method==='POST'&&request.path===path)).toHaveLength(1);
+  }finally{await tab.context.close();}
+ });
  it('publishes from the original designer App with its optional sample date empty, without a false time application or fabricated date',async()=>{
   const original=await source('optional-date',null),tab=await h.open(original.actor.actorId,1165,{},'/ui/digital-production?development='+original.sourceId);
   let releasePublish=()=>{};

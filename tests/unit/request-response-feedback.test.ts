@@ -76,3 +76,21 @@ it('retains the safe server request identifier on an unclassified digital read f
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:{code:'INTERNAL_ERROR',message:'Internal error'}},{status:500,headers:{'x-request-id':'TEST-read-failure-42'}})));
  await expect(digitalRequest('journeys/TEST-request-id')).rejects.toThrow('请求编号：TEST-read-failure-42');
 });
+
+it.each(['whole-orders/delete-preview','sla-settings/calculation-preview','sla-settings/sets/calculate','order-time-settings/calculate','customers/default-merchandisers/selected','order-time/check','order-time/preview','order-time/requests/12345678-1111-4111-8111-123456789012/preview'])('keeps %s as a failed read even with the old generic write error and preserves the actual request',async path=>{
+ const fetch=vi.fn().mockResolvedValue(Response.json({error:{code:'INTERNAL_ERROR',message:'原提交结果尚未确认，请先核对原记录，不要重复提交'}},{status:500,headers:{'x-request-id':'TEST-preflight-1'}}));vi.stubGlobal('fetch',fetch);
+ const error=await digitalRequest(path,'POST',{TEST:'original'},'TEST-original-key').catch(error=>error);
+ expect(error).toBeInstanceOf(DigitalRequestError);expect(error).toMatchObject({status:500,code:'INTERNAL_ERROR',operation:'read',resultUnknown:false});expect(error.message).toContain('读取未完成');expect(error.message).toContain('TEST-preflight-1');expect(error.message).not.toContain('提交结果');
+ expect(fetch).toHaveBeenCalledTimes(1);const sent=fetch.mock.calls[0]![1];expect(sent.method).toBe('POST');expect(JSON.parse(sent.body)).toEqual({TEST:'original'});expect(new Headers(sent.headers).get('idempotency-key')).toBe('TEST-original-key');
+});
+
+it('keeps failed precheck transport and malformed reads distinct from real command outcomes, without retries',async()=>{
+ for(const result of [()=>Promise.reject(new TypeError('TEST network')),()=>Promise.resolve(new Response('{'))]){
+  const fetch=vi.fn(result);vi.stubGlobal('fetch',fetch);const error=await digitalRequest('order-time/check','POST',{TEST:true}).catch(error=>error);
+  expect(error).toBeInstanceOf(DigitalRequestError);expect(error.resultUnknown).toBe(false);expect(error.message).toContain('读取');expect(fetch).toHaveBeenCalledTimes(1);
+ }
+ for(const path of ['order-time/arrange','sources/TEST/confirm','sources/TEST/development/publish','order-time/not-real/check']){
+  const fetch=vi.fn(async()=>Response.json({error:{code:'INTERNAL_ERROR',message:'原提交结果尚未确认'}},{status:500}));vi.stubGlobal('fetch',fetch);
+  const error=await digitalRequest(path,'POST',{TEST:true},'TEST-write-key').catch(error=>error);expect(error).toMatchObject({resultUnknown:true,operation:'write'});expect(error.message).toContain('提交结果');expect(fetch).toHaveBeenCalledTimes(1);
+ }
+});
