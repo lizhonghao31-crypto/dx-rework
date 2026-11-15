@@ -449,6 +449,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(second.check.washing?.find(row=>row.lineId===lineId)?.version).toBe(2);
    const journey=await new DigitalJourneyQuery(f.db).read(manager,resource.id,undefined,true);
    expect(journey.fixedSchedule?.framework?.scopes[0]?.milestones).toHaveLength(8);
+   const executionRows=journey.stages.flatMap(stage=>stage.nodes),washingRows=executionRows.filter(node=>node.key.startsWith('bulk_return_washing'));
+   expect(washingRows.map(node=>node.key).sort()).toEqual(['bulk_return_washing','bulk_return_washing_inspection']);
+   const shipment=journey.fixedSchedule!.framework!.scopes[0]!.milestones.find(row=>row.key==='planned_shipment')!;
+   const dispatch=journey.fixedSchedule!.framework!.scopes[0]!.milestones.find(row=>row.key==='processing_dispatch')!;
+   for(const node of washingRows){
+    expect(node).toMatchObject({stage:'receiving',current:true,state:'pending',progressApplicability:'applicable',actualAt:null,enteredAt:null});
+    expect(node.records[0]).toMatchObject({url:`/ui/digital-production?factory=${resource.id}`,lineId});
+    expect(node.fixedTargets!.every(target=>target.lineId===lineId&&shipment.relatedWorkIds!.includes(target.progress.id)&&!dispatch.relatedWorkIds!.includes(target.progress.id))).toBe(true);
+    expect(journey.businessProgress!.requirements.find(row=>row.key===node.key)).toMatchObject({applicability:'applicable',completed:false});
+   }
+   expect(executionRows.find(node=>node.key==='warehouse_accessories')).toMatchObject({label:'辅料实物备齐',planningOnly:true,state:'pending',actualAt:null});
    const adopted=(await repo.current(resource))!,forward=Object.values(adopted.input.frameworkPlans!)[0]!;
    const projected=journey.fixedSchedule!.scopes[0]!;
    // B handover/investment are June12 for an August15 delivery. The
@@ -469,6 +480,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(projected.nodes.find(work=>work.id.startsWith('bulk_return_washing:'))?.businessCompleted).toBe(false);
    expect(journey.visualProgress?.expected.at).toBe('2027-08-15');
    const model=await new JourneyFactRepository(f.db).buildOne(resource);
+   expect(model.model.nodes.filter(node=>node.key.startsWith('bulk_return_washing')).map(node=>node.key).sort()).toEqual(washingRows.map(node=>node.key).sort());
+   expect(model.model.nodes.find(node=>node.key==='warehouse_accessories')).toMatchObject({planningOnly:true,state:'pending'});
    expect(model.model.fixedSchedule?.framework).toHaveLength(1);
    for(const work of model.model.fixedSchedule!.scopes[0]!.work)if(eventDeadlines[work.id]){
     expect(work.end).toBe('2027-08-01T00:00:00.000Z');

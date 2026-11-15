@@ -6,6 +6,7 @@ const events:Record<string,{label:string;role:string}>={
  design_handover:{label:'设计资料交接',role:'设计'},material_investment:{label:'跟单投面料',role:'订单跟单'},
  fabric_receipt:{label:'面料实际到仓',role:'仓管'},
  color_confirmation:{label:'对色完成',role:'订单跟单'},style_label_ready:{label:'款号唛实物备齐',role:'仓管'},
+ warehouse_accessories:{label:'辅料实物备齐',role:'仓管'},
 };
 /** Already authorized, same-snapshot facts. These are references to the existing
  * preparation records, not extra tasks, clocks or progress denominator items. */
