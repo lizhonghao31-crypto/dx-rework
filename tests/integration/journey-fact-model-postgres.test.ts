@@ -66,6 +66,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // business scenario. Every business value still compares byte-for-byte.
   if(before.operationLog&&after.operationLog)after.operationLog.asOf=before.operationLog.asOf;expect(after).toEqual(before);
  }));
+ it('keeps the native order-scoped ship sample current before preparation, through partial PO records and stored reads',()=>run(async()=>{
+  const order=await make(),id=order.productionOrderId,query=new DigitalJourneyQuery(f.db),flow=new FactoryFlowService(f.db),primary=f.people.merchandiser!;
+  const task=(await f.db.query("SELECT t.* FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind='bulk_ship_sample'",[id])).rows[0]!;
+  expect(task.route_instance_id).toBe(id);
+  expect((await f.db.query('SELECT 1 FROM digital_bulk_preparations WHERE production_order_id=$1',[id])).rowCount).toBe(0);
+  const check=async(completed:boolean)=>{
+   for(const cockpit of [false,true]){
+    const item=await query.read(primary,id,undefined,cockpit),nodes=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.key==='bulk_ship_sample');
+    expect(nodes).toHaveLength(1);expect(nodes[0]).toMatchObject({instanceId:task.task_id,current:true,state:completed?'completed':'active'});
+    if(!completed){expect(nodes[0]).toMatchObject({enteredAt:null,deadlineMode:'date_target'});expect(nodes[0]!.expectedAt).toBeTruthy();expect(nodes[0]!.risks).not.toContain('unknown');}
+    const requirement=item.businessProgress!.requirements.find(row=>row.key==='bulk_ship_sample')!;
+    expect(requirement).toMatchObject({applicability:'applicable',completed});
+    expect(requirement.reasons.join('')).not.toContain('退役');
+    expect(item.visualProgress!.stages.find(stage=>stage.key==='production')!.actualRatio).not.toBeNull();
+   }
+   const built=await repo.buildOne({kind:'order',id});
+   expect(built.model.nodes.filter(node=>node.key==='bulk_ship_sample')).toEqual([expect.objectContaining({instanceId:task.task_id,current:true,state:completed?'completed':'active'})]);
+   expect(built.model.requirements.find(row=>row.key==='bulk_ship_sample')).toMatchObject({applicability:'applicable',completed});
+   const listed=await new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}).list(primary,JourneyFilterSchema.parse({scope:'production',search:order.designStyleNo}));
+   expect(listed.total).toBe(1);expect(listed.items[0]!.businessProgress!.requirements.find(row=>row.key==='bulk_ship_sample')).toMatchObject({applicability:'applicable',completed});
+  };
+  await check(false);
+  let state=await flow.read(primary,id);
+  const input={expectedRevision:state.revision,kind:'船样寄出' as const,occurredAt:'2026-11-08T00:00:00.000Z',trackingNumber:'TEST-CURRENT-SAMPLE',note:'TEST native order identity'};
+  await expect(flow.followup(f.people['pattern-room-worker']!,id,{...input,lineIds:[order.lines[0]!.lineId]},randomUUID())).rejects.toMatchObject({statusCode:404});
+  const key=randomUUID();state=await flow.followup(primary,id,{...input,lineIds:[order.lines[0]!.lineId]},key);
+  await flow.followup(primary,id,{...input,lineIds:[order.lines[0]!.lineId]},key);
+  expect(state.shipSamples).toHaveLength(1);await check(false);
+  state=await flow.followup(primary,id,{...input,expectedRevision:state.revision,lineIds:[order.lines[1]!.lineId],trackingNumber:'TEST-CURRENT-SAMPLE-2'},randomUUID());
+  expect(state.shipSamples).toHaveLength(2);await check(true);
+  expect((await f.db.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='ship_sample_sent'",[id])).rows[0].n).toBe(2);
+  expect((await f.db.query('SELECT 1 FROM digital_factory_routes WHERE production_order_id=$1',[id])).rowCount).toBe(0);
+  await expect(query.read(f.people['pattern-room-worker']!,id,undefined,true)).rejects.toMatchObject({statusCode:404});
+ }));
+ it('does not retire the whole-order ship sample when a current production preparation has a different identity',()=>run(async()=>{
+  const ready=await f.bulkReady('无',undefined,2),query=new DigitalJourneyQuery(f.db);
+  expect(ready.preparationId).not.toBe(ready.id);
+  const item=await query.read(f.root,ready.id,undefined,true),sample=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.key==='bulk_ship_sample');
+  expect(sample).toHaveLength(1);expect(sample[0]).toMatchObject({current:true,state:'active'});
+  expect(item.businessProgress!.requirements.find(row=>row.key==='bulk_ship_sample')).toMatchObject({applicability:'applicable',completed:false});
+  const built=await repo.buildOne({kind:'order',id:ready.id});
+  expect(built.model.nodes.filter(node=>node.key==='bulk_ship_sample')).toEqual([expect.objectContaining({instanceId:sample[0]!.instanceId,current:true})]);
+  expect(built.model.requirements.find(row=>row.key==='bulk_ship_sample')).toMatchObject({applicability:'applicable',completed:false});
+  const original=(await f.db.query('SELECT route_instance_id,entered_at,completed_at FROM digital_production_tasks WHERE task_id=$1',[sample[0]!.instanceId])).rows[0]!;
+  expect(original.route_instance_id).toBe(ready.id);expect(original.completed_at).toBeNull();
+  expect(sample[0]!.enteredAt).toBe(original.entered_at?.toISOString()??null);
+ }));
  it('uses original multi-PO preparation, native events, frozen SLA inputs and per-instance deadlines without an actor',()=>run(async()=>{
   const ready=await f.bulkReady('印花',undefined,2),scope={kind:'order' as const,id:ready.id};
   const allowed=vi.spyOn(DigitalProductionAccessPolicy.prototype,'allowed'),role=vi.spyOn(DigitalProductionAccessPolicy.prototype,'activeRole');
