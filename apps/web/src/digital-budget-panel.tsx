@@ -21,6 +21,7 @@ import "./digital-budget.css";
 import {compareQuotationBudget,quotationRowDelta} from '@dx-rework/contracts/digital-quotation';
 import {quotationHref} from './digital-quotation-panel.js';
 import './digital-quotation.css';
+import {BudgetWashingFeesPanel} from './budget-washing-fees.js';
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const newRow = (section: BudgetRow["section"], category = ""): BudgetRow => ({ rowId: createClientRequestId(), section, category, name: "", specification: "", unit: "", supplier: "", consumption: "", unitPrice: "" });
@@ -194,5 +195,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
         </div>
       </div>
     </fieldset></form>}
+    {sheet?.status==='published'&&initialVersion===undefined&&!embedded&&<BudgetWashingFeesPanel key={order.productionOrderId} sheet={sheet} quantity={order.lines.reduce((sum,line)=>sum+line.sizes.reduce((n,size)=>n+size.quantity,0),0)} onPublished={async()=>{install(await budgetRequest(base,order.productionOrderId));}}/>}
+    {sheet?.status==='published'&&(initialVersion!==undefined||embedded)&&<DocumentSection id="budget-washing-fees" title="本版洗水费用依据"><p>历史预算 v{sheet.version} 只读，不以当前费用替代本版明细。</p>{doc.rows.filter(row=>row.section==='外发工序'&&row.category==='洗水').map(row=><p key={row.rowId}>{row.name} · 用量{row.consumption||'待核'} · 单价{row.unitPrice||'待核'}</p>)}<Button onClick={()=>onChapterChange?.('budget-section-2')}>查看本版外发工序</Button></DocumentSection>}
   </section></Surface><DigitalBudgetPrint order={order} sheet={sheet} permitted={Boolean(sheet?.document)&&!dirty&&!busy}/></>;
 }

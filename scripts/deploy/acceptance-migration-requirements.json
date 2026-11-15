@@ -2185,5 +2185,27 @@
       "digital_journey_register_change"
     ],
     "sequences": []
+  },
+  "0293_budget_washing_fee_supplements": {
+    "checksum": "e46efe87f57b35f394ad975964eb6a51f3c30874914c53873f1964a8e9bc82a7",
+    "tables": [
+      "digital_budget_versions"
+    ],
+    "functions": [
+      "guard_customer_quotation_budget_publication"
+    ],
+    "references": [
+      "digital_budget_versions",
+      "digital_production_po_lines",
+      "digital_bulk_washing_plans",
+      "digital_commercial_order_rules",
+      "digital_quotation_versions",
+      "digital_production_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

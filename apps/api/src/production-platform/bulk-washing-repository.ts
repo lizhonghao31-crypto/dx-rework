@@ -48,6 +48,23 @@ export async function adoptBulkWashingWithClient(db:PoolClient,actor:TrustedActo
   const rowId=document.fee.rowId;
   if(!budget?.document.rows.some((row:{rowId:string;section:string})=>row.rowId===rowId&&row.section==='外发工序'))washingConflict('洗水费用须引用本单已发布预算的外发工序行');
  }
+ return appendWashingPlan(db,actor,orderId,lineId,expectedVersion,document);
+}
+/** Narrow financial update: preserve route, staff and frozen durations. It is
+ * not a second manager arrangement/adoption entry. */
+export async function linkWashingBudgetFeeWithClient(db:PoolClient,actor:TrustedActorContext,orderId:string,lineId:string,expectedVersion:number,fee:Extract<BulkWashingAdoption['fee'],{kind:'budget_row'}>){
+ const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',orderId,'budget');
+ const order=(await db.query('SELECT primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0];
+ if(!isRootActor(actor)&&!(order?.primary_merchandiser_id===actor.actorId&&await policy.lockActiveRole(actor.actorId,'order_merchandiser')))digitalForbidden();
+ await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+ if(!await washingOrderActive(db,orderId))washingConflict('订单已暂停、终止或结案，洗水费用不能变更');
+ const plan=(await washingPlans(db,orderId)).filter(row=>row.lineId===lineId).at(-1);
+ if(!plan||plan.version!==expectedVersion||plan.document.arrangement.mode==='none')washingConflict('本PO洗水安排已变化，请重新核对费用');
+ const budget=(await db.query('SELECT document FROM digital_budget_versions WHERE production_order_id=$1 AND version=$2',[orderId,fee.version])).rows[0];
+ if(!budget?.document.rows.some((row:{rowId:string;section:string;consumption:string;unitPrice:string})=>row.rowId===fee.rowId&&row.section==='外发工序'&&row.consumption!==''&&row.unitPrice!==''))washingConflict('请选择本单已发布且用量、价格明确的外发工序行');
+ return appendWashingPlan(db,actor,orderId,lineId,expectedVersion,{...plan!.document,fee});
+}
+async function appendWashingPlan(db:PoolClient,actor:TrustedActorContext,orderId:string,lineId:string,expectedVersion:number,document:BulkWashingAdoption){
  const prior=(await db.query('SELECT version FROM digital_bulk_washing_plans WHERE production_order_id=$1 AND line_id=$2 ORDER BY version DESC LIMIT 1',[orderId,lineId])).rows[0];
  if((prior?.version??0)!==expectedVersion)washingConflict('本单洗水安排已更新，请重新读取');
  const id=randomUUID();await db.query('INSERT INTO digital_bulk_washing_plans(plan_id,production_order_id,line_id,version,document,created_by) VALUES($1,$2,$3,$4,$5,$6)',[id,orderId,lineId,expectedVersion+1,JSON.stringify(document),actor.actorId]);

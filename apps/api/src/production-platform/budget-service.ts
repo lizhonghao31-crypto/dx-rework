@@ -11,10 +11,12 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
 import {readBudgetQuoteComparison} from './quotation-budget-basis.js';
+import {BudgetWashingFeeService} from './budget-washing-fees.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("BUDGET_CONFLICT", message, 409); };
 export class DigitalBudgetService {
+  get washingFees(){return new BudgetWashingFeeService(this.database);}
   constructor(private readonly database: Pool, private readonly creationEnabled: boolean) {}
   async prepareSourcing(actor: TrustedActorContext, orderId: string, expectedVersion: number, attachments: AttachmentService): Promise<BudgetSourcingPreparation> {
     const source = await readBudgetSourcing(this.database, actor, orderId);

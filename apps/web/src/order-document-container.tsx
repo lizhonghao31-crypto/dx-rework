@@ -18,7 +18,7 @@ import {DevelopmentDocumentFacts} from './development-document-facts.js';
 
 export const documentNames={development:'开发单',instruction:'大货制单',budget:'成本预算表'};
 export type DocumentKind=keyof typeof documentNames;
-export const documentChapters={development:[['development-images','款图与制作说明'],['development-basic','打板信息'],['development-materials','面辅料'],['development-sizes','尺寸表'],['development-labels','唛类'],['development-craft','工艺要求'],['development-handling','轮次与记录']],budget:[['budget-basic','基本资料'],['budget-section-0','主料'],['budget-section-1','辅料'],['budget-section-2','外发工序'],['budget-summary','费用与报价'],['budget-outsourcing','其他信息']]};
+export const documentChapters={development:[['development-images','款图与制作说明'],['development-basic','打板信息'],['development-materials','面辅料'],['development-sizes','尺寸表'],['development-labels','唛类'],['development-craft','工艺要求'],['development-handling','轮次与记录']],budget:[['budget-basic','基本资料'],['budget-section-0','主料'],['budget-section-1','辅料'],['budget-section-2','外发工序'],['budget-summary','费用与报价'],['budget-outsourcing','其他信息'],['budget-washing-fees','洗水费用补充']]};
 export type DocumentCategory=DocumentKind|'images'|'materials'|'results'|'customer'|'related';
 const extraNames={images:'款图与工艺图',materials:'面辅料与检测报告',results:'工序成果',customer:'客户确认与寄样资料',related:'其他关联单据'};
 type Reference={state:'available';id:string;version?:number|undefined}|{state:'unavailable'|'not_applicable'|'missing'|'draft'};

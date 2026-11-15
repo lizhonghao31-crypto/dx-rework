@@ -5,6 +5,8 @@ import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {createClientRequestId} from './client-request-id.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {washingActionRecords,washingFactLabel,type WashingAction} from './bulk-washing-actions.js';
+import {createWebUrls} from '../url-contract.js';
+import {productionWorkspaceDomainHref} from './digital-detail-route.js';
 const display=(at:string|null)=>at?new Date(at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'时间待核';
 const time=(value:FormDataEntryValue|null)=>value?new Date(`${String(value)}+08:00`).toISOString():null;
 export function BulkWashingPanel({orderId,initialOpen=false}:{orderId:string;initialOpen?:boolean}){
@@ -45,7 +47,7 @@ function WashingScope({orderId,scope,reload}:{orderId:string;scope:BulkWashingSc
  <p>送洗 {scope.ledger.sent} · 洗回／洗好 {scope.ledger.washed} · 合格 {scope.ledger.qualified??'待核'} · 剩余 {scope.ledger.remaining??'待核'}</p>
  {scope.ledger.rework&&scope.ledger.rework.sent>0&&<p>返洗发出／开始 {scope.ledger.rework.sent} · 返洗洗回／洗好 {scope.ledger.rework.washed} · 复检合格 {scope.ledger.rework.qualified}（不增加原收货数量）</p>}
  {scope.windows.map(w=><p key={w.id}>{round(w.id)?`返洗第${round(w.id)}轮 · `:''}{w.kind==='washing'?'洗水':'洗后检查'}：{display(w.startedAt)} — {display(w.dueAt)} · {w.state==='voided'?'原记录已撤销':w.state==='completed'?`已完成 · ${display(w.completedAt)}`:'尚未完成'}</p>)}
- {scope.fee&&<p>洗水费用：{scope.fee.state==='referenced'?`${scope.fee.name} · 预算第${scope.fee.version}版 · 单价${scope.fee.unitPrice||'待补'} · 用量${scope.fee.consumption||'待补'}`:'沿原预算补齐费用依据'}</p>}
+ {scope.fee&&<p>洗水费用：{scope.fee.state==='referenced'?`${scope.fee.name} · 预算第${scope.fee.version}版 · 单价${scope.fee.unitPrice||'待补'} · 用量${scope.fee.consumption||'待补'}`:'沿原预算补齐费用依据'} <a href={productionWorkspaceDomainHref(`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-production')}?budget=${orderId}&documentChapter=budget-washing-fees`,window.location.search)}>本单预算费用补充</a></p>}
  {error&&<p role="alert">{error}</p>}
  {uncertain?<><p role="status">提交结果未确认，请用原内容核对，勿重复登记。</p><Button disabled={busy} onClick={()=>void send()}>核对原提交</Button></>:(scope.canLogistics||scope.canInspect||scope.canCorrect)&&<form onChange={()=>setDirty(true)} onSubmit={event=>{
   event.preventDefault();const form=event.currentTarget;try{const data=new FormData(form),base={planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:time(data.get('occurredAt')),note:String(data.get('note')??'')};
