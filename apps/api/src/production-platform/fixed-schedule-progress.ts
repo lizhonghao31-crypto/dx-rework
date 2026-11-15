@@ -112,9 +112,13 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
    if(!input.plannedReadiness&&!ready&&work.accountingRole!=='added_work'&&!(deps.length&&!allComplete&&fact?.waitingForPredecessors))coverage.push('真实就绪或未完成前置依据待核');
    else {
     const available:number[]=[],credit:number[]=[];let lowerBound=deps.some(dep=>dep!.estimate==='lower_bound');
+    const dependencyArrival=(dep:Boundary,index:number,side:0|1)=>{
+     const reserve=work.dependencyReserves?.[work.dependsOn[index]!];
+     return reserve?shift(dep.available[side],reserve.minutes,reserve.calendar):dep.available[side];
+    };
     for(const side of [0,1] as const){
      const candidates=deps.map((dep,index)=>{
-      const reserve=work.dependencyReserves?.[work.dependsOn[index]!],arrival=reserve?shift(dep!.available[side],reserve.minutes,reserve.calendar):dep!.available[side];
+      const arrival=dependencyArrival(dep!,index,side);
       return dep!.completed?arrival:Math.max(arrival,shift(start,Math.min(0,scheduleElapsed(dep!.reference,dep!.credit[side],calendar)),calendar));
      });
      const join=candidates.length?Math.max(...candidates):start;
@@ -128,7 +132,16 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
       available.push(bound);credit.push(shift(end,Math.min(0,scheduleElapsed(end,bound,calendar)),calendar));lowerBound ||= Boolean(ready&&now>=quota)||Boolean(input.plannedReadiness&&!ready&&now>start);
      }
     }
-    boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false,estimate:lowerBound?'lower_bound':'conditional',exclusive:!ready&&!lowerBound&&(work.eventTarget?.exclusive??work.endExclusive)===true&&available.every(at=>at===end)&&deps.every(dep=>dep!.available[1]<start||dep!.exclusive===true)};
+    // A future date position keeps its open endpoint even when an upstream
+    // overrun removes the forecast's upper bound. This is not an assurance of
+    // finishing: the estimate remains lower_bound. Once now reaches the end,
+    // or a required actual branch arrives there, equality is genuinely late.
+    const exclusive=!ready&&now<end&&(work.eventTarget?.exclusive??work.endExclusive)===true
+     &&available.every(at=>at===end)&&deps.every((dep,index)=>{
+      const arrival=dependencyArrival(dep!,index,1);
+      return arrival<start||arrival===start&&dep!.exclusive===true;
+     });
+    boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false,estimate:lowerBound?'lower_bound':'conditional',exclusive};
    }
   }
   const strictEnd=work.eventTarget?.exclusive??work.endExclusive;

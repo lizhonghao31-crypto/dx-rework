@@ -121,3 +121,35 @@ it('evaluates an event constraint without rewriting its frozen planning position
  s.facts.a={...pending(),businessCompleted:true,completed:{precision:'instant',at:at(2)}};
  expect(evaluateFixedScheduleScope(s,at(17)).nodes[0]).toMatchObject({state:'normal',goalDelta:{kind:'on_target'},availabilityBound:{earliest:at(2),latest:at(2)}});
 });
+
+it('keeps a future exclusive event bound uncertain after an upstream overrun, without inventing a one-millisecond gap',()=>{
+ const s=scope();s.work[1]={...s.work[1]!,start:at(16),end:at(16),minutes:0,responsibilitySlaRef:null,eventTarget:{end:at(16),targetPrecision:'date',targetDate:'2027-03-01',exclusive:true}};
+ s.facts.a={...pending(),ready:{precision:'instant',at:at(0)},clockStart:{precision:'instant',at:at(0)}};
+ const frozen=structuredClone(s),read=(hour:number)=>{const result=evaluateFixedScheduleScope(s,at(hour));return {result,milestone:evaluateJourneyFramework(basis(s),[s],[result],at(hour),null).scopes[0]!.milestones[0]!};};
+ // All hours UTC; deadline16Z is Beijing March2 00:00 exclusive.
+ for(const hour of [4,10,16-1/3600000]){
+  const {result,milestone}=read(hour);expect(result.nodes[1]).toMatchObject({estimateKind:'lower_bound',availabilityBound:{earliest:at(16),latest:at(16),exclusive:true},goalDelta:{kind:'on_target'}});
+  expect(milestone).toMatchObject({forecast:{kind:'lower_bound',earliest:at(16),latest:null},feasibility:'unknown',lateMinutes:null,delta:{kind:'on_target'}});
+ }
+ for(const hour of [16,16+1/3600000,17]){
+  const {result,milestone}=read(hour);expect(result.nodes[1]!.availabilityBound?.exclusive).not.toBe(true);
+  expect(milestone.feasibility).toBe('insufficient');expect(milestone.lateMinutes).toBeGreaterThan(0);expect(milestone.delta.kind).toBe('late');
+ }
+ expect(s).toEqual(frozen);
+});
+it('does not hide a strict actual lower bound arriving at the deadline, or a later known parallel branch',()=>{
+ const s=scope();s.work[1]={...s.work[1]!,start:at(16),end:at(16),minutes:0,responsibilitySlaRef:null,eventTarget:{end:at(16),targetPrecision:'date',targetDate:'2027-03-01',exclusive:true}};
+ s.facts.a={...pending(),businessCompleted:true,completed:{precision:'instant',at:at(16)}};
+ let result=evaluateFixedScheduleScope(s,at(16));expect(result.nodes[1]!.availabilityBound?.exclusive).not.toBe(true);
+ expect(evaluateJourneyFramework(basis(s),[s],[result],at(16),null).scopes[0]!.milestones[0]).toMatchObject({feasibility:'insufficient',lateMinutes:1/60000});
+ s.facts.a=pending();const b=basis(s);b[0]!.milestones[0]!.workIds=['a','b'];result=evaluateFixedScheduleScope(s,at(4));
+ result.nodes[0]!.availabilityBound={earliest:at(17),latest:at(17)};result.nodes[0]!.estimateKind='lower_bound';
+ expect(evaluateJourneyFramework(b,[s],[result],at(4),null).scopes[0]!.milestones[0]).toMatchObject({feasibility:'insufficient',lateMinutes:60});
+});
+it('applies adopted dependency reserves before deciding whether a future event endpoint is open',()=>{
+ const s=scope();s.work[0]={...s.work[0]!,start:at(0),end:at(15),minutes:900};
+ s.work[1]={...s.work[1]!,start:at(16),end:at(16),minutes:0,responsibilitySlaRef:null,dependencyReserves:{a:{minutes:60,calendar:'continuous'}},eventTarget:{end:at(16),targetPrecision:'date',targetDate:'2027-03-01',exclusive:true}};
+ const result=evaluateFixedScheduleScope(s,at(0));
+ expect(result.nodes[1]!.availabilityBound).toEqual({earliest:at(16),latest:at(16)});
+ expect(evaluateJourneyFramework(basis(s),[s],[result],at(0),null).scopes[0]!.milestones[0]).toMatchObject({feasibility:'insufficient',lateMinutes:1/60000});
+});

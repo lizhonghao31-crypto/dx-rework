@@ -54,6 +54,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await flow.locator('.cockpit-stage').count()).toBe(route==='A'?9:8);
    const dto=await page.evaluate(async id=>{const response=await fetch('/api/digital-production/journeys/'+id+'?view=cockpit');if(!response.ok)throw Error('Journey read failed '+response.status);return response.json();},order.id) as OrderJourney;
    await writeFile(join(h.evidence,'event-target-'+route+'.json'),JSON.stringify(dto,null,2));
+   const progress=dto.fixedSchedule!.scopes[0]!,poRow=page.getByRole('row').filter({hasText:order.style+'-PO'}).first();
+   expect(progress.completionEstimate).toMatchObject({kind:'lower_bound',latest:null});
+   // Both fixtures have zero lag against their accepted forward plan;
+   // A's intermediate/customer milestone gap is a separate comparison.
+   expect(progress.lagMinutes).toEqual({minimum:0,maximum:0});
+   expect(progress.customerDuePassed).toBe(false);
+   await poRow.getByText('进度待核',{exact:true}).waitFor();
+   expect(await poRow.innerText()).not.toContain('可用');
+
    for(const node of dto.stages.flatMap(stage=>stage.nodes).filter(node=>node.key==='budget'||node.key==='design_handover')){
     expect(node.actualAt).toBeNull();
     for(const target of node.fixedTargets??[]){

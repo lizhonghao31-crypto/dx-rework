@@ -54,7 +54,8 @@ export function evaluateJourneyFramework(basis:JourneyFrameworkBasis,scopes:read
    // A known late branch remains a proved gap even if its sibling is unknown.
    // The date's following midnight is exclusive, not an on-time instant.
    const late=target===null?[]:knownBounds.filter(bound=>Date.parse(bound.earliest)>target||Date.parse(bound.earliest)===target&&!bound.exclusive).map(bound=>Date.parse(bound.earliest)),stopped=Boolean(termination&&!completion.completed);
-   const gap=target===null||!knownEnds.length?null:Math.max(0,(Math.max(...knownEnds)-target+(late.some(end=>end===target)?1:0))/60000);
+   const latestKnownEnd=knownEnds.length?Math.max(...knownEnds):null;
+   const gap=target===null||latestKnownEnd===null?null:Math.max(0,(latestKnownEnd-target+(latestKnownEnd===target&&late.length?1:0))/60000);
    const sufficient=target!==null&&forecast.latest!==null&&(Date.parse(forecast.latest)<target||Date.parse(forecast.latest)===target&&knownBounds.every(bound=>Date.parse(bound.latest)<target||bound.exclusive===true));
    const feasibility=stopped?'terminated' as const:late.length?'insufficient' as const:sufficient?'sufficient' as const:'unknown' as const;
    return {key:m.key,targetDate:m.date,plannedAt:m.plannedAt,workIds:[...m.workIds],...(m.relatedWorkIds?{relatedWorkIds:[...m.relatedWorkIds]}:{}),...completion,delta,forecast,feasibility,lateMinutes:feasibility==='insufficient'?gap:feasibility==='sufficient'?0:null,coverage:[...new Set(nodes.flatMap(n=>n?.coverage??['里程碑关联工作待核']))]};

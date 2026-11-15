@@ -1,55 +1,41 @@
 {
   "version": 1,
-  "base": "49dac788df5167a53307d7219e085d17261e2c14",
+  "base": "06fd7779b60ffe94894f8b978eb08009462c9aa7",
   "risk": "full",
-  "sourceFingerprint": "1a9ededd1c6f47df0f4149f3881af1cfac5b0c68a53f8c261d4fc8ada593b9b8",
+  "sourceFingerprint": "0230ad92c8a0b0338767c49b77f9f2adae23ab7e4be1ae3abf9d2226f8e87883",
   "rules": [
     {
-      "rule": "Original customer feedback captures actual date/instant independently from registration; missing final approval time is supplemented with immutable evidence, never by replacing feedback/review or inventing another event.",
-      "source": "Dot2026-11-14 authorized customer-final-approval capture and controlled original-record supplementation; docs/requirements/sample-system-migration-v1.0.md latest time-special addendum.",
+      "rule": "Future exclusive date positions retain open endpoints under an unbounded upstream forecast; no invented1ms shortage or sufficient claim. Actual deadline passage, known later branches and historical responsibility remain independent.",
+      "source": "Dot2026-11-15 authorization to resume delivered Acceptance defects; v27 calendar/forecast/parallel rules; docs/requirements/digital-sla-golden-source-20261023.md latest date-bound addendum.",
       "writes": [
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/development-execution-routes.ts",
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/order-time-framework-route.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "apps/api/src/production-platform/series-plan-facts.ts",
-        "apps/web/src/cockpit-documents-technical.ts",
-        "apps/web/src/development-technical-workspace.tsx",
-        "packages/contracts/src/digital-development-technical.ts",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/order-time-framework-facts.test.ts",
-        "apps/api/migrations/0292_customer_comment_occurrences.sql",
-        "apps/api/src/production-platform/development-comment-time.ts",
-        "apps/web/src/customer-comment-time-fields.tsx",
-        "tests/unit/customer-comment-time.test.ts"
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-time-framework.ts",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/unit/journey-time-framework.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-technical-repository.ts#effectiveTechnicalEvidence",
-        "apps/api/src/production-platform/series-plan-facts.ts#readSeriesPlanFacts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/web/src/task-workbench-sample.tsx",
-        "apps/web/src/cockpit-documents-technical.ts"
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/journey-fact-updates.ts",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-home.tsx"
       ],
       "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/journey-time-framework.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
         "tests/integration/order-time-reading-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "tests/unit/order-time-framework-facts.test.ts",
-        "tests/unit/cockpit-document-new-sources.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts"
       ],
-      "initialization": "Append0292 immutable companion evidence with composite original-comment identity, unique per-comment occurrence, known-time protection and Journey invalidation. Manifest and maintenance privileges inventory match checksum. Current reader detects old schema and nullable legacy occurrence without rewriting old feedback. Rollback must use a reader containing this evidence support; no assertion that pre0292 code reads newly captured date evidence.",
-      "dateAndPermission": "Original sample designer/Root scope rechecked under lifecycle transaction, even on replay. Final approved original comment/version and missing time required; future dates, wrong source/role, overwrites and stale versions refused. Date precision stays actualDate; planning uses conservative date upper bound capped at observation, never a midnight actual or the review/recording clock. Existing started responsibility/review windows remain unchanged.",
-      "expectation": "Original authenticated App records unknown without fake time, supplements actual date on same comment, keeps one review and immutable original feedback/artifacts. Concurrent distinct requests give one evidence; same key replay returns receipt. Effective facts, exact-round milestones, Journey, document history and remaining plan share occurrence. Old timestamps, role denials,88-order7070SQL and7100 cap retained.",
+      "initialization": "No migrations or persisted business/plan changes. Existing calculation-version check marks stale derived models obsolete and existing bounded update queue rebuilds from original facts; no GET whole-database rebuild. Contract payload remains compatible. Old completion targets/revisions and native perPO/batch clocks are unchanged.",
+      "dateAndPermission": "Beijing date next midnight remains exclusive, ordinary precise deadline remains inclusive. Work/DAG/calendar and adopted reserve applied once before endpoint comparison; now reaching deadline or actual equal-point completion is not exempted. Existing authorized same-connection reads and ordinary KPI/PO customer-overdue status remain independent of predicted schedule lag.",
+      "expectation": "Hand-calculated future lower_bound stays unknown/latestnull while genuine equality/past target or known late sibling remains insufficient; max gap does not add a sibling1ms. Native A/B original App displays unbounded slack as progress pending rather than green available0; known predicted lag labeled forecast, actual customer deadline remains separate. Immutable history, freshness, pagination and7070SQL preserved.",
       "checks": [
         "unit",
         "native"
@@ -60,46 +46,46 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest eight affected contracts/framework/reading/document/risk suites --maxWorkers1",
+      "command": "vitest eight affected fixed schedule/framework/reading/selector/projection/App presentation unit suites --maxWorkers1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 184,
+      "passed": 134,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "49dac788df5167a53307d7219e085d17261e2c14",
-      "sourceFingerprint": "1a9ededd1c6f47df0f4149f3881af1cfac5b0c68a53f8c261d4fc8ada593b9b8",
-      "context": "Candidate working tree on real release base49dac788. Node22.22.0; canonical Vitest configs/maxWorkers1; marked low-privilege PG16, pinned Chromium1194, original authenticated App. No live/Acceptance data or deployments. Composite native report preserves original three unchanged passing DB suites and six rerun original App tests; initial fixture/selector failure remains in original report, not relabeled. Type-only import correction does not alter emitted runtime, and later document metadata/feedback reset changes are covered by updated units/App build. No claim of现场 acceptance.",
-      "startedAt": "2026-11-14T18:59:10.622Z",
-      "endedAt": "2026-11-14T18:59:14.590Z",
-      "log": "/tmp/customer-comment-unit.json",
-      "logSha256": "8723da33a777cba2eb9a5ae8eaa622b37ae9cd860ac3b32c0622faee7f8271bd",
+      "testedHead": "06fd7779b60ffe94894f8b978eb08009462c9aa7",
+      "sourceFingerprint": "0230ad92c8a0b0338767c49b77f9f2adae23ab7e4be1ae3abf9d2226f8e87883",
+      "context": "Candidate working tree on real release base06fd7779. Node22.22.2/npm10.9.9; canonical maxWorkers1 and marked low-privilege isolatedPG16; pinned actual Chromium1194. Three unchanged database suites retain original passing evidence; changed App/PO-label assertions rerun on actual A/B pages. No live writes or deployment. Original132unit baseline before final UI consumer checks is superseded by134current cases; no statement of Acceptance verification.88-order7samples7070SQL with7100cap retained.",
+      "startedAt": "2026-11-15T02:39:53.540Z",
+      "endedAt": "2026-11-15T02:39:58.214Z",
+      "log": "/tmp/time-read-unit.json",
+      "logSha256": "628698fb8d658f62d511759d9c30d300f92ae2788ae7426e09b7be71f5894476",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8723da33a777cba2eb9a5ae8eaa622b37ae9cd860ac3b32c0622faee7f8271bd"
+          "sha256": "628698fb8d658f62d511759d9c30d300f92ae2788ae7426e09b7be71f5894476"
         }
       ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "Composite: three unchanged passing DB suites from /tmp/customer-comment-pg.sh plus six original App browser tests from /tmp/customer-comment-browser.sh",
+      "command": "Composite: unchanged reading/fact/performance suites from /tmp/time-read-pg.sh and final3original App cases from /tmp/time-read-browser.sh",
       "status": "passed",
       "exitCode": 0,
-      "passed": 47,
+      "passed": 27,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "49dac788df5167a53307d7219e085d17261e2c14",
-      "sourceFingerprint": "1a9ededd1c6f47df0f4149f3881af1cfac5b0c68a53f8c261d4fc8ada593b9b8",
-      "context": "Candidate working tree on real release base49dac788. Node22.22.0; canonical Vitest configs/maxWorkers1; marked low-privilege PG16, pinned Chromium1194, original authenticated App. No live/Acceptance data or deployments. Composite native report preserves original three unchanged passing DB suites and six rerun original App tests; initial fixture/selector failure remains in original report, not relabeled. Type-only import correction does not alter emitted runtime, and later document metadata/feedback reset changes are covered by updated units/App build. No claim of现场 acceptance.",
-      "startedAt": "2026-11-14T18:47:03.076Z",
-      "endedAt": "2026-11-14T19:01:56.929Z",
-      "log": "/tmp/customer-comment-native-final.json",
-      "logSha256": "778c0ef7a855fe15f5d3016390ebb8efeb22a8b1389e0db2c5762ee9065de17a",
+      "testedHead": "06fd7779b60ffe94894f8b978eb08009462c9aa7",
+      "sourceFingerprint": "0230ad92c8a0b0338767c49b77f9f2adae23ab7e4be1ae3abf9d2226f8e87883",
+      "context": "Candidate working tree on real release base06fd7779. Node22.22.2/npm10.9.9; canonical maxWorkers1 and marked low-privilege isolatedPG16; pinned actual Chromium1194. Three unchanged database suites retain original passing evidence; changed App/PO-label assertions rerun on actual A/B pages. No live writes or deployment. Original132unit baseline before final UI consumer checks is superseded by134current cases; no statement of Acceptance verification.88-order7samples7070SQL with7100cap retained.",
+      "startedAt": "2026-11-15T02:33:00.618Z",
+      "endedAt": "2026-11-15T02:41:01.908Z",
+      "log": "/tmp/time-read-native-final.json",
+      "logSha256": "4953933bf2ccf377746f3a73a7eaf8c4c6bee5b456b499d3dff285fca9c0954f",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "778c0ef7a855fe15f5d3016390ebb8efeb22a8b1389e0db2c5762ee9065de17a"
+          "sha256": "4953933bf2ccf377746f3a73a7eaf8c4c6bee5b456b499d3dff285fca9c0954f"
         }
       ]
     }

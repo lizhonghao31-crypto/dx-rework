@@ -3,9 +3,9 @@ import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {originalNodeDeadlineLabel} from '../../apps/web/src/journey-sla-details.js';
 import {describe,it,expect} from 'vitest';
-import type {JourneyNode} from '@dx-rework/contracts/digital-production-journey';
+import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {evaluateFixedScheduleScope,type ScheduleScopeInput} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
-import {CockpitActualDates,CockpitFixedTargetDates,cockpitTargetDifference,cockpitOwnStatus,cockpitDuration,cockpitDurationRange,observedTargetDelta,cockpitScopeProgress} from '../../apps/web/src/cockpit-fixed-schedule.js';
+import {CockpitActualDates,CockpitFixedTargetDates,cockpitTargetDifference,cockpitOwnStatus,cockpitDuration,cockpitDurationRange,observedTargetDelta,cockpitScopeProgress,cockpitScheduleReason} from '../../apps/web/src/cockpit-fixed-schedule.js';
 const scope=(id:string,end='2026-11-10T10:00:00.000Z'):ScheduleScopeInput=>({scopeRef:'po:'+id,lineId:id,targetRevision:'TEST1',work:[{id:'work',canonicalWorkRef:'work:'+id,dependsOn:[],start:'2026-11-10T08:00:00.000Z',end,minutes:120,calendar:'continuous',responsibilitySlaRef:'TEST original adopted',responsibilityMinutes:120,responsibilityCalendar:'continuous'}],facts:{work:{ready:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},clockStart:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},completed:{precision:'unknown'},businessCompleted:false,waitingForPredecessors:false,evidenceRefs:['TEST original readiness']}},terminalIds:['work'],customerGoal:end});
 const projected=(input=scope('A'),now='2026-11-10T10:00:00.000Z')=>evaluateFixedScheduleScope(input,now).nodes[0]!;
 const node=(id:string,p=projected()):JourneyNode=>({key:'bulk_cutting',instanceId:id,label:'开裁',stage:'cutting',state:'active',current:true,round:1,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'running',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,fixedTargets:[{scopeRef:p.scopeRef,lineId:id,progress:p}]});
@@ -22,7 +22,7 @@ describe('approved fixed schedule presentation without changing business classif
  it('ticks only unfinished known target differences while leaving completion and termination frozen',()=>{const p=projected();expect(observedTargetDelta(p,'2026-11-10T12:00:00Z').signedValue).toBe(120);expect(observedTargetDelta({...p,businessCompleted:true},'2026-11-10T12:00:00Z')).toBe(p.goalDelta);const stopped={...p,goalDelta:{...p.goalDelta,kind:'terminated' as const,signedValue:null}};expect(observedTargetDelta(stopped,'2026-11-12T12:00:00Z')).toBe(stopped.goalDelta);});
  it('uses the original Beijing date boundary instead of midnight instant lateness',()=>{const p=projected(),dated={...p,goalDelta:{...p.goalDelta,targetAt:'2026-11-10T16:00:00Z',targetPrecision:'date' as const,targetDate:'2026-11-10',unit:'day' as const}};expect(observedTargetDelta(dated,'2026-11-10T15:59:59Z').signedValue).toBe(0);expect(observedTargetDelta(dated,'2026-11-10T16:00:00Z').signedValue).toBe(1);});
  it('separates own adopted responsibility from exceeding B and never declares no responsibility without own evidence',()=>{const p=projected(scope('A'),'2026-11-10T12:00:00Z');expect(cockpitOwnStatus(node('A',p))).toMatchObject({text:'逾期（有责口径）'});expect(cockpitOwnStatus(node('A',{...p,ownSla:{...p.ownSla,state:'within'}}))).toMatchObject({text:'逾期（无责）'});expect(cockpitOwnStatus(node('A',{...p,ownSla:{...p.ownSla,state:'not_adopted'}}))).toMatchObject({text:'超目标·待核'});});
- it('displays exact perPO buffer including zero and preserves unknown without cross-scope credit',()=>{const native=evaluateFixedScheduleScope(scope('A'),'2026-11-10T10:00:00Z');expect(cockpitScopeProgress({...native,lagMinutes:{minimum:0,maximum:0}}).text).toBe('可用0分钟');expect(cockpitScopeProgress({...native,lagMinutes:{minimum:-120,maximum:-120}}).text).toBe('可用2小时');expect(cockpitScopeProgress({...native,state:'late',lagMinutes:{minimum:60,maximum:60}}).text).toBe('落后1小时');expect(cockpitScopeProgress({...native,state:'unknown',lagMinutes:null}).text).toBe('待核');});
+ it('displays exact perPO buffer including zero and preserves unknown without cross-scope credit',()=>{const result=evaluateFixedScheduleScope(scope('A'),'2026-11-10T10:00:00Z'),native={...result,completionEstimate:{kind:'conditional' as const,earliest:'2026-11-10T10:00:00Z',latest:'2026-11-10T10:00:00Z'}};expect(cockpitScopeProgress({...native,lagMinutes:{minimum:0,maximum:0}}).text).toBe('可用0分钟');expect(cockpitScopeProgress({...native,lagMinutes:{minimum:-120,maximum:-120}}).text).toBe('可用2小时');expect(cockpitScopeProgress({...native,state:'late',lagMinutes:{minimum:60,maximum:60}}).text).toBe('预测落后1小时');expect(cockpitScopeProgress({...native,state:'unknown',lagMinutes:null}).text).toBe('待核');});
  it('never labels frozen B as original task D in task or risk presentations',()=>{const value=node('A');value.expectedAt='2027-03-01T08:00:00Z';value.expectedKind='plan';value.expectedPrecision='instant';value.nativeTaskDeadline={at:'2026-11-10T10:00:00Z',precision:'instant'};value.records=[{domain:'task',id:value.instanceId,url:null,mode:'read',version:null,lineId:null}];expect(originalNodeDeadlineLabel(value)).toContain('2026/11/10');expect(originalNodeDeadlineLabel(value)).not.toContain('2027/3/1');delete value.nativeTaskDeadline;expect(originalNodeDeadlineLabel(value)).toContain('2026/11/10');delete value.fixedTargets![0]!.progress.ownSla.deadlineAt;expect(originalNodeDeadlineLabel(value)).toBe('原截止待核');});
  it('formats the one physical span, real zero and date intervals without inventing unknown elapsed time',()=>{expect(cockpitDuration(null)).toBe('—');expect(cockpitDuration(0)).toBe('0分钟');expect(cockpitDuration(1500)).toBe('1天1小时');expect(cockpitDurationRange({minimum:60,maximum:120})).toBe('1小时～2小时');});
 });
@@ -56,4 +56,20 @@ it('Acceptance PR02 Review retains distinct native batch deadlines without borro
  expect(html()).toContain('各批原截止见节点');expect(html()).not.toContain('未开始或待核');
  value.fixedTargets![0]!.progress.ownSla={state:'unknown',deadlineAt:null,overdueMinutes:null,sourceRef:'TEST unready PO B'};
  expect(originalNodeDeadlineLabel(value)).toBe('责任计时未开始或待核');expect(html()).not.toContain('各批原截止见节点');expect(html()).not.toContain('08:30');
+});
+
+it('keeps unbounded forecast slack uncertain and separates a predicted gap from customer overdue',()=>{
+ const native=evaluateFixedScheduleScope(scope('A'),'2026-11-10T10:00:00Z');
+ expect(native.completionEstimate?.kind).toBe('lower_bound');
+ for(const lag of [{minimum:0,maximum:0},{minimum:-120,maximum:-60}])expect(cockpitScopeProgress({...native,lagMinutes:lag})).toMatchObject({text:'进度待核',tone:'neutral'});
+ expect(cockpitScopeProgress({...native,lagMinutes:{minimum:60,maximum:120},state:'late',customerDuePassed:false})).toMatchObject({text:'预测至少落后1小时',tone:'danger'});
+ expect(cockpitScopeProgress({...native,completionEstimate:{kind:'actual',earliest:'2026-11-10T11:00:00Z',latest:'2026-11-10T11:00:00Z'},lagMinutes:{minimum:60,maximum:60}}).text).toBe('落后1小时');
+});
+
+it('keeps predicted progress warnings independent from the actual customer deadline status',()=>{
+ const native=evaluateFixedScheduleScope(scope('A'),'2026-11-10T11:00:00Z');
+ const order={lines:[{id:'A',po:'TEST-PO'}],display:{mainState:'active'},fixedSchedule:{state:'late',scopes:[{...native,state:'late',customerDuePassed:false}]}} as unknown as OrderJourney;
+ expect(cockpitScheduleReason(order)).toEqual({text:'预测进度落后 · PO TEST-PO',tone:'warning'});
+ order.fixedSchedule!.scopes[0]!.customerDuePassed=true;
+ expect(cockpitScheduleReason(order)).toEqual({text:'交期已过 · PO TEST-PO',tone:'danger'});
 });
