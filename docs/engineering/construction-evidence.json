@@ -1,164 +1,113 @@
 {
   "version": 1,
-  "base": "dca186adf3ee3251d111073c29d45d3661c89536",
+  "base": "dce4dbbebfed84e5357036d405ce72e2ac49c510",
   "risk": "full",
-  "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
+  "sourceFingerprint": "06a114dd172a103c347310ae28cbdfccc69ce1dc8d5fc0d89789875fd4393658",
   "rules": [
     {
-      "rule": "Each contract document accepts up to three cumulative files, with unchanged 20 MB, authorization, transaction, idempotency and first-return facts.",
-      "source": "2026-11-09 user: 每个合同版本最多三份，一个入口；按钮叫“查看回签文件”；开工并入main。既定补传不更新首次回传日期与时效；不部署。",
+      "rule": "Order receiving card good quantity equals cumulative actual minus cumulative defective from the same stable group and date/search observation. It is not cumulative actual minus period defective, current-all defective or a new QC release. Include trusted current/historical correction and batch merge adjustments; genuine zero remains zero.",
+      "source": "2026-11-15 user via Dot: main order card 实收 含次品数 must become 实收 正品数量 with actual good pieces; retain unrequested top KPI/difference semantics. docs/requirements/v1-receiving-defective-quantity-2026-08-26.md2026-11-15.",
       "writes": [
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
-        "apps/web/src/sourcing-contract-return-upload.ts",
-        "packages/contracts/src/sourcing.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/sourcing-contract-return-upload.test.ts"
+        "apps/api/src/receiving/receiving-service.ts",
+        "tests/integration/receiving-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/migrations/0208_sourcing_contract_return_uploads.sql",
-        "apps/api/src/sourcing/contract-return-state.ts"
+        "apps/api/src/receiving/receiving-board-filters.ts",
+        "apps/api/src/receiving/receiving-routes.ts",
+        "apps/api/src/receiving/receiving-analysis.ts",
+        "apps/api/migrations/0095_receiving_defective_quantity.sql",
+        "apps/api/migrations/0138_receiving_receipt_corrections.sql"
       ],
       "oldTests": [
-        "tests/unit/sourcing-contract-return-upload.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "tests/integration/receiving-postgres.test.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/unit/receiving-defective-quantity.test.ts"
       ],
-      "initialization": "No schema/seed/backfill change. Existing one/two files can append; over-three evidence retained; fresh marked local PostgreSQL 18.6 low-privilege schema created and removed by existing fixture.",
-      "dateAndPermission": "Unchanged actor and attachment ownership checks; append two/three preserves first returned_at, late status and overdue hours; old/new document quota isolated.",
-      "expectation": "Three succeed, fourth refuses, only one competitor wins the last slot, no retry duplicate or historic rewrite.",
+      "initialization": "No migration/backfill or new writes. Add one derived response field cumulativeGoodQuantity; preserve existing actual/defective/current/period fields and all raw facts. The same SQL snapshot/group by stable cutting identity or legacy style computes both cumulative operands; no extra per-row queries. Original inclusive fields remain available to old web, history, export and analysis.",
+      "dateAndPermission": "Range cumulative defective uses the identical exclusive Beijing end-date boundary and correction-event observation as existing cumulative actual. Search keeps existing whole-history semantics. Root corrections/merge use original event deltas; no role, capability, object scope, Root exception or write path changes.",
+      "expectation": "Prior40/defective2 plus today30/defective1 yields cumulative good67, historical38 and search67; later90/6 correction yields84 but previous80/5 remains75; merge90/2 yields88; all10defective gives good0 while inclusive received10 and difference0 remain. Original real receiving/analysis suite34cases passes.",
       "checks": [
-        "unit",
-        "postgres"
+        "postgres",
+        "unit"
       ]
     },
     {
-      "rule": "One exact 查看回签文件 entry opens all authorized files, deduplicates aggregate/history and keeps contract versions and unknown versions separate.",
-      "source": "2026-11-09 user: 每个合同版本最多三份，一个入口；按钮叫“查看回签文件”；开工并入main。既定补传不更新首次回传日期与时效；不部署。",
+      "rule": "Only the receiving order card shows the true good quantity with 实收 正品数量. Keep top period/search received KPI inclusive of defects, original defect column, history/entry/correction/export totals and receiving/packing difference semantics. Do not silently label missing projection as zero or actual.",
+      "source": "Same2026-11-15 user instruction and original approved inclusive-receipt distinction. Existing UI structure/styles retained; no new page or panel.",
       "writes": [
-        "apps/web/src/sourcing-contract-return-files.tsx",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "apps/web/src/sourcing-workspace.css",
-        "tests/unit/sourcing-contract-return-files.test.ts",
-        "tests/fixtures/contract-return-files.tsx",
-        "tests/acceptance/contract-return-files-browser.mjs",
-        "tests/acceptance/contract-transfer-delivery-browser.mjs"
+        "apps/web/src/order-board-page.tsx",
+        "tests/unit/order-board-good-quantity.test.ts"
       ],
       "reads": [
-        "apps/web/src/image-viewer.tsx",
-        "apps/api/src/tools/routes.ts",
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts"
+        "apps/web/src/received-quantity-label.tsx",
+        "apps/web/src/received-quantity-label.css",
+        "apps/web/src/order-board-page.css",
+        "apps/api/src/receiving/receiving-routes.ts"
       ],
       "oldTests": [
-        "tests/acceptance/contract-transfer-delivery-browser.mjs"
+        "tests/unit/order-board-cutting-facts.test.ts",
+        "tests/unit/order-board-global-style-search.test.ts",
+        "tests/unit/receiving-board-pagination.test.ts",
+        "tests/unit/receiving-defective-quantity.test.ts"
       ],
       "newTests": [
-        "tests/unit/sourcing-contract-return-files.test.ts",
-        "tests/acceptance/contract-return-files-browser.mjs"
+        "tests/unit/order-board-good-quantity.test.ts"
       ],
-      "initialization": "No new API or data migration. Groups derive only from authorized existing response; legacy excess files remain visible without slicing.",
-      "dateAndPermission": "No new role grants or file endpoints; existing permission-filtered response and preview/download authorization retained. Historical submission dates kept.",
-      "expectation": "Desktop/mobile one entry, mixed file switch, historical grouping, failure fallback, long names and Escape focus restoration; empty permission response has no entry.",
+      "initialization": "Existing card location, CSS classes, number formatter and shared inclusive label usages preserved; good-card local label avoids changing shared ReceivedQuantityLabel. No API route or export shape/column change beyond additive JSON read field. Old API missing the additive field shows unknown instead of NaN or invented good count.",
+      "dateAndPermission": "The card consumes the server derived snapshot. Date/search controls and native write/Root actions remain original; no access changes belong in this PR. All rows retain existing business status and difference controls from inclusive values.",
+      "expectation": "Original OrderBoardPage mounted in React shows server67, genuine0 and missing projection unknown; top period30 remains labelled含次品数 and expanded history keeps original inclusive30/70. Existing card seven-column/cutting layout contracts, status/search/pagination and backend differences stay unchanged.",
       "checks": [
         "unit",
-        "browser",
-        "static"
+        "postgres"
       ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-return-files.test.ts tests/unit/sourcing-contract-return-state.test.ts tests/unit/sourcing-additional-merchandiser.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/dx-contract-unit.json",
+      "kind": "tests",
+      "command": "vitest run order-board-good-quantity/receiving-defective-quantity/order-board-cutting-facts/order-board-global-style-search/receiving-board-pagination --maxWorkers=2",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dca186adf3ee3251d111073c29d45d3661c89536",
-      "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
-      "context": "Independent main checkout; Node 22, npm 10; Vitest canonical maxWorkers=1; PostgreSQL 18.6 local marked database dx_contract_test, non-superuser contract_runner, port 55439; Chromium synthetic fixtures only.",
-      "startedAt": "2026-11-09T03:52:44.944886+00:00",
-      "endedAt": "2026-11-09T03:52:45.916266+00:00",
-      "logSha256": "f49caf4ae67731b48bf1263feb676c399fa00f027ba9ec86d4a867a5baec9c02",
-      "kind": "tests",
-      "passed": 13,
+      "passed": 11,
       "failed": 0,
       "skipped": 0,
-      "log": "/tmp/dx-contract-unit-final.log",
+      "testedHead": "dce4dbbebfed84e5357036d405ce72e2ac49c510",
+      "sourceFingerprint": "06a114dd172a103c347310ae28cbdfccc69ce1dc8d5fc0d89789875fd4393658",
+      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9; bounded workers2. React/jsdom original OrderBoardPage uses labelled synthetic response/session adapters only for display: server-projected67, real0 and missing field; unchanged inclusive KPI/history and original differences. Existing quantity, cutting, search, pagination tests retained.",
+      "startedAt": "2026-11-15T09:53:59.202Z",
+      "endedAt": "2026-11-15T09:54:01.376Z",
+      "log": "/tmp/main-good-unit.json",
+      "logSha256": "95992cc5c79471c163cc19b96cda0b04af1dd0812b0d2dffaa16ee366e3a224a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "afb1290ada725df6e2b307d39fc4d10c6dc21e13ef2d6e0a39877f80d8f66d9e"
+          "sha256": "95992cc5c79471c163cc19b96cda0b04af1dd0812b0d2dffaa16ee366e3a224a"
         }
       ]
     },
     {
       "id": "postgres",
-      "command": "TEST_DATABASE_URL=postgresql://contract_runner@127.0.0.1:55439/dx_contract_test DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts -t 'retains the first file|atomically returns three|serializes cumulative return|allocates three files|adds one actionable merchandiser todo' --reporter=verbose --reporter=json --outputFile=/tmp/dx-contract-pg.json",
+      "kind": "tests",
+      "command": "bash /tmp/main-good-pg.sh; canonical vitest.business-chain.config.ts tests/integration/receiving-postgres.test.ts --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dca186adf3ee3251d111073c29d45d3661c89536",
-      "sourceFingerprint": "8fdc9d6a994410d936befc0ef62eb199357d6687e9529ea0d728511000e685fb",
-      "context": "Independent main checkout; Node 22, npm 10; Vitest canonical maxWorkers=1; PostgreSQL 18.6 local marked database dx_contract_test, non-superuser contract_runner, port 55439; Chromium synthetic fixtures only.",
-      "startedAt": "2026-11-09T03:42:02.966978+00:00",
-      "endedAt": "2026-11-09T03:42:06.147392+00:00",
-      "logSha256": "16e6854712a9555ab17fb5950cef1cdadd3339836064b6c9323abfa5ff348cc8",
-      "kind": "tests",
-      "passed": 5,
+      "passed": 34,
       "failed": 0,
-      "skipped": 84,
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "tests/integration",
-        "tests/helpers",
-        "scripts",
-        "vitest.config.ts",
-        "package.json",
-        "package-lock.json"
-      ],
-      "inputFingerprint": "ee2b162407d367c1c884829e907aa3e7832d6531ce22744715c963e2cc8ac31b",
-      "log": "/tmp/dx-contract-postgres-final.log",
+      "skipped": 0,
+      "testedHead": "dce4dbbebfed84e5357036d405ce72e2ac49c510",
+      "sourceFingerprint": "06a114dd172a103c347310ae28cbdfccc69ce1dc8d5fc0d89789875fd4393658",
+      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9, canonical workers1. Fresh marked local owned PG16, low-privilege dx_rework_test; original ReceivingService, immutable correction/merge events and original schema fixtures. All34tests pass, no skips; container stopped by trap. No deployed/live business data, production identity, permission, schema or date changes.",
+      "startedAt": "2026-11-15T09:54:29.312Z",
+      "endedAt": "2026-11-15T09:54:32.280Z",
+      "log": "/tmp/main-good-pg.json",
+      "logSha256": "94983ea70f4523b50c3fda1a4b8ec47041b3a5d37fcaba72b37c4f890ec7f754",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6ca664e944f8ca41057ca5095ff8f79665cd4d469da0fcf397a41c920018b16c"
+          "sha256": "94983ea70f4523b50c3fda1a4b8ec47041b3a5d37fcaba72b37c4f890ec7f754"
         }
       ]
-    },
-    {
-      "id": "browser",
-      "command": "NODE_ENV=production node --test tests/acceptance/contract-return-files-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "dca186adf3ee3251d111073c29d45d3661c89536",
-      "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
-      "context": "Independent main checkout; Node 22, npm 10; Vitest canonical maxWorkers=1; PostgreSQL 18.6 local marked database dx_contract_test, non-superuser contract_runner, port 55439; Chromium synthetic fixtures only.",
-      "startedAt": "2026-11-09T03:52:45.916569+00:00",
-      "endedAt": "2026-11-09T03:52:48.128281+00:00",
-      "logSha256": "e9432215d0fcfa79d5dfd4c8d963694ee0909219c9e68f1050e55d2ecb5d24ad",
-      "kind": "tests",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0,
-      "log": "/tmp/dx-contract-browser-final.log",
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "e9432215d0fcfa79d5dfd4c8d963694ee0909219c9e68f1050e55d2ecb5d24ad"
-        }
-      ]
-    },
-    {
-      "id": "static",
-      "command": "npm run lint && npm run typecheck && npm run build --workspaces --if-present",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "dca186adf3ee3251d111073c29d45d3661c89536",
-      "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
-      "context": "Independent main checkout; Node 22, npm 10; Vitest canonical maxWorkers=1; PostgreSQL 18.6 local marked database dx_contract_test, non-superuser contract_runner, port 55439; Chromium synthetic fixtures only.",
-      "startedAt": "2026-11-09T03:52:48.128468+00:00",
-      "endedAt": "2026-11-09T03:53:24.326992+00:00",
-      "logSha256": "a51b6cf173c293f35260dbf173185c1ba29a57c9b74c6a5575e18bbc98c84018",
-      "kind": "command",
-      "log": "/tmp/dx-contract-static-final.log"
     }
   ]
 }
