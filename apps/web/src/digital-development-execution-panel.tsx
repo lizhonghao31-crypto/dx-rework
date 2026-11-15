@@ -16,6 +16,7 @@ import {navigateInternalPage} from "./internal-navigation.js";
 import {roleLabel} from "./components.js";
 import {useDigitalDetailNavigationGuard} from "./use-digital-detail-navigation-guard.js";
 import {developmentActionReceipt} from "./digital-operation-feedback.js";
+import {submittedDevelopmentUploads,settleDevelopmentUploads} from './development-submitted-uploads.js';
 import {DigitalReadFailure,asDigitalReadError} from './digital-read-failure.js';
 import {DevelopmentAssignmentTable} from "./development-assignment-table.js";
 import {DevelopmentMaterialCheck} from "./development-material-check.js";
@@ -42,8 +43,10 @@ export type ExternalPatternRecord={requestId:string;roundNumber:number;actualDep
 type State={technical?:DevelopmentTechnicalState;externalPatterns?:ExternalPatternRecord[];canRequestExternalPattern?:boolean;sewingRecipientName?:string|null;slaEnrolled?:boolean;fixedCutting?:{version:number;assigneeId:string|null;assigneeName:string|null;valid:boolean;canConfigure:boolean}|null;reopenMaterialCheck?:{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}|null;materialVerification?:MaterialVerification|null;fabricCases?:FabricCase[];unifiedArrangement?:boolean;arrangement?:DevelopmentArrangement|null;materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;supplementCheckTaskId?:string|null;nextSteps?:Array<{taskId:string;label:string}>;canConfirmExecution?:boolean;patternPreparation?:{version:number;roundId:string;roundType:string;status:string;categorySaved:boolean;priceSaved:boolean;workerId:string|null;workerName:string|null}|null;patternOrder:{orderId:string}|null;routeFacts:RouteFact[];sheet:DevelopmentSheet;dispatch:{version:number;patternWorkerId:string;cuttingWorkerId:string;sewingWorkerId:string}|null;tasks:DigitalTask[];facts:{factId:string;taskId:string|null;kind:string;payload:{note?:string;recommendation?:string;decision?:string;attachmentIds?:string[];items?:Array<{materialId:string;physical:boolean;quantity:boolean;color:boolean;specification:boolean}>};recordedAt:string}[];canReportFabric:boolean;canDispatch:boolean;canDecideFabric:boolean;qrAvailable:boolean};
 export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onChanged,workspace=false,onPatternOrderLoaded,onPreassignedSewingLoaded}:{sourceId:string;materialRevision?:number;taskId?:string|undefined;onChanged?:((notice?:string)=>void)|undefined;workspace?:boolean;prioritizeMaterialCheck?:boolean;onPatternOrderLoaded?:((id:string|null)=>void)|undefined;onPreassignedSewingLoaded?:((person:{id:string;name:string}|null)=>void)|undefined}){
   const previews=useDocumentUploadPreviews();
-  const [state,setState]=useState<State|null>(null),[people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]),[peopleFor,setPeopleFor]=useState<string|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[craftFiles,setCraftFiles]=useState<string[]>([]),[reportFiles,setReportFiles]=useState<string[]>([]),[sewingFiles,setSewingFiles]=useState<string[]>([]),[tailFiles,setTailFiles]=useState<string[]>([]),[externalFiles,setExternalFiles]=useState<string[]>([]);
+  const [state,setState]=useState<State|null>(null),[people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]),[peopleFor,setPeopleFor]=useState<string|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [technicalUploads,setTechnicalUploads]=useState<Partial<Record<DevelopmentUploadPurpose,string[]>>>({});
+  // Compatibility fields are views of the same pending-reference state.
+  const craftFiles=[...new Set([...(technicalUploads['工艺开发板']??[]),...(technicalUploads['纸样成果']??[])])],reportFiles=technicalUploads['面料报告']??[],sewingFiles=technicalUploads['车板成果']??[],tailFiles=technicalUploads['尾查照片']??[],externalFiles=technicalUploads['外部纸样']??[];
   const [uncertainWrite,setUncertainWrite]=useState(false),[committedWrite,setCommittedWrite]=useState<{path:string;key:string}|null>(null);
   const [writeOutcome,setWriteOutcome]=useState<{path:string;phase:'writing'|'committed'|'complete'|'unknown'|'rejected'}|null>(null);
   const [reopenReceipt,setReopenReceipt]=useState<{taskId:string;target:string}|null>(null);
@@ -58,7 +61,7 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
   useDigitalDetailNavigationGuard(uncertainWrite,busy,writing,"本次办理已提交但最新状态未确认；离开会丢失本页未保存输入与重试记录，仍要离开？");
   const loadVersion=useRef(0);
   const uploadEpoch=useRef(0),activeUpload=useRef(false);
-  useEffect(()=>{uploadEpoch.current++;previews.reset();setTechnicalUploads({});setCraftFiles([]);setSewingFiles([]);setTailFiles([]);setExternalFiles([]);setReportFiles([]);if(activeUpload.current){activeUpload.current=false;writing.current=false;setBusy(false);}return()=>{uploadEpoch.current++;};},[sourceId,taskId,state?.sheet.roundNumber]);
+  useEffect(()=>{uploadEpoch.current++;previews.reset();setTechnicalUploads({});if(activeUpload.current){activeUpload.current=false;writing.current=false;setBusy(false);}return()=>{uploadEpoch.current++;};},[sourceId,taskId,state?.sheet.roundNumber]);
   const loadPeople=async(next:State,version=loadVersion.current)=>{
     setPeopleError(null);setPeopleReading(true);
     try{const candidates=await digitalRequest<typeof people>('access/candidates');if(version!==loadVersion.current)return;setPeople(candidates);setPeopleFor(`${sourceId}:${next.arrangement?.version??next.dispatch?.version??0}`);const sewing=candidates.find(person=>person.id===next.dispatch?.sewingWorkerId);onPreassignedSewingLoaded?.(sewing?{id:sewing.id,name:sewing.displayName}:null);}
@@ -99,13 +102,8 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
       }
       setCommittedWrite({path,key:operation.current.key});setWriteOutcome({path,phase:"committed"});
       unresolvedWrite.current=false;uncertainWritePending.current=true;setUncertainWrite(true);
-      if(path==='technical/artifacts'){previews.saved(craftFiles);setCraftFiles([]);}
-      const usedPurpose=path==='technical/comments'?'客户评语依据':path==='technical/position'?'定位图':path==='technical/patch-complete'?(state?.tasks.find(t=>t.taskId===(body as {taskId:string}).taskId)?.taskKind==='development_patch_tail_check'?'尾查照片':'补做成果'):null;
-      if(usedPurpose){previews.saved(technicalUploads[usedPurpose]??[]);setTechnicalUploads(current=>({...current,[usedPurpose]:[]}));}
-      if(path==="complete"){previews.saved(craftFiles);setCraftFiles([]);}
-      if(path==="route"){previews.saved([...sewingFiles,...tailFiles,...technicalUploads["工艺回样照片"]??[]]);setSewingFiles([]);setTailFiles([]);setTechnicalUploads(current=>({...current,"工艺回样照片":[]}));}
-      if(path==='external-pattern'&&(body as {action:string}).action==='receive'){previews.saved(externalFiles);setExternalFiles([]);}
-      if(path==="fabric-reports"){previews.saved(reportFiles);setReportFiles([]);}
+      const submittedUploads=submittedDevelopmentUploads(path,body);
+      if(submittedUploads.ids.length){previews.saved(submittedUploads.ids,submittedUploads.purposes);setTechnicalUploads(current=>settleDevelopmentUploads(current,submittedUploads));}
       const submitted=state?.tasks.find(task=>task.taskId===(body as {taskId?:string})?.taskId);
       const completedCheck=path==="check"&&(body as {result?:string}).result==="通过";
       if(path==="reopen-materials"){uncertainWritePending.current=false;setUncertainWrite(false);}
@@ -137,7 +135,6 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
         },undefined,undefined,file);
         if(context!==uploadEpoch.current)return;previews.uploaded(file,ready.attachmentId);
         setTechnicalUploads(current=>({...current,[purpose]:[...new Set([...(current[purpose]??[]),ready.attachmentId])]}));
-        (['工艺开发板','纸样成果'].includes(purpose)?setCraftFiles:purpose==='车板成果'?setSewingFiles:purpose==='尾查照片'?setTailFiles:purpose==='外部纸样'?setExternalFiles:setReportFiles)(current=>[...new Set([...current,ready.attachmentId])]);
       }catch(reason){if(context!==uploadEpoch.current)return;const message=reason instanceof Error?reason.message:'附件尚未取得就绪回执';previews.failed(file,message);setError(message);}}
     }catch(reason){if(context===uploadEpoch.current){const message=reason instanceof Error?reason.message:'附件授权未完成';for(const file of selected)previews.failed(file,message);setError(message);}}
     finally{if(context===uploadEpoch.current){activeUpload.current=false;writing.current=false;setBusy(false);}}
