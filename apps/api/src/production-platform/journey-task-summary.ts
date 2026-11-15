@@ -1,3 +1,4 @@
+import {taskCraftDisplay} from './task-craft-display.js';
 import {retiredBulkPreshrinkTaskIds} from './bulk-preshrink-requirement.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import type {Pool,PoolClient} from 'pg';
@@ -13,12 +14,13 @@ const iso=(value:Date|string|null|undefined)=>value==null?null:new Date(value).t
 type SummaryTask=DigitalTask&{completionKeys:string[];completion:{actor_id:string;actor_name:string;recorded_at:string}|null;laterOwner:{assigneeId:string|null}|null;previousOwnerName:string|null};
 export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:string[],time?:BusinessTime):Promise<Map<string,SummaryTask>>{
  if(!ids.length)return new Map();
+ const craftTable=Boolean((await db.query("SELECT to_regclass('digital_timeline_craft_steps') AS relation")).rows[0]?.relation);
  // Rich projection compares JS Dates, which retain milliseconds only. Keep that note outside SQL.
  const rows=(await db.query(`SELECT t.*,a.source_id,a.production_order_id,a.task_kind,a.assignee_id,a.required_role,
    owner.display_name AS assignee_name,life.state='paused' AS paused,
    effective.due_at,effective.warning_at,effective.entered_at AS sla_entered_at,effective.sla_basis,effective.deadline_kind,coalesce(effective.version,policy.version) AS policy_version,
    CASE WHEN effective.version IS NOT NULL THEN effective.sla_seconds ELSE policy.sla_seconds END AS sla_seconds,
-   coalesce(effective.label,policy.label) AS label,route.tasks AS route_tasks,
+   coalesce(effective.label,policy.label) AS label,${craftTable?"to_jsonb(craft)->'special_craft'->'definition'->>'name' AS craft_name,craft.craft_kind AS craft_kind,craft.sequence AS craft_sequence,(SELECT count(*)::int FROM digital_timeline_craft_steps same_route WHERE same_route.route_ref=craft.route_ref) AS craft_count,":''}route.tasks AS route_tasks,
    document.document AS published_document,revision.route_nodes,
    coalesce(conditions.activation,ARRAY[]::text[]) AS condition_keys,
    coalesce(conditions.completion,ARRAY[]::text[]) AS completion_keys,
@@ -36,6 +38,10 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
     CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,p.label FROM digital_production_deadline_revisions r
     JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by
     WHERE r.task_id=t.task_id ORDER BY r.revision_id DESC LIMIT 1)effective ON true
+  ${craftTable?`LEFT JOIN LATERAL(SELECT CASE WHEN count(DISTINCT ref)=1 THEN min(ref) END AS ref FROM
+    (SELECT substring(value FROM 12) AS ref FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(effective.sla_basis->'basis')='array' THEN effective.sla_basis->'basis' ELSE '[]'::jsonb END) value WHERE value LIKE 'craft-step:%') captured)craft_identity ON true
+  LEFT JOIN digital_timeline_craft_steps craft ON craft.step_id=CASE WHEN craft_identity.ref~'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN craft_identity.ref::uuid ELSE NULL END
+   AND (craft.source_id=a.source_id AND craft.round_number=t.route_version AND craft.route_ref=t.route_instance_id OR craft.production_order_id=a.production_order_id)`:''}
   LEFT JOIN LATERAL(SELECT version,sla_seconds,label FROM digital_production_deadline_policies WHERE node_key=a.task_kind ORDER BY version DESC LIMIT 1)policy ON true
   LEFT JOIN LATERAL(SELECT json_agg(json_build_object('node',CASE WHEN node_key='development_material_recheck' THEN 'development_materials' ELSE node_key END,'key',node_key,'state',state)) AS tasks
     FROM digital_production_tasks prior WHERE prior.route_instance_id=t.route_instance_id AND NOT(prior.task_id=ANY($2::uuid[]))
@@ -56,6 +62,7 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
   WHERE t.task_id=ANY($1::uuid[])`,[ids,await retiredBulkPreshrinkTaskIds(db)])).rows;
  const result=new Map<string,SummaryTask>();
  for(const row of rows){
+  const craftDisplay=taskCraftDisplay(row.task_kind,row.label,row.sla_basis,{kind:row.craft_kind,name:row.craft_name,sequence:row.craft_sequence,count:row.craft_count});
   const routeRows=row.route_tasks??[];
   const declared=row.published_document?(row.route_version===1?['development_materials',...await savedDevelopmentRoute(db,row.source_id,row.published_document as DevelopmentDocument)]:row.route_nodes??[]):null;
   const business=declared?.filter((key:string)=>!excluded.has(key));
@@ -69,7 +76,7 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
    }
    for(const prior of row.predecessors)unmet.push({condition:'predecessor',name:prior.name,missing:prior.name+(prior.state==='cancelled'?'已取消，不能作为完成依据':'尚未完成'),responsibleRole:prior.role,action:`请该岗位从「我的待办」办理本单${prior.name}；已取消的上游由本单管理人员核对当前轮次`,evidenceId:null,verified:true});
   }
-  const value:SummaryTask={...(row.deadline_kind?{deadlineMode:row.deadline_kind,...(row.deadline_kind==='date_target'?{deadlineExclusive:true}:{})}:{}),...(time?.scenarioId&&row.sla_basis?{deadlineExclusive:row.sla_basis.exclusive===true}:{}),unmetConditions:unmet,completionKeys:row.completion_keys,completion:row.completion,laterOwner:row.later_owner,previousOwnerName:row.previous_owner_name,identity:null,priority:'normal',taskId:row.task_id,orderId:row.production_order_id,sourceId:row.source_id,taskKind:row.task_kind,label:row.label,routeProgress,
+  const value:SummaryTask={...(row.deadline_kind?{deadlineMode:row.deadline_kind,...(row.deadline_kind==='date_target'?{deadlineExclusive:true}:{})}:{}),...(time?.scenarioId&&row.sla_basis?{deadlineExclusive:row.sla_basis.exclusive===true}:{}),unmetConditions:unmet,completionKeys:row.completion_keys,completion:row.completion,laterOwner:row.later_owner,previousOwnerName:row.previous_owner_name,identity:null,priority:'normal',taskId:row.task_id,orderId:row.production_order_id,sourceId:row.source_id,taskKind:row.task_kind,...craftDisplay,routeProgress,
    assigneeName:row.assignee_name??null,requiredRole:row.required_role,hasHandover:false,canManage:false,canControl:false,canCorrect:false,assigneeId:row.assignee_id,
    state:row.state,routeVersion:row.route_version,occurrence:row.occurrence,enteredAt:iso(row.sla_basis?row.sla_entered_at:row.entered_at),recordedAt:iso(row.created_at)!,completedAt:iso(row.completed_at),paused:Boolean(row.paused),dueAt:iso(row.due_at),warningAt:iso(row.warning_at),slaHours:row.sla_seconds===null?null:Number(row.sla_seconds)/3600,policyVersion:row.policy_version,timeQuality:row.sla_basis?(row.sla_entered_at?"现场登记":"缺失"):row.entered_quality,blockedReason:row.blocked_reason,canExecute:false};
   result.set(value.taskId,value);

@@ -1,3 +1,4 @@
+import {taskCraftDisplay} from './task-craft-display.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {SlaSettingsSetsService} from './sla-settings-sets.js';
 import {SpecialCraftLibraryService} from './special-craft-library.js';
@@ -779,13 +780,14 @@ export class DigitalProductionTaskService {
     if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
     const factoryQc=task.task_kind==='factory_production_qc'&&task.production_order_id?await factoryProductionFacts(db,task.production_order_id):null;
     const observed=await new ContextBusinessClock(this.database,db === this.database ? undefined : db as PoolClient).read(resource);
-    const taskBasis:string[]=effective?.sla_basis?.basis??[];
-    const stepRef=taskBasis.find(ref=>ref.startsWith('craft-step:'))?.slice(11),craftKind=taskBasis.find(ref=>ref.startsWith('craft-kind:'))?.slice(11);
-    const specialName=craftKind==='special'&&stepRef?(await db.query("SELECT special_craft->'definition'->>'name' AS name FROM digital_timeline_craft_steps WHERE step_id=$1",[stepRef])).rows[0]?.name:null;
-    const craftName=specialName??(craftKind==='embroidery'?'绣花':craftKind==='printing'?'印花':null);
+    const stepRef=taskCraftDisplay(task.task_kind,currentPolicy.label as string,effective?.sla_basis).stepRef;
+    const frozenStep=stepRef?(await db.query(`SELECT to_jsonb(step)->'special_craft'->'definition'->>'name' AS name,step.sequence,step.craft_kind AS kind,
+      (SELECT count(*)::int FROM digital_timeline_craft_steps own WHERE own.route_ref=step.route_ref) AS count
+      FROM digital_timeline_craft_steps step WHERE step.step_id=$1 AND (step.source_id=$2 AND step.round_number=$3 AND step.route_ref=$4 OR step.production_order_id=$5)`,[stepRef,task.source_id,task.route_version,task.route_instance_id,task.production_order_id])).rows[0]:null;
+    const craftDisplay=taskCraftDisplay(task.task_kind,currentPolicy.label as string,effective?.sla_basis,frozenStep);
     const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind});
-    const stepLabel=craftName?({development_printing:craftName,development_craft_dispatch:`发${craftName}`,development_craft_confirmation:`${craftName}回样确认`,process_logistics:`${craftName}物流`,bulk_qc:`${craftName}回仓检查`} as Record<string,string>)[task.task_kind]:null;
-    return { ...(stepRef&&craftName?{stepRef,craftKind:craftKind as 'embroidery'|'printing'|'special'}:{}),...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:stepLabel??currentPolicy.label as string,
+
+    return { ...craftDisplay,...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:craftDisplay.label,
       ...(plannedTargets?{plannedTargets}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,

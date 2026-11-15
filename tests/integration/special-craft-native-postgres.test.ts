@@ -1,3 +1,6 @@
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
+import {JOURNEY_FACT_CALCULATION_VERSION} from '../../apps/api/src/production-platform/journey-fact-model.js';
 import {arrangementInput} from '../helpers/development-arrangement-fixture.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
@@ -40,6 +43,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }});
   const saved=(await new FixedTimelineAdoptionRepository(f.db).existing({kind:'source',id:created[0]!.sourceId},1))!;
   expect(saved.input.craftSteps?.map(step=>step.specialCraft?.definition.name)).toEqual(['TEST 激光','TEST 烫钻']);
+  // Both native rich detail and the compact list must retain the captured
+  // task/step windows; comparing to native rows detects a shared last-kind R/D.
+  const journey=new DigitalJourneyQuery(f.db),sid=created[0]!.sourceId;
+  const nativeRows=(await f.db.query(`SELECT t.task_id,a.task_kind,t.entered_at,r.due_at,p.step_id,p.phase
+    FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+    JOIN digital_timeline_task_positions p USING(task_id)
+    LEFT JOIN LATERAL(SELECT due_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true
+    WHERE a.source_id=$1 AND p.phase IN ('dispatch','work','confirmation') ORDER BY p.route_position`,[sid])).rows;
+  const detail=await journey.read(f.root,sid),listed=(await journey.list(f.root,JourneyFilterSchema.parse({scope:'development',search:detail.designStyleNo}),true)).items.find(item=>item.sourceId===sid)!;
+  for(const item of [detail,listed]){
+   const nodes=item.stages.flatMap(stage=>stage.nodes).filter(node=>nativeRows.some(row=>row.task_id===node.instanceId));
+   expect(nodes.map(node=>node.instanceId)).toEqual(nativeRows.map(row=>row.task_id));
+   for(const row of nativeRows){const node=nodes.find(node=>node.instanceId===row.task_id)!;expect(node.timing?.actualStart).toBe(row.entered_at.toISOString());expect(node.timing?.target.at).toBe(row.due_at.toISOString());expect(node.label).toContain(row.step_id===nativeRows[0]!.step_id?'TEST 激光':'TEST 烫钻');}
+  }
+  // The original fact builder must carry each instance and invalidate the old
+  // calculation version; projection storage must never erase step identity.
+  const client=await f.db.connect();try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const model=await journey.buildFactsWithClient(client,{kind:'source',id:sid},businessNow().toISOString());expect(model.sla.instances?.map(instance=>instance.taskId).sort()).toEqual(nativeRows.map(row=>row.task_id).sort());expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-craft-instance-scope-v6');await client.query('ROLLBACK');}finally{client.release();}
   const quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:created[0]!.sourceId},worker=f.people['pattern-room-worker']!;
   let quote=await quotes.read(worker,resource);
   const own=quote.rows.filter(row=>row.name==='TEST 激光'||row.name==='TEST 烫钻');
@@ -75,6 +95,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const history=await quotes.read(f.root,resource,undefined,confirmedVersion);
   expect(history.rows.filter(row=>row.craftBasis).map(row=>[row.name,row.unitPrice,row.craftBasis!.libraryVersion])).toEqual([['TEST 激光','3',1],['TEST 烫钻','4',1]]);
   expect((await new DigitalBudgetService(f.db,true).read(f.root,order.productionOrderId)).document).toEqual(budget.document);
+  const frozenJourney=await journey.read(f.root,order.productionOrderId);expect(frozenJourney.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===nativeRows[0]!.task_id)?.label).toContain('TEST 激光');expect(JSON.stringify(frozenJourney.stages)).not.toContain('TEST renamed');
 
   const instructions=new ProductionInstructionService(f.db,true),seed=await instructions.read(f.root,order.productionOrderId);
   expect(seed.document.craftSteps?.[0]?.specialCraft).toEqual(first);

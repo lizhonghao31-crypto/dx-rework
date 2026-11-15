@@ -79,10 +79,11 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
   for(const node of originalNative)if(node.key==='development_material_supply'){
    const fresh=untimedRisks.find(value=>value.id===node.instanceId);if(fresh)nativeRisks.find(value=>value.id===node.instanceId)!.risks=[...fresh.risks];
   }
+  for(const instance of inputs.instances??[])if(instance.eligible&&!instance.fact.businessCompleted&&projected.stages.some(stage=>stage.nodes.some(node=>node.current&&node.instanceId===instance.taskId&&node.round===instance.round))){reconsider(instance.deadline.at,instance.deadline.exclusive===false);reconsider(instance.warningAt);}
   const evaluation=inputs.plan?evaluateSlaPlan(inputs.plan,inputs.facts,{...time,now:at},{mode:'read_projection',onNextChange:reconsider}):[];
   attachJourneySupervision(projected,inputs.plan,inputs.original,evaluation,{...time,now:at},
    {original:item.supervision?.originalRevision??null,current:item.supervision?.currentRevision??null},
-   tasks.some(task=>task.kind==='bulk_cutting_external'),{facts:inputs.facts},new Set(tasks.map(task=>task.id)));
+   tasks.some(task=>task.kind==='bulk_cutting_external'),{facts:inputs.facts,...(inputs.instances?.length?{instances:inputs.instances}:{})},new Set(tasks.map(task=>task.id)));
   const fixed=inputs.fixedSchedule?evaluateFixedJourneyBasis(inputs.fixedSchedule,at,false,false):null;
   if(inputs.fixedSchedule&&fixed)attachFixedJourneySchedule(projected,inputs.fixedSchedule,at,{progress:fixed,nextChange:false});
   const deliveryRisks=poDeliveryRisks(item.poDeliveryDates??[],day,delivery).filter(risk=>risk.kind!=='sample'||!delivery.sentLineIds.includes(risk.lineId))

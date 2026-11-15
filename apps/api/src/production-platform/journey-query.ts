@@ -479,7 +479,7 @@ export class DigitalJourneyQuery {
     }
     const materialStates=new Map<number,Awaited<ReturnType<typeof materialReadiness>>>();
     const materialsFor=async(version:number)=>{let value=materialStates.get(version);if(!value){value=await materialReadiness(db,sid!,version);materialStates.set(version,value);}return value;};
-    const taskService=new DigitalProductionTaskService(this.database),taskDtos=[];
+    const taskService=new DigitalProductionTaskService(this.database),taskDtos=[],craftOrder=new Map<string,{sequence:number;phase:number}>();
     const routeTimes=sourceAccess&&sid&&visibleTasks.length?(await db.query(`SELECT f.task_id,f.route_version,f.payload,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=f.task_id AND e.event_kind='time_corrected'
        AND e.payload->>'originalKind'='completed') AS corrected
@@ -491,6 +491,8 @@ export class DigitalJourneyQuery {
       const task=summaryOnly||!actor?summaries!.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db);taskDtos.push(task);
       const state:JourneyState=task.paused&&!["completed","cancelled"].includes(task.state)?"blocked":task.state==="ready"?"active":task.state;
       const node=emptyNode(definition.key,state,task.routeVersion);node.instanceId=task.taskId;node.occurrence=task.occurrence;
+      if(['development_craft_dispatch','development_printing','development_embroidery','development_print_embroidery','development_craft_confirmation'].includes(raw.task_kind))node.label=task.label;
+      if(task.stepRef&&raw.source_id&&task.craftSequence)craftOrder.set(task.taskId,{sequence:task.craftSequence,phase:raw.task_kind==='development_craft_dispatch'?0:raw.task_kind==='development_craft_confirmation'?2:1});
       node.expectedAt=task.dueAt;node.expectedPrecision=task.dueAt?task.deadlineMode==='date_target'?'date':'instant':"missing";node.expectedKind=task.dueAt?"sla":"unset";node.enteredAt=task.enteredAt;
       if(task.deadlineMode!==undefined)node.deadlineMode=task.deadlineMode;
       if(task.deadlineExclusive!==undefined)node.deadlineExclusive=task.deadlineExclusive;
@@ -877,6 +879,13 @@ export class DigitalJourneyQuery {
     if((!summaryOnly||!actor)&&fullOrder&&oid&&visibleTasks.some(task=>['process_logistics','bulk_qc','warehouse_dispatch'].includes(task.task_kind))){
       const factory=await factorySlaEvidence(db,oid);
       if(factory)attachJourneyFactoryDeadlines(baseNodes,visibleTasks,factory,lines);
+    }
+    const scopedCraft=baseNodes.filter(node=>node.current&&craftOrder.has(node.instanceId));
+    if(scopedCraft.length>1){
+      const first=baseNodes.findIndex(node=>scopedCraft.includes(node));
+      scopedCraft.sort((a,b)=>{const own=craftOrder.get(a.instanceId)!,other=craftOrder.get(b.instanceId)!;return own.sequence-other.sequence||own.phase-other.phase||(a.occurrence??0)-(b.occurrence??0)||a.instanceId.localeCompare(b.instanceId,'en');});
+      for(let index=baseNodes.length-1;index>=0;index--)if(scopedCraft.includes(baseNodes[index]!))baseNodes.splice(index,1);
+      baseNodes.splice(first,0,...scopedCraft);
     }
     const stages=journeyStages(baseNodes);
     const item:OrderJourney={observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:visibleCreation&&Date.parse(visibleCreation.at)<=Date.parse(asOf)?visibleCreation.at:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};

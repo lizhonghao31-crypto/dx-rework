@@ -377,3 +377,10 @@ it('maps the new order-time storage and algorithm to its actual PG cases without
   }
   for(const path of ['apps/api/src/production-platform/quotation-assembly.ts','apps/api/src/production-platform/development-commercial-fields.ts'])expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(amendmentSuite);
  });
+
+it('keeps exact craft instance adapters and frozen labels in native and authenticated browser coverage',()=>{
+ for(const name of ['development-craft-instance-evidence','task-craft-display','development-sla-evidence','journey-supervision','journey-task-summary']){
+  const mapped=classifyFullGatePaths([`apps/api/src/production-platform/${name}.ts`]).mappedPostgresTests;
+  expect(mapped).toContain('tests/integration/special-craft-native-postgres.test.ts');expect(mapped).toContain('tests/integration/special-craft-browser-postgres.test.ts');
+ }
+});
