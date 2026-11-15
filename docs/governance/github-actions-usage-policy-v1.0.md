@@ -28,3 +28,9 @@
 summary按实际outcome列成功、失败、取消、不适用及未执行。render/清理成功不等于Gate成功。操作者核证不是平台保护；未知服务器设置保持未知，不擅改required checks。用户明确接受某PR剩余风险而直接合并时，保留失败、未验范围和原文来源，绝不伪造Gate成功；该单次决定不扩大成长期豁免。
 
 Review服务恢复、连接器/CLI传输差异及有效授权按[协议](review-first-final-head-20261027.md)处理，不为无关平台波动重复跑全部业务检查。
+
+## 2026-11-15 PG16 备份恢复演练环境
+
+#995 Full43703571054 已运行的业务及数据库测试通过，但 ubuntu-latest 实际切换为 Ubuntu26.04，演练恢复在 `SET transaction_timeout = 0` 失败。汇总如实拒绝，后续生命周期和打包未执行，不当成通过。该 runner 的[官方软件清单](https://github.com/actions/runner-images/blob/ubuntu26/20261111.196/images/ubuntu/Ubuntu2604-Readme.md)列 PostgreSQL18.6；[PostgreSQL 官方说明](https://www.postgresql.org/docs/18/app-pgdump.html)不保证较新 pg_dump 的输出可以回灌旧版本服务器。
+
+Full 固定使用 Ubuntu24.04；PG16 演练通过原支持的 `DX_REWORK_PG_BIN_DIR=/usr/lib/postgresql/16/bin` 为备份和恢复选择同一套客户端，实际校验/记录三个工具及服务器均为16，不再依赖 PATH 中的默认客户端。工具缺失或版本不符在创建备份前拒绝；原生产脚本、校验和、隔离身份、空目标、单事务/出错终止和 schema readiness 检查保持。没有剔除 dump 语句、吞恢复错误、跳演练或改生产配置。真实隔离 PG16 通过原脚本备份/恢复、232条迁移ledger和额外测试行核验；本地只适配CI机器路径及Git元数据，不代表已验证新的GitHub镜像运行，仍由准确新head的Full完成。

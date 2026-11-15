@@ -35,7 +35,7 @@ jobs:
     concurrency:
       group: pr-gate-${{ inputs.pr_number }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # User-authorized Full Gate ceiling; this changes the limit, not execution cost.
     timeout-minutes: 30
     env:
@@ -284,10 +284,20 @@ jobs:
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/pr17-db-drill"
+          # The archive must be restorable to this PG16 drill, independent of
+          # the hosted runner's default/latest PostgreSQL client.
+          export DX_REWORK_PG_BIN_DIR=/usr/lib/postgresql/16/bin
+          source scripts/deploy/lib.sh
+          assert_postgres_toolchain "$DATABASE_URL"
+          [[ "$(postgres_tool_major pg_dump)" == 16 && \
+             "$(( $(pg_exec psql "$DATABASE_URL" -XAtqc 'show server_version_num') / 10000 ))" == 16 ]] ||
+            die 'CI backup/restore drill requires PostgreSQL 16 clients and server'
+          for tool in psql pg_dump pg_restore; do pg_exec "$tool" --version; done
           node_bin="$(readlink -f "$(command -v node)")"
           mkdir -p "$root/shared" "$root/backups/postgres"
           printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > "$root/shared/.env"
           printf 'DX_REWORK_NODE_BIN=%s\n' "$node_bin" > "$root/shared/deploy.env"
+          printf 'DX_REWORK_PG_BIN_DIR=%s\n' "$DX_REWORK_PG_BIN_DIR" >> "$root/shared/deploy.env"
           chmod 0600 "$root/shared/.env" "$root/shared/deploy.env"
           state="$(node scripts/deploy/database-state.mjs print-current)"
           target_version="$(node -p "require('./apps/api/src/platform/migration-manifest.json').migrations.at(-1).version")"

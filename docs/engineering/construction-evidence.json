@@ -2,7 +2,7 @@
   "version": 1,
   "base": "dce4dbbebfed84e5357036d405ce72e2ac49c510",
   "risk": "full",
-  "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
+  "sourceFingerprint": "74d3df8720f52fb4bcef903c990e117f9132680d39a7fb19cc1928f8f5fd6806",
   "rules": [
     {
       "rule": "Order receiving card good quantity equals cumulative actual minus cumulative defective from the same stable group and date/search observation. It is not cumulative actual minus period defective, current-all defective or a new QC release. Include trusted current/historical correction and batch merge adjustments; genuine zero remains zero.",
@@ -97,6 +97,39 @@
       "checks": [
         "protocol"
       ]
+    },
+    {
+      "rule": "Keep PG16 backup/restore drill actually restorable with matched PG16 client tools, instead of hosted latest client generating commands unsupported by the isolated server. Fail before archive creation on wrong/missing clients/server; preserve all original backup/restore and final reporting checks.",
+      "source": "Full43703571054 PG16 restore rejected SET transaction_timeout=0 on actualUbuntu26.04 hosted image; image official software list18.6. User/Dot authorized systemic fix without weakening checks. docs/governance/github-actions-usage-policy-v1.0.md2026-11-15 PG16 correction.",
+      "writes": [
+        ".github/workflows/full-gate.yml",
+        "scripts/ci/postgres-drill.test.mjs"
+      ],
+      "reads": [
+        "scripts/backup-postgres.sh",
+        "scripts/restore-postgres.sh",
+        "scripts/deploy/lib.sh",
+        "scripts/deploy/database-state.mjs",
+        "scripts/deploy/verify-database-readiness.mjs",
+        "scripts/ci/gate-maintenance.test.mjs",
+        "apps/api/src/platform/migration-manifest.json"
+      ],
+      "oldTests": [
+        "tests/unit/backup-script.test.ts",
+        "tests/integration/backup-runtime-topology.test.ts",
+        "scripts/ci/gate-maintenance.test.mjs"
+      ],
+      "newTests": [
+        "scripts/ci/postgres-drill.test.mjs"
+      ],
+      "initialization": "CI only: pin original Full worker toUbuntu24.04 and explicitly use existing DX_REWORK_PG_BIN_DIR16 config in both commands. Original services/deployment scripts/DB images/backup format and policy unchanged. No apt/network client installation, dump text surgery or ignored restore errors. Same original backup step ID/catalog; summary correctly fails when backup/later required stages are absent.",
+      "dateAndPermission": "Original approved source/target fingerprint separation, explicit isolated confirmation, empty target, checksums, single-transaction exit-on-error, schema manifest readiness, finite30-minute budget and read-only Actions permissions remain. New guards reject18client/16server and16client/15server before backup. No production or Acceptance operations.",
+      "expectation": "Current56targeted CI rules plus5original backup/runtime unit tests pass. Real local PG16 backup and isolated restore passes232ledger/checksum/readiness and two TEST rows, original low-privilege script/config-owner guards active, exact target/container cleaned. Previous2171nonDB+36immediatePG+201businessPG successes retain original99d7head; backup failure and skipped downstream remain failed/unverified until new Full passes.",
+      "checks": [
+        "protocol",
+        "backup_units",
+        "real_drill"
+      ]
     }
   ],
   "checks": [
@@ -111,7 +144,7 @@
       "skipped": 0,
       "testedHead": "6d47f64188f6b188b15abbb2084e178a19015dec",
       "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
-      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9; bounded workers2. React/jsdom original OrderBoardPage uses labelled synthetic response/session adapters only for display: server-projected67, real0 and missing field; unchanged inclusive KPI/history and original differences. Existing quantity, cutting, search, pagination tests retained. Review4577936125 fixed: exact jsdom30.1.3 declared/locked, prior symlink-only dependencies moved aside, fresh npm ci --ignore-scripts --no-audit --no-fund in this checkout, current local node_modules/jsdom resolves inside this worktree, current packages rebuilt. All11run again using this clean dependency tree. Previous local shared-dependency run was not proof of canonical installation.",
+      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9; bounded workers2. React/jsdom original OrderBoardPage uses labelled synthetic response/session adapters only for display: server-projected67, real0 and missing field; unchanged inclusive KPI/history and original differences. Existing quantity, cutting, search, pagination tests retained. Review4577936125 fixed: exact jsdom30.1.3 declared/locked, prior symlink-only dependencies moved aside, fresh npm ci --ignore-scripts --no-audit --no-fund in this checkout, current local node_modules/jsdom resolves inside this worktree, current packages rebuilt. All11run again using this clean dependency tree. Previous local shared-dependency run was not proof of canonical installation. Valid existing local result reused after exact declared app/package/test/runner input hashes match the actual99d7b1f5 detached checkout. Only Full workflow/new CI test changed; same local Node/npm/PG/dependency tree, no cross-head GitHub final receipt reuse.",
       "startedAt": "2026-11-15T10:15:14.762Z",
       "endedAt": "2026-11-15T10:15:16.205Z",
       "log": "/tmp/main-good-clean-unit.json",
@@ -121,7 +154,18 @@
           "format": "vitest-json",
           "sha256": "7c697a711576cf9fabc2208e9d4313984076badc8ebd3fa537cd383ff4bde7af"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs"
+      ],
+      "inputFingerprint": "40b99489b63c0601a691628edf662ae42059c6a1c15f4c3edb6d549e4811507e"
     },
     {
       "id": "postgres",
@@ -134,7 +178,7 @@
       "skipped": 0,
       "testedHead": "6d47f64188f6b188b15abbb2084e178a19015dec",
       "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
-      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9, canonical workers1. Fresh marked local owned PG16, low-privilege dx_rework_test; original ReceivingService, immutable correction/merge events and original schema fixtures. All34tests pass, no skips; container stopped by trap. No deployed/live business data, production identity, permission, schema or date changes. Repeated against current clean installed dependency tree and candidate; same34real cases pass. Quantity production code remains byte-identical to reviewed6d47f641.",
+      "context": "Actual main checkout plus candidate; Node22.22.2/npm10.9.9, canonical workers1. Fresh marked local owned PG16, low-privilege dx_rework_test; original ReceivingService, immutable correction/merge events and original schema fixtures. All34tests pass, no skips; container stopped by trap. No deployed/live business data, production identity, permission, schema or date changes. Repeated against current clean installed dependency tree and candidate; same34real cases pass. Quantity production code remains byte-identical to reviewed6d47f641. Valid existing local result reused after exact declared app/package/test/runner input hashes match the actual99d7b1f5 detached checkout. Only Full workflow/new CI test changed; same local Node/npm/PG/dependency tree, no cross-head GitHub final receipt reuse.",
       "startedAt": "2026-11-15T10:14:37.242Z",
       "endedAt": "2026-11-15T10:14:40.681Z",
       "log": "/tmp/main-good-pg.json",
@@ -144,24 +188,104 @@
           "format": "vitest-json",
           "sha256": "08e5d0b0988d18ec4377cb5b9b21a50a91754376933c7666c5d81a3d97325c97"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "scripts/bind-business-module-owners.mjs",
+        "scripts/check-migrations.mjs",
+        "scripts/migrate.mjs",
+        "scripts/migration-history-policy.mjs",
+        "scripts/migration-integration-check.mjs",
+        "scripts/migration-lib.mjs",
+        "scripts/navigation-icon-preview-transform.mjs",
+        "scripts/navigation-icon-preview.mjs",
+        "scripts/owned-command.mjs",
+        "scripts/pattern-ux-preview.mjs",
+        "scripts/production-command-center-preview.mjs",
+        "scripts/production-compact-preview.mjs",
+        "scripts/production-exclusion-preview.mjs",
+        "scripts/run-business-chain-gate.mjs",
+        "scripts/sample-analysis-compact-preview.mjs",
+        "scripts/sample-compact-preview.mjs",
+        "scripts/sample-ui-preview.mjs",
+        "scripts/sample-upload-preview.mjs",
+        "scripts/secret-scan.mjs",
+        "scripts/sourcing-price-preview.mjs",
+        "scripts/supplier-compact-preview.mjs",
+        "scripts/supplier-safety-preview.mjs",
+        "scripts/test-database-safety.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-fixture-prerequisites.mjs",
+        "scripts/test-preflight.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "scripts/test-suite-plan.mjs",
+        "scripts/ui-polish-preview.mjs"
+      ],
+      "inputFingerprint": "3475fb84e130895f2decfb3d71f32be440889c00be4b0580f07792e3fc895ecc"
     },
     {
       "id": "protocol",
       "kind": "tests",
-      "command": "node --test scripts/ci/once-light.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/light-reuse.test.mjs",
+      "command": "node --test scripts/ci/once-light.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/postgres-drill.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "passed": 52,
+      "passed": 56,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "6d47f64188f6b188b15abbb2084e178a19015dec",
-      "sourceFingerprint": "fca083ffe3100ae69b6a538528e1d3612557685c5a404500283e1dfd74ef0cdd",
-      "context": "Node22.22.2/npm10.9.9 current main candidate.52actual node:test protocol assertions, no GitHub mutations: original workflow expressions, missing/failed/cancelled/old/running Light vs final own validation, wrong base/head/review/final/ref failures, mandatory exact-source verification when reuse is claimed. Real Actions validator and full109-case main preflight also passed. No Light re-run or skipped final check represented as success.",
-      "startedAt": "2026-11-15T10:15:58.250Z",
-      "endedAt": "2026-11-15T10:15:59.442Z",
-      "log": "/tmp/main-good-once-light.log",
-      "logSha256": "fd4f190babfe714bd6e674247ec97986af1d750f2e738bff899227c7640414c4"
+      "testedHead": "99d7b1f5b63cb1ef9caac4076eb56ed0f2bad70d",
+      "sourceFingerprint": "74d3df8720f52fb4bcef903c990e117f9132680d39a7fb19cc1928f8f5fd6806",
+      "context": "Node22.22.2/npm10.9.9 current main candidate.52actual node:test protocol assertions, no GitHub mutations: original workflow expressions, missing/failed/cancelled/old/running Light vs final own validation, wrong base/head/review/final/ref failures, mandatory exact-source verification when reuse is claimed. Real Actions validator and full109-case main preflight also passed. No Light re-run or skipped final check represented as success. Current56cases include pinned16/16 success,18/16 and16/15 refusal before archive creation, plus original restore safety/ready checks. Full worker now pins Ubuntu24.04 and original supported PG16 directory. Main113-case preflight also passed; failedFull43703571054 original log retained, skipped lifecycle/package never claimed passed.",
+      "startedAt": "2026-11-15T10:40:41.879Z",
+      "endedAt": "2026-11-15T10:40:43.104Z",
+      "log": "/tmp/main-good-once-light-drill.log",
+      "logSha256": "83b3236124f46ce4d6af88f44b4d3a9e7868a38dd49a9f6eaa6c1efb9772b030"
+    },
+    {
+      "id": "backup_units",
+      "kind": "tests",
+      "command": "vitest run tests/unit/backup-script.test.ts tests/integration/backup-runtime-topology.test.ts --maxWorkers=2 --reporter=json --outputFile=/tmp/main-good-backup-unit-final.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "99d7b1f5b63cb1ef9caac4076eb56ed0f2bad70d",
+      "sourceFingerprint": "74d3df8720f52fb4bcef903c990e117f9132680d39a7fb19cc1928f8f5fd6806",
+      "context": "Node22.22.2/npm10.9.9 clean declared dependency tree; original backup checksum/fingerprint/toolchain assertions and production runtime resolution retained. Production deployment scripts are unchanged.",
+      "startedAt": "2026-11-15T10:40:43.409Z",
+      "endedAt": "2026-11-15T10:40:43.767Z",
+      "log": "/tmp/main-good-backup-unit-final.json",
+      "logSha256": "2b8b5079bfc0c0cf28b05ad8f887431c92b18b2673914d1de7cbeee59e89db54",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2b8b5079bfc0c0cf28b05ad8f887431c92b18b2673914d1de7cbeee59e89db54"
+        }
+      ]
+    },
+    {
+      "id": "real_drill",
+      "kind": "tests",
+      "command": "node --test /tmp/main-good-real-backup.test.mjs; actual extracted current Full backup block with original backup/restore/readiness scripts in owned isolated PG16",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "99d7b1f5b63cb1ef9caac4076eb56ed0f2bad70d",
+      "sourceFingerprint": "74d3df8720f52fb4bcef903c990e117f9132680d39a7fb19cc1928f8f5fd6806",
+      "context": "Actual postgres16-bookworm16.16 server and clients, Node22.22.2 read-only mounted current source/deps, named isolated OS UID and non-superuser source/restore DB owner, no published DB port. Actual current workflow block/original scripts execute full232migration source, checksum backup, isolated target approval/empty checks, single-transaction exit-on-error restore and readiness; two added TEST sentinel rows verified before original target drop. Only local CI paths and unavailable Git metadata are adapted to actual observed source SHA; this is not a claim of running GitHub Ubuntu24.04 locally. Actual script stdout /tmp/main-good-real-backup-drill.log retained; named-user fixture corrected after original owner check refused, no owner guard weakened. Owned container stopped by trap, no live data/server operations.",
+      "startedAt": "2026-11-15T10:37:51.483Z",
+      "endedAt": "2026-11-15T10:38:04.602Z",
+      "log": "/tmp/main-good-real-drill.tap",
+      "logSha256": "55f976129d14e8b6c8ed70aff9a1c565979a91aa0d1a046606e4c0f5d64dd36f"
     }
   ]
 }
