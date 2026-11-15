@@ -1,53 +1,66 @@
 {
   "version": 1,
-  "base": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
+  "base": "826e464935da5d039915bfd54f01504d0f4075df",
   "risk": "full",
-  "sourceFingerprint": "e1a7a52a05a04332df1eeedddb72f326c7d3ee2db53d874f53b1b3656230888f",
+  "sourceFingerprint": "8adf6bd5e7ce4f291daac36dbcec5a1112b39974bab175039bd1d1d567ea5ad3",
   "rules": [
     {
-      "rule": "Keep the original independent-development sample completion date optional. Only an undated independent source route can skip date sufficiency comparison; required node durations, route, supply conditions and necessary actual evidence still must be computable. No invented dates or on-time result, no weakened formal PO/customer-date constraints.",
-      "source": "Approved v27 independent development without a customer date must not invent reverse targets; Dot2026-11-14/15 repeated original App optional-field blocker, explicitly authorized restore optional behavior; docs/requirements/digital-sla-golden-source-20261023.md2026-11-15 correction.",
+      "rule": "Factory read failure must settle within its own region. Assigned washing logistics/QC retain independently authorized washing controls; factory object denial, module denial, prices, assignments and native write guards remain unchanged. Preserve mounted same-order drafts while a refresh is pending and pause their interactions; clear failed/revoked DTOs and ignore stale reads across order changes/unmount/acknowledged writes.",
+      "source": "Dot2026-11-14/15 Acceptance assigned washing logistics and QC observed unrelated factory denial plus permanent loading; user authorized autonomous sequential fixes. docs/requirements/rework-ui-golden-source-v1.0.md2026-11-15 regional correction.",
       "writes": [
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "apps/api/src/production-platform/order-time-automatic.ts",
-        "apps/web/src/order-time-application.tsx",
-        "apps/web/src/order-time-request-page.tsx",
-        "packages/contracts/src/order-time-requests.ts",
-        "tests/unit/order-time-requests.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "apps/web/src/factory-flow-panel.tsx",
+        "apps/web/src/factory-flow-read.ts",
+        "tests/unit/factory-flow-read.test.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/bulk-washing-browser-postgres.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-service.ts",
-        "packages/contracts/src/digital-development.ts",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-native-commands.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-native-timing.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/order-time-schedule.ts",
-        "apps/api/src/production-platform/development-sla-enrollment.ts",
-        "scripts/acceptance/time-site-inventory.mjs",
-        "tests/acceptance/supplychain-settings-browser.ts"
+        "apps/web/src/bulk-washing-panel.tsx",
+        "apps/web/src/digital-production-api.ts",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/bulk-washing-service.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "tests/acceptance/m01-cockpit-home-native-browser.ts"
       ],
       "oldTests": [
-        "tests/unit/order-time-requests.test.ts",
-        "tests/unit/order-time-plan.test.ts",
-        "tests/unit/order-time-framework-submission.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/bulk-washing-browser-postgres.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
-      "newTests": [],
-      "initialization": "No database schema, stored version shape, settings, role, task identity or default date changes. Add an explicit not_applicable comparison result to the existing response enum; original App parser and application/arrangement consumers recognize it. The flag is an internal computed operation input, not accepted client intent. Existing snapshots/unknown targets remain unchanged, no date backfill or source auto-rearrangement. Existing native timing uses the frozen policy and real starts.",
-      "dateAndPermission": "Only a source-only scope with an absent sample goal and the original independent-development operation branch can skip goal reasons. Explicit sample goals still compare; order/proposal or PO scope cannot borrow the flag. Unknown duration/calendar, required route/supply and missing terminal actual remain unknown. Exhausted unfinished windows remain lower bounds. Audit lateMinutes is null when no comparison occurred; original actor/capability/native command/idempotency and role revocation retained.",
-      "expectation": "Undated complete independent sample publishes once from the real designer App without a false application; returnDate remains null, no customer promise/PO/actual is generated. Original native1h window starts at publication, later arrangement preserves it, new framework company counterpart behaves consistently. Explicit late samples still apply through existing process, and missing formal delivery or real inputs still block. Original saved-source/quotation/qualified packing, lost receipt and same-session withdrawal browser regressions remain. Regression now waits actual publication/navigation/actionable controls instead of independent1s polling, deliberately proves in-flight publication is still draft, and checks the original read-only status after success. Same-table preview and revoked write wait actual evidence; all original assertion meanings remain.",
+      "newTests": [
+        "tests/unit/factory-flow-read.test.ts"
+      ],
+      "initialization": "No schema, role, endpoint, DTO, facts, settings, date/version or historical mutation. Shared fullApp fixture registers the actual existing factory service so404 comes from original policy rather than an absent route. Other cockpit/fixed-timeline fixtures already register their own native service and are unchanged. Original dedicated washing route still skips factory metadata.",
+      "dateAndPermission": "No clock, SLA, quantity, fee or policy changes. Assigned washing roles do not gain factory reads; native404 and403 remain. Unrelated worker is denied at AuthGate, unrelated designer denied per object. Current-order validation, response sequence and unmount guards clear stale private data. Optional personnel failure retains only the authorized factory sheet. Same-order pending refresh retains the original mounted DOM under inert and disabled controls; command/upload callbacks reject a pending read. Failed/revoked reads still clear the DTO, and order switches never borrow an old sheet. Receipt association still checks exact lineId on the same order/factory, without weakening source or quantity guards.",
+      "expectation": "Factory denial or transport failure no longer leaves a loading spinner or suppresses washing. Original retry clears read error after actual200; denied roles see no private factory fields or wash fee/foreign actions. Original signed logistics30sent/20returned, QC20qualified and same-session revoke still pass. Six hook race/failure cases and real App region cases cover current changes; Root recovery and1165px screenshots inspected. Review4577757297 is fixed by keeping same-order forms mounted during pending refresh. Native unchanged200 verifies all three applicable logistics/dispatch/ship-sample form DOM identities and exact unsaved values, no write sent. A real no-craft order intentionally has no logistics form; the logistics case uses a real printed route. A same-order/same-factory two-PO negative case excludes PO B from PO A candidates, rejects forged B receipt409 without changing revision, then permits the exact A receipt; PO B gains zero qualified coverage.",
       "checks": [
         "unit",
         "native"
+      ]
+    },
+    {
+      "rule": "Factory panel/read changes must retain canonical real washing browser/service regressions instead of omitting their authorization and independent loading consumers.",
+      "source": "AGENTS.md3/4 canonical test mapping for actual changed dependency; existing washing map expanded for extracted reader and original factory panel.",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "reads": [
+        "scripts/ci/prepare-settings-browser.mjs",
+        "tests/integration/bulk-washing-browser-postgres.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "initialization": "Existing mapper only; no workflow triggers, Light policy, runner, timeout, safety or resource contract changes. Original browser suite remains recognized and uses pinned browser preparation.",
+      "dateAndPermission": "No application permissions or business clocks affected by mapping. Existing negative role assertions and original service constraints remain in canonical tests.",
+      "expectation": "Both factory-flow-panel and factory-flow-read source paths map the actual bulk washing PG/browser suites, plus existing risk-map expectations remain;76mapping tests passed.",
+      "checks": [
+        "unit"
       ]
     }
   ],
@@ -55,55 +68,46 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest order-time-requests/order-time-plan/order-time-framework-submission --maxWorkers=2",
+      "command": "vitest run tests/unit/factory-flow-read.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=2",
       "status": "passed",
       "exitCode": 0,
-      "passed": 41,
+      "passed": 82,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "2e04f8cf5df337b6c2f2dd275632b846c231dc9f",
-      "sourceFingerprint": "da17d158c361e2da12e9bc544d8c7ab8533844f8dcf6df520756bd476c12f02b",
-      "context": "Exact release base2e04f8cf plus candidate; Node22.22.2/npm10.9.9. Local package contracts rebuilt with current worktree workspace links. Unit workers2; canonical business-chain workers1, isolated marked low-privilege PG16 and pinned Chromium1194. Actual signed designer1165px original App publication, original services and source arrangement; no live/production writes or deployment. During PG execution only an unrelated unit counterexample was corrected from intermediate to terminal missing actual, and documentation/inventory were updated; all PG/API/Web/contracts/helper/runtime inputs remained unchanged. Original strict unknown terminal/standards/supply and true PO-date guards remain. Reused exact original41unit report against input hashes matched to the reviewed d00e7783 checkout; only the browser regression changed.",
-      "startedAt": "2026-11-15T07:27:13.881Z",
-      "endedAt": "2026-11-15T07:27:14.897Z",
-      "log": "/tmp/optional-sample-unit.json",
-      "logSha256": "1d48147c27f69fd28bde4d6f6fa85abbcede5cb69416822b5b49747dc41fd0fe",
+      "testedHead": "03db0418b6b67b86fb36fae2c1e00f207b340897",
+      "sourceFingerprint": "8adf6bd5e7ce4f291daac36dbcec5a1112b39974bab175039bd1d1d567ea5ad3",
+      "context": "React hook state/race/revocation and disabled washing route; full-gate mapping regressions. Actual Node22.22.2/npm10.9.9, jsdom, bounded workers2.",
+      "startedAt": "2026-11-15T09:19:05.481Z",
+      "endedAt": "2026-11-15T09:19:06.645Z",
+      "log": "/tmp/factory-read-unit-fixed.json",
+      "logSha256": "4dc5c6f07382014d1eab27fd5153f14ada50d8bf100191e6ee41a21100fca32b",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1d48147c27f69fd28bde4d6f6fa85abbcede5cb69416822b5b49747dc41fd0fe"
+          "sha256": "4dc5c6f07382014d1eab27fd5153f14ada50d8bf100191e6ee41a21100fca32b"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests/unit",
-        "vitest.config.ts",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs"
-      ],
-      "inputFingerprint": "8a088856fc48cdd46a535632f253166a67f861ef927b0af5f264ceb132ce890e"
+      ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /tmp/optional-sample-browser-fixed.sh: canonical order-time-requests-browser-postgres --maxWorkers=1",
+      "command": "bash /tmp/factory-read-pg-fixed.sh; canonical vitest.business-chain.config.ts bulk-washing-browser-postgres and bulk-washing-postgres --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 7,
+      "passed": 13,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "d00e7783296fe4eda7b7ac512187f258f9469931",
-      "sourceFingerprint": "e1a7a52a05a04332df1eeedddb72f326c7d3ee2db53d874f53b1b3656230888f",
-      "context": "Node22.22.2/npm10.9.9, canonical long-correctness config workers1, isolated marked low-privilege PG16, pinned real Chromium1194. Original signed designer/manager App and real services. Only test transport is deliberately held before native publication, proving preflight200 is not publish completion; released once then actual POST200, immutable saved record, single native publish and original read-only current-version status required. All7browser cases passed, including late confirmation/cancel, lost receipt, same-session revoked403, qualified packing and washing. No timeout, permission, business guard or production code changed since reviewed d00e; no Light rerun or live writes. Previous Full43690969735 had417pass/2short-poll failures and unrun later stages; never represented as passed.",
-      "startedAt": "2026-11-15T08:14:23.935Z",
-      "endedAt": "2026-11-15T08:15:22.594Z",
-      "log": "/tmp/optional-sample-browser-fixed.json",
-      "logSha256": "3077bb7cf95dfe6eb087794f69bdcd5e5598d1cc585fd2d38e9d9a6b0c2b4312",
+      "testedHead": "03db0418b6b67b86fb36fae2c1e00f207b340897",
+      "sourceFingerprint": "8adf6bd5e7ce4f291daac36dbcec5a1112b39974bab175039bd1d1d567ea5ad3",
+      "context": "Original App/AuthService/native FactoryFlowService and BulkWashingService on owned marked low-privilege PG16, pinned real Chromium1194, workers1. Real assigned logistics/QC, unrelated worker module denial and unrelated designer object denial, actual same-session revocation. Root503 transport fault is explicitly TEST only and recovers through native200. Dedicated washing route and existing30/20 write flow preserved. Owned container removed by trap;1165px screenshot inspected. No deployed/live data, role or server changes. All13current cases pass, including refresh-held original GET/200 with retained actual DOM/value/no writes on applicable real craft and no-craft routes; same order, same factory, different PO receipt409 followed by correct receipt release. Initial new-test fixture/selector/unknown-vs-known-zero expectations were corrected against actual route and coverage semantics, not by changing backend guards, quantities, deadlines or timeout. Original failed local reports retained separately.",
+      "startedAt": "2026-11-15T09:19:11.389Z",
+      "endedAt": "2026-11-15T09:20:02.420Z",
+      "log": "/tmp/factory-read-pg-fixed.json",
+      "logSha256": "f520e19f35af474f802216882fc074e629502bd1d5710dd22cf31cdb0439c20d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3077bb7cf95dfe6eb087794f69bdcd5e5598d1cc585fd2d38e9d9a6b0c2b4312"
+          "sha256": "f520e19f35af474f802216882fc074e629502bd1d5710dd22cf31cdb0439c20d"
         }
       ]
     }
