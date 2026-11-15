@@ -54,7 +54,9 @@
 
 ## 4. 检查、Review与合并
 
-标准顺序：**相关规则与消费者 → 便宜预检 → 必要定向/真实DB验证 → 完整diff → assembled push → light成功 → 必要GitHub Codex Review → 集中修复 → 冻结Head → 显式最终Quick或Full → 核准确回执 → 已授权合并**。
+标准顺序：**相关规则与消费者 → 便宜预检 → 必要定向/真实DB验证 → 完整diff → assembled push → 每PR一次初始Light → 必要GitHub Codex Review → 集中修复 → 冻结Head → 显式最终Quick或Full → 核准确回执 → 已授权合并**。
+
+- 用户已明确每个PR仅首次opened运行一次Light；后续源码、证据、base或模式变化、重开和重试均不再运行。最终Quick/Full不以同Head Light成功为前置，仍核当前真实Head/base、Review和全部必要检查；仅完全匹配且校验通过的同Head产物可复用，其余执行原检查，旧Light不冒称新Head通过。此已批准规则在本次main修复中与控制器、触发器、验证器及回归同步接通。
 
 - 最终请求由开工确定的单一执行者发起；有父级/协作收口负责人时，先取得其本批具体结论，单窗口沿§3独立定点复核。最终新建引用前必须用当前 `request-final --closeout <外置包>`，preview/apply均校验；包在冻结后产生，绑定repository/PR/head/base/baseRef/等级、提交内construction-evidence摘要/来源指纹、每项已知发现及每条影响规则、真实报告的具体通过用例。缺包、漂移、未闭合、不可读/摘要不符/失败/全跳过一次列清并拒绝POST，不以一句passed或空发现集合代替。格式见 `docs/governance/final-closeout-v1.md`。
 - 收口包及实际日志/报告不推送到候选提交，不把包含自身head的包提交而造成自引用改head。已有不可变引用的状态观察沿原路径，不因补丁取消在途有效运行。低风险不需Review仍须原协议的具体理由/授权及有界核验，不跑无关测试凑数。

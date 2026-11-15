@@ -68,6 +68,7 @@ type BoardRow = Readonly<{
   currentActualQuantity: number;
   currentDefectiveQuantity: number;
   cumulativeActualQuantity: number;
+  cumulativeGoodQuantity: number;
   differenceQuantity: number;
   packingRevisionId: string | null;
   packingQuantity: number | null;
@@ -810,7 +811,7 @@ export function OrderBoardPage() {
                 >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
               </div>
             </div>
-            <div className="order-board-row__actual"><span><ReceivedQuantityLabel>实收</ReceivedQuantityLabel></span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
+            <div className="order-board-row__actual"><span className="received-quantity-label"><span>实收</span><small className="received-quantity-note">正品数量</small></span><strong>{row.cumulativeGoodQuantity == null ? "—" : `${quantity(row.cumulativeGoodQuantity)}件`}</strong></div>
             <div className="order-board-row__defective"><span>次品</span><strong>{quantity(row.defectiveQuantity)}件</strong></div>
             <div className="order-board-operation order-board-row__difference">
               <span>收货差异</span>

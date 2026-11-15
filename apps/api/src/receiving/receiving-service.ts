@@ -159,6 +159,7 @@ type BoardRow = Readonly<{
   currentActualQuantity: number;
   currentDefectiveQuantity: number;
   cumulativeActualQuantity: number;
+  cumulativeGoodQuantity: number;
   differenceQuantity: number;
   packingRevisionId: string | null;
   packingQuantity: number | null;
@@ -366,7 +367,23 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_groups AS (
                 ) FILTER (
                   WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-                ),0)::bigint AS period_defective_adjustment
+                ),0)::bigint AS period_defective_adjustment,
+                COALESCE(sum(
+                  CASE WHEN event.action='receiving.batch.merge'
+                    THEN (event.after_state->>'defectiveQuantityAdjustment')::bigint
+                    ELSE (event.after_state->>'defectiveQuantity')::bigint
+                      -(event.before_state->>'defectiveQuantity')::bigint
+                  END
+                ) FILTER (
+                  WHERE event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                ),0)::bigint AS through_end_defective_adjustment,
+                COALESCE(sum(
+                  CASE WHEN event.action='receiving.batch.merge'
+                    THEN (event.after_state->>'defectiveQuantityAdjustment')::bigint
+                    ELSE (event.after_state->>'defectiveQuantity')::bigint
+                      -(event.before_state->>'defectiveQuantity')::bigint
+                  END
+                ),0)::bigint AS all_defective_adjustment
          FROM operation_events event
          JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
          WHERE event.action IN ('receiving.batch.correct','receiving.batch.merge')
@@ -438,6 +455,15 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_groups AS (
                 (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS current_actual_quantity,
                 (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS current_defective_quantity,
                 CASE WHEN $3::text<>'' THEN
+                  sum(r.defective_quantity)+batch.defective_quantity_adjustment
+                ELSE
+                  COALESCE(sum(r.defective_quantity) FILTER (
+                    WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+                  ),0)
+                  +COALESCE(adjustments.through_end_defective_adjustment,0)
+                  +batch.defective_quantity_adjustment-COALESCE(adjustments.all_defective_adjustment,0)
+                END::bigint AS cumulative_defective_quantity,
+                CASE WHEN $3::text<>'' THEN
                   sum(r.actual_quantity)+batch.actual_quantity_adjustment
                 ELSE
                   COALESCE(sum(r.actual_quantity) FILTER (
@@ -482,7 +508,8 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_groups AS (
                   adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
                   adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
                   adjustments.through_end_document_adjustment,adjustments.all_document_adjustment,
-                  adjustments.period_defective_adjustment
+                  adjustments.period_defective_adjustment,
+                  adjustments.through_end_defective_adjustment,adjustments.all_defective_adjustment
        ), style_totals AS (
          SELECT totals.group_key,totals.style_key,
                 (
@@ -497,6 +524,7 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_groups AS (
                 sum(totals.defective_quantity)::bigint AS defective_quantity,
                 sum(totals.current_actual_quantity)::bigint AS current_actual_quantity,
                 sum(totals.current_defective_quantity)::bigint AS current_defective_quantity,
+                sum(totals.cumulative_defective_quantity)::bigint AS cumulative_defective_quantity,
                 sum(totals.cumulative_actual_quantity)::bigint AS cumulative_actual_quantity,
                 sum(totals.receipt_count)::bigint AS receipt_count,
                 count(*)::bigint AS batch_count,
@@ -2547,6 +2575,7 @@ export class ReceivingService {
       current_actual_quantity: string;
       current_defective_quantity: string;
       cumulative_actual_quantity: string;
+      cumulative_good_quantity: string;
       difference_quantity: string;
       receipt_count: string;
       batch_count: string;
@@ -2597,6 +2626,7 @@ export class ReceivingService {
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
               totals.current_actual_quantity,totals.current_defective_quantity,
               totals.cumulative_actual_quantity,
+              totals.cumulative_actual_quantity-totals.cumulative_defective_quantity AS cumulative_good_quantity,
               totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity,
               packing.packing_revision_id,packing.packing_quantity,
               packing_user.display_name AS packing_recorded_by,
@@ -2828,6 +2858,7 @@ export class ReceivingService {
       currentActualQuantity: Number(row.current_actual_quantity),
       currentDefectiveQuantity: Number(row.current_defective_quantity),
       cumulativeActualQuantity: Number(row.cumulative_actual_quantity),
+      cumulativeGoodQuantity: Number(row.cumulative_good_quantity),
       differenceQuantity: Number(row.difference_quantity),
       packingRevisionId: row.packing_revision_id,
       packingQuantity: row.packing_quantity === null ? null : Number(row.packing_quantity),

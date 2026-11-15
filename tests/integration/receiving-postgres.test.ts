@@ -621,6 +621,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       documentQuantity: 120,
       currentActualQuantity: 90,
       currentDefectiveQuantity: 6,
+      cumulativeGoodQuantity: 84,
       differenceQuantity: -30,
     });
     expect(current.receivingHistory[0]).toMatchObject({
@@ -636,6 +637,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       documentQuantity: 100,
       actualQuantity: 80,
       cumulativeActualQuantity: 80,
+      cumulativeGoodQuantity: 75,
       differenceQuantity: -20,
     });
     expect(historical.receivingHistory[0]).toMatchObject({
@@ -672,10 +674,14 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       priorActualQuantity: 40,
       actualQuantity: 30,
       defectiveQuantity: 1,
+      cumulativeGoodQuantity: 67,
       differenceQuantity: -30,
       receiptCount: 2,
     });
     expect(todayOnly.kpis.receivedQuantity).toBeGreaterThanOrEqual(30);
+    const historical = (await service.board(yesterday, yesterday)).rows
+      .find(row => row.receivingBatchId === current.value.receivingBatchId)!;
+    expect(historical).toMatchObject({cumulativeActualQuantity:40,cumulativeGoodQuantity:38,differenceQuantity:-60});
 
     const twoDays = await service.board(yesterday, today, "STYLE-RANGE-01");
     expect(twoDays.rows).toHaveLength(1);
@@ -683,15 +689,26 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       priorActualQuantity: 0,
       actualQuantity: 70,
       defectiveQuantity: 3,
+      cumulativeGoodQuantity: 67,
       differenceQuantity: -30,
       receiptCount: 2,
     });
     expect(twoDays.kpis.receivedQuantity).toBe(70);
+    const searched = await service.board(today, today, "STYLE-RANGE-01");
+    expect(searched.rows[0]).toMatchObject({cumulativeActualQuantity:70,cumulativeGoodQuantity:67,differenceQuantity:-30});
+    expect(searched.kpis.receivedQuantity).toBe(70);
     expect(twoDays).toMatchObject({ page: 1, pageSize: 15, totalCount: 1, totalPages: 1 });
 
     const literalWildcard = await service.board(today, today, "%");
     expect(literalWildcard.rows).toHaveLength(0);
     expect(literalWildcard.kpis.orderCount).toBe(0);
+  });
+
+  it("keeps a genuine zero good-piece count when all received pieces are defective",async()=>{
+    await service.create(receiver(),{styleNo:"STYLE-ALL-DEFECTIVE",documentQuantity:10,actualQuantity:10,defectiveQuantity:10,attachmentIds:[await readyImage()]},randomUUID());
+    const board=await service.board(businessDate(),businessDate(),"STYLE-ALL-DEFECTIVE");
+    expect(board.rows[0]).toMatchObject({cumulativeActualQuantity:10,cumulativeGoodQuantity:0,defectiveQuantity:10,differenceQuantity:0});
+    expect(board.kpis).toMatchObject({receivedQuantity:10,abnormalOrderCount:0,differenceQuantity:0,differenceRate:0});
   });
 
   it("consolidates repeated style batches before status filtering and KPI calculation", async () => {
@@ -1598,6 +1615,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       defectiveQuantity: 2,
       currentActualQuantity: 90,
       currentDefectiveQuantity: 2,
+      cumulativeGoodQuantity: 88,
       differenceQuantity: -10,
       receiptCount: 2,
     });
