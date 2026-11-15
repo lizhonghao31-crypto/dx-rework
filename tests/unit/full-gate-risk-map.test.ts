@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync,readdirSync } from "node:fs";
 import { basename } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,24 @@ import { describe, expect, it } from "vitest";
 import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
+
+it('runs every consumer of the original shared authenticated App browser with the existing long correctness configuration',()=>{
+ const suites=readdirSync('tests/integration').filter(name=>name.endsWith('.test.ts')).map(name=>'tests/integration/'+name).filter(path=>/from ['"]\.\.\/acceptance\/supplychain-settings-browser\.js['"]/.test(readFileSync(path,'utf8')));
+ expect(suites).toContain('tests/integration/budget-washing-fees-browser-postgres.test.ts');
+ for(const suite of suites){
+  expect(configForSuite(suite),suite).toBe('vitest.business-chain.config.ts');
+  expect(settingsBrowserRequired({DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite}),suite).toBe(true);
+ }
+ expect(configForSuite('tests/integration/budget-washing-fees-postgres.test.ts')).toBe('vitest.business-chain.config.ts');
+ expect(configForSuite('tests/integration/digital-budget-shared-postgres.test.ts')).toBe('vitest.config.ts');
+});
+
+it('keeps shared failed-upload state and native task completion in the real authenticated upload plan',()=>{
+ for(const name of ['document-upload-previews','digital-development-execution-panel','development-external-pattern','development-result-upload','task-workbench-sample']){
+  const risk=classifyFullGatePaths([`apps/web/src/${name}.tsx`]);
+  for(const suite of ['development-execution-read-native-browser','digital-development-execution','development-technical'])expect(risk.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
+ }
+});
 
 it('keeps factory read-region changes in the original authenticated washing and factory browser plan',()=>{
  for(const file of ['apps/web/src/factory-flow-read.ts','apps/web/src/factory-flow-panel.tsx'])expect(classifyFullGatePaths([file]).mappedPostgresTests).toContain('tests/integration/bulk-washing-browser-postgres.test.ts');

@@ -33,7 +33,7 @@ const initial = initialDevelopmentDocument;
 type RoundHistory={roundNumber:number;origin:string;customerComment:string;internalProblem:string;explanation:string;affectedNodes:string[];inherited:Record<string,{taskId:string;roundNumber:number}>};
 type Rounds={rounds:RoundHistory[];draft:{version:number;payload:DevelopmentRevision}|null};
 export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=false,contained=false,onVersionChange}:{sourceId:string;onClose:()=>void;onVersionChange?:((version:number|undefined)=>void)|undefined;initialRound?:number|undefined;contained?:boolean;embedded?:boolean}) {
-  const previews=useDocumentUploadPreviews();
+  const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [sheet,setSheet]=useState<DevelopmentSheet|null>(null),[document,setDocument]=useState<DevelopmentDocument>(initial);
   const [showPublishedDocument,setShowPublishedDocument]=useState(false);
   useEffect(()=>setShowPublishedDocument(false),[sourceId]);
