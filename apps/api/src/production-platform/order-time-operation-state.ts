@@ -169,7 +169,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    const ready=fact.clockStart.precision==='instant'?fact.clockStart.at:null;
    const windows=fact.ownWindows??[],open=windows.filter(window=>!window.complete),deadlines=open.map(window=>window.deadline).filter((at):at is string=>Boolean(at));
    const deadline=open.length?deadlines.length===open.length?deadlines.sort().at(-1)!:null:ready&&node.responsibilityMinutes!==null&&node.responsibilityMinutes!==undefined&&node.responsibilityCalendar?(await import('./fixed-timeline-targets.js')).shiftFixedTimeline(ready,node.responsibilityMinutes,node.responsibilityCalendar):null;
-   progress.set(scope.scopeRef+'|'+(work.canonicalWorkRef??work.id),{completed:fact.businessCompleted,actualAt:fact.completed.precision==='instant'?fact.completed.at:null,readyAt:ready,deadline,calendar:node.responsibilityCalendar??null,
+   progress.set(scope.scopeRef+'|'+(work.canonicalWorkRef??work.id),{completed:fact.businessCompleted,actualAt:fact.completed.precision==='instant'?fact.completed.at:null,actualDate:fact.completed.precision==='date'?fact.completed.date:null,readyAt:ready,deadline,calendar:node.responsibilityCalendar??null,
     unresolvedOverrun:open.some(window=>window.deadline&&Date.parse(window.deadline)<=Date.parse(time.now))});
   }
  }
@@ -228,7 +228,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    sourceVersion.frameworkFactRevisions=native.revisions;
   }
   value.frameworkContext={route:frameworkRoute,acceptedAt,notBefore,progress:Object.fromEntries(progress)};
-  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs(value,frameworkRoute,acceptedAt,notBefore).map(input=>({input,retained:retainedFrameworkWork(input,progress,saved?.input.frameworkPlans?.[input.scopeRef])})),observedAt:time.now,mode:'automatic',acceptLate:false});
+  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs(value,frameworkRoute,acceptedAt,notBefore).map(input=>({input,retained:retainedFrameworkWork(input,progress,saved?.input.frameworkPlans?.[input.scopeRef],time.now)})),observedAt:time.now,mode:'automatic',acceptLate:false});
   check.fingerprint=fixedTimelineIdentity({prior:check.fingerprint,sourceVersion,frameworkProgress:[...progress]});
   // The caller already authorized this exact order. Reuse the native scoped
   // receipt ledger and the same transaction; no first receipt is manufactured

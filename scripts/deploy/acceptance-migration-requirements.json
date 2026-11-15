@@ -2166,5 +2166,24 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0292_customer_comment_occurrences": {
+    "checksum": "5c0098eadadbf3556f725d7c0972638e2c7ece4be8060ea141aee7a6be251a8b",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "digital_development_final_comments",
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_comment_times"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "digital_journey_register_change"
+    ],
+    "sequences": []
   }
 }

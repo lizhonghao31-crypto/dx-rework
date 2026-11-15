@@ -1,3 +1,4 @@
+import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
 import {technicalDocumentFingerprint} from '../../apps/api/src/production-platform/development-technical-repository.js';
 import {QuotationConfirmationSchema} from '@dx-rework/contracts/digital-quotation';
 import {calculateBudget} from '@dx-rework/contracts/digital-budget';
@@ -352,6 +353,46 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await read()).toMatchObject({state:'pending',actualAt:null,actualQuality:'missing'});
    await review(next);
    expect(await read()).toMatchObject({state:'completed',actualAt:null,actualQuality:'missing'});
+  });
+ });
+ it('supplements only the original missing customer occurrence, preserving completed review, technical facts, authorization and date precision',async()=>{
+  const scene=await f.scene('2026-11-15T04:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const p=await prepare(),published=await artifact(p),final=await technical.recordComment(p.designer,p.sourceId,comment(),randomUUID());
+   await technical.completeReview(p.worker,p.sourceId,{taskId:final.reviewTaskId!,expectedReviewVersion:1,finalCommentId:final.commentId,finalCommentVersion:final.version,decision:'reuse',artifactSetId:published.artifactSetId,artifactVersion:published.version,note:'TEST completed before time supplement'},randomUUID());
+   const original=(await f.db.query('SELECT * FROM digital_development_final_comments WHERE comment_id=$1',[final.commentId])).rows;
+   const review=(await tasks.read(f.root,final.reviewTaskId!)),validity=(await technical.read(p.worker,p.sourceId)).effective;
+   const body={commentId:final.commentId,commentVersion:final.version,actualTime:{precision:'date' as const,date:'2026-11-14'},note:'TEST original dated customer message'},keys=[randomUUID(),randomUUID()];
+   await expect(technical.supplementCommentTime(p.worker,p.sourceId,body,randomUUID())).rejects.toMatchObject({statusCode:403});
+   await expect(technical.supplementCommentTime(p.designer,p.sourceId,{...body,commentVersion:99},randomUUID())).rejects.toMatchObject({statusCode:409});
+   await expect(technical.supplementCommentTime(p.designer,p.sourceId,{...body,actualTime:{precision:'date',date:'2026-11-16'}},randomUUID())).rejects.toMatchObject({statusCode:409});
+   const attempted=await Promise.allSettled(keys.map(key=>technical.supplementCommentTime(p.designer,p.sourceId,body,key)));
+   expect(attempted.filter(value=>value.status==='fulfilled')).toHaveLength(1);expect(attempted.filter(value=>value.status==='rejected')).toHaveLength(1);
+   const winner=attempted.findIndex(value=>value.status==='fulfilled');
+   expect(await technical.supplementCommentTime(p.designer,p.sourceId,body,keys[winner]!)).toEqual((attempted[winner] as PromiseFulfilledResult<unknown>).value);
+   expect((await f.db.query('SELECT * FROM digital_development_final_comments WHERE comment_id=$1',[final.commentId])).rows).toEqual(original);
+   expect(await tasks.read(f.root,final.reviewTaskId!)).toEqual(review);expect((await technical.read(p.worker,p.sourceId)).effective).toEqual(validity);
+   expect((await f.db.query('SELECT 1 FROM digital_development_size_review_requests WHERE final_comment_id=$1',[final.commentId])).rowCount).toBe(1);
+   expect((await technical.read(p.designer,p.sourceId)).comments.find(row=>row.commentId===final.commentId)).toMatchObject({occurredAt:null,occurredDate:'2026-11-14',timeEvidence:{note:body.note,recordedAt:'2026-11-15T04:00:00.000Z'}});
+   const history=await technical.history(p.designer,p.sourceId,{roundNumber:1,scopeRef:'整款',kind:'comments',version:final.version});expect(history.items[0]).toMatchObject({occurredAt:null,occurredDate:'2026-11-14'});
+   const style=(await f.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[p.sourceId])).rows[0].design_style_no;
+   const order=await identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:false,designStyleNo:style,orderDate:'2026-11-15',lines:[{poNumber:'TEST dated approval',color:'黑',customerWarehouseArrivalDate:'2027-03-15',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),p.sourceId);
+   const node=(await new DigitalJourneyQuery(f.db).read(f.root,order.productionOrderId,undefined,true)).stages.flatMap(stage=>stage.nodes).find(row=>row.key==='customer_sample'&&row.current)!;
+   expect(node).toMatchObject({state:'completed',actualAt:null,actualDate:'2026-11-14',actualQuality:'unverified'});
+   const facts=await readSeriesPlanFacts(f.db,order.productionOrderId,p.sourceId,'PD',1);expect(facts.facts.find(row=>row.key==='client_sample_approval')).toMatchObject({completed:true,occurredAt:null,occurredDate:'2026-11-14',precision:'date'});
+   await expect(f.db.query("UPDATE digital_development_comment_times SET occurred_date='2026-11-13' WHERE comment_id=$1",[final.commentId])).rejects.toThrow();
+   await expect(technical.supplementCommentTime(p.designer,p.sourceId,{...body,actualTime:{precision:'instant',at:'2026-11-14T03:00:00Z'}},randomUUID())).rejects.toMatchObject({statusCode:409});
+  });
+ });
+ it('records date/current customer occurrences at their original action without inventing missing or changing review registration clocks',async()=>{
+  const scene=await f.scene('2026-11-15T04:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const p=await prepare();
+   const dated=await technical.recordComment(p.designer,p.sourceId,{...comment(),actualTime:{precision:'date',date:'2026-11-14'}},randomUUID());
+   const first=(await technical.read(p.designer,p.sourceId)).comments.find(row=>row.commentId===dated.commentId)!;
+   expect(first).toMatchObject({occurredAt:null,occurredDate:'2026-11-14',recordedAt:'2026-11-15T04:00:00.000Z'});
+   expect((await tasks.read(f.root,dated.reviewTaskId!)).enteredAt).toBe('2026-11-15T04:00:00.000Z');
+   const now=await technical.recordComment(p.designer,p.sourceId,{...comment(1),actualTime:{precision:'current'}},randomUUID());
+   expect((await technical.read(p.designer,p.sourceId)).comments.find(row=>row.commentId===now.commentId)).toMatchObject({occurredAt:'2026-11-15T04:00:00.000Z',occurredDate:null});
   });
  });
  it('adopts only an explicitly selected same-source same-unit technical usage; confirmation remains frozen',async()=>{

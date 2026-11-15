@@ -1,3 +1,4 @@
+import {commentTimeColumns} from './development-comment-time.js';
 import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
@@ -648,12 +649,15 @@ export class DigitalJourneyQuery {
       if(bulk.customerConfirmed&&gates.technical?.finalCommentRef&&sid&&gates.source){
         // Technical effectiveness permits the route, while the customer's own
         // explicit occurrence (not review/recording time) proves confirmation.
-        const comment=(await db.query(`SELECT comment_id,occurred_at,recorded_by FROM digital_development_final_comments
-          WHERE source_id=$1 AND round_number=$2 AND comment_id=$3 AND version=$4 AND scope_ref='整款' AND is_final AND decision='approved'`,
+        const commentTime=await commentTimeColumns(db);
+        const comment=(await db.query(`SELECT c.comment_id,${commentTime.columns},c.recorded_by FROM digital_development_final_comments c ${commentTime.join}
+          WHERE c.source_id=$1 AND c.round_number=$2 AND c.comment_id=$3 AND c.version=$4 AND c.scope_ref='整款' AND c.is_final AND c.decision='approved'`,
           [sid,gates.source.round_number,gates.technical.finalCommentRef.id,gates.technical.finalCommentRef.version])).rows[0];
         if(comment?.occurred_at)capture?.recheckAt?.(iso(comment.occurred_at)!);
         if(comment?.occurred_at&&Date.parse(iso(comment.occurred_at)!)<=Date.parse(asOf)){
           confirmationTime=iso(comment.occurred_at);confirmationDate=null;confirmationOperator=comment.recorded_by;confirmationQuality='unverified';
+        }else if(comment?.occurred_date&&comment.occurred_date<=new Date(Date.parse(asOf)+8*3600000).toISOString().slice(0,10)){
+          confirmationTime=null;confirmationDate=comment.occurred_date;confirmationOperator=comment.recorded_by;confirmationQuality='unverified';
         }
       }
       // Technical readiness is a valid alternate gate, not a timestamp of the

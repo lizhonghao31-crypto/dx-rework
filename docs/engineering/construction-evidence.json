@@ -1,65 +1,55 @@
 {
   "version": 1,
-  "base": "768306759f9687fd93dd7227c8e269ad8572cf37",
+  "base": "49dac788df5167a53307d7219e085d17261e2c14",
   "risk": "full",
-  "sourceFingerprint": "d89fb010f982859fa8c7eb3df27affe1d1f52b85ec64346d6e57e78b46bd267a",
+  "sourceFingerprint": "1a9ededd1c6f47df0f4149f3881af1cfac5b0c68a53f8c261d4fc8ada593b9b8",
   "rules": [
     {
-      "rule": "Receipt matching requires actual shipped production, factory, positive PO allocation, valid style and immutable receipt audit; supplier reminder pilot is not a prerequisite.",
-      "source": "2026-11-15 user authorization via Dot; docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-15 addendum.",
+      "rule": "Original customer feedback captures actual date/instant independently from registration; missing final approval time is supplemented with immutable evidence, never by replacing feedback/review or inventing another event.",
+      "source": "Dot2026-11-14 authorized customer-final-approval capture and controlled original-record supplementation; docs/requirements/sample-system-migration-v1.0.md latest time-special addendum.",
       "writes": [
         "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/sourcing/production-closure-service.ts",
-        "apps/web/src/cockpit-production-settings.tsx",
-        "apps/web/src/order-time-settings.css",
-        "apps/web/src/production-closure-ui.tsx",
-        "apps/web/src/production-dashboard-page.tsx",
-        "apps/web/src/sla-settings-workspace.tsx",
+        "apps/api/src/production-platform/development-execution-routes.ts",
+        "apps/api/src/production-platform/development-technical-repository.ts",
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/order-time-framework-route.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-request-plan.ts",
+        "apps/api/src/production-platform/series-plan-facts.ts",
+        "apps/web/src/cockpit-documents-technical.ts",
+        "apps/web/src/development-technical-workspace.tsx",
+        "packages/contracts/src/digital-development-technical.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/r5-settings-native-browser-postgres.test.ts",
-        "apps/api/migrations/0291_receiving_without_production_pilot.sql"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/order-time-framework-facts.test.ts",
+        "apps/api/migrations/0292_customer_comment_occurrences.sql",
+        "apps/api/src/production-platform/development-comment-time.ts",
+        "apps/web/src/customer-comment-time-fields.tsx",
+        "tests/unit/customer-comment-time.test.ts"
       ],
       "reads": [
-        "apps/api/src/receiving/receiving-service.ts",
-        "apps/api/src/sourcing/production-visibility.ts",
-        "apps/api/src/production-platform/bulk-washing-service.ts"
+        "apps/api/src/production-platform/development-technical-repository.ts#effectiveTechnicalEvidence",
+        "apps/api/src/production-platform/series-plan-facts.ts#readSeriesPlanFacts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/web/src/task-workbench-sample.tsx",
+        "apps/web/src/cockpit-documents-technical.ts"
       ],
       "oldTests": [
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts",
+        "tests/unit/order-time-framework-facts.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts"
       ],
-      "initialization": "Append0291 replaces only current receipt guard; manifest and owner permission inventory match checksum. No old migration edit, receipt backfill, quantity alteration or pilot default changes.",
-      "dateAndPermission": "Warehouse capability, cutoff/shipment date, factoryDecisionId audit, same-source PO allocation, exclusions and immutable history retained. Pilot toggles continue to control risk projection and Root-only settings.",
-      "expectation": "Absent/false/true pilot states support valid direct/automatic receipt links, concurrent toggle and replay. Ambiguous/wrong factory, unshipped and excluded sources stay rejected/unlinked. Existing risk recipient and alert tests remain applicable.",
-      "checks": [
-        "unit",
-        "native"
-      ]
-    },
-    {
-      "rule": "Root directly manages production risk reminders in management settings using existing panel UI, with no duplicate entry or second navigation; no extra role receives access.",
-      "source": "2026-11-15 latest user instruction to rename and move supplier pilot settings into management panel with direct content.",
-      "writes": [
-        "apps/web/src/production-closure-ui.tsx",
-        "apps/web/src/production-dashboard-page.tsx",
-        "apps/web/src/cockpit-production-settings.tsx",
-        "apps/web/src/sla-settings-workspace.tsx",
-        "apps/web/src/order-time-settings.css"
-      ],
-      "reads": [
-        "apps/api/src/sourcing/production-closure-routes.ts",
-        "apps/web/src/digital-production-access-panel.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/r5-settings-native-browser-postgres.test.ts"
-      ],
-      "initialization": "Existing pilots API/table stay compatible; new root-only tab mounts settings content directly, not a separate page/disclosure. Original dashboard exclusion control remains.",
-      "dateAndPermission": "Authenticated session Root gates navigation; service revalidates Root on reads/writes. PMC keeps original tabs/read-only behavior and gets403 from reminder endpoint.",
-      "expectation": "Real original App opens settings directly, toggles persist and refresh, fits1165px and hides/refuses PMC. Other settings/calculator/customer and keyboard paths remain functional.",
+      "initialization": "Append0292 immutable companion evidence with composite original-comment identity, unique per-comment occurrence, known-time protection and Journey invalidation. Manifest and maintenance privileges inventory match checksum. Current reader detects old schema and nullable legacy occurrence without rewriting old feedback. Rollback must use a reader containing this evidence support; no assertion that pre0292 code reads newly captured date evidence.",
+      "dateAndPermission": "Original sample designer/Root scope rechecked under lifecycle transaction, even on replay. Final approved original comment/version and missing time required; future dates, wrong source/role, overwrites and stale versions refused. Date precision stays actualDate; planning uses conservative date upper bound capped at observation, never a midnight actual or the review/recording clock. Existing started responsibility/review windows remain unchanged.",
+      "expectation": "Original authenticated App records unknown without fake time, supplements actual date on same comment, keeps one review and immutable original feedback/artifacts. Concurrent distinct requests give one evidence; same key replay returns receipt. Effective facts, exact-round milestones, Journey, document history and remaining plan share occurrence. Old timestamps, role denials,88-order7070SQL and7100 cap retained.",
       "checks": [
         "unit",
         "native"
@@ -70,46 +60,46 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest production-closure, migration compatibility, maintenance inventory and canonical risk-map units --maxWorkers1",
+      "command": "vitest eight affected contracts/framework/reading/document/risk suites --maxWorkers1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 95,
+      "passed": 184,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "768306759f9687fd93dd7227c8e269ad8572cf37",
-      "sourceFingerprint": "d89fb010f982859fa8c7eb3df27affe1d1f52b85ec64346d6e57e78b46bd267a",
-      "context": "Candidate working tree on stated real release base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual marked low-privilege PG16 and pinned Chromium1194 with original authenticated App. No live data/deployment. Native report explicitly combines unchanged passing factory/washing/App suites with the rerun updated receipt test suite; it does not claim the original failed run passed. Earlier local test initialization errors were diagnosed without relaxing production permissions or receipt identity guards.",
-      "startedAt": "2026-11-14T17:36:00.199Z",
-      "endedAt": "2026-11-14T17:36:03.106Z",
-      "log": "/tmp/receiving-pilot-unit.json",
-      "logSha256": "de66f32051b610aaa0be231e84d9775c389cf07650fd5c5eec3488029e85551e",
+      "testedHead": "49dac788df5167a53307d7219e085d17261e2c14",
+      "sourceFingerprint": "1a9ededd1c6f47df0f4149f3881af1cfac5b0c68a53f8c261d4fc8ada593b9b8",
+      "context": "Candidate working tree on real release base49dac788. Node22.22.0; canonical Vitest configs/maxWorkers1; marked low-privilege PG16, pinned Chromium1194, original authenticated App. No live/Acceptance data or deployments. Composite native report preserves original three unchanged passing DB suites and six rerun original App tests; initial fixture/selector failure remains in original report, not relabeled. Type-only import correction does not alter emitted runtime, and later document metadata/feedback reset changes are covered by updated units/App build. No claim of现场 acceptance.",
+      "startedAt": "2026-11-14T18:59:10.622Z",
+      "endedAt": "2026-11-14T18:59:14.590Z",
+      "log": "/tmp/customer-comment-unit.json",
+      "logSha256": "8723da33a777cba2eb9a5ae8eaa622b37ae9cd860ac3b32c0622faee7f8271bd",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "de66f32051b610aaa0be231e84d9775c389cf07650fd5c5eec3488029e85551e"
+          "sha256": "8723da33a777cba2eb9a5ae8eaa622b37ae9cd860ac3b32c0622faee7f8271bd"
         }
       ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "Composite: unchanged factory/washing/App passes from /tmp/receiving-pilot-pg.sh plus20/20 updated receipt suite from /tmp/receiving-pilot-receipt-pg.sh; original reports retained",
+      "command": "Composite: three unchanged passing DB suites from /tmp/customer-comment-pg.sh plus six original App browser tests from /tmp/customer-comment-browser.sh",
       "status": "passed",
       "exitCode": 0,
-      "passed": 49,
+      "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "768306759f9687fd93dd7227c8e269ad8572cf37",
-      "sourceFingerprint": "d89fb010f982859fa8c7eb3df27affe1d1f52b85ec64346d6e57e78b46bd267a",
-      "context": "Candidate working tree on stated real release base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual marked low-privilege PG16 and pinned Chromium1194 with original authenticated App. No live data/deployment. Native report explicitly combines unchanged passing factory/washing/App suites with the rerun updated receipt test suite; it does not claim the original failed run passed. Earlier local test initialization errors were diagnosed without relaxing production permissions or receipt identity guards.",
-      "startedAt": "2026-11-14T17:32:54.410Z",
-      "endedAt": "2026-11-14T17:36:04.204Z",
-      "log": "/tmp/receiving-pilot-pg.json",
-      "logSha256": "fa3154f18440ce5e536a03cab74cfc0725d1744544be250c45106fdf893dc1c0",
+      "testedHead": "49dac788df5167a53307d7219e085d17261e2c14",
+      "sourceFingerprint": "1a9ededd1c6f47df0f4149f3881af1cfac5b0c68a53f8c261d4fc8ada593b9b8",
+      "context": "Candidate working tree on real release base49dac788. Node22.22.0; canonical Vitest configs/maxWorkers1; marked low-privilege PG16, pinned Chromium1194, original authenticated App. No live/Acceptance data or deployments. Composite native report preserves original three unchanged passing DB suites and six rerun original App tests; initial fixture/selector failure remains in original report, not relabeled. Type-only import correction does not alter emitted runtime, and later document metadata/feedback reset changes are covered by updated units/App build. No claim of现场 acceptance.",
+      "startedAt": "2026-11-14T18:47:03.076Z",
+      "endedAt": "2026-11-14T19:01:56.929Z",
+      "log": "/tmp/customer-comment-native-final.json",
+      "logSha256": "778c0ef7a855fe15f5d3016390ebb8efeb22a8b1389e0db2c5762ee9065de17a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fa3154f18440ce5e536a03cab74cfc0725d1744544be250c45106fdf893dc1c0"
+          "sha256": "778c0ef7a855fe15f5d3016390ebb8efeb22a8b1389e0db2c5762ee9065de17a"
         }
       ]
     }

@@ -3,15 +3,15 @@ import {SERIES_MILESTONES,type SeriesRoute,type SeriesMilestoneKey} from '@dx-re
 import {TimeFrameworkInputSchema,type TimeFrameworkInput, type FrameworkTarget} from '@dx-rework/contracts/order-time-framework';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import type {OrderTimeInput} from './order-time-plan-repository.js';
-import type {OrderTimeNativeProgress} from './order-time-request-plan.js';
+import {orderTimeCompletionBound,type OrderTimeNativeProgress} from './order-time-request-plan.js';
 import type {FrameworkCandidateContext} from './order-time-framework.js';
 import type {SeriesObservedFact} from '@dx-rework/contracts/digital-series-plan';
 
 /** Completion evidence cannot erase a separately established native clock.
  * Whole-order partial completion cannot negate a completed individual PO. */
-export function overlayFrameworkCompletion(native:OrderTimeNativeProgress|undefined,fact:Pick<SeriesObservedFact,'completed'|'precision'|'occurredAt'|'scopeRef'>):OrderTimeNativeProgress{
- if(fact.scopeRef==='whole'&&native?.completed&&(native.actualAt||!fact.completed))return {...native};
- return {...native,completed:fact.completed,actualAt:fact.completed&&fact.precision==='instant'?fact.occurredAt:null,readyAt:native?.readyAt??null,deadline:native?.deadline??null};
+export function overlayFrameworkCompletion(native:OrderTimeNativeProgress|undefined,fact:Pick<SeriesObservedFact,'completed'|'precision'|'occurredAt'|'scopeRef'>&{occurredDate?:string|null}):OrderTimeNativeProgress{
+ if(fact.scopeRef==='whole'&&native?.completed&&(native.actualAt||native.actualDate||!fact.completed))return {...native};
+ return {...native,completed:fact.completed,actualAt:fact.completed&&fact.precision==='instant'?fact.occurredAt:null,...(fact.precision==='date'?{actualDate:fact.completed?fact.occurredDate:null}:native?.actualDate!==undefined?{actualDate:null}:{}),readyAt:native?.readyAt??null,deadline:native?.deadline??null};
 }
 
 /** Bind the actual original graph by business identity, not display labels or
@@ -51,13 +51,13 @@ export function frameworkScopeInputs(value:OrderTimeInput,route:SeriesRoute,acce
 /** Actual completion is a scheduling boundary; a previous planned date is not
  * an actual event. Started work keeps its last formally effective arrangement.
  * Unknown completion remains unknown and cannot silently become zero time. */
-export function retainedFrameworkWork(input:TimeFrameworkInput,progress:ReadonlyMap<string,OrderTimeNativeProgress>,previous?:{reference:string;arranged:readonly FrameworkTarget[]}):NonNullable<FrameworkCandidateContext['retained']>{
+export function retainedFrameworkWork(input:TimeFrameworkInput,progress:ReadonlyMap<string,OrderTimeNativeProgress>,previous?:{reference:string;arranged:readonly FrameworkTarget[]},observedAt?:string):NonNullable<FrameworkCandidateContext['retained']>{
  const retained:Record<string,{target:FrameworkTarget;sourceRef:string;actualCompletion?:FrameworkTarget['end']}>={};
  for(const work of input.work){
   if(work.includedIn)continue;
   const ref=work.canonicalWorkRef??work.id,fact=progress.get(input.scopeRef+'|'+ref)??progress.get(ref);
   if(fact?.completed){
-   const time={at:fact.actualAt,exclusive:false,reasons:fact.actualAt?[]:['已完成但缺少可信完成时间']};
+   const time=orderTimeCompletionBound(fact,observedAt);
    const prior=previous?.arranged.find(row=>row.id===work.id);
    retained[work.id]={target:prior?structuredClone(prior):{id:work.id,start:time,end:time},sourceRef:prior?previous!.reference:ref+':native-completion',actualCompletion:time};
   }else if(fact?.readyAt&&previous){
