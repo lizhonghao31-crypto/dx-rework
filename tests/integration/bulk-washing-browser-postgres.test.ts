@@ -27,6 +27,51 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{await db.query('BEGIN');await adoptBulkWashingWithClient(db,f.root,orderId,line,0,{arrangement:{mode:'after_receipt',reference:'TEST',revision:1,accounting:'additional',washing:time,inspection:time},staff:{logisticsId:f.people['embroidery-washing-merchandiser']!.actorId,inspectorId:inspector.actor.actorId},fee:{kind:'pending'},sourceRef:'TEST approved washing'});await db.query('COMMIT');}finally{db.release();}
  });
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
+ it('keeps factory denial scoped and settled while assigned washing logistics and QC retain their own narrow region',async()=>{
+  for(const [id,kinds]of [[h.f.people['embroidery-washing-merchandiser']!.actorId,['send','return']],[inspector.actor.actorId,['inspection']]] as const){
+   const tab=await h.open(id,1165,{},`/ui/digital-production?factory=${orderId}`);
+   try{
+    const factory=tab.page.getByRole('region',{name:'工厂流程资料'});await factory.getByRole('alert').waitFor();
+    expect(await factory.innerText()).toContain('工厂流程资料暂不可读：资料不存在或不在授权范围');expect(await factory.getByText('正在读取工厂资料…',{exact:true}).count()).toBe(0);
+    expect(h.requests.filter(call=>call.session===tab.session&&call.path.endsWith('/factory-flow')).at(-1)?.status).toBe(404);
+    const washing=tab.page.locator('#factory-washing');await washing.getByRole('button',{name:'大货洗水',exact:true}).click();
+    await washing.getByText(/收货批次.*合格 0 \/ 30/).click();
+    expect(await washing.getByLabel('办理',{exact:true}).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(kinds);
+    expect(await washing.getByText(/洗水费用：/).count()).toBe(0);expect(await factory.getByText(/当前批准加工厂/).count()).toBe(0);
+    expect(await washing.getByRole('alert').count()).toBe(0);
+    await tab.page.screenshot({path:join(h.evidence,id===inspector.actor.actorId?'washing-qc-scoped-factory-1165.png':'washing-logistics-scoped-factory-1165.png'),fullPage:true});
+   }finally{await tab.context.close();}
+  }
+ });
+ it('ends factory transport failure, retries the real authorized region and leaves washing independently readable',async()=>{
+  const tab=await h.open(h.f.root.actorId,1165,{},`/ui/digital-production?factory=${orderId}&factoryAction=washing`);
+  try{
+   let first=true;await tab.page.route(`**/orders/${orderId}/factory-flow`,async route=>{if(first){first=false;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_FACTORY_READ',message:'TEST 工厂读取暂时失败'}})});}else await route.continue();});
+   await tab.page.goto(h.base+`/ui/digital-production?factory=${orderId}`);
+   const factory=tab.page.getByRole('region',{name:'工厂流程资料'});await factory.getByRole('alert').waitFor();expect(await factory.innerText()).toContain('TEST 工厂读取暂时失败');expect(await factory.getByText('正在读取工厂资料…',{exact:true}).count()).toBe(0);
+   const washing=tab.page.locator('#factory-washing');await washing.getByRole('button',{name:'大货洗水',exact:true}).click();await washing.getByText(/收货批次.*合格 0 \/ 30/).waitFor();
+   const loaded=tab.page.waitForResponse(response=>response.url().endsWith('/factory-flow')&&response.request().method()==='GET');await factory.getByRole('button',{name:'刷新',exact:true}).click();expect((await loaded).status()).toBe(200);
+   await factory.getByText(/整款实裁：全部PO完成/).waitFor();expect(await factory.getByRole('alert').count()).toBe(0);expect(await factory.getByText('正在读取工厂资料…',{exact:true}).count()).toBe(0);
+   expect(await washing.getByText(/收货批次.*合格 0 \/ 30/).count()).toBe(1);
+  }finally{await tab.context.close();}
+ });
+ it('preserves both module and object denial for unrelated real users without granting factory or washing access',async()=>{
+  const worker=await h.dedicated('worker'),tab=await h.open(worker.id,1165,{},`/ui/digital-production?factory=${orderId}`);
+  try{
+   // A plain worker is denied before the business page mounts. Do not widen
+   // that stronger original module boundary just to exercise a region.
+   await tab.page.getByRole('heading',{name:'无权访问此页面',exact:true}).waitFor();
+   expect(await tab.page.getByRole('region',{name:'工厂流程资料'}).count()).toBe(0);expect(await tab.page.locator('#factory-washing').count()).toBe(0);
+   expect((await tab.page.request.get(h.base+`/api/digital-production/orders/${orderId}/factory-flow`)).status()).toBe(404);
+   expect((await tab.page.request.get(h.base+`/api/digital-production/orders/${orderId}/bulk-washing`)).status()).toBe(403);
+  }finally{await tab.context.close();}
+  const designer=await h.dedicated('sample_designer'),foreign=await h.open(designer.id,1165,{},`/ui/digital-production?factory=${orderId}`);
+  try{
+   const factory=foreign.page.getByRole('region',{name:'工厂流程资料'});await factory.getByRole('alert').waitFor();expect(await factory.getByText('正在读取工厂资料…',{exact:true}).count()).toBe(0);
+   const washing=foreign.page.locator('#factory-washing');await washing.getByRole('button',{name:'大货洗水',exact:true}).click();await washing.getByRole('alert').waitFor();
+   expect(await washing.getByLabel('办理',{exact:true}).count()).toBe(0);expect(await washing.getByText('正在读取洗水记录…',{exact:true}).count()).toBe(0);expect(await factory.getByText(/当前批准加工厂/).count()).toBe(0);
+  }finally{await foreign.context.close();}
+ });
  it('assigned logistics records30 sent and20 returned, then QC releases only20 in the same existing page',async()=>{
   const path=`/ui/digital-production?factory=${orderId}&factoryAction=washing`;
   const {page,context}=await h.open(h.f.people['embroidery-washing-merchandiser']!.actorId,1165,{},path);

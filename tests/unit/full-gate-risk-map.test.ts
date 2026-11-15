@@ -7,6 +7,10 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES 
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('keeps factory read-region changes in the original authenticated washing and factory browser plan',()=>{
+ for(const file of ['apps/web/src/factory-flow-read.ts','apps/web/src/factory-flow-panel.tsx'])expect(classifyFullGatePaths([file]).mappedPostgresTests).toContain('tests/integration/bulk-washing-browser-postgres.test.ts');
+});
+
 it('keeps washing projection changes in the native quantity, fact model and request regression plan',()=>{
  for(const file of ['journey-washing-facts','journey-washing-projection']){
   const risk=classifyFullGatePaths([`apps/api/src/production-platform/${file}.ts`]);
