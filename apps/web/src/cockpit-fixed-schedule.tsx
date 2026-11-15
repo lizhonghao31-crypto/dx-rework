@@ -75,8 +75,10 @@ export function cockpitScopeProgress(scope:ScheduleScopeProgress|undefined){
  if(scope.state==='terminated')return {text:'已终止',tone:'neutral'};
  if(scope.nodes.some(node=>node.id.startsWith('garment_packing:')&&node.businessCompleted))return {text:'已交付',tone:'success'};
  if(scope.lagMinutes===null)return {text:scope.state==='late'?'进度落后':'待核',tone:scope.state==='late'?'danger':'neutral'};
- const lag=scope.lagMinutes;if(lag.minimum>0)return {text:'落后'+cockpitDurationRange(lag),tone:'danger'};
+ const lag=scope.lagMinutes,forecast=scope.completionEstimate;
+ if(lag.minimum>0)return {text:forecast?.kind==='lower_bound'?'预测至少落后'+cockpitDuration(lag.minimum):(forecast?.kind==='conditional'?'预测落后':'落后')+cockpitDurationRange(lag),tone:'danger'};
  if(lag.maximum>0)return {text:'待核',tone:'neutral'};
+ if(forecast&&['lower_bound','unknown'].includes(forecast.kind))return {text:'进度待核',tone:'neutral'};
  return {text:'可用'+cockpitDurationRange({minimum:-lag.maximum,maximum:-lag.minimum}),tone:'success'};
 }
 export function cockpitScheduleReason(order:OrderJourney){
@@ -84,5 +86,6 @@ export function cockpitScheduleReason(order:OrderJourney){
  const scope=order.fixedSchedule.scopes.find(scope=>scope.customerDuePassed===true)??order.fixedSchedule.scopes.find(scope=>scope.state==='late');
  if(!scope)return order.fixedSchedule.state==='unknown'?{text:'计划待核',tone:'neutral'}:null;
  const po=order.lines.find(line=>line.id===scope.lineId)?.po;
- return {text:(scope.customerDuePassed?'交期已过':'进度落后')+(po?' · PO '+po:''),tone:scope.customerDuePassed?'danger':'warning'};
+ const predicted=['lower_bound','conditional'].includes(scope.completionEstimate?.kind??'');
+ return {text:(scope.customerDuePassed?'交期已过':predicted?'预测进度落后':'进度落后')+(po?' · PO '+po:''),tone:scope.customerDuePassed?'danger':'warning'};
 }
