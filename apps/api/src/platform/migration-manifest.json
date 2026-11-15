@@ -1227,6 +1227,10 @@
     {
       "version": "0292_customer_comment_occurrences",
       "checksum": "5c0098eadadbf3556f725d7c0972638e2c7ece4be8060ea141aee7a6be251a8b"
+    },
+    {
+      "version": "0293_budget_washing_fee_supplements",
+      "checksum": "e46efe87f57b35f394ad975964eb6a51f3c30874914c53873f1964a8e9bc82a7"
     }
   ]
 }

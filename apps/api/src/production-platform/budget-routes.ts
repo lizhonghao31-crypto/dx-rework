@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { SaveBudgetSchema, PublishBudgetSchema,AdoptBudgetQuotationSchema } from "@dx-rework/contracts/digital-budget";
+import { SaveBudgetSchema, PublishBudgetSchema,AdoptBudgetQuotationSchema,BudgetWashingFeeSchema } from "@dx-rework/contracts/digital-budget";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -21,6 +21,8 @@ export function registerBudgetRoutes(app: FastifyInstance, dependencies: Digital
   const id = (request: FastifyRequest, name: string) => parse(z.string().uuid(), (request.params as Record<string, unknown>)[name]);
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const base = "/digital-production/orders/:orderId/budget";
+  app.get(`${base}/washing-fees`,async request=>service.washingFees.read(await actor(request),id(request,'orderId')));
+  app.post(`${base}/washing-fees`,async request=>service.washingFees.publish(await actor(request),id(request,'orderId'),parse(BudgetWashingFeeSchema,request.body),key(request)));
   app.get(base, async request => {
     const query = parse(z.object({ version: z.coerce.number().int().positive().optional() }).strict(), request.query);
     return service.read(await actor(request), id(request, "orderId"), undefined, query.version);

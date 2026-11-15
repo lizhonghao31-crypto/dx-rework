@@ -30,6 +30,20 @@ export const AdoptBudgetQuotationSchema=z.object({expectedVersion:z.number().int
 export type BudgetDocument = z.infer<typeof BudgetDocumentSchema>;
 export type BudgetRow = z.infer<typeof BudgetRowSchema>;
 
+const washingRow=BudgetRowSchema.pick({name:true,specification:true,unit:true,supplier:true,consumption:true,unitPrice:true})
+ .refine(row=>Boolean(row.name&&row.unit&&row.consumption!==''&&row.unitPrice!==''),'请填写洗水名称、单位、用量和单价，零价格可明确填写0');
+export const BudgetWashingFeeSchema=z.object({expectedVersion:z.number().int().positive(),lineId:z.uuid(),expectedWashingVersion:z.number().int().positive(),reason:z.string().trim().min(1,'请填写费用依据和原因').max(2000),
+ source:z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('existing'),version:z.number().int().positive(),rowId:z.uuid()}).strict(),
+  z.object({kind:z.literal('new'),row:washingRow}).strict(),
+  z.object({kind:z.literal('adjust'),rowId:z.uuid(),row:washingRow}).strict(),
+ ])}).strict();
+export type BudgetWashingFeeInput=z.infer<typeof BudgetWashingFeeSchema>;
+export type BudgetWashingFees={productionOrderId:string;budgetVersion:number;canPublish:boolean;reason:string;comparison:BudgetQuoteComparison|null;
+ lines:Array<{lineId:string;label:string;version:number;fee:{kind:'pending'}|{kind:'budget_row';version:number;rowId:string}}>;
+ rows:BudgetRow[];history:Array<{version:number;baseVersion:number;lineId:string;rowId:string;reason:string;publishedAt:string;action:'new'|'adjust'}>;
+ references:Array<{lineId:string;planVersion:number;budgetVersion:number;name:string;consumption:string|null;unitPrice:string|null}>};
+
 // Keep the existing sourcing fixed-point convention, with six-place inputs and
 // twelve-place products so no detail is rounded before section/cost totals.
 const INPUT_SCALE = 1_000_000n;
