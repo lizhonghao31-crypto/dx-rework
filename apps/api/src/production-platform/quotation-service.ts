@@ -1,3 +1,4 @@
+import {quotationMaterialUnitBasis,quotationMaterialPriceBasis} from './quotation-material-unit.js';
 import {isDeepStrictEqual} from 'node:util';
 import {assembleQuotation,quotationComplete,type AssembledQuotation} from './quotation-assembly.js';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
@@ -16,7 +17,7 @@ import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './
 import {ensureQuotationBudget} from './quotation-budget-basis.js';
 
 type Database=Pick<Pool|PoolClient,'query'>;
-type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string};
+type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
 type QuoteRow=AssembledQuotation;
 const conflict=(message:string,code='QUOTATION_CONFLICT'):never=>{throw new ApplicationError(code,message,409);};
 const enabledRoles=['sample_designer','order_merchandiser','pattern_room_worker','ie_reviewer','embroidery_washing_merchandiser','owner_group','production_management'];
@@ -38,7 +39,8 @@ export class DigitalQuotationService{
   const full=isRootActor(actor)||designer||merch||roles.has('owner_group')||roles.has('production_management')||roles.has('pmc');
   const ownRow=(quote?.assignments??[]).some(a=>a.technicalAssigneeId===actor.actorId&&roles.has('pattern_room_worker')||a.priceAssigneeId===actor.actorId&&roles.has(a.priceRole));
   if(!full&&!ownRow)digitalNotFound();
-  return {row,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure:isRootActor(actor)||designer,confirm:isRootActor(actor)||designer||merch};
+  const sourceDocument=quote?.assembly&&sourceId&&(isRootActor(actor)||designer)?await developmentDocumentRow(db,sourceId):undefined;
+  return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure:isRootActor(actor)||designer,confirm:isRootActor(actor)||designer||merch};
  }
  async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number):Promise<QuotationSheet>{
   const c=await this.context(db,actor,resource,true),q=c.quote;
@@ -61,7 +63,7 @@ export class DigitalQuotationService{
    const basis=assembly?.rows[row.rowId];
    return [{...row,...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
     technicalAssigneeName:a.technicalAssigneeId?names.get(a.technicalAssigneeId)??null:null,priceAssigneeName:a.priceAssigneeId?names.get(a.priceAssigneeId)??null:null,
-    canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&(isRootActor(actor)||price),consumptionSource:sources[row.rowId]??null}];
+    canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&(isRootActor(actor)||price),canEditPricingUnit:version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
   });
   const technicalConsumptionOptions:NonNullable<QuotationSheet['technicalConsumptionOptions']>=[];
   if(version===undefined&&c.sourceId&&rows.some(r=>r.canEditConsumption)){
@@ -177,22 +179,39 @@ export class DigitalQuotationService{
    const component=q.assembly?.rows[rowId];
    if(component&&component.kind!=='material'&&(input.consumption!==undefined||input.artifactConsumption))conflict('材料价格从原开发资料读取；IE与工艺均按每件单价计入，不重复填写用量');
    const version=q.version+1,sources={...q.consumption_sources},priceSources={...q.price_sources};
+   const unit=input.pricingUnit??row.unit,unitChanged=unit!==row.unit;
+   let assembly=q.assembly,priceBasis=component?.priceBasis;
+   if(input.pricingUnit!==undefined){
+    if(!c.structure)digitalForbidden();
+    const material=c.sourceDocument?.document?.materials.find((m:DevelopmentMaterial)=>m.materialId===component?.sourceRef) as DevelopmentMaterial|undefined;
+    if(!assembly||component?.kind!=='material'||c.sourceDocument?.status!=='published'||!material)conflict('请从原已发布开发单的自动材料报价补正计价单位');
+    const materialPricingUnits={...assembly!.materialPricingUnits};
+    if(unit===(material!.pricingUnit??''))delete materialPricingUnits[rowId];
+    else if(unitChanged||!materialPricingUnits[rowId])materialPricingUnits[rowId]={unit,sourceUnit:material!.pricingUnit??'',materialBasis:quotationMaterialUnitBasis(material!),actorId:actor.actorId,version,recordedAt:businessNow().toISOString()};
+    assembly={...assembly!,materialPricingUnits};priceBasis=quotationMaterialPriceBasis(material!,unit);
+    if(unitChanged){
+     delete sources[rowId];
+     const original=priceSources[rowId];
+     if(original&&original.documentPriceHash!==undefined&&original.documentPriceHash===component!.priceBasis)priceSources[rowId]={...original,documentPriceHash:priceBasis,unitCorrectionVersion:version};
+     await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'quotation_material_unit_corrected','customer_quotation',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,q.quote_id,JSON.stringify({sourceId:c.sourceId,materialId:material!.materialId,sourceVersion:c.sourceDocument!.version,quoteVersion:version,beforeUnit:row.unit,unit,consumptionInvalidated:true})]);
+    }
+   }
    let adoptedConsumption:string|undefined;
    if(input.artifactConsumption){
     if(!c.sourceId)conflict('本报价尚无开发技术来源，可继续按真实技术数据直接填写');
     const source=await developmentDocumentRow(db,c.sourceId!),artifact=source?await publishedTechnicalArtifact(db,c.sourceId!,source.round_number??1):null,ref=input.artifactConsumption;
     if(!source?.document||!artifact||artifact.artifact.artifactSetId!==ref.id||artifact.artifact.version!==ref.version||artifact.row.document_fingerprint!==technicalDocumentFingerprint(source.document))conflict('技术成果已变版，请重新读取后显式采用');
     const consumption=artifact!.artifact.body.consumptionRows.find(r=>r.materialId===ref.materialId);
-    if(!consumption||!row.unit.trim()||consumption.unit!==row.unit.trim())conflict('该物料或单位与本报价行不符，请核对；不自动换算单位');
+    if(!consumption||!unit.trim()||consumption.unit!==unit.trim())conflict('该物料或单位与本报价行不符，请核对；不自动换算单位');
     if(component&&ref.materialId!==component.sourceRef)conflict('技术用量必须对应同一物料标识，不能按名称或相同单位替换');
     if(!['主料','辅料'].includes(row.section))conflict('物料用量成果仅用于对应材料行，工序用量仍按实际技术填写');
     adoptedConsumption=consumption!.consumption;sources[rowId]={kind:'technical_artifact',actorId:actor.actorId,version,recordedAt:businessNow().toISOString(),artifactRef:{id:ref.id,version:ref.version,materialId:ref.materialId}};
    }
-   if(input.consumption!==undefined){if(!row.unit)conflict('请设计先填写物料单位');sources[rowId]={kind:'technical_manual',actorId:actor.actorId,version,recordedAt:businessNow().toISOString()};}
-   if(input.unitPrice!==undefined)priceSources[rowId]={actorId:actor.actorId,role:isRootActor(actor)?'root_superuser':a.priceRole,version,recordedAt:businessNow().toISOString(),...(component?.kind==='material'?{documentPriceHash:component.priceBasis}:{} )};
+   if(input.consumption!==undefined){if(!unit)conflict('请设计先填写物料单位');sources[rowId]={kind:'technical_manual',actorId:actor.actorId,version,recordedAt:businessNow().toISOString()};}
+   if(input.unitPrice!==undefined)priceSources[rowId]={actorId:actor.actorId,role:isRootActor(actor)?'root_superuser':a.priceRole,version,recordedAt:businessNow().toISOString(),...(component?.kind==='material'&&priceBasis!==undefined?{documentPriceHash:priceBasis,...(unitChanged?{unitCorrectionVersion:version}:{})}:{} )};
    if(input.consumption===''&&!q.assembly)delete sources[rowId];if(input.unitPrice===''&&!q.assembly)delete priceSources[rowId];
-   const document={...q.document,rows:q.document.rows.map(r=>r.rowId===rowId?{...r,...(adoptedConsumption!==undefined?{consumption:adoptedConsumption}:input.consumption!==undefined?{consumption:input.consumption}:{}),...(input.unitPrice!==undefined?{unitPrice:input.unitPrice}:{})}:r)};
-   await db.query('UPDATE digital_quotation_documents SET version=$2,document=$3,consumption_sources=$4,price_sources=$5,updated_by=$6,updated_at=CURRENT_TIMESTAMP WHERE quote_id=$1',[q.quote_id,version,JSON.stringify(document),JSON.stringify(sources),JSON.stringify(priceSources),actor.actorId]);
+   const document={...q.document,rows:q.document.rows.map(r=>r.rowId===rowId?{...r,unit,...(unitChanged?{consumption:''}:{}),...(adoptedConsumption!==undefined?{consumption:adoptedConsumption}:input.consumption!==undefined?{consumption:input.consumption}:{}),...(input.unitPrice!==undefined?{unitPrice:input.unitPrice}:{})}:r)};
+   await db.query(`UPDATE digital_quotation_documents SET version=$2,document=$3,consumption_sources=$4,price_sources=$5,updated_by=$6${q.assembly?',assembly=$7':''},updated_at=CURRENT_TIMESTAMP WHERE quote_id=$1`,[q.quote_id,version,JSON.stringify(document),JSON.stringify(sources),JSON.stringify(priceSources),actor.actorId,...(q.assembly?[JSON.stringify(assembly)]:[])]);
    if(q.assembly&&c.sourceId)await assembleQuotation(db,c.sourceId,actor.actorId,version);
   });
  }

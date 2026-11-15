@@ -11,7 +11,7 @@ import {developmentDocumentRow} from './development-round-repository.js';
 import {publishedTechnicalArtifact,technicalDocumentFingerprint} from './development-technical-repository.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 
-type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string};
+type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
 export type AssembledQuotation={quote_id:string;source_id:string|null;production_order_id:string|null;version:number;confirmed_version:number|null;document:BudgetDocument;assignments:QuotationAssignment[];consumption_sources:Record<string,QuotationConsumptionSource>;price_sources:Record<string,PriceSource>;assembly?:QuotationAssembly|null};
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function rowId(sourceId:string,key:string){const h=digest([sourceId,key]);return `${h.slice(0,8)}-${h.slice(8,12)}-5${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;}

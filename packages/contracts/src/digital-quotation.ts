@@ -17,7 +17,7 @@ export const SaveQuotationSchema=z.object({expectedVersion:z.number().int().nonn
   if(new Set(ids).size!==ids.length||ids.length!==v.document.rows.length||v.document.rows.some(r=>!ids.includes(r.rowId)))c.addIssue({code:'custom',message:'每条报价明细须有且仅有一条责任分工'});
   if(v.document.imageAttachmentIds.length)c.addIssue({code:'custom',message:'报价沿用原单款图；确认依据请填写真实来源，不重复上传预算图片'});
 });
-export const QuotationRowInputSchema=z.object({expectedVersion:z.number().int().positive(),consumption:z.union([QuotationDecimalSchema,z.literal('')]).optional(),unitPrice:z.union([QuotationDecimalSchema,z.literal('')]).optional(),artifactConsumption:z.object({id:z.string().uuid(),version:z.number().int().positive(),materialId:z.string().uuid()}).strict().optional()}).strict().refine(v=>v.consumption!==undefined||v.unitPrice!==undefined||v.artifactConsumption!==undefined,'请填写负责的用量或价格').refine(v=>!(v.artifactConsumption&&v.consumption!==undefined),'采用成果时不同时提交另一份手工用量');
+export const QuotationRowInputSchema=z.object({expectedVersion:z.number().int().positive(),consumption:z.union([QuotationDecimalSchema,z.literal('')]).optional(),unitPrice:z.union([QuotationDecimalSchema,z.literal('')]).optional(),pricingUnit:z.string().trim().min(1,'请填写真实计价单位').max(100).optional(),artifactConsumption:z.object({id:z.string().uuid(),version:z.number().int().positive(),materialId:z.string().uuid()}).strict().optional()}).strict().refine(v=>v.consumption!==undefined||v.unitPrice!==undefined||v.artifactConsumption!==undefined||v.pricingUnit!==undefined,'请填写负责的用量、价格或计价单位').refine(v=>!(v.artifactConsumption&&v.consumption!==undefined),'采用成果时不同时提交另一份手工用量');
 export const QuotationConfirmationSchema=z.object({
   customerCode:z.string().trim().min(1).max(30),
   expectedVersion:z.number().int().positive(),customerConfirmedTotal:QuotationDecimalSchema,
@@ -29,7 +29,7 @@ export const QuotationConfirmationSchema=z.object({
 }).strict().refine(v=>v.amountScope==='order_total'?v.quantity!==null:v.quantity===null,'整单金额须填确认件数；单件金额不填整单件数');
 export type QuotationConfirmation=z.infer<typeof QuotationConfirmationSchema>;
 export type QuotationConsumptionSource={kind:'technical_manual'|'technical_artifact';actorId:string;version:number;recordedAt:string;artifactRef?:{id:string;version:number;materialId?:string}};
-export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;consumptionSource:QuotationConsumptionSource|null};
+export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null};
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;

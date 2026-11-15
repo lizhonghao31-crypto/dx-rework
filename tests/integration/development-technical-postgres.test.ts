@@ -1,4 +1,5 @@
 import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
+import {execFileSync} from 'node:child_process';
 import {technicalDocumentFingerprint} from '../../apps/api/src/production-platform/development-technical-repository.js';
 import {QuotationConfirmationSchema} from '@dx-rework/contracts/digital-quotation';
 import {calculateBudget} from '@dx-rework/contracts/digital-budget';
@@ -67,7 +68,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingAccessory?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
@@ -76,7 +77,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
   const accessoryId=options.missingAccessory?randomUUID():null;
   if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST必要纽扣',name:'纽扣',available:false,expectedDate:'2027-01-01'});
-  if(options.automatic){document.quotationMode='automatic_v1';document.materials=document.materials.map(m=>({...m,pricingUnit:m.category==='辅料'?'件':'米',unitPrice:m.category==='辅料'?'2':'20'}));}
+  if(options.automatic){document.quotationMode='automatic_v1';document.materials=document.materials.map(m=>({...m,pricingUnit:m.category==='辅料'?'件':options.missingPricingUnit?'':'米',unitPrice:m.category==='辅料'?'2':'20'}));}
   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
   if(options.withoutNative)await new DigitalDevelopmentService(f.db,true).publish(designer,sourceId,saved.version,randomUUID());
   else await forms.publish(designer,sourceId,saved.version,randomUUID(),category);
@@ -103,6 +104,64 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return technical.saveArtifact(p.worker,p.sourceId,{taskId:p.paper.taskId,expectedDocumentVersion:p.documentVersion,expectedVersion:0,scopeRef:'整款',action:'publish',body,...overrides},randomUUID());
  };
  const comment=(version=0,isFinal=true):RecordFinalComment=>({roundNumber:1,scopeRef:'整款',expectedVersion:version,isFinal,decision:'approved',text:'TEST客户最终批复，技术仍须核对或沿用',evidenceRefs:[],evidenceNote:'TEST客户邮件文字记录，非报价确认',occurredAt:null});
+
+
+ it('corrects only the commercial unit after real technical completion, preserving original work and frozen financial versions',async()=>{
+  const p=await prepare('印花',{automatic:true,missingPricingUnit:true}),resource={kind:'source' as const,id:p.sourceId},quotes=new DigitalQuotationService(f.db,true),published=await artifact(p);
+  await execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,attachmentIds:[],artifactRef:{id:published.artifactSetId,version:published.version,scopeRef:'整款'},note:'TEST original paper completed before commercial correction'},randomUUID());
+  const final=await technical.recordComment(p.designer,p.sourceId,comment(),randomUUID());
+  await technical.completeReview(p.worker,p.sourceId,{taskId:final.reviewTaskId!,expectedReviewVersion:1,finalCommentId:final.commentId,finalCommentVersion:final.version,decision:'reuse',artifactSetId:published.artifactSetId,artifactVersion:published.version,note:'TEST actual completed technical review'},randomUUID());
+  const sourceBefore=await forms.read(f.root,p.sourceId),technicalBefore=await technical.read(p.worker,p.sourceId);
+  const tasksBefore=(await execution.read(f.root,p.sourceId)).tasks.map(({taskId,state,enteredAt,dueAt,completedAt})=>({taskId,state,enteredAt,dueAt,completedAt}));
+  let q=await quotes.read(p.designer,resource);const ie=q.document!.rows.find(row=>row.name==='IE加工单价')!,craft=q.document!.rows.find(row=>row.name==='印花')!;
+  q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.rowId===ie.rowId?{...a,priceAssigneeId:person('ie').actorId}:a)},randomUUID());
+  q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
+  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'3'},randomUUID());
+  q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,unitPrice:'22'},randomUUID());
+  expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'',consumption:'',unitPrice:'22',canEditPricingUnit:true});
+  await expect(quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID())).rejects.toMatchObject({statusCode:403});
+  await expect(quotes.fillRow(p.designer,resource,craft.rowId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const input={expectedVersion:q.version,pricingUnit:'米'},key=randomUUID();
+  q=await quotes.fillRow(p.designer,resource,p.materialId,input,key);expect(q.complete).toBe(true);
+  expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'米',consumption:'1.250000',unitPrice:'22',pricingUnitSource:{sourceUnit:'',version:q.version}});
+  expect(calculateBudget(q.document!).cost).toBe('40.5');expect((await quotes.fillRow(p.designer,resource,p.materialId,input,key)).version).toBe(q.version);
+  await expect(quotes.fillRow(p.designer,resource,p.materialId,{...input,pricingUnit:'码'},key)).rejects.toMatchObject({statusCode:409});
+  expect((await f.db.query("SELECT count(*)::int AS count FROM audit_events WHERE action='quotation_material_unit_corrected' AND entity_id=$1",[q.quoteId])).rows[0].count).toBe(1);
+  // Optional local exact-commit probe reads this real new-format sample and
+  // writes another row through the selected rollback reader/writer. CI still
+  // executes every business assertion without an external checkout dependency.
+  if(process.env.QUOTATION_UNIT_COMPAT_PROBE){
+   const schema=(await f.db.query('SELECT current_schema() AS schema')).rows[0].schema;
+   const proof=JSON.parse(execFileSync('node_modules/.bin/tsx',[process.env.QUOTATION_UNIT_COMPAT_PROBE],{input:JSON.stringify({schema,designer:p.designer,ie:person('ie'),resource,materialId:p.materialId,ieId:ie.rowId}),encoding:'utf8',env:process.env}));
+   expect(proof).toMatchObject({commit:'29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd',readNewUnit:true,preservedAfterNativeDifferentRowWrite:true});console.log('QUOTATION_UNIT_ROLLBACK_PROOF='+JSON.stringify(proof));
+   q=await quotes.read(p.designer,resource);q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
+  }
+  const sourceAfter=await forms.read(f.root,p.sourceId);expect(sourceAfter.document).toEqual(sourceBefore.document);expect(sourceAfter.version).toBe(sourceBefore.version);
+  expect((await technical.read(p.worker,p.sourceId)).artifacts).toEqual(technicalBefore.artifacts);expect((await technical.read(p.worker,p.sourceId)).effective).toEqual(technicalBefore.effective);
+  expect((await execution.read(f.root,p.sourceId)).tasks.map(({taskId,state,enteredAt,dueAt,completedAt})=>({taskId,state,enteredAt,dueAt,completedAt}))).toEqual(tasksBefore);
+  const frozen=q.version;await quotes.confirm(p.designer,resource,QuotationConfirmationSchema.parse({expectedVersion:frozen,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST real customer confirmation separate from commercial correction',confirmedAt:businessNow().toISOString()}),randomUUID());
+  const order=await identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:sourceAfter.designStyleNo,temporaryStyleNo:null,orderDate:'2026-10-20',lines:[{color:'黑',sizes:[{size:'M',quantity:10}],deliveryDate:'2027-03-01'}]}),randomUUID(),p.sourceId),budgets=new DigitalBudgetService(f.db,true),budgetBefore=await budgets.read(f.root,order.productionOrderId);
+  q=await quotes.read(p.designer,resource);q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'码',unitPrice:'0'},randomUUID());
+  expect(q.complete).toBe(false);expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'码',unitPrice:'0',consumption:''});
+  expect(q.rows.filter(row=>row.rowId!==p.materialId).map(row=>row.unitPrice)).toEqual(['10','3']);
+  q=await quotes.fillRow(f.root,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米',unitPrice:'0'},randomUUID());expect(calculateBudget(q.document!).cost).toBe('13');
+  q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'1.5'},randomUUID());
+  q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID());expect(q.rows.find(row=>row.rowId===p.materialId)?.consumption).toBe('1.5');
+  expect((await quotes.read(p.designer,resource,undefined,frozen)).document!.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'米',consumption:'1.250000',unitPrice:'22'});
+  expect((await budgets.read(f.root,order.productionOrderId)).document).toEqual(budgetBefore.document);
+ });
+
+ it('serializes commercial unit correction and denies foreign or revoked designers without adopting another unit',async()=>{
+  const p=await prepare('无',{automatic:true,missingPricingUnit:true}),quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:p.sourceId};await artifact(p);
+  let q=await quotes.read(p.designer,resource);const version=q.version;
+  const attempts=await Promise.allSettled(['米','码'].map(pricingUnit=>quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:version,pricingUnit},randomUUID())));
+  expect(attempts.filter(result=>result.status==='fulfilled')).toHaveLength(1);expect(attempts.find(result=>result.status==='rejected')).toMatchObject({reason:{statusCode:409}});
+  q=await quotes.read(p.designer,resource);expect(q.version).toBe(version+1);
+  await expect(quotes.fillRow(person('worker-a'),resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID())).rejects.toMatchObject({statusCode:404});
+  await f.db.query("UPDATE identity_mappings SET employed=false WHERE user_id=$1",[p.designer.actorId]);
+  try{await expect(quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID())).rejects.toMatchObject({statusCode:404});}finally{await f.db.query('UPDATE identity_mappings SET employed=true WHERE user_id=$1',[p.designer.actorId]);}
+  expect((await quotes.read(p.designer,resource)).version).toBe(q.version);
+ });
 
  it('PR03 assembles exact native materials, formal consumption, IE and assigned craft; freezes confirmed budgets across later source changes',async()=>{
   const p=await prepare('印花',{automatic:true,missingAccessory:true}),resource={kind:'source' as const,id:p.sourceId},quotes=new DigitalQuotationService(f.db,true);

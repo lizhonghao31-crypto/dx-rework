@@ -2,7 +2,7 @@
   "version": 1,
   "base": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
   "risk": "full",
-  "sourceFingerprint": "3499156456bfcb9b9d534253f765edcea52470eaee1f9230cbe11e7e772ef1ba",
+  "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
   "rules": [
     {
       "rule": "Commercial unit corrections stay on the same physical material and native source-unit baseline, remain additive in current quotation assembly, and cannot overwrite original technical source, confirmed quote, budget or contract.",
@@ -13,7 +13,15 @@
         "apps/api/src/production-platform/quotation-assembly.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "tests/unit/quotation-material-unit.test.ts",
-        "docs/engineering/quotation-material-pricing-unit.md"
+        "docs/engineering/quotation-material-pricing-unit.md",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "tests/unit/customer-quotation.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "docs/requirements/platform-permission-golden-source-v1.0.md",
+        "docs/requirements/rework-ui-golden-source-v1.0.md",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
         "apps/api/src/production-platform/quotation-service.ts",
@@ -21,7 +29,11 @@
         "apps/api/src/production-platform/development-round-plan.ts",
         "apps/api/src/production-platform/development-round-service.ts",
         "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/migrations/0288_automatic_quotation_sources.sql"
+        "apps/api/migrations/0288_automatic_quotation_sources.sql",
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "apps/web/src/digital-production-api.ts",
+        "apps/api/src/access/business-authority.ts",
+        "apps/api/migrations/0267_customer_quotation_budget_basis.sql"
       ],
       "oldTests": [
         "tests/unit/customer-quotation.test.ts",
@@ -31,17 +43,20 @@
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/quotation-material-unit.test.ts"
+        "tests/unit/quotation-material-unit.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
-      "initialization": "Additive assembly JSON schemaVersion1 field with strict bounded provenance decoder; no migration/backfill, no UI or command enabled at compatibility stage. Assemblers preserve valid metadata and reject malformed values; real source-unit/material changes invalidate stale correction. Old metadata-free shape/fingerprint unchanged. Exact compatibility SHA will be tested against real final new-format sample before release.",
-      "dateAndPermission": "No actual dates, clocks or business permissions change in this compatibility commit. Original actor/role checks and immutable confirmed versions remain; same-unit formal usage only, no conversions or fabricated zero price. Final row command/UI and lowprivPG checks still required before PR completion.",
-      "expectation": "87 unit cases pass: valid same material correction survives price/availability/date changes; foreign material/physical/source unit rejected; malformed provenance rejected; exact unit price basis and zero-vs-missing remain distinct. Types/lint/preflight/secret pass. This intermediate compatibility source is not claimed to have completed final PG/UI acceptance.",
+      "initialization": "Additive schemaVersion1 provenance, no migration/backfill. Actual compatibility floor29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd independently checked out and built own packages; native final source writes real metadata, exact older code reads it and changes IE row without losing material unit, formal usage, price override or provenance. No server switched. Pre-0288 manual schemas retain original row SQL and never reference absent assembly column. No catch-and-ignore or fixture migration added.",
+      "dateAndPermission": "Original quotation lifecycle transaction, current native active-role checks, expectedVersion and body/key replay retained. Unit field restricted to original current designer or Root and published automatic physical material. Simultaneous price/consumption/artifact fields each keep original independent permission. Quantity unit is exact, no conversion, zero price remains real. No source document, technical ID, completed review/task/R/deadline or immutable financial snapshot rewritten.",
+      "expectation": "87units and74realPG/native tests pass. Actual completed paper and review preserve physical IDs and clocks;22x1.25+10+3=40.5, unmatched unit clears only own consumption, zero+unit together honored, unchanged unit preserves manual quantity. Immutable confirmed quote and adopted budget preserved. Race succeeds once, changed-body original key rejects, unrelated/revoked roles deny. Original authenticated App recovers lost successful response with same key/body/version and denies same cookie after source-designer revocation;1165/390 screenshots opened. Native old manual quote and actual amendment guards pass.",
       "checks": [
         "unit",
         "types",
         "lint",
         "preflight",
-        "secret"
+        "secret",
+        "pg"
       ]
     }
   ],
@@ -52,20 +67,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
-      "sourceFingerprint": "3499156456bfcb9b9d534253f765edcea52470eaee1f9230cbe11e7e772ef1ba",
-      "startedAt": "2026-11-15T21:02:49.220Z",
-      "endedAt": "2026-11-15T21:02:49.984Z",
-      "log": "/tmp/quotation-unit-compat-unit.log",
-      "logSha256": "af645eacfb76a3152cb5fcb1f0657ade9aa94dcc063ac1a9df7d3e6eaeae3205",
-      "context": "Node22.22.2/npm10.9.9, exact-lock third-party reuse with own built workspace packages, not fresh npm ci. Canonical bounded workers1. No deployment or real business data/role mutation. Compatibility reader stage is not release of the correction command; final native PostgreSQL/role/UI and exact rollback sample follow in same PR.",
+      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
+      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "startedAt": "2026-11-15T21:21:59.523Z",
+      "endedAt": "2026-11-15T21:22:00.319Z",
+      "log": "/tmp/quotation-unit-final-unit.log",
+      "logSha256": "b1954e19fcf946435157399786f8e0bfd5006b9ed3ebd79501c9b798429cac12",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
       "passed": 87,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f1d1b31a0627ed6214b0c3f834b69df5fed29b6db797c7383d80c7b364b26f13"
+          "sha256": "6ebf8cde1054c0dcd1adbdf3dfc4578a2b7b43f9ed719798dec4464cc7a510ea"
         }
       ]
     },
@@ -75,13 +90,13 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
-      "sourceFingerprint": "3499156456bfcb9b9d534253f765edcea52470eaee1f9230cbe11e7e772ef1ba",
-      "startedAt": "2026-11-15T21:02:53.000Z",
-      "endedAt": "2026-11-15T21:03:49.580Z",
-      "log": "/tmp/quotation-unit-compat-types.log",
+      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
+      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "startedAt": "2026-11-15T21:09:20.000Z",
+      "endedAt": "2026-11-15T21:21:59.233Z",
+      "log": "/tmp/quotation-unit-final-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9, exact-lock third-party reuse with own built workspace packages, not fresh npm ci. Canonical bounded workers1. No deployment or real business data/role mutation. Compatibility reader stage is not release of the correction command; final native PostgreSQL/role/UI and exact rollback sample follow in same PR."
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
       "id": "lint",
@@ -89,13 +104,13 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
-      "sourceFingerprint": "3499156456bfcb9b9d534253f765edcea52470eaee1f9230cbe11e7e772ef1ba",
-      "startedAt": "2026-11-15T21:03:49.000Z",
-      "endedAt": "2026-11-15T21:03:49.588Z",
-      "log": "/tmp/quotation-unit-compat-lint.log",
+      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
+      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "startedAt": "2026-11-15T21:15:22.000Z",
+      "endedAt": "2026-11-15T21:22:00.361Z",
+      "log": "/tmp/quotation-unit-final-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.2/npm10.9.9, exact-lock third-party reuse with own built workspace packages, not fresh npm ci. Canonical bounded workers1. No deployment or real business data/role mutation. Compatibility reader stage is not release of the correction command; final native PostgreSQL/role/UI and exact rollback sample follow in same PR."
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
       "id": "preflight",
@@ -103,13 +118,13 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
-      "sourceFingerprint": "3499156456bfcb9b9d534253f765edcea52470eaee1f9230cbe11e7e772ef1ba",
-      "startedAt": "2026-11-15T21:03:50.000Z",
-      "endedAt": "2026-11-15T21:03:57.132Z",
-      "log": "/tmp/quotation-unit-compat-preflight.log",
-      "logSha256": "a10ccd9c01b2cac2605d0c764a2335ecbdc0480269ab2273b26ee9af47236ad5",
-      "context": "Node22.22.2/npm10.9.9, exact-lock third-party reuse with own built workspace packages, not fresh npm ci. Canonical bounded workers1. No deployment or real business data/role mutation. Compatibility reader stage is not release of the correction command; final native PostgreSQL/role/UI and exact rollback sample follow in same PR."
+      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
+      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "startedAt": "2026-11-15T21:22:02.000Z",
+      "endedAt": "2026-11-15T21:23:19.882Z",
+      "log": "/tmp/quotation-unit-final-preflight.log",
+      "logSha256": "b69511d796dfcefd6541b21f6a4ad27485d6e110dcefc7c569866bf1222fc0b5",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
     },
     {
       "id": "secret",
@@ -117,13 +132,36 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d49d3fed715419c78be1b5b0e4e32e12866311ea",
-      "sourceFingerprint": "3499156456bfcb9b9d534253f765edcea52470eaee1f9230cbe11e7e772ef1ba",
-      "startedAt": "2026-11-15T21:03:57.000Z",
-      "endedAt": "2026-11-15T21:03:58.332Z",
-      "log": "/tmp/quotation-unit-compat-secret.log",
+      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
+      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "startedAt": "2026-11-15T21:23:19.000Z",
+      "endedAt": "2026-11-15T21:23:21.014Z",
+      "log": "/tmp/quotation-unit-final-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9, exact-lock third-party reuse with own built workspace packages, not fresh npm ci. Canonical bounded workers1. No deployment or real business data/role mutation. Compatibility reader stage is not release of the correction command; final native PostgreSQL/role/UI and exact rollback sample follow in same PR."
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing."
+    },
+    {
+      "id": "pg",
+      "command": "QUOTATION_UNIT_COMPAT_PROBE=/tmp/quotation-unit-run-compat.mts bash /tmp/quotation-unit-pg.sh (canonical original lowprivPG16, maxWorkers1)",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "29bd292878db2bfd0c86cf7850bb4a43ad6fd2dd",
+      "sourceFingerprint": "30492f78127a75d73eca4b364a918b501068e5003eadaf1160813b4fa57116b7",
+      "startedAt": "2026-11-15T21:17:13.985Z",
+      "endedAt": "2026-11-15T21:18:44.072Z",
+      "log": "/tmp/quotation-unit-final-pg.log",
+      "logSha256": "2c8f52544eb67aa24b10d0a4ed66b9147f89cebe5f24604e45604db6201aff66",
+      "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Original full App and native signed roles; owned safety-marked lowpriv PG16,512MiB tmpfs, canonical business-chain maxWorkers1. Locked Chromium1194 and original CJK job fonts. External lost receipt is controlled after actual native success; no real data, server deploy or role assignment. Exact compatibility29bd2928 service tested on same new-format isolated sample, not only JSON parsing.",
+      "passed": 74,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2563f83137294b11b52cb345c4351916a60b5d922a8ed10b8c1d4a845d59005d"
+        }
+      ]
     }
   ]
 }

@@ -1,3 +1,4 @@
+import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -74,4 +75,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.errors).toEqual([]);
   }finally{await d.page.screenshot({path:join(h.evidence,'last-page.png'),fullPage:true});await d.context.close();}
  });
+ it('supplements a published material unit in the original row, recovers the original lost receipt and rechecks same-session authority',async()=>{
+  const designer=h.f.people['sample-designer']!,forms=new DigitalDevelopmentService(h.db,true),quotes=new DigitalQuotationService(h.db,true);
+  const source=await new DigitalProductionIdentityService(h.db,true).createSource(designer,{developmentType:'头版',designStyleNo:'TEST-UNIT-UI-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const doc=initialDevelopmentDocument(),materialId=randomUUID();doc.quantity=1;doc.materials=[{...doc.materials[0]!,materialId,category:'主布',label:'主布',name:'TEST单位棉布',supplier:'TEST',specification:'40支',width:'150',weight:'200',composition:'棉',color:'黑',requiredThisRound:true,available:true,pricingUnit:'',unitPrice:'20'}];doc.files=[{attachmentId:await h.f.image(designer),kind:'款图'}];
+  const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document:DevelopmentDocumentSchema.parse(doc)},randomUUID());await forms.publish(designer,source.sourceId,saved.version,randomUUID());
+  const before=await forms.read(designer,source.sourceId),resource={kind:'source' as const,id:source.sourceId},path='/ui/digital-quotation?kind=source&id='+source.sourceId;
+  const d=await h.open(designer.actorId,1165,{},path);let lost=true;const writes:Array<{key:string|undefined;body:unknown}>=[];
+  await d.context.route('**/api/digital-production/sources/'+source.sourceId+'/quotation/rows/'+materialId,async route=>{
+   const request=route.request();if(request.method()!=='POST')return route.continue();writes.push({key:request.headers()['idempotency-key'],body:request.postDataJSON()});
+   if(lost){lost=false;expect((await route.fetch()).status()).toBe(200);return route.abort('failed');}return route.continue();
+  });
+  try{
+   await d.page.getByLabel('TEST单位棉布计价单位',{exact:true}).fill('米');
+   const own=d.page.locator('.quotation-row-input').filter({has:d.page.getByLabel('TEST单位棉布计价单位',{exact:true})});await own.getByRole('button',{name:'保存本行负责字段',exact:true}).click();
+   await d.page.getByRole('button',{name:'使用原内容核对报价提交',exact:true}).waitFor();const committed=await quotes.read(designer,resource);expect(committed.rows.find(row=>row.rowId===materialId)).toMatchObject({unit:'米',unitPrice:'20',consumption:''});
+   await d.page.getByRole('button',{name:'使用原内容核对报价提交',exact:true}).click();await expect.poll(()=>d.page.getByRole('button',{name:'使用原内容核对报价提交',exact:true}).count()).toBe(0);
+   expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);expect((await quotes.read(designer,resource)).version).toBe(committed.version);
+   expect((await forms.read(designer,source.sourceId)).document).toEqual(before.document);expect((await forms.read(designer,source.sourceId)).version).toBe(before.version);
+   await d.page.screenshot({path:join(h.evidence,'material-unit-1165.png'),fullPage:true});await d.page.setViewportSize({width:390,height:844});await d.page.screenshot({path:join(h.evidence,'material-unit-390.png'),fullPage:true});
+   const assignment=(await h.db.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='sample_designer' AND revoked_at IS NULL",[designer.actorId])).rows[0];
+   await h.f.access.assignRole(h.admin,{userId:designer.actorId,roleCode:'finance_read',reason:'TEST keep same authenticated login after designer revocation'});await h.f.access.revokeRole(h.admin,assignment.assignment_id,'TEST deny commercial unit write after revocation');
+   const denied=await d.page.request.post(h.base+'/api/digital-production/sources/'+source.sourceId+'/quotation/rows/'+materialId,{headers:{'idempotency-key':writes[0]!.key!},data:writes[0]!.body});expect([403,404]).toContain(denied.status());
+   expect((await quotes.read(h.f.root,resource)).version).toBe(committed.version);
+  }finally{await d.context.close();}
+ });
+
 });
