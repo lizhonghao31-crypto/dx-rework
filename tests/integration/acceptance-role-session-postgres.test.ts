@@ -16,6 +16,10 @@ import {
 } from "../../apps/api/src/auth/acceptance-provider.js";
 import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
 import { AuthService } from "../../apps/api/src/auth/service.js";
+import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
+import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
+import { ExportJobService } from "../../apps/api/src/tools/exports.js";
+import type { ObjectStorage } from "../../apps/api/src/tools/storage.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -37,6 +41,8 @@ runWithPostgres("acceptance role sessions", () => {
     root: randomUUID(),
     worker: randomUUID(),
     financeDirector: randomUUID(),
+    factoryPayables: randomUUID(),
+    warehouse: randomUUID(),
   };
 
   const config = loadConfig({
@@ -59,6 +65,14 @@ runWithPostgres("acceptance role sessions", () => {
   const provider = new AcceptanceDingTalkProvider(database, corpId, acceptanceSecret);
   const auth = new AuthService(provider, store, corpId, 60 * 60_000, sessionSecret);
   const access = new AccessMasterDataService(database, corpId);
+  // Only the isolated fixture accepts a legacy style receipt; production keeps its cutting-order guard.
+  const receiving = new ReceivingService(database, undefined, undefined, undefined, { allowLegacyStyleInput: true });
+  const attachmentGrants: string[] = [];
+  const storage = { createDownloadGrant: async (key: string) => {
+    attachmentGrants.push(key);
+    return { downloadUrl: "https://example.invalid/receiving-evidence", expiresAt: new Date(Date.now() + 60000).toISOString() };
+  } } as unknown as ObjectStorage;
+  const attachments = new AttachmentService(database, storage, { prefix: "test", maxUploadBytes: 10000, ttlSeconds: 60 });
   const app = buildApp({
     config,
     checkDatabase: async () => undefined,
@@ -68,6 +82,12 @@ runWithPostgres("acceptance role sessions", () => {
       authenticate: (token) => auth.authenticate(token),
       service: access,
       root: rootAuthority,
+    },
+    receiving: { authenticate: token => auth.authenticate(token), service: receiving, root: rootAuthority },
+    tools: {
+      authenticate: token => auth.authenticate(token), attachments, exports: new ExportJobService(database),
+      isRootUser: id => rootAuthority.isRootUser(id),
+      canDownloadBoundAttachment: (actor, binding) => receiving.canDownloadBoundAttachment(actor, binding),
     },
   });
 
@@ -118,6 +138,8 @@ runWithPostgres("acceptance role sessions", () => {
     await seedUser(ids.root, "root", "[UAT] Root", "owner_group");
     await seedUser(ids.worker, "worker-a", "[UAT] 工人甲", "worker");
     await seedUser(ids.financeDirector, "finance-director", "[UAT] 财务总监", "finance_director");
+    await seedUser(ids.factoryPayables, "factory-payables", "[UAT] 加工厂应付会计", "factory_payables");
+    await seedUser(ids.warehouse, "warehouse", "[UAT] 仓管", "warehouse_receiver");
     await database.query(
       `INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id)
        VALUES(true,$1,'uat-root',$2)`,
@@ -147,6 +169,62 @@ runWithPostgres("acceptance role sessions", () => {
     expect(raw).toContain("dx_rework_session=");
     return raw!.split(";", 1)[0]!;
   };
+
+  it("reads receipt quantities, history and bound evidence in a real factory-payables session without receiving writes or export", async () => {
+    const warehouseCookie = await login("warehouse");
+    const imageId = randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-receipt.jpg','image/jpeg',100,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+    [imageId, `TEST-receiving/${imageId}`, "a".repeat(64), ids.warehouse]);
+    const created = await app.inject({ method: "POST", url: "/receiving/receipts", headers: { cookie: warehouseCookie, "idempotency-key": randomUUID() },
+      payload: { styleNo: "TEST-FACTORY-PAYABLES-READ", documentQuantity: 10, actualQuantity: 8, defectiveQuantity: 1, attachmentIds: [imageId] } });
+    expect(created.statusCode, created.body).toBe(201);
+    const cookie = await login("factory-payables");
+    const me = (await app.inject({ url: "/auth/me", headers: { cookie } })).json();
+    expect(me.user).toMatchObject({ id: ids.factoryPayables, isRoot: false, businessRoles: ["factory_payables"] });
+    for (const capability of ["receiving:create", "receiving:correct", "receiving:packing_manage", "receiving:resolve_difference", "receiving:export"]) {
+      expect(me.user.capabilities).not.toContain(capability);
+    }
+    const response = await app.inject({ url: "/receiving/board?q=TEST-FACTORY-PAYABLES-READ", headers: { cookie } });
+    expect(response.statusCode, response.body).toBe(200);
+    const row = response.json().rows[0];
+    expect(row).toMatchObject({ styleNo: "TEST-FACTORY-PAYABLES-READ", cumulativeActualQuantity: 8, cumulativeGoodQuantity: 7, differenceQuantity: -2 });
+    expect(row.receivingHistory).toHaveLength(1);
+    expect(row.attachments).toEqual([expect.objectContaining({ attachmentId: imageId })]);
+    const download = await app.inject({ url: `/tools/attachments/${imageId}/download?mode=preview`, headers: { cookie } });
+    expect(download.statusCode, download.body).toBe(302);
+    expect(attachmentGrants).toEqual([`TEST-receiving/${imageId}`]);
+    expect((await app.inject({ url: `/tools/attachments/${randomUUID()}/download?mode=preview`, headers: { cookie } })).statusCode).toBe(404);
+    for (const url of ["/receiving/board/export", "/receiving/cutting-options", "/receiving/repeat-options"]) {
+      expect((await app.inject({ url, headers: { cookie } })).statusCode, url).toBe(403);
+    }
+    const before = (await database.query("SELECT count(*)::int count FROM receiving_receipts")).rows[0];
+    for (const [method, url, payload] of [
+      ["POST", "/receiving/receipts", { styleNo: "TEST-FORBIDDEN", documentQuantity: 1, actualQuantity: 1 }],
+      ["POST", "/receiving/repeat-receipts", {}],
+      ["POST", `/receiving/receipts/${row.receivingHistory[0].receiptId}/corrections`, {}],
+      ["PATCH", `/receiving/batches/${row.receivingBatchId}`, {}],
+      ["DELETE", `/receiving/batches/${row.receivingBatchId}`, {}],
+      ["POST", `/receiving/batches/${row.receivingBatchId}/packing-revisions`, { expectedVersion: 1, packingQuantity: 8 }],
+      ["POST", `/receiving/batches/${row.receivingBatchId}/difference-resolutions`, { expectedVersion: 1, differenceType: "receiving", result: "TEST" }],
+    ] as const) {
+      const denied = await app.inject({ method, url, payload, headers: { cookie, "idempotency-key": randomUUID() } });
+      expect(denied.statusCode, `${url}: ${denied.body}`).toBe(403);
+    }
+    expect((await database.query("SELECT count(*)::int count FROM receiving_receipts")).rows[0]).toEqual(before);
+    expect((await database.query("SELECT count(*)::int count FROM receiving_packing_revisions")).rows[0].count).toBe(0);
+    expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions")).rows[0].count).toBe(0);
+  });
+
+  it("rechecks the same factory-payables cookie after its real role is revoked", async () => {
+    const cookie = await login("factory-payables");
+    expect((await app.inject({ url: "/receiving/board", headers: { cookie } })).statusCode).toBe(200);
+    const assignment = (await database.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='factory_payables' AND revoked_at IS NULL", [ids.factoryPayables])).rows[0];
+    await access.revokeRole({ actorId: ids.root, actorRoles: ["root_superuser"], authorizationCapability: "access:admin", authorizationCapabilities: ["access:admin"], requestId: randomUUID() }, assignment.assignment_id, "隔离回归撤销权限");
+    // Existing role revocation invalidates the session itself, before any receiving read is attempted.
+    expect((await app.inject({ url: "/receiving/board", headers: { cookie } })).statusCode).toBe(401);
+    expect((await app.inject({ url: "/auth/me", headers: { cookie } })).statusCode).toBe(401);
+  });
 
   it("creates independent real sessions whose authorization is loaded from role assignments", async () => {
     const workerCookie = await login("worker-a");
