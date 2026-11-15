@@ -237,8 +237,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const upload=page.getByLabel('收到的纸样附件',{exact:true});await upload.waitFor();
    await upload.setInputFiles({name:'TEST-remove-rejected.plt',mimeType:'application/octet-stream',buffer:Buffer.from('IN;SP0;')});
    const remove=page.getByRole('button',{name:'移除失败附件 TEST-remove-rejected.plt',exact:true});await remove.waitFor();
-   await page.screenshot({path:join(evidence,'failed-external-paper-1165.png'),fullPage:true});
-   await remove.click();await remove.waitFor({state:'detached'});expect(await page.getByRole('alert').count()).toBe(0);
+   await remove.scrollIntoViewIfNeeded();await page.screenshot({path:join(evidence,'failed-external-paper-1165.png'),fullPage:true});
+   await remove.click();await remove.waitFor({state:'detached'});expect(await page.getByRole('alert').count()).toBe(0);await expect.poll(leavingBlocked).toBe(false);
+   const note=page.getByLabel('备注',{exact:true});await note.fill('TEST真实收到说明尚未提交');
+   await upload.setInputFiles({name:'TEST-note-rejected.plt',mimeType:'application/octet-stream',buffer:Buffer.from('IN;SP0;')});
+   const noteFailure=page.getByRole('button',{name:'移除失败附件 TEST-note-rejected.plt',exact:true});await noteFailure.waitFor();await noteFailure.click();await noteFailure.waitFor({state:'detached'});
+   expect(await note.inputValue()).toBe('TEST真实收到说明尚未提交');expect(await leavingBlocked()).toBe(true);
    await upload.setInputFiles({name:'TEST-original-rejected.plt',mimeType:'application/octet-stream',buffer:Buffer.from('IN;SP0;')});
    await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).waitFor();
    const png=await sharp({create:{width:2,height:2,channels:3,background:'white'}}).png().toBuffer();
@@ -252,12 +256,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'记录已收到',exact:true}).click();await page.getByRole('alert').filter({hasText:'尚未确认本次提交是否成功'}).waitFor();
    expect(await leavingBlocked()).toBe(true);expect(await page.getByText('已上传，尚未保存引用',{exact:false}).count()).toBe(1);
    const committed=await execution.read(f.root,externalSourceId);expect(committed.tasks.find(task=>task.taskId===externalTaskId)?.state).toBe('completed');
+   // A later local failure is not part of the original submitted snapshot.
+   await upload.setInputFiles({name:'TEST-later-rejected.plt',mimeType:'application/octet-stream',buffer:Buffer.from('IN;SP0;')});
+   await page.getByRole('button',{name:'移除失败附件 TEST-later-rejected.plt',exact:true}).waitFor();
    await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();
    await page.getByRole('alert').filter({hasText:'本次办理已提交，但最新资料暂未读取到'}).waitFor();
    expect(await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).count()).toBe(1);expect(await leavingBlocked()).toBe(true);
    await page.getByRole('button',{name:'重新读取办理状态',exact:true}).click();
-   await page.getByText('本任务已完成',{exact:true}).waitFor();await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('已提交');await expect.poll(leavingBlocked).toBe(false);
-   expect(await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).count()).toBe(0);expect(attempts).toBe(3);
+   await page.getByText('本任务已完成',{exact:true}).waitFor();
+   expect(await page.getByRole('button',{name:'移除失败附件 TEST-original-rejected.plt',exact:true}).count()).toBe(0);
+   const later=page.getByRole('button',{name:'移除失败附件 TEST-later-rejected.plt',exact:true});await later.waitFor();expect(await leavingBlocked()).toBe(true);
+   await later.click();await later.waitFor({state:'detached'});await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('已提交');await expect.poll(leavingBlocked).toBe(false);expect(attempts).toBe(3);
    expect(commands[1]!.key).toBeTruthy();expect(commands[2]).toEqual(commands[1]);
    const final=await execution.read(f.root,externalSourceId),record=final.externalPatterns.find(row=>row.requestId===externalRequestId)!;
    expect(record.receivedAt).toBeTruthy();expect(record.attachmentIds).toHaveLength(1);expect(final.externalPatterns).toHaveLength(1);

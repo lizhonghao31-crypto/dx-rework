@@ -8,7 +8,7 @@ import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../sc
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
 it('keeps shared failed-upload state and native task completion in the real authenticated upload plan',()=>{
- for(const name of ['document-upload-previews','digital-development-execution-panel','development-external-pattern','development-result-upload']){
+ for(const name of ['document-upload-previews','digital-development-execution-panel','development-external-pattern','development-result-upload','task-workbench-sample']){
   const risk=classifyFullGatePaths([`apps/web/src/${name}.tsx`]);
   for(const suite of ['development-execution-read-native-browser','digital-development-execution','development-technical'])expect(risk.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
  }

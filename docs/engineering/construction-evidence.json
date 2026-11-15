@@ -2,7 +2,7 @@
   "version": 1,
   "base": "08440321e9d0e67307c6966d2572e420d0e318b8",
   "risk": "full",
-  "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+  "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
   "rules": [
     {
       "rule": "Failed local uploads remain retryable and may be individually removed without deleting ready attachments. Shared original upload consumers clear only the matching upload error, retaining unrelated business or unknown-command feedback.",
@@ -40,11 +40,12 @@
     },
     {
       "rule": "Task completion may retire only its captured failed upload intents after a successful original command and fresh native completed task, including recovery from a known commit followed by failed reading. Rejected or uncertain writes and failed reads retain original state and body/key.",
-      "source": "User-authorized external-paper failed-entry repair. New real native regression also proved successful receipt plus failed read left workbench dirty after recheck because completion callback was missing. Fix original completion/read recovery, not a new submission protocol or blanket clearing.",
+      "source": "User-authorized external-paper failed-entry repair. GitHub Review4579840297 proved file selection incorrectly set generic dirty state after explicit removal. Real native regression also proved successful receipt plus failed read left workbench dirty after recheck because completion callback was missing. Fix original completion/read recovery, not a new submission protocol or blanket clearing.",
       "writes": [
         "apps/web/src/digital-development-execution-panel.tsx",
         "apps/web/src/development-external-pattern.tsx",
         "apps/web/src/development-result-upload.tsx",
+        "apps/web/src/task-workbench-sample.tsx",
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "tests/unit/full-gate-risk-map.test.ts",
@@ -73,7 +74,7 @@
       ],
       "initialization": "Original operation ref captures exact source/upload epoch/task/purpose/attempt snapshot before first actual POST; original-key retries retain the same snapshot. Original task-bound upload inputs supply task identity. Fresh GET must confirm same task completed, not a generic200 or arbitrary sibling. Matching known commit recheck closes the original feedback phase; no extra business POST is sent by that read. Canonical risk map selects native execution/technical suites and original browser preparation.",
       "dateAndPermission": "Native assignee supervisor, current original source/task/round authorization and private attachment grants remain.409 rejected, lost successful receipt, same-key replay,503read and laterGET tested distinctly. No actual time or cancellation semantics changed; old observed cancelled legacy timing/default two-clock differences remain separate bounded audit, not declared bugs or silently repaired.",
-      "expectation": "65realPG16/native cases pass, including original paper/sewing acknowledged-only settlement, true unsaved guard, same-session authorization and technical history. New external-paper case proves rejected/unknown/readfail retain failures; final GET-only recheck clears captured failure and stale dirty hint; exactly one actual receipt, original ready object retained and no storage delete. Actual1165failure and390completed screenshots opened; no Acceptance/production claim.",
+      "expectation": "65realPG16/native cases pass, including original paper/sewing acknowledged-only settlement, true unsaved guard, same-session authorization and technical history. New external-paper case proves rejected/unknown/readfail retain failures; final GET-only recheck clears captured failure and stale dirty hint while later failed file remains removable in the completed view; failed-only removal permits leaving but real note edits remain guarded; exactly one actual receipt, original ready object retained and no storage delete. Actual1165failure and390completed screenshots opened; no Acceptance/production claim.",
       "checks": [
         "pg-native",
         "unit",
@@ -92,19 +93,19 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:17:26.815Z",
-      "endedAt": "2026-11-15T19:17:28.549Z",
+      "startedAt": "2026-11-15T19:25:53.063Z",
+      "endedAt": "2026-11-15T19:25:55.176Z",
       "log": "/tmp/failed-upload-unit.log",
-      "logSha256": "bfad04b34efa546f41be85326affe9ab33332187e4002ec43e3e59bf06d15e9e",
+      "logSha256": "cfff1abf6aa7194a218b300b1761da4aa38f33fdeffd00e96c0b09d00d0b6d6c",
       "passed": 92,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4b85f61dea0751b2c9493bbdba01c72b264b241939fb5a404ce6b8c8ff832470"
+          "sha256": "52d8e511691dea0517ec61d4ddbc0d9c12dc510693e797d8ab56a33969ea3518"
         }
       ]
     },
@@ -115,19 +116,19 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
-      "startedAt": "2026-11-15T19:16:32.281Z",
-      "endedAt": "2026-11-15T19:18:14.229Z",
+      "startedAt": "2026-11-15T19:24:54.745Z",
+      "endedAt": "2026-11-15T19:26:37.753Z",
       "log": "/tmp/failed-upload-pg.log",
-      "logSha256": "778726cd988191f12ae46f41e5f952d91d44dfb83cb173fece91af66a7a319f2",
+      "logSha256": "a99457b9df5cbf32f6ad9b857fa02f653cfff1cb561759202448a09087e4c94b",
       "passed": 65,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6700f8fd33e21797ddf2bb77df66384e9fda6ba046145e01ea592ea42547d98c"
+          "sha256": "dcbf61e61ede4b333e9468178e939ade3946e014694b081717219ebc7671b316"
         }
       ]
     },
@@ -138,24 +139,24 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
       "startedAt": "2026-11-15T19:07:16.000Z",
-      "endedAt": "2026-11-15T19:17:26.495Z",
+      "endedAt": "2026-11-15T19:25:52.735Z",
       "log": "/tmp/failed-upload-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
       "id": "lint",
-      "command": "eslint changed seven web files, canonical risk map and three actual test files --max-warnings=0",
+      "command": "eslint changed eight web files, canonical risk map and three actual test files --max-warnings=0",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
       "startedAt": "2026-11-15T19:10:40.000Z",
-      "endedAt": "2026-11-15T19:17:28.599Z",
+      "endedAt": "2026-11-15T19:25:55.227Z",
       "log": "/tmp/failed-upload-final-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
@@ -166,12 +167,12 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
       "startedAt": "2026-11-15T19:08:23.000Z",
-      "endedAt": "2026-11-15T19:17:37.892Z",
+      "endedAt": "2026-11-15T19:26:04.095Z",
       "log": "/tmp/failed-upload-preflight.log",
-      "logSha256": "7ee07cc81f92873de293a2d67efbfa5ba6498fa997d724d7e0edea994f008646"
+      "logSha256": "f4f250826ffb7aaf080fbe40877aabdf107951c41ad6eed83c01ddc64ff3c36c"
     },
     {
       "id": "secret",
@@ -180,10 +181,10 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "08440321e9d0e67307c6966d2572e420d0e318b8",
-      "sourceFingerprint": "1315656a1a640c9ecc7a5101a9c587e0f20fb5471d310da907310d303404f5b4",
+      "sourceFingerprint": "e9b013a2294d9e85519f2ab3e13ed53a1013399c11f7a7aaa383cff4b6905408",
       "context": "Node22.22.2/npm10.9.9, same-lock third-party symlinks with own built workspace packages (not fresh npm ci). Canonical Vitest maxWorkers1. Native original App and signed roles on owned marked lowpriv PG16 container with512MiB tmpfs; exact task/source fixtures, synthetic object-store transport and explicitly named rejection/lost-receipt/read failures only. Locked Chromium1194 and original CJK job fonts, no apt or system changes. No deploy, server/real-data operation, attachment delete, role widening or historical unknown-command replay.",
       "startedAt": "2026-11-15T19:10:13.000Z",
-      "endedAt": "2026-11-15T19:17:38.812Z",
+      "endedAt": "2026-11-15T19:26:04.931Z",
       "log": "/tmp/failed-upload-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
