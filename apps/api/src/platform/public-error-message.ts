@@ -90,11 +90,11 @@ const messages: Record<string, string> = {
   "Idempotency record is not in progress": "原提交状态已变化，请核对处理结果",
 };
 
-export function publicErrorMessage(error: { message: string; code: string; statusCode?: number }, statusCode = error.statusCode): string {
+export function publicErrorMessage(error: { message: string; code: string; statusCode?: number }, statusCode = error.statusCode,operation:'read'|'write'='write'): string {
   if (/[\u3400-\u9fff]/.test(error.message)) return error.message;
   return messages[error.message] ?? (error.code === "VALIDATION_ERROR"
-    ? "提交资料格式不正确，请核对填写内容"
+    ? operation==='read'?"读取条件格式不正确，请核对填写内容":"提交资料格式不正确，请核对填写内容"
     : statusCode !== undefined && statusCode >= 400 && statusCode < 500 && statusCode !== 408
       ? "本次请求已被拒绝，具体业务原因尚未确定；请保留输入，由原有权岗位在原页面核对，仍不明确时请管理员按请求编号核查"
-      : "原操作结果尚未确认，具体业务原因未能确定；请保留输入，在原页面核对记录，仍不明确时请管理员按请求编号核查");
+      : operation==='read'?"资料读取未完成，请重新读取；仍失败时请管理员按请求编号核查":"原操作结果尚未确认，具体业务原因未能确定；请保留输入，在原页面核对记录，仍不明确时请管理员按请求编号核查");
 }

@@ -1,132 +1,115 @@
 {
   "version": 1,
-  "base": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
+  "base": "3850a31bcb154d48b517f775153951bed4fe0061",
   "risk": "full",
-  "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
+  "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
   "rules": [
     {
-      "rule": "Close published-budget washing-fee gap through the original budget page and final publisher. Explicitly link an existing published external-process row without another cost, or publish a new washing-only immutable budget version. Preserve all other budget fields, old versions, adopted sourcing/contract and original confirmed quote basis, and enforce original cap/tax/actual order quantity without later-quote auto-adoption or an over-limit exception.",
-      "source": "User via Dot authorizes all known acceptance repairs, specifically read-only published budget with no fee supplement entry. Approved27 washing fee uses published budget rows, financial original publisher and protected quote/budget/contract history. Current customer-quotation and permission norms document this narrow implementation, not a new price approval or payment workflow.",
+      "rule": "Separate the existing side-effect-free digital POST queries from possibly committed native commands at the real HTTP and client error boundaries. Share the exact original read route contract, retain status/code/request ID and safe business reasons, and keep all real command unknown-result semantics and permissions.",
+      "source": "User via Dot authorizes all known Acceptance repairs, particularly order-time/check POST mislabeled write unknown and F path unproven. Existing shared feedback and UI recovery rules; rework UI golden20261115 updated with this exact scope. Not a new grant, retry platform or inference about historical request terminal state.",
       "writes": [
-        "packages/contracts/src/digital-budget.ts",
-        "apps/api/src/production-platform/budget-washing-fees.ts",
-        "apps/api/src/production-platform/budget-service.ts",
-        "apps/api/src/production-platform/budget-routes.ts",
-        "apps/api/migrations/0293_budget_washing_fee_supplements.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/budget-washing-fees-postgres.test.ts",
-        "tests/unit/budget-washing-fees.test.ts",
-        "docs/requirements/customer-quotation-budget-v1.md",
-        "docs/requirements/platform-permission-golden-source-v1.0.md"
+        "packages/contracts/src/digital-production-read-requests.ts",
+        "packages/contracts/package.json",
+        "apps/api/src/app.ts",
+        "apps/api/src/platform/public-error-message.ts",
+        "apps/web/src/digital-production-api.ts",
+        "tests/integration/platform-method-error-feedback.test.ts",
+        "tests/unit/request-response-feedback.test.ts",
+        "tests/unit/public-error-message.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-budget-basis.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/budget-sourcing-adapter.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/api/src/production-platform/task-documents.ts"
+        "apps/api/src/production-platform/order-time-request-routes.ts",
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/access/pmc-readonly-http.ts",
+        "apps/api/src/access/member-module-http.ts",
+        "apps/web/src/request-response-feedback.ts",
+        "apps/web/src/request-failure-message.ts"
       ],
       "oldTests": [
-        "tests/integration/digital-budget-shared-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/unit/digital-budget.test.ts",
-        "tests/unit/customer-quotation.test.ts"
+        "tests/unit/request-response-feedback.test.ts",
+        "tests/unit/public-error-message.test.ts",
+        "tests/integration/platform-method-error-feedback.test.ts",
+        "tests/integration/request-identity-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/budget-washing-fees-postgres.test.ts",
-        "tests/unit/budget-washing-fees.test.ts"
+        "tests/unit/request-response-feedback.test.ts",
+        "tests/integration/platform-method-error-feedback.test.ts"
       ],
-      "initialization": "0293 adds nullable metadata to existing immutable budget versions and replaces its guard with a narrowly validated washing supplement branch. Ordinary publication branch retained. No backfill, new financial role or destructive SQL. BudgetDocument format and original fee budget_row shape unchanged; old normal readers exercised on new versions. Supported rollback must recognize0293 and its readers, not arbitrary earlier SHA deployment.",
-      "dateAndPermission": "Only current primary order_merchandiser and Root can finalize; own designer cannot finalize frozen fees, washing logistics cannot read money or write fees. Original source/order/active role and lifecycle rechecked before same-key response; shared lifecycle lock and expected budget/washing versions prevent overwrite. Quote confirmation amount/version retained; new fee publish time is version audit and original budget first completion time remains unchanged. No actual/target/quantity/wage/contract facts invented.",
-      "expectation": "PG16/PG13 real guard cases pass:5base+2fee=7, explicit0adjustment=5 with old7history, exact retry once, concurrent one winner, original budget/source case/adopted preparation/started clocks unchanged; unlinked preparation follows new/adjusted fee versions with its same task and timestamp, real sourcing creation succeeds and stale prepared commands reject; newer quote200000 cannot bypass original100000cap, original normal publication and spoofed non-washing edits still rejected. Direct old frozen-budget save and historical immutable update protections retained. Original six shared-budget tests pass.",
+      "initialization": "Additive explicit contracts export built in own workspace, no dependency/lock change, schema, migration, role, config, cache persistence or backfill. Real app uses registered routeOptions.url, not caller headers/path suffix. Legacy open server generic INTERNAL_ERROR read fallback becomes read failure without erasing safe domain errors.",
+      "dateAndPermission": "No time calculation, actual facts or authority change. GET/HEAD/read-only POST errors cannot create write-result uncertainty; all actual writes retain original key/body, confirmation, idempotency and status. Shared predicate not used in permission guards. Original current identity/context same request tests retained.",
+      "expectation": "122real unit/HTTP cases pass including all8known pure POST forms, dynamic request UUID, status/request-ID preservation, malformed/network reads, exact method/body/key and no automatic retry. Fake read-only header/suffix and real confirm/arrange/publish remain unknown commands. PG identity7pass.",
       "checks": [
-        "unit",
-        "pg16-app",
-        "pg13",
+        "unit-http",
+        "pg-native",
         "types",
         "lint",
         "preflight"
       ]
     },
     {
-      "rule": "Financial linkage changes only the selected PO fee reference and immutable plan version, preserving route/staff/frozen timing and refreshing disposable receipt coverage in the same transaction. No automatic fee from wash/rewash movements, no duplicate existing fee charge, no new physical task or receipt.",
-      "source": "Approved washing plan/fee/reference scope and started-clock protection; ROLE fee data gap and user-authorized sequential repair. Actual first budget publication drives Journey completion and must not be replaced by a later fee timestamp.",
+      "rule": "The original designer form must report which precheck failed before issuing publication or confirmation. Only an actually sent uncertain command owns its original captured body/key and recovery entry. Generic read/input failures must not claim a customer confirmation was sent.",
+      "source": "F Acceptance observation plus confirmed code chain: useOrderTimeApplication.inspect before actual publish/confirm POST, generic form caption falsely claiming confirmation receipt missing. User-authorized sequential fix; historical C/D/E/F operation and terminal state still unproved and never retried.",
       "writes": [
-        "apps/api/src/production-platform/bulk-washing-repository.ts",
-        "apps/api/src/production-platform/budget-washing-fees.ts",
-        "tests/integration/budget-washing-fees-postgres.test.ts",
-        "docs/architecture/business-module-boundaries.md"
+        "apps/web/src/digital-development-create-form.tsx",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "docs/requirements/rework-ui-golden-source-v1.0.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/bulk-washing-service.ts",
-        "apps/api/src/production-platform/bulk-washing-coverage.ts",
-        "apps/api/src/production-platform/bulk-washing-windows.ts",
-        "apps/api/src/production-platform/bulk-washing-todos.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts"
+        "apps/web/src/order-time-application.tsx",
+        "apps/web/src/development-submit-recovery.ts",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/production-instruction-panel.tsx",
+        "apps/api/src/production-platform/development-service.ts"
       ],
       "oldTests": [
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/unit/bulk-washing-ledger.test.ts",
-        "tests/unit/bulk-washing-windows.test.ts",
-        "tests/unit/order-time-washing.test.ts"
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/integration/m01-short-lead-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/budget-washing-fees-postgres.test.ts"
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "initialization": "Persistence append helper shared with original manager adoption; separate financial entry itself authorizes original budget publisher and copies route/staff/time unchanged. Pending/none arrangements remain existing behavior; no fees auto-created for old orders. Coverage rebuild retains native factory/receipt guards and immutable history.",
-      "dateAndPermission": "Fee publisher gets no manager route, assignment, duration or actual record authority. Live original washing roles and original actual windows not replaced by financial access. Financial revision keeps digital_budget_documents.published_at and already-linked preparation budget version, so budget completion/SLA and adopted sourcing stay frozen. Unlinked original preparation follows current publication under the same lifecycle lock as sourcing creation, preserving its task. Paused/closed orders preserve history without new fees.",
-      "expectation": "Both PostgreSQL versions verify the unlinked new/adjusted fee preparation advances, actual sourcing still creates against current version, stale prepared commands reject, and original actual wash window/planId remains untouched after fees, current fee points new budget3 and later0adjustment4, original budget2 and first completion timestamp remain. Existing-link route produces no extra budget version. Ten unchanged washing PG cases retain QC/receipt correction, crossPO, concurrency, real rewash and revocation protection in23total.",
+      "initialization": "Original entry, stored draft/source and commands reused. Only form error phase is transient local state, cleared with other errors; no persisted pending data, command key migration or new status endpoint. Existing actual-command wording and all original recovery semantics retained.",
+      "dateAndPermission": "No plan/time/date/quote or order-writing rule changed. Original designer authenticated App and native request checks remain. Test snapshots use explicit guarded owned scene; no real-time manufacturing facts, clock tolerance or fake terminal result introduced.",
+      "expectation": "Both actual1165publish and390confirm App cases fail check twice with zero native commands, enabled safe check retry and no submit recovery entry, then restored native check emits one successful original command. Prior committed/uncommitted publication and committed confirmation receipt GET recovery, short-lead approval and same-session identity cases all pass within31PG cases. Both new screenshots actually opened.",
       "checks": [
-        "unit",
-        "pg16-app",
-        "pg13",
+        "pg-native",
+        "unit-http",
         "types",
         "lint"
       ]
     },
     {
-      "rule": "Original budget chapter provides direct fee link/add/adjust and immutable fee/reference history, with existing document fields/style and historical read-only view. A successful HTTP/JSON is certified only against captured order, PO, applied versions and exact row. Unknown response preserves original body/key; reads and recovery writes serialize, no duplicate expense or stale read error.",
-      "source": "User requires complete UI/business closed loop and original permission/layout, not a link to a nonexistent editor. Native screenshot showed a read/recovery race; local repair serializes original read and write, keeps original request proof and uses shared document controls. No parallel future-feature implementation.",
+      "rule": "Keep existing native query consumers and canonical browser/regression planning connected to the new shared read contract, without changing old business or historical timing semantics.",
+      "source": "AGENTS actual input->consumer->initialization->original test closure and user oneLight perPR normal Review/Full; approved original UI components and request boundaries.",
       "writes": [
-        "apps/web/src/budget-washing-fees.tsx",
-        "apps/web/src/budget-washing-fee-result.ts",
-        "apps/web/src/digital-budget-panel.tsx",
-        "apps/web/src/bulk-washing-panel.tsx",
-        "apps/web/src/digital-detail-context.ts",
-        "apps/web/src/order-document-container.tsx",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/budget-washing-fees-browser-postgres.test.ts",
-        "tests/unit/budget-washing-fees.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "docs/engineering/washing-budget-fees-20261115.md"
+        "docs/engineering/read-check-feedback-20261115.md"
       ],
       "reads": [
-        "apps/web/src/document-editor.tsx",
-        "apps/web/src/use-digital-detail-navigation-guard.ts",
-        "apps/web/src/digital-production-api.ts",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/digital-budget-print.tsx",
-        "apps/api/src/production-platform/identity-routes.ts"
+        "scripts/ci/prepare-settings-browser.mjs",
+        "scripts/ci/settings-browser-fonts.mjs",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/acceptance/m01-short-lead-native-browser.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/development-route-service.ts"
       ],
       "oldTests": [
-        "tests/unit/budget-request-feedback.test.ts",
-        "tests/unit/digital-detail-route.test.ts",
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/bulk-washing-browser-postgres.test.ts"
+        "tests/integration/m01-short-lead-native-browser-postgres.test.ts",
+        "tests/integration/request-identity-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/budget-washing-fees-browser-postgres.test.ts",
-        "tests/unit/budget-washing-fees.test.ts"
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "initialization": "Add chapter allowlist, original page and original budget routes; no new navigation module. Full App fixture now registers actual existing budget service, no mock fee API. Canonical mapping includes new PostgreSQL/browser plus old financial/washing consumers; native Chromium recognition generic browser-postgres pattern already supports new suite. Time index reconciles only actual changed entries; publication metadata not a physical completion clock.",
-      "dateAndPermission": "Same authenticated dedicated primary session, original role grant/customer defaults and actual Sourcing capability proof; no role widening. Native role revocation in same cookie removes fee editor, unrelated wash user cannot read finances. Historical budget chapter has no new fee write form. No browser/customer pending data saved persistently, no automatic retries or actual C/D/E/F submission replay.",
-      "expectation": "153units pass including exact0/missing/invalid fields, wrong-source/row/malformed response rejection and chapter compatibility.23PG/native pass; lost committed503 fee response remains pending after GET and recovers exact same original key/body, one new cost/audit; no alerts after serialized recovery.1165published and390zero-price screenshots actually opened after shared field/style fix. Historical v2 stays read-only, v3cost7 remains after current v4cost5. Preflight266/types/lint/secret pass; F path/terminal state unproven and error-message split remains nextPR.",
+      "initialization": "Canonical map explicitly includes original time App, short-lead App and request identity for new helper/shared error/form inputs. Native preparation remains original Chromium/CJK, no weakened browser/DB or permission guard. Legacy standalone harness command wording kept baseline, no unexecuted harness claimed passed.",
+      "dateAndPermission": "Cancelled old timing and default double-clock observations remain separate read-only audit, not claimed new bugs or silently repaired. No unknown cancellation/clock rule invented; explicit actual instants retain original value and precision. Failed external-paper attachment entry is separate from991 and not claimed fixed here.",
+      "expectation": "76existing risk-map assertions included in122pass;31realPG/native cases include11short-lead,13timeApp,7identity; all commands cleanup success. Types/lint/preflight/secret pass, source unchanged after tests, no deployment or production writes.",
       "checks": [
-        "unit",
-        "pg16-app",
+        "unit-http",
+        "pg-native",
         "types",
         "lint",
         "preflight",
@@ -136,86 +119,63 @@
   ],
   "checks": [
     {
-      "id": "unit",
-      "command": "vitest run ten fee/budget/quotation/receipt/route/washing/CI-mapping unit files --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/washing-fees-unit.json",
+      "id": "unit-http",
+      "command": "vitest run request-response-feedback/public-error-message/development-submit-recovery/full-gate-risk-map unit files and platform-method-error-feedback integration --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/read-check-unit.json",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
-      "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
-      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own packages build, not fresh npm ci. Vitest maxWorkers1, canonical business-chain config. Marked lowpriv isolatedPG16 andPG13.23, each exact owned512MiB tmpfs Docker and schema cleanup verified; original App/AuthService signed real fixture roles, lock-pinned Chromium1194 with committed CJK. No server/deployment/real business data. Test times are actual JSON timestamps; command times conservatively bound log-file creation through last successful completion across local validation attempts, not claimed individual execution durations.",
-      "startedAt": "2026-11-15T17:18:04.837Z",
-      "endedAt": "2026-11-15T17:18:08.514Z",
-      "log": "/tmp/washing-fees-unit.log",
-      "logSha256": "aa1116531a242f5a1dcf83c8707451150e3f24050bab32c578d8ec091a020413",
-      "passed": 153,
+      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
+      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
+      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
+      "startedAt": "2026-11-15T18:03:31.436Z",
+      "endedAt": "2026-11-15T18:03:38.967Z",
+      "log": "/tmp/read-check-unit.log",
+      "logSha256": "64cf98e4cc0126088accfc236ee9195767f7d892f6c470b704dc7bf191e3de48",
+      "passed": 122,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "28d66a613a40fb9866acef77c6b43c95350d1c6c86146698258fd36f3f8cbbd5"
+          "sha256": "587317e16dd386ecff13bef8172cbbcb4081117129baa5d3a10ac429e6e427db"
         }
       ]
     },
     {
-      "id": "pg16-app",
-      "command": "bash /tmp/washing-fees-pg.sh (new fees/native App plus unchanged shared-budget and washing canonical suites, maxWorkers1)",
+      "id": "pg-native",
+      "command": "bash /tmp/read-check-pg.sh (original order-time requests App, short-lead native App and request identity; canonical business-chain maxWorkers1)",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
-      "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
-      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own packages build, not fresh npm ci. Vitest maxWorkers1, canonical business-chain config. Marked lowpriv isolatedPG16 andPG13.23, each exact owned512MiB tmpfs Docker and schema cleanup verified; original App/AuthService signed real fixture roles, lock-pinned Chromium1194 with committed CJK. No server/deployment/real business data. Test times are actual JSON timestamps; command times conservatively bound log-file creation through last successful completion across local validation attempts, not claimed individual execution durations.",
-      "startedAt": "2026-11-15T17:16:24.499Z",
-      "endedAt": "2026-11-15T17:17:44.011Z",
-      "log": "/tmp/washing-fees-pg.log",
-      "logSha256": "5c2affc13e59164520ef8cd0b1b35c8099d329b275b8445211272bdea8553fe4",
-      "passed": 23,
+      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
+      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
+      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
+      "startedAt": "2026-11-15T18:01:17.644Z",
+      "endedAt": "2026-11-15T18:03:44.877Z",
+      "log": "/tmp/read-check-pg.log",
+      "logSha256": "7ff47733f6183e167628b9ef37777d1910646f4eb7393facd9347d54aa3e5830",
+      "passed": 31,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9581d8a3c24ca99834407e96f639d9a36eaca0e677ffab2b5469d14c5f9ac99c"
-        }
-      ]
-    },
-    {
-      "id": "pg13",
-      "command": "bash /tmp/washing-fees-pg13.sh (new financial guard/service cases only, lowprivPG13.23, not browser)",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
-      "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
-      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own packages build, not fresh npm ci. Vitest maxWorkers1, canonical business-chain config. Marked lowpriv isolatedPG16 andPG13.23, each exact owned512MiB tmpfs Docker and schema cleanup verified; original App/AuthService signed real fixture roles, lock-pinned Chromium1194 with committed CJK. No server/deployment/real business data. Test times are actual JSON timestamps; command times conservatively bound log-file creation through last successful completion across local validation attempts, not claimed individual execution durations.",
-      "startedAt": "2026-11-15T17:17:51.591Z",
-      "endedAt": "2026-11-15T17:18:16.776Z",
-      "log": "/tmp/washing-fees-pg13.log",
-      "logSha256": "d681afd1d4704f70179179168d925925d299f87648c9312fef6844d1630a0089",
-      "passed": 5,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "fc9fa1213d401c0de2ac050e2d73ac1d9312187b843d6f36a7155524213d5e2c"
+          "sha256": "67b611a130030a721d1e08890199aaccec2c10dd010735dd1b5f68214e6b8d40"
         }
       ]
     },
     {
       "id": "types",
-      "command": "npm run typecheck (all workspaces)",
+      "command": "npm run typecheck",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
-      "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
-      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own packages build, not fresh npm ci. Vitest maxWorkers1, canonical business-chain config. Marked lowpriv isolatedPG16 andPG13.23, each exact owned512MiB tmpfs Docker and schema cleanup verified; original App/AuthService signed real fixture roles, lock-pinned Chromium1194 with committed CJK. No server/deployment/real business data. Test times are actual JSON timestamps; command times conservatively bound log-file creation through last successful completion across local validation attempts, not claimed individual execution durations.",
-      "startedAt": "2026-11-15T16:34:54.000Z",
-      "endedAt": "2026-11-15T17:17:16.688Z",
-      "log": "/tmp/washing-fees-types.log",
+      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
+      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
+      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
+      "startedAt": "2026-11-15T18:01:38.000Z",
+      "endedAt": "2026-11-15T18:02:39.826Z",
+      "log": "/tmp/read-check-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
@@ -224,27 +184,27 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
-      "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
-      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own packages build, not fresh npm ci. Vitest maxWorkers1, canonical business-chain config. Marked lowpriv isolatedPG16 andPG13.23, each exact owned512MiB tmpfs Docker and schema cleanup verified; original App/AuthService signed real fixture roles, lock-pinned Chromium1194 with committed CJK. No server/deployment/real business data. Test times are actual JSON timestamps; command times conservatively bound log-file creation through last successful completion across local validation attempts, not claimed individual execution durations.",
-      "startedAt": "2026-11-15T16:38:53.000Z",
-      "endedAt": "2026-11-15T17:17:56.582Z",
-      "log": "/tmp/washing-fees-lint.log",
+      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
+      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
+      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
+      "startedAt": "2026-11-15T18:02:39.000Z",
+      "endedAt": "2026-11-15T18:03:21.795Z",
+      "log": "/tmp/read-check-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
       "id": "preflight",
-      "command": "npm run test:preflight (266protocol cases plus migration/resource checks)",
+      "command": "npm run test:preflight",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
-      "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
-      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own packages build, not fresh npm ci. Vitest maxWorkers1, canonical business-chain config. Marked lowpriv isolatedPG16 andPG13.23, each exact owned512MiB tmpfs Docker and schema cleanup verified; original App/AuthService signed real fixture roles, lock-pinned Chromium1194 with committed CJK. No server/deployment/real business data. Test times are actual JSON timestamps; command times conservatively bound log-file creation through last successful completion across local validation attempts, not claimed individual execution durations.",
-      "startedAt": "2026-11-15T16:40:58.000Z",
-      "endedAt": "2026-11-15T17:18:03.396Z",
-      "log": "/tmp/washing-fees-preflight.log",
-      "logSha256": "e10b03ed8546adc9dddb78dee8df0d1a828c0512f048109c74c9a4a0e5b0047e"
+      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
+      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
+      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
+      "startedAt": "2026-11-15T18:03:21.000Z",
+      "endedAt": "2026-11-15T18:03:30.023Z",
+      "log": "/tmp/read-check-preflight.log",
+      "logSha256": "1592288ddc09bff49c1256df893b590e5ac60f0d5b42b00188af1a559041ee5d"
     },
     {
       "id": "secret",
@@ -252,12 +212,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "54e2f416f7723a002880364afc6e83bcdbc57ac7",
-      "sourceFingerprint": "021cc3f2353539d9429b35222b50fc87ddf8a75a96ac8e2cfe2e222633c24bd3",
-      "context": "Node22.22.2/npm10.9.9, identical package-lock third-party links and own packages build, not fresh npm ci. Vitest maxWorkers1, canonical business-chain config. Marked lowpriv isolatedPG16 andPG13.23, each exact owned512MiB tmpfs Docker and schema cleanup verified; original App/AuthService signed real fixture roles, lock-pinned Chromium1194 with committed CJK. No server/deployment/real business data. Test times are actual JSON timestamps; command times conservatively bound log-file creation through last successful completion across local validation attempts, not claimed individual execution durations.",
-      "startedAt": "2026-11-15T16:52:58.000Z",
-      "endedAt": "2026-11-15T17:18:04.516Z",
-      "log": "/tmp/washing-fees-secret.log",
+      "testedHead": "3850a31bcb154d48b517f775153951bed4fe0061",
+      "sourceFingerprint": "2110168d95ff74b8cc85cf681056b5c2f55007e5457dba6e0e8b4a9f85f0f953",
+      "context": "Node22.22.2/npm10.9.9. Same package-lock third-party symlinks, own workspace packages built; not fresh npm ci. Canonical Vitest maxWorkers1. NativeApp tests use owned marked lowprivPG16,512MiB tmpfs container, actual AuthService and existing role fixtures; only named external provider/transport faults, no mocked successful command. Original lock-pinned Chromium1194/CJK job font, no apt/system changes. Owned schema/container cleanup verified. No deployment, server or real data, no historical unknown submission replay.",
+      "startedAt": "2026-11-15T18:03:30.000Z",
+      "endedAt": "2026-11-15T18:03:31.063Z",
+      "log": "/tmp/read-check-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
