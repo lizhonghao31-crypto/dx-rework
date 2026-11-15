@@ -91,7 +91,7 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     if (nodeId === "external_pattern" || !facts[nodeId]?.completedAt || fact.completedAt) facts[nodeId] = fact;
   }
   const originalFacts = structuredClone(facts);
-  const latestRound = (await db.query(`SELECT round_number,route_nodes FROM digital_development_rounds
+  const latestRound = (await db.query(`SELECT round_number,route_nodes,inherited,published_at FROM digital_development_rounds
     WHERE source_id=$1${requestedRound!==undefined?' AND round_number=$2':''} ORDER BY round_number DESC LIMIT 1`, requestedRound!==undefined?[sourceId,requestedRound]:[sourceId])).rows[0];
   // A correction does not erase the first attempt or grant a fresh original SLA window.
   // Nodes not yet recreated on the sequential correction route must not remain "completed".
@@ -133,6 +133,20 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
   for(const key of new Set(instances.filter(instance=>instance.round===selectedRound).map(instance=>instance.definitionId)))delete facts[key];
   for(const key of new Set(instances.filter(instance=>instance.round===1).map(instance=>instance.definitionId)))delete originalFacts[key];
   Object.assign(facts,craftInstanceAggregates(instances,selectedRound));Object.assign(originalFacts,craftInstanceAggregates(instances,1));
+  // A published correction can explicitly adopt a completed prior task rather
+  // than recreate it. Restore exactly that reference, never the latest kind
+  // from another round or every sibling sharing its technical kind.
+  const adoptedAt=latestRound?.published_at?iso(latestRound.published_at):null;
+  if(adoptedAt&&Date.parse(adoptedAt)>Date.parse(time.now))onFutureEvidence?.(adoptedAt);
+  if(selectedRound>1&&adoptedAt&&Date.parse(adoptedAt)<=Date.parse(time.now))for(const [kind,reference] of Object.entries(latestRound.inherited??{})){
+    const ref=reference as {taskId?:unknown;roundNumber?:unknown}|null,nodeId=aliases[kind]??kind;
+    if(!ref||typeof ref.taskId!=='string'||!Number.isSafeInteger(ref.roundNumber)||Number(ref.roundNumber)>=selectedRound)continue;
+    if((latestRound.route_nodes as string[]).some(key=>(aliases[key]??key)===nodeId)||instances.some(instance=>instance.round===selectedRound&&instance.definitionId===nodeId))continue;
+    const own=instances.find(instance=>instance.sourceId===sourceId&&instance.taskId===ref.taskId&&instance.round===ref.roundNumber&&instance.definitionId===nodeId&&instance.eligible&&instance.fact.businessCompleted);
+    if(!own)continue;
+    const inherited=craftInstanceAggregates([own],own.round)[nodeId];
+    if(inherited){inherited.evidence+=`;adopted:development-round:${sourceId}:${selectedRound};inherited:${own.taskId}:round:${own.round}`;facts[nodeId]=inherited;}
+  }
   for(const instance of instances){
     facts[`${instance.definitionId}:task:${instance.taskId}`]=structuredClone(instance.fact);
     if(instance.round===1)originalFacts[`${instance.definitionId}:task:${instance.taskId}`]=structuredClone(instance.fact);

@@ -821,6 +821,7 @@ export class DigitalJourneyQuery {
     }
     for(const node of baseNodes.filter(node=>node.state==='inherited'&&node.inheritedFrom&&node.progressApplicability==='applicable')){
       const original=baseNodes.find(value=>value.instanceId===node.inheritedFrom!.taskId&&value.state==='completed');
+      if(original&&['development_craft_dispatch','development_printing','development_embroidery','development_print_embroidery','development_craft_confirmation'].includes(node.key)){node.label=original.label;const own=craftOrder.get(original.instanceId);if(own)craftOrder.set(node.instanceId,own);}
       // The immutable round publication atomically adopted the listed original
       // result. Its business timestamp is adoption, not that result's work end.
       const adoptedAt=round&&round>1&&currentDocument?.round_number===round?iso(currentDocument.published_at):null;

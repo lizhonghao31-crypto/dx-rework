@@ -40,7 +40,7 @@ export function developmentCraftInstances(sourceId:string,rows:readonly Developm
   const receipt=connected.length===1?connected[0]:connected.length?undefined:matching.length===1&&rows.find(row=>row.task_id===matching[0]!.taskId)?.predecessor_ids===undefined?matching[0]:undefined;
   delete parent.fact.completedAt;parent.fact.businessCompleted=receipt?.fact.businessCompleted===true;
   if(receipt?.fact.completedAt){parent.fact.completedAt=receipt.fact.completedAt;parent.fact.completedDeadline=parent.deadline;parent.fact.evidence+=`;return:${receipt.taskId}`;}
-  else{delete parent.fact.completedDeadline;parent.fact.waitingFor={reason:'本步骤回收尚未有效确认，未借用其他工艺的回收',source:parent.fact.evidence};}
+  else{delete parent.fact.completedDeadline;parent.fact.waitingFor={reason:receipt?.fact.businessCompleted?'本步骤回收已完成，实际发生时间待核':'本步骤回收尚未有效确认，未借用其他工艺的回收',source:parent.fact.evidence};}
  }
  return result;
 }

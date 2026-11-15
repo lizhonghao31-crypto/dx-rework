@@ -1,3 +1,7 @@
+import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
+import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
+import {developmentSlaEvidence} from '../../apps/api/src/production-platform/development-sla-evidence.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {JOURNEY_FACT_CALCULATION_VERSION} from '../../apps/api/src/production-platform/journey-fact-model.js';
@@ -144,6 +148,21 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(new Set(rows.filter(row=>row.phase==='work').map(row=>row.step_id)).size).toBe(2);
   expect(rows.filter(row=>row.phase==='work').map(row=>row.assignee_id)).toEqual([f.people['pattern-room-worker']!.actorId,f.people['pattern-room-worker']!.actorId]);
  });
+ it('retains explicitly adopted craft completion when a real later round redoes only sewing',async()=>{
+  const standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}},library=new SpecialCraftLibraryService(f.db),craft=await library.save(f.root,{id:null,expectedVersion:0,definition:{name:'TEST inherited special',enabled:true,development:standard,bulk:standard}},randomUUID());
+  const created=await exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,undefined,[['特殊工艺','免洗']],{fixedCraftSteps:[{craftKind:'embroidery',sequence:1},{craftKind:'special',sequence:2,specialCraft:craft}]}),sid=created[0]!.sourceId;
+  const time=()=>({now:businessNow().toISOString(),scenarioId:null,revision:0}),before=(await developmentSlaEvidence(f.db,sid,time()))!;
+  const forms=new DigitalDevelopmentService(f.db,true),sheet=await forms.read(f.root,sid),native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true}),rounds=new DevelopmentRoundService(f.db,true,native);
+  const draft=await rounds.save(f.root,sid,{expectedDraftVersion:0,revision:{basedOnRound:1,document:sheet.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST only sewing redo',explanation:'TEST preserve original craft facts',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'}},randomUUID());
+  await rounds.publish(f.root,sid,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+  const adopted=(await f.db.query('SELECT inherited,route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[sid])).rows[0];
+  expect(adopted.route_nodes).not.toContain('development_printing');expect(adopted.inherited.development_printing).toMatchObject({taskId:expect.any(String),roundNumber:1});
+  const after=(await developmentSlaEvidence(f.db,sid,time()))!;
+  for(const key of ['development_printing','development_embroidery','development_craft_return']){expect(after.facts[key]).toMatchObject({businessCompleted:true,completedAt:before.facts[key]!.completedAt});expect(after.facts[key]!.evidence).toContain('adopted:development-round:'+sid+':2');}
+  for(const key of Object.keys(before.originalFacts).filter(key=>/^(development_printing|development_embroidery|development_craft_dispatch|development_craft_return)(:|$)/.test(key)))expect(after.originalFacts[key]).toEqual(before.originalFacts[key]);expect(after.instances).toEqual(before.instances);
+  const current=await new DigitalJourneyQuery(f.db).read(f.root,sid);expect(current.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='development_printing'&&node.current)).toMatchObject({state:'inherited',label:'TEST inherited special（工艺2）'});
+ });
+
  it('keeps built-in printing price and permissions when different artisans start special steps',async()=>{
   const worker=f.people['pattern-room-worker']!,other={...worker,actorId:randomUUID()};
   await f.db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST special quote artisan',true)",[other.actorId]);

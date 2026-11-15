@@ -38,9 +38,9 @@ describe('exact craft task supervision identity',()=>{
  });
 });
 
-async function read(rows:DevelopmentCraftRow[],selectedPlan=plan,round?:number){
+async function read(rows:DevelopmentCraftRow[],selectedPlan=plan,round?:number,adoption?:{inherited:Record<string,{taskId:string;roundNumber:number}>;published_at:string;route_nodes:string[]}){
  vi.mocked(developmentSlaPlan).mockResolvedValue({plan_json:selectedPlan,business_time:{scenarioId:null},revision:2,rule_version:snapshot.ruleVersion,parameters_json:snapshot.parameters});
- const query=vi.fn(async(sql:string,params:unknown[]=[])=>sql.startsWith('SELECT t.task_id')?{rows}:sql.includes('SELECT round_number')?{rows:[{round_number:params[1]??Math.max(...rows.map(row=>row.route_version)),route_nodes:rows.filter(row=>row.route_version===(params[1]??Math.max(...rows.map(row=>row.route_version)))).map(row=>row.task_kind)}]}:Promise.reject(new Error('Unexpected scoped fixture query: '+sql)));
+ const query=vi.fn(async(sql:string,params:unknown[]=[])=>sql.startsWith('SELECT t.task_id')?{rows}:sql.includes('SELECT round_number')?{rows:[{round_number:params[1]??Math.max(...rows.map(row=>row.route_version)),route_nodes:rows.filter(row=>row.route_version===(params[1]??Math.max(...rows.map(row=>row.route_version)))).map(row=>row.task_kind),...adoption}]}:Promise.reject(new Error('Unexpected scoped fixture query: '+sql)));
  return (await developmentSlaEvidence({query} as never,'source',time,undefined,round))!;
 }
 function phase(rowId:string,step:string,kind:string,start:number|null,end:number|null,predecessor:string[]=[]){
@@ -116,4 +116,20 @@ it('retains inclusive and explicitly strict own captured cutoff equality for run
   const item=subject([n]);attachJourneySupervision(item,plan,plan,evaluateSlaPlan(plan,e.facts,time),time,{original:1,current:2},false,e);
   expect(n.timing?.status).toBe(complete?exclusive?'completed_late':'completed_on_time':exclusive?'overdue':'warning');expect(n.timing?.target.exclusive).toBe(exclusive);
  }
+});
+
+it('retains only the explicitly inherited craft result when a later round redoes sewing',async()=>{
+ const rows=[phase('emb-A','step-A','development_embroidery',0,4),phase('ret-A','step-A','development_craft_confirmation',4,6,['emb-A']),phase('special-B','step-B','development_printing',10,15),phase('ret-B','step-B','development_craft_confirmation',15,20,['special-B'])];
+ const inherited={development_embroidery:{taskId:'emb-A',roundNumber:1},development_printing:{taskId:'special-B',roundNumber:1},development_craft_confirmation:{taskId:'ret-B',roundNumber:1}};
+ const e=await read(rows,craftPlan,2,{inherited,published_at:at(25),route_nodes:['development_sewing','development_tail_check']});
+ expect(e.facts.development_printing).toMatchObject({businessCompleted:true,completedAt:at(20)});expect(e.facts.development_embroidery).toMatchObject({businessCompleted:true,completedAt:at(6)});expect(e.facts.development_craft_return).toMatchObject({businessCompleted:true,completedAt:at(20)});
+ expect(e.originalFacts.development_printing.completedAt).toBe(at(20));expect(e.instances.every(i=>i.round===1)).toBe(true);
+});
+it('never restores unadopted, foreign, later, cancelled or currently redone craft results',async()=>{
+ const rows=[phase('work-A','step-A','development_printing',0,4),phase('ret-A','step-A','development_craft_confirmation',4,6,['work-A'])];
+ const valid={development_printing:{taskId:'work-A',roundNumber:1}};
+ for(const [inherited,route_nodes,published_at] of [[{},[],at(20)],[{development_printing:{taskId:'foreign-task',roundNumber:1}},[],at(20)],[{development_printing:{taskId:'work-A',roundNumber:3}},[],at(20)],[valid,['development_printing'],at(20)],[valid,[],at(40)]] as Array<[Record<string,{taskId:string;roundNumber:number}>,string[],string]>){
+  const e=await read(rows,craftPlan,2,{inherited,published_at,route_nodes});expect(e.facts.development_printing?.businessCompleted).not.toBe(true);
+ }
+ const e=await read([{...rows[0]!,state:'cancelled'},rows[1]!],craftPlan,2,{inherited:valid,published_at:at(20),route_nodes:[]});expect(e.facts.development_printing?.businessCompleted).not.toBe(true);
 });
