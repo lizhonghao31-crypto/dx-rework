@@ -495,7 +495,12 @@ export class DigitalJourneyQuery {
       if(task.deadlineMode!==undefined)node.deadlineMode=task.deadlineMode;
       if(task.deadlineExclusive!==undefined)node.deadlineExclusive=task.deadlineExclusive;
       node.sla=task.slaHours===null?"not_set":["completed","cancelled"].includes(state)?"finished":task.enteredAt?"running":"not_started";
-      node.current=raw.source_id?task.routeVersion===round&&!raw.returned:raw.task_kind==="sourcing_preparation"?task.state!=="cancelled":raw.route_instance_id===currentPrep;
+      // Native ship samples belong to the order from confirmation onward,
+      // independently of preparation/instruction revisions. Older preparation-
+      // scoped tasks still follow their original current-preparation identity.
+      node.current=raw.source_id?task.routeVersion===round&&!raw.returned
+        :raw.task_kind==="sourcing_preparation"?task.state!=="cancelled"
+        :raw.route_instance_id===currentPrep||(raw.task_kind==='bulk_ship_sample'&&raw.route_instance_id===oid);
       node.actualAt=task.completedAt;node.actualQuality=raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
       const routeTime=routeTimes.find(fact=>fact.task_id===task.taskId&&fact.route_version===task.routeVersion);
       if(state==='completed'&&routeTime&&!routeTime.corrected){
@@ -536,7 +541,9 @@ export class DigitalJourneyQuery {
         const timeRisks=journeyTaskTimeRisks({state,dueAt:task.dueAt,warningAt:task.warningAt,deadlineExclusive:task.deadlineExclusive},asOf);node.risks.push(...timeRisks);
         if(timeRisks.includes('overdue'))node.overdueSeconds=(Date.parse(asOf)-Date.parse(task.dueAt!))/1000;
         if(state==="blocked")node.risks.push("blocked");
-        if(!task.enteredAt)node.risks.push("unknown");
+        // A date target (e.g. ship sample) deliberately has no duration start.
+        // Its known deadline is sufficient for the original date supervision.
+        if(!task.enteredAt&&!(task.deadlineMode==='date_target'&&task.dueAt))node.risks.push("unknown");
       }
       if(state==="completed"&&node.actualQuality!=="verified")node.risks.push("unknown");
       node.countsInProgress=definition.count&&!raw.returned;

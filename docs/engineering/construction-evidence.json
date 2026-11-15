@@ -1,41 +1,39 @@
 {
   "version": 1,
-  "base": "06fd7779b60ffe94894f8b978eb08009462c9aa7",
+  "base": "e3c0604824694e860f65163d9bbe10f3e4a0158f",
   "risk": "full",
-  "sourceFingerprint": "0230ad92c8a0b0338767c49b77f9f2adae23ab7e4be1ae3abf9d2226f8e87883",
+  "sourceFingerprint": "e787ddb9488e630ae12380f35fb8213afe43ac77257d751ef0fd7da7855ce808",
   "rules": [
     {
-      "rule": "Future exclusive date positions retain open endpoints under an unbounded upstream forecast; no invented1ms shortage or sufficient claim. Actual deadline passage, known later branches and historical responsibility remain independent.",
-      "source": "Dot2026-11-15 authorization to resume delivered Acceptance defects; v27 calendar/forecast/parallel rules; docs/requirements/digital-sla-golden-source-20261023.md latest date-bound addendum.",
+      "rule": "Read the native whole-order ship sample as current independently of production preparation identity, retain original perPO completion and date-target reminders, and never turn genuine missing facts or retired scope into completion.",
+      "source": "Dot2026-11-15 explicit authorization to continue delivered Acceptance progress defects; approved ship sample non-gate rule and original date-target reporting semantics; docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md2026-11-15 addendum.",
       "writes": [
-        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/journey-query.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-time-framework.ts",
-        "apps/web/src/cockpit-fixed-schedule.tsx",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
-        "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/unit/journey-time-framework.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/production-platform/ship-sample-service.ts",
+        "apps/api/src/production-platform/ship-sample-facts.ts",
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/journey-business-progress.ts",
+        "apps/api/src/production-platform/journey-visual-progress.ts",
         "apps/api/src/production-platform/journey-selection-query.ts",
-        "apps/api/src/production-platform/journey-fact-updates.ts",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-home.tsx"
+        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/production-platform/reporting-metrics.ts"
       ],
       "oldTests": [
-        "tests/unit/fixed-schedule-progress.test.ts",
-        "tests/unit/journey-time-framework.test.ts",
-        "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/integration/order-time-reading-postgres.test.ts",
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/journey-fact-model.test.ts",
+        "tests/unit/journey-selection-facts.test.ts",
         "tests/integration/journey-fact-model-postgres.test.ts",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
         "tests/integration/m01-journey-performance-postgres.test.ts"
       ],
-      "initialization": "No migrations or persisted business/plan changes. Existing calculation-version check marks stale derived models obsolete and existing bounded update queue rebuilds from original facts; no GET whole-database rebuild. Contract payload remains compatible. Old completion targets/revisions and native perPO/batch clocks are unchanged.",
-      "dateAndPermission": "Beijing date next midnight remains exclusive, ordinary precise deadline remains inclusive. Work/DAG/calendar and adopted reserve applied once before endpoint comparison; now reaching deadline or actual equal-point completion is not exempted. Existing authorized same-connection reads and ordinary KPI/PO customer-overdue status remain independent of predicted schedule lag.",
-      "expectation": "Hand-calculated future lower_bound stays unknown/latestnull while genuine equality/past target or known late sibling remains insufficient; max gap does not add a sibling1ms. Native A/B original App displays unbounded slack as progress pending rather than green available0; known predicted lag labeled forecast, actual customer deadline remains separate. Immutable history, freshness, pagination and7070SQL preserved.",
+      "initialization": "No business writes or schema changes. Original order confirmation already creates the whole-order sample; prep-scoped historical tasks retain original currentPrep matching. New calculation version rejects obsolete derived models and bounded original update queue rebuilds them. No full-database rebuild in GET, no new task copies, grants, timestamp fabrication or default-state backfill.",
+      "dateAndPermission": "Same actor policy, source-round/returned guards, same RR connection, perPO native sample facts, date-exclusive deadline and original reminders remain. Known date_target does not require a duration start; absent target or unverified completion is still unknown. Real unknown stages remain unknown, stage weights and completion denominators unchanged; no production/QC/packing hard gate added.",
+      "expectation": "Before and after original preparation, one real current sample replaces its placeholder; partial PO stays incomplete and allPO actual facts complete. Detail, indexed list and no-actor persisted models agree. Foreign role remains denied, repeat command does not duplicate facts. Existing retired-scope unknown, original history/clock, pagination and7070SQL remain covered.",
       "checks": [
         "unit",
         "native"
@@ -46,46 +44,46 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest eight affected fixed schedule/framework/reading/selector/projection/App presentation unit suites --maxWorkers1",
+      "command": "vitest journey-business-progress, journey-visual-progress, journey-fact-model, journey-selection-facts unit suites --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 134,
+      "passed": 55,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "06fd7779b60ffe94894f8b978eb08009462c9aa7",
-      "sourceFingerprint": "0230ad92c8a0b0338767c49b77f9f2adae23ab7e4be1ae3abf9d2226f8e87883",
-      "context": "Candidate working tree on real release base06fd7779. Node22.22.2/npm10.9.9; canonical maxWorkers1 and marked low-privilege isolatedPG16; pinned actual Chromium1194. Three unchanged database suites retain original passing evidence; changed App/PO-label assertions rerun on actual A/B pages. No live writes or deployment. Original132unit baseline before final UI consumer checks is superseded by134current cases; no statement of Acceptance verification.88-order7samples7070SQL with7100cap retained.",
-      "startedAt": "2026-11-15T02:39:53.540Z",
-      "endedAt": "2026-11-15T02:39:58.214Z",
-      "log": "/tmp/time-read-unit.json",
-      "logSha256": "628698fb8d658f62d511759d9c30d300f92ae2788ae7426e09b7be71f5894476",
+      "testedHead": "e3c0604824694e860f65163d9bbe10f3e4a0158f",
+      "sourceFingerprint": "e787ddb9488e630ae12380f35fb8213afe43ac77257d751ef0fd7da7855ce808",
+      "context": "Candidate working tree on exact release base e3c06048. Node22.22.2/npm10.9.9, maxWorkers1, marked low-privilege isolated PG16. Native original commands and same RR snapshot; no live writes or deployment. Whole-order sample keeps its original task/PO records and clocks.88-order7samples7070SQL/7100cap. Earlier red2cases are reproduction evidence, not current passing evidence.",
+      "startedAt": "2026-11-15T03:39:00.289Z",
+      "endedAt": "2026-11-15T03:39:07.235Z",
+      "log": "/tmp/effective-journey-unit.json",
+      "logSha256": "13cff8cc81ecf74a7e7a4d2c4ee386fbcda8c3515fb76026dfe5d565ae90f424",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "628698fb8d658f62d511759d9c30d300f92ae2788ae7426e09b7be71f5894476"
+          "sha256": "13cff8cc81ecf74a7e7a4d2c4ee386fbcda8c3515fb76026dfe5d565ae90f424"
         }
       ]
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "Composite: unchanged reading/fact/performance suites from /tmp/time-read-pg.sh and final3original App cases from /tmp/time-read-browser.sh",
+      "command": "bash /tmp/effective-journey-pg.sh: canonical PG runner journey-fact-model-postgres, order-time-reading-postgres and m01-journey-performance-postgres --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 27,
+      "passed": 26,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "06fd7779b60ffe94894f8b978eb08009462c9aa7",
-      "sourceFingerprint": "0230ad92c8a0b0338767c49b77f9f2adae23ab7e4be1ae3abf9d2226f8e87883",
-      "context": "Candidate working tree on real release base06fd7779. Node22.22.2/npm10.9.9; canonical maxWorkers1 and marked low-privilege isolatedPG16; pinned actual Chromium1194. Three unchanged database suites retain original passing evidence; changed App/PO-label assertions rerun on actual A/B pages. No live writes or deployment. Original132unit baseline before final UI consumer checks is superseded by134current cases; no statement of Acceptance verification.88-order7samples7070SQL with7100cap retained.",
-      "startedAt": "2026-11-15T02:33:00.618Z",
-      "endedAt": "2026-11-15T02:41:01.908Z",
-      "log": "/tmp/time-read-native-final.json",
-      "logSha256": "4953933bf2ccf377746f3a73a7eaf8c4c6bee5b456b499d3dff285fca9c0954f",
+      "testedHead": "e3c0604824694e860f65163d9bbe10f3e4a0158f",
+      "sourceFingerprint": "e787ddb9488e630ae12380f35fb8213afe43ac77257d751ef0fd7da7855ce808",
+      "context": "Candidate working tree on exact release base e3c06048. Node22.22.2/npm10.9.9, maxWorkers1, marked low-privilege isolated PG16. Native original commands and same RR snapshot; no live writes or deployment. Whole-order sample keeps its original task/PO records and clocks.88-order7samples7070SQL/7100cap. Earlier red2cases are reproduction evidence, not current passing evidence.",
+      "startedAt": "2026-11-15T03:38:59.438Z",
+      "endedAt": "2026-11-15T03:42:12.901Z",
+      "log": "/tmp/effective-journey-pg.json",
+      "logSha256": "71a140446bcfa97975baf603d96772c3dedf3b2584fb9c83c2decd4ee896133a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4953933bf2ccf377746f3a73a7eaf8c4c6bee5b456b499d3dff285fca9c0954f"
+          "sha256": "71a140446bcfa97975baf603d96772c3dedf3b2584fb9c83c2decd4ee896133a"
         }
       ]
     }
