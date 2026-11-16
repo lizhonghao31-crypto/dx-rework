@@ -1,4 +1,4 @@
-import {developmentResponsibilityWindow,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
+import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
 import {developmentCraftInstances,craftInstanceAggregates} from './development-craft-instance-evidence.js';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import type { PoolClient } from "pg";
@@ -14,20 +14,24 @@ const iso = (value: Date | string) => new Date(value).toISOString();
  * The caller has already authorized the whole source's timing evidence.
  */
 export async function developmentNativeFacts(db: DB, sourceId: string, time: BusinessTime,onFutureEvidence?:(at:string)=>void): Promise<Record<string, SlaNodeFact>> {
-  const rows = (await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,
+  const rows = (await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned,
       EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id AND f.kind='尾查退回') AS rejected
     FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
     WHERE a.source_id=$1 AND t.route_version=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=$1),1)
     ORDER BY t.created_at,t.task_id`, [sourceId])).rows;
+  await attachDevelopmentRegistrations(db,rows);
   return Object.fromEntries(rows.map(row => {
     const complete = row.state === 'completed' && !row.returned && !row.rejected;
     const trusted = (at: Date | string | null, quality: string) => {
       if(!at||!['现场登记','已核实'].includes(quality))return false;
       const observed=iso(at);if(Date.parse(observed)>Date.parse(time.now)){onFutureEvidence?.(observed);return false;}return true;
     };
+    const registration=row.registration_readiness;
+    const registered=registration?developmentResponsibilityWindow(row,registration.at,{enteredAt:registration.at,basis:[registration.reference]}):null;
+    const entered=registered?.at??(registration?null:row.entered_at),quality=registered?.quality??row.entered_quality;
     return [`${row.task_kind}:task:${row.task_id}`, { evidence: `task:${row.task_id}`, businessCompleted: complete,
-      ...(trusted(row.entered_at, row.entered_quality) ? { startedAt: iso(row.entered_at) } : {}),
+      ...(trusted(entered,quality) ? { startedAt: iso(entered) } : {}),
       ...(complete && trusted(row.completed_at, row.completed_quality) ? { completedAt: iso(row.completed_at) } : {}) }];
   }));
 }
@@ -52,6 +56,7 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
       ORDER BY CASE WHEN t.state='completed' AND r.reason='completion' THEN 0 ELSE 1 END,r.revision_id DESC LIMIT 1)d ON true
     LEFT JOIN LATERAL(SELECT r.entered_at,r.due_at,r.warning_at,r.sla_basis FROM digital_production_deadline_revisions r WHERE r.task_id=t.task_id ORDER BY r.revision_id DESC LIMIT 1)current_window ON true
     WHERE a.source_id=$1 ORDER BY t.route_version,t.created_at,t.task_id`, [sourceId])).rows;
+  await attachDevelopmentRegistrations(db,rows);
   const responsibility=(row:typeof rows[number])=>developmentResponsibilityWindow({...row,entered_at:Object.hasOwn(row,'task_entered_at')?row.task_entered_at:row.entered_at},Object.hasOwn(row,'instance_entered_at')?row.instance_entered_at:row.entered_at,Object.hasOwn(row,'instance_sla_basis')?row.instance_sla_basis:row.sla_basis,rows);
   const responsibilityBasis=(row:typeof rows[number])=>row.instance_sla_basis??row.sla_basis;
   const deadline=(row:typeof rows[number])=>responsibility(row).at&&(Object.hasOwn(row,'instance_due_at')?row.instance_due_at:row.due_at)?iso(Object.hasOwn(row,'instance_due_at')?row.instance_due_at:row.due_at):null;

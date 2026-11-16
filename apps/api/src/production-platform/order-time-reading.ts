@@ -1,4 +1,4 @@
-import {developmentResponsibilityWindow,developmentReadyCorrectionSql,type ReadyCorrection} from './development-responsibility-window.js';
+import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentReadyCorrectionSql,type ReadyCorrection} from './development-responsibility-window.js';
 import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
 import {frameworkNodeTargets,frameworkTargetPrecision} from './framework-node-targets.js';
 import {journeyWashingFact} from './journey-washing-facts.js';
@@ -52,6 +52,7 @@ async function taskEvidence(db:DB,resource:BusinessTimeScope,item:OrderJourney):
    ORDER BY CASE WHEN a.source_id IS NULL AND t.state='completed' AND r.reason='completion' THEN 0 ELSE 1 END,r.revision_id DESC LIMIT 1) d ON true
   WHERE ($1::uuid IS NOT NULL AND a.production_order_id=$1) OR ($2::uuid IS NOT NULL AND a.source_id=$2)
   ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,resource.kind==='source'?resource.id:item.sourceId])).rows;
+ await attachDevelopmentRegistrations(db,tasks);
  const ids=tasks.map(task=>task.task_id),readiness=await nativeTaskReadiness(db,ids);
  return {tasks,readiness,cutting:resource.kind==='order'?await nativeCuttingReadiness(db,ids):[],cutCompletions:resource.kind==='order'?await nativeCuttingCompletions(db,resource.id):[]};
 }

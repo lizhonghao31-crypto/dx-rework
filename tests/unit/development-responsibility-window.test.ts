@@ -25,3 +25,12 @@ it('retains the independently captured organizational start while activation/han
 });
 
 it('does not turn a bare legacy timestamp without quality or native proof into a trusted start',()=>{expect(developmentResponsibilityWindow({task_id:'TEST missing provenance',entered_at:at},at,{enteredAt:at})).toEqual({at:null,quality:'缺失'});});
+
+it('uses an exact review registration independently of activation quality, but cannot borrow another request or revive an explicit unknown',()=>{
+ const registration={taskId:'own',at,reference:'final-comment:original'},pending={...task,entered_at:null,entered_quality:'缺失',registration_readiness:registration},basis={enteredAt:at,basis:['final-comment:original']};
+ expect(developmentResponsibilityWindow(pending,at,basis)).toEqual({at,quality:'现场登记'});
+ expect(developmentResponsibilityWindow({...pending,entered_quality:'补报未核实'},at,basis).at).toBe(at);
+ for(const r of [{...registration,taskId:'other'},{...registration,reference:'final-comment:other'},{...registration,at:synthetic}])expect(developmentResponsibilityWindow({...pending,registration_readiness:r},at,basis).at).toBeNull();
+ expect(developmentResponsibilityWindow(pending,at,{...basis,enteredAt:null}).at).toBeNull();
+ expect(developmentResponsibilityWindow({...pending,ready_correction:{at:null,eventId:'explicit original correction'}},at,basis).at).toBeNull();
+});

@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {afterAll,beforeAll,describe,expect,it} from 'vitest';
+import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
@@ -12,14 +12,18 @@ import {OrderTimeRequestService} from '../../apps/api/src/production-platform/or
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {orderTimeNativeTiming} from '../../apps/api/src/production-platform/order-time-native-timing.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('development responsibility occurrence provenance on actual isolated schema',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>;
  beforeAll(async()=>{f=await businessAnchorFixture(url!);});afterAll(async()=>{await f?.dispose();});
  it('keeps unverified inner wash readiness unrated, preserves actual completion/history and restores only the explicitly verified original R',async()=>{
+  const began=performance.now(),phase=(name:string)=>console.info('RESPONSIBILITY_NATIVE_PHASE',JSON.stringify({case:'unverified-inner-wash',phase:name,elapsedMs:Math.round(performance.now()-began)}));phase('start');
   const at='2027-01-07T22:53:30.123Z',scene=await f.scene(at),tasks=new DigitalProductionTaskService(f.db);
   await f.runtime.run(scene,f.root,async()=>{
    const [made]=await exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,{read:async()=>({now:businessNow().toISOString(),scenarioId:scene,revision:1})},[['无','内洗']],{fixedCraftSteps:[],routeActualTime:kind=>kind==='development_washing'?{precision:'instant',at}:undefined});
+   phase('native-route-complete');
    const tail=(await f.db.query("SELECT t.task_id,t.entered_quality FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_tail_check'",[made!.sourceId])).rows[0]!;
    expect(tail.entered_quality).toBe('补报未核实');
    // A precisely scoped historical fixture represents the old synthetic revision.
@@ -46,6 +50,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const currentFacts=(await developmentSlaEvidence(f.db,made!.sourceId,observed()))!.facts.development_tail_check;expect(currentFacts.startedAt??null).toBe(occurredAt);expect(currentFacts.completedAt).toBe(at);
     const derived=(await new DigitalJourneyQuery(f.db).read(f.root,made!.sourceId,undefined,true)).stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===tail.task_id)!;expect(derived.timing?.status).toBe(occurredAt?'completed_on_time':'completed_unrated');expect(derived.actualAt).toBe(at);
    }
+   phase('source-corrections-and-reads-complete');
    const ready=(await tasks.history(f.root,tail.task_id)).events.find(event=>event.kind==='ready')!;
    await expect(tasks.correctTime(f.people['pattern-room-worker']!,tail.task_id,{eventId:ready.eventId,occurredAt:at,reason:'TEST no authority'},randomUUID())).rejects.toMatchObject({statusCode:403});
    for(const value of [at,null,at]){
@@ -60,10 +65,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await Promise.all([null,at].map(occurredAt=>tasks.correctTime(f.root,tail.task_id,{eventId:ready.eventId,occurredAt,reason:'TEST concurrent original time verification'},randomUUID())));
    const current=(await f.db.query('SELECT entered_at FROM digital_production_tasks WHERE task_id=$1',[tail.task_id])).rows[0].entered_at as Date|null;
    expect((await tasks.read(f.root,tail.task_id)).enteredAt).toBe(current?.toISOString()??null);
-   expect((await f.db.query('SELECT revision_id,entered_at,due_at,sla_basis FROM digital_production_deadline_revisions WHERE revision_id=$1',[revision.revision_id])).rows[0]).toEqual(revision);
+   expect((await f.db.query('SELECT revision_id,entered_at,due_at,sla_basis FROM digital_production_deadline_revisions WHERE revision_id=$1',[revision.revision_id])).rows[0]).toEqual(revision);phase('own-verification-concurrency-and-history-complete');
   });
  });
  it('retains the corrected causal start through real completion verification, order arrangement and later native revisions',async()=>{
+  const began=performance.now(),phase=(name:string)=>console.info('RESPONSIBILITY_NATIVE_PHASE',JSON.stringify({case:'causal-R-persistence',phase:name,elapsedMs:Math.round(performance.now()-began)}));phase('start');
   const settings=new OrderTimeSettingsService(f.db,true,false),current=await settings.read(f.root);
   const nodes={...current.current.nodes};for(const [key,minutes] of Object.entries({development_materials:240,development_pattern:2880,development_cutting:240,development_sewing:1440,development_pre_wash_check:30,development_washing:1440,development_tail_check:30}))nodes[key]={...nodes[key]!,minutes};
   await settings.save(f.root,{expectedVersion:current.version,values:{...current.current,nodes}},randomUUID());
@@ -74,6 +80,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    tailId=rows.find(row=>row.task_kind==='development_tail_check')!.task_id;washingId=rows.find(row=>row.task_kind==='development_washing')!.task_id;
    expect(await tasks.read(f.root,tailId)).toMatchObject({enteredAt:at,dueAt:'2027-01-08T20:30:00.000Z'});
   });
+  phase('native-route-complete');
   await f.advance(scene,'2027-01-08T22:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
    const tailC=(await tasks.history(f.root,tailId)).events.find(event=>event.kind==='completed')!,washingC=(await tasks.history(f.root,washingId)).events.find(event=>event.kind==='completed')!;
    await tasks.correctTime(f.root,tailId,{eventId:tailC.eventId,occurredAt:'2027-01-08T22:00:00.000Z',reason:'TEST verify actual later tail completion'},randomUUID());
@@ -82,12 +89,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await tasks.read(f.root,tailId)).toMatchObject(expected);
    await tasks.correctTime(f.root,tailId,{eventId:tailC.eventId,occurredAt:'2027-01-08T22:00:00.000Z',reason:'TEST later verification cannot undo causal R'},randomUUID());
    expect(await tasks.read(f.root,tailId)).toMatchObject(expected);
+   phase('source-and-completion-corrections-complete');
    const requests=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true)),resource={kind:'source' as const,id:sourceId},operation={kind:'arrangement' as const,resource};
    const overrides={development_tail_check:nodes.development_tail_check!},check=await requests.check(f.root,operation,overrides);
    await requests.arrange(f.root,{resource,fingerprint:check.fingerprint,overrides,acceptLate:true},randomUUID());
    const client=await f.db.connect();try{await client.query('BEGIN');await tasks.refreshDevelopmentDeadlineWithClient(client,f.root,tailId);await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
    expect(await tasks.read(f.root,tailId)).toMatchObject({...expected,slaHours:.5});
-   const revisions=(await f.db.query('SELECT entered_at,sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[tailId])).rows[0];expect(new Date(revisions.entered_at).toISOString()).toBe(expected.enteredAt);expect(revisions.sla_basis.seconds).toBe(1800);
+   const revisions=(await f.db.query('SELECT entered_at,sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[tailId])).rows[0];expect(new Date(revisions.entered_at).toISOString()).toBe(expected.enteredAt);expect(revisions.sla_basis.seconds).toBe(1800);phase('arrangement-and-native-revision-complete');
   });
  });
  it('does not authenticate an earlier synthetic quota with a later ready event from the same task',async()=>{

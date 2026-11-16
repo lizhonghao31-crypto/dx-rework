@@ -1,4 +1,4 @@
-import {developmentResponsibilityWindow,developmentResponsibilityProofSql,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
+import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentResponsibilityProofSql,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
 import {taskCraftDisplay} from './task-craft-display.js';
 import {retiredBulkPreshrinkTaskIds} from './bulk-preshrink-requirement.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
@@ -61,6 +61,7 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
   LEFT JOIN LATERAL(SELECT before_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=t.task_id::text AND action='digital_task_reassigned' AND date_trunc('milliseconds',created_at)>date_trunc('milliseconds',completion.recorded_at) ORDER BY created_at,id LIMIT 1)later ON true
   LEFT JOIN app_users previous_owner ON previous_owner.id=(later.before_state->>'assigneeId')::uuid
   WHERE t.task_id=ANY($1::uuid[])`,[ids,await retiredBulkPreshrinkTaskIds(db)])).rows;
+ await attachDevelopmentRegistrations(db,rows);
  const result=new Map<string,SummaryTask>();
  for(const row of rows){
   const craftDisplay=taskCraftDisplay(row.task_kind,row.label,row.sla_basis,{kind:row.craft_kind,name:row.craft_name,sequence:row.craft_sequence,count:row.craft_count});

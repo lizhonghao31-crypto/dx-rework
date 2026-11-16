@@ -1,3 +1,5 @@
+import {developmentNativeFacts} from '../../apps/api/src/production-platform/development-sla-evidence.js';
+import {journeyTaskSummaries} from '../../apps/api/src/production-platform/journey-task-summary.js';
 import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
 import {execFileSync} from 'node:child_process';
 import {technicalDocumentFingerprint} from '../../apps/api/src/production-platform/development-technical-repository.js';
@@ -477,6 +479,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await tasks.read(f.root,dated.reviewTaskId!)).enteredAt).toBe('2026-11-15T04:00:00.000Z');
    const now=await technical.recordComment(p.designer,p.sourceId,{...comment(1),actualTime:{precision:'current'}},randomUUID());
    expect((await technical.read(p.designer,p.sourceId)).comments.find(row=>row.commentId===now.commentId)).toMatchObject({occurredAt:'2026-11-15T04:00:00.000Z',occurredDate:null});
+  });
+ });
+ it('keeps exact review registration before assignment and for historical unverified activation without changing facts',async()=>{
+  const scene=await f.scene('2026-11-15T04:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const p=await prepare();
+   // Dedicated source fixture: no eligible historical paper recipient remains.
+   await f.db.query('UPDATE digital_production_task_access SET assignee_id=NULL WHERE task_id=$1',[p.paper.taskId]);
+   const final=await technical.recordComment(p.designer,p.sourceId,{...comment(),actualTime:{precision:'date',date:'2026-11-14'}},randomUUID()),id=final.reviewTaskId!;
+   const request=(await f.db.query('SELECT * FROM digital_development_size_review_requests WHERE task_id=$1',[id])).rows;
+   const expected={enteredAt:'2026-11-15T04:00:00.000Z',dueAt:'2026-11-16T04:00:00.000Z',slaHours:24};
+   expect(await tasks.read(f.root,id)).toMatchObject({...expected,state:'pending',assigneeId:null});
+   expect((await journeyTaskSummaries(f.db,[id])).get(id)).toMatchObject(expected);
+   expect((await developmentNativeFacts(f.db,p.sourceId,{now:'2026-11-15T04:00:00.000Z',scenarioId:scene,revision:1}))[`development_size_review:task:${id}`]).toMatchObject({startedAt:expected.enteredAt,businessCompleted:false});
+   await tasks.reassign(f.root,id,p.worker.actorId,randomUUID());expect(await tasks.read(p.worker,id)).toMatchObject({...expected,state:'ready'});
+   // Precise historical row fixture models the previous explicit-at creator;
+   // original request and task events remain immutable and independently read.
+   await f.db.query("UPDATE digital_production_tasks SET entered_quality='补报未核实' WHERE task_id=$1",[id]);
+   const events=(await tasks.history(f.root,id)).events;
+   expect(await tasks.read(p.worker,id)).toMatchObject({...expected,timeQuality:'现场登记'});
+   expect((await journeyTaskSummaries(f.db,[id])).get(id)).toMatchObject({...expected,timeQuality:'现场登记'});
+   expect((await f.db.query('SELECT * FROM digital_development_size_review_requests WHERE task_id=$1',[id])).rows).toEqual(request);
+   expect((await tasks.history(f.root,id)).events).toEqual(events);
+   expect((await f.db.query('SELECT entered_quality FROM digital_production_tasks WHERE task_id=$1',[id])).rows[0].entered_quality).toBe('补报未核实');
   });
  });
  it('adopts only an explicitly selected same-source same-unit technical usage; confirmation remains frozen',async()=>{
