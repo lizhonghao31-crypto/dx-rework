@@ -106,7 +106,7 @@ const mutationBody = (input: unknown): {
 
 const receiptCorrectionBody = (input: unknown): {
   expectedVersion: number;
-  source: "jiashun" | "other_factory";
+  source?: "jiashun" | "other_factory";
   documentQuantity: number;
   actualQuantity: number;
   defectiveQuantity: number;
@@ -115,12 +115,12 @@ const receiptCorrectionBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "收货记录修正信息不完整", 400);
   }
   const body = input as Record<string, unknown>;
-  if (body.source !== "jiashun" && body.source !== "other_factory") {
+  if (body.source !== undefined && body.source !== "jiashun" && body.source !== "other_factory") {
     throw new ApplicationError("VALIDATION_ERROR", "请选择嘉顺收货或其他工厂收货", 400);
   }
   return {
     expectedVersion: Number(body.expectedVersion),
-    source: body.source,
+    ...(body.source===undefined?{}:{source:body.source}),
     documentQuantity: Number(body.documentQuantity),
     actualQuantity: Number(body.actualQuantity),
     defectiveQuantity: Number(body.defectiveQuantity),

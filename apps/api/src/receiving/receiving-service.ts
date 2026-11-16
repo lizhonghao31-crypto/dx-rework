@@ -91,7 +91,7 @@ type CorrectReceivingBatchInput = Readonly<{
 
 type CorrectReceivingReceiptInput = Readonly<{
   expectedVersion: number;
-  source: RepeatedReceivingSource;
+  source?: RepeatedReceivingSource;
   documentQuantity: number;
   actualQuantity: number;
   defectiveQuantity: number;
@@ -790,6 +790,23 @@ export class ReceivingService {
         version: current.version,
       };
 
+      const quantityChanged=before.documentQuantity!==normalized.documentQuantity||before.actualQuantity!==normalized.actualQuantity||before.defectiveQuantity!==defectiveQuantity;
+      const receipts=(await client.query(`SELECT r.receipt_id,coalesce(c.receiving_source,r.receiving_source) AS source,
+        coalesce(c.document_quantity,r.document_quantity)::bigint AS document_quantity,
+        coalesce(c.actual_quantity,r.actual_quantity)::bigint AS actual_quantity,
+        coalesce(c.defective_quantity,r.defective_quantity)::bigint AS defective_quantity
+        FROM receiving_receipts r LEFT JOIN LATERAL(SELECT * FROM receiving_receipt_corrections c
+          WHERE c.receipt_id=r.receipt_id ORDER BY c.created_at DESC,c.correction_id DESC LIMIT 1)c ON true
+        WHERE r.receiving_batch_id=$1 ORDER BY r.received_at,r.receipt_id`,[receivingBatchId])).rows;
+      if(quantityChanged&&receipts.length!==1)fail('本单有多笔收货，请展开收货记录并修正实际录错的那一笔；累计数不能猜分摊',409,'CONFLICT');
+      const appendQuantityCorrection=async(eventId:string)=>{
+        if(!quantityChanged)return;
+        const receipt=receipts[0]!;
+        await client.query(`INSERT INTO receiving_receipt_corrections(correction_id,receipt_id,receiving_batch_id,receiving_source,
+          document_quantity,actual_quantity,defective_quantity,corrected_by,operation_event_id,request_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[randomUUID(),receipt.receipt_id,receivingBatchId,receipt.source,
+          normalized.documentQuantity,normalized.actualQuantity,defectiveQuantity,actor.actorId,eventId,actor.requestId]);
+      };
       const targetResult = current.has_rework_history ? { rows: [] } : await client.query<{
         receiving_batch_id: string;
         has_rework_history: boolean;
@@ -869,6 +886,7 @@ export class ReceivingService {
             source: { ...before, correctedStyleNo: normalized.styleNo },
           },
         });
+        await appendQuantityCorrection(mergeEventId);
         await client.query(
           "SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
           [mergeEventId, actor.requestId],
@@ -957,6 +975,7 @@ export class ReceivingService {
         "SELECT set_config('dx_rework.receiving_root_action','correct',true),set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",
         [eventId, actor.requestId],
       );
+      await appendQuantityCorrection(eventId);
       const updated = await client.query(
         `UPDATE receiving_batches batch
          SET style_no=$2,delivery_note_quantity=$3,
@@ -1746,7 +1765,7 @@ export class ReceivingService {
     if (!UUID_PATTERN.test(receiptId)) fail("收货记录标识无效");
     const normalized = {
       expectedVersion: this.validateExpectedVersion(input.expectedVersion),
-      source: normalizeRepeatedReceivingSource(input.source),
+      source: input.source===undefined?undefined:normalizeRepeatedReceivingSource(input.source),
       documentQuantity: validateQuantity(input.documentQuantity, "本次送货单数量", false),
       actualQuantity: validateQuantity(input.actualQuantity, "本次实际收货数量", true),
       defectiveQuantity: validateQuantity(input.defectiveQuantity, "本次次品数量", true),
@@ -1766,7 +1785,7 @@ export class ReceivingService {
         corrected_document_quantity: string | null;
         corrected_actual_quantity: string | null;
         corrected_defective_quantity: string | null;
-        corrected_receiving_source: RepeatedReceivingSource | null;
+        corrected_receiving_source: ReceiptSource | null;
         is_base_receipt: boolean;
       }>(
         `SELECT receipt.receiving_batch_id,receipt.style_no,
@@ -1791,12 +1810,13 @@ export class ReceivingService {
            ORDER BY item.created_at DESC,item.correction_id DESC
            LIMIT 1
          ) correction ON true
-         WHERE receipt.receipt_id=$1
-         FOR UPDATE OF receipt`,
+         WHERE receipt.receipt_id=$1`,
         [receiptId],
       );
       const fact = receipt.rows[0];
       if (!fact) return fail("收货记录不存在", 404, "NOT_FOUND");
+      // Style/owning-batch locks serialize all native quantity writers. Taking
+      // a receipt FOR UPDATE first would deadlock a card correction's FK insert.
       await this.lockStyles(client, [fact.style_no]);
       const batch = await this.mutableBatch(client, fact.receiving_batch_id, true);
       if (batch.version !== normalized.expectedVersion) {
@@ -1809,15 +1829,25 @@ export class ReceivingService {
         actualQuantity: Number(fact.corrected_actual_quantity ?? fact.actual_quantity),
         defectiveQuantity: Number(fact.corrected_defective_quantity ?? fact.defective_quantity),
       };
+      const correctionSource=normalized.source??beforeReceipt.source;
       const rawTotals = await client.query<{
         document_quantity: string;
         actual_quantity: string;
         defective_quantity: string;
+        effective_document_quantity:string;
+        effective_actual_quantity:string;
+        effective_defective_quantity:string;
       }>(
-        `SELECT sum(document_quantity)::bigint AS document_quantity,
-                sum(actual_quantity)::bigint AS actual_quantity,
-                sum(defective_quantity)::bigint AS defective_quantity
-         FROM receiving_receipts WHERE receiving_batch_id=$1`,
+        `SELECT sum(r.document_quantity)::bigint AS document_quantity,
+                sum(r.actual_quantity)::bigint AS actual_quantity,
+                sum(r.defective_quantity)::bigint AS defective_quantity,
+                sum(CASE WHEN r.receipt_id=(SELECT base.receipt_id FROM receiving_receipts base WHERE base.receiving_batch_id=r.receiving_batch_id ORDER BY base.received_at,base.receipt_id LIMIT 1)
+                  OR coalesce(c.receiving_source,r.receiving_source)='other_factory' THEN coalesce(c.document_quantity,r.document_quantity) ELSE 0 END)::bigint AS effective_document_quantity,
+                sum(coalesce(c.actual_quantity,r.actual_quantity))::bigint AS effective_actual_quantity,
+                sum(coalesce(c.defective_quantity,r.defective_quantity))::bigint AS effective_defective_quantity
+         FROM receiving_receipts r LEFT JOIN LATERAL(SELECT document_quantity,actual_quantity,defective_quantity,receiving_source FROM receiving_receipt_corrections c
+           WHERE c.receipt_id=r.receipt_id ORDER BY c.created_at DESC,c.correction_id DESC LIMIT 1)c ON true
+         WHERE r.receiving_batch_id=$1`,
         [fact.receiving_batch_id],
       );
       const raw = rawTotals.rows[0]!;
@@ -1826,11 +1856,11 @@ export class ReceivingService {
         : beforeReceipt.source === "other_factory" ? beforeReceipt.documentQuantity : 0;
       const nextDeliveryContribution = fact.is_base_receipt
         ? normalized.documentQuantity
-        : normalized.source === "other_factory" ? normalized.documentQuantity : 0;
-      const documentQuantity = Number(batch.document_quantity)
+        : correctionSource === "other_factory" ? normalized.documentQuantity : 0;
+      const documentQuantity = Number(raw.effective_document_quantity)
         + nextDeliveryContribution - oldDeliveryContribution;
-      const actualQuantity = Number(batch.actual_quantity) + normalized.actualQuantity - beforeReceipt.actualQuantity;
-      const defectiveQuantity = Number(batch.defective_quantity) + normalized.defectiveQuantity - beforeReceipt.defectiveQuantity;
+      const actualQuantity = Number(raw.effective_actual_quantity) + normalized.actualQuantity - beforeReceipt.actualQuantity;
+      const defectiveQuantity = Number(raw.effective_defective_quantity) + normalized.defectiveQuantity - beforeReceipt.defectiveQuantity;
       if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
       const after: ReceivingBatchSnapshot = {
         receivingBatchId: fact.receiving_batch_id,
@@ -1859,7 +1889,7 @@ export class ReceivingService {
           receiptId,
           receiptBefore: beforeReceipt,
           receiptAfter: {
-            source: normalized.source,
+            source: correctionSource,
             documentQuantity: normalized.documentQuantity,
             actualQuantity: normalized.actualQuantity,
             defectiveQuantity: normalized.defectiveQuantity,
@@ -1876,7 +1906,7 @@ export class ReceivingService {
            document_quantity,actual_quantity,defective_quantity,
            corrected_by,operation_event_id,request_id
          ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [randomUUID(), receiptId, fact.receiving_batch_id, normalized.source,
+        [randomUUID(), receiptId, fact.receiving_batch_id, correctionSource,
           normalized.documentQuantity, normalized.actualQuantity, normalized.defectiveQuantity,
           actor.actorId, eventId, actor.requestId],
       );

@@ -24,7 +24,7 @@ describe("PR-08 information display", () => {
     expect(page).toContain("startDate");
     expect(page).toContain("endDate");
     expect(page).not.toContain("<span>原收货</span>");
-    expect(page).toContain("row.receiptCount > 1 ? <button");
+    expect(page).toContain("row.receiptCount >= 1 ? <button");
     expect(page).toContain("第{row.receiptCount}次收货");
     expect(page).toContain("查看记录");
     expect(page).toContain("累计实收 {quantity(item.cumulativeActualQuantity)}件");

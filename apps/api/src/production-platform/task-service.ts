@@ -1,5 +1,7 @@
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentResponsibilityProofSql,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
 import {taskCraftDisplay} from './task-craft-display.js';
+import {attachFactoryTaskCompletions,factoryCompletionSource} from './factory-task-completion.js';
+import {factoryCompletionOccurrence} from './factory-completion-occurrence.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {SlaSettingsSetsService} from './sla-settings-sets.js';
 import {SpecialCraftLibraryService} from './special-craft-library.js';
@@ -540,14 +542,18 @@ export class DigitalProductionTaskService {
     const fact=(await client.query(`SELECT f.* FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) WHERE r.production_order_id=$1 AND f.fact_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[orderId,factId,actor.actorId])).rows[0];
     if(!fact||!(actor.actorRoles.includes('root_superuser')||hasWarehouseReceivingRole(actor.actorRoles)))digitalForbidden();
     const tasks=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind IN ('process_logistics','bulk_qc','warehouse_dispatch')",[fact.preparation_id])).rows;
+    const source=await factoryCompletionSource(client,orderId);
+    const positions=source&&'craftSteps'in source?(await client.query('SELECT task_id,step_id FROM digital_timeline_task_positions WHERE task_id=ANY($1::uuid[])',[tasks.map(row=>row.task_id)])).rows:[];
     for(const row of tasks){
       const task=await this.task(client,row.task_id,true);if(task.state==='completed')continue;
       await this.active(client,this.resource(task));if(task.state!=='ready'||!await this.conditionsReady(client,task.task_id))fail('发厂相关任务尚未就绪');
-      const at=businessNow().toISOString();await this.setConditionWithClient(client,actor,task.task_id,'business_recorded',true,undefined,'QC事实及实际发厂已齐');
-      const eventId=await this.event(client,actor,task.task_id,this.resource(task),'completed',at,'现场登记',{factId,note:'实际发厂收口，QC判定人仍由原检查事实保留'});
+      const completion=factoryCompletionOccurrence(task,source,positions.find(position=>position.task_id===task.task_id)?.step_id);
+      const at=completion.kind==='known'?completion.at:null,quality:TimeQuality=at?'现场登记':'缺失';
+      await this.setConditionWithClient(client,actor,task.task_id,'business_recorded',true,undefined,'QC事实及实际发厂已齐');
+      const eventId=await this.event(client,actor,task.task_id,this.resource(task),'completed',at,quality,{factId,actualSource:'factory-scoped-occurrence-v1',note:'实际发厂收口，QC判定人仍由原检查事实保留'});
       await this.revision(client,actor,task.task_id,await this.policy(client,task.task_kind,task.task_id),iso(task.entered_at),'completion',eventId);
-      await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[task.task_id,at]);
-      if(task.baseline_clock_id)await new ProductionOrderNodeClockRepository(client).complete(task.task_id,new Date(at));
+      await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality=$3,terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[task.task_id,at,quality]);
+      if(task.baseline_clock_id&&at)await new ProductionOrderNodeClockRepository(client).complete(task.task_id,new Date(at));
     }
   }
   async refreshBusinessConditionsWithClient(client:PoolClient,actor:TrustedActorContext,id:string){
@@ -758,6 +764,7 @@ export class DigitalProductionTaskService {
     const policy = new DigitalProductionAccessPolicy(db);
     await policy.assert(actor, "task", id, "technical");
     const task = await this.task(db, id);
+    await attachFactoryTaskCompletions(db,[task]);
     const retired=isRetiredFactoryTask(task.task_kind);
     const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,
       CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,
