@@ -1,6 +1,6 @@
 import { specialProcessLabel, specialProcessName } from "@dx-rework/contracts";
 import { ReceivedQuantityLabel } from "./received-quantity-label.js";
-import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
+import { FinanceNodeKeySchema, hasFactoryPayablesReworkRead } from "@dx-rework/contracts/reporting";
 import { ReworkNodeHistoryPage, reworkHistoryHref } from "./rework-node-history-page.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { canOperateReworkNode, WHOLE_ORDER_REVIEW_CAPABILITIES } from "./rework-node-access.js";
@@ -665,8 +665,9 @@ function CurrentReworkDetailPage({
     if (historyKey.success) return <ReworkNodeHistoryPage orderId={detail.reworkOrderId} node={historyKey.data} />;
   }
 
-  const scopedFinanceOrderReader = hasCapability(currentUser,"rework:finance_orders:read") && !elevated(currentUser) && !hasCapability(currentUser,"rework:finance_nodes:read");
-  const financeNodeReader = !elevated(currentUser) && hasCapability(currentUser,"rework:finance_nodes:read");
+  const factoryReader=hasFactoryPayablesReworkRead(currentUser?.businessRoles,currentUser?.capabilities??[]);
+  const scopedFinanceOrderReader = hasCapability(currentUser,"rework:finance_orders:read") && !elevated(currentUser) && !hasCapability(currentUser,"rework:finance_nodes:read") && !factoryReader;
+  const financeNodeReader = !elevated(currentUser) && (hasCapability(currentUser,"rework:finance_nodes:read")||factoryReader);
   const renderSelectedTask = () => {
     if (!selected) return null;
     if (selected.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(selected.key)) return <a className="dx-button dx-button--primary" href={reworkHistoryHref(detail.reworkOrderId, selected.key)}>查看完整历史页面</a>;

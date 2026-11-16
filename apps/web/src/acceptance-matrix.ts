@@ -375,15 +375,23 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
     alias: "factory-payables",
     expectedRole: "factory_payables",
-    requiredCapabilities: ["sourcing:view", "supplier_profile:read", "external_responsibility:payables_confirm"],
-    forbiddenCapabilities: ["sample:view_basic", "access:admin", "receiving:create", "receiving:correct", "receiving:packing_manage", "receiving:resolve_difference", "receiving:export"],
+    requiredCapabilities: ["sourcing:view", "supplier_profile:read", "external_responsibility:payables_confirm", "rework:finance_orders:read"],
+    forbiddenCapabilities: ["sample:view_basic", "access:admin", "receiving:create", "receiving:correct", "receiving:packing_manage", "receiving:resolve_difference", "receiving:export", "report:view", "report:export", "wage:view", "wage:export", "wage:settlement_mark", "dashboard:management:read"],
     allowedModules: ["rework", "sourcing", "suppliers"],
     forbiddenModules: ["samples", "production"],
     probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardDeny, samplesDeny,
+      probe("rework-board", "返工完整看板只读", "management/rework-orders", 200),
+      probe("rework-management-denied", "管理看板不开放", "management/dashboard", 403),
+      probe("rework-report-denied", "通用返工报表不开放", "management/reports/rework_overview", 403),
+      probe("rework-wage-denied", "工资管理不开放", "management/reports/wages", 403),
       probe("receiving-board", "收货看板只读", "receiving/board?page=1", 200),
       probe("receiving-export", "收货导出不开放", "receiving/board/export", 403),
       probe("receiving-create-options", "收货录入不开放", "receiving/cutting-options", 403)],
     ruleRefs: {
+      ...approvedKeys("PERM-FACTORY-PAYABLES-REWORK-READ-20261116", [
+        "cap:rework:finance_orders:read:allow", "cap:report:view:deny", "cap:report:export:deny", "cap:wage:view:deny", "cap:wage:export:deny", "cap:wage:settlement_mark:deny", "cap:dashboard:management:read:deny",
+        "http:rework-board", "http:rework-management-denied", "http:rework-report-denied", "http:rework-wage-denied",
+      ]),
       ...approvedKeys("PERM-FACTORY-PAYABLES-RECEIVING-READ-001", [
         "cap:receiving:create:deny", "cap:receiving:correct:deny", "cap:receiving:packing_manage:deny",
         "cap:receiving:resolve_difference:deny", "cap:receiving:export:deny",

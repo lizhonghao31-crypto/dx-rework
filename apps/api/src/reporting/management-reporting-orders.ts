@@ -21,6 +21,7 @@ export async function fetchFacts(source: Queryable, options: {
   workTaskActorUserId?: string;
   includeTemporaryProxyTasks?: boolean;
   relatedOrderActorUserId?: string;
+  includeBasicOrderSearch?: boolean;
 }) {
   const values: unknown[] = [];
   const bind = (value: unknown): string => { values.push(value); return `$${values.length}`; };
@@ -35,7 +36,14 @@ export async function fetchFacts(source: Queryable, options: {
         JOIN rework_work_task_members searched_member ON searched_member.work_task_id=searched_task.work_task_id
         JOIN business_people searched_person ON searched_person.person_id=searched_member.person_id
         WHERE searched_task.rework_order_id=order_record.rework_order_id AND searched_person.display_name ILIKE ${p}
-      ))`);
+      )${options.includeBasicOrderSearch ? `
+      OR EXISTS(SELECT 1 FROM supplier_catalog_versions original_factory
+        WHERE original_factory.supplier_id=order_record.processing_factory_supplier_id
+          AND original_factory.version=order_record.processing_factory_supplier_version
+          AND original_factory.supplier_name ILIKE ${p})
+      OR EXISTS(SELECT 1 FROM app_users original_merchant
+        WHERE original_merchant.id=order_record.merchandiser_user_id AND original_merchant.display_name ILIKE ${p})
+      OR (order_record.processing_factory_type='own_factory' AND '本厂' ILIKE ${p})` : ''})`);
   }
   if (options.status) where.push(`order_record.status=${bind(options.status)}`);
   if (options.reworkKind) where.push(`order_record.rework_kind=${bind(options.reworkKind)}`);

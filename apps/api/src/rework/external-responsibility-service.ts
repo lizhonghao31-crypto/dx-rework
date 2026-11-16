@@ -1,4 +1,4 @@
-import { canReadFinanceOrders, scopedExternalSource } from "./finance-order-access.js";
+import { canReadFactoryPayablesRework, canReadFinanceOrders, scopedExternalSource } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
 import type {
   AllocateExternalSuppliers,
@@ -649,8 +649,9 @@ export class ExternalResponsibilityService {
   }
 
   async get(actor: TrustedActorContext, orderId: string, executor: Queryable = this.database): Promise<ExternalResponsibilityBatchResponse> {
+    const factoryReader=await canReadFactoryPayablesRework(executor,actor);
     const allowed = await executor.query<{ permitted: boolean }>("SELECT external_responsibility_can_view($1,$2) permitted", [actor.actorId, orderId]);
-    if (!allowed.rows[0]?.permitted) {
+    if (!allowed.rows[0]?.permitted && !factoryReader) {
       if (!await canReadFinanceOrders(executor,actor)) fail("当前用户无权查看外部责任台账",403,"FORBIDDEN");
       const order=await executor.query("SELECT 1 FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'",[orderId]);
       if(!order.rows[0]) fail("返工单不存在",404,"NOT_FOUND");
@@ -670,7 +671,7 @@ export class ExternalResponsibilityService {
       `SELECT item.external_item_id,item.configuration_item_id,item.responsibility_type,item.process_snapshot,item.multiplier_snapshot::text,item.share_bps_snapshot,item.proposed_amount::text,item.amount_line_snapshot
        FROM rework_external_responsibility_items item
        WHERE item.batch_id=$1 AND (
-         external_responsibility_can_view_all($2)
+         $4::boolean OR external_responsibility_can_view_all($2)
          OR external_responsibility_can_sign($2,$3,item.responsibility_type)
          OR EXISTS(
            SELECT 1 FROM rework_external_responsibility_case_items mapping
@@ -678,18 +679,18 @@ export class ExternalResponsibilityService {
            WHERE mapping.external_item_id=item.external_item_id
              AND external_responsibility_can_view_case($2,target_case.rework_order_id,target_case.responsibility_type)
          )
-       ) ORDER BY item.configuration_item_id,item.responsibility_type`, [head.batch_id,actor.actorId,orderId],
+       ) ORDER BY item.configuration_item_id,item.responsibility_type`, [head.batch_id,actor.actorId,orderId,factoryReader],
     );
     const cases = await executor.query<CaseRow>(
       `SELECT target_case.case_id,target_case.batch_id,target_case.rework_order_id,target_case.responsibility_type,target_case.supplier_id,target_case.supplier_version,target_case.supplier_code_snapshot,target_case.supplier_name_snapshot,target_case.supplier_type_snapshot,target_case.business_handler_user_id,target_case.payables_handler_role_snapshot,target_case.proposed_deduction_amount::text,target_case.case_version,target_case.status,batch.status batch_status,target_case.submitted_at,target_case.payables_confirmed_at
        FROM rework_external_responsibility_cases target_case JOIN rework_external_responsibility_batches batch USING(batch_id) WHERE target_case.batch_id=$1
-         AND external_responsibility_can_view_case($2,rework_order_id,responsibility_type)
-       ORDER BY created_at,case_id`, [head.batch_id,actor.actorId],
+         AND ($3::boolean OR external_responsibility_can_view_case($2,rework_order_id,responsibility_type))
+       ORDER BY created_at,case_id`, [head.batch_id,actor.actorId,factoryReader],
     );
     return {
       batchId: head.batch_id, reworkOrderId: head.rework_order_id, finalizedDeterminationId: head.finalized_determination_id,
       finalizedDeterminationVersion: head.finalized_determination_version, batchVersion: head.batch_version,
-      status: head.status, sourceSnapshot: allScope.rows[0]?.permitted ? head.source_snapshot : scopedExternalSource(head.source_snapshot),
+      status: head.status, sourceSnapshot: factoryReader||allScope.rows[0]?.permitted ? head.source_snapshot : scopedExternalSource(head.source_snapshot),
       items: items.rows.map((item) => this.itemDto(item)),
       cases: await Promise.all(cases.rows.map((item) => this.caseDto(actor, item, executor))),
     };
@@ -700,7 +701,7 @@ export class ExternalResponsibilityService {
       `SELECT target_case.case_id,target_case.batch_id,target_case.rework_order_id,target_case.responsibility_type,target_case.supplier_id,target_case.supplier_version,target_case.supplier_code_snapshot,target_case.supplier_name_snapshot,target_case.supplier_type_snapshot,target_case.business_handler_user_id,target_case.payables_handler_role_snapshot,target_case.proposed_deduction_amount::text,target_case.case_version,target_case.status,batch.status batch_status,target_case.submitted_at,target_case.payables_confirmed_at FROM rework_external_responsibility_cases target_case JOIN rework_external_responsibility_batches batch USING(batch_id) JOIN rework_orders order_record ON order_record.rework_order_id=target_case.rework_order_id WHERE target_case.case_id=$1 AND order_record.status<>'deleted'`, [caseId],
     );
     const row = found.rows[0] ?? fail("外部责任台账不存在", 404, "NOT_FOUND");
-    const permission = await executor.query<{ permitted: boolean }>("SELECT external_responsibility_can_view_case($1,$2,$3) permitted", [actor.actorId, row.rework_order_id,row.responsibility_type]);
+    const permission = await executor.query<{ permitted: boolean }>("SELECT ($4::boolean OR external_responsibility_can_view_case($1,$2,$3)) permitted", [actor.actorId, row.rework_order_id,row.responsibility_type,await canReadFactoryPayablesRework(executor,actor)]);
     if (!permission.rows[0]?.permitted) fail("当前用户无权查看外部责任台账", 403, "FORBIDDEN");
     return this.caseDto(actor, row, executor);
   }
@@ -1080,8 +1081,8 @@ export class ExternalResponsibilityService {
        JOIN rework_external_responsibility_cases source_case ON source_case.case_id::text=attachment.entity_id
        WHERE attachment.attachment_id=ANY($1::uuid[]) AND attachment.entity_type='external_responsibility_case'
          AND attachment.status='ready' AND source_case.rework_order_id=$2
-         AND external_responsibility_can_view_case($3,source_case.rework_order_id,source_case.responsibility_type)`,
-      [evidenceIds,row.rework_order_id,actor.actorId],
+         AND ($4::boolean OR external_responsibility_can_view_case($3,source_case.rework_order_id,source_case.responsibility_type))`,
+      [evidenceIds,row.rework_order_id,actor.actorId,await canReadFactoryPayablesRework(executor,actor)],
     ) : {rows:[]};
     const specialApprovalHistory = special.rows.map(request => ({requestId:request.special_request_id,requestVersion:request.request_version,
       reason:request.reason,attachmentIds:request.attachment_ids,proposedAmount:request.proposed_amount_snapshot,

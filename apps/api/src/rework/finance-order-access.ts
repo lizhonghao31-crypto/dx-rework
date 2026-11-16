@@ -1,7 +1,18 @@
 import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
+import { hasFactoryPayablesReworkRead } from "@dx-rework/contracts/reporting";
 
 export const FINANCE_ORDER_CAPABILITY = "rework:finance_orders:read";
+
+/** The approved factory-payables increment is rework-only; no wage/report or write grant. */
+export async function canReadFactoryPayablesRework(database: Pool | PoolClient, actor: TrustedActorContext): Promise<boolean> {
+  if (!hasFactoryPayablesReworkRead(actor.actorRoles, actor.authorizationCapabilities ?? [actor.authorizationCapability])) return false;
+  const result = await database.query<{permitted:boolean}>(
+    "SELECT external_responsibility_direct_role($1,$2,ARRAY['factory_payables']::text[]) permitted",
+    [actor.actorId, FINANCE_ORDER_CAPABILITY],
+  );
+  return result.rows[0]?.permitted === true;
+}
 
 export async function canReadFinanceOrders(database: Pool | PoolClient, actor: TrustedActorContext): Promise<boolean> {
   if (!(actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes(FINANCE_ORDER_CAPABILITY)) return false;

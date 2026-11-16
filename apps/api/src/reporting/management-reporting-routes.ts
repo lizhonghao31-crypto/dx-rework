@@ -1,5 +1,6 @@
 import { assertFinanceWageAccess, type WageAccessCapability } from "../wages/wage-access.js";
 import {
+  hasFactoryPayablesReworkRead,
   FinanceNodeParamsSchema, FinanceNodeReadSchema,
   BasicReworkPageSchema, WageReportPageQuerySchema, BasicReworkQuerySchema,
   WageSettlementPreviewSchema, WageSettlementRequestSchema, WageSettlementResultSchema,
@@ -54,6 +55,12 @@ export function registerManagementReportingRoutes(
     return trusted;
   };
 
+  const reworkReader = async (request: FastifyRequest, fallback: string): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(token(request));
+    return businessActor(dependencies.root, user, request.id,
+      hasFactoryPayablesReworkRead(user.businessRoles, user.capabilities) ? "rework:finance_orders:read" : fallback);
+  };
+
   app.get("/management/wages/settlement-preview", async (request,reply) => {
     reply.header("cache-control","no-store");
     return WageSettlementPreviewSchema.parse(await dependencies.service.previewWageSettlement(
@@ -69,7 +76,7 @@ export function registerManagementReportingRoutes(
     const {reworkOrderId,node}=parse(FinanceNodeParamsSchema,request.params);
     reply.header("cache-control","no-store");
     return FinanceNodeReadSchema.parse(await dependencies.service.financeNode(
-      await actor(request,"rework:finance_nodes:read"),reworkOrderId,node));
+      await reworkReader(request,"rework:finance_nodes:read"),reworkOrderId,node));
   });
 
   app.get("/management/rework-basic-orders", async (request,reply) => {
@@ -102,7 +109,7 @@ export function registerManagementReportingRoutes(
 
   app.get("/management/rework-orders", async (request) => ManagementReworkPageSchema.parse(
     await dependencies.service.listReworkOrders(
-      await actor(request, "report:view"),
+      await reworkReader(request, "report:view"),
       parse(ManagementReworkQuerySchema, request.query),
     ),
   ));
