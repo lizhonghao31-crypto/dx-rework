@@ -1,3 +1,4 @@
+import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
 import {developmentCraftInstances,craftInstanceAggregates} from './development-craft-instance-evidence.js';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import type { PoolClient } from "pg";
@@ -13,20 +14,24 @@ const iso = (value: Date | string) => new Date(value).toISOString();
  * The caller has already authorized the whole source's timing evidence.
  */
 export async function developmentNativeFacts(db: DB, sourceId: string, time: BusinessTime,onFutureEvidence?:(at:string)=>void): Promise<Record<string, SlaNodeFact>> {
-  const rows = (await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,
+  const rows = (await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned,
       EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id AND f.kind='尾查退回') AS rejected
     FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
     WHERE a.source_id=$1 AND t.route_version=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=$1),1)
     ORDER BY t.created_at,t.task_id`, [sourceId])).rows;
+  await attachDevelopmentRegistrations(db,rows);
   return Object.fromEntries(rows.map(row => {
     const complete = row.state === 'completed' && !row.returned && !row.rejected;
     const trusted = (at: Date | string | null, quality: string) => {
       if(!at||!['现场登记','已核实'].includes(quality))return false;
       const observed=iso(at);if(Date.parse(observed)>Date.parse(time.now)){onFutureEvidence?.(observed);return false;}return true;
     };
+    const registration=row.registration_readiness;
+    const registered=registration?developmentResponsibilityWindow(row,registration.at,{enteredAt:registration.at,basis:[registration.reference]}):null;
+    const entered=registered?.at??(registration?null:row.entered_at),quality=registered?.quality??row.entered_quality;
     return [`${row.task_kind}:task:${row.task_id}`, { evidence: `task:${row.task_id}`, businessCompleted: complete,
-      ...(trusted(row.entered_at, row.entered_quality) ? { startedAt: iso(row.entered_at) } : {}),
+      ...(trusted(entered,quality) ? { startedAt: iso(entered) } : {}),
       ...(complete && trusted(row.completed_at, row.completed_quality) ? { completedAt: iso(row.completed_at) } : {}) }];
   }));
 }
@@ -38,8 +43,8 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
   const saved = await developmentSlaPlan(db, sourceId);
   if (!saved) return null;
   if (saved.business_time.scenarioId !== time.scenarioId) throw new Error("Development/order SLA clock scope mismatch");
-  const rows = (await db.query(`SELECT t.task_id,t.route_instance_id,t.route_version,t.state,t.entered_quality,t.completed_at,t.completed_quality,
-      a.task_kind,d.entered_at,d.due_at,d.sla_basis,
+  const rows = (await db.query(`SELECT t.task_id,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,t.route_instance_id,t.route_version,t.state,t.entered_quality,t.entered_at AS task_entered_at,t.completed_at,t.completed_quality,
+      a.task_kind,d.entered_at,d.due_at,d.sla_basis,${developmentNativeReadySql('t.task_id','current_window.sla_basis')} AS native_readiness,
       current_window.entered_at AS instance_entered_at,current_window.due_at AS instance_due_at,current_window.warning_at AS instance_warning_at,current_window.sla_basis AS instance_sla_basis,
       ARRAY(SELECT dependency.predecessor_id::text FROM digital_production_task_dependencies dependency WHERE dependency.task_id=t.task_id ORDER BY dependency.predecessor_id) AS predecessor_ids,
       (SELECT e.event_id FROM digital_production_task_events e WHERE e.task_id=t.task_id
@@ -51,6 +56,10 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
       ORDER BY CASE WHEN t.state='completed' AND r.reason='completion' THEN 0 ELSE 1 END,r.revision_id DESC LIMIT 1)d ON true
     LEFT JOIN LATERAL(SELECT r.entered_at,r.due_at,r.warning_at,r.sla_basis FROM digital_production_deadline_revisions r WHERE r.task_id=t.task_id ORDER BY r.revision_id DESC LIMIT 1)current_window ON true
     WHERE a.source_id=$1 ORDER BY t.route_version,t.created_at,t.task_id`, [sourceId])).rows;
+  await attachDevelopmentRegistrations(db,rows);
+  const responsibility=(row:typeof rows[number])=>developmentResponsibilityWindow({...row,entered_at:Object.hasOwn(row,'task_entered_at')?row.task_entered_at:row.entered_at},Object.hasOwn(row,'instance_entered_at')?row.instance_entered_at:row.entered_at,Object.hasOwn(row,'instance_sla_basis')?row.instance_sla_basis:row.sla_basis,rows);
+  const responsibilityBasis=(row:typeof rows[number])=>row.instance_sla_basis??row.sla_basis;
+  const deadline=(row:typeof rows[number])=>responsibility(row).at&&(Object.hasOwn(row,'instance_due_at')?row.instance_due_at:row.due_at)?iso(Object.hasOwn(row,'instance_due_at')?row.instance_due_at:row.due_at):null;
   const instances=developmentCraftInstances(sourceId,rows,time,onFutureEvidence),scopedTasks=new Set(instances.map(instance=>instance.taskId));
   const facts: Record<string, SlaNodeFact> = {};
   const originalTargets: Record<string, SlaTime> = {};
@@ -66,22 +75,22 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     if (!saved.plan_json.nodes.some((node: { id: string }) => node.id === nodeId)) continue;
     // An inherited legacy task/policy is not proof of a captured new-model window.
     if (!row.sla_basis) continue;
-    originalTargets[nodeId] = { at: row.due_at ? iso(row.due_at) : null, exclusive: false,
-      reasons: row.due_at ? [] : ["原任务没有独立时限或可信起点"] };
+    originalTargets[nodeId] = { at: deadline(row), exclusive: false,
+      reasons: deadline(row) ? [] : ["原任务没有独立时限或可信起点"] };
     const fact: SlaNodeFact = { evidence: `task:${row.task_id}:round:1${row.correction_id ? `;correction:${row.correction_id}` : ""}` };
     fact.businessCompleted = businessCompleted(row);
     // Older revisions may contain a planned tail-window start as entered_at.
     // Recover the actual native return without rewriting any frozen deadline/history.
     const enteredAt = nodeId === "development_craft_return"
       ? [...first].reverse().find(candidate => ["development_printing", "development_embroidery", "development_print_embroidery"].includes(candidate.task_kind) && accepted(candidate))?.completed_at
-      : row.entered_at;
+      : responsibility(row).at;
     if(enteredAt){if(Date.parse(iso(enteredAt))<=Date.parse(time.now))fact.startedAt=iso(enteredAt);else onFutureEvidence?.(iso(enteredAt));}
-    if(typeof row.sla_basis.warningRatio==='number')fact.standardWarningPercent=row.sla_basis.warningRatio*100;
-    if (row.sla_basis.seconds !== null) fact.standardMinutes = row.sla_basis.seconds / 60;
+    if(typeof responsibilityBasis(row)?.warningRatio==='number')fact.standardWarningPercent=responsibilityBasis(row).warningRatio*100;
+    if (typeof responsibilityBasis(row)?.seconds==='number') fact.standardMinutes = responsibilityBasis(row).seconds / 60;
     if (accepted(row)) {
       fact.completedAt = iso(row.completed_at);
-      fact.completedDeadline = { at: row.due_at ? iso(row.due_at) : null, exclusive: false,
-        reasons: row.due_at ? [] : ["原任务没有独立时限或可信起点"] };
+      fact.completedDeadline = { at: deadline(row), exclusive: false,
+        reasons: deadline(row) ? [] : ["原任务没有独立时限或可信起点"] };
     } else if (row.state === "completed" && !row.completed_at) {
       // Business completion remains valid. The evaluator separately marks its timing unrated.
     } else if (row.returned || row.rejected || row.state === "blocked" || row.state === "cancelled") {
@@ -104,16 +113,16 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     const fact: SlaNodeFact = { ...facts[nodeId], evidence: `development-round:${sourceId}:${latestRound.round_number}${row ? `;task:${row.task_id}` : ""}` };
     delete fact.completedAt; delete fact.completedDeadline; delete fact.waitingFor;
     fact.businessCompleted = Boolean(row && businessCompleted(row));
-    if(!fact.startedAt&&row?.sla_basis&&row.entered_at&&Date.parse(iso(row.entered_at))>Date.parse(time.now))onFutureEvidence?.(iso(row.entered_at));
-    if (!fact.startedAt && row?.sla_basis && row.entered_at && Date.parse(iso(row.entered_at)) <= Date.parse(time.now)) {
-      fact.startedAt = iso(row.entered_at);
-      if(typeof row.sla_basis.warningRatio==='number')fact.standardWarningPercent=row.sla_basis.warningRatio*100;
-    if (row.sla_basis.seconds !== null) fact.standardMinutes = row.sla_basis.seconds / 60;
+    if(!fact.startedAt&&row?.sla_basis&&responsibility(row).at&&Date.parse(responsibility(row).at!)>Date.parse(time.now))onFutureEvidence?.(responsibility(row).at!);
+    if (!fact.startedAt && row?.sla_basis && responsibility(row).at && Date.parse(responsibility(row).at!) <= Date.parse(time.now)) {
+      fact.startedAt = responsibility(row).at!;
+      if(typeof responsibilityBasis(row)?.warningRatio==='number')fact.standardWarningPercent=responsibilityBasis(row).warningRatio*100;
+    if (typeof responsibilityBasis(row)?.seconds==='number') fact.standardMinutes = responsibilityBasis(row).seconds / 60;
     }
     if (row && accepted(row) && row.sla_basis) {
       fact.completedAt = iso(row.completed_at);
-      fact.completedDeadline = originalTargets[nodeId] ?? { at: row.due_at ? iso(row.due_at) : null,
-        exclusive: false, reasons: row.due_at ? [] : ["本轮没有可信截止点"] };
+      fact.completedDeadline = originalTargets[nodeId] ?? { at: deadline(row),
+        exclusive: false, reasons: deadline(row) ? [] : ["本轮没有可信截止点"] };
     } else fact.waitingFor = { reason: `第${latestRound.round_number}轮${row?.state === "cancelled" ? "已取消，不能当作完成" : "纠正尚未有效完成"}`, source: fact.evidence };
     facts[nodeId] = fact;
   }

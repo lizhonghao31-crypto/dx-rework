@@ -342,3 +342,12 @@ it('retains strict non-midnight completion goals through later plan changes and 
   expect(evaluateFixedJourneyBasis(basis,at(12),false).scopes[0]!.nodes.find(n=>n.id==='a')!.goalDelta).toMatchObject({kind:exclusive?'late':'on_target',signedValue:exclusive?1/60000:0,targetAt:at(6)});
  }
 });
+
+it('keeps actual completion and original plan lag while an explicitly untrusted native R cannot be resurrected by legacy facts',()=>{
+ const saved=stored(),view=item();view.asOf=at(12);view.stages[1]!.nodes=[node('a','completed',at(5),at(7))];
+ const legacy=build(saved,view),before=structuredClone(legacy);
+ const task={task_id:'a:1',task_kind:'a',source_id:resource.id,production_order_id:null,route_version:1,state:'completed',entered_at:new Date(at(5)),entered_quality:'补报未核实',completed_at:new Date(at(7)),completed_quality:'已核实',step_id:null,returned:false,rejected:false,sla_basis:{seconds:18000,calendarRef:'continuous' as const},native_entered_at:new Date(at(5)),warning_at:null};
+ const proof={...evidence(),tasks:[task]},facts={a:{evidence:'task:a:1:round:1',businessCompleted:true,completedAt:at(7)}};
+ const basis=orderTimeReadingBasis(saved,resource,view,facts,proof,legacy),result=evaluateFixedJourneyBasis(basis,at(12),false).scopes[0]!.nodes.find(row=>row.id==='a')!;
+ expect(basis.scopes[0]!.facts.a!.clockStart.precision).toBe('unknown');expect(result.ownSla.state).toBe('unknown');expect(result.goalDelta).toMatchObject({kind:'late',signedValue:60});expect(basis.scopes[0].facts.a.completed).toEqual(point(7));expect(legacy).toEqual(before);
+});

@@ -380,4 +380,46 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }catch(error){await page.screenshot({path:join(evidence,'quote-failure.png'),fullPage:true});await writeFile(join(evidence,'quote-failure-body.txt'),await page.locator('body').innerText());throw error;}
   finally{release();await context.close();}
  });
+ it('restores an original completed occurrence without truncating seconds or milliseconds in the native correction form',async()=>{
+  const tasks=new DigitalProductionTaskService(f.db),history=await tasks.history(f.root,uploadPaperId),completed=history.events.find(event=>event.kind==='completed')!;
+  expect(completed.occurredAt).toBeTruthy();const originalAt=new Date(completed.occurredAt!).toISOString();
+  const context=await browser.newContext({viewport:{width:1165,height:1000}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage();
+  try{
+   await page.goto(base+`/ui/digital-production?task=${uploadPaperId}&taskView=correct`);
+   await page.getByText('任务状态、问题反馈与记录',{exact:true}).click();
+   await page.getByText('历史记录与核实',{exact:true}).click();
+   const form=page.locator('form').filter({has:page.locator(`input[name="reason"]`)}).filter({has:page.getByRole('button',{name:'填入原记录时间',exact:true})}).last();
+   // Match the original immutable completion event, not a later correction.
+   const original=page.locator('details > div').filter({has:page.locator('p').filter({hasText:/^完成 · 发生/})}).filter({has:page.locator('form input[name="reason"]')});
+   const completionForm=await original.count()===1?original.locator('form'):form;
+   const input=completionForm.locator('input[name="at"]');expect(await input.getAttribute('step')).toBe('0.001');
+   await completionForm.locator('input[name="reason"]').fill('TEST explicitly mark original completion time unknown');
+   let response=page.waitForResponse(reply=>reply.request().method()==='POST'&&reply.url().endsWith('/time-corrections'));
+   await completionForm.getByRole('button',{name:'保存核实',exact:true}).click();expect((await response).status()).toBe(200);
+   await expect.poll(async()=>(await tasks.read(f.root,uploadPaperId)).completedAt).toBeNull();
+   await page.getByText('TEST explicitly mark original completion time unknown',{exact:true}).waitFor({state:'attached'});
+   if(!await page.getByText('历史记录与核实',{exact:true}).isVisible())await page.getByText('任务状态、问题反馈与记录',{exact:true}).click();
+   if(!await input.isVisible())await page.getByText('历史记录与核实',{exact:true}).click();
+   await completionForm.getByRole('button',{name:'填入原记录时间',exact:true}).click();
+   expect(new Date((await input.inputValue())+'+08:00').toISOString()).toBe(originalAt);
+   await completionForm.locator('input[name="reason"]').fill('TEST restore the original occurrence with full precision');
+   response=page.waitForResponse(reply=>reply.request().method()==='POST'&&reply.url().endsWith('/time-corrections'));
+   await completionForm.getByRole('button',{name:'保存核实',exact:true}).click();expect((await response).status()).toBe(200);
+   await expect.poll(async()=>(await tasks.read(f.root,uploadPaperId)).completedAt).toBe(originalAt);
+   await page.getByText('TEST restore the original occurrence with full precision',{exact:true}).waitFor({state:'attached'});
+   if(!await page.getByText('历史记录与核实',{exact:true}).isVisible())await page.getByText('任务状态、问题反馈与记录',{exact:true}).click();
+   if(!await input.isVisible())await page.getByText('历史记录与核实',{exact:true}).click();
+   const precise=new Date(Math.floor((Date.now()-2000)/1000)*1000+850).toISOString();
+   // Chromium normalizes .850 to .85; this is identical precision, not truncation.
+   await input.fill(new Date(Date.parse(precise)+8*3600000).toISOString().slice(0,-2));
+   await completionForm.locator('input[name="reason"]').fill('TEST explicit .850 correction through the original input');
+   await page.screenshot({path:join(evidence,'time-correction-precision-1165.png'),fullPage:true});
+   response=page.waitForResponse(reply=>reply.request().method()==='POST'&&reply.url().endsWith('/time-corrections'));
+   await completionForm.getByRole('button',{name:'保存核实',exact:true}).click();expect((await response).status()).toBe(200);
+   await expect.poll(async()=>(await tasks.read(f.root,uploadPaperId)).completedAt).toBe(precise);
+   const after=await tasks.history(f.root,uploadPaperId);expect(after.events.find(event=>event.eventId===completed.eventId)).toEqual(completed);
+  }finally{await context.close();}
+ });
+
 });

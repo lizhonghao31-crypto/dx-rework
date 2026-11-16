@@ -42,7 +42,7 @@ describe('saved synthetic start compatibility',()=>{
   const original=structuredClone(plan);
   vi.mocked(developmentSlaPlan).mockResolvedValue({plan_json:plan,business_time:{scenarioId:null},revision:2,rule_version:snapshot.ruleVersion,parameters_json:snapshot.parameters});
   const oldStart='2026-10-04T23:30:00.000Z',returned='2026-10-01T05:00:00.000Z';
-  const row=(task_id:string,task_kind:string,entered_at:string,completed_at:string)=>({task_id,task_kind,entered_at,completed_at,route_version:1,state:'completed',completed_quality:'已核实',returned:false,rejected:false,due_at:'2026-10-05T00:00:00.000Z',sla_basis:{seconds:task_kind==='development_printing'?345600:1800}});
+  const row=(task_id:string,task_kind:string,entered_at:string,completed_at:string)=>({task_id,task_kind,entered_at,entered_quality:'现场登记',completed_at,route_version:1,state:'completed',completed_quality:'已核实',returned:false,rejected:false,due_at:'2026-10-05T00:00:00.000Z',sla_basis:{seconds:task_kind==='development_printing'?345600:1800}});
   const rows=[row('craft','development_printing',cut,returned),row('return','development_craft_confirmation',oldStart,'2026-10-01T05:10:00.000Z')];
   const query=vi.fn(async(sql:string)=>sql.startsWith('SELECT t.task_id')?{rows}:sql.includes('SELECT round_number')?{rows:[]}:Promise.reject(new Error('Unexpected SQL')));
   const time={now:'2026-10-20T00:00:00.000Z',scenarioId:null,revision:0};
