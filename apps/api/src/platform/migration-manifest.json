@@ -1231,6 +1231,10 @@
     {
       "version": "0293_budget_washing_fee_supplements",
       "checksum": "e46efe87f57b35f394ad975964eb6a51f3c30874914c53873f1964a8e9bc82a7"
+    },
+    {
+      "version": "0294_receiving_correction_provenance",
+      "checksum": "109b9cfdafdd471cf89b40129b6a96c1d501bdefd046d69983aca2d726f83168"
     }
   ]
 }

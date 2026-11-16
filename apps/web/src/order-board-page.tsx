@@ -270,7 +270,7 @@ export function OrderBoardPage() {
                   {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
                 </StatusBadge>
               </div>
-              {row.receiptCount > 1 ? <button
+              {row.receiptCount >= 1 ? <button
                 type="button"
                 className="order-board-history-toggle"
                 aria-expanded={historyExpanded}
@@ -353,7 +353,7 @@ export function OrderBoardPage() {
                 ? "其他工厂"
                 : item.receivingSource === "jiashun"
                   ? "嘉顺"
-                  : "来源待确认"}</span>
+                  : item.receivingSource==='initial'?'首次收货':item.receivingSource==='backfill'?'历史补录':"来源待确认"}</span>
               <span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>
               <span>本次实收 <strong>{quantity(item.actualQuantity)}件</strong></span>
               <span>累计实收 {quantity(item.cumulativeActualQuantity)}件</span>
@@ -477,11 +477,11 @@ export function OrderBoardPage() {
       <form className="order-board-dialog" aria-label="修正本次收货" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitReceiptCorrection(); }}>
         <h2>修正第{correctingReceipt.sequence}次收货</h2>
         <p>原始收货记录不会被覆盖，本次修正会单独保存操作人和时间。</p>
-        <label>收货来源<select value={receiptSource} disabled={mutationBusy} onChange={(event) => setReceiptSource(event.target.value as "" | "jiashun" | "other_factory")}>
-          <option value="" disabled>请选择收货来源</option>
+        {correctingReceipt.receivingSource==='initial'||correctingReceipt.receivingSource==='backfill'?<p>收货来源：{correctingReceipt.receivingSource==='initial'?'首次收货':'历史补录'}（沿用原记录）</p>:<label>收货来源<select value={receiptSource} disabled={mutationBusy} onChange={(event) => setReceiptSource(event.target.value as "" | "jiashun" | "other_factory")}>
+          <option value="" disabled={correctingReceipt.receivingSource!=='legacy'}>{correctingReceipt.receivingSource==='legacy'?'沿用原来源（历史未分类）':'请选择收货来源'}</option>
           <option value="jiashun">嘉顺收货</option>
           <option value="other_factory">其他工厂收货</option>
-        </select></label>
+        </select></label>}
         <div className="order-board-dialog__quantity-grid">
           <label>本次送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={receiptDocumentQuantity} disabled={mutationBusy} onChange={(event) => setReceiptDocumentQuantity(event.target.value)} /></label>
           <label>本次实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptActualQuantity} disabled={mutationBusy} onChange={(event) => setReceiptActualQuantity(event.target.value)} /></label>
@@ -490,7 +490,7 @@ export function OrderBoardPage() {
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setCorrectingReceipt(null)}>取消</button>
-          <button type="submit" className="is-primary" disabled={mutationBusy || mutationUnknown || !receiptSource || !receiptDocumentQuantity || receiptActualQuantity === "" || receiptDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修正"}</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || mutationUnknown || (!receiptSource&&!['legacy','initial','backfill'].includes(correctingReceipt.receivingSource)) || !receiptDocumentQuantity || receiptActualQuantity === "" || receiptDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修正"}</button>
         </div>
       </form>
     </ReceivingDialog> : null}

@@ -2207,5 +2207,18 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0294_receiving_correction_provenance": {
+    "checksum": "109b9cfdafdd471cf89b40129b6a96c1d501bdefd046d69983aca2d726f83168",
+    "tables": [
+      "receiving_receipt_corrections"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

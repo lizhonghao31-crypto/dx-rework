@@ -4822,7 +4822,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(closed.closed).not.toBeNull();expect(closed.collection!.status).toBe('待收齐');expect(closed.lines[0]!.packingRevisionId).toBe(corrected.lines[0]!.packingRevisionId);
   });
 
-  it('P01-06 reads the native cumulative 1-to-2 correction, receipt QC1, packing2 and closure without hiding the quality gap',async()=>{
+  it('P01-06 keeps a single-receipt 1-to-2 correction consistent and preserves one unqualified garment despite packing2',async()=>{
     const root=rootActor(),primary=merchandiserActor(),flow=new FactoryFlowService(database);
     const fixture=await budgetFixture(false,'TEST-P01-QUALITY-GAP');
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
@@ -4846,8 +4846,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await receiving.correctBatch({...root,authorizationCapability:'receiving:correct'},before.receivingBatchId,{expectedVersion:before.version,styleNo:style,documentQuantity:2,actualQuantity:2,defectiveQuantity:0});
     let sheet=await closure.read(root,ready.id);
     const quality=sheet.quality!.find(value=>value.receiptId===receipt.value.receiptId)!;
-    expect(quality.quantity).toBe(1); // Batch cumulative correction never rewrites this receipt.
-    await closure.recordQuality(root,ready.id,{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:1,problem:''},randomUUID());
+    expect(quality.quantity).toBe(2); // Effective correction changes scope; the raw receipt remains one.
+    expect(quality.quantityVersion).not.toBe(receipt.value.receiptId);
+    await closure.recordQuality(root,ready.id,{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:1,problem:'TEST实际两件中一件质量待处理'},randomUUID());
     const corrected=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
     await receiving.recordPacking({...root,authorizationCapability:'receiving:packing_manage'},{receivingBatchId:corrected.receivingBatchId,expectedVersion:corrected.version,expectedPackingRevisionId:null,packingQuantity:2},randomUUID());
     sheet=await closure.read(root,ready.id);
@@ -4855,7 +4856,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const original=(await database.query('SELECT actual_quantity FROM receiving_receipts WHERE receipt_id=$1',[receipt.value.receiptId])).rows[0];
     expect(Number(original.actual_quantity)).toBe(1);
     const query=new DigitalJourneyQuery(database),projected=await query.read(root,ready.id);
-    expect(projected.businessProgress!.quantities!.lines.find(value=>value.lineId===white.lineId)).toMatchObject({received:2,inspected:1,qualified:1,packed:2,effectivePacked:null,remainingShipment:null,qualityGap:1,factoryAttribution:'unknown'});
+    // Both garments were checked, one failed. qualityGap counts uninspected
+    // garments; qualified and effectivePacked retain the actual quality gap.
+    expect(projected.businessProgress!.quantities!.lines.find(value=>value.lineId===white.lineId)).toMatchObject({received:2,inspected:2,qualified:1,packed:2,effectivePacked:null,remainingShipment:null,qualityGap:0,factoryAttribution:'unknown'});
     expect(projected.businessProgress!.requirements.find(value=>value.key==='receiving_inspection')).toMatchObject({completed:false,applicability:'applicable'});
     expect(projected.stages.flatMap(stage=>stage.nodes).find(value=>value.key==='special_closure')).toMatchObject({state:'completed'});
   });

@@ -158,12 +158,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await run(()=>closure.read(f.root,made.id))).collection!.shipmentQuantity).toBe(4);
   const fresh=await run(()=>calendar.day(f.root,filters,due));expect(fresh.daySummary).toMatchObject({orderedQty:4,packedQty:4,pendingQty:0,unknownQuantityPoCount:0});
   expect((await run(()=>row(second.receivingBatchId))).packingQuantity).toBe(4);
-  // A native whole-batch correction does not rewrite receipt QC quantities.
-  // All delivery readers must keep that mismatch unknown instead of treating
-  // the receipt sum as both coverage and authoritative received stock.
+  // A cumulative edit cannot choose which of two real receipts was wrong.
+  // Reject it, then correct the identified receipt through the original path;
+  // its previous QC cannot silently certify the revised quantity version.
   const current=await run(()=>row(second.receivingBatchId));
-  await run(()=>receiving.correctBatch(corrector(),second.receivingBatchId,{expectedVersion:current.version,styleNo:current.styleNo,documentQuantity:4,actualQuantity:3,defectiveQuantity:0}));
+  await expect(run(()=>receiving.correctBatch(corrector(),second.receivingBatchId,{expectedVersion:current.version,styleNo:current.styleNo,documentQuantity:4,actualQuantity:3,defectiveQuantity:0}))).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('多笔收货')});
+  expect((await run(()=>closure.read(f.root,made.id))).lines[0]).toMatchObject({actualQuantity:4,effectivePackingQuantity:4});
+  const receipt=(await f.db.query('SELECT document_quantity FROM receiving_receipts WHERE receipt_id=$1',[second.receiptId])).rows[0]!;
+  await run(()=>receiving.correctReceipt(corrector(),second.receiptId,{expectedVersion:current.version,documentQuantity:Number(receipt.document_quantity),actualQuantity:1,defectiveQuantity:0}));
   expect((await run(()=>closure.read(f.root,made.id))).lines[0]).toMatchObject({actualQuantity:3,packingQuantity:4,effectivePackingQuantity:null});
+  expect(Number((await f.db.query('SELECT actual_quantity FROM receiving_receipts WHERE receipt_id=$1',[second.receiptId])).rows[0].actual_quantity)).toBe(2);
   const corrected=await run(()=>calendar.day(f.root,filters,due));
   expect(corrected.items[0]).toMatchObject({rawPackedQty:4,effectivePackedQty:null,packedQty:null,pendingQty:null,riskStatus:'unknown'});
   expect(corrected.daySummary).toMatchObject({packedQty:null,pendingQty:null,unknownQuantityPoCount:1});

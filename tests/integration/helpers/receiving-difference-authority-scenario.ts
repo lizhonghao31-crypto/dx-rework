@@ -98,7 +98,12 @@ export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;
     expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[row.receivingBatchId])).rows[0].count).toBe(2);
     stale=false;userId=rootId;
     expect((await post(`${base}/packing-revisions`,{...packingInput,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:82})).statusCode).toBe(201);
-    expect((await app.inject({method:"PATCH",url:base,payload:{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:100,actualQuantity:92}})).statusCode).toBe(200);
+    const correction=await app.inject({method:"PATCH",url:base,payload:{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:100,actualQuantity:92}});
+    expect(correction.statusCode,correction.body).toBe(200);
+    const request=(await database.query(`SELECT c.request_id,e.request_id AS audited_request FROM receiving_receipt_corrections c
+      JOIN operation_events e ON e.event_id=c.operation_event_id WHERE c.receipt_id=$1 ORDER BY c.created_at DESC LIMIT 1`,[created.value.receiptId])).rows[0]!;
+    expect(request.request_id).toBe(request.audited_request);
+    expect(request.request_id).toMatch(/^req-/);
     row=await board();
     for(const type of ["receiving","packing"] as const) expect((await post(`${base}/difference-resolutions`,resolutionInput(type))).statusCode).toBe(201);
     expect(row).toMatchObject({documentQuantity:100,cumulativeActualQuantity:92,packingQuantity:82});

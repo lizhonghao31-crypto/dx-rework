@@ -35,7 +35,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},receiving:{authenticate,root,service:receiving}});await app.ready();
   for(const role of ["root","warehouse"])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   const warehouse={...f.people.warehouse!,authorizationCapability:"receiving:create",authorizationCapabilities:["receiving:create"]};
-  for(let index=0;index<2;index++){
+  for(let index=0;index<3;index++){
    const receipt=await receiving.create(warehouse,{styleNo:"TEST-ARCH-F4-"+index+"-"+randomUUID(),documentQuantity:10,actualQuantity:9,attachmentIds:[await f.image(warehouse)]},randomUUID());ids.push(receipt.value.receivingBatchId);
   }
   output=await mkdtemp(join(tmpdir(),"dx-receiving-board-native-"));const previous=process.env.NODE_ENV;
@@ -93,6 +93,21 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await dialog.getByRole("button",{name:"使用原内容核对提交结果",exact:true}).click();await page.getByText("原提交已确认保存",{exact:false}).waitFor();expect(posts).toHaveLength(2);expect(posts[1]).toEqual(posts[0]);expect(await page.getByRole("dialog").count()).toBe(0);
    expect((await f.db.query("SELECT count(*)::int n FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[ids[1]])).rows[0].n).toBe(1);await page.screenshot({path:join(evidence,"native-difference-recovered-1165.png"),fullPage:true});
   }finally{await context.close();}
+ });
+ it("exposes a single original receipt correction while preserving provenance, original facts and role isolation",async()=>{
+  const {context,page}=await open(2);try{
+   const original=(await f.db.query('SELECT * FROM receiving_receipts WHERE receiving_batch_id=$1',[ids[2]])).rows[0];
+   await page.getByRole('button',{name:/第1次收货/}).click();await page.getByRole('button',{name:'修正本次',exact:true}).click();
+   const dialog=page.getByRole('dialog');expect(await dialog.getByText('收货来源：首次收货（沿用原记录）',{exact:true}).count()).toBe(1);
+   expect(await dialog.getByRole('combobox').count()).toBe(0);
+   await dialog.getByLabel('本次实际收货数量',{exact:true}).fill('0');
+   const saved=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/receiving/receipts/'+original.receipt_id+'/corrections'&&response.request().method()==='POST');
+   await dialog.getByRole('button',{name:'保存修正',exact:true}).click();expect((await saved).status()).toBe(200);await dialog.waitFor({state:'hidden'});
+   expect((await f.db.query('SELECT * FROM receiving_receipts WHERE receipt_id=$1',[original.receipt_id])).rows[0]).toEqual(original);
+   const correction=(await f.db.query('SELECT receiving_source,actual_quantity FROM receiving_receipt_corrections WHERE receipt_id=$1',[original.receipt_id])).rows[0];expect(correction).toEqual({receiving_source:'initial',actual_quantity:'0'});
+   await page.setViewportSize({width:390,height:1003});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  }finally{await context.close();}
+  const warehouse=await open(2,'warehouse');try{await warehouse.page.getByRole('button',{name:/第1次收货/}).click();expect(await warehouse.page.getByRole('button',{name:'修正本次',exact:true}).count()).toBe(0);}finally{await warehouse.context.close();}
  });
  it("retains the real warehouse role and exact-batch return path without exposing Root or merchandiser actions",async()=>{
   const {context,page}=await open(0,"warehouse",1440);try{

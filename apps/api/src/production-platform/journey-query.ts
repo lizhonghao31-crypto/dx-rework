@@ -503,7 +503,7 @@ export class DigitalJourneyQuery {
       node.current=raw.source_id?task.routeVersion===round&&!raw.returned
         :raw.task_kind==="sourcing_preparation"?task.state!=="cancelled"
         :raw.route_instance_id===currentPrep||(raw.task_kind==='bulk_ship_sample'&&raw.route_instance_id===oid);
-      node.actualAt=task.completedAt;node.actualQuality=raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
+      node.actualAt=task.completedAt;node.actualQuality=!task.completedAt?"missing":raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
       const routeTime=routeTimes.find(fact=>fact.task_id===task.taskId&&fact.route_version===task.routeVersion);
       if(state==='completed'&&routeTime&&!routeTime.corrected){
         const payload=raw.task_kind==='development_shipping'&&routeTime.payload.sentDate
@@ -879,7 +879,10 @@ export class DigitalJourneyQuery {
     if(!patternKinds&&fullOrder&&oid){const planned=await seriesPlanJourney(db,oid,promiseDay,Boolean(terminal));for(const n of planned){const existing=baseNodes.findIndex(v=>v.key===n.key);if(existing>=0)baseNodes[existing]=n;else baseNodes.push(n);}}
     if((!summaryOnly||!actor)&&fullOrder&&oid&&visibleTasks.some(task=>['process_logistics','bulk_qc','warehouse_dispatch'].includes(task.task_kind))){
       const factory=await factorySlaEvidence(db,oid);
-      if(factory)attachJourneyFactoryDeadlines(baseNodes,visibleTasks,factory,lines);
+      if(factory){
+        const positions='craftSteps'in factory?(await db.query('SELECT task_id,step_id FROM digital_timeline_task_positions WHERE task_id=ANY($1::uuid[])',[visibleTasks.map(task=>task.task_id)])).rows:[];
+        attachJourneyFactoryDeadlines(baseNodes,visibleTasks.map(task=>({...task,step_id:positions.find(position=>position.task_id===task.task_id)?.step_id??null})),factory,lines);
+      }
     }
     const scopedCraft=baseNodes.filter(node=>node.current&&craftOrder.has(node.instanceId));
     if(scopedCraft.length>1){

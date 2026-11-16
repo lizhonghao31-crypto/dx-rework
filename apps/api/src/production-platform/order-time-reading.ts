@@ -1,3 +1,4 @@
+import {attachFactoryTaskCompletions} from './factory-task-completion.js';
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentReadyCorrectionSql,type ReadyCorrection} from './development-responsibility-window.js';
 import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
 import {frameworkNodeTargets,frameworkTargetPrecision} from './framework-node-targets.js';
@@ -36,13 +37,13 @@ const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).d
 const aliases:Record<string,string>={production_sheet:'production_instruction',warehouse_accessories:'accessories_ready',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',external_pattern:'development_external_pattern',development_craft_return:'development_craft_confirmation',factory_production_work:'production_reporting',factory_production:'factory_production_qc',garment_inspection:'receiving_inspection',garment_packing:'packing',return_logistics:'receipts'};
 const keyOf=(work:OrderTimeWork)=>work.parameterKey.startsWith('development_special_')?'development_printing':aliases[work.parameterKey]??work.parameterKey;
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
-type NativeTask={ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
+type NativeTask={ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;route_instance_id:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
 type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
 async function taskEvidence(db:DB,resource:BusinessTimeScope,item:OrderJourney):Promise<Evidence>{
- const tasks=(await db.query<NativeTask>(`SELECT t.task_id,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,a.task_kind,a.source_id,a.production_order_id,t.route_version,t.state,
+ const tasks=(await db.query<NativeTask>(`SELECT t.task_id,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,a.task_kind,a.source_id,a.production_order_id,t.route_version,t.route_instance_id,t.state,
   t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,position.step_id,d.sla_basis,d.entered_at AS native_entered_at,d.warning_at,
   EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned,
   EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id AND f.kind='尾查退回') AS rejected
@@ -53,6 +54,7 @@ async function taskEvidence(db:DB,resource:BusinessTimeScope,item:OrderJourney):
   WHERE ($1::uuid IS NOT NULL AND a.production_order_id=$1) OR ($2::uuid IS NOT NULL AND a.source_id=$2)
   ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,resource.kind==='source'?resource.id:item.sourceId])).rows;
  await attachDevelopmentRegistrations(db,tasks);
+ await attachFactoryTaskCompletions(db,tasks);
  const ids=tasks.map(task=>task.task_id),readiness=await nativeTaskReadiness(db,ids);
  return {tasks,readiness,cutting:resource.kind==='order'?await nativeCuttingReadiness(db,ids):[],cutCompletions:resource.kind==='order'?await nativeCuttingCompletions(db,resource.id):[]};
 }
