@@ -1,3 +1,4 @@
+import {r5RoleFixture} from '../helpers/r5-role-fixture.js';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
@@ -497,6 +498,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const manager=h.f.people.owner!,preview=await requests.read(manager,pending.requestId);
    return (await requests.apply(manager,pending.requestId,{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:true},randomUUID())).result!.orderId!;
   });
+  const {actor:nextInspector}=await r5RoleFixture(h.db,h.f.access,{...h.f.root,requestId:randomUUID()},'quality_control');
   const tab=await h.open(h.f.people.owner!.actorId,1165,{},'/ui/digital-production?timeOrder='+orderId);
   try{
    const page=tab.page;await applyPage(page);
@@ -535,8 +537,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    // Same page and session: the saved editor must use the new native version,
    // without requiring a reload to make the next ordinary edit possible.
    await page.locator('summary').filter({hasText:'大货洗水'}).click();
-   const secondPreview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===180);
+   const secondPreview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===180&&response.request().postDataJSON()?.washing?.[0]?.document?.staff?.inspectorId===nextInspector.actorId);
    await page.getByLabel('洗水用时（小时）',{exact:true}).fill('3');
+   await page.getByLabel('洗后检查（小时）',{exact:true}).fill('2');
+   await page.getByRole('combobox',{name:/^质检/}).selectOption(nextInspector.actorId);
    expect(await page.getByText('本单新安排已生效。',{exact:true}).count()).toBe(0);
    const previewResponse=await secondPreview;expect(previewResponse.status()).toBe(200);
    const previewBody=await previewResponse.json();
@@ -547,7 +551,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    let releaseSave!:()=>void,requestStarted!:()=>void;
    const saveGate=new Promise<void>(resolve=>{releaseSave=resolve;}),started=new Promise<void>(resolve=>{requestStarted=resolve;});
    await page.route('**/order-time/arrange',async route=>{requestStarted();await saveGate;await route.continue();});
-   const secondSaved=page.waitForResponse(response=>response.url().endsWith('/order-time/arrange')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===180);
+   const secondSaved=page.waitForResponse(response=>response.url().endsWith('/order-time/arrange')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===180&&response.request().postDataJSON()?.washing?.[0]?.document?.staff?.inspectorId===nextInspector.actorId);
    await page.getByRole('button',{name:'提交',exact:true}).click();
    if(secondConfirmation){await dialog.waitFor();await dialog.getByRole('button',{name:'确认',exact:true}).click();}
    try{
@@ -573,9 +577,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const acknowledged=competing.page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===240);
     await competing.page.getByRole('button',{name:'重新读取并复核新基线',exact:true}).click();await acknowledged;
     expect(await conflict.count()).toBe(0);expect(await competing.page.getByLabel('洗水用时（小时）',{exact:true}).inputValue()).toBe('4');
+    expect(await competing.page.getByLabel('洗后检查（小时）',{exact:true}).inputValue()).toBe('2');
+    expect(await competing.page.getByRole('combobox',{name:/^质检/}).inputValue()).toBe(nextInspector.actorId);
     await competing.page.getByRole('button',{name:'提交',exact:true}).and(competing.page.locator(':enabled')).waitFor();
     // Explicit acknowledgement/preview is read-only; no second adoption yet.
     expect((await h.db.query('SELECT count(*)::int AS count FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows[0].count).toBe(2);
+    const edited=competing.page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===300);
+    await competing.page.getByLabel('洗水用时（小时）',{exact:true}).fill('5');
+    const editResponse=await edited,editBody=editResponse.request().postDataJSON().washing[0];
+    expect(editBody).toMatchObject({expectedVersion:2,document:{arrangement:{washing:{minutes:300},inspection:{minutes:120}},staff:{inspectorId:nextInspector.actorId}}});
+    const finalSaved=competing.page.waitForResponse(response=>response.url().endsWith('/order-time/arrange'));
+    await competing.page.getByRole('button',{name:'提交',exact:true}).and(competing.page.locator(':enabled')).waitFor();
+    await competing.page.getByRole('button',{name:'提交',exact:true}).click();
+    if((await editResponse.json()).feasibility==='insufficient'){await staleDialog.waitFor();await staleDialog.getByRole('button',{name:'确认',exact:true}).click();}
+    expect((await finalSaved).status()).toBe(200);await competing.page.getByText('本单新安排已生效。',{exact:true}).waitFor();
+    const finalPlans=(await h.db.query('SELECT version,document FROM digital_bulk_washing_plans WHERE production_order_id=$1 ORDER BY version',[orderId])).rows;
+    expect(finalPlans).toHaveLength(3);expect(finalPlans[2]).toMatchObject({version:3,document:{arrangement:{washing:{minutes:300},inspection:{minutes:120}},staff:{inspectorId:nextInspector.actorId}}});
    }finally{await competing.context.close();}
    // Actual adopted work produces110/121-character identities. Click, refresh,
    // original record and return must all preserve the complete identity.

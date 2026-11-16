@@ -1,5 +1,6 @@
+import {washingEditorDraft as from,rebaseWashingEditorDrafts,type WashingEditorDraft} from './order-time-washing-rebase.js';
 import {orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {BulkWashingAdoptionSchema,bulkWashingLabels,type BulkWashingMode} from '@dx-rework/contracts/bulk-washing';
 import type {OrderTimeCheckResult,OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
 import {digitalRequest} from './digital-production-api.js';
@@ -7,11 +8,12 @@ import {timeCalendars} from './order-time-settings-model.js';
 
 type Row=NonNullable<OrderTimeCheckResult['washing']>[number];
 type Person={id:string;displayName:string;roles:string[]};
-type Draft={mode:BulkWashingMode;accounting:'additional'|'included_in_factory';washing:string;inspection:string;calendar:string;inspectionCalendar:string;logisticsId:string;inspectorId:string};
-const from=(row:Row):Draft=>{const a=row.document?.arrangement;return {mode:a?.mode??'none',accounting:a&&a.mode!=='none'?a.accounting:'additional',washing:a&&a.mode!=='none'?String(a.washing.minutes/60):'',inspection:a&&a.mode!=='none'?String(a.inspection.minutes/60):'',calendar:a&&a.mode!=='none'?a.washing.calendar:'continuous',inspectionCalendar:a&&a.mode!=='none'?a.inspection.calendar:'continuous',logisticsId:row.document?.staff?.logisticsId??'',inspectorId:row.document?.staff?.inspectorId??''};};
+type Draft=WashingEditorDraft;
 /** Uses the existing order submission, not another save/approval endpoint. */
-export function OrderTimeWashingFields({rows,plan,disabled,onChange,onInvalid}:{rows:Row[];plan:FrozenOrderTimePlan;disabled:boolean;onChange(value:OrderTimeWashingChanges):void;onInvalid(value:boolean):void}){
+export function OrderTimeWashingFields({rows,plan,disabled,rebaseRevision=0,onChange,onInvalid}:{rows:Row[];plan:FrozenOrderTimePlan;disabled:boolean;rebaseRevision?:number;onChange(value:OrderTimeWashingChanges):void;onInvalid(value:boolean):void}){
  const [drafts,setDrafts]=useState<Record<string,Draft>>({}),[people,setPeople]=useState<Person[]>([]),[error,setError]=useState('');
+ const baseline=useRef({rows,revision:rebaseRevision});
+ useEffect(()=>{if(baseline.current.revision===rebaseRevision)return;const before=baseline.current.rows;baseline.current={rows,revision:rebaseRevision};setDrafts(current=>rebaseWashingEditorDrafts(before,current,rows));},[rebaseRevision,rows]);
  useEffect(()=>{if(disabled)return;let live=true;void digitalRequest<Person[]>('access/candidates').then(value=>{if(live)setPeople(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:'人员读取失败');});return()=>{live=false;};},[disabled]);
  const update=(row:Row,changes:Partial<Draft>)=>{
   if(changes.mode&&changes.mode!=='none'&&!row.document){

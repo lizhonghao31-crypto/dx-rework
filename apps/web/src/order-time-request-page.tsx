@@ -23,7 +23,7 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
  const [request,setRequest]=useState<OrderTimeRequestRead|null>(null),[check,setCheck]=useState<OrderTimeCheckResult|null>(null),[original,setOriginal]=useState<OrderTimeCheckResult|null>(null),[overrides,setOverrides]=useState<Record<string,OrderTimeRule>>({}),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[previewing,setPreviewing]=useState(false),[uncertain,setUncertain]=useState(false);
  const [selectedStage,setSelectedStage]=useState<number|null>(null);
  const [conflict,setConflict]=useState('');
- const [washing,setWashing]=useState<OrderTimeWashingChanges>([]),[washingInvalid,setWashingInvalid]=useState(false),[washingReset,setWashingReset]=useState(0);
+ const [washing,setWashing]=useState<OrderTimeWashingChanges>([]),[washingInvalid,setWashingInvalid]=useState(false),[washingReset,setWashingReset]=useState(0),[washingRebase,setWashingRebase]=useState(0);
  const [invalid,setInvalid]=useState<Record<string,boolean>>({}),[readRevision,setReadRevision]=useState(0);
  const live=useRef(true),generation=useRef(0),pending=useRef<Pending|null>(null),writing=useRef(false),navigation=useRef(false),currentChanges=useRef({overrides,washing});currentChanges.current={overrides,washing};
  const operation:OrderTimeOperation|undefined=request?.operation??(resource?{kind:'arrangement',resource}:undefined),requestBase=requestId?'order-time/requests/'+requestId:null;
@@ -37,7 +37,7 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
    if(!live.current||turn!==generation.current)return;
    const adoptedChanges=acknowledgeConflict?rebaseWashingChanges(original?.washing,currentChanges.current.washing,value.washing):null;
    setRequest(next);setCheck(value);setOriginal(before=>acknowledgeConflict?value:before??value);setReadRevision(before=>before+1);
-   if(acknowledgeConflict){if(adoptedChanges)setWashing(adoptedChanges);setPreviewing(dirty);setConflict('');setNotice('');}
+   if(acknowledgeConflict){if(adoptedChanges)setWashing(adoptedChanges);setWashingRebase(value=>value+1);setPreviewing(dirty);setConflict('');setNotice('');}
   }catch(value){if(live.current&&turn===generation.current)setError(value instanceof Error?value.message:'本单时效读取失败');}
  };
  useEffect(()=>{void load();},[requestId,resource?.kind,resource?.id]);
@@ -95,7 +95,7 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
   {check.feasibility==='insufficient'?<p className="r5-time-risk" role="status">{orderTimeGapText(check).replace('，是否继续？','')}</p>:check.feasibility==='unknown'?<p className="r5-time-risk">{check.coverage.join('；')||'必要时间或路线还没确定'}</p>:check.feasibility==='not_applicable'?<p>未填写选填的样板完成日期，不作日期比较；仍按已采用的节点时效办理。</p>:<p className="r5-time-sufficient">{check.availableMinutes===check.requiredMinutes?'时间刚好，没有余量':'按当前安排可按期完成'}</p>}
   {error&&<p role="alert">{error}</p>}{conflict&&<div role="alert"><p>{conflict}</p><Button disabled={busy||uncertain} onClick={()=>void load(true)}>重新读取并复核新基线</Button></div>}{notice&&<p role="status">{notice}</p>}{request?.returnReason&&<p>退回原因：{request.returnReason}</p>}
   {uncertain&&<p role="status">上次提交结果待核对，原内容已保留。<Button disabled={busy} onClick={()=>pending.current&&void write(pending.current.path,pending.current.body)}>核对上次提交结果</Button></p>}
-  {check.washing&&<OrderTimeWashingFields key={washingReset} rows={check.washing} plan={check.plan} disabled={disabled} onChange={value=>{if(!equal(value,currentChanges.current.washing))setNotice('');setWashing(value);setError('');}} onInvalid={bad=>{if(bad)setNotice('');setWashingInvalid(bad);}}/>}
+  {check.washing&&<OrderTimeWashingFields key={washingReset} rows={check.washing} rebaseRevision={washingRebase} plan={check.plan} disabled={disabled} onChange={value=>{if(!equal(value,currentChanges.current.washing))setNotice('');setWashing(value);setError('');}} onInvalid={bad=>{if(bad)setNotice('');setWashingInvalid(bad);}}/>}
   {washingInvalid&&<p role="alert">请补齐洗水用时和办理人员。</p>}
   <div className="r5-time-layout"><div className="r5-time-table"><nav className="r5-time-stage-tabs" aria-label="本单时效阶段">{stages.map(stage=><button type="button" key={stage.key} aria-pressed={activeStage===stage.number} onClick={()=>setSelectedStage(stage.number)}>{stage.label}</button>)}</nav><table><thead><tr><th>适用节点</th><th>原用时</th><th>本次用时</th><th>哪些天计时</th><th>提醒</th></tr></thead><tbody>{visibleRows.map(row=>{
    const rule=overrides[row.parameterKey]??row.rule,baseline=original?.rows.find(old=>old.parameterKey===row.parameterKey)?.rule??row.rule;

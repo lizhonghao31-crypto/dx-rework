@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import type {OrderTimeCheckResult,OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
-import {rebaseWashingChanges} from '../../apps/web/src/order-time-washing-rebase.js';
+import {rebaseWashingChanges,rebaseWashingEditorDrafts,washingEditorDraft} from '../../apps/web/src/order-time-washing-rebase.js';
 
 const lineId='11111111-1111-4111-8111-111111111111',staff='22222222-2222-4222-8222-222222222222',nextStaff='33333333-3333-4333-8333-333333333333';
 const rule={minutes:120,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
@@ -19,4 +19,12 @@ it('retains deliberately edited staff and rejects a disappeared PO rather than i
  const changes=proposal();changes[0]!.document.staff!.logisticsId=nextStaff;
  expect(rebaseWashingChanges(rows,changes,rows)[0]!.document.staff!.logisticsId).toBe(nextStaff);
  expect(()=>rebaseWashingChanges(rows,changes,[])).toThrow('PO范围已变化');
+});
+
+it('updates visible untouched fields after acknowledgement and keeps deliberate duration or invalid raw input',()=>{
+ const draft={...washingEditorDraft(rows[0]!),washing:'4'},fresh=structuredClone(rows);fresh[0]!.version=2;fresh[0]!.document!.staff!.logisticsId=nextStaff;
+ const a=fresh[0]!.document!.arrangement;if(a.mode==='none')throw Error('TEST valid wash');a.inspection.minutes=180;
+ expect(rebaseWashingEditorDrafts(rows,{[lineId]:draft},fresh)[lineId]).toMatchObject({washing:'4',inspection:'3',logisticsId:nextStaff});
+ expect(rebaseWashingEditorDrafts(rows,{[lineId]:{...draft,washing:'unfinished',inspection:'1.0'}},fresh)[lineId]).toMatchObject({washing:'unfinished',inspection:'3',logisticsId:nextStaff});
+ expect(draft).toEqual({...washingEditorDraft(rows[0]!),washing:'4'});
 });

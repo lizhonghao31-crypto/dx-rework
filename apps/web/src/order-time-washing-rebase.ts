@@ -1,4 +1,4 @@
-import {BulkWashingAdoptionSchema} from '@dx-rework/contracts/bulk-washing';
+import {BulkWashingAdoptionSchema,type BulkWashingMode} from '@dx-rework/contracts/bulk-washing';
 import type {OrderTimeCheckResult,OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
 
 const equal=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
@@ -23,4 +23,24 @@ export function rebaseWashingChanges(base:OrderTimeCheckResult['washing'],change
   document.fee=structuredClone(fresh.document?.fee??{kind:'pending'});
   return {lineId:change.lineId,expectedVersion:fresh.version,document:BulkWashingAdoptionSchema.parse(document)};
  });
+}
+
+export type WashingEditorDraft={mode:BulkWashingMode;accounting:'additional'|'included_in_factory';washing:string;inspection:string;calendar:string;inspectionCalendar:string;logisticsId:string;inspectorId:string};
+type WashingRow=NonNullable<OrderTimeCheckResult['washing']>[number];
+export function washingEditorDraft(row:WashingRow):WashingEditorDraft{
+ const a=row.document?.arrangement;
+ return {mode:a?.mode??'none',accounting:a&&a.mode!=='none'?a.accounting:'additional',washing:a&&a.mode!=='none'?String(a.washing.minutes/60):'',inspection:a&&a.mode!=='none'?String(a.inspection.minutes/60):'',calendar:a&&a.mode!=='none'?a.washing.calendar:'continuous',inspectionCalendar:a&&a.mode!=='none'?a.inspection.calendar:'continuous',logisticsId:row.document?.staff?.logisticsId??'',inspectorId:row.document?.staff?.inspectorId??''};
+}
+/** Apply the same three-way baseline to visible raw editor fields. Invalid
+ * text is a deliberate unsaved edit too; acknowledgement must not erase it. */
+export function rebaseWashingEditorDrafts(base:readonly WashingRow[],drafts:Record<string,WashingEditorDraft>,current:readonly WashingRow[]):Record<string,WashingEditorDraft>{
+ return Object.fromEntries(Object.entries(drafts).map(([lineId,draft])=>{
+  const old=base.find(row=>row.lineId===lineId),fresh=current.find(row=>row.lineId===lineId);if(!old||!fresh)return [lineId,draft];
+  const before=washingEditorDraft(old),next=washingEditorDraft(fresh),keepArrangement=before.mode!==draft.mode||before.mode!==next.mode;
+  const merged=Object.fromEntries(Object.entries(draft).map(([key,value])=>{
+   const field=key as keyof WashingEditorDraft,original=before[field],unchanged=(field==='washing'||field==='inspection')&&value.trim()&&original.trim()&&Number.isFinite(Number(value))&&Number.isFinite(Number(original))?Number(value)===Number(original):value===original;
+   return [key,keepArrangement&&!['logisticsId','inspectorId'].includes(key)||!unchanged?value:next[field]];
+  })) as WashingEditorDraft;
+  return [lineId,merged];
+ }));
 }
