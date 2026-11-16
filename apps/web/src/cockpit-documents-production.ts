@@ -73,7 +73,7 @@ export async function loadProductionEntry(entry:CockpitDocumentEntry,read:Cockpi
  }
  if(l.kind.startsWith('order_events_')){
   sameEntity(data,'orderId',l.id,'历史资料');const family=l.kind==='order_events_fabric'?'fabric':'receipt_quality';check(data.family===family&&(data.nextBeforeId===null||textValue(data.nextBeforeId)));const items=checkedRows(data.items,h=>textValue(h.eventId)&&textValue(h.kind));
-  const children:CockpitDocumentEntry[]=items.map(h=>{const p=row(h.payload);return {id:str(h.eventId),label:h.kind==='bulk_fabric_report'?'原验布报告':h.kind==='bulk_fabric_decision'?'原质量处理决定':'原到仓成衣检查',at:str(h.occurredAt)||str(h.recordedAt),by:str(h.operatorName),note:[str(p.material),str(p.result),p.allowUse===undefined?'':p.allowUse?'当次允许使用':'当次继续处理',p.qualifiedQuantity===undefined?'':`当次合格 ${p.qualifiedQuantity}件`,str(p.note),str(p.problem),'历史记录，当前有效性见原单'].filter(Boolean).join('；')};});
+  const children:CockpitDocumentEntry[]=items.map(h=>{const p=row(h.payload);return {id:str(h.eventId),label:h.kind==='bulk_fabric_report'?'原验布报告':h.kind==='bulk_fabric_decision'?'原质量处理决定':h.kind==='garment_receipt_qc_time_verified'?'原到仓检查时间核实':'原到仓成衣检查',at:str(h.occurredAt)||str(h.recordedAt),by:str(h.operatorName),note:[str(p.material),str(p.result),p.allowUse===undefined?'':p.allowUse?'当次允许使用':'当次继续处理',p.qualifiedQuantity===undefined?'':`当次合格 ${p.qualifiedQuantity}件`,str(p.note),str(p.problem),str(p.reason),'历史记录，当前有效性见原单'].filter(Boolean).join('；')};});
   if(data.nextBeforeId)children.push({id:`older:${data.nextBeforeId}`,label:'读取更早记录',load:{...l,path:l.path.split('?')[0]+`?beforeId=${encodeURIComponent(str(data.nextBeforeId))}`}});
   return {...entry,load:undefined,children,note:items.length?'原事实按实际登记顺序保留，未重新推定历史有效性':'原集合尚无可见历史记录'};
  }

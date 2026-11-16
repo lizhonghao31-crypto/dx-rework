@@ -1,3 +1,4 @@
+import {PackingReceiptAllocationFields} from './packing-receipt-allocation-fields.js';
 import {useReceivingBoardRead,localDate} from "./receiving-board-read.js";
 import {useReceivingBoardEditSession} from "./receiving-board-edit-session.js";
 import type {BoardStatus,BoardRow,ReceivingAttachment,ReworkStatus} from "./receiving-board-types.js";
@@ -78,7 +79,7 @@ export function OrderBoardPage() {
     editDefectiveQuantity,setEditDefectiveQuantity,editImages,setEditImages,receiptSource,setReceiptSource,
     receiptDocumentQuantity,setReceiptDocumentQuantity,receiptActualQuantity,setReceiptActualQuantity,receiptDefectiveQuantity,setReceiptDefectiveQuantity,
     mutationBusy,boardMutation,mutationUnknown,mutationMessage,setMutationMessage,packingEditing,
-    setPackingEditing,packingQuantity,setPackingQuantity,packingTimeMode,setPackingTimeMode,packingTimeValue,setPackingTimeValue,differenceEditing,differenceResult,setDifferenceResult,
+    setPackingEditing,packingQuantity,setPackingQuantity,packingTimeMode,setPackingTimeMode,packingTimeValue,setPackingTimeValue,packingAllocationsEnabled,setPackingAllocationsEnabled,packingAllocationDrafts,setPackingAllocationDrafts,differenceEditing,differenceResult,setDifferenceResult,
     differenceImages,closeDifference,selectDifferenceImages,openPacking,submitPacking,openDifference,
     submitDifference,openEdit,openReceiptCorrection,submitReceiptCorrection,submitCorrection,confirmDelete,
     recoveryActions,removeDifferenceImage
@@ -419,6 +420,7 @@ export function OrderBoardPage() {
         </select></label>
         {packingTimeMode==='instant'&&<label>实际装箱时间（北京时间）<input type="datetime-local" step="0.001" required value={packingTimeValue} disabled={mutationBusy} onChange={event=>setPackingTimeValue(event.target.value)}/></label>}
         {packingTimeMode==='date'&&<label>实际装箱日期<input type="date" required value={packingTimeValue} disabled={mutationBusy} onChange={event=>setPackingTimeValue(event.target.value)}/></label>}
+        <PackingReceiptAllocationFields row={packingEditing} enabled={packingAllocationsEnabled} onEnabled={setPackingAllocationsEnabled} drafts={packingAllocationDrafts} onChange={setPackingAllocationDrafts} disabled={mutationBusy||mutationUnknown}/>
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setPackingEditing(null)}>取消</button>

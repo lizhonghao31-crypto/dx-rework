@@ -5,7 +5,7 @@ import {DigitalProductionAccessPolicy} from './access-policy.js';
 
 /** Two fixed original read domains. No caller-supplied table, event kind or write operation. */
 export async function orderDocumentHistory(pool:Pool,actor:TrustedActorContext,orderId:string,family:'fabric'|'receipt_quality',beforeId?:string){
- const kinds=family==='fabric'?['bulk_fabric_report','bulk_fabric_decision']:['garment_receipt_qc'];
+ const kinds=family==='fabric'?['bulk_fabric_report','bulk_fabric_decision']:['garment_receipt_qc','garment_receipt_qc_time_verified'];
  const db=await pool.connect();try{
   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   // Same authority as the original bulk-preparation and closure readers, before cursor lookup or counts.

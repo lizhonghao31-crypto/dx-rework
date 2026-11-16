@@ -2,6 +2,7 @@ import {r5RoleFixture} from '../helpers/r5-role-fixture.js';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {writeFile} from 'node:fs/promises';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
@@ -159,6 +160,28 @@ const currentBeijingInput=()=>new Date(Date.now()+8*3600000).toISOString().slice
    expect((await garmentQuality(h.db,id))[0]!.quantity).toBe(4);
    await inspection.page.screenshot({path:join(h.evidence,`rewash-${mode}-qc-390.png`),fullPage:true});
   }finally{await inspection.context.close();}
+ });
+ it('verifies only the exact original reported arrival-QC time and records explicit now in the original closure App',async()=>{
+  const before=(await garmentQuality(h.db,orderId))[0]!,tab=await h.open(h.f.root.actorId,390,{},`/ui/digital-production?closure=${orderId}`);
+  try{
+   const page=tab.page;await page.getByRole('heading',{name:'回货、返工与本期结案',exact:true}).waitFor();
+   await page.getByText(`本批已检查 · 合格 ${before.qualifiedQuantity} / ${before.quantity}`,{exact:true}).click();
+   await page.getByRole('textbox',{name:'核实依据',exact:true}).fill('TEST checked the original arrival inspection occurrence');
+   const verified=page.waitForResponse(response=>response.url().endsWith('/closure/quality/verify-time')&&response.request().method()==='POST');
+   await page.getByRole('button',{name:'核实原检查时间',exact:true}).click();expect((await verified).status()).toBe(200);
+   await page.getByRole('button',{name:'核实原检查时间',exact:true}).waitFor({state:'hidden'});
+   const after=(await garmentQuality(h.db,orderId))[0]!;expect(after).toMatchObject({eventId:before.eventId,quantityVersion:before.quantityVersion,completedAt:before.completedAt,timeQuality:'已核实',packingReadyAt:before.completedAt});
+   expect((await h.db.query("SELECT time_quality FROM digital_production_task_events WHERE event_id=$1",[before.eventId])).rows[0].time_quality).toBe('补报未核实');
+   expect((await h.db.query("SELECT count(*)::int AS count FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[orderId])).rows[0].count).toBe(1);
+   await page.getByRole('combobox',{name:'检查时间',exact:true}).selectOption('now');
+   expect(await page.getByLabel('检查完成时间（北京时间）',{exact:true}).count()).toBe(0);
+   const recorded=page.waitForResponse(response=>response.url().endsWith('/closure/quality')&&response.request().method()==='POST');
+   await page.getByRole('button',{name:'保存到仓质检',exact:true}).click();expect((await recorded).status()).toBe(200);
+   await expect.poll(async()=>(await garmentQuality(h.db,orderId))[0]!.timeQuality).toBe('现场登记');
+   expect((await garmentQuality(h.db,orderId))[0]!.packingReadyAt).toBe(before.completedAt);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   await page.screenshot({path:join(h.evidence,'packing-ready-original-qc-time-390.png'),fullPage:true});
+  }catch(error){await tab.page.screenshot({path:join(h.evidence,'packing-ready-qc-time-failure.png'),fullPage:true});await writeFile(join(h.evidence,'packing-ready-qc-time-failure.txt'),JSON.stringify({body:await tab.page.locator('body').innerText(),requests:h.requests.filter(request=>request.session===tab.session)},null,2));throw error;}finally{await tab.context.close();}
  });
  it('assigned logistics records30 sent and20 returned, then QC releases only20 in the same existing page',async()=>{
   const path=`/ui/digital-production?factory=${orderId}&factoryAction=washing`;

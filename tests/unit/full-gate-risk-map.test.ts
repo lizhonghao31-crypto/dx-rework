@@ -93,6 +93,12 @@ it('keeps native persistent-session and Chromium coverage in the exact auth/conf
 });
 
 const amendmentSuite='tests/integration/development-amendment-postgres.test.ts';
+it.each(['apps/api/src/receiving/packing-receipt-allocations.ts','apps/api/src/production-platform/packing-scope-readiness.ts','apps/api/src/production-platform/packing-readiness-evidence.ts','apps/api/src/production-platform/packing-allocation-evidence.ts'])('maps isolated packing responsibility producer changes to the original real PG consumer: %s',path=>{
+ expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain('tests/integration/effective-packing-postgres.test.ts');
+});
+it('maps the original receipt packing editor to its authenticated browser flow',()=>{
+ expect(classifyFullGatePaths(['apps/web/src/packing-receipt-allocation-fields.tsx']).mappedPostgresTests).toContain('tests/integration/receiving-board-native-browser-postgres.test.ts');
+});
 const amendmentPlan=(paths:string[])=>{
  const r=classifyFullGatePaths(paths);
  return fullGatePostgresPlan({BASE_SHA:'7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e',DB_REQUIRED:String(r.dbRequired),BUSINESS_CHAIN_SENSITIVE:String(r.businessChainSensitive),MIGRATION_SENSITIVE:String(r.migrationSensitive),DEPLOYMENT_SENSITIVE:String(r.deploymentSensitive),MAPPED_POSTGRES_TESTS:r.mappedPostgresTests.join(',')});

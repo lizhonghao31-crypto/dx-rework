@@ -28,6 +28,7 @@ LEFT JOIN LATERAL (
  SELECT head.packing_revision_id,head.receiving_batch_id,head.recorded_by,head.created_at,head.operation_event_id,head.packing_quantity AS source_quantity,
   CASE WHEN quality.complete THEN head.packing_quantity ELSE NULL END AS packing_quantity,
   CASE WHEN quality.complete THEN head.after_state->'packingActualTime' ELSE NULL END AS packing_actual_time,
+  CASE WHEN quality.complete THEN head.after_state->'packingAllocations' ELSE NULL END AS packing_allocations,
   NOT quality.complete AS scope_unresolved
  FROM (
   SELECT revision.*,batch.deleted_at,batch.cutting_order_id,event.after_state,
@@ -54,8 +55,8 @@ LEFT JOIN LATERAL (
  * receipt is invented just to make a group exist. */
 export async function readNativePackingHeads(db:Pick<PoolClient,'query'>,cutIds:readonly string[]){
  if(!cutIds.length)return [];
- return (await db.query<{group_key:string;packing_revision_id:string|null;packing_quantity:string|null;packing_actual_time:unknown;packing_recorded_at:Date|null;packing_scope_unresolved:boolean}>(`
-  SELECT totals.group_key,packing.packing_revision_id,packing.packing_quantity,packing.packing_actual_time,
+ return (await db.query<{group_key:string;packing_revision_id:string|null;packing_quantity:string|null;packing_actual_time:unknown;packing_allocations:unknown;packing_recorded_at:Date|null;packing_scope_unresolved:boolean}>(`
+  SELECT totals.group_key,packing.packing_revision_id,packing.packing_quantity,packing.packing_actual_time,packing.packing_allocations,
    coalesce((event.after_state->'acceptanceClock'->>'now')::timestamptz,packing.created_at) AS packing_recorded_at,
    ${RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL} AS packing_scope_unresolved
   FROM unnest($1::uuid[]) requested(cutting_id) CROSS JOIN LATERAL(SELECT 'cut:'||requested.cutting_id::text AS group_key) totals

@@ -63,7 +63,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }
   // The original fact builder must carry each instance and invalidate the old
   // calculation version; projection storage must never erase step identity.
-  const client=await f.db.connect();try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const model=await journey.buildFactsWithClient(client,{kind:'source',id:sid},businessNow().toISOString());expect(model.sla.instances?.map(instance=>instance.taskId).sort()).toEqual(nativeRows.map(row=>row.task_id).sort());expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-production-occurrence-v8');await client.query('ROLLBACK');}finally{client.release();}
+  const client=await f.db.connect();try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const model=await journey.buildFactsWithClient(client,{kind:'source',id:sid},businessNow().toISOString());expect(model.sla.instances?.map(instance=>instance.taskId).sort()).toEqual(nativeRows.map(row=>row.task_id).sort());expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-packing-readiness-v9');await client.query('ROLLBACK');}finally{client.release();}
   const quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:created[0]!.sourceId},worker=f.people['pattern-room-worker']!;
   let quote=await quotes.read(worker,resource);
   const own=quote.rows.filter(row=>row.name==='TEST 激光'||row.name==='TEST 烫钻');
