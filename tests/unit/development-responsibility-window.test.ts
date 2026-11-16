@@ -23,3 +23,5 @@ it('retains the independently captured organizational start while activation/han
  expect(developmentResponsibilityWindow({...pending,native_readiness:{...pending.native_readiness,reference:'craft-step:own'}},at,{enteredAt:at,basis:['craft-step:own']}).at).toBe(at);
  expect(developmentResponsibilityWindow({...pending,native_readiness:{...pending.native_readiness,reference:'craft-step:other'}},at,{enteredAt:at,basis:['craft-step:own']}).at).toBeNull();
 });
+
+it('does not turn a bare legacy timestamp without quality or native proof into a trusted start',()=>{expect(developmentResponsibilityWindow({task_id:'TEST missing provenance',entered_at:at},at,{enteredAt:at})).toEqual({at:null,quality:'缺失'});});

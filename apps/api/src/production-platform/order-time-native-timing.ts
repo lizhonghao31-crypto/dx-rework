@@ -39,7 +39,7 @@ export async function orderTimePolicyAt(db:DB,resource:{kind:'source'|'order';id
   AND ($3::timestamptz IS NULL OR (business_time->>'now')::timestamptz<=$3) ORDER BY revision DESC LIMIT 1`,[resource.kind,resource.id,startedAt])).rows[0];
  return row?{plan:FrozenOrderTimePlanSchema.parse(row.input_snapshot.plan),id:row.plan_version_id as string}:null;
 }
-export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;order_time_managed?:boolean;entered_quality?:string;ready_correction?:ReadyCorrection|null},base:Timing|null,enteredAt:string|null,readyCorrection?:{at:string|null;eventId:string}):Promise<Timing|null>{
+export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;order_time_managed?:boolean;entered_quality?:string;ready_correction?:ReadyCorrection|null},base:Timing|null,enteredAt:string|null,readyCorrection?:{at:string|null;eventId:string},refreshDerivedStart=false):Promise<Timing|null>{
  // The original factory adapter already resolves each exact physical batch
  // at its own R. Its current selected batch cannot be replaced by the first
  // aggregate task revision from an earlier batch.
@@ -49,16 +49,18 @@ export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind
  if(task.source_id&&base&&correctedReady)base={...base,enteredAt:correctedReady.at,timeQuality:correctedReady.at?'已核实':'缺失',basis:[...base.basis,`ready-correction:${correctedReady.eventId}`]};
  const resource=task.production_order_id?{kind:'order' as const,id:task.production_order_id}:task.source_id?{kind:'source' as const,id:task.source_id}:null;if(!resource)return base;
  if(!task.order_time_managed&&!orderTimeAdmission(db)&&!await new OrderTimePlanRepository(db).current(resource))return base;
- const original=(await db.query(`SELECT entered_at,sla_basis,due_at,warning_at FROM digital_production_deadline_revisions
-  WHERE task_id=$1 AND entered_at IS NOT NULL ORDER BY revision_id LIMIT 1`,[task.task_id])).rows[0];
+ const original=(await db.query(`SELECT entered_at,sla_basis,due_at,warning_at,(SELECT e.time_quality FROM digital_production_task_events e WHERE e.task_id=$1 AND e.event_kind='ready' AND e.occurred_at IS NOT NULL AND coalesce(e.payload->'nativeReadiness'->>'scopeKind','task')='task' ORDER BY e.recorded_at,e.event_id LIMIT 1) AS ready_quality FROM digital_production_deadline_revisions
+  WHERE task_id=$1 AND entered_at IS NOT NULL ORDER BY CASE WHEN sla_basis->>'timeQuality' IN ('现场登记','已核实') THEN 0 ELSE 1 END,revision_id LIMIT 1`,[task.task_id])).rows[0];
  const correction=correctedReady;
- const originalRefs:string[]|undefined=Array.isArray(original?.sla_basis?.basis)?original.sla_basis.basis.filter((ref:unknown):ref is string=>typeof ref==='string'):undefined;
- const hasOriginalProof=originalRefs?.some(ref=>!ref.startsWith('order-time:')&&!ref.endsWith(':original-responsibility')&&!ref.startsWith('ready-correction:'))===true;
- const capturedPolicy=original?.sla_basis?.timeQuality==='现场登记'||original?.sla_basis?.timeQuality==='已核实'||hasOriginalProof||!correction&&['现场登记','已核实'].includes(task.entered_quality??'');
+ // Identity tags describe a route, not proof that responsibility began. A
+ // genuinely captured original window survives ordinary later arrangements.
+ const trusted=(quality:unknown)=>quality==='现场登记'||quality==='已核实';
+ const sameNativeStart=base?.enteredAt&&original?.entered_at&&Date.parse(base.enteredAt)===new Date(original.entered_at).getTime();
+ const capturedPolicy=trusted(original?.sla_basis?.timeQuality)||trusted(original?.ready_quality)||!correction&&sameNativeStart&&trusted(task.entered_quality);
  const explicitUnknown=base!==null&&base.enteredAt===null;
  if(original?.sla_basis?.orderTimePlanRef&&(capturedPolicy||base?.enteredAt===null&&!correction)){
   const basis=original.sla_basis;
-  const ready=correction?correction.at:explicitUnknown?null:(basis.timeQuality==='缺失'||basis.timeQuality===undefined&&task.source_id&&task.entered_quality!==undefined&&!['现场登记','已核实'].includes(task.entered_quality))&&base?base.enteredAt:new Date(original.entered_at).toISOString();
+  const ready=correction?correction.at:explicitUnknown?null:refreshDerivedStart&&base?base.enteredAt:(basis.timeQuality==='缺失'||basis.timeQuality===undefined&&task.source_id&&task.entered_quality!==undefined&&!['现场登记','已核实'].includes(task.entered_quality))&&base?base.enteredAt:new Date(original.entered_at).toISOString();
   return {...base,...basis,enteredAt:ready,timeQuality:ready?(correction?'已核实':base?.timeQuality??'现场登记'):'缺失',basis:[...basis.basis??[],...(correction?[`ready-correction:${correction.eventId}`]:[]),`task:${task.task_id}:original-responsibility`]};
  }
  const ready=correction?correction.at:base!==null?base.enteredAt:original?.entered_at?new Date(original.entered_at).toISOString():enteredAt;

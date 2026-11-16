@@ -22,7 +22,7 @@ it('retains a genuinely captured started quota when a later order arrangement ha
  const result=await orderTimeNativeTiming(db(original) as never,{...task,entered_quality:'已核实'},{...base,enteredAt:at,seconds:14400},at);expect(result?.enteredAt).toBe(at);expect(result?.seconds).toBe(28800);
 });
 it('uses the verified original ready correction rather than the earlier synthetic R without changing the captured quota',async()=>{
- const original={entered_at:automatic,sla_basis:{...base,enteredAt:automatic,seconds:28800,orderTimePlanRef:'TEST first',basis:['task:TEST actual source:completed']},due_at:null,warning_at:null};
+ const original={entered_at:automatic,sla_basis:{...base,enteredAt:automatic,seconds:28800,timeQuality:'现场登记',orderTimePlanRef:'TEST first',basis:['task:TEST actual source:completed']},due_at:null,warning_at:null};
  for(const corrected of [null,at]){
   const result=await orderTimeNativeTiming(db(original) as never,task,base,automatic,{at:corrected,eventId:'TEST original ready correction'});
   expect(result?.enteredAt).toBe(corrected);expect(result?.seconds).toBe(28800);expect(result?.timeQuality).toBe(corrected?'已核实':'缺失');
@@ -33,4 +33,22 @@ it('selects the already-effective policy at verified R when the old order-time-o
  const original={entered_at:automatic,sla_basis:{...base,enteredAt:automatic,seconds:28800,orderTimePlanRef:'TEST wrong later policy',basis:['order-time:TEST wrong later policy']},due_at:null,warning_at:null};
  const result=await orderTimeNativeTiming(db(original) as never,task,{...base,enteredAt:at},automatic,{at,eventId:'TEST verified original'});
  expect(result).toMatchObject({enteredAt:at,seconds:1800,orderTimePlanRef:'TEST original plan'});
+});
+it('does not treat craft identity tags as proof that the synthetic original R actually began',async()=>{
+ const original={entered_at:automatic,ready_quality:'补报未核实',sla_basis:{...base,enteredAt:automatic,seconds:28800,orderTimePlanRef:'TEST later synthetic policy',basis:['craft-step:TEST-own','craft-kind:special','adoption:TEST route']},due_at:null,warning_at:null};
+ const result=await orderTimeNativeTiming(db(original) as never,task,{...base,enteredAt:at},automatic,{at,eventId:'TEST actual verification'});
+ expect(result).toMatchObject({enteredAt:at,seconds:1800,orderTimePlanRef:'TEST original plan'});
+});
+
+it('keeps a genuinely begun legacy quota after exact ready verification even without newer quality metadata',async()=>{
+ const original={entered_at:automatic,ready_quality:'现场登记',sla_basis:{...base,enteredAt:automatic,seconds:28800,orderTimePlanRef:'TEST original legacy policy',basis:['craft-step:own']},due_at:null,warning_at:null};
+ const result=await orderTimeNativeTiming(db(original) as never,task,base,automatic,{at,eventId:'TEST verified actual original R'});
+ expect(result).toMatchObject({enteredAt:at,seconds:28800,orderTimePlanRef:'TEST original legacy policy'});
+});
+
+it('refreshes only an explicitly corrected derived R while keeping a genuine original quota',async()=>{
+ const original={entered_at:at,ready_quality:'现场登记',sla_basis:{...base,enteredAt:at,seconds:28800,timeQuality:'现场登记',orderTimePlanRef:'TEST original'},due_at:null,warning_at:null};
+ const changed='2026-11-15T22:54:00.850Z',current={...base,enteredAt:changed,seconds:14400};
+ expect((await orderTimeNativeTiming(db(original) as never,task,current,at))?.enteredAt).toBe(at);
+ expect(await orderTimeNativeTiming(db(original) as never,task,current,at,undefined,true)).toMatchObject({enteredAt:changed,seconds:28800,orderTimePlanRef:'TEST original'});
 });

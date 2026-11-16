@@ -19,10 +19,9 @@ export function developmentResponsibilityWindow(task:ResponsibilityTask,captured
  if(refs.length){if(capturedAt&&refs.every(ref=>proof.some(row=>ref===`task:${row.task_id}:completed`&&row.state==='completed'&&!row.returned&&!row.rejected&&row.completed_at&&credible(row.completed_quality)&&Date.parse(iso(row.completed_at)!)<=Date.parse(iso(capturedAt)!))))return {at:iso(capturedAt),quality:'现场登记'};return {at:null,quality:'缺失'};}
  if(basis?.timeQuality!==undefined&&!credible(basis.timeQuality))return {at:null,quality:basis.timeQuality};
  if(credible(task.entered_quality))return {at:iso(capturedAt??task.entered_at),quality:task.entered_quality!};
- // Pre-quality legacy fixtures/records retain their original metadata; an
- // explicitly missing or unverified event cannot use that compatibility path.
- if(task.entered_quality===undefined)return {at:iso(capturedAt),quality:capturedAt?'现场登记':'缺失'};
- return {at:null,quality:task.entered_quality};
+ // Missing quality is not proof of an actual start; older records can still
+ // use their exact native event or trusted predecessor evidence above.
+ return {at:null,quality:task.entered_quality??'缺失'};
 }
 /** Used inside already-authorized task queries; no new per-task SQL round trip. */
 export function developmentResponsibilityProofSql(taskAlias:string,basis:string):string{return `coalesce((SELECT jsonb_agg(jsonb_build_object('task_id',proof.task_id,'state',proof.state,'completed_at',proof.completed_at,'completed_quality',proof.completed_quality,'returned',EXISTS(SELECT 1 FROM digital_production_task_events returned WHERE returned.task_id=proof.task_id AND returned.event_kind='material_returned'),'rejected',false)) FROM digital_production_tasks proof JOIN digital_production_task_access proof_access USING(task_id) WHERE proof_access.source_id=${taskAlias}.source_id AND ('task:'||proof.task_id::text||':completed') IN (SELECT value FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(${basis}->'basis')='array' THEN ${basis}->'basis' ELSE '[]'::jsonb END))), '[]'::jsonb)`;}

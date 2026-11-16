@@ -139,7 +139,7 @@ export class DigitalProductionTaskService {
     }
     return (await client.query("SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [key])).rows[0] ?? digitalNotFound();
   }
-  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>,readyCorrection?:{at:string|null;eventId:string}) {
+  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>,readyCorrection?:{at:string|null;eventId:string},refreshDerivedStart=false) {
     const task=await this.task(client,taskId);
     if(task.task_kind==='bulk_ship_sample'&&task.production_order_id){
       const targets=await shipSampleTargets(client,task.production_order_id,task.order_time_managed===true);
@@ -153,7 +153,7 @@ export class DigitalProductionTaskService {
       }
     }
     const nativeTiming=timingOverride??await developmentTaskTiming(client,task)??await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
-    const timing=await orderTimeNativeTiming(client,task,nativeTiming,enteredAt,readyCorrection);
+    const timing=await orderTimeNativeTiming(client,task,nativeTiming,enteredAt,readyCorrection,refreshDerivedStart);
     if(timing){
       const deadline=digitalDeadline(timing.enteredAt,timing.seconds,timing.warningRatio);
       if('calendarRef'in timing&&timing.calendarRef&&timing.enteredAt&&timing.seconds!==null){
@@ -673,6 +673,26 @@ export class DigitalProductionTaskService {
       return { nodeKey, version, affectedTasks: tasks.rowCount };
     }));
   }
+  /** Re-evaluate only causal native windows. A time correction never creates
+   * readiness/work facts, activates tasks or rewrites completed work/P0. */
+  private async refreshDevelopmentCorrectionWindows(client:PoolClient,actor:TrustedActorContext,sourceId:string,originTaskId:string,eventId:string){
+    if(!await developmentSlaPlan(client,sourceId))return;
+    const rows=(await client.query(`WITH RECURSIVE affected(task_id) AS (
+      SELECT task_id FROM digital_production_task_dependencies WHERE predecessor_id=$2
+      UNION SELECT d.task_id FROM digital_production_task_dependencies d JOIN affected parent ON d.predecessor_id=parent.task_id
+    ) SELECT t.task_id,EXISTS(SELECT 1 FROM affected WHERE affected.task_id=t.task_id) AS descendant,
+      current.entered_at,current.sla_basis FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      LEFT JOIN LATERAL(SELECT entered_at,sla_basis FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1) current ON true
+      WHERE a.source_id=$1 AND t.task_id<>$2 AND t.state<>'cancelled' ORDER BY t.route_version,t.created_at,t.task_id`,[sourceId,originTaskId])).rows;
+    const reference=`task:${originTaskId}:completed`;
+    for(const row of rows){
+      const next=await this.task(client,row.task_id),native=await developmentTaskTiming(client,next);if(!native)continue;
+      const priorRefs=Array.isArray(row.sla_basis?.basis)?row.sla_basis.basis:[];
+      if(!row.descendant&&!native.basis.includes(reference)&&!priorRefs.includes(reference))continue;
+      const resolved=await orderTimeNativeTiming(client,next,native,iso(next.entered_at),undefined,true);
+      if(resolved&&!isDeepStrictEqual(row.sla_basis,JSON.parse(JSON.stringify(resolved))))await this.revision(client,actor,next.task_id,await this.policy(client,next.task_kind,next.task_id),iso(next.entered_at),'correction',eventId,undefined,undefined,true);
+    }
+  }
   async correctTime(actor: TrustedActorContext, id: string, input: { eventId: string; occurredAt: string | null; reason: string }, key: string) {
     if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor)) digitalForbidden();
     return this.transaction(async client => {
@@ -701,6 +721,7 @@ export class DigitalProductionTaskService {
           if (snapshot) policy = snapshot;
         }
         await this.revision(client, actor, id, policy, entry?.toISOString() ?? null, "correction", eventId,undefined,original.event_kind==='ready'?{at:input.occurredAt,eventId}:undefined);
+        if(task.source_id&&original.event_kind==='completed')await this.refreshDevelopmentCorrectionWindows(client,actor,task.source_id,id,eventId);
         return { taskId: id, eventId };
       });
     });
