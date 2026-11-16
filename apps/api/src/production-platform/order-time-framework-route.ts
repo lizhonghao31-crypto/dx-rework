@@ -1,4 +1,5 @@
 import {addCalendarDays} from '@dx-rework/contracts/series-calendar';
+import {frozenCraftChoice} from './fixed-work-definition.js';
 import {SERIES_MILESTONES,type SeriesRoute,type SeriesMilestoneKey} from '@dx-rework/contracts/digital-series-plan';
 import {TimeFrameworkInputSchema,type TimeFrameworkInput, type FrameworkTarget} from '@dx-rework/contracts/order-time-framework';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
@@ -44,7 +45,7 @@ export function frameworkScopeInputs(value:OrderTimeInput,route:SeriesRoute,acce
   }
   return TimeFrameworkInputSchema.parse({scopeRef:scope.scopeRef,route,acceptedAt,customerDelivery:{date:scope.customerGoal.value,source:scope.customerGoal.source,revision:scope.customerDateVersion??1},plan:value.plan,
    milestoneStandard:{reference:value.plan.company.reference,revision:value.plan.company.revision,offsets:standard.milestoneOffsets[route]},
-   work:value.work.filter(row=>ids.has(row.id)),bindings,notBefore:bounds});
+   work:value.work.filter(row=>ids.has(row.id)).map(row=>({...row,...(row.craftStep?{craftStep:frozenCraftChoice(row.craftStep)}:{})})),bindings,notBefore:bounds});
  });
 }
 

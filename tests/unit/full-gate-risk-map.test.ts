@@ -390,3 +390,11 @@ it('keeps exact craft instance adapters and frozen labels in native and authenti
   expect(mapped).toContain('tests/integration/special-craft-native-postgres.test.ts');expect(mapped).toContain('tests/integration/special-craft-browser-postgres.test.ts');
  }
 });
+
+it('keeps incomplete-publication and exact native craft choices in original request and App regressions',()=>{
+ for(const file of ['order-time-publication-intent','fixed-development-work','fixed-order-work','fixed-work-definition']){
+  const risk=classifyFullGatePaths([`apps/api/src/production-platform/${file}.ts`]);
+  for(const suite of ['order-time-requests-postgres','order-time-requests-browser-postgres'])expect(risk.mappedPostgresTests).toContain(`tests/integration/${suite}.test.ts`);
+ }
+ expect(classifyFullGatePaths(['apps/web/src/order-time-washing-rebase.ts']).mappedPostgresTests).toContain('tests/integration/order-time-requests-browser-postgres.test.ts');
+});

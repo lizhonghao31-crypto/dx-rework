@@ -2,6 +2,7 @@ import type {PoolClient} from 'pg';
 import type {OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
 import type {BulkWashingAdoption} from '@dx-rework/contracts/bulk-washing';
 import {washingPlans,washingConflict} from './bulk-washing-repository.js';
+import {ApplicationError} from '../platform/errors.js';
 
 /** One bounded original-order read. Proposed values affect only this calculation;
  * the original apply transaction separately validates and writes the adoption. */
@@ -13,7 +14,7 @@ export async function orderTimeWashingState(db:Pick<PoolClient,'query'>,orderId:
  for(const change of changes){
   if(seen.has(change.lineId))washingConflict('请选择不重复的洗水PO');seen.add(change.lineId);
   const current=result.get(change.lineId);if(!current)washingConflict('洗水PO不属于本单');
-  if(current!.version!==change.expectedVersion)washingConflict('本单洗水安排已更新，本次填写已保留');
+  if(current!.version!==change.expectedVersion)throw new ApplicationError('ORDER_TIME_STALE','本单洗水安排已更新，本次填写已保留',409);
   result.set(change.lineId,{...current!,document:structuredClone(change.document)});
  }
  return result;

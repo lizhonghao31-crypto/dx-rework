@@ -203,7 +203,11 @@ export const classifyFullGatePaths = (inputPaths) => {
   }
   if(paths.some(path=>/first-effective-receipt|factory-delivery-reading|receiving-span|factory-return-logistics/.test(path))){addAll(mappedTests,['tests/integration/fixed-progress-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/m01-journey-performance-postgres.test.ts']);domains.add('native-first-delivery');}
   if(paths.some(path=>/whole-order-(?:deletion|native-deletion|visibility)|cockpit-order-deletion|0287_whole_order/.test(path))){addAll(mappedTests,['tests/integration/whole-order-deletion-postgres.test.ts','tests/integration/whole-order-deletion-browser-postgres.test.ts']);domains.add('whole-order-deletion');}
-  if(paths.some(path=>/order-time-(?:request|admission|automatic|native|operation|application|production-route|route-identities|factory-commitments|washing)|0286_order_time_requests/.test(path))){
+  if(paths.some(path=>/^apps\/api\/src\/production-platform\/(?:fixed-development-work|fixed-order-work|fixed-work-definition)\.ts$/.test(path))){
+    addAll(mappedTests,['tests/integration/order-time-requests-postgres.test.ts','tests/integration/order-time-requests-browser-postgres.test.ts']);
+    domains.add('native-craft-choice-boundary');
+  }
+  if(paths.some(path=>/order-time-(?:request|admission|automatic|native|operation|application|publication|production-route|route-identities|factory-commitments|washing)|0286_order_time_requests/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-requests-postgres.test.ts','tests/integration/order-time-requests-browser-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/order-time-settings-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/development-round-history-clock-postgres.test.ts','tests/integration/production-readiness-postgres.test.ts']);
     domains.add('order-time-first-effective-and-requests');
   }

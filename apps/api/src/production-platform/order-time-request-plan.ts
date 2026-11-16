@@ -1,4 +1,5 @@
 import {craftStepLabel} from '@dx-rework/contracts/digital-craft';
+import {frozenCraftChoice} from './fixed-work-definition.js';
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {createHash} from 'node:crypto';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
@@ -38,7 +39,7 @@ export function orderTimeBegunStates(input:OrderTimeInput,progress:ReadonlyMap<s
  * dependency order nor the identity of a real task/step/PO. */
 export function orderTimeInputFromRoute(plan:FrozenOrderTimePlan,route:Pick<FixedTimelineInput,'work'|'consumers'>,goals:ReadonlyMap<string,SlaAnchor>,complete:boolean,missing:string[]=[],creation?:{kind:'source'|'order';id:string}):OrderTimeInput{
  const work=route.work.map(node=>({id:node.id,parameterKey:node.parameterKey??node.id,stage:orderTimeNodeStage(node.parameterKey??node.id,node.stage??2),dependsOn:[...node.dependsOn],
-  canonicalWorkRef:node.canonicalWorkRef,...(node.craftStep?{craftStep:structuredClone(node.craftStep)}:{}),...(node.nativeDuration?{nativeDuration:structuredClone(node.nativeDuration)}:{}),...(node.includedIn?{includedIn:node.includedIn,includedPosition:node.includedPosition??'start' as const}:{})}));
+  canonicalWorkRef:node.canonicalWorkRef,...(node.craftStep?{craftStep:frozenCraftChoice(node.craftStep)}:{}),...(node.nativeDuration?{nativeDuration:structuredClone(node.nativeDuration)}:{}),...(node.includedIn?{includedIn:node.includedIn,includedPosition:node.includedPosition??'start' as const}:{})}));
  if(creation&&!work.some(node=>node.parameterKey==='order_creation')){
   for(const node of work)if(!node.dependsOn.length&&!node.includedIn)node.dependsOn=['order_creation'];
   work.unshift({id:'order_creation',parameterKey:'order_creation',stage:1,dependsOn:[],canonicalWorkRef:`creation:${creation.kind}:${creation.id}`});

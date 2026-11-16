@@ -1,7 +1,9 @@
 import type {Pool,PoolClient} from 'pg';
 import type {PatternRoomOrderService} from '../pattern-room/order-service.js';
 import type {SourcingService} from '../sourcing/sourcing-service.js';
-import {DigitalOrderCreateSchema,initialCustomerOrderInput} from '@dx-rework/contracts/digital-production';
+import {DigitalOrderCreateSchema,initialCustomerOrderInput,beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
+import {publicationFormalInput} from './order-time-publication-intent.js';
+import {orderTimeAdmission} from './order-time-admission.js';
 import {DigitalProductionIdentityService} from './identity-service.js';
 import {DigitalDevelopmentService} from './development-service.js';
 import {ProductionInstructionService} from './production-instruction-service.js';
@@ -42,9 +44,11 @@ export function orderTimeNativeExecutor(database:Pool,creationEnabled:boolean,pa
   const identity=new DigitalProductionIdentityService(database,creationEnabled,sourcing).inTransaction(db);
   switch(operation.kind){
    case 'development_publish':{
-    const sheet=await new DigitalDevelopmentService(database,creationEnabled,patternOrders).inTransaction(db).publish(actor,operation.sourceId,operation.input.expectedVersion,key,operation.input.patternOrder),draft=sheet.document?.customerOrderDraft;
-    if(draft?.withOrder&&draft.stage!=='preorder'){
-     const input=DigitalOrderCreateSchema.parse({...initialCustomerOrderInput(draft.order),...(sheet.document?.productionPlanning?{productionPlanning:sheet.document.productionPlanning}:{})});
+    const sheet=await new DigitalDevelopmentService(database,creationEnabled,patternOrders).inTransaction(db).publish(actor,operation.sourceId,operation.input.expectedVersion,key,operation.input.patternOrder);
+    const admission=orderTimeAdmission(db),time=admission?new Date(admission.time.now):null;
+    const calendar=time?{serverToday:beijingCalendarDate(time),minimumInitialCustomerDate:minimumInitialCustomerDate(time),orderTimeEnabled:true}:await identity.orderCalendar(actor,operation.sourceId);
+    const input=publicationFormalInput(sheet.document,calendar,Boolean(admission?.plan.company.framework));
+    if(input){
      const order=await identity.createOrder(actor,input,key+':formal',operation.sourceId);return {sourceId:operation.sourceId,orderId:order.productionOrderId};
     }
     return {sourceId:operation.sourceId,orderId:null};
