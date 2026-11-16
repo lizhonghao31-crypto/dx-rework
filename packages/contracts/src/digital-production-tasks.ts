@@ -19,7 +19,7 @@ export type DigitalTask = {
   deadlineMode?:"duration"|"date_target"|"unlimited";
   unmetConditions?:DigitalTaskBlocker[];
   identity?: { designStyleNo: string; customerCode: string | null } | null;
-  stepRef?:string;craftKind?:"embroidery"|"printing"|"special";priority?: "normal" | "urgent"; taskId: string; orderId: string | null; sourceId: string | null; taskKind: string; label: string;
+  craftSequence?:number;stepRef?:string;craftKind?:"embroidery"|"printing"|"special";priority?: "normal" | "urgent"; taskId: string; orderId: string | null; sourceId: string | null; taskKind: string; label: string;
   assigneeId: string | null; state: DigitalTaskState; routeVersion: number; occurrence: number;
   enteredAt: string | null; recordedAt: string; completedAt: string | null; paused: boolean;
   dueAt: string | null; warningAt: string | null; slaHours: number | null; policyVersion: number;

@@ -35,7 +35,7 @@ type ReadRows = (sql: string, values: unknown[]) => Record<string, unknown>[] | 
 
 function database(activeRoles: string[], readRows: ReadRows) {
   const query = vi.fn(async (raw: string, values: unknown[] = []) => {
-    if(raw==="SELECT to_regclass('digital_timeline_adoptions') AS relation")return {rows:[{relation:null}],rowCount:1}; // This legacy permission fixture has no v2 adoption; assertions remain unchanged.
+    if(["SELECT to_regclass('digital_timeline_adoptions') AS relation","SELECT to_regclass('digital_timeline_craft_steps') AS relation"].includes(raw))return {rows:[{relation:null}],rowCount:1}; // This legacy permission fixture has no v2 adoption; assertions remain unchanged.
 
     const sql = raw.replace(/\s+/g, ' ').trim();
     // Model the native batching envelope while evaluating only the original

@@ -110,21 +110,21 @@ export class SlaOrderService {
   }
 
   /** Reuse the caller's authorized read snapshot; never open a nested connection/transaction. */
-  async readWithClient(actor: TrustedActorContext, orderId: string, client: PoolClient, options:{mode?:"read_projection";onFutureEvidence?:(at:string)=>void}={}) {
+  async readWithClient(actor: TrustedActorContext, orderId: string, client: PoolClient, options:{mode?:"read_projection";onFutureEvidence?:(at:string)=>void;developmentRound?:number}={}) {
       await new DigitalProductionAccessPolicy(client).assert(actor, "order", orderId, "technical");
       return this.readFacts(orderId,client,options,actor);
   }
   /** Internal canonical inputs. This never supplies an actor or an authorization result. */
-  async readFactsWithClient(orderId:string,client:PoolClient,options:{mode?:"read_projection";onFutureEvidence?:(at:string)=>void}={}){
+  async readFactsWithClient(orderId:string,client:PoolClient,options:{mode?:"read_projection";onFutureEvidence?:(at:string)=>void;developmentRound?:number}={}){
       return this.readFacts(orderId,client,options,null);
   }
-  private async readFacts(orderId:string,client:PoolClient,options:{mode?:"read_projection";onFutureEvidence?:(at:string)=>void},actor:TrustedActorContext|null){
+  private async readFacts(orderId:string,client:PoolClient,options:{mode?:"read_projection";onFutureEvidence?:(at:string)=>void;developmentRound?:number},actor:TrustedActorContext|null){
       const repo = new SlaPlanRepository(client), time = validateBusinessTime(await (this.clock instanceof ContextBusinessClock?this.clock.withTransaction(client):this.clock).read({ kind: "order", id: orderId }));
       const history = await repo.available() ? await repo.plans(orderId) : [];
       const current = history.at(-1);
       if (current && current.time.scenarioId !== time.scenarioId) throw new Error("SLA clock scope mismatch");
       const sourceId = (await client.query("SELECT source_id FROM digital_production_orders WHERE production_order_id=$1", [orderId])).rows[0]?.source_id;
-      const development = sourceId ? await developmentSlaEvidence(client, sourceId, time,options.onFutureEvidence) : null;
+      const development = sourceId ? await developmentSlaEvidence(client, sourceId, time,options.onFutureEvidence,options.developmentRound) : null;
       // Legacy SLA observations are fallback only. A corrected native fact (including an
       // explicitly unknown completion) must replace, not merge with, its obsolete copy.
       const facts = applyOrderCreationEvidence({ ...(current?await repo.facts(orderId):{}),
