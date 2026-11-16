@@ -2,7 +2,7 @@
   "version": 1,
   "base": "db7caa28ec24c2a91b5038d5a167826a95a28513",
   "risk": "full",
-  "sourceFingerprint": "1505a019d6a74fa7d6a5872780e15c3add906b60143b0a71c902608909629cfa",
+  "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
   "rules": [
     {
       "rule": "Use true original complete factory/PO/step occurrences, preserve administrative/audit time and explicit correction including unknown; Root receipt correction keeps cumulative and effective per-receipt facts aligned, never guesses a multi-receipt split.",
@@ -27,6 +27,7 @@
         "docs/requirements/sourcing-supplier-production-v1.0.md",
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/helpers/receiving-difference-authority-scenario.ts",
         "tests/integration/production-facts-consistency-postgres.test.ts",
         "tests/integration/receiving-board-native-browser-postgres.test.ts",
         "tests/integration/receiving-postgres.test.ts",
@@ -60,61 +61,85 @@
         "tests/unit/factory-task-completion.test.ts",
         "tests/unit/factory-completion-occurrence.test.ts"
       ],
-      "initialization": "Additive0294 only broadens receipt-correction provenance CHECK to original legacy/initial/backfill, with original source retained by omission and immutable correction append. No original receipt or audit rewrite/backfill. Mutable totals use effective original facts; card multi-receipt quantity changes require exact original receipt correction. Existing style/image/merge privileges remain. Existing dirty trigger reused; calculationVersionv8 causes original cache rebuild. Workflow1 reads exact original whole-style contract without requiring v2 physical records; native step scope cannot borrow sibling/preparation. Old completion corrections remain authoritative; no new business clocks or PO allocations.",
+      "initialization": "Additive0294 only broadens receipt-correction provenance CHECK to original legacy/initial/backfill, with original source retained by omission and immutable correction append. No original receipt or audit rewrite/backfill. Mutable totals use effective original facts; card multi-receipt quantity changes require exact original receipt correction. Existing style/image/merge privileges remain. Existing dirty trigger reused; calculationVersionv8 causes original cache rebuild. Workflow1 reads exact original whole-style contract without requiring v2 physical records; native step scope cannot borrow sibling/preparation. Old completion corrections remain authoritative; no new business clocks or PO allocations. Supplemental review4582562432: original0086 migration freezes batch.created_at to minimum immutable receipt.received_at; combine that exact historical origin proof with native creation-batch identity, so later repeat cannot replace migrated target baseline and older merged legacy/native source cannot become target. Pending0294 also converts correction.request_id UUID to unchanged textual values with original128-character receiving pattern; real req-1c is retained identically in correction and operation audit. No random replacement UUID or original fact rewrite.",
       "dateAndPermission": "Original current/manual dispatch validation, milliseconds, exact step/PO/preparation identity and full quantity coverage retained. Process return, QC and warehouse task ends use respective native sources; terminal_recorded_at stays audit. Full and compact task/Journey/plan readers aligned. Root original null correction cannot revive registration time. Original Root-only correction, actor/object/expected-version/native origin and first-delivery scope remain; shared style then batch lock prevents receipt-before-style FK lock inversion, concurrent same-version corrections one success/one conflict. PMC/warehouse receive no new edits. One receipt history available via existing UI and original receiving provenance not guessed; original quantity0 preserved, effective QC invalidated by original quantityVersion rules.",
-      "expectation": "Current135focusedunits+46realPG/App pass. Genuine split dispatch does not finish at first PO; last19:39:00.123 used instead of19:41:46.479 registration, root unknown respected and original perPO facts unchanged. Single receipt2→0→2 aligns closure, first delivery and effective quantity/QC while raw receipt remains immutable; multireceipt aggregate overwrite rejected and concurrent per-receipt version guard preserved. Real original App single history correction omits initial-source reclassification and retains warehouse read-only at1165/390. No claim all historical/onsite/rollback paths verified; exact candidate Light once, Review and Full still required.",
+      "expectation": "Current135focusedunits + native47 + separately selected original HTTP1 pass. Mixed original0086 legacy/native repeat and older legacy merge preserve target note50→60→65; laterjiashun70 and merged-source80 do not replace baseline, raw facts unchanged. Original older native200→target100 regression remains. Root HTTP request ID text persisted exactly to original audit, full/ordinary role denials retained. Prior remote Full595 failed one realRoot500, nonDB passed; new exact candidate still requires Review closure/Full and is not represented as remotely green.",
       "checks": [
         "unit",
-        "native-pg"
+        "native-pg",
+        "native-http"
       ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "vitest run ten focused source/scope/correction/read/UI/mapping suites --maxWorkers=1 --reporter=json",
+      "command": "Pinned Node22 Vitest ten original focused unit suites, one worker, default+JSON reporters",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
       "passed": 135,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "657d393fe5e594efeefef635dfb102b3611c3452",
-      "sourceFingerprint": "1505a019d6a74fa7d6a5872780e15c3add906b60143b0a71c902608909629cfa",
-      "startedAt": "2026-11-16T05:51:49.159Z",
-      "endedAt": "2026-11-16T05:51:53.689Z",
-      "log": "/tmp/production-facts-review-unit.log",
-      "logSha256": "ac31523f7f3bc22e05c8504ef7e91a6c98b68c4d3e16bed2009f9a5cf549da0d",
+      "testedHead": "595abf9522a92659d6261e2169efc1897c794535",
+      "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
+      "startedAt": "2026-11-16T06:30:55.466Z",
+      "endedAt": "2026-11-16T06:31:00.015Z",
+      "log": "/tmp/production-facts-legacy-final-unit.log",
+      "logSha256": "2cc1c1265da604ea2d65d321ad75dff186fbbe99e41962453b75404b4c011dfb",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0e896587d02d2e15e7f3c41e81e9e6188d29698f5c7aeeb2cb57b598f7669c24"
+          "sha256": "98556a3275a5abf09037e1801bef0fe780deb9414a471f0bedab5fc8c5f325c8"
         }
       ],
-      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies and own workspace builds, not fresh npm ci. PG16-bookworm512MiB owned tmpfs, non-superuser/NOBYPASSRLS marked isolated database, original role seeder/API/App and schema/container cleaned. Current 46 PG/App tests or 135 focused units, not live Acceptance/production. Earlier full local nonDB4143passed/1staleUIassertion failed and broaderPG57passed/1oldcacheversion failed remain failed historical reports; fixed exact-expected assertions are covered here, no claim those whole earlier runs passed. No deployment/live data or historical-submit replay."
+      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun."
     },
     {
       "id": "native-pg",
-      "command": "bash /tmp/production-facts-pg.sh production-facts-consistency, receiving-board-native-browser, special-craft-native; original marked lowpriv PG16 owned fixture and real App",
+      "command": "bash /tmp/production-facts-legacy-verified.sh, first original business-chain phase: receiving40 + original App5 + production-facts2",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "passed": 46,
+      "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "657d393fe5e594efeefef635dfb102b3611c3452",
-      "sourceFingerprint": "1505a019d6a74fa7d6a5872780e15c3add906b60143b0a71c902608909629cfa",
-      "startedAt": "2026-11-16T05:50:42.399Z",
-      "endedAt": "2026-11-16T05:51:16.837Z",
-      "log": "/tmp/production-facts-review-pg.log",
-      "logSha256": "0df5629ca7df0d9fa4b68364057c49c741bc90e833236f96b2b6413df85ec3d4",
+      "testedHead": "595abf9522a92659d6261e2169efc1897c794535",
+      "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
+      "startedAt": "2026-11-16T06:29:19.093Z",
+      "endedAt": "2026-11-16T06:29:57.024Z",
+      "log": "/tmp/production-facts-legacy-verified-final.log",
+      "logSha256": "35e1fbf1d688dbbed6d4f90a99e387fb817b4003a6e7047e28735d50d61ebc4a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f3e87aec54b41c3fa5aa20e68dee0926254d372641575e27ddf6921679b15db0"
+          "sha256": "b89235241d1e680015d143d42db3f191b2016cf0e4ba4d1360ecc7d1ab120f0e"
         }
       ],
-      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies and own workspace builds, not fresh npm ci. PG16-bookworm512MiB owned tmpfs, non-superuser/NOBYPASSRLS marked isolated database, original role seeder/API/App and schema/container cleaned. Current 46 PG/App tests or 135 focused units, not live Acceptance/production. Earlier full local nonDB4143passed/1staleUIassertion failed and broaderPG57passed/1oldcacheversion failed remain failed historical reports; fixed exact-expected assertions are covered here, no claim those whole earlier runs passed. No deployment/live data or historical-submit replay."
+      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun."
+    },
+    {
+      "id": "native-http",
+      "command": "Same owned script, original immediate config full-business-chain suite filtered to the discrepancy/Root authority scenario",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 59,
+      "testedHead": "595abf9522a92659d6261e2169efc1897c794535",
+      "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
+      "startedAt": "2026-11-16T06:29:58.226Z",
+      "endedAt": "2026-11-16T06:30:07.594Z",
+      "log": "/tmp/production-facts-legacy-verified-final.log",
+      "logSha256": "35e1fbf1d688dbbed6d4f90a99e387fb817b4003a6e7047e28735d50d61ebc4a",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "32e720f6374ba16229d7ec44053fa5609f5a39665e8ade5ec082f61f3a577e0a"
+        }
+      ],
+      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun."
     }
   ]
 }

@@ -1798,10 +1798,16 @@ export class ReceivingService {
                 receipt.receipt_id=(
                   SELECT base.receipt_id
                   FROM receiving_receipts base
+                  JOIN receiving_batches origin ON origin.receiving_batch_id=base.receiving_batch_id
+                  JOIN operation_events creation ON creation.event_id=base.operation_event_id
                   WHERE base.receiving_batch_id=receipt.receiving_batch_id
+                  -- 0086 froze a migrated batch's creation at its earliest original
+                  -- receipt. That proven baseline precedes later native repeats;
+                  -- an older receipt merged from another batch cannot claim it.
                   ORDER BY CASE
-                    WHEN (SELECT e.after_state->>'receivingBatchId' FROM operation_events e WHERE e.event_id=base.operation_event_id)=base.receiving_batch_id::text THEN 0
-                    WHEN (SELECT e.after_state ? 'receivingBatchId' FROM operation_events e WHERE e.event_id=base.operation_event_id) THEN 2
+                    WHEN creation.after_state->>'receivingBatchId'=base.receiving_batch_id::text
+                      OR NOT (creation.after_state ? 'receivingBatchId') AND base.received_at=origin.created_at THEN 0
+                    WHEN creation.after_state ? 'receivingBatchId' THEN 2
                     ELSE 1 END,base.received_at,base.receipt_id
                   LIMIT 1
                 ) AS is_base_receipt

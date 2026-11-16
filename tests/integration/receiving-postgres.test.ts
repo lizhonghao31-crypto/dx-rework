@@ -290,6 +290,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       "INSERT INTO app_users(id,display_name,enabled) VALUES($1,'仓管测试',true)",
       [receiverId],
     );
+    await insertLegacyReceipt('TEST-LEGACY-MERGED-SOURCE');
     await insertLegacyReceipt();
     await insertLegacyReceipt(" style-legacy-case-01 ");
     await migration("0086_receiving_rework_evidence_link.sql");
@@ -1328,7 +1329,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     );
     expect(firstLink.rows[0]?.source_receiving_batch_id).toBe(receipt.value.receivingBatchId);
 
-    let board = await service.board(businessDate());
+    let board = await service.board(businessDate(),businessDate(),'STYLE-REWORK-LINK-01');
     expect(board.rows.find((item) => item.receivingBatchId === receipt.value.receivingBatchId)).toMatchObject({
       reworkOrderId: firstDraftId,
       reworkStatus: "draft",
@@ -1742,6 +1743,26 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     current=await service.correctReceipt(rootCorrector(),source.value.receiptId,{expectedVersion:current.version,documentQuantity:210,actualQuantity:1,defectiveQuantity:0});expect(current.documentQuantity).toBe(110);
     expect((await database.query('SELECT receipt_id,document_quantity,actual_quantity,receiving_source,received_at FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id',[target.value.receivingBatchId])).rows).toEqual(original);
     const row=(await service.board(businessDate(),businessDate(),'TEST-MERGE-TARGET-100')).rows[0]!;expect(row).toMatchObject({documentQuantity:110,currentActualQuantity:2,receiptCount:2});
+  });
+
+  it("retains the migrated original note when native repeated receipts are appended",async()=>{
+    const original=(await database.query("SELECT receipt_id,receiving_batch_id,document_quantity,actual_quantity,receiving_source FROM receiving_receipts WHERE style_no='STYLE-LEGACY-01'")).rows[0]!;
+    const row=(await service.board(businessDate(),businessDate(),'STYLE-LEGACY-01')).rows[0]!;
+    await service.correctBatch(rootCorrector(),original.receiving_batch_id,{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:50,actualQuantity:45,attachmentIds:[await readyImage()]});
+    const added=await service.createRepeated(receiver(),{receivingBatchId:original.receiving_batch_id,source:'jiashun',actualQuantity:5,defectiveQuantity:0},randomUUID());
+    let current=(await service.board(businessDate(),businessDate(),'STYLE-LEGACY-01')).rows[0]!;
+    const corrected=await service.correctReceipt(rootCorrector(),original.receipt_id,{expectedVersion:current.version,documentQuantity:60,actualQuantity:45,defectiveQuantity:0});
+    expect(corrected).toMatchObject({documentQuantity:60,actualQuantity:50});
+    current=(await service.board(businessDate(),businessDate(),'STYLE-LEGACY-01')).rows[0]!;
+    expect(await service.correctReceipt(rootCorrector(),added.value.receiptId,{expectedVersion:current.version,documentQuantity:70,actualQuantity:5,defectiveQuantity:0})).toMatchObject({documentQuantity:60,actualQuantity:50});
+    const source=(await database.query("SELECT receipt_id,receiving_batch_id,received_at FROM receiving_receipts WHERE style_no='TEST-LEGACY-MERGED-SOURCE'")).rows[0]!;
+    const sourceRow=(await service.board(businessDate(),businessDate(),'TEST-LEGACY-MERGED-SOURCE')).rows[0]!;
+    const merged=await service.correctBatch(rootCorrector(),source.receiving_batch_id,{expectedVersion:sourceRow.version,styleNo:row.styleNo,documentQuantity:50,actualQuantity:45,defectiveQuantity:0});
+    expect(merged).toMatchObject({documentQuantity:60,actualQuantity:95});
+    const correctedSource=await service.correctReceipt(rootCorrector(),source.receipt_id,{expectedVersion:merged.version,documentQuantity:80,actualQuantity:40,defectiveQuantity:0});
+    expect(correctedSource).toMatchObject({documentQuantity:60,actualQuantity:90});
+    expect(await service.correctReceipt(rootCorrector(),original.receipt_id,{expectedVersion:correctedSource.version,documentQuantity:65,actualQuantity:45,defectiveQuantity:0})).toMatchObject({documentQuantity:65,actualQuantity:90});
+    expect((await database.query('SELECT receipt_id,receiving_batch_id,document_quantity,actual_quantity,receiving_source FROM receiving_receipts WHERE receipt_id=$1',[original.receipt_id])).rows[0]).toEqual(original);
   });
 
   it("lets Root merge a typo batch into a canonical batch that already has rework and reconcile quantities", async () => {
