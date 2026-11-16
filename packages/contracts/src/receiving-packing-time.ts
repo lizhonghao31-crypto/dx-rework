@@ -14,6 +14,14 @@ export const PackingActualTimeSchema=z.discriminatedUnion('precision',[
  z.object({precision:z.literal('unknown')}).strict(),
 ]);
 export type PackingActualTime=z.infer<typeof PackingActualTimeSchema>;
+export const PackingAllocationInputSchema=z.object({receiptId:z.string().uuid(),quantityVersion:z.string().uuid(),quantity:z.number().int().min(1).max(10000000),packingTime:PackingTimeInputSchema}).strict();
+export const PackingAllocationsInputSchema=z.array(PackingAllocationInputSchema).max(500).superRefine((rows,context)=>{
+ if(new Set(rows.map(row=>row.receiptId)).size!==rows.length)context.addIssue({code:'custom',message:'同一收货记录不能重复分配装箱'});
+});
+export type PackingAllocationInput=z.infer<typeof PackingAllocationInputSchema>;
+export const PackingAllocationSchema=PackingAllocationInputSchema.omit({packingTime:true}).extend({actualTime:PackingActualTimeSchema}).strict();
+export const PackingAllocationsSchema=z.array(PackingAllocationSchema).max(500);
+export type PackingAllocation=z.infer<typeof PackingAllocationSchema>;
 export function packingActualTime(value:unknown):PackingActualTime{
  const parsed=PackingActualTimeSchema.safeParse(value);
  return parsed.success?parsed.data:{precision:'unknown'};

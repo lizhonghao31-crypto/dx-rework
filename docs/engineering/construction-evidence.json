@@ -1,77 +1,86 @@
 {
   "version": 1,
-  "base": "db7caa28ec24c2a91b5038d5a167826a95a28513",
+  "base": "45176bec3b907d4573cbafa74cf5287c3ba1c5e9",
   "risk": "full",
-  "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
+  "sourceFingerprint": "89f0afc2494f9e056dc629f99a6af5a59fe0951cfa5763ef66ca18f26de24624",
   "rules": [
     {
-      "rule": "Use true original complete factory/PO/step occurrences, preserve administrative/audit time and explicit correction including unknown; Root receipt correction keeps cumulative and effective per-receipt facts aligned, never guesses a multi-receipt split.",
-      "source": "2026-11-16 user via Dot authorized three PRs sequentially, PR1 goods occurrence/correction consistency on merged1006 db7; approved v27 section4.3 real dispatch and first effective receipt, existing Root-only quantity correction. OUTCUT2 last physical dispatch19:39 vs task19:41:46.479 and U5single receipt aggregate0/raw2 are exact supplied isolated counterexamples. Packing PR2, order-time check/feedback PR3 and paused homepage excluded.",
+      "rule": "Prove whole-PO packing readiness separately from explicit original receipt allocation; preserve real packing completion, trustworthy quantity/version/QC/washing/rework evidence and original per-window allowance/calendar, never infer FIFO or last-QC batch starts.",
+      "source": "Approved time framework v27 sections4.3 and6.1, 2026-11-16 user via Dot three-PR repair plan PR2; original cumulative packing lacks per-receipt completion association. User authorized minimal native relation using existing events. No homepage, deployment, live correction or unknown-submit replay.",
       "writes": [
-        "apps/api/migrations/0294_receiving_correction_provenance.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/factory-completion-occurrence.ts",
-        "apps/api/src/production-platform/factory-task-completion.ts",
+        "apps/api/src/production-platform/garment-quality.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-factory-deadlines.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-task-summary.ts",
+        "apps/api/src/production-platform/order-closure-routes.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/order-document-history.ts",
         "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/packing-allocation-evidence.ts",
+        "apps/api/src/production-platform/packing-readiness-evidence.ts",
+        "apps/api/src/production-platform/packing-scope-readiness.ts",
+        "apps/api/src/production-platform/packing-sla-evidence.ts",
+        "apps/api/src/receiving/packing-receipt-allocations.ts",
+        "apps/api/src/receiving/receiving-board-query.ts",
+        "apps/api/src/receiving/receiving-quantity-query.ts",
         "apps/api/src/receiving/receiving-routes.ts",
         "apps/api/src/receiving/receiving-service.ts",
+        "apps/web/src/cockpit-documents-production.ts",
+        "apps/web/src/garment-quality-form.tsx",
+        "apps/web/src/order-board-page.css",
         "apps/web/src/order-board-page.tsx",
+        "apps/web/src/order-closure-panel.tsx",
+        "apps/web/src/packing-receipt-allocation-fields.tsx",
         "apps/web/src/receiving-board-edit-session.tsx",
+        "apps/web/src/receiving-board-types.ts",
         "docs/engineering/acceptance-time-sites-20261027.json",
-        "docs/engineering/factory-completion-occurrence.md",
+        "docs/engineering/construction-evidence.json",
+        "docs/engineering/packing-receipt-responsibility.md",
         "docs/requirements/sourcing-supplier-production-v1.0.md",
+        "packages/contracts/src/order-closure.ts",
+        "packages/contracts/src/receiving-packing-time.ts",
+        "packages/domain/src/digital-sla-plan.ts",
         "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/bulk-washing-browser-postgres.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts",
         "tests/integration/effective-packing-postgres.test.ts",
-        "tests/integration/helpers/receiving-difference-authority-scenario.ts",
-        "tests/integration/production-facts-consistency-postgres.test.ts",
         "tests/integration/receiving-board-native-browser-postgres.test.ts",
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
         "tests/integration/special-craft-native-postgres.test.ts",
-        "tests/unit/factory-completion-occurrence.test.ts",
-        "tests/unit/factory-task-completion.test.ts",
-        "tests/unit/rework-v2-pr08-information-display.test.ts"
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/order-time-reading.test.ts",
+        "tests/unit/packing-readiness-evidence.test.ts",
+        "tests/unit/packing-scope-readiness.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/factory-sla-evidence.ts",
-        "apps/api/src/production-platform/factory-batch-timing.ts",
-        "apps/api/src/production-platform/fixed-factory-timing.ts",
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/garment-quality.ts",
-        "apps/api/src/production-platform/factory-delivery-reading.ts",
-        "apps/api/src/production-platform/receiving-span.ts",
-        "apps/api/src/receiving/receiving-board-query.ts",
-        "apps/api/src/receiving/receiving-quantity-query.ts"
+        "apps/api/src/production-platform/packing-quality-coverage.ts",
+        "apps/api/src/production-platform/bulk-washing-coverage.ts",
+        "apps/api/src/production-platform/rework-sla-evidence.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/receiving/packing-actual-time.ts",
+        "apps/web/src/order-closure-panel.tsx"
       ],
       "oldTests": [
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/rework-sla-evidence.test.ts",
         "tests/integration/effective-packing-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
         "tests/integration/receiving-board-native-browser-postgres.test.ts",
+        "tests/integration/bulk-washing-browser-postgres.test.ts",
         "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/special-craft-native-postgres.test.ts",
-        "tests/unit/journey-factory-deadlines.test.ts",
-        "tests/unit/order-time-reading.test.ts"
+        "tests/unit/order-time-reading.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts"
       ],
       "newTests": [
-        "tests/integration/production-facts-consistency-postgres.test.ts",
-        "tests/unit/factory-task-completion.test.ts",
-        "tests/unit/factory-completion-occurrence.test.ts"
+        "tests/unit/packing-readiness-evidence.test.ts",
+        "tests/unit/packing-scope-readiness.test.ts"
       ],
-      "initialization": "Additive0294 only broadens receipt-correction provenance CHECK to original legacy/initial/backfill, with original source retained by omission and immutable correction append. No original receipt or audit rewrite/backfill. Mutable totals use effective original facts; card multi-receipt quantity changes require exact original receipt correction. Existing style/image/merge privileges remain. Existing dirty trigger reused; calculationVersionv8 causes original cache rebuild. Workflow1 reads exact original whole-style contract without requiring v2 physical records; native step scope cannot borrow sibling/preparation. Old completion corrections remain authoritative; no new business clocks or PO allocations. Supplemental review4582562432: original0086 migration freezes batch.created_at to minimum immutable receipt.received_at; combine that exact historical origin proof with native creation-batch identity, so later repeat cannot replace migrated target baseline and older merged legacy/native source cannot become target. Pending0294 also converts correction.request_id UUID to unchanged textual values with original128-character receiving pattern; real req-1c is retained identically in correction and operation audit. No random replacement UUID or original fact rewrite.",
-      "dateAndPermission": "Original current/manual dispatch validation, milliseconds, exact step/PO/preparation identity and full quantity coverage retained. Process return, QC and warehouse task ends use respective native sources; terminal_recorded_at stays audit. Full and compact task/Journey/plan readers aligned. Root original null correction cannot revive registration time. Original Root-only correction, actor/object/expected-version/native origin and first-delivery scope remain; shared style then batch lock prevents receipt-before-style FK lock inversion, concurrent same-version corrections one success/one conflict. PMC/warehouse receive no new edits. One receipt history available via existing UI and original receiving provenance not guessed; original quantity0 preserved, effective QC invalidated by original quantityVersion rules.",
-      "expectation": "Current135 units,47 original PG/App plus1 filtered original Root HTTP, and2 old consumer PG cases pass; raw quantities and provenance immutable, effective correction scope and QC invalidation retained. Multireceipt aggregate mutation409 then exact receipt correction preserves current calendar/read/facts unknown. Single1→2 raw1/current2, inspected2/qualified1/uninspectedGap0, packed2/effectivePackedunknown preserve actual failed quality. Previous remoteFull511pass/2fail remains failure; new exact Full required; later skipped phases not claimed.",
+      "initialization": "No SQL/backfill. Optional additive contract fields and original operation-event allocations remain old-reader compatible. Old missing allocations retain real cumulative completion and explicitly bounded whole-PO/unknown evidence; no generated batch timestamps. Original source/step/cut/PO, effective quantityVersion, washing coverage and physical rework evidence reused. Journey cache calculationVersionv9 triggers original rebuild, original event dirty triggers cover native QC/verification. FullApp browser fixture now registers real closure service, not stub responses.",
+      "dateAndPermission": "Warehouse original first packing/Root later correction and original expected-version/style locks unchanged. Explicit allocation must sum to cumulative packing, fit current same-cut/style receipt and exact effective quantityVersion. Unknown/date/unverified/future required conditions do not certify responsibility instant. Original manual QC remains unverified; explicit now takes one command business time, Root verifies exact current original event/time/scope via append-only audited event with DB Root recheck, original unauthorized object404 retained. No retiming or re-creation of QC/receipt/packing. Repeated all-pass does not reset continuous readiness; failed quality/corrected quantity invalidates prior coverage. Per-batch original policy selected at each R; current unknown warning cleared while original history retained.",
+      "expectation": "Current209 units pass, including40 original PMC permission cases with the new exact physical-work lookup stub and3 existing rework-evidence cases. Native73 remains valid with unchanged exact production/DB/App/integration/runtime inputs, referenced by original SHA/result and explicitly bounded inputFingerprint; not falsely rerun for a unit-fixture-only change. Review4583316626 now matches each factory receipt to exact live linked completion inspections; unrelated later or unknown sibling inspections do not shift or erase currentR. A real2+2 native case verifies A-R10/B-R16, unknown sibling and exact allocation windows. Native two-receipt whole-PO convergence vs independent batch windows, reported QC unknown then exact Root verification and idempotent replay, unchanged raw event and packing actual, two .123 completions, wrong-cut allocation denied, quantity correction invalidation, first warehouse/Root correction scopes and original receiving cases pass. Browser1165/390 retains original fields, restores mappings, normal checkbox and no horizontal overflow; original QC now/verification page passes. Latest lint/API+webtypes/preflight/secret exit0 separately. No GitHub Full, PG13 compatibility or live acceptance claimed.",
       "checks": [
         "unit",
-        "native-pg",
-        "consumers-pg"
+        "native-pg"
       ]
     }
   ],
@@ -79,75 +88,62 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run ten source/scope/correction/read/UI/mapping unit suites --maxWorkers=1",
+      "command": "vitest run tests/unit/order-time-reading.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/packing-readiness-evidence.test.ts tests/unit/packing-sla-evidence.test.ts tests/unit/packing-scope-readiness.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/rework-sla-evidence.test.ts --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 135,
+      "passed": 209,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "61a1d917fe0af781239247adc27196f479338e4e",
-      "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
-      "startedAt": "2026-11-16T07:19:29.564Z",
-      "endedAt": "2026-11-16T07:19:37.127Z",
-      "log": "/tmp/production-facts-consumers-unit.log",
-      "logSha256": "6b6d247f9c512adb1bc58a74b54c2ce6568819be2a96f7345eb34cec50d42cb5",
+      "testedHead": "cd3046ee4f36c4ea126a8df7ff73f3762fb3f289",
+      "sourceFingerprint": "89f0afc2494f9e056dc629f99a6af5a59fe0951cfa5763ef66ca18f26de24624",
+      "startedAt": "2026-11-16T08:59:51.299Z",
+      "endedAt": "2026-11-16T08:59:57.028Z",
+      "log": "/tmp/packing-readiness-consumer-current-unit.log",
+      "logSha256": "0243aaaec1f88921e5f030536e5952457e82a7ddc6dcdde4f8e4c1f7c0f3e645",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e1faf1d9002ecb78415e4e5008069aa4c885f20fcfa4b70e6fd2ec402ee0d9f4"
+          "sha256": "4344bde0377fb069a335b79fbb611d7d822c63acec819068fce9fc60266c1527"
         }
       ],
-      "context": "Actual current worktree tests; Node22.22.2/npm10.9.9, exact-lock reused dependencies, own workspace builds. Marked isolated lowpriv PG16-bookworm, original authenticated App/native services and cleanup, not live Acceptance/production. Previous61 Full common/nonDB passed but PG511passed/2stale-consumer assumptions failed, later stages unrun. No Light rerun or production guard relaxation. This new source tested after aligning only two old test consumers with already-approved effective receipt correction behavior."
+      "context": "Actual assembled worktree on PR1 squash merge45176bec; Node22.22.2/npm10.9.9, exact lock dependencies and own workspace builds. Original business-chain config, single worker, marked isolated non-superuser PG16-bookworm database in one exact owned512MiB tmpfs container; original authenticated Apps/roles and exact cleanup exit0. No Acceptance or production writes. Unit209/PG73 are actual results, not remote Full or live acceptance."
     },
     {
       "id": "native-pg",
       "kind": "tests",
-      "command": "bash /tmp/production-facts-consumers-verified.sh",
+      "command": "bash /tmp/packing-readiness-regression-pg.sh tests/integration/effective-packing-postgres.test.ts tests/integration/receiving-board-native-browser-postgres.test.ts tests/integration/bulk-washing-browser-postgres.test.ts tests/integration/receiving-postgres.test.ts tests/integration/bulk-washing-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 48,
+      "passed": 73,
       "failed": 0,
-      "skipped": 59,
-      "testedHead": "61a1d917fe0af781239247adc27196f479338e4e",
-      "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
-      "startedAt": "2026-11-16T07:19:31.244Z",
-      "endedAt": "2026-11-16T07:20:20.565Z",
-      "log": "/tmp/production-facts-consumers-verified.log",
-      "logSha256": "fef18a9c53b6c799c2000260d1d971732bde01597e544b5fc523d5244aaa8a9b",
+      "skipped": 0,
+      "testedHead": "731d5924c4d53fc54cae3eadf522dc3c2307a35a",
+      "sourceFingerprint": "28488704cb94a92b86b39d63b0bc1c89267a1bde245148de5344bd6e1c566c01",
+      "startedAt": "2026-11-16T08:37:08.495Z",
+      "endedAt": "2026-11-16T08:39:38.440Z",
+      "log": "/tmp/packing-readiness-review-current-native.log",
+      "logSha256": "5c5932c202c7cd3779868997a1a337fc5e89ba831401608cdb4e8f007bfe457c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a28f5537fcbf96197ea3960ff5b10085ebb1d026816587da98770f083acf2879"
-        },
-        {
-          "format": "vitest-json",
-          "sha256": "e794fc773f4dedb8511fe6ee91fb83c74d2e8300f8d67229d0c0b0ec4f49be48"
+          "sha256": "39717afa8bd1ef5697d9914f56e1b14eead59a6777d84dded14bd53d68fdd63b"
         }
       ],
-      "context": "Actual current worktree tests; Node22.22.2/npm10.9.9, exact-lock reused dependencies, own workspace builds. Marked isolated lowpriv PG16-bookworm, original authenticated App/native services and cleanup, not live Acceptance/production. Previous61 Full common/nonDB passed but PG511passed/2stale-consumer assumptions failed, later stages unrun. No Light rerun or production guard relaxation. This new source tested after aligning only two old test consumers with already-approved effective receipt correction behavior."
-    },
-    {
-      "id": "consumers-pg",
-      "kind": "tests",
-      "command": "bash /tmp/production-facts-full-consumers.sh tests/integration/effective-packing-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts -t 'keeps recorded four distinct|P01-06 keeps'",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 2,
-      "failed": 0,
-      "skipped": 147,
-      "testedHead": "61a1d917fe0af781239247adc27196f479338e4e",
-      "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
-      "startedAt": "2026-11-16T07:18:36.536Z",
-      "endedAt": "2026-11-16T07:19:01.814Z",
-      "log": "/tmp/production-facts-full-consumers.log",
-      "logSha256": "322900332ccc4d3ce0518479cec7c6c512fdbe55065556bbbabdfdb8f549056a",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "53a87a18aa5dfd9266e118dfbeccd9d8aebe37584e700aa62d13280245e73387"
-        }
+      "context": "Actual assembled worktree on PR1 squash merge45176bec; Node22.22.2/npm10.9.9, exact lock dependencies and own workspace builds. Original business-chain config, single worker, marked isolated non-superuser PG16-bookworm database in one exact owned512MiB tmpfs container; original authenticated Apps/roles and exact cleanup exit0. No Acceptance or production writes. Unit166/PG73 are actual results, not remote Full or live acceptance. Original tested source284887 and current production/integration/config inputs compared exactly unchanged; only original PMC unit-query fixture changed, no PG rerun claimed.",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
       ],
-      "context": "Actual current worktree tests; Node22.22.2/npm10.9.9, exact-lock reused dependencies, own workspace builds. Marked isolated lowpriv PG16-bookworm, original authenticated App/native services and cleanup, not live Acceptance/production. Previous61 Full common/nonDB passed but PG511passed/2stale-consumer assumptions failed, later stages unrun. No Light rerun or production guard relaxation. This new source tested after aligning only two old test consumers with already-approved effective receipt correction behavior."
+      "inputFingerprint": "ee4b7db66d7f90f042c5d11b2771d950c401092ca5fb00c31152243563d8f6b7"
     }
   ]
 }

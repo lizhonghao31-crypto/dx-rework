@@ -1,3 +1,5 @@
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
+import {packingSlaEvidence} from '../../apps/api/src/production-platform/packing-sla-evidence.js';
 import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
 import {bulkWashingTodos} from '../../apps/api/src/production-platform/bulk-washing-todos.js';
 import {todoDestination} from '@dx-rework/contracts/todo-destination';
@@ -250,6 +252,48 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT version,document,totals FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version',[id])).rows).toEqual(budgets);
   await service.record(f.root,id,{...await command(),kind:'void',factId:failed.eventId,reason:'TEST invalidated original evidence, retain descendants for investigation'},randomUUID());
   expect((await read()).ledger).toMatchObject({conflict:true,qualified:null,complete:false});expect((await readWashingCoverage(f.db,id)).get(receipt.receiptId)).toBeNull();
+ });
+ it('keeps factory-linked receipt packing windows independent across later and unknown sibling wash checks',async()=>{
+  const scene=await f.scene('2026-11-15T08:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const ready=await f.bulkReady('无',undefined,1,undefined,{quantity:4}),id=ready.id;
+   const po=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows[0].line_id;
+   const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].cutting_order_id;
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:4,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),sheet=await flow.read(f.root,id);await flow.dispatch(f.root,id,{expectedRevision:sheet.revision,supplierId:f.supplierId,note:'TEST two real wash completions'},randomUUID());
+   const production=(await flow.read(f.root,id)).productionId!,reports=new ProductionReportingService(f.db);
+   await reports.report(f.root,production,{position:1,businessDate:'2026-11-15',quantity:4},randomUUID());
+   for(const action of ['complete','ship'] as const)await reports.execute(f.root,production,action,{businessDate:'2026-11-15',confirmed:true},randomUUID());
+   const db=await f.db.connect();try{await db.query('BEGIN');await adoptBulkWashingWithClient(db,f.root,id,po,0,{...adoption,fee:{kind:'pending'},staff:{logisticsId:logistics.actor.actorId,inspectorId:f.people.qc!.actorId},arrangement:{...adoption.arrangement,mode:'factory'} as BulkWashingAdoption['arrangement']});await db.query('COMMIT');}finally{db.release();}
+   const command=async(at:string|null)=>{const scope=(await service.read(f.root,id)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:at,note:'TEST exact receipt-linked wash evidence'};};
+   const started=await service.record(f.root,id,{...await command('2026-11-15T08:00:00.000Z'),kind:'factory_start',quantity:4},randomUUID());
+   await f.advance(scene,'2026-11-15T10:00:00.000Z');return f.runtime.withObservation(scene,async()=>{
+   const firstDone=await service.record(f.root,id,{...await command('2026-11-15T08:30:00.000Z'),kind:'factory_complete',startId:started.eventId,quantity:2},randomUUID());
+   await service.record(f.root,id,{...await command('2026-11-15T09:00:00.000Z'),kind:'inspection',completionId:firstDone.eventId,quantity:2,qualifiedQuantity:2},randomUUID());
+   const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
+   const first=(await receiving.create(warehouse,{cuttingOrderId:cut,documentQuantity:4,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID())).value;
+   const receiptA=(await garmentQuality(f.db,id))[0]!;await new GarmentQualityService(f.db).record(f.root,id,{receiptId:receiptA.receiptId,quantityVersion:receiptA.quantityVersion,qualifiedQuantity:2,problem:'',timeMode:'now'},randomUUID());
+   await service.record(f.root,id,{...await command('2026-11-15T10:00:00.000Z'),kind:'receipt_link',completionId:firstDone.eventId,receiptId:receiptA.receiptId,receiptQuantityVersion:receiptA.quantityVersion,quantity:2},randomUUID());
+   await f.advance(scene,'2026-11-15T16:00:00.000Z');return f.runtime.withObservation(scene,async()=>{
+   const secondDone=await service.record(f.root,id,{...await command('2026-11-15T14:00:00.000Z'),kind:'factory_complete',startId:started.eventId,quantity:2},randomUUID());
+   const unknown=await service.record(f.root,id,{...await command(null),kind:'inspection',completionId:secondDone.eventId,quantity:2,qualifiedQuantity:2},randomUUID());
+   await receiving.createRepeated(warehouse,{receivingBatchId:first.receivingBatchId,cuttingOrderId:cut,source:'jiashun',actualQuantity:2,defectiveQuantity:0},randomUUID());
+   const receiptB=(await garmentQuality(f.db,id)).find(q=>q.receiptId!==receiptA.receiptId)!;await new GarmentQualityService(f.db).record(f.root,id,{receiptId:receiptB.receiptId,quantityVersion:receiptB.quantityVersion,qualifiedQuantity:2,problem:'',timeMode:'now'},randomUUID());
+   await service.record(f.root,id,{...await command('2026-11-15T16:00:00.000Z'),kind:'receipt_link',completionId:secondDone.eventId,receiptId:receiptB.receiptId,receiptQuantityVersion:receiptB.quantityVersion,quantity:2},randomUUID());
+   const closure=new OrderClosureService(f.db);let current=await closure.read(f.root,id);
+   const perReceipt=(receiptId:string)=>current.lines[0]!.packingReadiness!.receipts.find(row=>row.receiptId===receiptId)!.readiness;
+   expect(perReceipt(receiptA.receiptId).ready).toEqual({precision:'instant',at:'2026-11-15T10:00:00.000Z'});expect(perReceipt(receiptB.receiptId).state).toBe('unknown');
+   await service.record(f.root,id,{...await command(null),kind:'void',factId:unknown.eventId,reason:'TEST record true known sibling inspection time'},randomUUID());
+   await service.record(f.root,id,{...await command('2026-11-15T15:00:00.000Z'),kind:'inspection',completionId:secondDone.eventId,quantity:2,qualifiedQuantity:2},randomUUID());
+   current=await closure.read(f.root,id);expect(perReceipt(receiptA.receiptId).ready).toEqual({precision:'instant',at:'2026-11-15T10:00:00.000Z'});expect(perReceipt(receiptB.receiptId).ready).toEqual({precision:'instant',at:'2026-11-15T16:00:00.000Z'});
+   const row=(await receiving.board('2026-11-15','2026-11-15','','all',1,15,first.receivingBatchId)).rows[0]!;
+   await receiving.recordPacking({...f.root,authorizationCapability:'receiving:packing_manage',authorizationCapabilities:['receiving:packing_manage']},{receivingBatchId:first.receivingBatchId,expectedVersion:row.version,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:4,packingTime:{mode:'now'},packingAllocations:[receiptA,receiptB].map((q,i)=>({receiptId:q.receiptId,quantityVersion:q.quantityVersion,quantity:2,packingTime:{mode:'instant' as const,value:i?'2026-11-15T16:00:00.000Z':'2026-11-15T11:00:00.123Z'}}))},randomUUID());
+   const fact=packingSlaEvidence(await closure.read(f.root,id)).facts['garment_packing:'+po]!;
+   expect(fact.batchWindows!.map(window=>window.startedAt).sort()).toEqual(['2026-11-15T10:00:00.000Z','2026-11-15T16:00:00.000Z']);
+   expect((await service.read(f.root,id)).scopes[0]!.facts.find(fact=>fact.id===unknown.eventId)?.voided).toBe(true);
+    });
+   });
+  });
  });
  it('exempt orders need no washing assignment and invalid fee references cannot adopt or overwrite history',async()=>{
   const ready=await f.bulkReady('无'),po=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[ready.id])).rows[0].line_id;

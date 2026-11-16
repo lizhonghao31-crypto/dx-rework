@@ -251,6 +251,15 @@ function closureDatabase(roles: string[]) {
       created_by: OTHER, merchandiser_user_id: OTHER, embroidery_merchandiser_user_id: null,
       problem_part: '袖口', problem_description: '返修', rework_quantity: 1, wage_items: 2, rework_kind: 'qc_rework',
     }];
+    // Original packing readiness also reads the exact linked physical work.
+    // This populated fixture is inhouse (below), so the worker-only execution
+    // query has no matching worker configuration; do not invent a completion.
+    if (sql === "SELECT child_id,line_id FROM digital_production_child_lines WHERE module='rework' AND production_order_id=$1") {
+      expect(values).toEqual([ORDER]);return [{child_id: REWORK, line_id: ROW}];
+    }
+    if (sql.startsWith('SELECT r.rework_order_id,r.status,r.special_process_type,')) {
+      expect(values).toEqual([[REWORK],ORDER]);expect(sql).toContain("item.execution_kind='worker'");return [];
+    }
     // The optional closure summary reads through the same original full-detail
     // permission. Model that SELECT without masking unexpected SQL or writes.
     if (sql.startsWith('SELECT item.configuration_item_id,item.process_name,item.execution_kind,')) {

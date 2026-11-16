@@ -1,9 +1,10 @@
-import type {PackingActualTime} from '@dx-rework/contracts';
+import type {PackingActualTime,PackingAllocation} from '@dx-rework/contracts';
 export type ReworkStatus = "draft" | "active" | "completed" | null;
 export type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple" | "receiving_difference" | "packing_difference" | "missing_packing" | "pending" | "handled" | "stale";
 
 export type ReceivingHistoryItem = Readonly<{
   receiptId: string;
+  quantityVersion?:string;
   receivingBatchId: string;
   batchVersion: number;
   sequence: number;
@@ -44,6 +45,7 @@ export type BoardRow = Readonly<{
   packingRecordedBy: string | null;
   packingRecordedAt: string | null;
   packingActualTime?:PackingActualTime;
+  packingAllocations?:PackingAllocation[];
   packingScopeUnresolved?:boolean;
   actualCutCount: number | null;
   cuttingRecordedBy: string | null;

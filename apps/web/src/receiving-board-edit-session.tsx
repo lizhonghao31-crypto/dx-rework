@@ -1,3 +1,4 @@
+import {originalPackingAllocationDrafts,packingAllocationInputs,type PackingAllocationDraft} from './packing-receipt-allocation-fields.js';
 import {useEffect,useRef,useState,type Dispatch,type SetStateAction} from "react";
 import {createWebUrls} from "../url-contract.js";
 import {uploadAttachmentWithRecovery,toolsAttachmentApi,localFileScope} from "./attachment-upload-recovery.js";
@@ -61,6 +62,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
   const [packingQuantity, setPackingQuantity] = useState("");
   const [packingTimeMode,setPackingTimeMode]=useState<PackingTimeInput['mode']>('unknown');
   const [packingTimeValue,setPackingTimeValue]=useState('');
+  const [packingAllocationsEnabled,setPackingAllocationsEnabled]=useState(false),[packingAllocationDrafts,setPackingAllocationDrafts]=useState<Record<string,PackingAllocationDraft>>({});
 
   const [packingRequestKey, setPackingRequestKey] = useState("");
 
@@ -121,6 +123,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
     setPackingQuantity(row.packingQuantity === null ? "" : String(row.packingQuantity));
     setPackingTimeMode(row.packingRevisionId===null&&!row.packingScopeUnresolved?'now':'unknown');
     setPackingTimeValue('');
+    setPackingAllocationsEnabled(Boolean(row.packingAllocations?.length));setPackingAllocationDrafts(originalPackingAllocationDrafts(row));
     setPackingRequestKey(createClientRequestId());
     setMutationMessage("");
   };
@@ -141,6 +144,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
       if(!/^\d{4}-\d{2}-\d{2}$/.test(packingTimeValue)){setMutationMessage('请填写实际装箱日期');return;}
       packingTime={mode:'date',value:packingTimeValue};
     }else packingTime={mode:packingTimeMode};
+    let allocations;try{allocations=packingAllocationsEnabled?packingAllocationInputs(packingEditing,packingAllocationDrafts,packingTime):undefined;if(allocations&&allocations.reduce((sum,row)=>sum+row.quantity,0)!==value)throw new Error('各批关联的装箱数量合计须等于当前累计装箱数量');}catch(error){setMutationMessage(error instanceof Error?error.message:'请核对装箱批次关联');return;}
     setMutationBusy(true);
     setMutationMessage("");
     try {
@@ -152,7 +156,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
           expectedVersion: packingEditing.version,
           expectedPackingRevisionId: packingEditing.packingRevisionId,
           packingQuantity: value,
-          packingTime,
+          packingTime,...(allocations?{packingAllocations:allocations}:{}),
         }),
       });
       setPackingEditing(null);
@@ -383,7 +387,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
     editDefectiveQuantity,setEditDefectiveQuantity,editImages,setEditImages,receiptSource,setReceiptSource,
     receiptDocumentQuantity,setReceiptDocumentQuantity,receiptActualQuantity,setReceiptActualQuantity,receiptDefectiveQuantity,setReceiptDefectiveQuantity,
     mutationBusy,boardMutation,mutationUnknown,mutationMessage,setMutationMessage,packingEditing,
-    setPackingEditing,packingQuantity,setPackingQuantity,packingTimeMode,setPackingTimeMode,packingTimeValue,setPackingTimeValue,differenceEditing,differenceResult,setDifferenceResult,
+    setPackingEditing,packingQuantity,setPackingQuantity,packingTimeMode,setPackingTimeMode,packingTimeValue,setPackingTimeValue,packingAllocationsEnabled,setPackingAllocationsEnabled,packingAllocationDrafts,setPackingAllocationDrafts,differenceEditing,differenceResult,setDifferenceResult,
     differenceImages,closeDifference,selectDifferenceImages,openPacking,submitPacking,openDifference,
     submitDifference,openEdit,openReceiptCorrection,submitReceiptCorrection,submitCorrection,confirmDelete,
     recoveryActions,removeDifferenceImage,
