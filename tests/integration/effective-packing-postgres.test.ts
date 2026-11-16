@@ -191,4 +191,52 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }
  });
 
+ it('separates a proven whole-PO readiness from explicit receipt packing, retains unverified time and survives quantity correction',async()=>{
+  const scene=await f.scene('2026-11-21T00:00:00.000Z'),run=<T>(work:()=>Promise<T>)=>f.runtime.run(scene,f.root,work),made=await run(()=>ready(4));
+  const first=(await run(async()=>receiving.create(receiver(),{cuttingOrderId:made.cut,documentQuantity:4,actualQuantity:2,attachmentIds:[await f.image(receiver())]},randomUUID()))).value;
+  const quality=async(receiptId:string)=>(await run(()=>closure.read(f.root,made.id))).quality!.find(q=>q.receiptId===receiptId)!;
+  const q1=await quality(first.receiptId);
+  await run(()=>closure.recordQuality(f.root,made.id,{receiptId:q1.receiptId,quantityVersion:q1.quantityVersion,timeMode:'now',qualifiedQuantity:2,problem:''},randomUUID()));
+  expect((await run(()=>closure.read(f.root,made.id))).lines[0]!.packingReadiness!.whole.state).toBe('not_ready');
+  await f.advance(scene,'2026-11-21T01:00:00.000Z');
+  const second=(await run(()=>receiving.createRepeated(receiver(),{receivingBatchId:first.receivingBatchId,cuttingOrderId:made.cut,source:'jiashun',actualQuantity:2,defectiveQuantity:0},randomUUID()))).value;
+  const q2=await quality(second.receiptId),reportedAt='2026-11-21T01:00:00.000Z';
+  await run(()=>closure.recordQuality(f.root,made.id,{receiptId:q2.receiptId,quantityVersion:q2.quantityVersion,occurredAt:reportedAt,qualifiedQuantity:2,problem:''},randomUUID()));
+  const reported=await quality(second.receiptId);expect(reported.timeQuality).toBe('补报未核实');
+  await f.advance(scene,'2026-11-21T02:00:00.000Z');await run(()=>pack(second.receivingBatchId,4,{mode:'now'}));
+  const pending=await run(()=>closure.read(f.root,made.id));expect(pending.lines[0]!.packingReadiness!.whole).toMatchObject({state:'unknown',ready:{precision:'unknown'}});
+  expect(packingSlaEvidence(pending).facts['garment_packing:'+pending.lines[0]!.lineId]).toMatchObject({businessCompleted:true,completedAt:'2026-11-21T02:00:00.000Z'});
+  expect(packingSlaEvidence(pending).facts['garment_packing:'+pending.lines[0]!.lineId]!.startedAt).toBeUndefined();
+  const verify={receiptId:reported.receiptId,quantityVersion:reported.quantityVersion,eventId:reported.eventId!,occurredAt:reportedAt,reason:'TEST verified original receipt inspection, no new QC result'},key=randomUUID();
+  // This QC has no native assignment on the order: preserve the original
+  // non-disclosing object denial before the separate Root-only time action.
+  await expect(run(()=>closure.verifyQualityTime(f.people.qc!,made.id,verify,key))).rejects.toMatchObject({statusCode:404});
+  const verified=await run(()=>closure.verifyQualityTime(f.root,made.id,verify,key));expect(await run(()=>closure.verifyQualityTime(f.root,made.id,verify,key))).toEqual(verified);
+  const known=await run(()=>closure.read(f.root,made.id)),line=known.lines[0]!;
+  expect(line.packingReadiness!.whole).toMatchObject({scope:'whole_po',state:'ready',ready:{precision:'instant',at:reportedAt}});
+  const whole=packingSlaEvidence(known).facts['garment_packing:'+line.lineId]!;expect(whole).toMatchObject({startedAt:reportedAt,completedAt:'2026-11-21T02:00:00.000Z'});expect(whole.batchWindows).toBeUndefined();
+  expect((await f.db.query('SELECT time_quality,occurred_at FROM digital_production_task_events WHERE event_id=$1',[reported.eventId])).rows[0]).toMatchObject({time_quality:'补报未核实',occurred_at:new Date(reportedAt)});
+  const current=await run(()=>row(second.receivingBatchId)),allocations=[{receiptId:q1.receiptId,quantityVersion:q1.quantityVersion,quantity:2,packingTime:{mode:'instant' as const,value:'2026-11-21T00:30:00.123Z'}},{receiptId:q2.receiptId,quantityVersion:q2.quantityVersion,quantity:2,packingTime:{mode:'instant' as const,value:'2026-11-21T02:00:00.000Z'}}];
+  const body={receivingBatchId:current.receivingBatchId,expectedVersion:current.version,expectedPackingRevisionId:current.packingRevisionId,packingQuantity:4,packingTime:{mode:'now' as const},packingAllocations:allocations},packingKey=randomUUID();
+  await expect(run(()=>receiving.recordPacking(receiver(),body,packingKey))).rejects.toMatchObject({statusCode:403});
+  await run(()=>receiving.recordPacking(packer(),body,packingKey));expect((await run(()=>receiving.recordPacking(packer(),body,packingKey))).reused).toBe(true);
+  const allocated=await run(()=>closure.read(f.root,made.id)),facts=packingSlaEvidence(allocated).facts['garment_packing:'+line.lineId]!;
+  expect(facts.batchCoverageComplete).toBe(true);expect(facts.batchWindows!.map(window=>[window.startedAt,window.completedAt]).sort()).toEqual([['2026-11-21T00:00:00.000Z','2026-11-21T00:30:00.123Z'],[reportedAt,'2026-11-21T02:00:00.000Z']]);
+  expect((await run(()=>row(second.receivingBatchId))).packingAllocations).toHaveLength(2);
+  const other=await run(()=>ready(2)),foreign=(await run(async()=>receiving.create(receiver(),{cuttingOrderId:other.cut,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(receiver())]},randomUUID()))).value;
+  const originalCurrent=await run(()=>row(second.receivingBatchId));
+  await expect(run(()=>receiving.recordPacking(packer(),{...body,expectedVersion:originalCurrent.version,expectedPackingRevisionId:originalCurrent.packingRevisionId,packingAllocations:[{...allocations[0]!,receiptId:foreign.receiptId,quantityVersion:foreign.receiptId},allocations[1]!]},randomUUID()))).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('不属于本款／PO')});
+  expect((await run(()=>row(second.receivingBatchId))).packingRevisionId).toBe(originalCurrent.packingRevisionId);
+  await f.advance(scene,'2026-11-21T03:00:00.000Z');
+  await run(()=>closure.recordQuality(f.root,made.id,{receiptId:q2.receiptId,quantityVersion:q2.quantityVersion,timeMode:'now',qualifiedQuantity:2,problem:'TEST repeated full pass does not reset the already-open packing window'},randomUUID()));
+  expect((await run(()=>closure.read(f.root,made.id))).lines[0]!.packingReadiness!.whole.ready).toEqual({precision:'instant',at:reportedAt});
+  const changed=await run(()=>row(second.receivingBatchId)),original=(await f.db.query('SELECT document_quantity FROM receiving_receipts WHERE receipt_id=$1',[second.receiptId])).rows[0];
+  await run(()=>receiving.correctReceipt(corrector(),second.receiptId,{expectedVersion:changed.version,documentQuantity:Number(original.document_quantity),actualQuantity:1,defectiveQuantity:0}));
+  const stale=await run(()=>closure.read(f.root,made.id)),staleFact=packingSlaEvidence(stale).facts['garment_packing:'+line.lineId]!;
+  expect(staleFact).toMatchObject({businessCompleted:false,batchCoverageComplete:false});expect(staleFact.completedAt).toBeUndefined();
+  const fresh=await run(()=>row(second.receivingBatchId));
+  await expect(run(()=>receiving.recordPacking(packer(),{...body,expectedVersion:fresh.version,expectedPackingRevisionId:fresh.packingRevisionId},randomUUID()))).rejects.toMatchObject({statusCode:409});
+  expect((await f.db.query('SELECT count(*)::int AS count FROM receiving_packing_revisions WHERE receiving_batch_id=$1',[second.receivingBatchId])).rows[0].count).toBe(2);
+ });
+
 });

@@ -239,3 +239,8 @@
 .order-board-page[data-legacy-ui="receiving-board"] .order-board-heading h1{font-size:24px;line-height:32px}
 .order-board-page[data-legacy-ui="receiving-board"] :is(.order-board-operation-button,.order-board-packing-button,.order-board-attachment-button,.order-board-root-actions button){min-height:32px;display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border:1px solid #c8d2df;border-radius:6px;background:#fff;font:600 12px/18px inherit;text-decoration:none}
 .order-board-page[data-legacy-ui="receiving-board"] .order-board-dialog__actions button{border-radius:6px}
+
+.order-board-dialog .packing-receipt-allocation{min-width:0;display:grid;gap:12px;border:1px solid var(--dx-v2-color-border,#c7d0da);border-radius:8px;padding:12px}
+.order-board-dialog .packing-receipt-allocation__toggle{display:flex;align-items:center;gap:8px}
+.order-board-dialog .packing-receipt-allocation__toggle input[type=checkbox]{width:16px;height:16px;min-height:16px;margin:0;padding:0;flex:none}
+.order-board-dialog .packing-receipt-allocation p{margin:0;font-size:12px;line-height:1.5;color:#5f6570}

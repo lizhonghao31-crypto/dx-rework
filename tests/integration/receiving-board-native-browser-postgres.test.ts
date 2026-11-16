@@ -35,7 +35,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},receiving:{authenticate,root,service:receiving}});await app.ready();
   for(const role of ["root","warehouse"])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   const warehouse={...f.people.warehouse!,authorizationCapability:"receiving:create",authorizationCapabilities:["receiving:create"]};
-  for(let index=0;index<3;index++){
+  for(let index=0;index<4;index++){
    const receipt=await receiving.create(warehouse,{styleNo:"TEST-ARCH-F4-"+index+"-"+randomUUID(),documentQuantity:10,actualQuantity:9,attachmentIds:[await f.image(warehouse)]},randomUUID());ids.push(receipt.value.receivingBatchId);
   }
   output=await mkdtemp(join(tmpdir(),"dx-receiving-board-native-"));const previous=process.env.NODE_ENV;
@@ -114,5 +114,34 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.locator(".order-board-row").count()).toBe(1);expect(await page.locator(".order-board-root-actions").count()).toBe(0);expect(await page.getByRole("button",{name:"去处理",exact:true}).count()).toBe(0);expect(await page.getByRole("link",{name:"＋ 仓库收货",exact:true}).count()).toBe(1);
    expect((await page.request.get(base+"/api/auth/me")).status()).toBe(200);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(evidence,"native-warehouse-1440.png"),fullPage:true});
   }finally{await context.close();}
+ });
+ it('records explicit receipt allocations in the original warehouse packing dialog and restores them for Root review at desktop and narrow widths',async()=>{
+  const receiving=new ReceivingService(f.db,undefined,undefined,undefined,{allowLegacyStyleInput:true}),warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+  await receiving.createRepeated(warehouse,{receivingBatchId:ids[3]!,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID());
+  const tab=await open(3,'warehouse',390);
+  try{
+   const {page}=tab;await page.getByRole('button',{name:'录入',exact:true}).click();const dialog=page.getByRole('dialog');
+   await dialog.getByLabel('当前累计已装箱数量',{exact:true}).fill('10');
+   await dialog.getByRole('checkbox',{name:'明确本次累计装箱对应的收货批次',exact:true}).check();
+   await dialog.getByLabel('第1笔装箱数量',{exact:true}).fill('9');await dialog.getByLabel('第2笔装箱数量',{exact:true}).fill('1');
+   for(const n of [1,2])await dialog.getByLabel(`第${n}笔装箱时间`,{exact:true}).selectOption('same');
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   const toggle=dialog.getByRole('checkbox',{name:'明确本次累计装箱对应的收货批次',exact:true});const box=await toggle.boundingBox();expect(box!.width).toBeLessThanOrEqual(20);
+   await page.screenshot({path:join(evidence,'native-packing-receipt-allocation-dialog-390.png'),fullPage:true});
+   const saved=page.waitForResponse(response=>response.url().endsWith('/packing-revisions')&&response.request().method()==='POST');
+   await dialog.getByRole('button',{name:'保存',exact:true}).click();expect((await saved).status()).toBe(201);await dialog.waitFor({state:'hidden'});
+   const facts=(await f.db.query("SELECT event.after_state FROM receiving_packing_revisions revision JOIN operation_events event ON event.event_id=revision.operation_event_id WHERE revision.receiving_batch_id=$1 ORDER BY revision.created_at DESC LIMIT 1",[ids[3]])).rows[0]!.after_state;
+   expect(facts.packingAllocations).toHaveLength(2);expect(facts.packingAllocations.reduce((sum:number,row:{quantity:number})=>sum+row.quantity,0)).toBe(10);
+   expect(facts.packingAllocations.every((row:{actualTime:unknown})=>JSON.stringify(row.actualTime)===JSON.stringify(facts.packingActualTime))).toBe(true);
+   await page.screenshot({path:join(evidence,'native-packing-receipt-allocation-390.png'),fullPage:true});
+  }finally{await tab.context.close();}
+  const review=await open(3,'root',1165);try{
+   await review.page.locator('.order-board-packing-button').filter({hasText:'修改'}).click();const dialog=review.page.getByRole('dialog');
+   expect(await dialog.getByRole('checkbox',{name:'明确本次累计装箱对应的收货批次',exact:true}).isChecked()).toBe(true);
+   expect(await dialog.getByLabel('第1笔装箱数量',{exact:true}).inputValue()).toBe('9');expect(await dialog.getByLabel('第2笔装箱数量',{exact:true}).inputValue()).toBe('1');
+   expect(await dialog.getByLabel('第1笔装箱时间',{exact:true}).inputValue()).toBe('instant');
+   expect(await dialog.getByLabel('第1笔实际装箱时间（北京时间）',{exact:true}).inputValue()).not.toBe('');
+   expect(await review.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await review.page.screenshot({path:join(evidence,'native-packing-receipt-allocation-1165.png'),fullPage:true});
+  }finally{await review.context.close();}
  });
 });

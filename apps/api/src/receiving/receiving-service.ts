@@ -1,7 +1,8 @@
 import {readReceivingBoard,type BoardResult} from "./receiving-board-query.js";
 import {invalidatePackingAliasCandidates} from './packing-alias-invalidation.js';
 import {normalizePackingTime,resolvePackingTime} from './packing-actual-time.js';
-import type {PackingTimeInput,PackingActualTime} from '@dx-rework/contracts';
+import {packingReceiptAllocations} from './packing-receipt-allocations.js';
+import type {PackingTimeInput,PackingActualTime,PackingAllocationInput} from '@dx-rework/contracts';
 import {RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL,RECEIVING_BOARD_BASE_SQL,type RepeatedReceivingSource,type ReceiptSource,type ReceivingDifferenceType,type StyleOperationSnapshot} from "./receiving-quantity-query.js";
 export {RECEIVING_BOARD_BASE_SQL,RECEIVING_BATCH_BOARD_BASE_SQL,DIGITAL_RECEIVING_BASE_SQL} from "./receiving-quantity-query.js";
 import {businessNow} from '../acceptance-clock/business-time.js';
@@ -31,6 +32,7 @@ type RecordPackingInput = Readonly<{
   expectedPackingRevisionId?: string | null;
   packingQuantity: number;
   packingTime?:PackingTimeInput;
+  packingAllocations?:readonly PackingAllocationInput[];
 }>;
 
 type ResolveReceivingDifferenceInput = Readonly<{
@@ -1954,6 +1956,7 @@ export class ReceivingService {
       expectedPackingRevisionId: normalizeOptionalUuid(input.expectedPackingRevisionId, "装箱数量版本"),
       packingQuantity: validateQuantity(input.packingQuantity, "装箱数量", true),
       ...(input.packingTime===undefined?{}:{packingTime:normalizePackingTime(input.packingTime)}),
+      ...(input.packingAllocations===undefined?{}:{packingAllocations:input.packingAllocations}),
     };
     const scope = "receiving.packing.record";
     const client = await this.database.connect();
@@ -1976,7 +1979,8 @@ export class ReceivingService {
           fail("订单或装箱数量已更新，本次未覆盖；请在本单回货处理页重新读取累计收货与装箱数，再核对后提交", 409, "CONFLICT");
         }
         const packingRevisionId = randomUUID();
-        const packingActualTime=resolvePackingTime(normalized.packingTime,businessNow().toISOString());
+        const now=businessNow().toISOString(),packingActualTime=resolvePackingTime(normalized.packingTime,now);
+        const allocations=normalized.packingAllocations===undefined?undefined:await packingReceiptAllocations(client,snapshot.receivingBatchId,normalized.packingQuantity,normalized.packingAllocations,now);
         const eventId = await this.events.append(client, actor, {
           action: "receiving.packing.record",
           entityType: "receiving_batch",
@@ -1985,7 +1989,7 @@ export class ReceivingService {
             packingRevisionId: snapshot.packingRevisionId,
             packingQuantity: snapshot.packingSourceQuantity??snapshot.packingQuantity,
           },
-          after: { packingRevisionId, packingQuantity: normalized.packingQuantity,packingScopeMergeEventIds:snapshot.packingScopeMergeEventIds??[],...(normalized.packingTime?{packingActualTime}:{}) },
+          after: { packingRevisionId, packingQuantity: normalized.packingQuantity,packingScopeMergeEventIds:snapshot.packingScopeMergeEventIds??[],...(normalized.packingTime?{packingActualTime}:{}),...(allocations?{packingAllocations:allocations}:{}) },
         });
         const inserted = await client.query<{
           packing_revision_id: string;

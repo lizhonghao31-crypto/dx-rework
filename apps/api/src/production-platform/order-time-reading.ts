@@ -169,8 +169,15 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    if(own.task)fact.ownTaskId=own.task.task_id;
    facts[source.id]=fact;
    const begun=fact.clockStart.precision!=='unknown'||fact.businessCompleted||Boolean(own.task?.native_entered_at);
-   if(own.native?.batchWindows?.length&&(policy.responsibilitySlaRef||old?.responsibilitySlaRef))fact.ownWindows=own.native.batchWindows.map(window=>({sourceRef:window.evidence,started:instant(window.startedAt),completed:instant(window.completedAt),complete:window.complete,deadline:window.deadline,warningAt:window.warningAt,
-    calendar:'calendarRef'in window&&['continuous','natural_days','beijing_sunday_excluded'].includes(String(window.calendarRef))?window.calendarRef as ScheduleWork['calendar']:old?.responsibilityCalendar??'continuous'}));
+   if(own.native?.batchWindows?.length&&(policy.responsibilitySlaRef||old?.responsibilitySlaRef))fact.ownWindows=own.native.batchWindows.map(window=>{
+    const captured=window.policyAtStart&&window.startedAt?evidence.policies?.find(version=>Date.parse(version.at)<=Date.parse(window.startedAt!)):null;
+    const rule=captured?orderTimeRule(captured.plan,source.parameterKey)?.rule:null;
+    const calendar=window.policyAtStart?(rule?.kind==='work'?rule.calendar:null):'calendarRef'in window&&['continuous','natural_days','beijing_sunday_excluded'].includes(String(window.calendarRef))?window.calendarRef as ScheduleWork['calendar']:old?.responsibilityCalendar??'continuous';
+    const minutes=rule?.kind==='work'?rule.minutes:null;
+    const deadline=window.policyAtStart?window.startedAt&&minutes!==null&&calendar?shiftFixedTimeline(window.startedAt,minutes,calendar):null:window.deadline;
+    const warningAt=window.policyAtStart?window.startedAt&&minutes!==null&&calendar&&rule?.reminder.enabled?shiftFixedTimeline(window.startedAt,minutes*rule.reminder.percent/100,calendar):null:window.warningAt;
+    return {sourceRef:window.evidence,started:instant(window.startedAt),completed:instant(window.completedAt),complete:window.complete,deadline,warningAt,calendar};
+   });
    const taskOwn=begun&&typeof own.task?.sla_basis?.seconds==='number'?{responsibilitySlaRef:`task:${own.task.task_id}:original-window`,responsibilityMinutes:own.task.sla_basis.seconds/60,responsibilityCalendar:own.task.sla_basis.calendarRef??'continuous' as const}:null;
    // An original adopted task window owns its established responsibility R.
    // A legacy planning counterpart can lack readiness without erasing that
@@ -191,7 +198,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    return {...definition,stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
     start:target?.start.at??null,end:target?.end.at??null,...(target?{startExclusive:target.start.exclusive,endExclusive:target.end.exclusive}:{}),...originalOwn,...(eventTarget?{eventTarget}:{}),
     responsibilitySlaRef:originalOwn.responsibilitySlaRef,responsibilityMinutes:originalOwn.responsibilityMinutes??null,responsibilityCalendar:originalOwn.responsibilityCalendar??null,
-    ...(begun?{responsibilityWarningAt:own.task?.warning_at?.toISOString()??(atStart?capturedWarning:old?.responsibilityWarningAt??null)}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
+    ...(begun?{responsibilityWarningAt:fact.clockStart.precision==='unknown'?null:own.task?.warning_at?.toISOString()??(atStart?capturedWarning:old?.responsibilityWarningAt??null)}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
     ...(framework?frameworkTargetPrecision(target):{targetPrecision:goal&&anchor?.precision==='date'?'date' as const:'instant' as const,targetDate:goal&&anchor?.precision==='date'?anchor.value:null})};
   });
   // Native accepted redo remains real work even when it was not in the

@@ -346,8 +346,21 @@ it('retains strict non-midnight completion goals through later plan changes and 
 it('keeps actual completion and original plan lag while an explicitly untrusted native R cannot be resurrected by legacy facts',()=>{
  const saved=stored(),view=item();view.asOf=at(12);view.stages[1]!.nodes=[node('a','completed',at(5),at(7))];
  const legacy=build(saved,view),before=structuredClone(legacy);
- const task={task_id:'a:1',task_kind:'a',source_id:resource.id,production_order_id:null,route_version:1,state:'completed',entered_at:new Date(at(5)),entered_quality:'补报未核实',completed_at:new Date(at(7)),completed_quality:'已核实',step_id:null,returned:false,rejected:false,sla_basis:{seconds:18000,calendarRef:'continuous' as const},native_entered_at:new Date(at(5)),warning_at:null};
+ const task={task_id:'a:1',task_kind:'a',source_id:resource.id,production_order_id:null,route_version:1,state:'completed',entered_at:new Date(at(5)),entered_quality:'补报未核实',completed_at:new Date(at(7)),completed_quality:'已核实',step_id:null,returned:false,rejected:false,sla_basis:{seconds:18000,calendarRef:'continuous' as const},native_entered_at:new Date(at(5)),warning_at:new Date(at(8))};
  const proof={...evidence(),tasks:[task]},facts={a:{evidence:'task:a:1:round:1',businessCompleted:true,completedAt:at(7)}};
  const basis=orderTimeReadingBasis(saved,resource,view,facts,proof,legacy),result=evaluateFixedJourneyBasis(basis,at(12),false).scopes[0]!.nodes.find(row=>row.id==='a')!;
  expect(basis.scopes[0]!.facts.a!.clockStart.precision).toBe('unknown');expect(result.ownSla.state).toBe('unknown');expect(result.goalDelta).toMatchObject({kind:'late',signedValue:60});expect(basis.scopes[0].facts.a.completed).toEqual(point(7));expect(legacy).toEqual(before);
+ expect(basis.scopes[0]!.work.find(work=>work.id==='a')!.responsibilityWarningAt).toBeNull();
+});
+
+it('selects each explicitly allocated packing window policy at its own R and never a later shortened arrangement',()=>{
+ const saved=stored(),row=item(),earlier=structuredClone(saved.input.plan);
+ earlier.company.nodes.a=duration(2);saved.input.plan.company.nodes.a=duration(1);
+ const native={a:{evidence:'TEST explicit native allocations',businessCompleted:true,batchCoverageComplete:true,batchWindows:[
+  {startedAt:at(2),completedAt:at(5),complete:true,deadline:at(99),warningAt:at(98),evidence:'TEST receipt1',policyAtStart:true},
+  {startedAt:at(4),completedAt:at(5),complete:true,deadline:at(99),warningAt:at(98),evidence:'TEST receipt2',policyAtStart:true},
+ ]}};
+ const basis=orderTimeReadingBasis(saved,resource,row,native,{...evidence(),policies:[{id:'TEST later',at:at(3),plan:saved.input.plan},{id:'TEST first',at:at(0),plan:earlier}]},null);
+ expect(basis.scopes[0]!.facts.a!.ownWindows!.map(window=>window.deadline)).toEqual([at(4),at(5)]);
+ expect(basis.scopes[0]!.facts.a!.ownWindows!.map(window=>window.warningAt)).toEqual([at(3.4),at(4.7)]);
 });

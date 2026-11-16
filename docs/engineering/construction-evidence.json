@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "45176bec3b907d4573cbafa74cf5287c3ba1c5e9",
+  "base": "7143c82691592fc0e7ae77ab2c90f9cb80398f60",
   "risk": "full",
-  "sourceFingerprint": "36fe85e31b56457f143d59afac195a651078b4537cba15d68918251f5a723892",
+  "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
   "rules": [
     {
       "rule": "Development may publish incomplete ordering data without formal creation or invented deadlines; exact frozen craft instance identity stays outside strict choice DTO; new unsaved timing drafts and concurrent stale conflicts must remain clear and safe.",
@@ -58,7 +58,7 @@
       ],
       "initialization": "No SQL/backfill or live writes. Same publicationFormalInput readiness boundary used by check and native executor; missing contract/partialPO dates/preorder remain development only, explicit formal check returns unknown/coverage and original formal identity guard refuses promotion. Only datedPO scopes get original A/B milestones; no naked missing-date throw or dummy date. Builders and old framework adapters project allowed choice fields while original native route stepId/source/round/canonicalWorkRef/frozen library version persist. Old complete formal drafts and native history remain via original services.",
       "dateAndPermission": "Real original designer publication App and original Root/manager request transactions used. New success cleared on ordinary, washing and invalid drafts; separate persistent stale conflict survives automatic previews and blocks saving until explicit refresh/review. Three-way washing rebase preserves intentional edits and fresh readonly fee provenance/currentversion, no automatic adoption. Original fingerprint/expectedVersion, started responsibility windows, data versions, old confirmed quotation/budget/contract and role guards remain. Unknown POST recovery not retried; original read-check vs write-outcome splitting retained.",
-      "expectation": "Current135 unit cases and1 expanded real original PostgreSQL16/authenticated browser case pass (14unselected). The previous35 cases passed on8e1; not claimed re-executed for this fix. Review4583545198 now synchronizes visible raw editor fields and payload after explicit baseline acknowledgement, preserves deliberate or invalid text, and does not reverse independently adopted inspector or inspection duration on a subsequent edit. Includes incomplete/partially dated ordering development publish and strict confirm refusal, ordinary and dual frozen special developer->formal native adoption, unique identities and old saved-work strict projection, no source mutation; two sequential washing edits, two-page stale409 persistent through preview and explicit ack without auto-save, old success removed for200day and invalidtext draft with navigation guard. lint/types/preflight/secret exit0; exact GitHub Full/review/live acceptance still pending. New rewash-round planning identified separately, not misrepresented as covered here.",
+      "expectation": "Combined140 units and full35 original PostgreSQL16/authenticated browser cases pass on the exact044+409 preview composition; current actual parent integration must match the complete source fingerprint before local result reuse. Execution retained real HEAD409 with uncommitted044 source, not falsely described as testing at later actual parent commit. Review4583545198 now synchronizes visible raw editor fields and payload after explicit baseline acknowledgement, preserves deliberate or invalid text, and does not reverse independently adopted inspector or inspection duration on a subsequent edit. Includes incomplete/partially dated ordering development publish and strict confirm refusal, ordinary and dual frozen special developer->formal native adoption, unique identities and old saved-work strict projection, no source mutation; two sequential washing edits, two-page stale409 persistent through preview and explicit ack without auto-save, old success removed for200day and invalidtext draft with navigation guard. lint/types/preflight/secret exit0; exact GitHub Full/review/live acceptance still pending. New rewash-round planning identified separately, not misrepresented as covered here.",
       "checks": [
         "unit",
         "native-pg",
@@ -76,101 +76,101 @@
       "command": "vitest run tests/unit/order-time-craft-contract.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-washing.test.ts tests/unit/order-time-publication-intent.test.ts tests/unit/order-time-washing-rebase.test.ts tests/unit/order-time-settings.test.ts tests/unit/order-time-plan.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 135,
+      "passed": 140,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "8e1ade3c67518d77c885e999a6be6210222f07a1",
-      "sourceFingerprint": "36fe85e31b56457f143d59afac195a651078b4537cba15d68918251f5a723892",
-      "startedAt": "2026-11-16T08:53:55.436Z",
-      "endedAt": "2026-11-16T08:53:59.022Z",
-      "log": "/tmp/order-time-check-review-current-unit.log",
-      "logSha256": "82100cf0d911c48331c60b445f0364d7b5f2d5d58ec83f40e68d81422b2535e6",
+      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
+      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
+      "startedAt": "2026-11-16T09:10:51.795Z",
+      "endedAt": "2026-11-16T09:10:55.558Z",
+      "log": "/tmp/time-combined-preview-unit.log",
+      "logSha256": "edd16baa563602aeaf86d9df1a4dee478908f8bbba15d26d4542e4f8f0db8489",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e9c3b893a2768da6975477efbe4f1a52695688d05eb0677864acbf02cabfba34"
+          "sha256": "9d1df5c4ff36f3b1858b53b27f0448f44ae53b7624b595add08267512e4f948a"
         }
       ],
-      "context": "Original assembled worktree on actual45176bec. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real expanded whole washing App case1passed/14unselected, not the earlier35 run on8e1. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
+      "context": "Combined source preview: actual Git HEAD409 with uncommitted044 candidate integration, actual base at execution45176bec; final current branch source equals the original complete source fingerprint, real parent integration and409 ancestry checked. Not claimed as execution at the later actual mergeSHA. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real combined full35-case original service/App suite, no skipped cases. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
     },
     {
       "id": "native-pg",
       "kind": "tests",
-      "command": "bash /tmp/order-time-check-pg.sh tests/integration/order-time-requests-browser-postgres.test.ts -t 'adopts washing through the original grouped'",
+      "command": "bash /tmp/time-combined-preview-pg.sh tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 1,
+      "passed": 35,
       "failed": 0,
-      "skipped": 14,
-      "testedHead": "8e1ade3c67518d77c885e999a6be6210222f07a1",
-      "sourceFingerprint": "36fe85e31b56457f143d59afac195a651078b4537cba15d68918251f5a723892",
-      "startedAt": "2026-11-16T08:51:56.572Z",
-      "endedAt": "2026-11-16T08:52:31.615Z",
-      "log": "/tmp/order-time-check-review-editor-final.log",
-      "logSha256": "3cffe53629f8f5f542914e016dca5333dd4f3c1825c119556f6c56609d4a3586",
+      "skipped": 0,
+      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
+      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
+      "startedAt": "2026-11-16T09:10:57.698Z",
+      "endedAt": "2026-11-16T09:13:14.602Z",
+      "log": "/tmp/time-combined-preview-native.log",
+      "logSha256": "66f027b1481c518aa1900659b726bff7b7f9e21a360e26dec2fffef2f987f8da",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "424ece40f47b207051f900cd6751ae9de3a59cb7856f545ea93adae2a8de2a86"
+          "sha256": "f8c563acee72d1e3a7dc0807888f6094a9dcd71626d550f14919e80d2c74dea8"
         }
       ],
-      "context": "Original assembled worktree on actual45176bec. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real expanded whole washing App case1passed/14unselected, not the earlier35 run on8e1. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
+      "context": "Combined source preview: actual Git HEAD409 with uncommitted044 candidate integration, actual base at execution45176bec; final current branch source equals the original complete source fingerprint, real parent integration and409 ancestry checked. Not claimed as execution at the later actual mergeSHA. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real combined full35-case original service/App suite, no skipped cases. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
     },
     {
       "id": "lint",
       "command": "npm run lint",
-      "startedAt": "2026-11-16T08:53:59.095430+00:00",
-      "endedAt": "2026-11-16T08:54:36.068621+00:00",
+      "startedAt": "2026-11-16T09:13:48.986897+00:00",
+      "endedAt": "2026-11-16T09:14:25.182381+00:00",
       "exitCode": 0,
-      "log": "/tmp/order-time-check-review-current-lint.log",
+      "log": "/tmp/time-combined-preview-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "kind": "command",
       "status": "passed",
-      "sourceFingerprint": "36fe85e31b56457f143d59afac195a651078b4537cba15d68918251f5a723892",
-      "testedHead": "8e1ade3c67518d77c885e999a6be6210222f07a1",
-      "context": "Actual original npm command exit0 on current assembled source; no extra tests or remote CI success invented."
+      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
+      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
+      "context": "Actual npm command on the same combined source fingerprint; execution HEAD409 with pending044 integration, later real parent/source equality and ancestry checked. No remote CI success invented."
     },
     {
       "id": "types",
       "command": "npm run typecheck",
-      "startedAt": "2026-11-16T08:54:36.069229+00:00",
-      "endedAt": "2026-11-16T08:55:32.643319+00:00",
+      "startedAt": "2026-11-16T09:14:25.183238+00:00",
+      "endedAt": "2026-11-16T09:15:26.361431+00:00",
       "exitCode": 0,
-      "log": "/tmp/order-time-check-review-current-types.log",
+      "log": "/tmp/time-combined-preview-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "kind": "command",
       "status": "passed",
-      "sourceFingerprint": "36fe85e31b56457f143d59afac195a651078b4537cba15d68918251f5a723892",
-      "testedHead": "8e1ade3c67518d77c885e999a6be6210222f07a1",
-      "context": "Actual original npm command exit0 on current assembled source; no extra tests or remote CI success invented."
+      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
+      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
+      "context": "Actual npm command on the same combined source fingerprint; execution HEAD409 with pending044 integration, later real parent/source equality and ancestry checked. No remote CI success invented."
     },
     {
       "id": "preflight",
       "command": "npm run test:preflight",
-      "startedAt": "2026-11-16T08:55:32.643716+00:00",
-      "endedAt": "2026-11-16T08:55:40.286248+00:00",
+      "startedAt": "2026-11-16T09:49:38.232439+00:00",
+      "endedAt": "2026-11-16T09:49:46.536033+00:00",
       "exitCode": 0,
-      "log": "/tmp/order-time-check-review-current-preflight.log",
-      "logSha256": "9bc4799d4f7e3a07cbbbfbcbfffa31973ae895e6cafbfb342bfc3dbb5f8650bb",
+      "log": "/tmp/order-time-check-integrated-preflight.log",
+      "logSha256": "7e7ed407695455f1a0ab2f8cee54e8e094a36093031300fedbac568b4e2a1295",
+      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
+      "context": "Actual current PR3 worktree command on HEAD409 with real predecessor merge7143c826 pending; exact combined source fingerprint checked. This is not the earlier dirty044 preview run and not remote CI or onsite acceptance.",
       "kind": "command",
       "status": "passed",
-      "sourceFingerprint": "36fe85e31b56457f143d59afac195a651078b4537cba15d68918251f5a723892",
-      "testedHead": "8e1ade3c67518d77c885e999a6be6210222f07a1",
-      "context": "Actual original npm command exit0 on current assembled source; no extra tests or remote CI success invented."
+      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230"
     },
     {
       "id": "secret",
       "command": "npm run secret:scan",
-      "startedAt": "2026-11-16T08:55:40.288270+00:00",
-      "endedAt": "2026-11-16T08:55:41.242434+00:00",
+      "startedAt": "2026-11-16T09:49:46.536605+00:00",
+      "endedAt": "2026-11-16T09:49:47.397246+00:00",
       "exitCode": 0,
-      "log": "/tmp/order-time-check-review-current-secret.log",
+      "log": "/tmp/order-time-check-integrated-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
+      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
+      "context": "Actual current PR3 worktree command on HEAD409 with real predecessor merge7143c826 pending; exact combined source fingerprint checked. This is not the earlier dirty044 preview run and not remote CI or onsite acceptance.",
       "kind": "command",
       "status": "passed",
-      "sourceFingerprint": "36fe85e31b56457f143d59afac195a651078b4537cba15d68918251f5a723892",
-      "testedHead": "8e1ade3c67518d77c885e999a6be6210222f07a1",
-      "context": "Actual original npm command exit0 on current assembled source; no extra tests or remote CI success invented."
+      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230"
     }
   ]
 }
