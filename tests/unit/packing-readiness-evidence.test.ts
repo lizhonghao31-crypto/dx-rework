@@ -1,5 +1,6 @@
 import {expect,it} from 'vitest';
 import type {ClosureLine,ReceiptQualityFact} from '@dx-rework/contracts/order-closure';
+import type {BulkWashingScopeView} from '@dx-rework/contracts/bulk-washing';
 import {ReceiptQualitySchema} from '@dx-rework/contracts/order-closure';
 import {packingReadinessEvidence} from '../../apps/api/src/production-platform/packing-readiness-evidence.js';
 import {packingAllocationEvidence} from '../../apps/api/src/production-platform/packing-allocation-evidence.js';
@@ -37,4 +38,30 @@ it('retains the original reported-QC payload and requires an explicit now choice
  const {occurredAt,...current}=old;expect(ReceiptQualitySchema.safeParse(current).success).toBe(false);
  expect(ReceiptQualitySchema.safeParse({...current,timeMode:'now'}).success).toBe(true);
  expect(ReceiptQualitySchema.safeParse({...old,timeMode:'now'}).success).toBe(false);expect(occurredAt).toBe(at(1));
+});
+
+it('binds each factory receipt to its own live linked completions instead of all inspections in the shared factory',()=>{
+ const scope={mode:'factory',scopeId:'TEST factory scope',lineId:line.lineId,planId:'TEST frozen',revision:8,ledger:{conflict:false},receipts:checks.map(q=>({receiptId:q.receiptId,quantityVersion:q.quantityVersion,quantity:q.quantity})),facts:[
+  ...checks.map((q,i)=>({id:'TEST link'+i,scopeId:'TEST factory scope',kind:'receipt_link',receiptId:q.receiptId,receiptQuantityVersion:q.quantityVersion,completionId:'TEST wash'+i,quantity:2,voided:false})),
+  ...checks.map((q,i)=>({id:'TEST wash QC'+i,scopeId:'TEST factory scope',kind:'inspection',completionId:'TEST wash'+i,quantity:2,qualifiedQuantity:2,occurredAt:at(i?15:9),voided:false})),
+ ]} as unknown as BulkWashingScopeView;
+ const coverage=new Map(checks.map(q=>[q.receiptId,q.quantity]));
+ const read=()=>packingReadinessEvidence(line,checks,at(20),coverage,[scope],[]);
+ expect(read().receipts.map(r=>r.readiness.ready)).toEqual([{precision:'instant',at:at(9)},{precision:'instant',at:at(15)}]);
+ expect(read().whole.ready).toEqual({precision:'instant',at:at(15)});
+ const second=scope.facts.find(f=>f.id==='TEST wash QC1')!;second.occurredAt=null;
+ expect(read().receipts[0]!.readiness.ready).toEqual({precision:'instant',at:at(9)});expect(read().receipts[1]!.readiness.state).toBe('unknown');
+ expect(read().whole.state).toBe('unknown');
+ scope.facts.find(f=>f.id==='TEST link0')!.voided=true;
+ expect(read().receipts[0]!.readiness.state).toBe('unknown');
+});
+it('uses all contributing checks of one receipt after washing, but does not use an unrelated failed zero-coverage check as its ready time',()=>{
+ const scope={mode:'after_receipt',scopeId:'receipt:'+checks[0]!.receiptId,lineId:line.lineId,planId:'TEST frozen',revision:5,ledger:{conflict:false},facts:[
+  {id:'TEST initial',kind:'inspection',completionId:'TEST return1',quantity:2,qualifiedQuantity:1,occurredAt:at(9),voided:false},
+  {id:'TEST failed',kind:'inspection',completionId:'TEST rewash1',quantity:1,qualifiedQuantity:0,occurredAt:null,voided:false},
+  {id:'TEST rechecked',kind:'inspection',completionId:'TEST rewash2',quantity:1,qualifiedQuantity:1,occurredAt:at(12),voided:false},
+ ]} as unknown as BulkWashingScopeView;
+ const result=packingReadinessEvidence(line,checks,at(20),new Map([[checks[0]!.receiptId,2]]),[scope],[]);
+ expect(result.receipts[0]!.readiness.ready).toEqual({precision:'instant',at:at(12)});
+ expect(result.receipts[1]!.readiness.ready).toEqual({precision:'instant',at:at(2)});
 });

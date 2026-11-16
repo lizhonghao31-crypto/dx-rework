@@ -24,8 +24,15 @@ export function packingReadinessEvidence(line:ClosureLine,quality:readonly Recei
    occurred:Object.hasOwn(q,'packingReadyAt')?instant(q.packingReadyAt):['现场登记','已核实'].includes(q.timeQuality??'')?instant(q.completedAt):unknown}];
   if(washing?.has(q.receiptId)){
    const scopes=washScopes.filter(scope=>scope.lineId===line.lineId&&(scope.scopeId===`receipt:${q.receiptId}`||scope.receipts?.some(receipt=>receipt.receiptId===q.receiptId)));
-   const events=scopes.flatMap(scope=>scope.facts.filter(fact=>!fact.voided&&fact.kind==='inspection'));
-   result.push({reference:`washing:${q.receiptId}:${scopes.map(scope=>scope.planId+':'+scope.revision).join(',')||'missing'}`,complete:washing.get(q.receiptId)!==null&&washing.get(q.receiptId)!>=q.quantity&&scopes.length>0&&scopes.every(scope=>!scope.ledger.conflict),
+   // Factory scope membership is not a physical allocation. Match the same
+   // live completion links as native coverage; another receipt's later/unknown
+   // inspection must not move or erase this receipt's established R.
+   const events=scopes.flatMap(scope=>{
+    const links=scope.facts.filter(fact=>!fact.voided&&fact.kind==='receipt_link'&&fact.receiptId===q.receiptId&&fact.receiptQuantityVersion===q.quantityVersion);
+    const completions=new Set(links.flatMap(link=>link.kind==='receipt_link'?[link.completionId]:[]));
+    return scope.facts.filter(fact=>!fact.voided&&fact.kind==='inspection'&&fact.qualifiedQuantity>0&&(scope.mode==='after_receipt'||completions.has(fact.completionId)));
+   });
+   result.push({reference:`washing:${q.receiptId}:${scopes.map(scope=>scope.planId+':'+scope.revision).join(',')||'missing'}:qc:${events.map(event=>event.id).join(',')}`,complete:washing.get(q.receiptId)!==null&&washing.get(q.receiptId)!>=q.quantity&&scopes.length>0&&scopes.every(scope=>!scope.ledger.conflict),
     occurred:events.length&&events.every(event=>event.occurredAt)?instant(events.map(event=>event.occurredAt!).sort().at(-1)):unknown});
   }
   return result;
