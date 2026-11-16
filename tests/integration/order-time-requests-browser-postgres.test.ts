@@ -429,6 +429,63 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.requests.filter(call=>call.session===tab.session&&call.status===401)).toHaveLength(0);
   }finally{await tab.context.close();}
  });
+ it('publishes a framework development draft with incomplete ordering through the real designer App without sending formal confirmation',async()=>{
+  const settings=new OrderTimeSettingsService(h.db,true,true),standard=await settings.read(h.f.root);
+  await settings.save(h.f.root,{expectedVersion:standard.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  const original=await source('incomplete-order',null,'PD'),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  await h.f.runtime.run(scene,original.actor,async()=>{
+   const current=await forms.read(original.actor,original.sourceId);
+   await forms.save(original.actor,original.sourceId,{expectedVersion:current.version,document:DevelopmentDocumentSchema.parse({...current.document!,productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order:{customerCode:'PD',productGroup:'男装',designStyleNo:original.designStyleNo,temporaryStyleNo:null,primaryMerchandiserId:h.f.people.merchandiser!.actorId,orderDate:'2027-01-07',contractDeliveryDate:null,requiresColorMatching:false,lines:[{formalPoNo:'TEST-incomplete-'+randomUUID(),poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:'黑',colorForeign:null,deliveryDate:null,customerWarehouseArrivalDate:null,sizes:[{size:'M',quantity:'10'}]}]}}})},randomUUID());
+  });
+  const tab=await h.open(original.actor.actorId,1165,{},'/ui/digital-production?development='+original.sourceId);
+  try{
+   await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
+   const checked=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/check')&&response.request().method()==='POST');
+   const published=tab.page.waitForResponse(response=>response.url().endsWith(`/sources/${original.sourceId}/development/publish`));
+   await tab.page.getByRole('button',{name:'发布开发单',exact:true}).click();
+   const check=await checked;expect(check.status()).toBe(200);expect(await check.json()).toMatchObject({feasibility:'not_applicable'});expect((await published).status()).toBe(200);
+   await tab.page.getByRole('button',{name:'确认客户订单',exact:true}).waitFor();
+   expect(h.requests.filter(request=>request.session===tab.session&&request.method==='POST'&&request.path.endsWith(`/sources/${original.sourceId}/confirm`))).toHaveLength(0);
+   const saved=await forms.read(original.actor,original.sourceId);expect(saved.status).toBe('published');expect(saved.document!.customerOrderDraft!.order.lines[0]!.customerWarehouseArrivalDate).toBeNull();
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[original.sourceId])).rowCount).toBe(0);
+   expect((await new OrderTimePlanRepository(h.db).current({kind:'source',id:original.sourceId}))!.input.frameworkPlans).toBeUndefined();
+  }finally{await tab.context.close();}
+ });
+
+ it('clears the previous adopted notice as soon as a new ordinary duration draft is edited, while retaining the unsaved guard',async()=>{
+  const original=await source('notice-draft','2027-01-10'),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  await h.f.runtime.run(scene,h.f.root,async()=>{
+   const sheet=await forms.read(original.actor,original.sourceId),price=await new PatternRoomPriceService(h.db).quote(h.f.root,'category',original.category.price_id);
+   await forms.publish(original.actor,original.sourceId,sheet.version,randomUUID(),{categoryId:original.category.price_id,priceVersion:price.version});
+  });
+  const tab=await h.open(h.f.people.owner!.actorId,1165,{},'/ui/digital-production?timeSource='+original.sourceId);
+  try{
+   const page=tab.page;await applyPage(page);
+   const input=page.locator('.r5-time-table input[aria-label$="本次用时"]:enabled').first();
+   const row=input.locator('xpath=ancestor::tr'),unit=row.getByRole('combobox',{name:/用时单位$/});
+   await unit.selectOption('days');
+   const preview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.status()===200);
+   await input.fill('2');await preview;
+   await page.getByRole('button',{name:'提交',exact:true}).and(page.locator(':enabled')).waitFor();
+   const confirmation=await page.locator('.r5-time-risk').count()>0;
+   await page.getByRole('button',{name:'提交',exact:true}).click();
+   if(confirmation){const dialog=page.getByRole('dialog',{name:'提交本单时效',exact:true});await dialog.waitFor();await dialog.getByRole('button',{name:'确认',exact:true}).click();}
+   await page.getByText('本单新安排已生效。',{exact:true}).waitFor();
+   const before=await new OrderTimePlanRepository(h.db).current({kind:'source',id:original.sourceId});
+   await input.fill('不是数字');expect(await page.getByText('本单新安排已生效。',{exact:true}).count()).toBe(0);
+   expect(await page.getByRole('button',{name:'提交',exact:true}).isDisabled()).toBe(true);
+   await page.getByRole('button',{name:'返回',exact:true}).click();const invalidDraft=page.getByRole('dialog');await invalidDraft.waitFor();
+   expect(await invalidDraft.innerText()).toContain('还没提交');await invalidDraft.getByRole('button',{name:'取消',exact:true}).click();expect(await input.inputValue()).toBe('不是数字');
+   const uncommitted=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.status()===200);
+   await input.fill('200');expect(await page.getByText('本单新安排已生效。',{exact:true}).count()).toBe(0);await uncommitted;
+   expect(await input.inputValue()).toBe('200');expect(await page.locator('.r5-time-risk').count()).toBeGreaterThan(0);
+   expect((await new OrderTimePlanRepository(h.db).current({kind:'source',id:original.sourceId}))!.revision).toBe(before!.revision);
+   await page.getByRole('button',{name:'返回',exact:true}).click();
+   const unsaved=page.getByRole('dialog');await unsaved.waitFor();expect(await unsaved.innerText()).toContain('还没提交');
+   await unsaved.getByRole('button',{name:'取消',exact:true}).click();expect(await input.inputValue()).toBe('200');
+  }finally{await tab.context.close();}
+ });
+
  it('adopts washing through the original grouped order adjustment page with real authenticated roles',async()=>{
   const settings=new OrderTimeSettingsService(h.db,true,true),current=await settings.read(h.f.root);
   await settings.save(h.f.root,{expectedVersion:current.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
@@ -469,11 +526,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByText('本单新安排已生效。',{exact:true}).waitFor();
    const plans=(await h.db.query('SELECT document FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows;
    expect(plans).toHaveLength(1);expect(plans[0].document.arrangement).toMatchObject({mode:'after_receipt',washing:{minutes:120},inspection:{minutes:60}});
+   const competing=await h.open(h.f.people.owner!.actorId,1165,{},'/ui/digital-production?timeOrder='+orderId);
+   try{
+    await applyPage(competing.page);await competing.page.locator('summary').filter({hasText:'大货洗水'}).click();
+    const competitorPreview=competing.page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===240);
+    await competing.page.getByLabel('洗水用时（小时）',{exact:true}).fill('4');expect((await competitorPreview).status()).toBe(200);
+    await competing.page.getByRole('button',{name:'提交',exact:true}).and(competing.page.locator(':enabled')).waitFor();
    // Same page and session: the saved editor must use the new native version,
    // without requiring a reload to make the next ordinary edit possible.
    await page.locator('summary').filter({hasText:'大货洗水'}).click();
    const secondPreview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===180);
    await page.getByLabel('洗水用时（小时）',{exact:true}).fill('3');
+   expect(await page.getByText('本单新安排已生效。',{exact:true}).count()).toBe(0);
    const previewResponse=await secondPreview;expect(previewResponse.status()).toBe(200);
    const previewBody=await previewResponse.json();
    await page.getByRole('button',{name:'提交',exact:true}).and(page.locator(':enabled')).waitFor();
@@ -496,6 +560,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(savedBody.check.washing[0]).toMatchObject({version:2,document:{arrangement:{washing:{minutes:180}}}});
    const savedPlans=(await h.db.query('SELECT document FROM digital_bulk_washing_plans WHERE production_order_id=$1 ORDER BY version',[orderId])).rows;
    expect(savedPlans).toHaveLength(2);expect(savedPlans[1].document.arrangement.washing.minutes).toBe(180);
+    const stale=competing.page.waitForResponse(response=>response.url().endsWith('/order-time/arrange'));
+    const repreview=competing.page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===240);
+    await competing.page.getByRole('button',{name:'提交',exact:true}).click();
+    const staleDialog=competing.page.getByRole('dialog',{name:'提交本单时效',exact:true});
+    if(await staleDialog.count())await staleDialog.getByRole('button',{name:'确认',exact:true}).click();
+    expect((await stale).status()).toBe(409);await repreview;
+    const conflict=competing.page.getByText('原单已有变化，调整内容已保留；请重新读取并复核新基线，再提交本次草稿。',{exact:true});
+    await conflict.waitFor();expect(await competing.page.getByRole('button',{name:'提交',exact:true}).isDisabled()).toBe(true);
+    expect(await competing.page.getByLabel('洗水用时（小时）',{exact:true}).inputValue()).toBe('4');
+    expect((await h.db.query('SELECT count(*)::int AS count FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows[0].count).toBe(2);
+    const acknowledged=competing.page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===240);
+    await competing.page.getByRole('button',{name:'重新读取并复核新基线',exact:true}).click();await acknowledged;
+    expect(await conflict.count()).toBe(0);expect(await competing.page.getByLabel('洗水用时（小时）',{exact:true}).inputValue()).toBe('4');
+    await competing.page.getByRole('button',{name:'提交',exact:true}).and(competing.page.locator(':enabled')).waitFor();
+    // Explicit acknowledgement/preview is read-only; no second adoption yet.
+    expect((await h.db.query('SELECT count(*)::int AS count FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows[0].count).toBe(2);
+   }finally{await competing.context.close();}
    // Actual adopted work produces110/121-character identities. Click, refresh,
    // original record and return must all preserve the complete identity.
    for(const mode of ['after_receipt','factory'] as const){

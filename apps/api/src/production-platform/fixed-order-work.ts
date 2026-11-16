@@ -2,7 +2,7 @@ import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
-import {frozenWorkDefinition,frozenCraftDefinition,craftParameterKey,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
+import {frozenWorkDefinition,frozenCraftDefinition,frozenCraftChoice,craftParameterKey,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import type {BulkWashingArrangement} from '@dx-rework/contracts/bulk-washing';
 import {bulkWashingWork} from './bulk-washing-work.js';
@@ -53,7 +53,7 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
   add('bulk_cutting','bulk_cutting',['bulk_pattern',preshrink==='需要预缩'?'warehouse_preshrink':'fabric_inspection','sourcing_approval',...(framework?['style_label_ready']:[])]);
   let previous='bulk_cutting';
   for(const step of craftSteps){
-   const key=craftParameterKey(step,'bulk'),node=add(initial.data.orderTimePlan?`${key}:${step.stepId}`:key,key,[previous],{...frozenCraftDefinition(initial,step,'bulk',dual),...(step.craftKind==='special'?{stage:5,craftStep:structuredClone(step)}:{}),...(initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:work`}:{})});
+   const key=craftParameterKey(step,'bulk'),node=add(initial.data.orderTimePlan?`${key}:${step.stepId}`:key,key,[previous],{...frozenCraftDefinition(initial,step,'bulk',dual),...(step.craftKind==='special'?{stage:5,craftStep:frozenCraftChoice(step)}:{}),...(initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:work`}:{})});
    const qc=add(`bulk_qc:${step.stepId}`,'bulk_qc',[node.id],initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:qc`}:{});previous=qc.id;
    route.push({kind:'process_logistics',position:route.length,nodeId:node.id,stepId:step.stepId,phase:'logistics'});
    route.push({kind:'bulk_qc',position:route.length,nodeId:qc.id,stepId:step.stepId,phase:'qc'});

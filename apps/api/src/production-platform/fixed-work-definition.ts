@@ -1,4 +1,4 @@
-import {craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
+import {CraftStepChoiceSchema,craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {FrozenInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
@@ -9,6 +9,12 @@ import {FRAMEWORK_TIME_NODES,orderTimeNodeStage} from '@dx-rework/contracts/orde
  * supplies one ordinary-node duration/calendar to planning and responsibility.
  */
 export type FixedWorkInputs={data:Pick<FrozenInitialTimelineInput['data'],'unified'|'planning'|'development'|'orderTimePlan'>};
+/** An adopted native step also has an instance ID. The scheduling choice DTO
+ * keeps its frozen library version/order; route and canonicalWorkRef own ID. */
+export function frozenCraftChoice(step:CraftStepChoice):CraftStepChoice{
+ return CraftStepChoiceSchema.parse({craftKind:step.craftKind,sequence:step.sequence,
+  ...(step.specialCraft===undefined?{}:{specialCraft:step.specialCraft})});
+}
 export function frozenWorkDefinition(initial:FixedWorkInputs,key:string,dualCraft=false){
  if(initial.data.orderTimePlan)return orderTimeWorkDefinition(initial.data.orderTimePlan,key);
  const parameter=initial.data.unified.values.parameters[key]?.value;

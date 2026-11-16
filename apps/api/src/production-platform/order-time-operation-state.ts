@@ -1,4 +1,6 @@
 import {orderTimeFactoryCommitments,outstandingFactoryCommitments} from './order-time-factory-commitments.js';
+import {publicationFormalInput} from './order-time-publication-intent.js';
+import {beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
 import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import {orderTimeCreated} from './order-time-created.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
@@ -87,7 +89,8 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  // display label. Preserve the original target identity and allocate this
  // round's work its own keys; inherited completed work is not scheduled again.
  const dev=built&&round>1?{...built,previous:built.previous?built.previous+':round:'+round:null,route:built.route.map(node=>({...node,nodeId:node.nodeId+':round:'+round})),work:built.work.map(work=>({...work,id:work.id+':round:'+round,dependsOn:work.dependsOn.map(id=>id+':round:'+round),...(work.includedIn?{includedIn:work.includedIn+':round:'+round}:{})}))}:built;
- if(resource?.kind==='order'||operation.kind==='confirm_order'||operation.kind==='direct_order'||development?.customerOrderDraft?.withOrder){
+ const publicationOrder=publicationFormalInput(development,{serverToday:beijingCalendarDate(new Date(time.now)),minimumInitialCustomerDate:minimumInitialCustomerDate(new Date(time.now)),orderTimeEnabled:true},Boolean(plan.company.framework));
+ if(resource?.kind==='order'||operation.kind==='confirm_order'||operation.kind==='direct_order'||publicationOrder){
   let lines:Array<{id:string;po:string;date:string|null;customerDateVersion?:number}>;
   if(order){
    const rows=(await db.query('SELECT line_id,coalesce(po_number,formal_style_no) AS po,customer_warehouse_arrival_date::text AS date,customer_date_version,factory_delivery_date::text AS factory_date,factory_date_version,factory_date_source FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[resource!.id])).rows;
@@ -116,6 +119,8 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   const declaredSteps=orderTimeBulkSteps(order?.production_order_id??'planned-order',Number(sourceVersion.instructionVersion??0),production?.craftSteps??[],originalSteps);
   const colorMatching=order?.requires_color_matching??(operation.kind==='direct_order'||operation.kind==='confirm_order'?operation.input.requiresColorMatching:development?.customerOrderDraft?.order.requiresColorMatching);
   frameworkRoute=colorMatching===true?'A':colorMatching===false?'B':undefined;
+  if(plan.company.framework&&!frameworkRoute)throw new ApplicationError('VALIDATION_ERROR','请在原单确认是否需要对色',400);
+  for(const line of lines)if(!line.date)missing.push(`${line.po||'本PO'}的客户交期尚未填写`);
   const bulk=fixedOrderWork(initial,order?.production_order_id??'planned-order',sourceId??'planned-source',round,production?.preshrink?'需要预缩':'无需预缩',declaredSteps,hasBothBuiltinCrafts(declaredSteps),dev,lines.map(line=>({line_id:line.id,goal:line.date?{precision:'date',value:line.date,source:'本单客户交期'}:{precision:'unknown',reason:'请填写本单客户交期'},customerDateVersion:line.customerDateVersion??1,...(washing?.get(line.id)?.document?{washing:washing.get(line.id)!.document!.arrangement}:{})})),frameworkRoute);
   route={work:bulk.work,consumers:bulk.consumers.map(consumer=>({...consumer,lineId:resource?.kind==='order'?consumer.lineId:null}))};
  }else{
@@ -203,7 +208,8 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(washing)sourceVersion.washing=[...washing];
  sourceVersion.customerDates=dates;sourceVersion.workFacts=[...progress];sourceVersion.materialBounds=notBefore;
  const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal});
- if(plan.company.framework&&frameworkRoute){
+ const datedScopes=value.scopes.filter(scope=>scope.customerGoal.precision==='date');
+ if(plan.company.framework&&frameworkRoute&&datedScopes.length){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
   const created=resource?await orderTimeCreated(db,resource):null;
   const acceptedAt:SlaAnchor=created?{precision:'instant',value:created.at,source:created.evidence}:resource
@@ -229,7 +235,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    sourceVersion.frameworkFactRevisions=native.revisions;
   }
   value.frameworkContext={route:frameworkRoute,acceptedAt,notBefore,progress:Object.fromEntries(progress)};
-  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs(value,frameworkRoute,acceptedAt,notBefore).map(input=>({input,retained:retainedFrameworkWork(input,progress,saved?.input.frameworkPlans?.[input.scopeRef],time.now)})),observedAt:time.now,mode:'automatic',acceptLate:false});
+  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs({...value,scopes:datedScopes},frameworkRoute,acceptedAt,notBefore).map(input=>({input,retained:retainedFrameworkWork(input,progress,saved?.input.frameworkPlans?.[input.scopeRef],time.now)})),observedAt:time.now,mode:'automatic',acceptLate:false});
   check.fingerprint=fixedTimelineIdentity({prior:check.fingerprint,sourceVersion,frameworkProgress:[...progress]});
   // The caller already authorized this exact order. Reuse the native scoped
   // receipt ledger and the same transaction; no first receipt is manufactured

@@ -6,7 +6,8 @@ import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
-import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderInput} from '@dx-rework/contracts/digital-production';
+import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import type {OrderTimeOperation} from '@dx-rework/contracts/order-time-requests';
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
@@ -562,6 +563,68 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await new DigitalProductionTaskService(f.db).read(row.actor,sheet.taskId!)).toMatchObject({enteredAt:task.enteredAt,dueAt:task.dueAt});
    expect((await forms.read(row.actor,row.sourceId)).document!.returnDate).toBeNull();
    const saved=(await new OrderTimePlanRepository(f.db).current(resource))!;expect(saved.input.scopes.every(scope=>scope.customerGoal.precision==='unknown')).toBe(true);expect(saved.input.frameworkPlans).toBeUndefined();
+  });
+ });
+
+ it('publishes incomplete ordering as development without inventing PO deadlines or silently creating a formal order',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,true),standard=await settings.read(f.root);
+  await settings.save(f.root,{expectedVersion:standard.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  const scene=await f.scene('2027-10-01T00:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   for(const partial of [false,true]){
+    const row=await make(null),before=await forms.read(row.actor,row.sourceId);
+    const ordering=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:before.designStyleNo,orderDate:'2027-10-01',contractDeliveryDate:null,requiresColorMatching:false,
+     lines:[{formalPoNo:'TEST-undated-'+randomUUID(),color:'黑',deliveryDate:null,customerWarehouseArrivalDate:null,sizes:[{size:'M',quantity:'2'}]},...(partial?[{formalPoNo:'TEST-dated-'+randomUUID(),color:'蓝',deliveryDate:null,customerWarehouseArrivalDate:'2028-02-01',sizes:[{size:'M',quantity:'2'}]}]:[])]});
+    const saved=await forms.save(row.actor,row.sourceId,{expectedVersion:before.version,document:{...before.document!,productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order:ordering}}},randomUUID());
+    const operation:OrderTimeOperation={...row.operation,input:{...(row.operation.kind==='development_publish'?row.operation.input:{}),expectedVersion:saved.version}} as OrderTimeOperation;
+    const check=await requests.check(row.actor,operation);
+    expect(check).toMatchObject({feasibility:'not_applicable',customerDates:[{po:'样板',date:null}]});expect(check.framework).toBeUndefined();
+    // Use the original request/application transaction as well as ordinary
+    // publication: the native executor must share the same readiness boundary.
+    const pending=await requests.submit(row.actor,{operation,fingerprint:check.fingerprint,reason:'TEST retain incomplete customer information'},randomUUID());
+    const preview=await requests.read(f.root,pending.requestId);
+    const result=await requests.apply(f.root,pending.requestId,{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:false},randomUUID());
+    expect(result).toMatchObject({state:'applied',result:{orderId:null}});
+    const published=await forms.read(row.actor,row.sourceId);expect(published.status).toBe('published');expect(published.document!.customerOrderDraft!.order).toEqual(ordering);
+    expect((await f.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+    const adopted=(await new OrderTimePlanRepository(f.db).current({kind:'source',id:row.sourceId}))!;
+    expect(adopted.input.scopes.every(scope=>scope.customerGoal.precision==='unknown')).toBe(true);expect(adopted.input.frameworkPlans).toBeUndefined();
+    const formal={...initialCustomerOrderInput(ordering),productionPlanning:{craftSteps:[],preshrink:false}};
+    const formalCheck=await requests.check(row.actor,{kind:'confirm_order',sourceId:row.sourceId,input:formal});
+    expect(formalCheck.feasibility).toBe('unknown');expect(formalCheck.coverage.join('；')).toContain('客户交期尚未填写');
+    if(partial)expect(formalCheck.framework!.milestones).toHaveLength(8);
+    else expect(formalCheck.framework).toBeUndefined();
+    await expect(identity.createOrder(row.actor,formal,randomUUID(),row.sourceId)).rejects.toMatchObject({code:'ORDER_TIME_INPUT_REQUIRED'});
+    expect((await f.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+   }
+  });
+ });
+
+ it('checks and formally adopts two frozen special steps without leaking internal step IDs into strict choice contracts',async()=>{
+   const settings=new OrderTimeSettingsService(f.db,true,true),standard=await settings.read(f.root);
+   await settings.save(f.root,{expectedVersion:standard.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+   const library=new SpecialCraftLibraryService(f.db),steps=[];
+   for(const [index,name] of ['TEST contract special B','TEST contract special C'].entries()){
+    const rule={minutes:60*(index+1),calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
+    const snapshot=await library.save(f.root,{id:null,expectedVersion:0,definition:{name,enabled:true,development:rule,bulk:{...rule,minutes:rule.minutes*2}}},randomUUID());
+    steps.push({craftKind:'special' as const,sequence:index+1,specialCraft:snapshot});
+   }
+  const scene=await f.scene('2027-10-01T00:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const row=await make(null),before=await forms.read(row.actor,row.sourceId);
+   const ordering=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:before.designStyleNo,orderDate:'2027-10-01',contractDeliveryDate:'2028-04-16',requiresColorMatching:false,salesYear:2028,salesSeries:'P04',
+    lines:[{formalPoNo:'TEST-special-'+randomUUID(),color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2028-04-16',sizes:[{size:'M',quantity:'2'}]}]});
+   const saved=await forms.save(row.actor,row.sourceId,{expectedVersion:before.version,document:{...before.document!,craft:'特殊工艺',craftSteps:steps,productionPlanning:{craftSteps:steps,preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order:ordering}}},randomUUID());
+   const operation:OrderTimeOperation={...row.operation,input:{...(row.operation.kind==='development_publish'?row.operation.input:{}),expectedVersion:saved.version}} as OrderTimeOperation;
+   const check=await requests.check(row.actor,operation);expect(check.framework!.milestones).toHaveLength(8);expect(check.feasibility).not.toBe('unknown');
+   const pending=await requests.submit(row.actor,{operation,fingerprint:check.fingerprint,reason:'TEST full special craft ordering'},randomUUID());
+   const preview=await requests.read(f.root,pending.requestId),result=await requests.apply(f.root,pending.requestId,{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   expect(result.state).toBe('applied');expect(result.result!.orderId).toBeTruthy();
+   const resource={kind:'order' as const,id:result.result!.orderId!},adopted=(await new OrderTimePlanRepository(f.db).current(resource))!;
+   expect(adopted.input.frameworkPlans).toBeDefined();
+   const work=adopted.input.work.filter(work=>work.craftStep?.craftKind==='special');expect(work).toHaveLength(4);
+   expect(new Set(work.map(work=>work.canonicalWorkRef)).size).toBe(4);
+   for(const item of work){expect(Object.keys(item.craftStep!)).not.toContain('stepId');expect(item.craftStep!.specialCraft!.version).toBe(1);expect(item.canonicalWorkRef).toContain(':step:');}
+   const read=await requests.check(f.root,{kind:'arrangement',resource});expect(read.framework!.milestones).toHaveLength(8);
+   expect((await forms.read(row.actor,row.sourceId)).document!.craftSteps).toEqual(steps);
   });
  });
 

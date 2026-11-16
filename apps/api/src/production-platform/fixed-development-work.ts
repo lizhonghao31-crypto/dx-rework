@@ -1,7 +1,7 @@
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {DigitalTaskKind} from './task-access-repository.js';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
-import {frozenWorkDefinition as definition,frozenCraftDefinition,craftParameterKey,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
+import {frozenWorkDefinition as definition,frozenCraftDefinition,frozenCraftChoice,craftParameterKey,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
 type Work=FixedTimelineInput['work'][number];
 /** Shared pure adopted route construction. The caller supplies original inputs;
  * the settings calculator supplies clearly temporary inputs, never actual A. */
@@ -26,7 +26,7 @@ export function fixedDevelopmentWork(initial:FixedWorkInputs,sourceId:string,rou
     const days=initial.data.development?.values.externalWashDays;
     if(typeof days==='number'){policy.minutes=days*1440;policy.calendar='natural_days';policy.planningParameterRef=`${initial.data.development!.snapshotRef}:externalWashDays`;policy.responsibilitySlaRef=policy.planningParameterRef;policy.responsibilityMinutes=days*1440;policy.responsibilityCalendar='natural_days';}
    }
-   work.push({id,parameterKey:key,...(step?.craftKind==='special'?{stage:2,craftStep:structuredClone(step)}:{}),dependsOn:previous?[previous]:[],...policy,canonicalWorkRef:step?`source:${sourceId}:round:${round}:step:${step.stepId}:work`:ref(id),accountingRole:milestone?'event':round===1?'original_work':'added_work'});
+   work.push({id,parameterKey:key,...(step?.craftKind==='special'?{stage:2,craftStep:frozenCraftChoice(step)}:{}),dependsOn:previous?[previous]:[],...policy,canonicalWorkRef:step?`source:${sourceId}:round:${round}:step:${step.stepId}:work`:ref(id),accountingRole:milestone?'event':round===1?'original_work':'added_work'});
    previous=id;
   }
   // Positioning follows this round's pattern in parallel with cutting. Only
