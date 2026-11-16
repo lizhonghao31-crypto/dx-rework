@@ -66,8 +66,7 @@
       "expectation": "Current135focusedunits + native47 + separately selected original HTTP1 pass. Mixed original0086 legacy/native repeat and older legacy merge preserve target note50→60→65; laterjiashun70 and merged-source80 do not replace baseline, raw facts unchanged. Original older native200→target100 regression remains. Root HTTP request ID text persisted exactly to original audit, full/ordinary role denials retained. Prior remote Full595 failed one realRoot500, nonDB passed; new exact candidate still requires Review closure/Full and is not represented as remotely green.",
       "checks": [
         "unit",
-        "native-pg",
-        "native-http"
+        "native-pg"
       ]
     }
   ],
@@ -97,49 +96,30 @@
     },
     {
       "id": "native-pg",
-      "command": "bash /tmp/production-facts-legacy-verified.sh, first original business-chain phase: receiving40 + original App5 + production-facts2",
+      "command": "bash /tmp/production-facts-legacy-verified.sh: original business-chain receiving40/native-App5/production-facts2, then original immediate configuration selects the Root authority/correction scenario1",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "passed": 47,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "595abf9522a92659d6261e2169efc1897c794535",
-      "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
-      "startedAt": "2026-11-16T06:29:19.093Z",
-      "endedAt": "2026-11-16T06:29:57.024Z",
-      "log": "/tmp/production-facts-legacy-verified-final.log",
-      "logSha256": "35e1fbf1d688dbbed6d4f90a99e387fb817b4003a6e7047e28735d50d61ebc4a",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "b89235241d1e680015d143d42db3f191b2016cf0e4ba4d1360ecc7d1ab120f0e"
-        }
-      ],
-      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun."
-    },
-    {
-      "id": "native-http",
-      "command": "Same owned script, original immediate config full-business-chain suite filtered to the discrepancy/Root authority scenario",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 1,
+      "passed": 48,
       "failed": 0,
       "skipped": 59,
       "testedHead": "595abf9522a92659d6261e2169efc1897c794535",
       "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
-      "startedAt": "2026-11-16T06:29:58.226Z",
+      "startedAt": "2026-11-16T06:29:19.093Z",
       "endedAt": "2026-11-16T06:30:07.594Z",
       "log": "/tmp/production-facts-legacy-verified-final.log",
       "logSha256": "35e1fbf1d688dbbed6d4f90a99e387fb817b4003a6e7047e28735d50d61ebc4a",
       "resultReports": [
         {
           "format": "vitest-json",
+          "sha256": "b89235241d1e680015d143d42db3f191b2016cf0e4ba4d1360ecc7d1ab120f0e"
+        },
+        {
+          "format": "vitest-json",
           "sha256": "32e720f6374ba16229d7ec44053fa5609f5a39665e8ade5ec082f61f3a577e0a"
         }
       ],
-      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun."
+      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun. This is one actual captured script with two native reports:47+1 passing cases and59 unselected; the committed check groups both original summaries and report digests instead of counting the same command log as two independent checks. No rerun or source change for record formatting."
     }
   ]
 }
