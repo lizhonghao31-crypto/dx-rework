@@ -1,3 +1,4 @@
+import {developmentResponsibilityWindow,developmentResponsibilityProofSql,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
 import {taskCraftDisplay} from './task-craft-display.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {SlaSettingsSetsService} from './sla-settings-sets.js';
@@ -99,7 +100,7 @@ export class DigitalProductionTaskService {
     return result;
   }
   private async task(client: PoolClient | Pick<Pool, "query">, id: string, lock = false) {
-    const task=(await client.query(`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role,
+    const task=(await client.query(`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,
       coalesce((to_jsonb(o)->>'order_time_managed')::boolean,(to_jsonb(s)->>'order_time_managed')::boolean,false) AS order_time_managed FROM digital_production_tasks t
       JOIN digital_production_task_access a USING(task_id) LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
       LEFT JOIN digital_production_sources s ON s.source_id=a.source_id WHERE t.task_id=$1 ${lock ? "FOR UPDATE OF t,a" : ""}`, [id])).rows[0] ?? digitalNotFound();
@@ -138,7 +139,7 @@ export class DigitalProductionTaskService {
     }
     return (await client.query("SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [key])).rows[0] ?? digitalNotFound();
   }
-  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>) {
+  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>,readyCorrection?:{at:string|null;eventId:string}) {
     const task=await this.task(client,taskId);
     if(task.task_kind==='bulk_ship_sample'&&task.production_order_id){
       const targets=await shipSampleTargets(client,task.production_order_id,task.order_time_managed===true);
@@ -152,7 +153,7 @@ export class DigitalProductionTaskService {
       }
     }
     const nativeTiming=timingOverride??await developmentTaskTiming(client,task)??await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
-    const timing=await orderTimeNativeTiming(client,task,nativeTiming,enteredAt);
+    const timing=await orderTimeNativeTiming(client,task,nativeTiming,enteredAt,readyCorrection);
     if(timing){
       const deadline=digitalDeadline(timing.enteredAt,timing.seconds,timing.warningRatio);
       if('calendarRef'in timing&&timing.calendarRef&&timing.enteredAt&&timing.seconds!==null){
@@ -687,7 +688,7 @@ export class DigitalProductionTaskService {
         const completion = original.event_kind === "completed"||poCut ? corrected : task.completed_at ? new Date(task.completed_at) : null;
         if (entry && completion && completion < entry) fail("完成时间不能早于进入时间");
         const poReady=original.payload?.nativeReadiness?.scopeKind==='po';
-        const readiness=!poReady&&original.event_kind==='ready'&&NATIVE_READINESS_KINDS.has(task.task_kind)?(await nativeTaskReadiness(client,[id])).get(id):null;
+        const readiness=!poReady&&original.event_kind==='ready'&&(NATIVE_READINESS_KINDS.has(task.task_kind)||Boolean(task.source_id&&FIXED_DEVELOPMENT_CRAFT_TASKS.has(task.task_kind)))?(await nativeTaskReadiness(client,[id])).get(id):null;
         const correctedReference=readiness?.eventId??input.eventId;
         const eventId = await this.event(client, actor, id, this.resource(task), "time_corrected", input.occurredAt, corrected ? "已核实" : "缺失", { reason: input.reason, originalKind: original.event_kind,...(correctedReference!==input.eventId?{requestedEventId:input.eventId}:{}) }, correctedReference);
         if(poReady||poCut)return {taskId:id,eventId};
@@ -699,7 +700,7 @@ export class DigitalProductionTaskService {
             WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
           if (snapshot) policy = snapshot;
         }
-        await this.revision(client, actor, id, policy, entry?.toISOString() ?? null, "correction", eventId);
+        await this.revision(client, actor, id, policy, entry?.toISOString() ?? null, "correction", eventId,undefined,original.event_kind==='ready'?{at:input.occurredAt,eventId}:undefined);
         return { taskId: id, eventId };
       });
     });
@@ -739,8 +740,8 @@ export class DigitalProductionTaskService {
     const retired=isRetiredFactoryTask(task.task_kind);
     const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,
       CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,
-      to_jsonb(r)->'sla_basis' AS sla_basis,to_jsonb(r)->>'deadline_kind' AS timing_mode,p.label FROM digital_production_deadline_revisions r
-      JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
+      to_jsonb(r)->'sla_basis' AS sla_basis,to_jsonb(r)->>'deadline_kind' AS timing_mode,p.label,${developmentResponsibilityProofSql('a',"to_jsonb(r)->'sla_basis'")} AS responsibility_proof,${developmentNativeReadySql('r.task_id',"to_jsonb(r)->'sla_basis'")} AS native_readiness FROM digital_production_deadline_revisions r
+      JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by JOIN digital_production_task_access a ON a.task_id=r.task_id WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
     const currentPolicy = effective ?? await this.policy(db, task.task_kind, task.task_id);
     const resource = this.resource(task);
     const paused = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
@@ -787,12 +788,13 @@ export class DigitalProductionTaskService {
     const craftDisplay=taskCraftDisplay(task.task_kind,currentPolicy.label as string,effective?.sla_basis,frozenStep);
     const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind});
 
+    const responsibility=task.source_id?developmentResponsibilityWindow({...task,native_readiness:effective?.native_readiness},effective?.sla_basis?effective.entered_at:task.entered_at,effective?.sla_basis,effective?.responsibility_proof):null;
     return { ...craftDisplay,...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:craftDisplay.label,
       ...(plannedTargets?{plannedTargets}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
-      enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
-      dueAt: retired?null:iso(effective?.due_at ?? null), warningAt: retired?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
-      policyVersion: currentPolicy.version as number, timeQuality: (effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
+      enteredAt: responsibility?responsibility.at:iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
+      dueAt: retired||responsibility&&!responsibility.at?null:iso(effective?.due_at ?? null), warningAt: retired||responsibility&&!responsibility.at?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
+      policyVersion: currentPolicy.version as number, timeQuality: (responsibility?.quality??(effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality)) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
       blockedReason: task.blocked_reason as string | null, canExecute: !retired && !paused && await policy.allowed(actor, "task", id, "execute") };
   }
   async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){

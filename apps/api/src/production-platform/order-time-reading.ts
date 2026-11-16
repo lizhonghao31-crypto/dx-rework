@@ -1,3 +1,4 @@
+import {developmentResponsibilityWindow,developmentReadyCorrectionSql,type ReadyCorrection} from './development-responsibility-window.js';
 import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
 import {frameworkNodeTargets,frameworkTargetPrecision} from './framework-node-targets.js';
 import {journeyWashingFact} from './journey-washing-facts.js';
@@ -35,20 +36,20 @@ const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).d
 const aliases:Record<string,string>={production_sheet:'production_instruction',warehouse_accessories:'accessories_ready',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',external_pattern:'development_external_pattern',development_craft_return:'development_craft_confirmation',factory_production_work:'production_reporting',factory_production:'factory_production_qc',garment_inspection:'receiving_inspection',garment_packing:'packing',return_logistics:'receipts'};
 const keyOf=(work:OrderTimeWork)=>work.parameterKey.startsWith('development_special_')?'development_printing':aliases[work.parameterKey]??work.parameterKey;
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
-type NativeTask={task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar']}|null;native_entered_at:Date|null;warning_at:Date|null};
+type NativeTask={ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
 type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
 async function taskEvidence(db:DB,resource:BusinessTimeScope,item:OrderJourney):Promise<Evidence>{
- const tasks=(await db.query<NativeTask>(`SELECT t.task_id,a.task_kind,a.source_id,a.production_order_id,t.route_version,t.state,
+ const tasks=(await db.query<NativeTask>(`SELECT t.task_id,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,a.task_kind,a.source_id,a.production_order_id,t.route_version,t.state,
   t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,position.step_id,d.sla_basis,d.entered_at AS native_entered_at,d.warning_at,
   EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned,
   EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id AND f.kind='尾查退回') AS rejected
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   LEFT JOIN digital_timeline_task_positions position USING(task_id)
   LEFT JOIN LATERAL(SELECT r.sla_basis,r.entered_at,r.warning_at FROM digital_production_deadline_revisions r WHERE r.task_id=t.task_id
-   ORDER BY CASE WHEN t.state='completed' AND r.reason='completion' THEN 0 ELSE 1 END,r.revision_id DESC LIMIT 1) d ON true
+   ORDER BY CASE WHEN a.source_id IS NULL AND t.state='completed' AND r.reason='completion' THEN 0 ELSE 1 END,r.revision_id DESC LIMIT 1) d ON true
   WHERE ($1::uuid IS NOT NULL AND a.production_order_id=$1) OR ($2::uuid IS NOT NULL AND a.source_id=$2)
   ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,resource.kind==='source'?resource.id:item.sourceId])).rows;
  const ids=tasks.map(task=>task.task_id),readiness=await nativeTaskReadiness(db,ids);
@@ -85,7 +86,8 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  let fact:ScheduleFact=value?{...empty(),ready:instant(value.startedAt),clockStart:instant(value.startedAt),completed:value.completedDate?{precision:'date',date:value.completedDate}:instant(value.completedAt),businessCompleted:value.businessCompleted===true||Boolean(value.completedAt||value.completedDate),evidenceRefs:[value.evidence]}:empty();
  if(task){
   const readiness=evidence.readiness.get(task.task_id),accepted=task.state==='completed'&&!task.returned&&!task.rejected;
-  const ready=readiness?.tracked?instant(readiness.firstReadyAt):['现场登记','已核实'].includes(task.entered_quality)?instant(task.entered_at):unknown;
+  const responsibility=task.source_id?developmentResponsibilityWindow(task,task.native_entered_at??task.entered_at,task.sla_basis,evidence.tasks):null;
+  const ready=readiness?.tracked?instant(readiness.firstReadyAt):responsibility?instant(responsibility.at):['现场登记','已核实'].includes(task.entered_quality)?instant(task.entered_at):unknown;
   fact={...fact,ownTaskId:task.task_id,ready,clockStart:ready,completed:accepted&&['现场登记','已核实'].includes(task.completed_quality)?instant(task.completed_at):unknown,businessCompleted:accepted,
    notYetReady:readiness?.tracked===true&&readiness.eventId===null&&!accepted,
    evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...readiness?.basis??[]]};
@@ -133,6 +135,9 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    // cannot hide this exact scope's already verified native completion.
    const emptyPrevious=previous&&!previous.businessCompleted&&!previous.evidenceRefs.length&&[previous.ready,previous.clockStart,previous.completed].every(value=>value.precision==='unknown');
    let fact=previous&&!(emptyPrevious&&own.fact.businessCompleted&&own.fact.completed.precision!=='unknown')?structuredClone(previous):own.fact;
+   // Current exact-task R can invalidate a stale legacy clock. Keep the
+   // existing completion/date mapping and original target history separate.
+   if(own.task&&own.task.source_id)fact={...fact,ready:own.fact.ready,clockStart:own.fact.clockStart,notYetReady:own.fact.notYetReady===true,ownTaskId:own.task.task_id,evidenceRefs:[...new Set([...fact.evidenceRefs,...own.fact.evidenceRefs])]};
    if(evidence.washing?.[source.id])fact=structuredClone(evidence.washing[source.id]!);
    if(framework){
     const names:Record<string,string>={fabric_receipt_a:'fabric_receipt',fabric_receipt_b:'fabric_receipt',warehouse_accessories:'accessories_ready',warehouse_dispatch:'processing_dispatch'};
@@ -167,7 +172,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    // An original adopted task window owns its established responsibility R.
    // A legacy planning counterpart can lack readiness without erasing that
    // verified native clock. This does not invent availability/ready evidence.
-   if(taskOwn&&fact.clockStart.precision==='unknown'&&fact.notYetReady!==true&&!own.native?.batchWindows?.length&&!(source.parameterKey==='bulk_cutting'&&scope.lineId!==null)&&own.task?.native_entered_at&&['现场登记','已核实'].includes(own.task.entered_quality))fact.clockStart=instant(own.task.native_entered_at);
+   if(taskOwn&&fact.clockStart.precision==='unknown'&&fact.notYetReady!==true&&!own.native?.batchWindows?.length&&!(source.parameterKey==='bulk_cutting'&&scope.lineId!==null)&&own.task?.native_entered_at&&own.fact.clockStart.precision!=='unknown')fact.clockStart=instant(own.task.native_entered_at);
    const nativeOwn=begun&&typeof own.native?.standardMinutes==='number'?{responsibilitySlaRef:own.native.evidence,responsibilityMinutes:own.native.standardMinutes,responsibilityCalendar:own.native.standardCalendar??'continuous' as const}:null;
    const start=fact.clockStart.precision==='instant'?fact.clockStart.at:null;
    const captured=start?evidence.policies?.find(version=>Date.parse(version.at)<=Date.parse(start))??inheritedSourcePolicyAt(source,evidence.inheritedPolicies,start,saved.time.scenarioId):undefined;

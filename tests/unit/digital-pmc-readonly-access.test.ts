@@ -344,7 +344,7 @@ function linkedJourneyDatabase(roles: string[]) {
     if (sql.startsWith('SELECT * FROM digital_production_orders ')) return values[0] === ORDER ? [mother] : [];
     if (sql.startsWith('SELECT a.task_id,a.task_kind,a.source_id,')) return [task];
     if (sql.startsWith('SELECT p.preparation_id FROM digital_bulk_preparations p')) return [{preparation_id: QUOTE}];
-    if (sql.startsWith('SELECT t.*,a.source_id,a.production_order_id,')) return [{
+    if (sql.startsWith('SELECT t.*,') && sql.includes('AS ready_correction,a.source_id,a.production_order_id,') && sql.includes('AS responsibility_proof,')) return [{
       ...task, state: 'completed', entered_at: createdAt, entered_quality: '现场登记', created_at: createdAt, completed_at: completedAt,
       paused: false, assignee_name: 'TEST other worker', assignee_active: true, label: '大货纸样',
       due_at: null, warning_at: null, sla_seconds: null, policy_version: 1, condition_keys: [], completion_keys: [], predecessors: [],
