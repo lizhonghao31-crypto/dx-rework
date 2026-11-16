@@ -146,7 +146,10 @@ export class DevelopmentTechnicalService {
      WHERE a.source_id=$1 AND a.task_kind='development_pattern' AND a.assignee_id IS NOT NULL AND t.route_version<=$2 ORDER BY t.route_version DESC,t.created_at DESC`,[sourceId,input.roundNumber])).rows;
     let assigneeId:string|null=null;for(const candidate of candidates)if(await new DigitalProductionAccessPolicy(db).activeRole(candidate.assignee_id,'pattern_room_worker')){assigneeId=candidate.assignee_id;break;}
     const occurrence=(await db.query("SELECT coalesce(max(t.occurrence),0)+1 AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_size_review'",[sourceId])).rows[0].n;
-    reviewTaskId=(await this.tasks().createWithClient(db,actor,{resource:{kind:'source',id:sourceId},kind:'development_size_review',routeId:origin.route_instance_id,routeVersion:input.roundNumber,occurrence,assigneeId,occurredAt:at})).taskId;
+    // This task starts at server registration of the review request. Customer
+    // occurrence dates are independent; do not mark this live creation as a
+    // backreported ready event by supplying an explicit occurredAt.
+    reviewTaskId=(await this.tasks().createWithClient(db,actor,{resource:{kind:'source',id:sourceId},kind:'development_size_review',routeId:origin.route_instance_id,routeVersion:input.roundNumber,occurrence,assigneeId})).taskId;
     const artifact=await publishedTechnicalArtifact(db,sourceId,input.roundNumber,input.scopeRef);
     await db.query(`INSERT INTO digital_development_size_review_requests(review_id,task_id,source_id,round_number,scope_ref,final_comment_id,final_comment_version,requested_artifact_set_id,requested_artifact_version,requested_at)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[randomUUID(),reviewTaskId,sourceId,input.roundNumber,input.scopeRef,id,next,artifact?.artifact.artifactSetId??null,artifact?.artifact.version??null,at]);

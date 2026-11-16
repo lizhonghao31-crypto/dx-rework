@@ -18,7 +18,7 @@ it('does not resurrect a previously captured synthetic R after current native ev
  const result=await orderTimeNativeTiming(db(original) as never,task,base,automatic);expect(result?.enteredAt).toBeNull();expect(result?.seconds).toBe(1800);
 });
 it('retains a genuinely captured started quota when a later order arrangement has a smaller duration',async()=>{
- const original={entered_at:at,sla_basis:{...base,enteredAt:at,seconds:28800,orderTimePlanRef:'TEST first',basis:['task:TEST trusted upstream:completed']},due_at:'2026-11-16T06:53:30.123Z',warning_at:null};
+ const original={entered_at:at,ready_quality:'现场登记',sla_basis:{...base,enteredAt:at,seconds:28800,orderTimePlanRef:'TEST first',basis:['task:TEST trusted upstream:completed']},due_at:'2026-11-16T06:53:30.123Z',warning_at:null};
  const result=await orderTimeNativeTiming(db(original) as never,{...task,entered_quality:'已核实'},{...base,enteredAt:at,seconds:14400},at);expect(result?.enteredAt).toBe(at);expect(result?.seconds).toBe(28800);
 });
 it('uses the verified original ready correction rather than the earlier synthetic R without changing the captured quota',async()=>{
@@ -51,4 +51,20 @@ it('refreshes only an explicitly corrected derived R while keeping a genuine ori
  const changed='2026-11-15T22:54:00.850Z',current={...base,enteredAt:changed,seconds:14400};
  expect((await orderTimeNativeTiming(db(original) as never,task,current,at))?.enteredAt).toBe(at);
  expect(await orderTimeNativeTiming(db(original) as never,task,current,at,undefined,true)).toMatchObject({enteredAt:changed,seconds:28800,orderTimePlanRef:'TEST original'});
+});
+
+it('preserves a causal corrected R through later completion, completed-time verification and arrangement revisions',async()=>{
+ const original={entered_at:at,ready_quality:'现场登记',sla_basis:{...base,enteredAt:at,seconds:28800,timeQuality:'现场登记',calendarRef:'beijing_sunday_excluded',orderTimePlanRef:'TEST original',basis:['task:TEST upstream:completed']},due_at:null,warning_at:null,current_basis:null as unknown};
+ const changed='2026-11-15T22:54:00.850Z',current={...base,enteredAt:changed,seconds:14400};
+ original.current_basis=await orderTimeNativeTiming(db(original) as never,task,current,at,undefined,true);
+ for(const action of ['completion','completed-time verification','arrangement']){
+  const result=await orderTimeNativeTiming(db(original) as never,task,current,at);
+  expect(result?.enteredAt,action).toBe(changed);expect(result).toMatchObject({seconds:28800,calendarRef:'beijing_sunday_excluded',orderTimePlanRef:'TEST original'});
+  original.current_basis=result;
+ }
+});
+
+it('does not certify a synthetic quota merely because a later trustworthy task row has the same R',async()=>{
+ const original={entered_at:at,ready_quality:null,sla_basis:{...base,enteredAt:at,seconds:28800,orderTimePlanRef:'TEST unproven old policy'},due_at:null,warning_at:null};
+ expect(await orderTimeNativeTiming(db(original) as never,{...task,entered_quality:'现场登记'},{...base,enteredAt:at},at)).toMatchObject({seconds:1800,orderTimePlanRef:'TEST original plan'});
 });

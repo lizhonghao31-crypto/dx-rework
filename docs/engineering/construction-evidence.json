@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "47d08674f937bf5b385fd42cecea6dd4b9cdcb63",
-  "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
+  "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
   "rules": [
     {
       "rule": "Unknown/unverified responsibility R must remain unrated while actual A and objective original plan lag remain valid. Per-node genuine organizational readiness can precede task activation; captured true quota/calendar survives later arrangements. Original authorized verification restores exact time, not system activation/verification now, without changing history.",
@@ -9,6 +9,7 @@
       "writes": [
         "apps/api/src/production-platform/development-responsibility-window.ts",
         "apps/api/src/production-platform/development-sla-evidence.ts",
+        "apps/api/src/production-platform/development-technical-service.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
         "apps/api/src/production-platform/journey-task-summary.ts",
         "apps/api/src/production-platform/order-time-native-timing.ts",
@@ -58,9 +59,9 @@
         "tests/integration/development-responsibility-postgres.test.ts",
         "tests/integration/development-execution-read-native-browser-postgres.test.ts"
       ],
-      "initialization": "No schema, plan-format or actual data migration. Additive native timing quality uses existing JSON basis; original type readers remain compatible. Rebuildable Journey calculationVersionv7 invalidates v6 via original repository/queue. Strict partial-schema compatibility preserved with to_jsonb and existing task/event tables; no new per-task query round trip. PMC strict query fixture recognizes exact added columns, all40original permission assertions retained. No archived-data or production repair executed.",
+      "initialization": "No schema, plan-format or actual data migration. Additive native timing quality uses existing JSON basis; original type readers remain compatible. Rebuildable Journey calculationVersionv7 invalidates v6 via original repository/queue. Strict partial-schema compatibility preserved with to_jsonb and existing task/event tables; no new per-task query round trip. PMC strict query fixture recognizes exact added columns, all40original permission assertions retained. No archived-data or production repair executed. Additive derivedStart metadata lives only in existing deadline sla_basis JSON; absent on old versions remains supported. Current R and original quota/calendar are distinct; no schema migration or source actual event rewrite. Later ready with equal CURRENT_TIMESTAMP must have precise original event/basis link, no ordering guess.",
       "dateAndPermission": "Exact source/round/task and native readiness/craft-step references; trusted predecessor completion is not replaced by arbitrary activation. Corrected unknown cannot revive older window. Original6/actual7 historical+1day logic and date completion mapping remain; clock overlay changes R only. Genuine begun8h stays8h after new4h. Original correction route/active actor/object checks, reason, past-time and C>=R guards remain; no new role/field authority. Exclude PO-scoped ready from whole-task correction. Concurrent ready corrections use current serialized row rather than transaction start timestamp; both audit events retained. UI step0.001 and explicit original-value button support normal minutes; .85 native rendering persists .850ISO exactly, no DOM bypass or tolerance.",
-      "expectation": "231targetedunits and49realPG/nativeApp pass; pinned types/lint/preflight/secret pass, actual screenshot inspected. Original3red reproductions and historical revision retained; unverifiedR now unknown/completed_unrated with knownA and original+60minute lag. Verified/unknown/restored originalR exact .123 and UI .850, denied worker and concurrent events covered. Captured organization R before handover is preserved after real expanded regression initially exposed omission. Expandedallunit3781pass1fail only new SQL shape in strict PMCmock; narrow fixture corrected and40permission cases pass, no claim fullunit rerun. Earlier50case intermediate PG/performance passed88physical7074<=7100; not claimed exact final Full. Local initialization/date representation/rerender/native decimal issues and two TypeScript failures are retained, corrected without relaxing assertions; Review on4306a6f9 had no findings; subsequent self-check identity-only craft tags incorrectly proved a genuine original policy window. Red test retained; fix requires captured trusted quality, original real ready quality or matching trusted current native R. Genuine old quota remains frozen; verified synthetic R selects the actual effective policy. Final post-fix PG rerun replaces prior runtime-equivalence reuse. Correcting upstream source completion now recomputes only causal native derived windows, including completed and explicit inherited consumers; no ready/completion events or P0/state rewrites. Actual source verified/unknown and independent own verified R are covered through native/legacy/cockpit reads, plus derived R refresh retains genuine original quota. Non-enrolled old sources return before optional native tables. PACKSTOP request path/terminal/deployedSHA unknown, original command protected; no guess/replay or unrelated cancellation/double-clock change.",
+      "expectation": "Current233targetedunit cases,3real lowprivPG16native cases and2original technical PG failure cases pass (35others unselected in that focused command, not passed). Supplemental Review24df P1/P2 repaired together: originalquota/calendar separated from current derivedStart, which remains after normal public revision sequence and real completed verification, source21:00, formal arrangement and native revision; exact task-ready R and earlier capture required, same-tx equal timestamp only with explicit event/ref. Actual30min vs synthetic8h and genuine8h positive preserved. OldFull43791599671 failed technical registration R; actual server-now creation fixes the original semantic classification, retaining exact requested_at separate from customer date/current. Prior37technical cases and9originalApp cases passed on same production runtime in broad87pass1newfixture-input-fail run; whole88notclaimedgreen. Later3targetedPGgreen with original strict permission/schema guards retained. Initial Review43 nofindings, supplemental24df P1/P2 resolved via these repairs, not claimed finalrepairSHA re-reviewed. No Light rerun/deployment/data changes. Earlier failed tests/reports remain historical, finalFull will execute exact candidate complete plan.",
       "checks": [
         "unit",
         "native-pg",
@@ -68,7 +69,8 @@
         "lint",
         "preflight",
         "secret",
-        "inventory"
+        "inventory",
+        "technical-pg"
       ]
     }
   ],
@@ -79,43 +81,43 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4306a6f9cd44f3e7a2246d6d675c398dc862f2ef",
-      "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
-      "startedAt": "2026-11-16T02:16:15.114Z",
-      "endedAt": "2026-11-16T02:16:23.725Z",
-      "log": "/tmp/responsibility-final-unit.log",
-      "logSha256": "273f411e91c671ea240a1a496d4e83ec81e988733010e50fb7ac10f79a38d031",
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:13:19.778Z",
+      "endedAt": "2026-11-16T03:13:29.100Z",
+      "log": "/tmp/responsibility-review-final-unit.log",
+      "logSha256": "541d08b20add004efa72b37901f0079c81ceea08fae0a521b73f574443c93f0c",
       "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times.",
-      "passed": 231,
+      "passed": 233,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "89f8fbe0ffa34158697f3a4b9353d940d2bead1faab8586c1bdd78406115334b"
+          "sha256": "fef72854515f8aed3c5a19be0ecc4756c2d0db8cbd5dd98e3b202bb6cb2475ea"
         }
       ]
     },
     {
       "id": "native-pg",
-      "command": "bash /tmp/responsibility-current-pg.sh: original development responsibility, task, enrollment, craft native and authenticated App browser suites, canonical config --maxWorkers=1",
+      "command": "bash /tmp/responsibility-review-approved-pg.sh: original lowpriv native responsibility and historical policy correlation, canonical config maxWorkers1",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4306a6f9cd44f3e7a2246d6d675c398dc862f2ef",
-      "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
-      "startedAt": "2026-11-16T02:14:43.530Z",
-      "endedAt": "2026-11-16T02:16:13.052Z",
-      "log": "/tmp/responsibility-current-pg.log",
-      "logSha256": "43a6ee3c8aa983d5535747591decd9585c40a14a9a76f377c0303acaffcb857a",
-      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times. Marked owned dx_rework_acceptance_clock_test, non-superuser/NOBYPASSRLS PG16-bookworm512MiB tmpfs, canonical vitest.business-chain.config.ts and maxWorkers1.5suites49cases, including original AuthService/App/browser, no mocks for business authorization/writes. Exact owned schemas/container released. Final source includes self-found policy-proof correction and fresh native PG rerun. Earlier type-only equivalence remains a historical record, not proof for the later runtime change. Screenshot actually opened: original form shows .850, original-time button and unchanged history; synthetic TEST image placeholder is not live data.",
-      "passed": 49,
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:12:32.166Z",
+      "endedAt": "2026-11-16T03:12:49.276Z",
+      "log": "/tmp/responsibility-review-correlated-pg.log",
+      "logSha256": "e6a6f16be3e7a74a66ae4535cd592cc3f975328f0297abc90b25f213da60321c",
+      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times. Marked owned dx_rework_acceptance_clock_test, non-superuser/NOBYPASSRLS PG16-bookworm512MiB tmpfs; canonical vitest.business-chain.config.ts maxWorkers1. Three actual service/PG cases: unverified wash/own R correction, source21:00 persisted through completed verification and real arrangement/native revision, exact original-ready correlation including equal transaction times. No mocked writes or permissions, exact owned schemas/container released. Does not claim this focused report runs the old browser suite. Broader current runtime run87passed/1illegal-test-input failed is retained separately, including37technical and9originalApp cases; overall88was NOT passed at that point. Earlier49passedon24df remain historical.",
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e4ac23991a6706985886e2568524c55fe53a6d59e5446325eca6c8ac68944052"
+          "sha256": "bd94c6e3cdb0896165ccbb859f6efaa192cd95ea16d31c7adcd9de3e2ff92a10"
         }
       ]
     },
@@ -125,11 +127,11 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4306a6f9cd44f3e7a2246d6d675c398dc862f2ef",
-      "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
-      "startedAt": "2026-11-16T01:40:16.000Z",
-      "endedAt": "2026-11-16T02:15:34.453Z",
-      "log": "/tmp/responsibility-final-types-passed.log",
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:13:29.000Z",
+      "endedAt": "2026-11-16T03:14:29.486Z",
+      "log": "/tmp/responsibility-review-complete-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times."
     },
@@ -139,11 +141,11 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4306a6f9cd44f3e7a2246d6d675c398dc862f2ef",
-      "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
-      "startedAt": "2026-11-16T01:41:12.000Z",
-      "endedAt": "2026-11-16T02:16:14.750Z",
-      "log": "/tmp/responsibility-final-lint-passed.log",
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:14:29.000Z",
+      "endedAt": "2026-11-16T03:15:08.742Z",
+      "log": "/tmp/responsibility-review-complete-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times."
     },
@@ -153,12 +155,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4306a6f9cd44f3e7a2246d6d675c398dc862f2ef",
-      "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
-      "startedAt": "2026-11-16T01:41:54.000Z",
-      "endedAt": "2026-11-16T02:16:31.778Z",
-      "log": "/tmp/responsibility-final-preflight.log",
-      "logSha256": "c017adf56d079f01dafcc6d26e0daa7da0ed29894cefa65c2db979ef3b5bf6f0",
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:15:08.000Z",
+      "endedAt": "2026-11-16T03:15:17.426Z",
+      "log": "/tmp/responsibility-review-complete-preflight.log",
+      "logSha256": "a0ad54bb4c3178d1edbb4e26cc4013815fe5613bd4fda6abfc4b8ac60993f6b9",
       "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times."
     },
     {
@@ -167,11 +169,11 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4306a6f9cd44f3e7a2246d6d675c398dc862f2ef",
-      "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
-      "startedAt": "2026-11-16T01:42:01.000Z",
-      "endedAt": "2026-11-16T02:16:32.694Z",
-      "log": "/tmp/responsibility-final-secret.log",
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:15:17.000Z",
+      "endedAt": "2026-11-16T03:15:19.322Z",
+      "log": "/tmp/responsibility-review-complete-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times."
     },
@@ -181,13 +183,36 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4306a6f9cd44f3e7a2246d6d675c398dc862f2ef",
-      "sourceFingerprint": "8da321f830ab8d66432192a6c7da630e5e9be29c7a2dfc90d2e8ada807a7963c",
-      "startedAt": "2026-11-16T01:39:23.000Z",
-      "endedAt": "2026-11-16T02:17:30.691Z",
-      "log": "/tmp/responsibility-inventory-check.log",
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:11:06.000Z",
+      "endedAt": "2026-11-16T03:14:18.021Z",
+      "log": "/tmp/responsibility-review-verified-inventory.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
       "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times."
+    },
+    {
+      "id": "technical-pg",
+      "command": "Original canonical PG16 technical suite --testNamePattern 'does not create a review for intermediate feedback|records date/current customer occurrences', maxWorkers1",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "24df08d1c83ec40b40179e21a340be93d8a7a5a1",
+      "sourceFingerprint": "46ec80efb3c9d16fd60cd6ce1a3791f6b540a5c485b8caab7d2eb3202f818e21",
+      "startedAt": "2026-11-16T03:15:03.148Z",
+      "endedAt": "2026-11-16T03:15:16.354Z",
+      "log": "/tmp/responsibility-review-technical-pg.log",
+      "logSha256": "8869f6a60f2d84cf22f2557552cba9544756d895f67c0777667b1f71c2d52aab",
+      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies with own built workspace packages, not fresh npm ci. Original isolated TEST fixtures only, no deployment or actual business/role data. Final cheap checks wrapper exited0 with set-e. Filesystem command bounds; reports provide exact case execution times. Targeted exact two original Full failures;35other named cases intentionally not selected here, not counted as passed; broader current runtime37technical cases already passed in earlier overall-failed87/1report. FinalFull still runs complete canonical suites. Owned marked lowprivPG16 original services, no business mocks; cleanup completed.",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 35,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "b8b545146604738cf270fcb723498f3e2d4fb1fa59d165926b2186dd59ecfa52"
+        }
+      ]
     }
   ]
 }
