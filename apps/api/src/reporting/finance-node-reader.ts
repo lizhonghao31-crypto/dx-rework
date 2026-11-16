@@ -3,6 +3,8 @@ import type { Pool } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { capabilities, fail } from "./management-reporting-shared.js";
 import { wageSelection } from "./wage-report-selection.js";
+import { canReadFactoryPayablesRework } from "../rework/finance-order-access.js";
+import { hasFactoryPayablesReworkRead } from "@dx-rework/contracts/reporting";
 
 type SectionQuery={title:string;columns:string[];sql:string;values?:unknown[]};
 const assignments:SectionQuery={title:"分工记录",columns:["工序","版本","状态","方式","工人","分工人","时间"],sql:`
@@ -115,11 +117,14 @@ const special:SectionQuery={title:"财务异常特批记录",columns:["供应商
  WHERE external.rework_order_id=$1 ORDER BY request.requested_at DESC`};
 
 export async function readFinanceNode(db:Pool,actor:TrustedActorContext,orderId:string,node:FinanceNodeKey):Promise<FinanceNodeRead>{
- if(!capabilities(actor).includes("rework:finance_nodes:read"))fail("缺少财务节点查看权限");
+ if(!capabilities(actor).includes("rework:finance_nodes:read")&&!hasFactoryPayablesReworkRead(actor.actorRoles,capabilities(actor)))fail("缺少财务节点查看权限");
  const client=await db.connect();
  try{
   await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-  await client.query("SELECT access_authorized_actor_roles($1,$2)",[actor.actorId,"rework:finance_nodes:read"]);
+  if(!await canReadFactoryPayablesRework(client,actor)){
+   if(!capabilities(actor).includes("rework:finance_nodes:read"))fail("当前加工厂应付会计读取授权已失效");
+   await client.query("SELECT access_authorized_actor_roles($1,$2)",[actor.actorId,"rework:finance_nodes:read"]);
+  }
   const order=await client.query("SELECT 1 FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'",[orderId]);
   if(!order.rowCount)fail("返工单不存在",404,"NOT_FOUND");
   const wages:SectionQuery={title:"工资明细",columns:["工人","类型","工序","数量","单价","工资金额","完工日期","结算状态","结算标记人","标记时间"],sql:`${wageSelection}

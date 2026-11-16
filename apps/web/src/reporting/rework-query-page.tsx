@@ -1,6 +1,6 @@
 import { BasicReworkBoard, ReworkBoardAccess } from "./basic-rework-board.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
+import { hasFactoryPayablesReworkRead, type ManagementReworkPage, type ManagementReworkRow } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
@@ -48,6 +48,7 @@ function BusinessReworkQueryPage() {
   const [refreshing, setRefreshing] = useState(true);
   const [isRoot, setIsRoot] = useState(false);
   const [canSandbox, setCanSandbox] = useState(false);
+  const [factoryReader,setFactoryReader]=useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const resetPage=()=>{setPage(1);};
@@ -78,6 +79,7 @@ function BusinessReworkQueryPage() {
       if (!mounted || session === "denied" || session.status !== "authorized") return;
       const root = session.user.isRoot === true;
       setIsRoot(root);
+      setFactoryReader(!root&&hasFactoryPayablesReworkRead(session.user.businessRoles,session.user.capabilities));
       setCanSandbox(root || session.user.capabilities.includes("dashboard:management:read"));
     });
     return () => { mounted = false; };
@@ -94,7 +96,7 @@ function BusinessReworkQueryPage() {
   };
   const items = state.kind === "ready" ? state.value.items : [];
   return <Shell active="返工单看板"><div className="rework-query-content">
-    <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={!refreshing && state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "查询中"} />
+    <Header title="返工单看板" subtitle={factoryReader?"查看返工资料、完整流程与处理记录。":"查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。"} badge={!refreshing && state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "查询中"} />
     {canSandbox ? <ReworkModuleTabs active="board" /> : null}
     <Surface className="reporting-filters reporting-filters--orders">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />

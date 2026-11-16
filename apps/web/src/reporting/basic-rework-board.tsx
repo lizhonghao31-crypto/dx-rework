@@ -1,4 +1,4 @@
-import type { BasicReworkPage } from "@dx-rework/contracts/reporting";
+import { hasFactoryPayablesReworkRead, type BasicReworkPage } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { verifySession } from "../auth.js";
@@ -17,9 +17,10 @@ export function ReworkBoardAccess({basic,business}:{basic:ReactNode;business:Rea
     if(!mounted)return;
     if(session==="denied"||session.status!=="authorized"){setAccess({basic:false,business:false});return;}
     const user=session.user;
+    const factoryReader=hasFactoryPayablesReworkRead(user.businessRoles,user.capabilities);
     const original=user.isRoot===true||user.businessRoles?.includes("owner_group")===true
-      ||["dashboard:management:read","dashboard:site:read","report:view","rework:related_orders:view"].some(cap=>user.capabilities.includes(cap));
-    setAccess({basic:user.capabilities.includes("rework:basic:view")||user.capabilities.includes("rework:finance_orders:read"),business:original});setShowBasic(!original);
+      ||factoryReader||["dashboard:management:read","dashboard:site:read","report:view","rework:related_orders:view"].some(cap=>user.capabilities.includes(cap));
+    setAccess({basic:!factoryReader&&(user.capabilities.includes("rework:basic:view")||user.capabilities.includes("rework:finance_orders:read")),business:original});setShowBasic(!original);
   });return()=>{mounted=false;};},[]);
   if(!access)return <Surface>正在读取权限…</Surface>;
   if(!access.basic)return access.business?business:<Surface>暂无查看权限</Surface>;

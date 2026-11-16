@@ -1,68 +1,104 @@
 {
   "version": 1,
-  "base": "47a9a1c02f67a62a372caa49054048ae73c6b4d6",
+  "base": "9e19be87067c6c24ed587dae2376dcb20682aa80",
+  "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
   "risk": "full",
-  "sourceFingerprint": "ebe3fb76592b2e6adac36d3061b3936cc515e4603f3650e6d40d911ebe57081f",
   "rules": [
     {
-      "rule": "Existing factory_payables can read the native receiving board, quantities, history and effective bound images, without gaining receiving/create/repeat/correct/delete/packing/difference/export authority. Revoke the real role invalidates its existing session; keep Root and original warehouse authority.",
-      "source": "2026-11-15 user via Dot: existing 加工厂应付会计 opens receiving board read-only, including entry/list/necessary detail, no writes. PERM-FACTORY-PAYABLES-RECEIVING-READ-001.",
+      "rule": "Exact persisted factory-payables identity opens the full rework board and per-order node reads without generic report or company wage capabilities.",
+      "source": "docs/requirements/platform-permission-golden-source-v1.0.md PERM-FACTORY-PAYABLES-REWORK-READ-20261116; user approved screenshot comparison and main implementation on2026-11-16.",
       "writes": [
-        "tests/integration/acceptance-role-session-postgres.test.ts"
+        "packages/contracts/src/reporting.ts",
+        "apps/api/src/rework/finance-order-access.ts",
+        "apps/api/src/reporting/management-reporting-routes.ts",
+        "apps/api/src/reporting/management-reporting-service.ts",
+        "apps/api/src/reporting/management-reporting-orders.ts",
+        "apps/api/src/reporting/finance-node-reader.ts",
+        "tests/unit/factory-payables-rework-readonly.test.ts",
+        "tests/integration/helpers/finance-order-query-scenario.ts"
       ],
       "reads": [
-        "apps/api/src/receiving/receiving-routes.ts",
-        "apps/api/src/receiving/receiving-service.ts",
-        "apps/api/src/tools/routes.ts",
-        "apps/api/src/tools/attachments.ts",
-        "apps/api/src/server.ts",
-        "apps/api/src/auth/postgres-store.ts",
-        "apps/api/src/access/service.ts",
-        "apps/api/migrations/0005_access_master_data.sql"
+        "apps/web/src/reporting/reporting-client.ts",
+        "apps/api/src/reporting/report-export-service.ts",
+        "apps/api/src/wages/wage-access.ts"
       ],
       "oldTests": [
-        "tests/integration/acceptance-role-session-postgres.test.ts",
-        "tests/integration/receiving-postgres.test.ts"
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/finance-wage-access-postgres.test.ts",
+        "tests/integration/management-reporting-routes.test.ts",
+        "tests/unit/finance-wage-access.test.ts"
       ],
-      "newTests": [
-        "tests/integration/acceptance-role-session-postgres.test.ts"
-      ],
-      "initialization": "Actual main already gives all active business roles board reads and gives factory_payables tools:user, preserving bound receiving-image scope. No new capability, migration, default role or employee assignment is needed. Regression extends the existing complete232-migration real AuthService+PostgresAuthStore fixture, seeded isolated warehouse creates10/8/1 receipt and bound image; never opens production legacy-style input.",
-      "dateAndPermission": "Original date/search/snapshot/quantities and own attachment rules unchanged. Login loads actual grants; original real revokeRole revokes the session and returns401 rather than a stale read. Do not narrow or expand other roles/financial functions, and do not grant export or Tools mutation to achieve read access.",
-      "expectation": "40 actual PG cases pass: role is factory_payables/nonRoot, cumulative actual8/good7/history/preview read; unknown attachment denied404; seven receiving write paths and export/candidate reads denied403 with no receipt/packing/resolution mutations. Existing warehouse writes, Root role management, login/replay/control isolation and34 receiving tests retained.",
+      "initialization": "No SQL migration, grant, role registration or real assignment changes. Existing direct-role/capability SQL rechecks trusted current identity, including forged claim and revoked-session cases.",
+      "dateAndPermission": "Original Shanghai date filters, financial source facts, current role revocation and mixed-role business rights retained. No wage/report/export expansion.",
+      "expectation": "Full-board figures match the existing finance director projection; original supplier-name search finds pre-determination orders; unrelated finance roles, company reports/exports, stale and forged factory roles remain denied.",
       "checks": [
-        "pg"
+        "native",
+        "unit",
+        "lint",
+        "types",
+        "secret"
       ]
     },
     {
-      "rule": "Keep original UI/navigation and native history/evidence interaction available to the accountant, while visibly omitting all receiving mutation/export controls. Persist read/deny contract in the role acceptance matrix, not a redundant business permission.",
-      "source": "Same latest user instruction. Existing main visual layout and components; no new interface or expanded module access authorized.",
+      "rule": "Complete rework details, historical nodes, liability records and bound attachments are readable while all original node and deduction write guards retain their duties.",
+      "source": "Approved2026-11-16 full rework-only read scope; platform permission golden-source increment; existing original direct-payables write policy.",
       "writes": [
-        "apps/web/src/acceptance-matrix.ts",
-        "tests/unit/factory-payables-receiving-read.test.ts"
+        "apps/api/src/rework/rework-business-detail-service.ts",
+        "apps/api/src/rework/rework-node-history.ts",
+        "apps/api/src/rework/external-responsibility-service.ts",
+        "apps/api/src/rework/fixed-external-responsibility-service.ts",
+        "tests/unit/rework-node-history.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/rework/external-responsibility-application-service.ts",
+        "apps/api/src/rework/external-responsibility-routes.ts",
+        "apps/web/src/rework-node-history-page.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/quality-basic-rework-postgres.test.ts",
+        "tests/unit/rework-node-history.test.ts",
+        "tests/unit/finance-read-business-access.test.ts"
+      ],
+      "initialization": "Existing legacy and fixed settlement readers use the same persisted read increment; no change to events, amounts, tables, historical facts or original SQL mutation functions.",
+      "dateAndPermission": "Bound order/case and nondeleted constraints stay in place. Other payable case write flags stay false; original processing-factory payables behavior is exercised throughout the native full business chain.",
+      "expectation": "Before-ledger and completed orders return complete history and amounts, unrelated attachment IDs are denied, all other basic projections stay restricted and existing authorized writes remain available.",
+      "checks": [
+        "native",
+        "unit",
+        "lint",
+        "types",
+        "secret"
+      ]
+    },
+    {
+      "rule": "Reuse the existing full rework board and original current/history read-only components, preserving original visual system and entry points.",
+      "source": "User screenshots Figure1 full board/Figure2 basic board and approved plan; rework UI golden source; current existing components.",
+      "writes": [
+        "apps/web/src/reporting/basic-rework-board.tsx",
+        "apps/web/src/reporting/rework-query-page.tsx",
+        "apps/web/src/rework-detail-page.tsx",
+        "apps/web/src/acceptance-matrix.ts"
       ],
       "reads": [
         "apps/web/src/App.tsx",
-        "apps/web/src/components.tsx",
-        "apps/web/src/auth.tsx",
-        "apps/web/src/order-board-page.tsx",
-        "apps/web/src/receiving-dialog.tsx",
-        "apps/web/src/acceptance-lab-page.tsx"
+        "apps/web/src/reporting/management-order-card.tsx",
+        "apps/web/src/reporting/finance-node-panel.tsx",
+        "apps/web/src/rework-node-history-page.tsx",
+        "apps/web/src/rework-node-access.ts"
       ],
       "oldTests": [
-        "tests/unit/role-navigation-source.test.ts",
-        "tests/unit/receiving-board-operations-contract.test.ts",
-        "tests/unit/order-board-good-quantity.test.ts"
+        "tests/unit/finance-node-mixed-role-access.test.ts",
+        "tests/unit/reporting-contracts-workbook-and-web.test.ts",
+        "tests/unit/factory-payables-receiving-read.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/unit/factory-payables-receiving-read.test.ts"
-      ],
-      "initialization": "No production page or style changes: real Shell and OrderBoardPage mounted with a clearly labelled UI transport fixture; actual authentication/grants separately covered byPG. jsdom lacks native dialog methods, so test supplies only open/close behavior; not a real browser/onsite acceptance claim. Existing bootstrap and other payable roles unchanged. Unique Light43707510572 on262f5719 failed3new-test ESLint rules (type import and two unused parameters). Original local shell had not propagated an earlier lint failure; earlier claimed lint pass is corrected. Repair only uses a proper type import and actual request tuple in the fixture. Current full lint, all workspace typechecks,113preflight and11targeted units executed with set -euo pipefail and all returned0. Original Light remains failed, downstream skipped; no Light rerun or fake status.",
-      "dateAndPermission": "Actual page controls use original role+capability and Root logic. Even rootMutable row hints do not grant controls to the accountant. Existing top inclusive KPI/card good count/history distinctions remain. Matrix only verifies granted reads and existing denials, it does not assign a real person.",
-      "expectation": "11 actual UI/source cases pass: original nav, native receipt history and bound image viewer, good7; no receiving/create/modify/delete/packing/difference/rework/export controls or write requests. Matrix board200, export/create-options403 with approved references. Existing receiving layout/quantities/navigation checks retained.",
+      "initialization": "No new page, duplicate dashboard or CSS redesign. Exact factory role selects original business board; other basic-reader entry points stay unchanged.",
+      "dateAndPermission": "Displayed dates, currency, current workflow and original write flags unchanged; full read is never an edit permission. Original mixed business roles keep their permitted actions.",
+      "expectation": "Original API chain and routes support the existing frontend; scoped role can read all nodes without acquiring node-edit grants. Separate real Chromium checks cover original App board at390/1440px, keyboard filters, amounts, empty/error and original read panel with TEST synthetic payloads; not claimed as live Acceptance.",
       "checks": [
+        "native",
         "unit",
-        "preflight",
         "lint",
         "types"
       ]
@@ -70,102 +106,87 @@
   ],
   "checks": [
     {
-      "id": "pg",
+      "id": "native",
+      "command": "bash /tmp/factory-rework-main-pg.sh",
       "kind": "tests",
-      "command": "bash /tmp/factory-payable-pg.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "47a9a1c02f67a62a372caa49054048ae73c6b4d6",
-      "sourceFingerprint": "a41cbd5e86e8e72636f52e04a84a3e9f839ea0aea3532c6026a8b2d1f3b47f41",
-      "context": "Node22.22.2/npm10.9.9, own fresh npm ci with declared jsdom30.1.3 and current package builds. Main47a9 source; no server, deployment or real business data. Sequential Vitest workers=1. PG16-bookworm owned container, low-privilege marked isolated database; bounded512MiB PGDATA tmpfs after Docker volume init hit local disk exhaustion, original database safety and exact resource cleanup retained. Retained original40-case PG report only after its directly captured pre-run API/packages/integration/helper/script/config input fingerprint matches this repaired candidate exactly. Test-only lint repair does not touch these inputs; not cross-head CI reuse.",
-      "startedAt": "2026-11-15T11:04:16.642Z",
-      "endedAt": "2026-11-15T11:06:42.968Z",
-      "log": "/tmp/factory-payable-pg.log",
-      "logSha256": "ec0a5b27559e72d9dd52b49664128a04fa8b630ee65aa1eb2477eb2f8ebd651f",
-      "passed": 40,
+      "passed": 41,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
+      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
+      "context": "Dedicated marked PG16 tmpfs container, localhost random port, NOSUPERUSER NOCREATEDB low-privilege owner; original business-chain config one worker; all owned resources removed. Current working-tree source on actual main base; no Acceptance/production connection.",
+      "startedAt": "2026-11-16T11:29:59.620000+00:00",
+      "endedAt": "2026-11-16T11:30:45.792750+00:00",
+      "logSha256": "68d20e58281fe55d01e9d74be04c40425620d11f2359ec68045af96b10df354e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0969aa6b966341142b225cd7378a1f02953cb5b3631301bbe79fb7910be4c912"
-        }
-      ],
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "tests/integration",
-        "tests/helpers",
-        "scripts",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "3c852f40757ce8958b7dae5775469b771a44b26b70c2687011ab0bf859dc2fc1"
-    },
-    {
-      "id": "unit",
-      "kind": "tests",
-      "command": "vitest run tests/unit/factory-payables-receiving-read.test.ts tests/unit/order-board-good-quantity.test.ts tests/unit/receiving-board-operations-contract.test.ts tests/unit/role-navigation-source.test.ts --maxWorkers=1 --reporter=json --outputFile=/tmp/factory-payable-fixed-unit.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "47a9a1c02f67a62a372caa49054048ae73c6b4d6",
-      "sourceFingerprint": "ebe3fb76592b2e6adac36d3061b3936cc515e4603f3650e6d40d911ebe57081f",
-      "context": "Node22.22.2/npm10.9.9, own fresh npm ci with declared jsdom30.1.3 and current package builds. Main47a9 source; no server, deployment or real business data. Sequential Vitest workers=1. PG16-bookworm owned container, low-privilege marked isolated database; bounded512MiB PGDATA tmpfs after Docker volume init hit local disk exhaustion, original database safety and exact resource cleanup retained.",
-      "startedAt": "2026-11-15T11:15:33.928Z",
-      "endedAt": "2026-11-15T11:15:37.352Z",
-      "log": "/tmp/factory-payable-fixed-unit.log",
-      "logSha256": "6f655442e85c901f11b4879109d92f658f708f8da3504426d2f667f0ac956d66",
-      "passed": 11,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "ef30d794317ee436ebbd5d2b902005e6cbd0698c15db10ac21e9eba300c1aeed"
+          "sha256": "76fec0d62076a5b3b778db7a5daabe4e518bce2659ca3245e6b9cebc1ca41e80"
         }
       ]
     },
     {
-      "id": "preflight",
-      "kind": "command",
-      "command": "npm run test:preflight",
+      "id": "unit",
+      "command": "node_modules/.bin/vitest run tests/unit/factory-payables-rework-readonly.test.ts tests/unit/rework-node-history.test.ts tests/unit/finance-node-mixed-role-access.test.ts tests/unit/finance-read-business-access.test.ts tests/unit/factory-payables-receiving-read.test.ts tests/unit/finance-director-rework-detail-access.test.ts tests/unit/finance-wage-access.test.ts tests/unit/reporting-contracts-workbook-and-web.test.ts tests/unit/sourcing-finance-readonly-contract.test.ts tests/integration/management-reporting-routes.test.ts tests/integration/finance-wage-access.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/factory-rework-final-unit.json",
+      "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "47a9a1c02f67a62a372caa49054048ae73c6b4d6",
-      "sourceFingerprint": "ebe3fb76592b2e6adac36d3061b3936cc515e4603f3650e6d40d911ebe57081f",
-      "context": "Node22.22.2/npm10.9.9, own fresh npm ci with declared jsdom30.1.3 and current package builds. Main47a9 source; no server, deployment or real business data. Sequential Vitest workers=1. PG16-bookworm owned container, low-privilege marked isolated database; bounded512MiB PGDATA tmpfs after Docker volume init hit local disk exhaustion, original database safety and exact resource cleanup retained.",
-      "startedAt": "2026-11-15T11:15:31.028Z",
-      "endedAt": "2026-11-15T11:15:33.920Z",
-      "log": "/tmp/factory-payable-fixed-preflight.log",
-      "logSha256": "dd415683d704184284598daf38239aefc5342b4b55d0be2a316c13fc39a152ac"
+      "passed": 58,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
+      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
+      "context": "Node22.22.2/npm10.9.9, exact main locked dependencies, original Vitest one worker; original finance/routes/receiving/history consumers and new scoped role regression.",
+      "startedAt": "2026-11-16T11:30:17.484000+00:00",
+      "endedAt": "2026-11-16T11:30:28.197222+00:00",
+      "logSha256": "7b71db19c402e8bf7bb9e5e6715627a81beefd1c35a8c89f114a64b2708a9bbe",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "c3603a51bd98595f3900afce7dbd8ec5002bd0dce5380ef4e4e9fc6f2685075e"
+        }
+      ]
     },
     {
       "id": "lint",
-      "kind": "command",
       "command": "npm run lint",
+      "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "47a9a1c02f67a62a372caa49054048ae73c6b4d6",
-      "sourceFingerprint": "ebe3fb76592b2e6adac36d3061b3936cc515e4603f3650e6d40d911ebe57081f",
-      "context": "Node22.22.2/npm10.9.9, own fresh npm ci with declared jsdom30.1.3 and current package builds. Main47a9 source; no server, deployment or real business data. Sequential Vitest workers=1. PG16-bookworm owned container, low-privilege marked isolated database; bounded512MiB PGDATA tmpfs after Docker volume init hit local disk exhaustion, original database safety and exact resource cleanup retained.",
-      "startedAt": "2026-11-15T11:14:50.251Z",
-      "endedAt": "2026-11-15T11:15:05.251Z",
-      "log": "/tmp/factory-payable-fixed-lint.log",
+      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
+      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
+      "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
+      "startedAt": "2026-11-16T11:29:53.656130+00:00",
+      "endedAt": "2026-11-16T11:30:46.344056+00:00",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
       "id": "types",
-      "kind": "command",
       "command": "npm run typecheck",
+      "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "47a9a1c02f67a62a372caa49054048ae73c6b4d6",
-      "sourceFingerprint": "ebe3fb76592b2e6adac36d3061b3936cc515e4603f3650e6d40d911ebe57081f",
-      "context": "Node22.22.2/npm10.9.9, own fresh npm ci with declared jsdom30.1.3 and current package builds. Main47a9 source; no server, deployment or real business data. Sequential Vitest workers=1. PG16-bookworm owned container, low-privilege marked isolated database; bounded512MiB PGDATA tmpfs after Docker volume init hit local disk exhaustion, original database safety and exact resource cleanup retained.",
-      "startedAt": "2026-11-15T11:15:05.255Z",
-      "endedAt": "2026-11-15T11:15:31.024Z",
-      "log": "/tmp/factory-payable-fixed-typecheck.log",
+      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
+      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
+      "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
+      "startedAt": "2026-11-16T11:29:53.656130+00:00",
+      "endedAt": "2026-11-16T11:30:46.344056+00:00",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
+    },
+    {
+      "id": "secret",
+      "command": "npm run secret:scan",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
+      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
+      "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
+      "startedAt": "2026-11-16T11:29:53.656130+00:00",
+      "endedAt": "2026-11-16T11:30:46.344056+00:00",
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
 }

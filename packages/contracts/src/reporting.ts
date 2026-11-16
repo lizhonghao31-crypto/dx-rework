@@ -1,4 +1,9 @@
 import { z } from "zod";
+
+/** UI/route hint only. Services must recheck the current direct role in PostgreSQL. */
+export function hasFactoryPayablesReworkRead(roles: readonly string[] | undefined, capabilities: readonly string[]): boolean {
+  return roles?.includes("factory_payables") === true && capabilities.includes("rework:finance_orders:read");
+}
 import { InspectionReportDraftSchema, TailInspectionResponseSchema, ReworkWorkTasksResponseSchema, ProcessConfigurationResponseSchema, WholeOrderReviewResponseSchema, ResponsibilityDeterminationResponseSchema } from "./compat-index.js";
 import { ProcessWorkerPlanResponseSchema } from "./process-worker-plan.js";
 

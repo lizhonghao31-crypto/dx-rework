@@ -1,6 +1,6 @@
 import { readReworkNodeHistory } from "./rework-node-history.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
-import { canReadFinanceOrders, isScopedFinanceReader } from "./finance-order-access.js";
+import { canReadFactoryPayablesRework, canReadFinanceOrders, isScopedFinanceReader } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import type { InspectionReportDraft, ReworkOrderStatus } from "@dx-rework/contracts";
@@ -384,7 +384,8 @@ export class ReworkBusinessDetailService {
       throw new ApplicationError("FORBIDDEN", "当前用户与该返工单无业务查看关系", 403);
     }
 
-    const fullBusinessAccess=await this.canView(actor,row,false);
+    const factoryReader=await canReadFactoryPayablesRework(this.database,actor);
+    const fullBusinessAccess=factoryReader||await this.canView(actor,row,false);
     const attachments = await this.database.query<AttachmentRow>(
       `SELECT attachment.attachment_id,attachment.original_filename,attachment.mime_type,attachment.entity_type
        FROM attachments attachment
@@ -429,12 +430,12 @@ export class ReworkBusinessDetailService {
                FROM rework_external_responsibility_cases external_case
                WHERE external_case.case_id::text=attachment.entity_id
                  AND external_case.rework_order_id=$1::uuid
-                 AND external_responsibility_can_view_case($2,external_case.rework_order_id,external_case.responsibility_type)
+                 AND ($4::boolean OR external_responsibility_can_view_case($2,external_case.rework_order_id,external_case.responsibility_type))
              )
            )
          )
        ORDER BY attachment.created_at,attachment.attachment_id`,
-      [reworkOrderId, actor.actorId, fullBusinessAccess],
+      [reworkOrderId, actor.actorId, fullBusinessAccess, factoryReader],
     );
 
     const workflowHistory = await this.database.query<WorkflowHistoryRow>(
@@ -467,7 +468,7 @@ export class ReworkBusinessDetailService {
          WHERE target_case.rework_order_id=$1
            AND determination.settlement_schema_version=2
            AND target_case.status<>'superseded'
-           AND external_responsibility_can_view_case($3,target_case.rework_order_id,target_case.responsibility_type)
+           AND ($4::boolean OR external_responsibility_can_view_case($3,target_case.rework_order_id,target_case.responsibility_type))
        ), wage_periods AS (
          SELECT DISTINCT period.period_id,period.period_month,period.status
          FROM rework_wage_items wage
@@ -496,7 +497,7 @@ export class ReworkBusinessDetailService {
          FROM wage_periods
          WHERE status<>'locked'
        ),'[]'::jsonb) ELSE '[]'::jsonb END unsettled_wage_periods`,
-      [reworkOrderId, canViewWagePeriods(actor), actor.actorId],
+      [reworkOrderId, canViewWagePeriods(actor), actor.actorId, factoryReader],
     );
 
     return {
@@ -847,11 +848,11 @@ export class ReworkBusinessDetailService {
       reworkOrderIds = receiving.rows.map((row) => row.rework_order_id);
     } else if (binding.entityType === "external_responsibility_case") {
       const externalCase = await this.database.query<{ permitted: boolean }>(
-        `SELECT external_responsibility_can_view_case($2,target.rework_order_id,target.responsibility_type) permitted
+        `SELECT ($3::boolean OR external_responsibility_can_view_case($2,target.rework_order_id,target.responsibility_type)) permitted
          FROM rework_external_responsibility_cases target
          JOIN rework_orders orders ON orders.rework_order_id=target.rework_order_id
          WHERE target.case_id::text=$1 AND orders.status<>'deleted'`,
-        [binding.entityId, actor.actorId],
+        [binding.entityId, actor.actorId, await canReadFactoryPayablesRework(this.database,actor)],
       );
       return externalCase.rows[0]?.permitted === true;
     }

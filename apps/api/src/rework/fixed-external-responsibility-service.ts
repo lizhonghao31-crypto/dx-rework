@@ -1,4 +1,4 @@
-import { canReadFinanceOrders, scopedExternalSource } from "./finance-order-access.js";
+import { canReadFactoryPayablesRework, canReadFinanceOrders, scopedExternalSource } from "./finance-order-access.js";
 import type {
   ExternalResponsibilityBatchResponse,
   ExternalResponsibilityCaseResponse,
@@ -48,11 +48,12 @@ export class FixedExternalResponsibilityService
     orderId: string,
     executor: Queryable = this.reviewedDatabase,
   ): Promise<ExternalResponsibilityBatchResponse> {
+    const factoryReader=await canReadFactoryPayablesRework(executor,actor);
     const allowed = await executor.query<{ permitted: boolean }>(
       "SELECT external_responsibility_can_view($1,$2) permitted",
       [actor.actorId, orderId],
     );
-    if (!allowed.rows[0]?.permitted) {
+    if (!allowed.rows[0]?.permitted && !factoryReader) {
       if (!await canReadFinanceOrders(executor,actor)) fail("当前用户无权查看外部责任台账",403,"FORBIDDEN");
       const order=await executor.query("SELECT 1 FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'",[orderId]);
       if(!order.rows[0]) fail("返工单不存在",404,"NOT_FOUND");
@@ -101,7 +102,7 @@ export class FixedExternalResponsibilityService
               item.proposed_amount::text,item.amount_line_snapshot
        FROM rework_external_responsibility_items item
        WHERE item.batch_id=$1 AND (
-         external_responsibility_can_view_all($2)
+         $4::boolean OR external_responsibility_can_view_all($2)
          OR external_responsibility_can_sign(
            $2,$3,item.responsibility_type
          )
@@ -118,7 +119,7 @@ export class FixedExternalResponsibilityService
          )
        )
        ORDER BY item.configuration_item_id,item.responsibility_type`,
-      [head.batch_id, actor.actorId, orderId],
+      [head.batch_id, actor.actorId, orderId, factoryReader],
     );
     const cases = await executor.query<{ case_id: string }>(
       `SELECT target_case.case_id
@@ -126,12 +127,12 @@ export class FixedExternalResponsibilityService
        JOIN rework_external_responsibility_batches batch
          ON batch.batch_id=target_case.batch_id
        WHERE (target_case.batch_id=$1 OR (batch.rework_order_id=$3 AND batch.status='superseded'))
-         AND external_responsibility_can_view_case(
+         AND ($4::boolean OR external_responsibility_can_view_case(
            $2,target_case.rework_order_id,
            target_case.responsibility_type
-         )
+         ))
        ORDER BY target_case.created_at,target_case.case_id`,
-      [head.batch_id, actor.actorId, orderId],
+      [head.batch_id, actor.actorId, orderId, factoryReader],
     );
     const caseValues = await Promise.all(
       cases.rows.map(async (item) => {
@@ -147,7 +148,7 @@ export class FixedExternalResponsibilityService
       finalizedDeterminationVersion: head.finalized_determination_version,
       batchVersion: head.batch_version,
       status: head.status,
-      sourceSnapshot: allScope.rows[0]?.permitted ? head.source_snapshot : scopedExternalSource(head.source_snapshot),
+      sourceSnapshot: factoryReader||allScope.rows[0]?.permitted ? head.source_snapshot : scopedExternalSource(head.source_snapshot),
       items: items.rows.map((item) => ({
         externalItemId: item.external_item_id,
         configurationItemId: item.configuration_item_id,

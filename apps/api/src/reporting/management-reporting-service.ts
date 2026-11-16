@@ -1,5 +1,7 @@
 import { LIST_PAGE_SIZE } from "@dx-rework/contracts/reporting";
 import { canAccessFinanceWages, requireFinanceWageAccess } from "../wages/wage-access.js";
+import { canReadFactoryPayablesRework } from "../rework/finance-order-access.js";
+import { hasFactoryPayablesReworkRead } from "@dx-rework/contracts/reporting";
 import { readFinanceNode } from "./finance-node-reader.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
 import { canDownloadBasicReworkAttachment, readBasicRework } from "./basic-rework-reader.js";
@@ -202,6 +204,8 @@ export class ManagementReportingService {
 
   async listReworkOrders(actor: TrustedActorContext, query: ManagementReworkQuery): Promise<ManagementReworkPage> {
     const currentCapabilities = capabilities(actor);
+    const factoryReader = await canReadFactoryPayablesRework(this.db, actor);
+    if (hasFactoryPayablesReworkRead(actor.actorRoles,currentCapabilities) && !factoryReader) fail("当前加工厂应付会计读取授权已失效");
     const broadCapability = currentCapabilities.includes("dashboard:management:read")
       ? "dashboard:management:read"
       : currentCapabilities.includes("dashboard:site:read")
@@ -209,15 +213,18 @@ export class ManagementReportingService {
         : currentCapabilities.includes("report:view")
           ? "report:view"
           : undefined;
-    const relatedOrderScoped = !broadCapability
+    const relatedOrderScoped = !factoryReader && !broadCapability
       && currentCapabilities.includes("rework:related_orders:view");
-    if (broadCapability) {
+    if (factoryReader) {
+      // Persisted direct role checked above, without granting generic report access.
+    } else if (broadCapability) {
       await this.require(actor, broadCapability);
     } else if (relatedOrderScoped) {
       await this.require(actor, "rework:related_orders:view");
     } else {
       const workflowStatus = query.status;
       if (!workflowStatus) {
+        if(currentCapabilities.includes("rework:finance_orders:read")) fail("当前财务岗位只开放基础返工看板");
         throw new ApplicationError("VALIDATION_ERROR", "节点工作台必须指定当前业务节点", 400);
       }
       const workflowCapability = workflowCapabilitiesByStatus[workflowStatus]
@@ -228,17 +235,17 @@ export class ManagementReportingService {
       await this.require(actor, workflowCapability);
     }
 
-    const canReadWages = await this.mayReadWageFields(actor);
+    const canReadWages = factoryReader || await this.mayReadWageFields(actor);
     const overdue = query.overdue === "true" ? true : query.overdue === "false" ? false : undefined;
     const exception = query.exception === "true" ? true : query.exception === "false" ? false : undefined;
-    const ownTaskScoped = !broadCapability
+    const ownTaskScoped = !factoryReader && !broadCapability
       && query.status === "in_progress"
       && (
         (actor.actorRoles.includes("worker") && currentCapabilities.includes("work:report"))
         || (actor.actorRoles.includes("tail_inspector") && currentCapabilities.includes("tail_inspection:report"))
       )
       && !currentCapabilities.includes("work:assign");
-    const proxyScoped = !broadCapability
+    const proxyScoped = !factoryReader && !broadCapability
       && query.status === "in_progress"
       && currentCapabilities.includes("work:report_for_worker")
       && !currentCapabilities.includes("work:assign");
@@ -256,6 +263,7 @@ export class ManagementReportingService {
       ...(ownTaskScoped ? { workTaskActorUserId: actor.actorId } : {}),
       ...(proxyScoped ? { includeTemporaryProxyTasks: true } : {}),
       ...(relatedOrderScoped ? { relatedOrderActorUserId: actor.actorId } : {}),
+      ...(factoryReader ? { includeBasicOrderSearch: true } : {}),
       openFirst: true,
       limit: query.limit,
       offset: (query.page - 1) * query.limit,

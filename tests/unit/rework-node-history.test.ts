@@ -16,7 +16,8 @@ describe('rework historical node boundary',()=>{
   expect(canReadReworkHistoryNode(actor('tail_supervisor',[]),'process_configuration')).toBe(false);
   expect(canReadReworkHistoryNode(actor('worker',['work:report']),'work_reporting')).toBe(true);
   expect(canReadReworkHistoryNode(actor('worker',['work:report']),'responsibility')).toBe(false);
-  expect(canReadReworkHistoryNode(actor('factory_payables',['rework:finance_orders:read']),'owner_signature')).toBe(false);
+  expect(canReadReworkHistoryNode(actor('factory_payables',['rework:finance_orders:read']),'owner_signature')).toBe(true);
+  expect(canReadReworkHistoryNode(actor('fabric_payables',['rework:finance_orders:read']),'owner_signature')).toBe(false);
   expect(canReadReworkHistoryNode(actor('finance_director',['rework:finance_nodes:read']),'owner_signature')).toBe(true);
  });
  it('grants PMC only the manager responsibility history reads, without operation grants',()=>{

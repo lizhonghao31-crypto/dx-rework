@@ -2,7 +2,7 @@ import { readHistoricalResponsibility } from './rework-history-responsibility.js
 import { ProcessWorkerPlanResponseSchema } from '@dx-rework/contracts/process-worker-plan';
 import { readHistoricalReview, readHistoricalTailInspection } from './rework-history-review.js';
 import { InspectionReportDraftSchema, ReworkWorkTasksResponseSchema, ProcessConfigurationResponseSchema } from '@dx-rework/contracts';
-import { ReworkNodeHistorySchema, type FinanceNodeKey, type ReworkNodeHistory } from '@dx-rework/contracts/reporting';
+import { hasFactoryPayablesReworkRead, ReworkNodeHistorySchema, type FinanceNodeKey, type ReworkNodeHistory } from '@dx-rework/contracts/reporting';
 import type { Pool } from 'pg';
 import { ApplicationError } from '../platform/errors.js';
 import type { TrustedActorContext } from '../tools/repositories.js';
@@ -37,7 +37,7 @@ export function canReadReworkHistoryNode(actor: TrustedActorContext, node: Finan
  const caps = actor.authorizationCapabilities ?? [actor.authorizationCapability];
  const has = (...keys: string[]) => keys.some(key => caps.includes(key));
  const role = (...keys: string[]) => keys.some(key => actor.actorRoles.includes(key));
- if (role('root_superuser','owner_group') || has('rework:finance_nodes:read')) return true;
+ if (role('root_superuser','owner_group') || has('rework:finance_nodes:read') || hasFactoryPayablesReworkRead(actor.actorRoles,caps)) return true;
  if (node === 'initiation') return true; // Order-level authorization is mandatory before this function.
  if (['process_configuration','ie_review','task_assignment'].includes(node)) return role('tail_supervisor') && has('process:configure') || role('ie_reviewer') && has('process:review');
  if (node === 'work_reporting') return role('tail_supervisor') && has('work:assign','work:assignment_adjust') || role('worker') && has('work:report','tail_inspection:report') || role('tail_inspector') && has('tail_inspection:report') || has('work:report_for_worker');
@@ -127,7 +127,7 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
   }
   if (node==='work_reporting'||node==='task_assignment') {
    const caps=actor.authorizationCapabilities??[actor.authorizationCapability];
-   const ownOnly=!actor.actorRoles.some(role=>['root_superuser','owner_group'].includes(role))&&!caps.includes('rework:finance_nodes:read')&&!(actor.actorRoles.includes('tail_supervisor')&&caps.some(cap=>['work:assign','work:assignment_adjust'].includes(cap)));
+   const ownOnly=!actor.actorRoles.some(role=>['root_superuser','owner_group'].includes(role))&&!caps.includes('rework:finance_nodes:read')&&!hasFactoryPayablesReworkRead(actor.actorRoles,caps)&&!(actor.actorRoles.includes('tail_supervisor')&&caps.some(cap=>['work:assign','work:assignment_adjust'].includes(cap)));
    await querySection('工人报数',['工序','工人','提交数量','有效数量','完工时间','备注','报数状态'],`SELECT item.process_name,COALESCE(person.display_name,member.display_name_snapshot),report.actual_quantity,COALESCE((SELECT revision.effective_quantity FROM rework_work_report_quantity_revisions revision WHERE revision.work_report_id=report.work_report_id AND revision.corrected_at <= $2::timestamptz ORDER BY revision.revision_version DESC LIMIT 1),report.actual_quantity),report.completed_at,report.remark,CASE WHEN EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id AND rejection.rejected_at <= $2::timestamptz) THEN '已驳回' ELSE '已提交' END
     FROM rework_work_reports report JOIN rework_process_configuration_items item USING(configuration_item_id) JOIN rework_work_task_members member USING(work_task_id) JOIN business_people person ON person.person_id=member.person_id
     WHERE report.rework_order_id=$1 AND report.created_at <= $2::timestamptz AND (NOT $3::boolean OR (person.app_user_id=$4 AND ((item.execution_kind='worker' AND $5::boolean) OR (item.execution_kind='tail_inspection' AND $6::boolean))) OR ($7::boolean AND member.person_type_snapshot='temporary')) ORDER BY item.position,report.created_at`,[detail.reworkOrderId,selected.at,ownOnly,actor.actorId,actor.actorRoles.includes('worker')&&caps.includes('work:report'),actor.actorRoles.some(role=>['worker','tail_inspector'].includes(role))&&caps.includes('tail_inspection:report'),caps.includes('work:report_for_worker')]);
