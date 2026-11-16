@@ -125,7 +125,8 @@
           "format": "vitest-json",
           "sha256": "76fec0d62076a5b3b778db7a5daabe4e518bce2659ca3245e6b9cebc1ca41e80"
         }
-      ]
+      ],
+      "log": "/tmp/factory-rework-native-final.log"
     },
     {
       "id": "unit",
@@ -147,7 +148,8 @@
           "format": "vitest-json",
           "sha256": "c3603a51bd98595f3900afce7dbd8ec5002bd0dce5380ef4e4e9fc6f2685075e"
         }
-      ]
+      ],
+      "log": "/tmp/factory-rework-final-unit.log"
     },
     {
       "id": "lint",
@@ -160,7 +162,8 @@
       "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
       "startedAt": "2026-11-16T11:29:53.656130+00:00",
       "endedAt": "2026-11-16T11:30:46.344056+00:00",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
+      "log": "/tmp/factory-rework-lint-final.log"
     },
     {
       "id": "types",
@@ -173,7 +176,8 @@
       "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
       "startedAt": "2026-11-16T11:29:53.656130+00:00",
       "endedAt": "2026-11-16T11:30:46.344056+00:00",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
+      "log": "/tmp/factory-rework-types-final.log"
     },
     {
       "id": "secret",
@@ -186,7 +190,8 @@
       "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
       "startedAt": "2026-11-16T11:29:53.656130+00:00",
       "endedAt": "2026-11-16T11:30:46.344056+00:00",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
+      "log": "/tmp/factory-rework-secret-final.log"
     }
   ]
 }
