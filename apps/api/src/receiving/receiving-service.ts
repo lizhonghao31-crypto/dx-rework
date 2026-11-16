@@ -1799,7 +1799,10 @@ export class ReceivingService {
                   SELECT base.receipt_id
                   FROM receiving_receipts base
                   WHERE base.receiving_batch_id=receipt.receiving_batch_id
-                  ORDER BY base.received_at,base.receipt_id
+                  ORDER BY CASE
+                    WHEN (SELECT e.after_state->>'receivingBatchId' FROM operation_events e WHERE e.event_id=base.operation_event_id)=base.receiving_batch_id::text THEN 0
+                    WHEN (SELECT e.after_state ? 'receivingBatchId' FROM operation_events e WHERE e.event_id=base.operation_event_id) THEN 2
+                    ELSE 1 END,base.received_at,base.receipt_id
                   LIMIT 1
                 ) AS is_base_receipt
          FROM receiving_receipts receipt
@@ -1834,15 +1837,12 @@ export class ReceivingService {
         document_quantity: string;
         actual_quantity: string;
         defective_quantity: string;
-        effective_document_quantity:string;
         effective_actual_quantity:string;
         effective_defective_quantity:string;
       }>(
         `SELECT sum(r.document_quantity)::bigint AS document_quantity,
                 sum(r.actual_quantity)::bigint AS actual_quantity,
                 sum(r.defective_quantity)::bigint AS defective_quantity,
-                sum(CASE WHEN r.receipt_id=(SELECT base.receipt_id FROM receiving_receipts base WHERE base.receiving_batch_id=r.receiving_batch_id ORDER BY base.received_at,base.receipt_id LIMIT 1)
-                  OR coalesce(c.receiving_source,r.receiving_source)='other_factory' THEN coalesce(c.document_quantity,r.document_quantity) ELSE 0 END)::bigint AS effective_document_quantity,
                 sum(coalesce(c.actual_quantity,r.actual_quantity))::bigint AS effective_actual_quantity,
                 sum(coalesce(c.defective_quantity,r.defective_quantity))::bigint AS effective_defective_quantity
          FROM receiving_receipts r LEFT JOIN LATERAL(SELECT document_quantity,actual_quantity,defective_quantity,receiving_source FROM receiving_receipt_corrections c
@@ -1857,7 +1857,9 @@ export class ReceivingService {
       const nextDeliveryContribution = fact.is_base_receipt
         ? normalized.documentQuantity
         : correctionSource === "other_factory" ? normalized.documentQuantity : 0;
-      const documentQuantity = Number(raw.effective_document_quantity)
+      // Merge deliberately retained the target's approved delivery-note baseline.
+      // Only this receipt's explicit document delta may change that baseline.
+      const documentQuantity = Number(batch.document_quantity)
         + nextDeliveryContribution - oldDeliveryContribution;
       const actualQuantity = Number(raw.effective_actual_quantity) + normalized.actualQuantity - beforeReceipt.actualQuantity;
       const defectiveQuantity = Number(raw.effective_defective_quantity) + normalized.defectiveQuantity - beforeReceipt.defectiveQuantity;

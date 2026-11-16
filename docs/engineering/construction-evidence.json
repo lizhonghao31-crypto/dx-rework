@@ -2,7 +2,7 @@
   "version": 1,
   "base": "db7caa28ec24c2a91b5038d5a167826a95a28513",
   "risk": "full",
-  "sourceFingerprint": "41c9f91cd14ebfb1ec55ce836ec6a9f7ea16b5d623e2c55411b9cd751abd0a8f",
+  "sourceFingerprint": "1505a019d6a74fa7d6a5872780e15c3add906b60143b0a71c902608909629cfa",
   "rules": [
     {
       "rule": "Use true original complete factory/PO/step occurrences, preserve administrative/audit time and explicit correction including unknown; Root receipt correction keeps cumulative and effective per-receipt facts aligned, never guesses a multi-receipt split.",
@@ -60,9 +60,9 @@
         "tests/unit/factory-task-completion.test.ts",
         "tests/unit/factory-completion-occurrence.test.ts"
       ],
-      "initialization": "Additive0294 only broadens receipt-correction provenance CHECK to original initial/backfill, with original source retained by omission and immutable correction append. No original receipt or audit rewrite/backfill. Mutable totals use effective original facts; card multi-receipt quantity changes require exact original receipt correction. Existing style/image/merge privileges remain. Existing dirty trigger reused; calculationVersionv8 causes original cache rebuild. Workflow1 reads exact original whole-style contract without requiring v2 physical records; native step scope cannot borrow sibling/preparation. Old completion corrections remain authoritative; no new business clocks or PO allocations.",
+      "initialization": "Additive0294 only broadens receipt-correction provenance CHECK to original legacy/initial/backfill, with original source retained by omission and immutable correction append. No original receipt or audit rewrite/backfill. Mutable totals use effective original facts; card multi-receipt quantity changes require exact original receipt correction. Existing style/image/merge privileges remain. Existing dirty trigger reused; calculationVersionv8 causes original cache rebuild. Workflow1 reads exact original whole-style contract without requiring v2 physical records; native step scope cannot borrow sibling/preparation. Old completion corrections remain authoritative; no new business clocks or PO allocations.",
       "dateAndPermission": "Original current/manual dispatch validation, milliseconds, exact step/PO/preparation identity and full quantity coverage retained. Process return, QC and warehouse task ends use respective native sources; terminal_recorded_at stays audit. Full and compact task/Journey/plan readers aligned. Root original null correction cannot revive registration time. Original Root-only correction, actor/object/expected-version/native origin and first-delivery scope remain; shared style then batch lock prevents receipt-before-style FK lock inversion, concurrent same-version corrections one success/one conflict. PMC/warehouse receive no new edits. One receipt history available via existing UI and original receiving provenance not guessed; original quantity0 preserved, effective QC invalidated by original quantityVersion rules.",
-      "expectation": "Current135focusedunits+11realPG/App pass. Genuine split dispatch does not finish at first PO; last19:39:00.123 used instead of19:41:46.479 registration, root unknown respected and original perPO facts unchanged. Single receipt2→0→2 aligns closure, first delivery and effective quantity/QC while raw receipt remains immutable; multireceipt aggregate overwrite rejected and concurrent per-receipt version guard preserved. Real original App single history correction omits initial-source reclassification and retains warehouse read-only at1165/390. No claim all historical/onsite/rollback paths verified; exact candidate Light once, Review and Full still required.",
+      "expectation": "Current135focusedunits+46realPG/App pass. Genuine split dispatch does not finish at first PO; last19:39:00.123 used instead of19:41:46.479 registration, root unknown respected and original perPO facts unchanged. Single receipt2→0→2 aligns closure, first delivery and effective quantity/QC while raw receipt remains immutable; multireceipt aggregate overwrite rejected and concurrent per-receipt version guard preserved. Real original App single history correction omits initial-source reclassification and retains warehouse read-only at1165/390. No claim all historical/onsite/rollback paths verified; exact candidate Light once, Review and Full still required.",
       "checks": [
         "unit",
         "native-pg"
@@ -79,19 +79,19 @@
       "passed": 135,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "db7caa28ec24c2a91b5038d5a167826a95a28513",
-      "sourceFingerprint": "41c9f91cd14ebfb1ec55ce836ec6a9f7ea16b5d623e2c55411b9cd751abd0a8f",
-      "startedAt": "2026-11-16T05:33:25.700Z",
-      "endedAt": "2026-11-16T05:33:30.890Z",
-      "log": "/tmp/production-facts-final-unit.log",
-      "logSha256": "f20c6e55796db0eda23fc3f89d8e8c009c0b800ce0b140ea4dccd20005df9c6c",
+      "testedHead": "657d393fe5e594efeefef635dfb102b3611c3452",
+      "sourceFingerprint": "1505a019d6a74fa7d6a5872780e15c3add906b60143b0a71c902608909629cfa",
+      "startedAt": "2026-11-16T05:51:49.159Z",
+      "endedAt": "2026-11-16T05:51:53.689Z",
+      "log": "/tmp/production-facts-review-unit.log",
+      "logSha256": "ac31523f7f3bc22e05c8504ef7e91a6c98b68c4d3e16bed2009f9a5cf549da0d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2b25d18acee834ace1e5e4af82ff035793f769b78520350c367639d513dbf35f"
+          "sha256": "0e896587d02d2e15e7f3c41e81e9e6188d29698f5c7aeeb2cb57b598f7669c24"
         }
       ],
-      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies and own workspace builds, not fresh npm ci. PG16-bookworm512MiB owned tmpfs, non-superuser/NOBYPASSRLS marked isolated database, original role seeder/API/App and schema/container cleaned. Current 11 PG/App tests or 135 focused units, not live Acceptance/production. Earlier full local nonDB4143passed/1staleUIassertion failed and broaderPG57passed/1oldcacheversion failed remain failed historical reports; fixed exact-expected assertions are covered here, no claim those whole earlier runs passed. No deployment/live data or historical-submit replay."
+      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies and own workspace builds, not fresh npm ci. PG16-bookworm512MiB owned tmpfs, non-superuser/NOBYPASSRLS marked isolated database, original role seeder/API/App and schema/container cleaned. Current 46 PG/App tests or 135 focused units, not live Acceptance/production. Earlier full local nonDB4143passed/1staleUIassertion failed and broaderPG57passed/1oldcacheversion failed remain failed historical reports; fixed exact-expected assertions are covered here, no claim those whole earlier runs passed. No deployment/live data or historical-submit replay."
     },
     {
       "id": "native-pg",
@@ -99,22 +99,22 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "passed": 11,
+      "passed": 46,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "db7caa28ec24c2a91b5038d5a167826a95a28513",
-      "sourceFingerprint": "41c9f91cd14ebfb1ec55ce836ec6a9f7ea16b5d623e2c55411b9cd751abd0a8f",
-      "startedAt": "2026-11-16T05:35:49.491Z",
-      "endedAt": "2026-11-16T05:36:58.469Z",
-      "log": "/tmp/production-facts-native-verified.log",
-      "logSha256": "2fc2d25e5d85439f89a5ed2bbb301fe479da2780eb322792a6d0660f3d8b623c",
+      "testedHead": "657d393fe5e594efeefef635dfb102b3611c3452",
+      "sourceFingerprint": "1505a019d6a74fa7d6a5872780e15c3add906b60143b0a71c902608909629cfa",
+      "startedAt": "2026-11-16T05:50:42.399Z",
+      "endedAt": "2026-11-16T05:51:16.837Z",
+      "log": "/tmp/production-facts-review-pg.log",
+      "logSha256": "0df5629ca7df0d9fa4b68364057c49c741bc90e833236f96b2b6413df85ec3d4",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fedd84bb843af3736f9c083e9d99ba05386852f09df09f7b197e03bca391d8d5"
+          "sha256": "f3e87aec54b41c3fa5aa20e68dee0926254d372641575e27ddf6921679b15db0"
         }
       ],
-      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies and own workspace builds, not fresh npm ci. PG16-bookworm512MiB owned tmpfs, non-superuser/NOBYPASSRLS marked isolated database, original role seeder/API/App and schema/container cleaned. Current 11 PG/App tests or 135 focused units, not live Acceptance/production. Earlier full local nonDB4143passed/1staleUIassertion failed and broaderPG57passed/1oldcacheversion failed remain failed historical reports; fixed exact-expected assertions are covered here, no claim those whole earlier runs passed. No deployment/live data or historical-submit replay."
+      "context": "Pinned Node22.22.2/npm10.9.9; exact-lock reused third-party dependencies and own workspace builds, not fresh npm ci. PG16-bookworm512MiB owned tmpfs, non-superuser/NOBYPASSRLS marked isolated database, original role seeder/API/App and schema/container cleaned. Current 46 PG/App tests or 135 focused units, not live Acceptance/production. Earlier full local nonDB4143passed/1staleUIassertion failed and broaderPG57passed/1oldcacheversion failed remain failed historical reports; fixed exact-expected assertions are covered here, no claim those whole earlier runs passed. No deployment/live data or historical-submit replay."
     }
   ]
 }

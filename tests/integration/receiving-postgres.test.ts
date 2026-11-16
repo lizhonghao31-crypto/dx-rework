@@ -1724,6 +1724,26 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(mergeAudit.rows[0]?.count).toBe("1");
   });
 
+  it("preserves a merged target delivery-note baseline when an older source receipt is corrected",async()=>{
+    const source=await service.create(receiver(),{styleNo:'TEST-MERGE-OLDER-200',documentQuantity:200,actualQuantity:2,defectiveQuantity:0,attachmentIds:[await readyImage()],receivedDate:pastBusinessDate(1)},randomUUID());
+    const target=await service.create(receiver(),{styleNo:'TEST-MERGE-TARGET-100',documentQuantity:100,actualQuantity:2,defectiveQuantity:0,attachmentIds:[await readyImage()]},randomUUID());
+    const sourceVersion=(await service.board(businessDate(),businessDate(),'TEST-MERGE-OLDER-200')).rows[0]!.version;
+    let current=await service.correctBatch(rootCorrector(),source.value.receivingBatchId,{expectedVersion:sourceVersion,styleNo:'TEST-MERGE-TARGET-100',documentQuantity:200,actualQuantity:2,defectiveQuantity:0});
+    expect(current).toMatchObject({documentQuantity:100,actualQuantity:4});
+    const original=(await database.query('SELECT receipt_id,document_quantity,actual_quantity,receiving_source,received_at FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id',[target.value.receivingBatchId])).rows;
+    expect(original[0]!.receipt_id).toBe(source.value.receiptId);
+    for(const [receiptId,documentQuantity]of [[source.value.receiptId,200],[target.value.receiptId,100]] as const){
+      current=await service.correctReceipt(rootCorrector(),receiptId,{expectedVersion:current.version,documentQuantity,actualQuantity:1,defectiveQuantity:0});
+      expect(current.documentQuantity).toBe(100);
+    }
+    // An intentional change to the target's own note changes its baseline;
+    // editing a merged source's old note does not turn it into the target note.
+    current=await service.correctReceipt(rootCorrector(),target.value.receiptId,{expectedVersion:current.version,documentQuantity:110,actualQuantity:1,defectiveQuantity:0});expect(current.documentQuantity).toBe(110);
+    current=await service.correctReceipt(rootCorrector(),source.value.receiptId,{expectedVersion:current.version,documentQuantity:210,actualQuantity:1,defectiveQuantity:0});expect(current.documentQuantity).toBe(110);
+    expect((await database.query('SELECT receipt_id,document_quantity,actual_quantity,receiving_source,received_at FROM receiving_receipts WHERE receiving_batch_id=$1 ORDER BY received_at,receipt_id',[target.value.receivingBatchId])).rows).toEqual(original);
+    const row=(await service.board(businessDate(),businessDate(),'TEST-MERGE-TARGET-100')).rows[0]!;expect(row).toMatchObject({documentQuantity:110,currentActualQuantity:2,receiptCount:2});
+  });
+
   it("lets Root merge a typo batch into a canonical batch that already has rework and reconcile quantities", async () => {
     const targetImage = await readyImage();
     const sourceImage = await readyImage();

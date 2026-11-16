@@ -274,7 +274,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           expectedVersion: correctingReceipt.batchVersion,
-          ...(['initial','backfill'].includes(correctingReceipt.receivingSource)?{}:{source:receiptSource}),
+          ...(!receiptSource&&['legacy','initial','backfill'].includes(correctingReceipt.receivingSource)?{}:{source:receiptSource}),
           documentQuantity: Number(receiptDocumentQuantity),
           actualQuantity: Number(receiptActualQuantity),
           defectiveQuantity: Number(receiptDefectiveQuantity),
