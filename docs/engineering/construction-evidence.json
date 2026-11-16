@@ -2,7 +2,7 @@
   "version": 1,
   "base": "db7caa28ec24c2a91b5038d5a167826a95a28513",
   "risk": "full",
-  "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
+  "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
   "rules": [
     {
       "rule": "Use true original complete factory/PO/step occurrences, preserve administrative/audit time and explicit correction including unknown; Root receipt correction keeps cumulative and effective per-receipt facts aligned, never guesses a multi-receipt split.",
@@ -27,10 +27,12 @@
         "docs/requirements/sourcing-supplier-production-v1.0.md",
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/effective-packing-postgres.test.ts",
         "tests/integration/helpers/receiving-difference-authority-scenario.ts",
         "tests/integration/production-facts-consistency-postgres.test.ts",
         "tests/integration/receiving-board-native-browser-postgres.test.ts",
         "tests/integration/receiving-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
         "tests/integration/special-craft-native-postgres.test.ts",
         "tests/unit/factory-completion-occurrence.test.ts",
         "tests/unit/factory-task-completion.test.ts",
@@ -49,12 +51,14 @@
         "apps/api/src/receiving/receiving-quantity-query.ts"
       ],
       "oldTests": [
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/receiving-board-native-browser-postgres.test.ts",
-        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/integration/effective-packing-postgres.test.ts",
         "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/unit/order-time-reading.test.ts",
-        "tests/unit/journey-factory-deadlines.test.ts"
+        "tests/integration/receiving-board-native-browser-postgres.test.ts",
+        "tests/integration/receiving-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/unit/journey-factory-deadlines.test.ts",
+        "tests/unit/order-time-reading.test.ts"
       ],
       "newTests": [
         "tests/integration/production-facts-consistency-postgres.test.ts",
@@ -63,63 +67,87 @@
       ],
       "initialization": "Additive0294 only broadens receipt-correction provenance CHECK to original legacy/initial/backfill, with original source retained by omission and immutable correction append. No original receipt or audit rewrite/backfill. Mutable totals use effective original facts; card multi-receipt quantity changes require exact original receipt correction. Existing style/image/merge privileges remain. Existing dirty trigger reused; calculationVersionv8 causes original cache rebuild. Workflow1 reads exact original whole-style contract without requiring v2 physical records; native step scope cannot borrow sibling/preparation. Old completion corrections remain authoritative; no new business clocks or PO allocations. Supplemental review4582562432: original0086 migration freezes batch.created_at to minimum immutable receipt.received_at; combine that exact historical origin proof with native creation-batch identity, so later repeat cannot replace migrated target baseline and older merged legacy/native source cannot become target. Pending0294 also converts correction.request_id UUID to unchanged textual values with original128-character receiving pattern; real req-1c is retained identically in correction and operation audit. No random replacement UUID or original fact rewrite.",
       "dateAndPermission": "Original current/manual dispatch validation, milliseconds, exact step/PO/preparation identity and full quantity coverage retained. Process return, QC and warehouse task ends use respective native sources; terminal_recorded_at stays audit. Full and compact task/Journey/plan readers aligned. Root original null correction cannot revive registration time. Original Root-only correction, actor/object/expected-version/native origin and first-delivery scope remain; shared style then batch lock prevents receipt-before-style FK lock inversion, concurrent same-version corrections one success/one conflict. PMC/warehouse receive no new edits. One receipt history available via existing UI and original receiving provenance not guessed; original quantity0 preserved, effective QC invalidated by original quantityVersion rules.",
-      "expectation": "Current135focusedunits + native47 + separately selected original HTTP1 pass. Mixed original0086 legacy/native repeat and older legacy merge preserve target note50→60→65; laterjiashun70 and merged-source80 do not replace baseline, raw facts unchanged. Original older native200→target100 regression remains. Root HTTP request ID text persisted exactly to original audit, full/ordinary role denials retained. Prior remote Full595 failed one realRoot500, nonDB passed; new exact candidate still requires Review closure/Full and is not represented as remotely green.",
+      "expectation": "Current135 units,47 original PG/App plus1 filtered original Root HTTP, and2 old consumer PG cases pass; raw quantities and provenance immutable, effective correction scope and QC invalidation retained. Multireceipt aggregate mutation409 then exact receipt correction preserves current calendar/read/facts unknown. Single1→2 raw1/current2, inspected2/qualified1/uninspectedGap0, packed2/effectivePackedunknown preserve actual failed quality. Previous remoteFull511pass/2fail remains failure; new exact Full required; later skipped phases not claimed.",
       "checks": [
         "unit",
-        "native-pg"
+        "native-pg",
+        "consumers-pg"
       ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "Pinned Node22 Vitest ten original focused unit suites, one worker, default+JSON reporters",
       "kind": "tests",
+      "command": "vitest run ten source/scope/correction/read/UI/mapping unit suites --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
       "passed": 135,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "595abf9522a92659d6261e2169efc1897c794535",
-      "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
-      "startedAt": "2026-11-16T06:30:55.466Z",
-      "endedAt": "2026-11-16T06:31:00.015Z",
-      "log": "/tmp/production-facts-legacy-final-unit.log",
-      "logSha256": "2cc1c1265da604ea2d65d321ad75dff186fbbe99e41962453b75404b4c011dfb",
+      "testedHead": "61a1d917fe0af781239247adc27196f479338e4e",
+      "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
+      "startedAt": "2026-11-16T07:19:29.564Z",
+      "endedAt": "2026-11-16T07:19:37.127Z",
+      "log": "/tmp/production-facts-consumers-unit.log",
+      "logSha256": "6b6d247f9c512adb1bc58a74b54c2ce6568819be2a96f7345eb34cec50d42cb5",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "98556a3275a5abf09037e1801bef0fe780deb9414a471f0bedab5fc8c5f325c8"
+          "sha256": "e1faf1d9002ecb78415e4e5008069aa4c885f20fcfa4b70e6fd2ec402ee0d9f4"
         }
       ],
-      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun."
+      "context": "Actual current worktree tests; Node22.22.2/npm10.9.9, exact-lock reused dependencies, own workspace builds. Marked isolated lowpriv PG16-bookworm, original authenticated App/native services and cleanup, not live Acceptance/production. Previous61 Full common/nonDB passed but PG511passed/2stale-consumer assumptions failed, later stages unrun. No Light rerun or production guard relaxation. This new source tested after aligning only two old test consumers with already-approved effective receipt correction behavior."
     },
     {
       "id": "native-pg",
-      "command": "bash /tmp/production-facts-legacy-verified.sh: original business-chain receiving40/native-App5/production-facts2, then original immediate configuration selects the Root authority/correction scenario1",
       "kind": "tests",
+      "command": "bash /tmp/production-facts-consumers-verified.sh",
       "status": "passed",
       "exitCode": 0,
       "passed": 48,
       "failed": 0,
       "skipped": 59,
-      "testedHead": "595abf9522a92659d6261e2169efc1897c794535",
-      "sourceFingerprint": "1e540933ecffbba366889bb69aac44fe1a05a54a0d1aa1a620554f512f99b09e",
-      "startedAt": "2026-11-16T06:29:19.093Z",
-      "endedAt": "2026-11-16T06:30:07.594Z",
-      "log": "/tmp/production-facts-legacy-verified-final.log",
-      "logSha256": "35e1fbf1d688dbbed6d4f90a99e387fb817b4003a6e7047e28735d50d61ebc4a",
+      "testedHead": "61a1d917fe0af781239247adc27196f479338e4e",
+      "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
+      "startedAt": "2026-11-16T07:19:31.244Z",
+      "endedAt": "2026-11-16T07:20:20.565Z",
+      "log": "/tmp/production-facts-consumers-verified.log",
+      "logSha256": "fef18a9c53b6c799c2000260d1d971732bde01597e544b5fc523d5244aaa8a9b",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b89235241d1e680015d143d42db3f191b2016cf0e4ba4d1360ecc7d1ab120f0e"
+          "sha256": "a28f5537fcbf96197ea3960ff5b10085ebb1d026816587da98770f083acf2879"
         },
         {
           "format": "vitest-json",
-          "sha256": "32e720f6374ba16229d7ec44053fa5609f5a39665e8ade5ec082f61f3a577e0a"
+          "sha256": "e794fc773f4dedb8511fe6ee91fb83c74d2e8300f8d67229d0c0b0ec4f49be48"
         }
       ],
-      "context": "Current verified source fingerprint on predecessor595; pinned Node22.22.2/npm10.9.9 and exact-lock reused dependencies. Real owned lowpriv marked PG16 fixture/API/App, original safety/role/schema contracts and actual container cleanup. Native47 all pass; separately filtered original HTTP scenario1 passes/59 not selected, not whole60-chain success. Prior595 Full43813924125 attempt2 nonDBsuccess but real PG Root500 failed; local exact repro22P02 req-1c and legacy50→60 failures retained, not relabeled. Native retry fixture pagination failure preserved; original rework-state assertion now uses exact original style search, no pagination threshold change. Earlier local nonDB wrapper leaked isolated URL into intentionally skipped legacy suite, so that whole run failed; correct empty-URL check11skips, no fake full pass. No live data/deployment or Light rerun. This is one actual captured script with two native reports:47+1 passing cases and59 unselected; the committed check groups both original summaries and report digests instead of counting the same command log as two independent checks. No rerun or source change for record formatting."
+      "context": "Actual current worktree tests; Node22.22.2/npm10.9.9, exact-lock reused dependencies, own workspace builds. Marked isolated lowpriv PG16-bookworm, original authenticated App/native services and cleanup, not live Acceptance/production. Previous61 Full common/nonDB passed but PG511passed/2stale-consumer assumptions failed, later stages unrun. No Light rerun or production guard relaxation. This new source tested after aligning only two old test consumers with already-approved effective receipt correction behavior."
+    },
+    {
+      "id": "consumers-pg",
+      "kind": "tests",
+      "command": "bash /tmp/production-facts-full-consumers.sh tests/integration/effective-packing-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts -t 'keeps recorded four distinct|P01-06 keeps'",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 147,
+      "testedHead": "61a1d917fe0af781239247adc27196f479338e4e",
+      "sourceFingerprint": "f177d594645ec6a45b56387b24d6ece35cd561f42f72546028e208bdffcdd82d",
+      "startedAt": "2026-11-16T07:18:36.536Z",
+      "endedAt": "2026-11-16T07:19:01.814Z",
+      "log": "/tmp/production-facts-full-consumers.log",
+      "logSha256": "322900332ccc4d3ce0518479cec7c6c512fdbe55065556bbbabdfdb8f549056a",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "53a87a18aa5dfd9266e118dfbeccd9d8aebe37584e700aa62d13280245e73387"
+        }
+      ],
+      "context": "Actual current worktree tests; Node22.22.2/npm10.9.9, exact-lock reused dependencies, own workspace builds. Marked isolated lowpriv PG16-bookworm, original authenticated App/native services and cleanup, not live Acceptance/production. Previous61 Full common/nonDB passed but PG511passed/2stale-consumer assumptions failed, later stages unrun. No Light rerun or production guard relaxation. This new source tested after aligning only two old test consumers with already-approved effective receipt correction behavior."
     }
   ]
 }
