@@ -3533,7 +3533,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
       .rows[0]?.count).toBe(1);
   });
-  const budgetFixture = async (threePo=false,stylePrefix="TEST-P09",secondCustomerDate="2026-11-20",historicalPreparation=false) => {
+  // Scope-denial consumers need a valid independent designer, not a budget order.
+  // Retain the original lifecycle/recipient setup and guarded role initialization.
+  const budgetDesignerFixture = async () => {
     await cycleTodoServices();
     const designerId = randomUUID();
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P09 designer',true)", [designerId]);
@@ -3544,6 +3546,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
     const designer: TrustedActorContext = { actorId: designerId, actorRoles: ["sample_designer"], authorizationCapability: "digital_production:view", authorizationCapabilities: ["digital_production:view", "pattern_room:orders:create"], requestId: randomUUID() };
     await database.query("UPDATE digital_production_customers SET default_merchandiser_id=$1 WHERE code='PD'", [merchandiserId]);
+    return {designer};
+  };
+  const budgetFixture = async (threePo=false,stylePrefix="TEST-P09",secondCustomerDate="2026-11-20",historicalPreparation=false) => {
+    const {designer}=await budgetDesignerFixture(),designerId=designer.actorId;
     const identity = new DigitalProductionIdentityService(database, true, undefined,()=>new Date("2026-09-01T00:00:00Z"));
     const createOrder=historicalPreparation?(actor:TrustedActorContext,input:Parameters<typeof historicalDigitalOrder>[2])=>historicalDigitalOrder(database,actor,input,{slaBeforePreparation:true}):identity.createOrder.bind(identity);
     const order = await createOrder(designer, DigitalOrderCreateSchema.parse({
@@ -3754,7 +3760,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(limited.development).toEqual(full.development);
     expect((await new DigitalDevelopmentService(database,true).read(worker,ready.sourceId)).sourceId).toBe(ready.sourceId);
     expect(limited.budget).toEqual({state:'unavailable'});expect(JSON.stringify(limited)).not.toMatch(/salePrice|unitPrice|attachmentId/);
-    const stranger=await budgetFixture();await expect(tasks.documents(stranger.designer,taskId)).rejects.toMatchObject({statusCode:404});
+    const stranger=await budgetDesignerFixture();await expect(tasks.documents(stranger.designer,taskId)).rejects.toMatchObject({statusCode:404});
     expect(await tasks.resourceDocuments(root,'source',ready.sourceId)).toEqual({development:{state:'available',id:ready.sourceId},instruction:{state:'available',id:ready.id},budget:{state:'available',id:ready.id}});
     expect((await tasks.resourceDocuments(worker,'source',ready.sourceId)).budget).toEqual({state:'unavailable'});
     await expect(tasks.resourceDocuments(stranger.designer,'source',ready.sourceId)).rejects.toMatchObject({statusCode:404});
@@ -3896,7 +3902,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(result.total).toBeGreaterThan(0);expect(result.summary.newStyles).toBe(1);expect(result.rows.every(row=>row.styleNo===fixture.order.designStyleNo)).toBe(true);
     expect(result.canExport).toBe(false);expect(result.canRecord).toBe(false);
     await expect(analysis.export(fixture.designer,filters)).rejects.toMatchObject({statusCode:403});
-    const stranger=await budgetFixture();expect((await analysis.list(stranger.designer,filters)).total).toBe(0);
+    const stranger=await budgetDesignerFixture();expect((await analysis.list(stranger.designer,filters)).total).toBe(0);
     const worker=ready.people.pattern_room_worker!,workerResult=await analysis.list(worker,filters);
     expect(workerResult.rows.every(row=>row.assigneeId===worker.actorId||row.orderId===ready.id)).toBe(true);
     const taskId=result.rows.find(row=>row.state==='ready')!.taskId;
