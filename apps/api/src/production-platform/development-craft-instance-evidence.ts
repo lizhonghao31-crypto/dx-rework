@@ -11,7 +11,10 @@ const kinds=new Set(['development_craft_dispatch','development_printing','develo
 const at=(value:Date|string|null|undefined)=>value==null?null:new Date(value).toISOString();
 const trusted=(value:Date|string|null|undefined,quality:string|undefined,time:BusinessTime,onFutureEvidence?:((at:string)=>void))=>{
  if(!value||!['现场登记','已核实'].includes(quality??''))return null;
- const result=at(value)!;if(Date.parse(result)>Date.parse(time.now)){onFutureEvidence?.(result);return null;}return result;
+ // Keep contradictory original evidence for the canonical chronology check.
+ // Dropping it here would turn an invalid instance into an apparently complete
+ // read when its kind-level observation is replaced by this exact task.
+ const result=at(value)!;if(Date.parse(result)>Date.parse(time.now))onFutureEvidence?.(result);return result;
 };
 const current=<T>(row:DevelopmentCraftRow,key:keyof DevelopmentCraftRow,fallback:T):T=>Object.hasOwn(row,key)?row[key] as T:fallback;
 /** Read the already captured native window. A kind is never an instance ID;

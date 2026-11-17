@@ -1,4 +1,5 @@
 import type {DevelopmentCraftInstance} from './development-craft-instance-evidence.js';
+import type {FactorySlaInstance} from './factory-evaluation-route.js';
 import {readFixedScheduleBasis,type FixedScheduleBasis} from './fixed-schedule-basis.js';
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import {ContextBusinessClock} from "../acceptance-clock/business-time.js";
@@ -18,8 +19,8 @@ import {journeyTermination,type JourneyTermination} from './journey-termination.
 
 const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',development_material_recheck:'development_materials',development_craft_return:'development_craft_confirmation',external_pattern:'development_external_pattern',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',bulk_print_embroidery:'process_logistics',factory_production:'factory_production_qc',ship_sample_advance:'bulk_ship_sample',garment_inspection:'receiving_inspection',garment_rework:'rework',garment_packing:'packing',receiving_span:'receipts'};
 export const journeyTimingKey=(id:string)=>aliases[id.split(':')[0]!]??id.split(':')[0]!;
-export type JourneyTimingEvidence={facts:Record<string,SlaNodeFact>;instances?:readonly DevelopmentCraftInstance[];labels?:ReadonlyMap<string,{scopeLabel:string;snapshotId?:string|null}>;termination?:JourneyTermination|null};
-export type JourneyTimingInputs={plan:SlaPlan|null;original:SlaPlan|null;facts:Record<string,SlaNodeFact>;instances?:DevelopmentCraftInstance[];fixedSchedule?:FixedScheduleBasis|null;termination?:JourneyTermination|null};
+export type JourneyTimingEvidence={facts:Record<string,SlaNodeFact>;instances?:readonly DevelopmentCraftInstance[];factoryInstances?:readonly FactorySlaInstance[];labels?:ReadonlyMap<string,{scopeLabel:string;snapshotId?:string|null}>;termination?:JourneyTermination|null};
+export type JourneyTimingInputs={plan:SlaPlan|null;original:SlaPlan|null;facts:Record<string,SlaNodeFact>;instances?:DevelopmentCraftInstance[];factoryInstances?:FactorySlaInstance[];fixedSchedule?:FixedScheduleBasis|null;termination?:JourneyTermination|null};
 const open=(state:string)=>!['completed','inherited','cancelled','not_applicable','unavailable'].includes(state);
 /** Evaluate a captured task window with the existing canonical evaluator;
  * neither the legacy kind's later R nor an unrelated parent return is input. */
@@ -33,7 +34,7 @@ function craftInstanceTiming(instance:DevelopmentCraftInstance,plan:SlaPlan|null
  let status=!instance.fact.startedAt&&!instance.fact.businessCompleted&&result.status!=='overdue'?(instance.state==='pending'?'not_started':'unknown'):result.status;
  // Batch evaluation is inclusive. Retain an explicitly captured strict
  // boundary through the same canonical comparison, without rounding a date.
- if(instance.deadline.exclusive&&instance.deadline.at&&instance.fact.startedAt){
+ if(!result.assessmentIssue&&instance.deadline.exclusive&&instance.deadline.at&&instance.fact.startedAt){
   if(instance.fact.businessCompleted&&instance.fact.completedAt&&slaPastDeadline(instance.fact.completedAt,instance.deadline))status='completed_late';
   else if(!instance.fact.businessCompleted&&slaPastDeadline(time.now,instance.deadline))status='overdue';
  }
@@ -45,15 +46,19 @@ function craftInstanceTiming(instance:DevelopmentCraftInstance,plan:SlaPlan|null
 export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,original:SlaPlan|null,nodes:SlaNodeEvaluation[],time:BusinessTime,revisions:{original:number|null;current:number|null},external=false,native?:JourneyTimingEvidence,authorizedTaskIds?:ReadonlySet<string>) {
  const definitions=new Map(plan?.nodes.map(n=>[n.id,n])??[]),originals=new Map(original?calculateSlaPlan(original).map(n=>[n.id,n.end]):[]);
  const instances=native?.instances??[],visible=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.state!=='unavailable'),readRound=item.selectedRound??item.adoptedRound;
+ const factoryInstances=native?.factoryInstances??[],factoryById=new Map(factoryInstances.map(instance=>[instance.nodeId,instance]));
+ const visibleFactory=(instance:FactorySlaInstance)=>visible.some(node=>instance.taskIds.includes(node.instanceId)&&node.key===instance.taskKind&&(!authorizedTaskIds||authorizedTaskIds.has(node.instanceId)));
  const scopedKeys=new Set(instances.filter(instance=>readRound===null||instance.round===readRound).map(instance=>journeyTimingKey(instance.definitionId)));
  const visibleInstance=(instance:DevelopmentCraftInstance)=>item.sourceId===instance.sourceId&&visible.some(node=>node.instanceId===instance.taskId&&node.round===instance.round&&journeyTimingKey(node.key)===journeyTimingKey(instance.taskKind))&&(!authorizedTaskIds||authorizedTaskIds.has(instance.taskId));
  const timing:JourneyTiming[]=nodes.flatMap(n=>{const definition=definitions.get(n.id);if(!definition||definition.applicable==='no'||definition.kind==='unlimited'||definition.parameterKey==='bulk_cutting'&&external||scopedKeys.has(journeyTimingKey(n.id)))return [];
-  const fact=native?.facts[n.id],line=item.lines.find(line=>line.id===n.id.split(':')[1]);
-  const windows=fact?.batchWindows?.map(window=>({...window,...(native?.labels?.get(window.evidence)??{scopeLabel:line?`PO ${line.po??'号码尚未取得'} · ${line.color}`:'本批范围依据尚未取得'})}));
+  const factory=factoryById.get(n.id);if(factory&&!visibleFactory(factory))return [];
+  const fact=native?.facts[n.id],line=factory?undefined:item.lines.find(line=>line.id===n.id.split(':')[1]);
+  const factoryLabel=factory?.lineIds.map(id=>{const row=item.lines.find(line=>line.id===id);return row?`PO ${row.po??'号码尚未取得'} · ${row.color}`:'PO范围依据尚未取得';}).join(' / ');
+  const windows=fact?.batchWindows?.map(window=>({...window,...(native?.labels?.get(window.evidence)??{scopeLabel:factoryLabel??(line?`PO ${line.po??'号码尚未取得'} · ${line.color}`:'本批范围依据尚未取得'),...(factory?{snapshotId:factory.snapshotId}:{})})}));
   return [{id:n.id,label:definition.label,stage:JOURNEY_STAGES[definition.stage-1]!.key,kind:definition.kind,status:n.status,...(windows?{windows,coverageComplete:fact?.batchCoverageComplete===true}:{}),...(n.logisticsWindows?{logisticsWindows:n.logisticsWindows}:{}),...(n.assessmentIssue?{assessmentIssue:n.assessmentIssue}:{}),...(n.provenRisk?{provenRisk:n.provenRisk}:{}),actualStart:n.actualStart,actualEnd:n.actualEnd,target:n.deadline,forecast:n.forecast,forecastBasis:n.forecastBasis,original:originals.get(n.id)??{at:null,exclusive:false,reasons:['没有首版目标']},current:n.end}];});
  const terminated=native?.termination?.scopeRef===(item.orderId?`order:${item.orderId}`:`source:${item.sourceId}`);
  for(const instance of instances.filter(visibleInstance)){const own=craftInstanceTiming(instance,plan,time,visible.find(node=>node.instanceId===instance.taskId)!.label,terminated);if(own)timing.push(own);}
- const coverage:JourneySupervision['coverage']=nodes.filter(node=>!scopedKeys.has(journeyTimingKey(node.id))).flatMap(n=>n.assessmentIssue?[{key:'fact_time' as const,message:`${definitions.get(n.id)?.label??n.id}：${n.assessmentIssue.reason}${n.provenRisk==='overdue'?'；另有可信批次已逾期':n.provenRisk==='warning'?'；另有可信批次已临期':''}`}]:[]);
+ const coverage:JourneySupervision['coverage']=nodes.filter(node=>!scopedKeys.has(journeyTimingKey(node.id))&&(!factoryById.has(node.id)||visibleFactory(factoryById.get(node.id)!))).flatMap(n=>n.assessmentIssue?[{key:'fact_time' as const,message:`${definitions.get(n.id)?.label??n.id}：${n.assessmentIssue.reason}${n.provenRisk==='overdue'?'；另有可信批次已逾期':n.provenRisk==='warning'?'；另有可信批次已临期':''}`}]:[]);
  for(const own of timing)if(own.assessmentIssue&&own.id.includes(':task:'))coverage.push({key:'fact_time',message:`${own.label}：${own.assessmentIssue.reason}`});
  if(item.orderId){
   const dates=item.poDeliveryDates??[],missingCustomer=Math.max(item.lines.length-dates.filter(l=>l.customerWarehouseArrivalDate).length,0),missingFactory=Math.max(item.lines.length-dates.filter(l=>l.factoryDeliveryDate).length,0);
@@ -69,19 +74,20 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  item.supervision={assessment:nodes.some(n=>!scopedKeys.has(journeyTimingKey(n.id))&&n.assessmentIssue)||timing.some(n=>n.assessmentIssue)?'partially_unavailable':'complete',asOf:time.now,status:plan?'planned':'legacy_unenrolled',originalRevision:revisions.original,currentRevision:revisions.current,nodes:timing,coverage,customerReminderDate:reminder};
  if(native){
   const visibleKeys=new Set(item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!['unavailable','not_applicable'].includes(node.state)).map(node=>journeyTimingKey(node.key)));
-  item.supervision.nativeFacts=Object.entries(native.facts).filter(([id])=>{const instance=instances.find(instance=>id===`${instance.definitionId}:task:${instance.taskId}`);return visibleKeys.has(journeyTimingKey(id))&&(instance?visibleInstance(instance):!scopedKeys.has(journeyTimingKey(id)));}).sort(([a],[b])=>a.localeCompare(b))
+  item.supervision.nativeFacts=Object.entries(native.facts).filter(([id])=>{const factory=factoryById.get(id);if(factory)return visibleFactory(factory);if(factoryInstances.length&&(['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_special','bulk_qc'].includes(id)||id==='warehouse_preshrink'&&factoryInstances.some(instance=>instance.taskKind===id)))return false;const instance=instances.find(instance=>id===`${instance.definitionId}:task:${instance.taskId}`);return visibleKeys.has(journeyTimingKey(id))&&(instance?visibleInstance(instance):!scopedKeys.has(journeyTimingKey(id)));}).sort(([a],[b])=>a.localeCompare(b))
    .map(([id,fact])=>({id,sourceRef:fact.evidence,timeRole:'sla_observation',startedAt:fact.startedAt??null,completedAt:fact.completedAt??null,businessCompleted:fact.businessCompleted??null}));
  }
  for(const stage of item.stages)for(const node of stage.nodes){
   if(!node.current)continue;
   if(scopedKeys.has(journeyTimingKey(node.key))){delete node.timing;delete node.timings;}
   const lineIds=new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[]));
-  const matches=timing.filter(t=>journeyTimingKey(t.id)===journeyTimingKey(node.key)&&(!t.id.includes(':task:')||t.id.endsWith(':task:'+node.instanceId))&&(!lineIds.size
-   ||!item.lines.some(line=>line.id===t.id.split(':')[1])||lineIds.has(t.id.split(':')[1]!)));
+  const matches=timing.filter(t=>{const factory=factoryById.get(t.id);if(factory)return factory.taskIds.includes(node.instanceId)&&node.key===factory.taskKind&&(!authorizedTaskIds||authorizedTaskIds.has(node.instanceId));return journeyTimingKey(t.id)===journeyTimingKey(node.key)&&(!t.id.includes(':task:')||t.id.endsWith(':task:'+node.instanceId))&&(!lineIds.size
+   ||!item.lines.some(line=>line.id===t.id.split(':')[1])||lineIds.has(t.id.split(':')[1]!));});
   // Multiple PO/batch windows share the existing aggregate's risk, never invent a single aggregate target.
   if(!matches.length)continue;
   if(matches.length>1)node.timings=matches;
   if(matches.length===1){const t=matches[0]!;node.timing=t;
+   if(factoryById.has(t.id))node.label=t.label;
    const originalTaskTarget=node.expectedKind==='sla'&&node.expectedAt&&(authorizedTaskIds?.has(node.instanceId)||node.records.some(record=>record.domain==='task'&&record.id===node.instanceId));
    if(!originalTaskTarget&&!(['estimate','included'].includes(t.kind)&&!t.target.at)){
     node.expectedAt=t.target.at;node.expectedPrecision=t.target.at?'instant':'missing';node.expectedKind=t.target.at?'sla':'unset';
@@ -100,7 +106,8 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
  const termination=resource?await journeyTermination(db,resource,time.now):null;
  let capturedInputs:JourneyTimingInputs|undefined,receiving:OrderClosureSheet|undefined;const originalCapture=capture;capture=value=>{value.termination=termination;capturedInputs=value;originalCapture?.(value);};
  if(item.orderId){const service=new SlaOrderService(database,{read:async()=>time}),read=actor?await service.readWithClient(actor,item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{}),...(item.selectedRound?{developmentRound:item.selectedRound}:{})}):await service.readFactsWithClient(item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{}),...(item.selectedRound?{developmentRound:item.selectedRound}:{})});
-  receiving=read.receiving;capture?.({plan:read.status==='planned'?read.evaluationPlan:null,original:read.status==='planned'?read.original.plan:null,facts:read.facts,...(read.development?.instances?.length?{instances:read.development.instances}:{})});
+  const factoryInstances=read.factory&&'instances'in read.factory?read.factory.instances:undefined;
+  receiving=read.receiving;capture?.({plan:read.status==='planned'?read.evaluationPlan:null,original:read.status==='planned'?read.original.plan:null,facts:read.facts,...(read.development?.instances?.length?{instances:read.development.instances}:{}),...(factoryInstances?.length?{factoryInstances}:{})});
   attachJourneyNativeTimes(item,{orderId:read.receiving.orderId,rework:read.rework.windows,receiving:read.receiving.receivingSpan},read.time.now);
   if(read.status==='planned'){
    const labels=new Map<string,{scopeLabel:string;snapshotId?:string|null}>();
@@ -108,7 +115,7 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
    for(const window of read.factory?.windows??[])labels.set(window.evidence,{scopeLabel:scope(window.lineIds),snapshotId:window.snapshotId??null});
    for(const window of read.rework.windows){const rework=read.receiving.lines.flatMap(line=>line.reworks).find(row=>row.reworkId===window.reworkId);labels.set(window.evidence,{scopeLabel:`${scope([window.lineId])} · ${rework?.reworkNo??'原做尾或返工记录'}`,snapshotId:window.snapshotId});}
    for(const window of read.garments.windows)labels.set(window.evidence,{scopeLabel:`${scope([window.lineId])} · 本批实收${read.garments.quality.find(row=>row.receiptId===window.receiptId)?.quantity??'范围待核'}件`,snapshotId:window.snapshotId});
-   attachJourneySupervision(item,read.evaluationPlan,read.original.plan,read.nodes,read.time,{original:read.original.revision,current:read.current.revision},external,{facts:read.facts,labels,termination,...(read.development?.instances?.length?{instances:read.development.instances}:{})},authorizedTaskIds);
+   attachJourneySupervision(item,read.evaluationPlan,read.original.plan,read.nodes,read.time,{original:read.original.revision,current:read.current.revision},external,{facts:read.facts,labels,termination,...(read.development?.instances?.length?{instances:read.development.instances}:{}),...(factoryInstances?.length?{factoryInstances}:{})},authorizedTaskIds);
   }
   else attachJourneySupervision(item,null,null,[],read.time,{original:null,current:null},external,{facts:read.facts,termination,...(read.development?.instances?.length?{instances:read.development.instances}:{})},authorizedTaskIds);
  }else if(item.sourceId){const saved=await developmentSlaPlan(db,item.sourceId);

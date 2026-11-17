@@ -1,291 +1,310 @@
 {
   "version": 1,
-  "base": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+  "base": "ed156834c310e45d01925dd3d164edd47365ba82",
   "risk": "full",
-  "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+  "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
   "rules": [
     {
-      "rule": "Current positive native receipt quantities define effective packing quality while original zero history remains readable",
-      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
-      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
-      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
+      "rule": "Captured factory adjacency supplies every exact logistics/QC dependency without tolerating corrupt graphs",
+      "source": "User authorized approved supplemental Pro body-v3 plan A→D→B→C, Library libfile_fde3_f-82b8febb23108191a5ce7a05f90f9256_c8d3bf5d609c8191bce6411a30e94d44. This A repair addresses proven frozen factory graph/step identity; raw BA013/PURE requests remain separately unattributed. User reaffirms parallel construction while each prior PR waits CI, no deployment.",
+      "initialization": "Latest release actual #1019 merge ed156834. Read existing initial/added immutable adoption/route/work/position and native logistics/QC facts; no GET capture, migration or business-history backfill. Invalidate old native projection calculation with v13; keep shared engine strict, old compatibility facts and fixed/order-time formal P.",
+      "dateAndPermission": "Retain original order/task authorization. Factory exact node/step/phase/route/task identity scopes attachment and native facts; ordinary-role现场复验 not claimed. Native R/D/A, current formal P, original B and legacy continuous forecast retain separate semantics. Original batch aggregate D is earliest open D; completed batches retain exact native D in their windows.",
       "writes": [
-        "apps/api/src/production-platform/packing-quality-coverage.ts",
-        "tests/unit/packing-quality-effective-receipts.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "docs/requirements/sourcing-supplier-production-v1.0.md"
+        "apps/api/src/production-platform/factory-evaluation-route.ts",
+        "apps/api/src/production-platform/fixed-factory-timing.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "tests/unit/factory-supervision-graph.test.ts",
+        "docs/engineering/sla-factory-supervision-repair.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/garment-quality.ts",
-        "apps/api/src/production-platform/bulk-washing-coverage.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/packing-readiness-evidence.ts"
+        "apps/api/src/production-platform/fixed-order-work.ts",
+        "apps/api/src/production-platform/fixed-order-route.ts",
+        "apps/api/src/production-platform/fixed-timeline-adoptions.ts",
+        "packages/domain/src/digital-sla-plan.ts"
       ],
       "oldTests": [
-        "tests/unit/packing-readiness-evidence.test.ts",
-        "tests/unit/packing-sla-evidence.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
+        "tests/unit/digital-sla-plan.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts"
       ],
-      "expectation": "Original2 pieces genuinely washed and QCed before Root correction0; two new positive1-piece receipts independently QCed/washed and packed2. Raw receipt and old wash events retained; scalar/native qualified and effective packing both2, unknown positive coverage still rejected.",
+      "expectation": "Frozen initial/added actual IDs and groups remain independent, B→QC_B→C→QC_C and unrelated original dispatch prerequisites remain. Missing dependency, duplicate route/work and cycle are rejected; compatibility kind placeholders never count a second time. Before/after cut direct SLA and original App read without graph500; no writes during reads. Shared evaluator remains unchanged.",
       "checks": [
-        "quality-unit",
-        "quality-native-app",
-        "quality-api-types"
+        "a-unit",
+        "a-native-app",
+        "a-api-types",
+        "a-lint"
       ]
     },
     {
-      "rule": "Terminal proof governs current activity summaries without inventing completion or losing frozen responsibility",
-      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
-      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
-      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
+      "rule": "Exact factory facts and visibility survive native attachment, minimal storage and selection-clock reevaluation",
+      "source": "User authorized approved supplemental Pro body-v3 plan A→D→B→C, Library libfile_fde3_f-82b8febb23108191a5ce7a05f90f9256_c8d3bf5d609c8191bce6411a30e94d44. This A repair addresses proven frozen factory graph/step identity; raw BA013/PURE requests remain separately unattributed. User reaffirms parallel construction while each prior PR waits CI, no deployment.",
+      "initialization": "Latest release actual #1019 merge ed156834. Read existing initial/added immutable adoption/route/work/position and native logistics/QC facts; no GET capture, migration or business-history backfill. Invalidate old native projection calculation with v13; keep shared engine strict, old compatibility facts and fixed/order-time formal P.",
+      "dateAndPermission": "Retain original order/task authorization. Factory exact node/step/phase/route/task identity scopes attachment and native facts; ordinary-role现场复验 not claimed. Native R/D/A, current formal P, original B and legacy continuous forecast retain separate semantics. Original batch aggregate D is earliest open D; completed batches retain exact native D in their windows.",
       "writes": [
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/cockpit-home.tsx",
-        "tests/unit/cockpit-fixed-schedule.test.ts",
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md"
-      ],
-      "reads": [
-        "apps/web/src/cockpit-node-summary.tsx",
-        "apps/web/src/cockpit-node-rows.tsx",
-        "apps/web/src/cockpit-fixed-schedule.tsx",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/api/src/production-platform/fixed-schedule-progress.ts"
-      ],
-      "oldTests": [
-        "tests/unit/cockpit-home.test.ts",
-        "tests/unit/m01-cockpit-workspace.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts"
-      ],
-      "expectation": "Original closure clock at13:00 and24h later retains240late with Aempty/raw unfinished state. Original App home shows special closure and no false running representative; exact original QC row remains readable as terminated. Mixed running/terminated scope not overgeneralized; progress-bar layout unchanged.",
-      "checks": [
-        "quality-unit",
-        "quality-home-consumers",
-        "quality-native-app",
-        "quality-web-types"
-      ]
-    },
-    {
-      "rule": "Stored Journey calculations rebuild for current effective quality and preserve exact craft and old-round facts",
-      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
-      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
-      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
-      "writes": [
+        "apps/api/src/production-platform/factory-sla-evidence.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-selection-clock.ts",
         "tests/integration/special-craft-native-postgres.test.ts"
       ],
       "reads": [
+        "apps/api/src/production-platform/fixed-task-route.ts",
+        "apps/api/src/production-platform/journey-factory-deadlines.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts"
+        "apps/api/src/production-platform/factory-completion-occurrence.ts"
       ],
       "oldTests": [
+        "tests/unit/journey-craft-facts.test.ts",
+        "tests/unit/journey-sla-supervision.test.ts",
+        "tests/unit/journey-selection-facts.test.ts",
         "tests/unit/journey-fact-model.test.ts",
-        "tests/integration/special-craft-native-postgres.test.ts"
+        "tests/unit/development-craft-instance-supervision.test.ts"
       ],
-      "expectation": "New calculation version prevents old stored zero-polluted quality snapshot reuse. Same current special-craft identities/rounds/native windows and explicitly inherited technical completion remain intact; no old fact rewriting or actual timestamp fabrication.",
+      "expectation": "Each real task owns only its original frozen step/phase window; step IDs are not parsed as PO IDs, hidden task windows are not attached, compatibility aggregate facts stay available without duplicate progress. Exact native starts/ends and window D retain old batch semantics, names come from frozen step; calc v13 prevents old cache reuse. All original special development/explicit inheritance/pricing permissions and native factory dispatch checks retained.",
       "checks": [
-        "quality-unit",
-        "quality-native-facts",
-        "quality-api-types"
+        "a-unit",
+        "a-native-app",
+        "a-api-types",
+        "a-time-inventory"
       ]
     },
     {
-      "rule": "Exact canonical tests and shared native admission preserve original coverage, browser authentication and cleanup",
-      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
-      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
-      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
+      "rule": "New original authenticated App regression remains mandatory through the canonical PG plan",
+      "source": "User authorized approved supplemental Pro body-v3 plan A→D→B→C, Library libfile_fde3_f-82b8febb23108191a5ce7a05f90f9256_c8d3bf5d609c8191bce6411a30e94d44. This A repair addresses proven frozen factory graph/step identity; raw BA013/PURE requests remain separately unattributed. User reaffirms parallel construction while each prior PR waits CI, no deployment.",
+      "initialization": "Latest release actual #1019 merge ed156834. Read existing initial/added immutable adoption/route/work/position and native logistics/QC facts; no GET capture, migration or business-history backfill. Invalidate old native projection calculation with v13; keep shared engine strict, old compatibility facts and fixed/order-time formal P.",
+      "dateAndPermission": "Retain original order/task authorization. Factory exact node/step/phase/route/task identity scopes attachment and native facts; ordinary-role现场复验 not claimed. Native R/D/A, current formal P, original B and legacy continuous forecast retain separate semantics. Original batch aggregate D is earliest open D; completed batches retain exact native D in their windows.",
       "writes": [
-        "tests/helpers/order-time-rewash-fixture.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
         "tests/unit/full-gate-risk-map.test.ts"
       ],
       "reads": [
-        "scripts/ci/prepare-settings-browser.mjs",
-        "vitest.business-chain.config.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
         "tests/helpers/business-anchor-fixture.ts",
-        "tests/acceptance/supplychain-settings-browser.ts"
+        "vitest.business-chain.config.ts",
+        "scripts/ci/prepare-settings-browser.mjs"
       ],
       "oldTests": [
-        "tests/integration/order-time-washing-rework-postgres.test.ts",
-        "tests/integration/order-time-washing-rework-browser-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts",
+        "scripts/ci/test-execution-contract.test.mjs",
+        "tests/integration/special-craft-native-postgres.test.ts"
       ],
-      "expectation": "Extract only unchanged full native admission for both old and new fixtures; all original rewash plan and authenticated App cases retained. New original App suite genuinely mapped to finite long config/Chromium, required profile gains actual bulk-washing bridge; no skipped assertions, timeout increase, CI experiment or extra runner.",
+      "expectation": "New finite long suite executes real original double special commands, direct/list/detail/cache read and four exact original task rows in authenticated App; read business counts unchanged, owned resource cleanup verified. Extend required existing Journey profile to include this regression; no existing required suite removed, no extra runner/timeout/CI research, no skipped new scenarios. Baseline graph red proof and failed setup/locator diagnostics preserved independently.",
       "checks": [
-        "quality-unit",
-        "quality-native-app",
-        "quality-native-facts",
-        "quality-protocol",
-        "quality-lint"
+        "a-unit",
+        "a-native-app",
+        "a-protocol",
+        "a-lint"
+      ]
+    },
+    {
+      "rule": "Original chronology and snapshot lexical validation remain correct through instance replacement and complete pagination",
+      "source": "User authorized approved supplemental Pro body-v3 plan A→D→B→C, Library libfile_fde3_f-82b8febb23108191a5ce7a05f90f9256_c8d3bf5d609c8191bce6411a30e94d44. This A repair addresses proven frozen factory graph/step identity; raw BA013/PURE requests remain separately unattributed. User reaffirms parallel construction while each prior PR waits CI, no deployment.",
+      "initialization": "Latest release actual #1019 merge ed156834. Read existing initial/added immutable adoption/route/work/position and native logistics/QC facts; no GET capture, migration or business-history backfill. Invalidate old native projection calculation with v13; keep shared engine strict, old compatibility facts and fixed/order-time formal P.",
+      "dateAndPermission": "Retain original order/task authorization. Factory exact node/step/phase/route/task identity scopes attachment and native facts; ordinary-role现场复验 not claimed. Native R/D/A, current formal P, original B and legacy continuous forecast retain separate semantics. Original batch aggregate D is earliest open D; completed batches retain exact native D in their windows.",
+      "writes": [
+        "apps/api/src/production-platform/development-craft-instance-evidence.ts",
+        "apps/api/src/production-platform/development-sla-evidence.ts",
+        "apps/api/src/production-platform/journey-snapshot-reads.ts",
+        "tests/unit/development-craft-instance-supervision.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/journey-selection-clock.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "packages/domain/src/digital-sla-plan.ts"
+      ],
+      "oldTests": [
+        "tests/unit/journey-snapshot-reads.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/time-reading-clock-postgres.test.ts"
+      ],
+      "expectation": "First exact Full failed; original bad completion also reproduced on exact integration base. Preserve contradictory trusted original instants for canonical read isolation/strict rejection and genuine future recheck, rather than discard them on exact-task replacement. Reuse only pure exact SQL lexical classifications within bounded memory; unchanged parameter/role/query-mode guards, original snapshot/result/failure invalidation, original full pagination and 120s assertion. Original full 55-test combination including unchanged 120s gate passed on exact e1f7364b; the subsequent strict-deadline guard is verified by new inclusive/exclusive chronology units and 20 original clock/App/legacy special tests with owned cleanup, without relabeling that earlier run as a later-head result; no assertions, timeout or workflow scope weakened.",
+      "checks": [
+        "a-unit",
+        "a-native-app",
+        "a-api-types",
+        "a-lint",
+        "a-protocol"
+      ]
+    },
+    {
+      "rule": "User-authorized aggregate pagination allowance preserves every scenario and business assertion",
+      "source": "User authorized approved supplemental Pro body-v3 plan A→D→B→C, Library libfile_fde3_f-82b8febb23108191a5ce7a05f90f9256_c8d3bf5d609c8191bce6411a30e94d44. This A repair addresses proven frozen factory graph/step identity; raw BA013/PURE requests remain separately unattributed. User reaffirms parallel construction while each prior PR waits CI, no deployment.",
+      "initialization": "Latest release actual #1019 merge ed156834. Read existing initial/added immutable adoption/route/work/position and native logistics/QC facts; no GET capture, migration or business-history backfill. Invalidate old native projection calculation with v13; keep shared engine strict, old compatibility facts and fixed/order-time formal P.",
+      "dateAndPermission": "Retain original order/task authorization. Factory exact node/step/phase/route/task identity scopes attachment and native facts; ordinary-role现场复验 not claimed. Native R/D/A, current formal P, original B and legacy continuous forecast retain separate semantics. Original batch aggregate D is earliest open D; completed batches retain exact native D in their windows.",
+      "writes": [
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "reads": [
+        "tests/integration/digital-journey-postgres.test.ts",
+        "scripts/test-execution-config.mjs"
+      ],
+      "oldTests": [
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "expectation": "Latest explicit user instruction after measured121597.93ms and124308.17832ms Full failures: moderately increase only the complete pagination workload budget instead of iterating query optimizations. Inspection of the exact diff confirms only the aggregate120000→150000ms assertion/message and explanatory comment change, all five role/page/ownership/revocation cases and business assertions retained. Second b84 Full executed131 passing business cases but suite gate failed; later PG phases skipped. Current syntax/unit/protocol/native-clock checks pass; the new full-workload runtime remains for final exact Full, not claimed as a speed gain or a completed local benchmark.",
+      "checks": [
+        "a-unit",
+        "a-lint",
+        "a-protocol",
+        "a-native-app"
+      ]
+    },
+    {
+      "rule": "Full-schema diagnostic initialization uses the existing fixture allowance without changing test-body semantics",
+      "source": "User authorized approved supplemental Pro body-v3 plan A→D→B→C, Library libfile_fde3_f-82b8febb23108191a5ce7a05f90f9256_c8d3bf5d609c8191bce6411a30e94d44. This A repair addresses proven frozen factory graph/step identity; raw BA013/PURE requests remain separately unattributed. User reaffirms parallel construction while each prior PR waits CI, no deployment.",
+      "initialization": "Latest release actual #1019 merge ed156834. Read existing initial/added immutable adoption/route/work/position and native logistics/QC facts; no GET capture, migration or business-history backfill. Invalidate old native projection calculation with v13; keep shared engine strict, old compatibility facts and fixed/order-time formal P.",
+      "dateAndPermission": "Retain original order/task authorization. Factory exact node/step/phase/route/task identity scopes attachment and native facts; ordinary-role现场复验 not claimed. Native R/D/A, current formal P, original B and legacy continuous forecast retain separate semantics. Original batch aggregate D is earliest open D; completed batches retain exact native D in their windows.",
+      "writes": [
+        "tests/integration/journey-diagnostic-postgres.test.ts"
+      ],
+      "reads": [
+        "scripts/test-execution-config.mjs",
+        "vitest.config.ts",
+        "tests/helpers/owned-postgres-schema.ts"
+      ],
+      "oldTests": [
+        "tests/integration/journey-diagnostic-postgres.test.ts"
+      ],
+      "expectation": "Latest user instruction requests a single systematic inspection of the actual ordinary PG initialization budgets after Full44146013787:127 cases passed and diagnostic4 did not run due to beforeAll default10s. Inspecting all9 actual ordinary entries distinguishes already configured full fixtures and light partial-schema fixtures. Only full-manifest migration/verified-service initialization now takes the existing shared correctness allowance; ordinary case/cleanup limits, postgres worker1/pool1, queue1s and all driver/cache/security assertions remain. Exact ordinary-config local four cases pass with marked low-privilege database and verified cleanup; earlier5.711/6.062s successful suite totals and10.554s failure are retained without inventing a lock/migration phase attribution.",
+      "checks": [
+        "a-diagnostic",
+        "a-unit",
+        "a-lint",
+        "a-protocol"
       ]
     }
   ],
   "checks": [
     {
-      "id": "quality-lint",
-      "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/packing-quality-coverage.ts apps/web/src/cockpit-home.tsx apps/web/src/digital-journey-cockpit-model.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/helpers/order-time-rewash-fixture.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/packing-quality-effective-receipts.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:55:26.085340+00:00",
-      "endedAt": "2026-11-17T13:55:30.218040+00:00",
-      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
-    },
-    {
-      "id": "quality-api-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:55:26.003639+00:00",
-      "endedAt": "2026-11-17T13:55:58.084253+00:00",
-      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-api-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
-    },
-    {
-      "id": "quality-web-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:55:26.105560+00:00",
-      "endedAt": "2026-11-17T13:56:12.850864+00:00",
-      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-web-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
-    },
-    {
-      "id": "quality-migrations",
-      "kind": "command",
-      "command": "node scripts/check-migrations.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:55:49.937857+00:00",
-      "endedAt": "2026-11-17T13:55:50.090839+00:00",
-      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-migrations/command.log",
-      "logSha256": "508e2136e927a716e3ffa1c0090e819d8e8659862739dde352757fe03528fdf2",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
-    },
-    {
-      "id": "quality-unit",
+      "id": "a-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-quality-effective-receipts.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-termination.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/packing-readiness-evidence.test.ts tests/unit/packing-sla-evidence.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/order-time-rewash-input.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/projection-ready-unit-results.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/factory-supervision-graph.test.ts tests/unit/journey-craft-facts.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-fact-model.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-a-20261117/fixture-prep-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:55:30.988557+00:00",
-      "endedAt": "2026-11-17T13:55:49.408203+00:00",
-      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-unit/command.log",
-      "logSha256": "8f0ed145d1ac858c8026996a5e1865bfa6e9137785f5b6d09d60a5f5c4a0ec7e",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
-      "passed": 264,
+      "testedHead": "187d15569afff56ddc68b70da76c00413d1eb9af",
+      "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
+      "startedAt": "2026-11-17T18:37:06.038121+00:00",
+      "endedAt": "2026-11-17T18:37:14.426099+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/fixture-prep-unit/command.log",
+      "logSha256": "f96f78b14834c36f222358ee916eb57866c84286cfca59a19d487bff144ec043",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
+      "passed": 212,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e12b5ae0c358a46045f11ba84eba4615236fea3c1d854ad08f21a7712717dfdb"
+          "sha256": "abc5052998a5a74b52edf0df758c2dec4a336ffdda2c3786a575f760595bdf40"
         }
       ]
     },
     {
-      "id": "quality-home-consumers",
+      "id": "a-native-app",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/m01-cockpit-workspace.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/projection-ready-home-consumers-results.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/time-reading-clock-postgres.test.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-a-20261117/pg/fixture-prep-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:58:39.462953+00:00",
-      "endedAt": "2026-11-17T13:58:42.132601+00:00",
-      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-home-consumers/command.log",
-      "logSha256": "b6f7fa587ac7bd70195e52349850e5dce43a7cdef59c15b7bf6fd8a406ba0c60",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
-      "passed": 18,
+      "testedHead": "187d15569afff56ddc68b70da76c00413d1eb9af",
+      "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
+      "startedAt": "2026-11-17T18:37:05.709250+00:00",
+      "endedAt": "2026-11-17T18:38:18.984223+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/pg/fixture-prep-native/tests.log",
+      "logSha256": "eb9565612574417bc14ebe883b7513ede70689d409ca8630ada31aebc95317e8",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
+      "passed": 20,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "85f31e4676996d0094a5198c852bf91e425d7926031ba24f9914366f13c617e3"
+          "sha256": "95f8f1652921cd0950fbdefef6f61ec879213580511f8c001dab60e4add303e4"
         }
       ]
     },
     {
-      "id": "quality-native-app",
+      "id": "a-diagnostic",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/bulk-washing-postgres.test.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts tests/integration/order-time-washing-rework-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/pg/quality-terminal-original-locks/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/journey-diagnostic-postgres.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-a-20261117/pg/diagnostic-ordinary-preparation/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:55:13.905333+00:00",
-      "endedAt": "2026-11-17T13:57:48.240002+00:00",
-      "log": "/workspace/sla-pr6-20261117/pg/quality-terminal-original-locks/tests.log",
-      "logSha256": "21fbde42b4c995c225bfc6c5a1e7c3695841a9deb81b6d093724efebdc208a84",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
-      "passed": 19,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "2f93a1f4df5672f2492e4bc5a7f290071e5c92aab43500a3195b61c078caa921"
-        }
-      ]
-    },
-    {
-      "id": "quality-native-facts",
-      "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/special-craft-native-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/pg/quality-cached-facts-special/tests.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:58:23.921999+00:00",
-      "endedAt": "2026-11-17T13:59:15.437224+00:00",
-      "log": "/workspace/sla-pr6-20261117/pg/quality-cached-facts-special/tests.log",
-      "logSha256": "8688a2661b1d8e472165f02e31b0c2069d49e8e4f2f858e964f30d8b9f4b4baf",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
+      "testedHead": "187d15569afff56ddc68b70da76c00413d1eb9af",
+      "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
+      "startedAt": "2026-11-17T18:34:25.210507+00:00",
+      "endedAt": "2026-11-17T18:34:42.579089+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/pg/diagnostic-ordinary-preparation/tests.log",
+      "logSha256": "629f3fa052fb0f53015bd8b87486d84f9472563783a6039599d7827e179cc586",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
       "passed": 4,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1d5624c06ccdf364b9ae7e5a5a3cb459f168b0eaa41d30c717a7478f51e15551"
+          "sha256": "74e0a2975b23e7b8786d54ef126b6db4f5018e7628a7fd40d1a22d3a6d795a26"
         }
       ]
     },
     {
-      "id": "quality-protocol",
-      "kind": "tests",
-      "command": "node --test scripts/ci/pr-gate-controller.test.mjs",
+      "id": "a-lint",
+      "kind": "command",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/factory-evaluation-route.ts apps/api/src/production-platform/factory-sla-evidence.ts apps/api/src/production-platform/fixed-factory-timing.ts apps/api/src/production-platform/sla-order-service.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-selection-clock.ts tests/unit/factory-supervision-graph.test.ts tests/unit/full-gate-risk-map.test.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts tests/helpers/business-anchor-fixture.ts scripts/test-suite-plan.mjs scripts/ci/full-gate-risk-map.mjs apps/api/src/production-platform/development-sla-evidence.ts apps/api/src/production-platform/development-craft-instance-evidence.ts apps/api/src/production-platform/journey-snapshot-reads.ts tests/unit/development-craft-instance-supervision.test.ts tests/integration/digital-journey-postgres.test.ts tests/integration/journey-diagnostic-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
-      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
-      "startedAt": "2026-11-17T13:56:09.944013+00:00",
-      "endedAt": "2026-11-17T13:56:11.052943+00:00",
-      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-protocol/command.log",
-      "logSha256": "82c7688957a5cc8b9ccb6dc7819449822c37141747bdb19172a46c0927b1787e",
-      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
-      "passed": 38,
+      "testedHead": "187d15569afff56ddc68b70da76c00413d1eb9af",
+      "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
+      "startedAt": "2026-11-17T18:37:14.900801+00:00",
+      "endedAt": "2026-11-17T18:37:17.011711+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/fixture-prep-lint/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
+    },
+    {
+      "id": "a-api-types",
+      "kind": "command",
+      "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "187d15569afff56ddc68b70da76c00413d1eb9af",
+      "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
+      "startedAt": "2026-11-17T18:37:17.307482+00:00",
+      "endedAt": "2026-11-17T18:37:39.368898+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/fixture-prep-api-types/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
+    },
+    {
+      "id": "a-protocol",
+      "kind": "tests",
+      "command": "node --test scripts/ci/construction-evidence.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/test-execution-contract.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "187d15569afff56ddc68b70da76c00413d1eb9af",
+      "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
+      "startedAt": "2026-11-17T18:37:39.747301+00:00",
+      "endedAt": "2026-11-17T18:37:40.830928+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/fixture-prep-protocol/command.log",
+      "logSha256": "9782ba77f172b4f4a7de7f0e7f98ea97940d034c120c4dd3322b1afbdac3e677",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
+      "passed": 92,
       "failed": 0,
       "skipped": 0
+    },
+    {
+      "id": "a-time-inventory",
+      "kind": "command",
+      "command": "node scripts/acceptance/time-site-inventory.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "187d15569afff56ddc68b70da76c00413d1eb9af",
+      "sourceFingerprint": "f8e43975e40c38b6531b2825a4a48e06f1ebe9ea0176d6a393b6c23f543c639b",
+      "startedAt": "2026-11-17T18:37:41.175517+00:00",
+      "endedAt": "2026-11-17T18:37:42.189333+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/fixture-prep-time-inventory/command.log",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
     }
   ]
 }

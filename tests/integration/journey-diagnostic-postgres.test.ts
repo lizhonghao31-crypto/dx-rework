@@ -15,6 +15,7 @@ import { verifyAcceptanceClockServer } from '../../apps/api/src/acceptance-clock
 import { reuseJourneySnapshotReads } from '../../apps/api/src/production-platform/journey-snapshot-reads.js';
 import {DIGITAL_RECEIVING_BASE_SQL} from '../../apps/api/src/receiving/receiving-service.js';
 import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from '../helpers/owned-postgres-schema.js';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 // Use the canonical Acceptance-clock target: the ordinary CI database is deliberately not an Acceptance database.
 const url = process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
@@ -54,7 +55,10 @@ const url = process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
       return { value: value.rows[0].value };
     });
     await app.ready();
-  });
+  // This hook applies the complete real migration inventory and boots the
+  // verified isolated service. Use the existing fixture correctness allowance;
+  // ordinary test-body/cleanup limits and queue/driver assertions stay strict.
+  },testExecutionConfig.correctnessTimeoutMs);
   afterAll(async () => { await app.close(); await pool.end(); if (created) await releaseOwnedPostgresSchema(admin, schema); await admin.end(); });
   it('reuses the original receiving merge-literal CTE without clearing prior facts, and never hides an aborted transaction',async()=>{
     const client=await pool.connect(),original=client.query,seen:string[]=[];

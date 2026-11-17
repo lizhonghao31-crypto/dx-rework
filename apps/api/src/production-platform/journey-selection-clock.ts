@@ -90,7 +90,7 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
   const evaluation=inputs.plan?evaluateSlaPlan(inputs.plan,inputs.facts,{...time,now:at},{mode:'read_projection',...(!termination?{onNextChange:reconsider}:{})}):[];
   attachJourneySupervision(projected,inputs.plan,inputs.original,evaluation,{...time,now:at},
    {original:item.supervision?.originalRevision??null,current:item.supervision?.currentRevision??null},
-   tasks.some(task=>task.kind==='bulk_cutting_external'),{facts:inputs.facts,...(inputs.instances?.length?{instances:inputs.instances}:{}),...(termination?{termination}:{})},new Set(tasks.map(task=>task.id)));
+   tasks.some(task=>task.kind==='bulk_cutting_external'),{facts:inputs.facts,...(inputs.instances?.length?{instances:inputs.instances}:{}),...(inputs.factoryInstances?.length?{factoryInstances:inputs.factoryInstances}:{}),...(termination?{termination}:{})},new Set(tasks.map(task=>task.id)));
   const fixed=inputs.fixedSchedule?evaluateFixedJourneyBasis(inputs.fixedSchedule,at,false,false):null;
   if(inputs.fixedSchedule&&fixed)attachFixedJourneySchedule(projected,inputs.fixedSchedule,at,{progress:fixed,nextChange:false});
   const deliveryRisks=poDeliveryRisks(item.poDeliveryDates??[],day,delivery).filter(risk=>risk.kind!=='sample'||!delivery.sentLineIds.includes(risk.lineId))

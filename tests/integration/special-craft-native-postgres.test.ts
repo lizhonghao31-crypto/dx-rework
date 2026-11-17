@@ -65,7 +65,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // calculation version; projection storage must never erase step identity.
   const client=await f.db.connect();try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const model=await journey.buildFactsWithClient(client,{kind:'source',id:sid},businessNow().toISOString());expect(model.sla.instances?.filter(instance=>instance.stepRef!==null).map(instance=>instance.taskId).sort()).toEqual(nativeRows.map(row=>row.task_id).sort());
    for(const instance of model.sla.instances??[])expect(model.tasks.some(task=>task.id===instance.taskId&&task.sourceId===instance.sourceId&&task.routeVersion===instance.round&&task.routeInstanceId===instance.routeRef)).toBe(true);
-   expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-quality-terminal-v12');await client.query('ROLLBACK');}finally{client.release();}
+   expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-factory-instances-v13');await client.query('ROLLBACK');}finally{client.release();}
   const quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:created[0]!.sourceId},worker=f.people['pattern-room-worker']!;
   let quote=await quotes.read(worker,resource);
   const own=quote.rows.filter(row=>row.name==='TEST 激光'||row.name==='TEST 烫钻');

@@ -410,6 +410,13 @@ it('keeps exact craft instance adapters and frozen labels in native and authenti
  }
 });
 
+it('keeps frozen factory graph, exact fact serialization and clock rebuild in the original App regression',()=>{
+ for(const name of ['factory-evaluation-route','factory-sla-evidence','fixed-factory-timing','sla-order-service','journey-supervision','journey-fact-model','journey-selection-clock']){
+  const plan=amendmentPlan([`apps/api/src/production-platform/${name}.ts`]);
+  expect(plan.plan.filter(row=>row.path==='tests/integration/factory-supervision-instances-browser-postgres.test.ts')).toEqual([{path:'tests/integration/factory-supervision-instances-browser-postgres.test.ts',config:'vitest.business-chain.config.ts',memberships:['mapped']}]);
+ }
+});
+
 it('keeps incomplete-publication and exact native craft choices in original request and App regressions',()=>{
  for(const file of ['order-time-publication-intent','fixed-development-work','fixed-order-work','fixed-work-definition']){
   const risk=classifyFullGatePaths([`apps/api/src/production-platform/${file}.ts`]);

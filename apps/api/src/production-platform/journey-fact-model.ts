@@ -9,7 +9,7 @@ import type {JourneyCutScope} from './journey-cut-scopes.js';
 import type {NativeFactoryTimeline} from './factory-production-facts.js';
 
 /** Bump when native mapping, time precision or applicability changes. No user DTO cache. */
-export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-quality-terminal-v12';
+export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-factory-instances-v13';
 type FactNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'round'|'occurrence'|'current'|'planningOnly'|'completesOrder'|'progressApplicability'|'expectedAt'|'expectedKind'|'expectedPrecision'|'deadlineMode'|'deadlineExclusive'|'actualAt'|'actualDate'|'actualQuality'|'enteredAt'|'sla'|'countsInProgress'|'inheritedFrom'|'inheritedResult'>&{
  ownerId:string|null;operatorId:string|null;blockers:Array<{key:string;ownerId:string|null}>;
  scopes:Array<{domain:string;id:string;lineId:string|null;version:number|null}>;
@@ -77,6 +77,7 @@ export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs
   quantities:item.businessProgress?.quantities?{revision:item.businessProgress.quantities.revision,factoryAttribution:item.businessProgress.quantities.factoryAttribution,
    lines:item.businessProgress.quantities.lines.map(l=>({lineId:l.lineId,demand:l.demand,received:l.received,inspected:l.inspected,qualified:l.qualified,packed:l.packed,...(l.effectivePacked===undefined?{}:{effectivePacked:l.effectivePacked}),remainingReceipt:l.remainingReceipt,remainingShipment:l.remainingShipment,qualityGap:l.qualityGap,qualityConflict:l.qualityConflict,factoryAttribution:l.factoryAttribution,reasons:[...l.reasons]}))}:null,
   sla:{plan:plan(inputs.plan),original:plan(inputs.original),facts:Object.fromEntries(Object.entries(inputs.facts).map(([key,value])=>[key,fact(value)])),
+   ...(inputs.factoryInstances?.length?{factoryInstances:inputs.factoryInstances.map(instance=>({nodeId:instance.nodeId,stepId:instance.stepId,phase:instance.phase,taskKind:instance.taskKind,routeRef:instance.routeRef,taskIds:[...instance.taskIds],lineIds:[...instance.lineIds],snapshotId:instance.snapshotId}))}:{}),
    ...(inputs.termination!==undefined?{termination:inputs.termination?{kind:inputs.termination.kind,at:inputs.termination.at,precision:inputs.termination.precision,originEventRef:inputs.termination.originEventRef,scopeRef:inputs.termination.scopeRef}:null}:{}),
    ...(inputs.instances?.length?{instances:inputs.instances.map(instance=>({sourceId:instance.sourceId,taskId:instance.taskId,round:instance.round,routeRef:instance.routeRef,stepRef:instance.stepRef,taskKind:instance.taskKind,definitionId:instance.definitionId,state:instance.state,eligible:instance.eligible,fact:fact(instance.fact),deadline:{at:instance.deadline.at,exclusive:instance.deadline.exclusive,reasons:[...instance.deadline.reasons]},warningAt:instance.warningAt}))}:{})},
   revisions:{original:item.supervision?.originalRevision??null,current:item.supervision?.currentRevision??null}};
