@@ -166,7 +166,7 @@ export const SLA_JOURNEY_SOURCE_PATHS = Object.freeze([
   "apps/web/src/digital-journey-cockpit-model.ts",
   "apps/web/src/journey-sla-details.tsx",
   "packages/contracts/src/digital-production-journey.ts",
-  "packages/domain/src/digital-sla-plan.ts"
+
 ]);
 export const SLA_JOURNEY_SUPPORT_PATHS = Object.freeze([
   "docs/engineering/acceptance-time-sites-20261027.json",
@@ -639,6 +639,15 @@ export const classifyFullGatePaths = (inputPaths) => {
       businessChainSensitive = true;
       domains.add("pattern-room");
     }
+  }
+
+  // The domain barrel loads this shared engine indirectly via naturalTimeRatio.
+  // Engine changes keep the complete chain, plus the explicit native consumers.
+  if (paths.includes("packages/domain/src/digital-sla-plan.ts")) {
+    addAll(mappedTests, SLA_JOURNEY_REQUIRED_TESTS);
+    businessChainSensitive = true;
+    domains.add("shared-sla-engine-full-chain");
+    if (paths.every(path => existsSync(path) && (path === "packages/domain/src/digital-sla-plan.ts" || SLA_JOURNEY_SOURCE_PATHS.includes(path) || SLA_JOURNEY_SUPPORT_PATHS.includes(path)))) chainProfile = "sla-journey-engine-v1";
   }
 
   // Shared writes are still exercised by the retained real full-business,

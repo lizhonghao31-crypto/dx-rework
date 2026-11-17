@@ -47,9 +47,10 @@ export const postgresTestFiles=()=>readdirSync('tests/integration').filter(name=
 export const ROOT_AUDIT_TESTS=Object.freeze(['tests/integration/root-self-system-admin-postgres.test.ts','tests/integration/supplier-onboarding-postgres.test.ts','tests/integration/supplier-maintenance-postgres.test.ts','tests/integration/quality-basic-rework-postgres.test.ts','tests/integration/wage-settlement-postgres.test.ts']);
 export const SLA_JOURNEY_CHAIN_EXCLUSIONS=Object.freeze(["tests/integration/own-tail-responsibility-history-postgres.test.ts","tests/integration/sample-foundation-postgres.test.ts","tests/integration/sample-read-postgres.test.ts","tests/integration/sample-create-postgres.test.ts","tests/integration/acceptance-worker-people-postgres.test.ts"]);
 export function postgresPlan({mapped=[],chain=false,rootAudit=false,chainProfile='full'}={}) {
- if(!['full','sla-journey-v1'].includes(chainProfile))throw Error('POSTGRES_CHAIN_PROFILE_UNKNOWN');
+ if(!['full','sla-journey-v1','sla-journey-engine-v1'].includes(chainProfile))throw Error('POSTGRES_CHAIN_PROFILE_UNKNOWN');
  if(chainProfile!=='full'&&(!chain||rootAudit))throw Error('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
- const chainTests=chainProfile==='sla-journey-v1'?POSTGRES_CHAIN_TESTS.filter(path=>!SLA_JOURNEY_CHAIN_EXCLUSIONS.includes(path)):POSTGRES_CHAIN_TESTS;
+ const omissions=chainProfile==='sla-journey-v1'?SLA_JOURNEY_CHAIN_EXCLUSIONS:chainProfile==='sla-journey-engine-v1'?['tests/integration/own-tail-responsibility-history-postgres.test.ts']:[];
+ const chainTests=POSTGRES_CHAIN_TESTS.filter(path=>!omissions.includes(path));
  const audit=rootAudit||mapped.includes(ROOT_AUDIT_TESTS[0]);
  const suites=[...new Set([...mapped,...(chain?chainTests:[]),...(audit?ROOT_AUDIT_TESTS:[])])].sort();
  return suites.map(path=>({path,config:configForSuite(path),memberships:[...(mapped.includes(path)?['mapped']:[]),...(chain&&chainTests.includes(path)?['chain']:[]),...(audit&&ROOT_AUDIT_TESTS.includes(path)?['root-audit']:[])]}));
@@ -59,7 +60,7 @@ export function fullGatePostgresPlan(environment){
  if(typeof environment.MAPPED_POSTGRES_TESTS!=='string'||!/^[0-9a-f]{40}$/.test(environment.BASE_SHA??''))throw Error('POSTGRES_RISK_CONTEXT_REQUIRED: mapped suites and immutable base');
  const mapped=environment.MAPPED_POSTGRES_TESTS.split(',').filter(Boolean),chain=environment.BUSINESS_CHAIN_SENSITIVE==='true'||environment.MIGRATION_SENSITIVE==='true'||environment.DEPLOYMENT_SENSITIVE==='true';
  const chainProfile=environment.CHAIN_PROFILE??'full';
- if(!['full','sla-journey-v1'].includes(chainProfile))throw Error('POSTGRES_CHAIN_PROFILE_UNKNOWN');
+ if(!['full','sla-journey-v1','sla-journey-engine-v1'].includes(chainProfile))throw Error('POSTGRES_CHAIN_PROFILE_UNKNOWN');
  if(chainProfile!=='full'&&(!chain||environment.DB_REQUIRED!=='true'||environment.MIGRATION_SENSITIVE==='true'||environment.DEPLOYMENT_SENSITIVE==='true'))throw Error('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
  if(environment.DB_REQUIRED==='false'){
   if(chain||mapped.length)throw Error('POSTGRES_RISK_CONTEXT_CONTRADICTION');

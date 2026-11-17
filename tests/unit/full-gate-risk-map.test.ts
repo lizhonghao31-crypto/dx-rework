@@ -478,7 +478,9 @@ describe('reviewed SLA/Journey production-source profile', () => {
   it('explicitly maps the shared SLA engine to the actual Journey consumers, not only the old generic chain', () => {
     const plan=amendmentPlan(['packages/domain/src/digital-sla-plan.ts']);
     for(const path of SLA_JOURNEY_REQUIRED_TESTS)expect(plan.plan.map(row=>row.path)).toContain(path);
-    for(const name of ['full-business-chain','root-single-account-two-pass','production-readiness','sourcing-pr03','production-closure'])expect(plan.plan.map(row=>row.path)).toContain('tests/integration/'+name+'-postgres.test.ts');
+    expect(plan.chain).toBe(true);
+    for(const path of POSTGRES_CHAIN_TESTS.filter(path=>!path.includes('own-tail-responsibility-history')))expect(plan.plan.map(row=>row.path)).toContain(path);
+    expect(classifyFullGatePaths(['packages/domain/src/digital-sla-plan.ts']).chainProfile).toBe('sla-journey-engine-v1');
   });
   it.each([
     'apps/api/src/auth/service.ts','apps/api/src/access/service.ts',
@@ -511,4 +513,12 @@ it('rejects forged or incompatible chain profile context', () => {
  expect(()=>fullGatePostgresPlan({...env,MIGRATION_SENSITIVE:'true'})).toThrow('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
  expect(()=>fullGatePostgresPlan({...env,DEPLOYMENT_SENSITIVE:'true'})).toThrow('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
  expect(()=>fullGatePostgresPlan({...env,DB_REQUIRED:'false',BUSINESS_CHAIN_SENSITIVE:'false'})).toThrow('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
+});
+
+it('restores the four indirectly loaded suites and retains only independent historical exclusion for engine changes', () => {
+ const paths=[...SLA_JOURNEY_SOURCE_PATHS,...SLA_JOURNEY_SUPPORT_PATHS,'packages/domain/src/digital-sla-plan.ts'];
+ const risk=classifyFullGatePaths(paths),plan=amendmentPlan(paths);
+ expect(risk.chainProfile).toBe('sla-journey-engine-v1');
+ const retained=POSTGRES_CHAIN_TESTS.filter(path=>!path.includes('own-tail-responsibility-history'));
+ expect(plan.plan.map(row=>row.path)).toEqual([...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...retained])].sort());
 });
