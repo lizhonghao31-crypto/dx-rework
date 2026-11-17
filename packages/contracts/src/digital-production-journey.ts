@@ -79,7 +79,9 @@ export type JourneyTiming = {
   /** Date ranges are estimates, never exact starts, deadlines or permission to receive. */
   logisticsWindows?:FactoryReturnLogisticsWindow[];
   id:string;label:string;stage:JourneyStageKey;kind:string;
-  status:"not_applicable"|"unknown"|"not_started"|"running"|"warning"|"overdue"|"completed_on_time"|"completed_late"|"completed_unrated";
+  status:"not_applicable"|"unknown"|"not_started"|"running"|"warning"|"overdue"|"completed_on_time"|"completed_late"|"completed_unrated"|"terminated";
+  /** A terminal event stops this unfinished window; it is never delivery A. */
+  termination?:{kind:'cancelled'|'special_closure';at:string|null;sourceRef:string|null;elapsedSeconds:number|null;overdueSeconds:number|null};
   provenRisk?:"overdue"|"warning";
   assessmentIssue?:{code:"completion_before_start"|"actual_after_observation";reason:string};
   actualStart:string|null;actualEnd:string|null;
@@ -98,6 +100,9 @@ export type JourneyCoverage = {key:typeof JOURNEY_COVERAGE_KEYS[number];message:
 export type JourneyNativeFact = {id:string;sourceRef:string;timeRole:'sla_observation';startedAt:string|null;completedAt:string|null;businessCompleted:boolean|null};
 export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];nativeFacts?:JourneyNativeFact[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
+  /** Packing work may finish while order-level QC/differences remain open.
+   * Missing on old DTOs retains their original whole-order packing meaning. */
+  completesOrder?:boolean;
   nativeTaskDeadline?:{at:string;precision:'instant'|'date';mode?:'duration'|'date_target'|'unlimited'|undefined;exclusive?:boolean|undefined};
   fixedTargets?:Array<{scopeRef:string;lineId:string|null;progress:ScheduleNodeProgress}>;
   planningOnly?:boolean;

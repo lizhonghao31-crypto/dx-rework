@@ -31,6 +31,8 @@ export type JourneySelectionDelivery={finished:boolean;terminal?:boolean;factory
 export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJourney,inputs:JourneyTimingInputs,tasks:readonly JourneySelectionTask[],nativeNodes:JourneySelectionFacts['nodes'],delivery:JourneySelectionDelivery,time:BusinessTime):{frames:JourneySelectionClockFrame[];expiresAt:string|null}{
  if(item.asOf!==time.now||untimed.asOf!==time.now)throw Error('Journey clock compilation requires one observation');
  const taskById=new Map(tasks.map(task=>[task.id,task]));
+ const suppliedTermination=inputs.termination??inputs.fixedSchedule?.termination;
+ const termination=suppliedTermination?.scopeRef===(item.orderId?`order:${item.orderId}`:`source:${item.sourceId}`)?suppliedTermination:null;
  const originalNative=structuredClone(nativeNodes);
  let hardBoundary:number|null=null;
  for(const fact of Object.values(inputs.facts))for(const actual of [fact,...fact.batchWindows??[]])for(const at of [actual.startedAt,actual.completedAt]){
@@ -57,6 +59,11 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
   const taskRisks=(node:JourneySelectionFacts['nodes'][number])=>{
    const task=taskById.get(node.instanceId);
    if(!task||['not_applicable','unavailable','cancelled'].includes(node.state))return [...node.risks];
+   if(termination&&['active','blocked'].includes(task.state)){
+    const risks=node.risks.filter(risk=>risk!=='overdue'&&risk!=='due_soon'),stop=termination.precision==='instant'&&termination.at?Date.parse(termination.at):null;
+    if((stop===null||stop>now||!termination.originEventRef||task.enteredAt&&stop<Date.parse(task.enteredAt))&&!risks.includes('unknown'))risks.push('unknown');
+    return risks;
+   }
    if(['active','blocked'].includes(task.state)){reconsider(task.dueAt,task.deadlineExclusive===false);reconsider(task.warningAt);}
    return [...journeyTaskTimeRisks(task,at),...node.risks.filter(risk=>risk!=='overdue'&&risk!=='due_soon')];
   };
@@ -65,7 +72,7 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
    if(!node.current)continue;
    node.risks=taskRisks({...journeySelectionNodes([node])[0]!});
    if(node.key==='development_material_supply'||node.planningOnly){
-    const active=!['completed','inherited','not_applicable','unavailable','cancelled'].includes(node.state);
+    const active=!termination&&!['completed','inherited','not_applicable','unavailable','cancelled'].includes(node.state);
     if(active&&node.expectedPrecision==='date'&&node.expectedAt){
      dateBoundary(node.expectedAt);node.risks=node.risks.filter(risk=>risk!=='overdue');
      if(journeyPlanDateOverdue(node.expectedAt,day))node.risks.push('overdue');
@@ -79,11 +86,11 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
   for(const node of originalNative)if(node.key==='development_material_supply'){
    const fresh=untimedRisks.find(value=>value.id===node.instanceId);if(fresh)nativeRisks.find(value=>value.id===node.instanceId)!.risks=[...fresh.risks];
   }
-  for(const instance of inputs.instances??[])if(instance.eligible&&!instance.fact.businessCompleted&&projected.stages.some(stage=>stage.nodes.some(node=>node.current&&node.instanceId===instance.taskId&&node.round===instance.round))){reconsider(instance.deadline.at,instance.deadline.exclusive===false);reconsider(instance.warningAt);}
-  const evaluation=inputs.plan?evaluateSlaPlan(inputs.plan,inputs.facts,{...time,now:at},{mode:'read_projection',onNextChange:reconsider}):[];
+  for(const instance of inputs.instances??[])if(!termination&&instance.eligible&&!instance.fact.businessCompleted&&projected.stages.some(stage=>stage.nodes.some(node=>node.current&&node.instanceId===instance.taskId&&node.round===instance.round))){reconsider(instance.deadline.at,instance.deadline.exclusive===false);reconsider(instance.warningAt);}
+  const evaluation=inputs.plan?evaluateSlaPlan(inputs.plan,inputs.facts,{...time,now:at},{mode:'read_projection',...(!termination?{onNextChange:reconsider}:{})}):[];
   attachJourneySupervision(projected,inputs.plan,inputs.original,evaluation,{...time,now:at},
    {original:item.supervision?.originalRevision??null,current:item.supervision?.currentRevision??null},
-   tasks.some(task=>task.kind==='bulk_cutting_external'),{facts:inputs.facts,...(inputs.instances?.length?{instances:inputs.instances}:{})},new Set(tasks.map(task=>task.id)));
+   tasks.some(task=>task.kind==='bulk_cutting_external'),{facts:inputs.facts,...(inputs.instances?.length?{instances:inputs.instances}:{}),...(termination?{termination}:{})},new Set(tasks.map(task=>task.id)));
   const fixed=inputs.fixedSchedule?evaluateFixedJourneyBasis(inputs.fixedSchedule,at,false,false):null;
   if(inputs.fixedSchedule&&fixed)attachFixedJourneySchedule(projected,inputs.fixedSchedule,at,{progress:fixed,nextChange:false});
   const deliveryRisks=poDeliveryRisks(item.poDeliveryDates??[],day,delivery).filter(risk=>risk.kind!=='sample'||!delivery.sentLineIds.includes(risk.lineId))

@@ -63,7 +63,8 @@ import {journeySelectionFacts,journeySelectionNodes,type JourneySelectionFacts,t
 import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks,journeyTaskDeadlineExclusive} from './journey-risk-clock.js';
 import {compileJourneySelectionClock,type JourneySelectionDelivery} from './journey-selection-clock.js';
 import {developmentRecordedTime} from './development-occurrence.js';
-import {journeyCuttingGateTime} from './journey-native-times.js';
+import {journeyCuttingGateTime,attachJourneyPackingNodeTime} from './journey-native-times.js';
+import {packingSlaEvidence} from './packing-sla-evidence.js';
 import {readJourneySelections} from './journey-selection-query.js';
 
 type FactCapture={timing:(inputs:JourneyTimingInputs)=>void;tasks:(tasks:Array<{id:string;routeInstanceId:string}>)=>void;
@@ -755,7 +756,10 @@ export class DigitalJourneyQuery {
       const received=closure.collection?.status==='已收齐';
       const receiptNode=setFact("receipts",received?"completed":closure.lines.some(line=>line.receiptCount>0)?"active":"uncreated",[closureRecord],received?closure.receivingSpan?.collectedAt??null:null);
       if(received&&!receiptNode.actualAt&&closure.receivingSpan?.collectedDate){receiptNode.actualDate=closure.receivingSpan.collectedDate;receiptNode.actualQuality='verified';}
-      setFact("packing",closure.stage==="本期装箱完成"?"completed":closure.lines.some(line=>line.packingRevisionId)?"active":"uncreated",[closureRecord]);
+      const packingNode=setFact("packing",closure.stage==="本期装箱完成"?"completed":closure.lines.some(line=>line.packingRevisionId)?"active":"uncreated",[closureRecord]);
+      // Capture the physical work before the untimed selector snapshot. The
+      // original complete-order flag remains independent of this node's A.
+      attachJourneyPackingNodeTime(packingNode,oid,closure,packingSlaEvidence(closure).facts,asOf);
       setFact("quantity_difference",closure.lines.some(line=>line.receiptCount>0&&line.actualQuantity!==line.documentQuantity&&!line.receivingResolution||line.packingQuantity!==null&&line.packingQuantity!==line.actualQuantity&&!line.packingResolution)?"pending":"not_applicable",[closureRecord]);
       if(closure.closed) {
         const original=(await db.query<{closed_by:string}>("SELECT closed_by FROM digital_order_closures WHERE production_order_id=$1",[oid])).rows[0]!;
@@ -833,7 +837,7 @@ export class DigitalJourneyQuery {
     }
     // Mutated nodes remain in the shared base list; all seven stages are always returned.
     const poDeliveryDates=!patternKinds&&orderAccess&&oid?await readOrderPoDeliveryDates(db,oid,lines.map(line=>line.id)):[];
-    const finalClosed=baseNodes.some(node=>node.current&&['packing','special_closure'].includes(node.key)&&node.state==='completed');
+    const finalClosed=baseNodes.some(node=>node.current&&(node.key==='special_closure'||node.key==='packing'&&node.completesOrder!==false)&&node.state==='completed');
     const terminal=!patternKinds&&orderAccess&&oid&&(await db.query("SELECT 1 WHERE EXISTS(SELECT 1 FROM digital_order_closures WHERE production_order_id=$1) OR EXISTS(SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1 AND state='cancelled')",[oid])).rowCount;
     const promiseDay=journeyObservedDay(asOf);
     // A hidden reporting node cannot stand in for the whole order's authoritative completion.

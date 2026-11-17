@@ -239,9 +239,21 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
    continue;
   }
   const ids=new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[]));
-  const taskRef=`task:${node.instanceId}:`,exactTask=basis.scopes.some(scope=>Object.values(scope.facts).some(fact=>fact.ownTaskId===node.instanceId||fact.ownTaskId===undefined&&fact.evidenceRefs[0]?.startsWith(taskRef)));
+  const inherited=node.state==='inherited'&&node.inheritedFrom&&node.records.some(record=>record.domain==='task'&&record.id===node.inheritedFrom!.taskId)?node.inheritedFrom:null;
+  const taskId=inherited?.taskId??node.instanceId,taskRound=inherited?.round??node.round,taskRef=`task:${taskId}:`;
+  const nativeTask=node.state==='inherited'||Boolean(node.inheritedFrom)||node.records.some(record=>record.domain==='task'&&record.id===taskId);
+  const ownFact=(scope:FixedScheduleBasis['scopes'][number],id:string)=>{
+   const canonical=scope.work.find(work=>work.id===id)?.canonicalWorkRef.match(/^source:([^:]+):round:(\d+):/);
+   if(canonical&&(canonical[1]!==item.sourceId||taskRound!==null&&Number(canonical[2])!==taskRound))return false;
+   const fact=scope.facts[id];return fact?.ownTaskId===taskId||fact?.ownTaskId===undefined&&fact?.evidenceRefs[0]?.startsWith(taskRef);
+  };
+  const exactTask=basis.scopes.some(scope=>Object.keys(scope.facts).some(id=>ownFact(scope,id)));
   const targets=progress.scopes.flatMap(scope=>ids.size&&scope.lineId&&!ids.has(scope.lineId)?[]:scope.nodes.filter(value=>{
-   if(exactTask){const fact=basis.scopes.find(input=>input.scopeRef===scope.scopeRef)?.facts[value.id];return fact?.ownTaskId===node.instanceId||fact?.ownTaskId===undefined&&fact?.evidenceRefs[0]?.startsWith(taskRef);}
+   if(exactTask)return ownFact(basis.scopes.find(input=>input.scopeRef===scope.scopeRef)!,value.id);
+   // A visible native task is an instance, not a planning placeholder. Without
+   // its own fact (or an explicit inherited task) kind equality cannot borrow
+   // another source/round's fixed target or completed evidence.
+   if(nativeTask)return false;
    const raw=value.id.startsWith('source:')?value.id.slice(7):value.id,key=raw.split(':')[0]!;
    if(basis.framework&&key==='customer_confirmation')return false;
    if(basis.framework&&key==='client_sample_approval')return node.key==='customer_sample';

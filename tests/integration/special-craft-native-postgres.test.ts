@@ -63,7 +63,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }
   // The original fact builder must carry each instance and invalidate the old
   // calculation version; projection storage must never erase step identity.
-  const client=await f.db.connect();try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const model=await journey.buildFactsWithClient(client,{kind:'source',id:sid},businessNow().toISOString());expect(model.sla.instances?.map(instance=>instance.taskId).sort()).toEqual(nativeRows.map(row=>row.task_id).sort());expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-packing-readiness-v9');await client.query('ROLLBACK');}finally{client.release();}
+  const client=await f.db.connect();try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const model=await journey.buildFactsWithClient(client,{kind:'source',id:sid},businessNow().toISOString());expect(model.sla.instances?.filter(instance=>instance.stepRef!==null).map(instance=>instance.taskId).sort()).toEqual(nativeRows.map(row=>row.task_id).sort());
+   for(const instance of model.sla.instances??[])expect(model.tasks.some(task=>task.id===instance.taskId&&task.sourceId===instance.sourceId&&task.routeVersion===instance.round&&task.routeInstanceId===instance.routeRef)).toBe(true);
+   expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-native-window-v10');await client.query('ROLLBACK');}finally{client.release();}
   const quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:created[0]!.sourceId},worker=f.people['pattern-room-worker']!;
   let quote=await quotes.read(worker,resource);
   const own=quote.rows.filter(row=>row.name==='TEST 激光'||row.name==='TEST 烫钻');
@@ -159,7 +161,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(adopted.route_nodes).not.toContain('development_printing');expect(adopted.inherited.development_printing).toMatchObject({taskId:expect.any(String),roundNumber:1});
   const after=(await developmentSlaEvidence(f.db,sid,time()))!;
   for(const key of ['development_printing','development_embroidery','development_craft_return']){expect(after.facts[key]).toMatchObject({businessCompleted:true,completedAt:before.facts[key]!.completedAt});expect(after.facts[key]!.evidence).toContain('adopted:development-round:'+sid+':2');}
-  for(const key of Object.keys(before.originalFacts).filter(key=>/^(development_printing|development_embroidery|development_craft_dispatch|development_craft_return)(:|$)/.test(key)))expect(after.originalFacts[key]).toEqual(before.originalFacts[key]);expect(after.instances).toEqual(before.instances);
+  for(const key of Object.keys(before.originalFacts).filter(key=>/^(development_printing|development_embroidery|development_craft_dispatch|development_craft_return)(:|$)/.test(key)))expect(after.originalFacts[key]).toEqual(before.originalFacts[key]);
+  for(const old of before.instances)expect(after.instances.find(instance=>instance.taskId===old.taskId&&instance.round===old.round)).toEqual(old);
+  const newInstances=after.instances.filter(instance=>!before.instances.some(old=>old.taskId===instance.taskId));
+  expect(newInstances).toHaveLength(1);expect(newInstances[0]).toMatchObject({sourceId:sid,taskKind:'development_sewing',round:2,stepRef:null});
+  const sewing=(await f.db.query(`SELECT t.entered_at AS physical_entered_at,r.entered_at,r.due_at FROM digital_production_tasks t
+   LEFT JOIN LATERAL(SELECT entered_at,due_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true WHERE t.task_id=$1`,[newInstances[0]!.taskId])).rows[0]!;
+  // The new round's organization window can precede physical assignment.
+  // Match its own captured revision, never a prior round or the task's null handover.
+  expect(sewing.physical_entered_at).toBeNull();expect(sewing.entered_at).toBeInstanceOf(Date);expect(sewing.due_at).toBeInstanceOf(Date);
+  expect(newInstances[0]!.fact.startedAt).toBe(sewing.entered_at.toISOString());expect(newInstances[0]!.deadline.at).toBe(sewing.due_at.toISOString());
   const current=await new DigitalJourneyQuery(f.db).read(f.root,sid);expect(current.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='development_printing'&&node.current)).toMatchObject({state:'inherited',label:'TEST inherited special（工艺2）'});
  });
 

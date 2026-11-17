@@ -657,7 +657,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query('SELECT predecessor_id FROM digital_production_task_dependencies WHERE task_id=$1',[paper.taskId])).rows).toEqual([{predecessor_id:prepared.recheckId}]);
    expect((await f.db.query("SELECT 1 FROM digital_production_task_events WHERE task_id=$1 AND event_kind='material_returned'",[prepared.initialTaskId])).rowCount).toBe(1);
    expect((await f.db.query('SELECT route_schema_version FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision DESC LIMIT 1',[prepared.sourceId])).rows[0].route_schema_version).toBe(2);
-   expect(await tasks.read(f.root,paper.taskId)).toMatchObject({enteredAt:'2026-11-21T04:00:00.000Z',dueAt:'2026-11-25T04:00:00.000Z',slaHours:72});
+   const nativePaper=await tasks.read(f.root,paper.taskId);
+   expect(nativePaper).toMatchObject({enteredAt:'2026-11-21T04:00:00.000Z',dueAt:'2026-11-25T04:00:00.000Z',slaHours:72});
+   const detail=await new DigitalJourneyQuery(f.db).read(f.root,prepared.sourceId,undefined,true),projected=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===paper.taskId)!;
+   expect(projected.timing).toMatchObject({actualStart:nativePaper.enteredAt,target:{at:nativePaper.dueAt},status:'running'});
+   const nativeRecheck=await tasks.read(f.root,prepared.recheckId),rechecked=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===prepared.recheckId)!;
+   expect(rechecked.timing).toMatchObject({id:`development_materials:task:${prepared.recheckId}`,actualStart:nativeRecheck.enteredAt,actualEnd:nativeRecheck.completedAt,target:{at:nativeRecheck.dueAt}});
+   expect(detail.supervision!.nativeFacts).toContainEqual(expect.objectContaining({id:`development_materials:task:${prepared.recheckId}`,completedAt:nativeRecheck.completedAt,businessCompleted:true}));
+   const stored=await new JourneyFactRepository(f.db).buildOne({kind:'source',id:prepared.sourceId});
+   expect(stored.model.sla.facts.development_pattern!.responsibilityWindow).toMatchObject({startedAt:nativePaper.enteredAt,deadline:{at:nativePaper.dueAt},warningAt:nativePaper.warningAt,calendar:'beijing_sunday_excluded'});
    return {paperId:paper.taskId,completed:(await tasks.history(f.root,prepared.recheckId)).events.find(e=>e.kind==='completed')!};
   });
   await f.advance(scene,'2026-11-21T06:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{

@@ -70,6 +70,12 @@ it('retains a known completion but never rates its responsibility on an unverifi
  const item=subject([n]);attachJourneySupervision(item,plan,plan,evaluateSlaPlan(plan,e.facts,time),time,{original:1,current:2},false,e);
  expect(n.actualAt).toBe(at(10));expect(n.timing?.status).toBe('completed_unrated');expect(n.timing?.actualStart).toBeNull();expect(n.timing?.target.at).toBeNull();
 });
+it('does not authenticate an unverified captured craft R with a later trusted task handover',async()=>{
+ const r={...row('mixed-start','step-A',0),entered_quality:'现场登记',task_entered_at:at(10),sla_basis:{...row('mixed-start','step-A',0).sla_basis,timeQuality:'补报未核实'}};
+ const e=await read([r]),n=node('mixed-start',at(10),at(30)),item=subject([n]);
+ attachJourneySupervision(item,plan,plan,evaluateSlaPlan(plan,e.facts,time),time,{original:1,current:2},false,e);
+ expect(n.timing).toMatchObject({status:'unknown',actualStart:null,target:{at:null}});expect(e.instances[0]!.fact.startedAt).toBeUndefined();
+});
 it('keeps the selected older round and excludes later round task observations, including a legacy first round',async()=>{
  for(const legacy of [false,true]){
   const old={...row('old','old-step',0),...(legacy?{sla_basis:{seconds:1800,enteredAt:at(0),warningRatio:0.7,basis:[]}}:{})},later={...row('later','later-step',20),route_version:2,route_instance_id:'later-route'};

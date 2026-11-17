@@ -49,7 +49,8 @@ export function journeyBusinessDates(order:OrderJourney):NonNullable<NonNullable
   let planned=0,actual=0,forecast=0,completedWithoutTime=0,pendingForecasts=0;
   for(const row of rows){
    const nodes=allNodes.filter(node=>row.instanceIds.includes(node.instanceId));
-   const matching=timings.filter(timing=>journeyTimingKey(timing.id)===row.key);
+   const matching=timings.filter(timing=>journeyTimingKey(timing.id)===journeyTimingKey(row.key)
+    &&(!timing.id.includes(':task:')||row.instanceIds.includes(timing.id.split(':task:')[1]!)));
    if(row.applicability==='unknown'){
     planReasons.push(`${row.label}的适用范围尚未核实`);actualReasons.push(`${row.label}的完成范围尚未核实`);forecastReasons.push(`${row.label}的适用范围尚未核实`);continue;
    }

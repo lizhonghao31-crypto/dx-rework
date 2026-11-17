@@ -133,8 +133,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(model.dependencies).toEqual(nativeDependencies);expect(model.sla.plan?.nodes.some(n=>n.dependsOn.length>0)).toBe(true);
   for(const task of model.tasks){const n=original.stages.flatMap(s=>s.nodes).find(n=>n.instanceId===task.id);expect(n?.enteredAt).toBe(task.enteredAt);expect(n?.expectedPrecision).toBe(task.dueAt?task.deadlineMode==='date_target'?'date':'instant':'missing');}
   expect(model.sla.plan).not.toBeNull();const evaluated=evaluateSlaPlan(model.sla.plan!,model.sla.facts,{now:'2026-11-08T00:00:00.000Z',scenarioId:scene,revision:1},{mode:'read_projection'});
-  const displayIds=new Set(original.supervision!.nodes.map(n=>n.id));
-  expect(evaluated.filter(n=>displayIds.has(n.id)).map(n=>({id:n.id,target:n.deadline,actual:n.actualEnd,status:n.status}))).toEqual(original.supervision!.nodes.map(n=>({id:n.id,target:n.target,actual:n.actualEnd,status:n.status})));
+  const instances=new Map((model.sla.instances??[]).map(instance=>[`${instance.definitionId}:task:${instance.taskId}`,instance]));
+  const aggregate=original.supervision!.nodes.filter(node=>!instances.has(node.id)),displayIds=new Set(aggregate.map(n=>n.id));
+  expect(evaluated.filter(n=>displayIds.has(n.id)).map(n=>({id:n.id,target:n.deadline,actual:n.actualEnd,status:n.status}))).toEqual(aggregate.map(n=>({id:n.id,target:n.target,actual:n.actualEnd,status:n.status})));
+  const native=original.supervision!.nodes.filter(node=>instances.has(node.id));
+  expect(native.map(node=>node.id).sort()).toEqual([...instances].filter(([,instance])=>instance.eligible&&model.nodes.some(node=>node.current&&node.state!=='unavailable'&&node.instanceId===instance.taskId&&node.round===instance.round)).map(([id])=>id).sort());
+  for(const node of native){
+   const instance=instances.get(node.id)!,start=instance.fact.startedAt??null,end=instance.fact.completedAt??null,deadline=instance.deadline.at;
+   const past=(at:string)=>deadline!==null&&(instance.deadline.exclusive?Date.parse(at)>=Date.parse(deadline):Date.parse(at)>Date.parse(deadline));
+   const status=instance.fact.businessCompleted?!start||!end||!deadline?'completed_unrated':past(end)?'completed_late':'completed_on_time':!start?instance.state==='pending'?'not_started':'unknown':!deadline?'unknown':past(original.asOf!)?'overdue':instance.warningAt&&Date.parse(original.asOf!)>=Date.parse(instance.warningAt)?'warning':'running';
+   expect(node).toMatchObject({actualStart:start,actualEnd:end,target:instance.deadline,status});
+   expect(instance.sourceId).toBe(ready.sourceId);expect(model.tasks.some(task=>task.id===instance.taskId&&task.routeVersion===instance.round&&task.routeInstanceId===instance.routeRef)).toBe(true);
+  }
   const json=JSON.stringify(model);for(const forbidden of ['authorizationCapabilities','canExecute','canClose','canOpenWages','styleImageUrl','wageItemCount','unitPrice','/api/','/ui/'])expect(json).not.toContain(forbidden);
  }));
  it('retains a source-only unknown route without inventing production obligations or event times',()=>run(async()=>{

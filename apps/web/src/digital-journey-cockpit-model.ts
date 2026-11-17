@@ -64,6 +64,7 @@ export function nodeOverdue(node: JourneyNode, asOf?: string): string {
   return lateDuration(node.overdueSeconds);
 }
 export function nodeStatus(node: JourneyNode, asOf?: string): string {
+  const stopped=nodeTerminationLabel(node);if(stopped)return stopped;
   if (node.state === "completed") {
     if (node.completionResult === "early") return "提前完成";
     if (node.completionResult === "on_time") return "按时完成";
@@ -73,6 +74,18 @@ export function nodeStatus(node: JourneyNode, asOf?: string): string {
   if (node.state === "unavailable") return node.unavailableReason === "permission" ? "无权限查看" : "尚无原事实";
   if (node.state === "inherited") return "沿用第 " + node.inheritedFrom?.round + " 轮";
   return node.risks.includes("overdue") ? journeyStateLabels[node.state] + " · " + nodeOverdue(node, asOf) : journeyStateLabels[node.state];
+}
+/** Minimum reader support for terminated timing, including legacy DTOs whose
+ * only terminal proof is the already scoped fixed progress. No client clock
+ * arithmetic or business-state mutation is involved. */
+export function nodeTerminationLabel(node:JourneyNode):string|null{
+ if(['completed','inherited','not_applicable','unavailable'].includes(node.state))return null;
+ const timings=[...(node.timings??[]),...(node.timing?[node.timing]:[])].filter(timing=>timing.termination);
+ const fixed=(node.fixedTargets??[]).filter(target=>!target.progress.businessCompleted);
+ const fixedStop=fixed.length>0&&fixed.every(target=>target.progress.goalDelta.kind==='terminated');
+ if(!timings.length&&!fixedStop)return null;
+ const unknown=timings.some(timing=>timing.status==='unknown')||fixedStop&&fixed.some(target=>target.progress.ownSla.state==='unknown');
+ return (node.state==='cancelled'?'已取消 · ':'')+(unknown?'已终止 · 责任时间待核':'计时已终止');
 }
 export function stageTimes(stage: OrderJourney["stages"][number]) {
   if (stage.state === "not_applicable") return { expected: "不适用", actual: "不适用" };
@@ -100,7 +113,7 @@ export function stageStatus(stage: OrderJourney["stages"][number], asOf?: string
 export function orderStatus(order: OrderJourney): string {
   if(order.display)return {closed:"已特殊结案",completed:"整单已完成",overdue:"逾期",due_soon:"临期",active:"进行中",not_started:"未启动",cancelled:"已取消"}[order.display.mainState];
   const nodes = order.stages.flatMap(stage => stage.nodes).filter(node => node.current);
-  if (nodes.some(node => ["packing", "special_closure"].includes(node.key) && node.state === "completed")) return "整单已完成";
+  if (nodes.some(node => (node.key === "special_closure" || node.key === "packing" && node.completesOrder !== false) && node.state === "completed")) return "整单已完成";
   if (nodes.some(node => node.state === "blocked")) return "受阻";
   if (nodes.some(node => ["active", "pending"].includes(node.state))) return "进行中";
   return "未启动";

@@ -6,6 +6,7 @@ import {assertBusinessClockUnchanged,businessScopeKey,ContextBusinessClock} from
 import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 import {DigitalJourneyQuery} from './journey-query.js';
 import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint,journeyValueFingerprint,type JourneyFactModel} from './journey-fact-model.js';
+import {journeyFactGenerationEnabled} from './journey-fact-generation.js';
 import type {JourneySelectionFacts} from './journey-selection-facts.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 
@@ -22,6 +23,7 @@ export class JourneyFactRepository{
  async buildOne(resource:BusinessTimeScope):Promise<Built>;
  async buildOne(resource:BusinessTimeScope,options:{retireMissing:true}):Promise<Built|Retired>;
  async buildOne(resource:BusinessTimeScope,options?:{retireMissing:true}):Promise<Built|Retired>{
+  if(!journeyFactGenerationEnabled())throw Error('JOURNEY_DERIVATION_READ_ONLY_COMPATIBLE');
   const client=await this.database.connect(),db=reuseJourneySnapshotReads(client);
   let result:Built,observed:BusinessTime,timedOut=false;
   // Terminating this owned connection bounds even a hung build, rolls its own

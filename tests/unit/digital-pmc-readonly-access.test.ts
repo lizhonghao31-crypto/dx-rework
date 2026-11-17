@@ -378,6 +378,7 @@ const SOURCE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 function sourceJourneyDatabase(roles: string[]) {
   const source = {source_id: SOURCE, development_type: '头版', created_by: OTHER, design_style_no: 'TEST-PMC-SOURCE', temporary_style_no: null, customer_code: 'PD', created_at: '2026-10-24T08:00:00.000Z'};
   return database(roles, (sql, values) => {
+    if(sql.startsWith('SELECT state FROM digital_production_resource_lifecycle')){expect(values).toEqual(['source',SOURCE]);return [];}
     if (sql === 'SELECT CURRENT_TIMESTAMP AS as_of') return [{as_of: '2026-10-24T09:00:00.000Z'}];
     if (sql.startsWith('WITH live_roles AS (')) return [{source, order: null}];
     if (sql.startsWith('SELECT * FROM digital_production_sources ')) return values[0] === SOURCE ? [source] : [];

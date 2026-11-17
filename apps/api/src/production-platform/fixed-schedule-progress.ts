@@ -55,7 +55,7 @@ function nativeOwnWindows(windows:readonly ScheduleResponsibilityWindow[],asOf:s
  const warning=windows.filter((window,index)=>values[index]&&!window.complete&&window.warningAt&&Date.parse(window.warningAt)<=now);
  const warningAt=windows.filter((window,index)=>values[index]&&!window.complete&&window.warningAt).map(window=>window.warningAt!).sort()[0]??null;
  const deadlines=windows.map(window=>{const start=scheduleOccurrenceBounds(window.started,asOf),deadline=timestamp(window.deadline);return start&&window.calendar&&deadline!==null&&deadline>=start[0]?iso(deadline):null;}),deadlineAt=deadlines.length&&deadlines.every(at=>at!==null&&at===deadlines[0])?deadlines[0]!:null;
- return {state:terminated?'terminated':overdue?'overdue':within?'within':'unknown',deadlineAt,overdueMinutes:all?range(Math.max(...known.map(value=>value.minimum)),Math.max(...known.map(value=>value.maximum))):null,sourceRef:windows.map(window=>window.sourceRef).join(';'),warningAt,warning:!terminated&&!overdue&&warning.length>0};
+ return {state:terminated?all?'terminated':'unknown':overdue?'overdue':within?'within':'unknown',deadlineAt,overdueMinutes:all?range(Math.max(...known.map(value=>value.minimum)),Math.max(...known.map(value=>value.maximum))):null,sourceRef:windows.map(window=>window.sourceRef).join(';'),warningAt,warning:!terminated&&!overdue&&warning.length>0};
 }
 
 export function fixedGoalDelta(work:ScheduleWork,fact:ScheduleFact|undefined,scope:Pick<ScheduleScopeInput,'scopeRef'|'targetRevision'>,asOf:string,termination?:ScheduleTermination|null):ScheduleGoalDelta{
@@ -101,6 +101,7 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
   let boundary:Boundary|null=null;
   if(work.accountingRole==='added_work'&&timestamp(work.originalHandoffAt)===null)coverage.push('新增范围缺少原交接目标');
   else if(completed&&actual&&end!==null)boundary={available:actual,credit:actual,reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:true,estimate:'actual'};
+  else if(completed&&actual)coverage.push('实际完成已取得，本范围冻结目标待核');
   else if(completed)coverage.push('已完成但实际发生时间待核');
   else if(terminated)coverage.push('已终止');
   else if(start===null||end===null||budget===null||budget<0||!calendar)coverage.push('本范围冻结目标、规划时长或日历待核');
@@ -151,10 +152,12 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
   const ownCalendar=work.responsibilityCalendar,ownStart=fact?scheduleOccurrenceBounds(fact.clockStart,asOf):null,ownEnd=completed?actual:terminated?stop!==null&&stop<=now?[stop,stop] as const:null:[now,now] as const;
   const ownKnown=Boolean(work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownEnd&&ownEnd[1]>=ownStart[0]);
   const own=ownKnown?range(Math.max(0,scheduleElapsed(ownStart![1],ownEnd![0],ownCalendar!)-work.responsibilityMinutes!),Math.max(0,scheduleElapsed(ownStart![0],ownEnd![1],ownCalendar!)-work.responsibilityMinutes!)):null;
-  const ownState=!work.responsibilitySlaRef?'not_adopted':terminated?'terminated':!own?'unknown':own.minimum>0?'overdue':own.maximum===0?'within':'unknown';
-  const warningAt=work.responsibilityWarningAt!==undefined?work.responsibilityWarningAt:ownKnown&&ownStart![0]===ownStart![1]&&work.responsibilityReminderPercent!==null&&work.responsibilityReminderPercent!==undefined?iso(shift(ownStart![0],work.responsibilityMinutes!*work.responsibilityReminderPercent/100,ownCalendar!)):null;
+  const ownState=!work.responsibilitySlaRef?'not_adopted':!own?'unknown':terminated?'terminated':own.minimum>0?'overdue':own.maximum===0?'within':'unknown';
+  const warningAt=!ownKnown?null:work.responsibilityWarningAt!==undefined?work.responsibilityWarningAt:ownStart![0]===ownStart![1]&&work.responsibilityReminderPercent!==null&&work.responsibilityReminderPercent!==undefined?iso(shift(ownStart![0],work.responsibilityMinutes!*work.responsibilityReminderPercent/100,ownCalendar!)):null;
   const deadlineAt=work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownStart[0]===ownStart[1]?iso(shift(ownStart[0],work.responsibilityMinutes,ownCalendar)):null;
   const ownSla:ScheduleNodeProgress['ownSla']=fact?.ownWindows?.length?nativeOwnWindows(fact.ownWindows,asOf,stop,terminated):{state:ownState,deadlineAt,overdueMinutes:own,sourceRef:work.responsibilitySlaRef,...(work.responsibilityWarningAt!==undefined||work.responsibilityReminderPercent!==undefined?{warningAt,warning:!completed&&!terminated&&ownState==='within'&&warningAt!==null&&now>=Date.parse(warningAt)}:{})};
+  if(completed&&actual&&fact?.completed.precision==='date')coverage.push('实际完成仅有日期，不推定精确时刻');
+  if(completed&&actual&&ownSla.state==='unknown')coverage.push('实际完成已取得，责任起点或期限依据待核');
   results.set(id,{id,scopeRef:input.scopeRef,targetRevision:work.targetRevision??input.targetRevision,canonicalWorkRef:work.canonicalWorkRef,state:terminated?'terminated':state(lag),lagMinutes:lag,businessCompleted:completed,...(input.plannedReadiness?{estimateKind:terminated?'terminated' as const:boundary?.estimate??'unknown' as const}:{}),availabilityBound:boundary?{earliest:iso(boundary.available[0]),latest:iso(boundary.available[1]),...(boundary.exclusive?{exclusive:true}:{})}:null,creditLimit:boundary?{earliest:iso(boundary.credit[0]),latest:iso(boundary.credit[1])}:null,goalDelta,...(work.completionTarget!==undefined?{currentTarget:{at:work.eventTarget?work.eventTarget.end:work.end,date:work.eventTarget?work.eventTarget.targetDate:work.targetDate??null,precision:work.eventTarget?.targetPrecision??work.targetPrecision??'instant',revision:work.targetRevision??input.targetRevision}}:{}),ownSla,coverage});
   visiting.delete(id);boundaries.set(id,boundary);return boundary;
  };

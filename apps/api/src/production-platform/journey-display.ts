@@ -23,7 +23,7 @@ export function progressLabel(ratio:number|null):string {
 }
 export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelled?:boolean;closedAt?:string|null}={}):JourneyDisplay {
   const nodes=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!isJourneyPlanningNode(node));
-  const closed=nodes.some(node=>node.key==="packing"&&node.state==="completed"),specialClosed=nodes.some(node=>node.key==="special_closure"&&node.state==="completed");
+  const closed=nodes.some(node=>node.key==="packing"&&node.state==="completed"&&node.completesOrder!==false),specialClosed=nodes.some(node=>node.key==="special_closure"&&node.state==="completed");
   const dates=order.poDeliveryDates??[];
   const earliestShipmentDate=dates.flatMap(line=>line.customerWarehouseArrivalDate?[line.customerWarehouseArrivalDate]:[]).sort()[0]??null;
   const activated=journeyActivated(order);

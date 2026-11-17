@@ -25,9 +25,19 @@ it.each(['order','rework','line','retired'])('Final10 never copies a completion 
  if(kind==='order')native.orderId='TEST-other';if(kind==='rework')native.rework[0]!.reworkId='TEST-other';if(kind==='line')native.rework[0]!.lineId='TEST-other';if(kind==='retired')node.current=false;
  attachJourneyNativeTimes(item,native,asOf);expect(node.actualAt).toBeNull();expect(node.enteredAt).toBeNull();
 });
-it('Final10 does not close an active rework or rate a future worker completion',()=>{
- const first=fixture();first.node.state='active';attachJourneyNativeTimes(first.item,first.native,asOf);expect(first.node).toMatchObject({state:'active',actualAt:null,enteredAt:start});
+it('keeps rework administration active while projecting its completed worker window, never a future A',()=>{
+ const first=fixture();first.node.state='active';attachJourneyNativeTimes(first.item,first.native,asOf);expect(first.node).toMatchObject({state:'active',actualAt:end,enteredAt:start,sla:'finished'});
  const second=fixture();second.native.rework[0]!.completedAt='2026-11-06T00:00:00Z';attachJourneyNativeTimes(second.item,second.native,asOf);expect(second.node.actualAt).toBeNull();
+});
+it('projects running and late-finished rework without using later review/financial registration time',()=>{
+ const {node,item,native}=fixture();node.state='active';const window=native.rework[0]!;
+ window.deadline=new Date(Date.parse(start)+48*3600000).toISOString();window.complete=false;window.completedAt=null;
+ const observed=new Date(Date.parse(start)+74*3600000).toISOString();attachJourneyNativeTimes(item,native,observed);
+ expect(node).toMatchObject({state:'active',sla:'running',actualAt:null,enteredAt:start});
+ window.complete=true;window.completedAt=new Date(Date.parse(start)+50*3600000).toISOString();attachJourneyNativeTimes(item,native,observed);
+ expect(node).toMatchObject({state:'active',sla:'finished',actualAt:window.completedAt,enteredAt:start});
+ expect((Date.parse(node.actualAt!)-Date.parse(node.enteredAt!))/3600000).toBe(50);
+ expect((Date.parse(node.actualAt!)-Date.parse(window.deadline))/3600000).toBe(2);
 });
 it('Final10 receiving uses its first effective instant and never assigns midnight to a date-only arrival',()=>{
  const {node,item,native}=fixture();node.key='receipts';node.instanceId='receipts:0';node.state='active';

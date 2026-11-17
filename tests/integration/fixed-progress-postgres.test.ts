@@ -15,6 +15,8 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {FixedTimelineAdoptionRepository} from '../../apps/api/src/production-platform/fixed-timeline-adoptions.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
+import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {businessNow,ContextBusinessClock,installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -92,7 +94,41 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('keeps native cancellation Z and elapsed time fixed on later reads without manufacturing final delivery',async()=>{
   await f.advance(scene,'2026-11-10T12:00:00.456Z');await run(()=>new DigitalProductionTaskService(f.db).controlResource(f.root,{kind:'order',id:ready.id},'cancel','TEST native stop, not physical delivery',randomUUID()));
   const query=new DigitalJourneyQuery(f.db),first=await run(()=>query.read(f.root,ready.id,undefined,true));expect(first.fixedSchedule?.state).toBe('terminated');expect(first.fixedSchedule?.durationSummary.finalActualSpanMinutes).toBeNull();expect(first.fixedSchedule?.scopes.flatMap(scope=>scope.nodes).filter(node=>!node.businessCompleted).every(node=>node.goalDelta.kind==='terminated')).toBe(true);
+  const stopped=first.supervision!.nodes.filter(node=>node.termination);
+  expect(stopped.length).toBeGreaterThan(0);expect(stopped.every(node=>node.status==='terminated'&&node.actualEnd===null&&node.termination?.kind==='cancelled'&&node.termination.at==='2026-11-10T12:00:00.456Z')).toBe(true);
+  const retained=(rows:typeof stopped)=>rows.map(({id,status,actualStart,actualEnd,target,termination})=>({id,status,actualStart,actualEnd,target,termination}));
   await f.advance(scene,'2026-11-20T10:00:00.456Z');const later=await run(()=>query.read(f.root,ready.id,undefined,true));expect(later.fixedSchedule?.durationSummary.elapsedSpanMinutes).toEqual(first.fixedSchedule?.durationSummary.elapsedSpanMinutes);expect(later.fixedSchedule?.durationSummary.observationAt).toBe('2026-11-10T12:00:00.456Z');expect(later.display?.mainState).toBe('cancelled');
+  expect(retained(later.supervision!.nodes.filter(node=>node.termination))).toEqual(retained(stopped));
+  const stored=await run(()=>new JourneyFactRepository(f.db).buildOne({kind:'order',id:ready.id}));
+  expect(stored.model.sla.termination).toMatchObject({kind:'cancelled',at:'2026-11-10T12:00:00.456Z'});
+  const frames=(await f.db.query('SELECT selection_json FROM digital_journey_fact_models WHERE resource_id=$1',[ready.id])).rows[0].selection_json.frames;
+  expect(frames.length).toBeGreaterThan(0);
+  const ids=new Set(stopped.map(node=>node.id));
+  const instanceIds=new Set(later.stages.flatMap(stage=>stage.nodes).filter(node=>node.timing&&ids.has(node.timing.id)||node.timings?.some(timing=>ids.has(timing.id))).map(node=>node.instanceId));
+  for(const frame of frames)expect(frame.risks.filter((node:{id:string})=>instanceIds.has(node.id)).every((node:{risks:string[]})=>!node.risks.includes('overdue')&&!node.risks.includes('due_soon'))).toBe(true);
+ });
+ it('keeps a real 48-hour rework window finished at 50 hours through later 74-hour quantity review without closing its administration',async()=>{
+  const ownScene=await f.scene('2026-11-21T08:00:00.000Z'),ownRun=<T,>(action:()=>Promise<T>)=>f.runtime.run(ownScene,f.root,action);
+  const repair=await ownRun(async()=>{configureTimelineAdoption(f.db,'fixed_v2');try{return await f.reworkReady();}finally{configureTimelineAdoption(f.db,'legacy');}});
+  const windows=(await reworkSlaEvidence(f.db,repair.ready.id)).windows,original=windows.find(window=>window.reworkId===repair.id)!;
+  expect(original.startedAt).toBe('2026-11-21T08:00:00.000Z');expect(original.deadline).toBe('2026-11-23T08:00:00.000Z');
+  const completedAt='2026-11-23T10:00:00.000Z';await f.advance(ownScene,completedAt);
+  await ownRun(async()=>{
+   for(const task of repair.state.tasks){const current=await repair.work.list(f.root,repair.id);await repair.work.submitReport({...f.root,authorizationCapability:'work:report_for_worker',authorizationCapabilities:['work:report_for_worker']},task.workTaskId,{expectedOrderVersion:current.orderVersion,actualQuantity:5,completedAt},randomUUID());}
+   const item=await new DigitalJourneyQuery(f.db).read(f.root,repair.ready.id,undefined,true),node=item.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='rework'&&node.instanceId===repair.id)!;
+   expect(node).toMatchObject({state:'active',sla:'finished',enteredAt:original.startedAt,actualAt:completedAt});
+   const timing=item.supervision!.nodes.find(node=>node.id==='garment_rework:'+original.lineId)!;
+   expect(timing).toMatchObject({status:'completed_late',actualEnd:completedAt});
+   expect(timing.windows).toEqual([expect.objectContaining({evidence:original.evidence,startedAt:original.startedAt,deadline:original.deadline,completedAt,complete:true})]);
+  });
+  await f.advance(ownScene,'2026-11-24T10:00:00.000Z');
+  await ownRun(async()=>{
+   const review=new WholeOrderReviewService(f.db),actor={...f.root,authorizationCapability:'submission:audit'},before=await review.get(actor,repair.id);
+   await review.approve(actor,repair.id,{expectedOrderVersion:before.orderVersion,temporaryCoefficients:before.temporaryWorkers.map(worker=>({configurationItemId:worker.configurationItemId,personId:worker.personId,multiplier:1}))},randomUUID());
+   const item=await new DigitalJourneyQuery(f.db).read(f.root,repair.ready.id,undefined,true),node=item.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='rework'&&node.instanceId===repair.id)!;
+   expect(node).toMatchObject({state:'active',sla:'finished',actualAt:completedAt});
+   expect((await reworkSlaEvidence(f.db,repair.ready.id)).windows.find(window=>window.reworkId===repair.id)).toMatchObject({completedAt,deadline:original.deadline});
+  });
  });
  it('keeps native production completion and shipment dates distinct from earlier QC and audit timestamps',async()=>{
   const ownScene=await f.scene('2026-11-21T08:00:00.000Z'),ownRun=<T,>(action:()=>Promise<T>)=>f.runtime.run(ownScene,f.root,action);

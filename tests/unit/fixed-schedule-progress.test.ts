@@ -36,6 +36,16 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
  it('retains physical Sunday availability separately from zero counted credit',()=>{const sunday='2026-11-08T12:00:00+08:00',monday='2026-11-09T00:00:00+08:00',start='2026-11-07T00:00:00+08:00',first=work('a',0,1,[],{start,end:monday,minutes:1440,calendar:'beijing_sunday_excluded',responsibilityCalendar:'beijing_sunday_excluded'}),second=work('b',0,1,['a'],{start:monday,end:'2026-11-10T00:00:00+08:00',minutes:1440}),input=scope([first,second],{a:{...fact(0,null),ready:{precision:'instant',at:start},clockStart:{precision:'instant',at:start}},b:fact(null,null)});expect(shiftFixedTimeline(sunday,0,'beijing_sunday_excluded')).toBe(sunday);expect(evaluateFixedScheduleScope(input,sunday).lagMinutes!.minimum).toBe(0);input.facts={...input.facts,a:{...input.facts.a!,businessCompleted:true,completed:{precision:'instant',at:sunday}},b:{...fact(null,null),ready:{precision:'instant',at:sunday}}};expect(evaluateFixedScheduleScope(input,sunday).lagMinutes!.minimum).toBe(-720);expect(scheduleElapsed(Date.parse(sunday),Date.parse(monday),'beijing_sunday_excluded')).toBe(0);});
  it('propagates unfinished physical availability during noncounting time to a continuous successor',()=>{const first=work('a',0,1,[],{calendar:'beijing_sunday_excluded'}),second=work('b',1,2,['a']);first.start='2026-11-07T22:00:00+08:00';first.end='2026-11-07T23:00:00+08:00';second.start='2026-11-08T00:00:00+08:00';second.end='2026-11-08T01:00:00+08:00';const input=scope([first,second],{a:{...fact(0,null),ready:{precision:'instant',at:first.start}},b:fact(null,null)});expect(evaluateFixedScheduleScope(input,'2026-11-08T00:30:00+08:00').lagMinutes!.minimum).toBe(30);});
  it('preserves completed but unrecorded physical time without repeatedly debiting now',()=>{const input=scope([work('a',0,4)],{a:fact(0,null,{businessCompleted:true})});expect(evaluate(input,10)).toMatchObject({state:'unknown',nodes:[{businessCompleted:true,lagMinutes:null,goalDelta:{kind:'unknown'}}]});expect(evaluate(input,20).lagMinutes).toBeNull();});
+ it('distinguishes trusted A without P, missing A, date-only A, and missing responsibility evidence',()=>{
+  const known=scope([work('a',0,4,[],{end:null})],{a:fact(0,3)}),project=evaluate(known,10).nodes[0]!;
+  expect(project.goalDelta.actual).toEqual(instant(3));expect(project.coverage).toContain('实际完成已取得，本范围冻结目标待核');expect(project.coverage).not.toContain('已完成但实际发生时间待核');
+  const missing=evaluate(scope([work('a',0,4)],{a:fact(0,null,{businessCompleted:true})}),10).nodes[0]!;
+  expect(missing.coverage).toContain('已完成但实际发生时间待核');
+  const date=evaluate(scope([work('a',0,4)],{a:fact(0,null,{businessCompleted:true,completed:{precision:'date',date:'2026-11-02'}})}),24).nodes[0]!;
+  expect(date.coverage).toContain('实际完成仅有日期，不推定精确时刻');expect(date.goalDelta.actual).toEqual({precision:'date',date:'2026-11-02'});
+  const noR=evaluate(scope([work('a',0,4)],{a:fact(null,3)}),10).nodes[0]!;
+  expect(noR.goalDelta.actual).toEqual(instant(3));expect(noR.coverage).toContain('实际完成已取得，责任起点或期限依据待核');
+ });
  it('does not use future completion as earned credit',()=>{const input=scope([work('a',0,4)],{a:fact(0,8)});expect(evaluate(input,5).state).toBe('unknown');});
  it.each([3,8])('retains completion before known R%s (including a future R) as unknown instead of early credit or zero own overtime',ready=>{const input=scope([work('a',0,4)],{a:fact(ready,2)}),result=evaluate(input,5);expect(result.nodes[0]).toMatchObject({businessCompleted:true,state:'unknown',goalDelta:{kind:'unknown',signedValue:null},ownSla:{state:'unknown',overdueMinutes:null}});expect(fixedDurationSummary([input],at(5)).finalActualSpanMinutes).toBeNull();});
  it('keeps date-only completion as an interval and never publishes midnight actual',()=>{const node=work('a',0,4),input=scope([node],{a:fact(0,null,{businessCompleted:true,completed:{precision:'date',date:'2026-11-02'}})}),result=evaluate(input,24);expect(result.state).toBe('unknown');expect(result.nodes[0]!.goalDelta).toMatchObject({kind:'unknown',actual:{precision:'date',date:'2026-11-02'}});});
@@ -44,6 +54,11 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
  it('requires an independently adopted own SLA and retains terminated unfinished goal state',()=>{const input=scope([work('a',0,4,[],{responsibilitySlaRef:null})],{a:fact(0,null)}),end={at:at(8),kind:'special_closure' as const},result=evaluateFixedScheduleScope(input,at(20),end);expect(result.state).toBe('terminated');expect(result.nodes[0]!.goalDelta.kind).toBe('terminated');expect(result.nodes[0]!.ownSla.state).toBe('not_adopted');});
  it('uses one whole-order span and real delivery or termination, never sums PO windows',()=>{const a=scope([work('a',0,12)],{a:fact(1,null)}),b={...scope([work('b',2,10)],{b:fact(3,null)}),scopeRef:'po:two',lineId:'two'};expect(fixedDurationSummary([a,b],at(8))).toMatchObject({planSpanMinutes:720,elapsedSpanMinutes:{minimum:420,maximum:420},finalActualSpanMinutes:null});expect(fixedDurationSummary([a,b],at(20),{at:at(8),kind:'cancelled'})).toMatchObject({observationAt:at(8),elapsedSpanMinutes:{minimum:420},finalActualSpanMinutes:null});a.facts={a:fact(1,11)};b.facts={b:fact(3,10)};expect(fixedDurationSummary([a,b],at(20))).toMatchObject({elapsedSpanMinutes:{minimum:600},finalActualSpanMinutes:{minimum:600},deliveryCompletedAt:instant(11)});});
  it('does not replace an unrecorded termination with now or a customer goal',()=>{const input=scope([work('a',0,12)],{a:fact(1,null)});expect(fixedDurationSummary([input],at(20),{at:null,kind:'cancelled'})).toMatchObject({observationAt:null,elapsedSpanMinutes:null,finalActualSpanMinutes:null});});
+ it.each([null,0])('does not rate an unfinished responsibility when termination %s is unknown or precedes R',stop=>{
+  const input=scope([work('a',0,4,[],{responsibilityWarningAt:at(3)})],{a:fact(1,null)});
+  const result=evaluateFixedScheduleScope(input,at(20),{at:stop===null?null:at(stop),kind:'special_closure'}).nodes[0]!;
+  expect(result.ownSla).toMatchObject({state:'unknown',overdueMinutes:null,warning:false,warningAt:null});
+ });
  it('retains an unknown original start when only downstream packing has R and A',()=>{
   const input=scope([work('original',0,6),work('packing',6,8,['original'])],{original:fact(null,null),packing:fact(6,8)});
   expect(fixedDurationSummary([input],at(10))).toMatchObject({actualStart:{precision:'unknown'},elapsedSpanMinutes:null,finalActualSpanMinutes:null,coverage:expect.arrayContaining(['本单可信起点待核'])});
@@ -66,7 +81,10 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
  it('freezes a terminated unfinished own SLA at credible Z and leaves missing or inverted Z unknown',()=>{
   const input=scope([work('a',0,4)],{a:fact(0,null)});
   for(const now of [8,20,30])expect(evaluateFixedScheduleScope(input,at(now),{at:at(8),kind:'cancelled'}).nodes[0]!.ownSla).toMatchObject({state:'terminated',overdueMinutes:{minimum:240,maximum:240}});
-  for(const stop of [null,at(-1),at(40)])expect(evaluateFixedScheduleScope(input,at(30),{at:stop,kind:'special_closure'}).nodes[0]!.ownSla).toMatchObject({state:'terminated',overdueMinutes:null});
+  for(const stop of [null,at(-1),at(40)]){
+   const node=evaluateFixedScheduleScope(input,at(30),{at:stop,kind:'special_closure'}).nodes[0]!;
+   expect(node.state).toBe('terminated');expect(node.ownSla).toMatchObject({state:'unknown',overdueMinutes:null});
+  }
   input.facts={a:fact(0,null,{terminated:true})};expect(evaluate(input,30).nodes[0]!.ownSla.overdueMinutes).toBeNull();
   input.facts={a:fact(0,null,{terminated:true,terminationAt:at(8)})};
   for(const now of [8,20,30])expect(evaluate(input,now).nodes[0]!.ownSla.overdueMinutes).toEqual({minimum:240,maximum:240});

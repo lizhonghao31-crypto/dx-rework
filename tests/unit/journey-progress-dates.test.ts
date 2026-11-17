@@ -22,6 +22,15 @@ function supervise(order:OrderJourney,fact:SlaNodeFact|undefined,key='bulk_patte
  return plan;
 }
 
+it('matches a recheck plan alias only to its own task when projecting completion dates and forecasts',()=>{
+ const order=fixture(['development_material_recheck']),own=node(order,'development_material_recheck');
+ own.instanceId='TEST-recheck';own.enteredAt='2026-11-04T23:00:00.000Z';
+ supervise(order,{startedAt:own.enteredAt,evidence:'task:TEST-recheck'},'development_materials:task:TEST-recheck');
+ expect(read(order).overall.forecast).toMatchObject({status:'complete',at:'2026-11-05T01:00:00.000Z'});
+ order.supervision!.nodes[0]!.id='development_materials:task:TEST-foreign-recheck';
+ expect(read(order).overall.forecast.at).toBeNull();
+});
+
 it('P02-02: a partially completed execution range never provides a whole-phase actual completion date',()=>{
  const order=fixture(['bulk_cutting']),first=node(order,'bulk_cutting');first.state='completed';first.actualDate='2026-11-04';first.actualQuality='unverified';
  const second:JourneyNode={...first,instanceId:'second-po',subject:'白PO · 乙厂',state:'active',actualDate:null};

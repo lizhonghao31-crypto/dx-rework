@@ -2,6 +2,7 @@ import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import type {Pool} from 'pg';
 import {JOURNEY_FACT_CALCULATION_VERSION} from './journey-fact-model.js';
 import {JourneyFactRepository,JourneyFactBusy} from './journey-fact-repository.js';
+import {journeyFactGenerationEnabled} from './journey-fact-generation.js';
 
 export const JOURNEY_FACT_UPDATE_LIMIT=16;
 export const JOURNEY_FACT_UPDATE_CONCURRENCY=2;
@@ -10,6 +11,7 @@ export class JourneyFactUpdates{
  constructor(private readonly database:Pool,private readonly repository=new JourneyFactRepository(database)){}
  /** One bounded batch. A failed mother has its own backoff, not a batch rollback. */
  async runOnce(){
+  if(!journeyFactGenerationEnabled())return {built:0,retired:0,failed:0,busy:0};
   // Only genuine future-fact rechecks expire. Ordinary SLA/date transitions
   // are already compiled; midnight must not enqueue every mother again.
   // Guarded clocks change through their existing native invalidations.
@@ -49,6 +51,7 @@ export class JourneyFactUpdates{
   * It never runs in a list/detail GET and never constructs payloads itself. */
  async registerBackfill(after:string|null=null,limit=200,force=false){
   if(!Number.isInteger(limit)||limit<1||limit>200)throw Error('Invalid journey backfill batch size');
+  if(!journeyFactGenerationEnabled())return {registered:0,cursor:after,done:true};
   const rows=(await this.database.query<Pending&{cursor:string}>(`WITH resources AS (
     SELECT 'order'::text resource_kind,production_order_id resource_id FROM digital_production_orders WHERE ${await wholeOrderActiveSql(this.database,"order","production_order_id")}
     UNION ALL SELECT 'source',s.source_id FROM digital_production_sources s
