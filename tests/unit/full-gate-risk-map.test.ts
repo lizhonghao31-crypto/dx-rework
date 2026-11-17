@@ -3,7 +3,7 @@ import { basename } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
+import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES, INDEPENDENT_POSTGRES_TESTS } from "../../scripts/ci/full-gate-risk-map.mjs";
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
@@ -206,7 +206,7 @@ describe("Full Gate sensitive path mapping", () => {
   it.each(Object.entries(POSTGRES_CASE_SUITES))("maps imported module %s to runnable suite %s", (module, suite) => {
     const result = classifyFullGatePaths([module]);
     expect(result.dbRequired).toBe(true);
-    expect(result.businessChainSensitive).toBe(true);
+    expect(result.businessChainSensitive).toBe(!INDEPENDENT_POSTGRES_TESTS.includes(suite));
     expect(result.mappedPostgresTests).toEqual([suite]);
     expect(readFileSync(suite, "utf8")).toContain(basename(module).replace(/\.ts$/, ".js"));
     expect(() => assertMappedPostgresTests(result.mappedPostgresTests)).not.toThrow();
@@ -262,7 +262,7 @@ describe("Full Gate sensitive path mapping", () => {
   it("runs receiving analysis cases through the real receiving suite", () => {
     const result = classifyFullGatePaths(["tests/integration/receiving-analysis-postgres.cases.ts"]);
     expect(result.dbRequired).toBe(true);
-    expect(result.businessChainSensitive).toBe(true);
+    expect(result.businessChainSensitive).toBe(false);
     expect(result.mappedPostgresTests).toEqual(["tests/integration/receiving-postgres.test.ts"]);
   });
 
@@ -397,4 +397,44 @@ it('keeps incomplete-publication and exact native craft choices in original requ
   for(const suite of ['order-time-requests-postgres','order-time-requests-browser-postgres'])expect(risk.mappedPostgresTests).toContain(`tests/integration/${suite}.test.ts`);
  }
  expect(classifyFullGatePaths(['apps/web/src/order-time-washing-rebase.ts']).mappedPostgresTests).toContain('tests/integration/order-time-requests-browser-postgres.test.ts');
+});
+
+describe('reviewed single-owner PostgreSQL test-only selection', () => {
+  it.each(INDEPENDENT_POSTGRES_TESTS)('keeps Full and the unchanged runnable entry without unrelated chain: %s', suite => {
+    const risk=classifyFullGatePaths([suite]), plan=amendmentPlan([suite]);
+    expect(risk.highRisk).toBe(true);
+    expect(risk.dbRequired).toBe(true);
+    expect(risk.businessChainSensitive).toBe(false);
+    expect(plan.chain).toBe(false);
+    expect(plan.plan.map(row=>row.path)).toEqual(risk.mappedPostgresTests);
+    expect(plan.plan.map(row=>row.path)).toContain(suite);
+  });
+  it('deduplicates the reviewed case and its owner without weakening execution context', () => {
+    const suite='tests/integration/receiving-postgres.test.ts';
+    const plan=amendmentPlan(['tests/integration/receiving-analysis-postgres.cases.ts',suite,suite]);
+    expect(plan.chain).toBe(false);
+    expect(plan.plan).toEqual([{path:suite,config:configForSuite(suite),memberships:['mapped']}]);
+  });
+  it.each([
+    'tests/helpers/business-anchor-fixture.ts',
+    'apps/api/src/production-platform/journey-fact-repository.ts',
+    'apps/api/src/auth/service.ts',
+    'apps/api/migrations/9999_test.sql',
+    'packages/domain/src/digital-sla-plan.ts',
+    'packages/domain/src/new-unclassified-domain.ts',
+    'tests/integration/unknown-postgres.test.ts',
+    'tests/integration/sample-read-postgres.test.ts',
+    'tests/integration/member-module-policy-postgres.cases.ts',
+    'vitest.config.ts',
+  ])('retains the conservative chain for mixed or multi-owner input: %s', extra => {
+    const plan=amendmentPlan(['tests/integration/receiving-postgres.test.ts',extra]);
+    expect(plan.chain).toBe(true);
+    for(const suite of POSTGRES_CHAIN_TESTS)expect(plan.plan.map(row=>row.path)).toContain(suite);
+  });
+  it('fails closed for standalone unknown domain code and deleted test entries', () => {
+    for(const path of ['packages/domain/src/new-unclassified-domain.ts','tests/integration/removed-postgres.test.ts']){
+      const risk=classifyFullGatePaths([path]);
+      expect(risk.highRisk).toBe(true);expect(risk.businessChainSensitive).toBe(true);
+    }
+  });
 });

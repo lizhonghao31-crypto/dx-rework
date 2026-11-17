@@ -36,6 +36,28 @@ export const POSTGRES_CASE_SUITES = Object.freeze({
   "tests/integration/own-tail-responsibility-history.cases.ts": "tests/integration/own-tail-responsibility-history-postgres.test.ts",
 });
 
+// Reviewed test-only leaf entries. Shared permission/history wrappers stay broad.
+// This changes only the automatic chain supplement, never Full or suite contents.
+export const INDEPENDENT_POSTGRES_TESTS = Object.freeze([
+  "tests/integration/receiving-postgres.test.ts",
+  "tests/integration/sourcing-pr03-postgres.test.ts",
+  "tests/integration/production-closure-postgres.test.ts",
+  "tests/integration/sample-read-postgres.test.ts",
+]);
+
+const independentTestOnlyChange = (paths) => {
+  if (!paths.length) return false;
+  const owners = new Set();
+  for (const path of paths) {
+    const owner = POSTGRES_CASE_SUITES[path] ?? path;
+    if (!INDEPENDENT_POSTGRES_TESTS.includes(owner) || !existsSync(path) || !existsSync(owner)) return false;
+    if (path !== owner && !readFileSync(owner, "utf8").includes(path.split("/").at(-1).replace(/\.ts$/, ".js"))) return false;
+    owners.add(owner);
+  }
+  // More than one runnable owner is a multi-domain change until reviewed.
+  return owners.size === 1;
+};
+
 const isMigration = (path) =>
   path.startsWith("apps/api/migrations/")
   || path.startsWith("scripts/deploy/migration-execution-compatibility.")
@@ -98,7 +120,7 @@ const isDeployment = (path) =>
   || SHARED_GATE_INPUTS.has(path);
 
 const isBackendOrContract = (path) =>
-  path.startsWith("apps/api/src/") || path.startsWith("packages/contracts/src/");
+  path.startsWith("apps/api/src/") || path.startsWith("packages/contracts/src/") || path.startsWith("packages/domain/src/");
 
 const isPostgresTest = (path) =>
   /^tests\/integration\/.*postgres.*\.(?:test|cases)\.ts$/.test(path);
@@ -168,6 +190,7 @@ const addAll = (target, values) => {
 
 export const classifyFullGatePaths = (inputPaths) => {
   const paths = [...new Set(inputPaths.map(normalize).filter(Boolean))];
+  const independentTestOnly = independentTestOnlyChange(paths);
   const mappedTests = new Set();
   if(paths.some(path=>/factory-(?:task-completion|completion-occurrence)|production-facts-consistency|receiving-(?:service|routes|board-edit-session)|order-board-page|0294_receiving_correction_provenance/.test(path)))addAll(mappedTests,['tests/integration/production-facts-consistency-postgres.test.ts','tests/integration/receiving-postgres.test.ts','tests/integration/receiving-board-native-browser-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts']);
   if(paths.some(path=>/development-responsibility|order-time-native-timing|order-time-reading|development-sla-evidence|journey-task-summary|task-service|digital-production-tasks-panel/.test(path)))addAll(mappedTests,['tests/integration/development-responsibility-postgres.test.ts','tests/integration/development-execution-read-native-browser-postgres.test.ts','tests/integration/digital-production-tasks-postgres.test.ts']);
@@ -400,7 +423,8 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
     if (path === "scripts/test-database-safety.mjs" || path.startsWith("scripts/test-resource-")) mappedTests.add("tests/integration/test-resource-contract-postgres.test.ts");
     if (isPostgresTest(path) || Object.hasOwn(POSTGRES_CASE_SUITES, path)) {
-      businessChainSensitive = true;
+      businessChainSensitive ||= !independentTestOnly;
+      if (independentTestOnly) domains.add("independent-postgres-test");
       domains.add("postgres-test");
       if (path.endsWith(".cases.ts")) {
         const suite = POSTGRES_CASE_SUITES[path];
