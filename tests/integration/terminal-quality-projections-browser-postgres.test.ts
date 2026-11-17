@@ -56,6 +56,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      await tab.page.getByLabel('节点阶段筛选',{exact:true}).selectOption(node.stage);
      const summary=tab.page.locator('.cockpit-node-summary').locator(`[id="journey-node-${node.instanceId}"]`);await summary.waitFor();
      expect(await summary.innerText()).toContain('计时已终止');expect(await summary.innerText()).not.toContain('进行中');
+     // The fixture's sole unfinished receiving-QC obligation is stopped by
+     // the original whole-order closure. Lock its identity above, not by
+     // invoking the UI predicate that is under test.
+     const filter=tab.page.getByLabel('节点状态筛选',{exact:true}),completed=await filter.locator('option[value=completed]').innerText();
+     await filter.selectOption('active');await summary.waitFor({state:'hidden'});
+     expect(await filter.locator('option[value=active]').innerText()).toBe('进行中（0）');
+     expect(await tab.page.locator('.journey-node-viewport tbody tr').count()).toBe(0);
+     await tab.page.getByRole('region',{name:'小流程明细'}).getByRole('button',{name:'查看更多 ›',exact:true}).click();
+     const more=tab.page.getByRole('dialog',{name:'全部节点明细',exact:true});await more.waitFor();expect(await more.locator('tbody tr').count()).toBe(0);
+     await more.getByRole('button',{name:'关闭全部节点明细',exact:true}).click();
+     expect(await tab.page.getByText('当前条件没有可见节点。可选择本单全部节点查看其他记录。',{exact:true}).count()).toBe(1);
+     await filter.selectOption('all');await summary.waitFor();
+     expect(await filter.locator('option[value=completed]').innerText()).toBe(completed);
+     // "All nodes" intentionally clears the explicit selection. Choose the
+     // locked original QC row again before asserting its historical detail.
+     await summary.getByRole('button',{name:node.label,exact:true}).click();
+     await tab.page.getByRole('region',{name:'当前节点详情'}).getByRole('heading',{name:'当前节点：'+node.label,exact:false}).waitFor();
+     expect(await tab.page.getByRole('region',{name:'当前节点详情'}).getByText('计时已终止',{exact:true}).count()).toBeGreaterThan(0);
+     expect(await tab.page.getByRole('link',{name:'进入该节点办理',exact:true}).count()).toBe(0);
+     expect(node.actualAt).toBeNull();expect(node.fixedTargets!.flatMap(target=>target.progress.ownSla.overdueMinutes??[])).toContainEqual({minimum:240,maximum:240});
+     await writeFile(join(h.evidence,'terminal-filter-original-dto-'+now.slice(0,10)+'.json'),JSON.stringify({nativeIdentity:node.instanceId,lineId,observedAt:now,source:detail.sourceId,orderId:detail.orderId,nativeNode:node,completedFilter:completed},null,2));
      expect(h.errors).toEqual([]);
     }catch(error){await writeFile(join(h.evidence,'terminal-detail.html'),await tab.page.content());await writeFile(join(h.evidence,'terminal-detail.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
   }

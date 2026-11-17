@@ -1,7 +1,7 @@
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {expect,it} from "vitest";
-import {JOURNEY_STAGES,JourneyReturnContextSchema,type JourneyNode,type JourneyVisualStage,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
+import {JOURNEY_STAGES,JourneyReturnContextSchema,type JourneyNode,type JourneyTiming,type JourneyVisualStage,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {CockpitDetail} from "../../apps/web/src/cockpit-detail.js";
 import {CockpitNodeDates} from '../../apps/web/src/cockpit-node-dates.js';
 import {nodeTargetLabel} from '../../apps/web/src/journey-sla-details.js';
@@ -15,6 +15,21 @@ function fixture():OrderJourney{
   return {visualProgress:{ruleVersion:'journey-visual-v1',asOf:'2026-10-19T00:00:00Z',actualRatio:.5,timeRatio:null,startedAt:null,applicableStages:7,completedStages:0,unknownStages:0,expected:businessDate(),actual:businessDate(),stages:JOURNEY_STAGES.map(stage=>visual(stage))},id,sourceId:id,orderId:id,designStyleNo:"TEST-DETAIL",temporaryStyleNo:null,customer:"PD",category:"上衣",designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:"2026-10-19T00:00:00Z",deliveryDate:null,selectedRound:1,adoptedRound:1,sourceVersion:1,instructionVersion:1,lines:[],links:[],stages:JOURNEY_STAGES.map(stage=>({...stage,state:"pending",nodes:stage.key==="development"?[current,completed]:[]})),progress:{development:{completed:8,applicable:10},bulk:null},hitReasons:[],display:{ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:null,missingShipmentDates:0,closedAt:null,actualRatio:.5,actualLabel:"50.0%",awaitingClosure:false,timeRatio:null,timeLabel:"时间规则待完善",stages:JOURNEY_STAGES.map(stage=>({key:stage.key,ratio:.5,applicable:2,completed:1,notApplicable:false,risk:stage.key==="development"?"overdue":"normal"}))},currentRiskNodes:[],currentDeliveryRisks:[],riskHistory:[],operationLog:{items:[],nextCursor:null,asOf:"2026-10-19T00:00:00Z",coverage:["节点事件"]}};
 }
 const render=(o:OrderJourney,busy=false)=>renderToStaticMarkup(createElement(CockpitDetail,{order:o,context:JourneyReturnContextSchema.parse({selected:id,scope:"production",focus:task}),asOf:"2026-10-19T00:00:00Z",actions:null,busy,onChange(){}}));
+it.each([false,true])('keeps detail active count, default working selection and terminal fallback consistent, framework=%s',framework=>{
+ const o=fixture(),stopped=o.stages[1]!.nodes[0]!,open={...structuredClone(stopped),instanceId:'TEST-open',label:'TEST真正开放',records:[]};
+ stopped.label='TEST终止原节点';stopped.timing={id:'TEST original',label:'TEST original',stage:'development',kind:'duration',status:'terminated',actualStart:null,actualEnd:null,target:{at:null,reasons:[]},original:{at:null,reasons:[]},current:{at:null,reasons:[]},forecast:{at:null,reasons:[]},forecastBasis:'unknown',termination:{kind:'special_closure',at:'2026-10-19T00:00:00Z',sourceRef:'TEST original closure',elapsedSeconds:null,overdueSeconds:14400}} satisfies JourneyTiming;
+ o.stages[1]!.nodes=[stopped,open];if(framework)o.fixedSchedule={framework:{scopes:[]}} as unknown as NonNullable<OrderJourney['fixedSchedule']>;
+ const draw=(focus?:string,nodeView='active')=>renderToStaticMarkup(createElement(CockpitDetail,{order:o,context:JourneyReturnContextSchema.parse({selected:id,expanded:'development',nodeView,...(focus?{focus}:{})}),asOf:'2026-10-19T00:00:00Z',actions:null,busy:false,onChange(){}}));
+ let html=draw();expect(html).toContain('进行中（1）');expect(html).toContain('当前节点：TEST真正开放');
+ const list=html.match(/<div class="journey-node-viewport"[\s\S]*?<\/div>/)![0];expect(list).toContain('TEST真正开放');expect(list).not.toContain('TEST终止原节点');
+ html=draw(task,'all');expect(html).toContain('当前节点：TEST终止原节点');expect(html).not.toContain('进入该节点办理');expect(html).not.toContain('taskView=handle');
+ o.stages[1]!.nodes=[stopped];html=draw();expect(html).toContain('进行中（0）');expect(html).toContain('当前节点：TEST终止原节点');expect(html).not.toContain('进入该节点办理');expect(html).not.toContain('taskView=handle');expect(html).toContain('当前条件没有可见节点');
+ // A second original PO responsibility may remain unknown/running even
+ // though the old compact label reports the first stopped timing. Keep the
+ // row, active count and original handling entry consistent in both layouts.
+ stopped.timings=[stopped.timing!,{...structuredClone(stopped.timing!),id:'TEST-other-PO',status:'unknown',termination:undefined}];
+ html=draw();expect(html).toContain('进行中（1）');expect(html).toContain('TEST终止原节点');expect(html).toContain('进入该节点办理');expect(html).toContain('taskView=handle');expect(html).not.toContain('当前条件没有可见节点');
+});
 it('R2-02 Review: node table exposes an original batch deadline when the generic task deadline is missing',()=>{
  const n=fixture().stages[1]!.nodes[0]!;n.expectedAt=null;n.expectedKind='unset';n.nativeWindows=[{evidence:'TEST-native-D',scopeLabel:'PO TEST',startedAt:null,deadline:'2026-11-12T03:35:00Z',warningAt:null,completedAt:null,complete:false}];
  const html=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:[n],context:JourneyReturnContextSchema.parse({selected:id}),selectedId:undefined,asOf:undefined,onSelect(){}}));
