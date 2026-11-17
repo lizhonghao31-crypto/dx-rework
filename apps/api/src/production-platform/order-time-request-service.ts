@@ -11,6 +11,7 @@ import {isRootActor} from '../access/business-authority.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
 import {assertSlaSettingsActor} from './sla-settings-authority.js';
 import {loadOrderTimeOperation,orderTimeOperationScope} from './order-time-operation-state.js';
+import {refreshLinkedOrderTimeInput} from './order-time-linked-applicability.js';
 import {withinOrderTimeAdmission,orderTimeRequester} from './order-time-admission.js';
 import {OrderTimeRequestRepository,type OrderTimeRequestRow} from './order-time-request-repository.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
@@ -67,7 +68,7 @@ export class OrderTimeRequestService{
    if(state.check.feasibility==='insufficient'&&!input.acceptLate)conflict('ORDER_TIME_LATE_CONFIRMATION',orderTimeGapText(state.check));
    const eventId=randomUUID();await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'order_time_arranged','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,input.resource.id,JSON.stringify({plan:state.value.plan,lateMinutes:state.check.lateMinutes,acceptedLate:input.acceptLate})]);
    if(input.washing?.length){if(input.resource.kind!=='order')conflict('ORDER_TIME_INPUT_REQUIRED','请在正式订单采用洗水安排');for(const change of input.washing)await adoptBulkWashingWithClient(db,actor,input.resource.id,change.lineId,change.expectedVersion,change.document);}
-   const previous=await new OrderTimePlanRepository(db).current(input.resource),saved=await new OrderTimePlanRepository(db).confirm({resource:input.resource,expectedRevision:previous?.revision??0,value:state.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-arrange:'+eventId},async(resource,changes)=>(await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource},time,changes)).value);
+   const previous=await new OrderTimePlanRepository(db).current(input.resource),saved=await new OrderTimePlanRepository(db).confirm({resource:input.resource,expectedRevision:previous?.revision??0,value:state.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-arrange:'+eventId},(resource,changes)=>refreshLinkedOrderTimeInput(this.database,db,actor,resource,time,changes));
    if(input.resource.kind==='order')await db.query('UPDATE digital_production_orders SET order_time_managed=true WHERE production_order_id=$1',[input.resource.id]);
    const current=await loadOrderTimeOperation(this.database,db,actor,operation,time);
    return {saved:true as const,planRevision:saved.revision,check:current.check};
@@ -139,7 +140,7 @@ export class OrderTimeRequestService{
     const actualOperation:OrderTimeOperation={kind:'arrangement',resource:target};
     const actual=state.operation.kind==='arrangement'&&!input.washing?.length?state:await loadOrderTimeOperation(this.database,db,actor,actualOperation,time,input.overrides);
     const previous=await new OrderTimePlanRepository(db).current(target);
-    const saved=await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:previous?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version},async(resource,changes)=>(await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource},time,changes)).value);
+    const saved=await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:previous?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version},(resource,changes)=>refreshLinkedOrderTimeInput(this.database,db,actor,resource,time,changes));
     if(target.kind==='order')await new DigitalProductionTaskService(this.database).refreshShipSampleTimingWithClient(db,actor,target.id);
     await db.query(`UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind=$1 AND ${target.kind==='source'?'source_id':'production_order_id'}=$2`,[target.kind,target.id]);
     return {native,saved};

@@ -6,6 +6,7 @@ import {ApplicationError} from '../platform/errors.js';
 import {ContextBusinessClock,observedBusinessTime,businessNow} from '../acceptance-clock/business-time.js';
 import {acceptsNewOrderTime,orderTimeAdmission,withinOrderTimeAdmission} from './order-time-admission.js';
 import {loadOrderTimeOperation,orderTimeOperationScope} from './order-time-operation-state.js';
+import {refreshLinkedOrderTimeInput} from './order-time-linked-applicability.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {DigitalProductionTaskService} from './task-service.js';
 
@@ -25,7 +26,7 @@ export async function automaticOrderTime<T>(database:Pool,db:PoolClient,actor:Tr
   const result=await work(),target=created?.(result)??resource;if(!target)throw Error('原生生效缺少本单身份');
   const actual=await loadOrderTimeOperation(database,db,actor,{kind:'arrangement',resource:target},time);
   const prior=await new OrderTimePlanRepository(db).current(target);
-  await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:prior?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-native:'+eventId},async(resource,changes)=>(await loadOrderTimeOperation(database,db,actor,{kind:'arrangement',resource},time,changes)).value);
+  await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:prior?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-native:'+eventId},(resource,changes)=>refreshLinkedOrderTimeInput(database,db,actor,resource,time,changes));
   if(target.kind==='order')await new DigitalProductionTaskService(database).refreshShipSampleTimingWithClient(db,actor,target.id);
   await db.query(`UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind=$1 AND ${target.kind==='source'?'source_id':'production_order_id'}=$2`,[target.kind,target.id]);
   return result;
