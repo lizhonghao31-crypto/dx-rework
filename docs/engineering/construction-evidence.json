@@ -1,129 +1,241 @@
 {
   "version": 1,
-  "base": "f56ad99c1a574cebae18d47b641d000be6233efc",
+  "base": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
   "risk": "full",
-  "sourceFingerprint": "fc824b3058df0e6cf1ca08630f71613e970222f6186a144cf66a2579810c37e2",
+  "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
   "rules": [
     {
-      "source": "User explicitly requested complete optimization revalidation on2026-11-17, original messages Sentinel_e678d81ce66c8191a715efd1a98f8435 and Sentinel_26d5affae06081919e9da75852430ccf. This replaces the previous manual inclusion of1014.",
-      "initialization": "Fresh worktree from actual revert merge f56ad99c; restoration tree checked against approved de663f03, then policy correction applied. No business runtime source, SQL, seed, role or deployment changes. Full still must execute its actual canonical suites; no PG pass claimed here.",
-      "dateAndPermission": "Risk diff binds actual immutable base/head and disables rename folding. Existing role/session/Root/PG13/resource boundaries retained; no grant, clock, quantity, deadline or historical business changes.",
-      "checks": [
-        "actions-policy",
-        "all-ci-protocol",
-        "changed-lint",
-        "risk-map-unit"
-      ],
-      "rule": "Restore approved preparation reductions and conservative dependency-aware suite selection, and synchronize Quick/Full exact-diff static guards without removing rename safety.",
+      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
+      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
+      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
+      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
+      "rule": "Authorized task and full/compact Journey consume exact effective completion precision and native correction chain",
       "writes": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/full-gate.yml",
-        "AGENTS.md",
-        "scripts/ci/ci-gate-runtime.mjs",
-        "scripts/ci/full-gate-lanes.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/verify-actions-policy.mjs",
-        "scripts/ci/verify-actions-policy.test.mjs",
-        "scripts/test-suite-plan.mjs",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/helpers/bulk-preparation-fixture.ts",
-        "tests/helpers/production-readiness-fixture.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "packages/contracts/src/digital-production-tasks.ts",
+        "apps/api/src/production-platform/task-completion-occurrence.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "tests/integration/task-completion-postgres.test.ts",
+        "tests/unit/task-completion-occurrence.test.ts"
       ],
       "reads": [
-        "scripts/ci/verify-actions-policy.mjs#exactRiskDiff",
-        "scripts/ci/ci-gate-runtime.mjs#scopeFor",
-        "scripts/ci/full-gate-lanes.mjs#expectedInputs",
-        "scripts/test-suite-plan.mjs#fullGatePostgresPlan",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/helpers/bulk-preparation-fixture.ts#exerciseBulkPreparation"
+        "apps/api/src/production-platform/development-occurrence.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "apps/api/src/production-platform/journey-task-summary.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts"
       ],
       "oldTests": [
-        "scripts/ci/verify-actions-policy.test.mjs",
-        "scripts/ci/full-gate-lanes.test.mjs",
-        "scripts/ci/ci-gate-runtime.test.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+        "tests/unit/development-occurrence.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "expectation": "Quick and Full accept only executable no-renames exact-tuple diff producers with the correct output; reject rename folding, mutable tuple, filters, wrong output and comments-only matches. Original complete fixture defaults and unique assertions retained. Local protocol284/risk132 and changed-file lint pass; real PG/browser/complete-build behavior remains for the newly authorized Full, not reported passed from these local checks."
+      "checks": [
+        "rp3-unit",
+        "rp3-native-app",
+        "rp3-api-types"
+      ]
+    },
+    {
+      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
+      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
+      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
+      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
+      "rule": "Original workbench renders five actual completion states and optional old DTOs without trust inversion",
+      "writes": [
+        "apps/web/src/task-completion-time.tsx",
+        "apps/web/src/task-workbench-sample.tsx",
+        "tests/unit/task-completion-display.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/web/src/journey-sla-details.tsx"
+      ],
+      "oldTests": [
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/m01-time-consumers.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+      ],
+      "checks": [
+        "rp3-unit",
+        "rp3-native-app",
+        "rp3-web-types"
+      ]
+    },
+    {
+      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
+      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
+      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
+      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
+      "rule": "Factory quotation navigation preserves actual root/Acceptance base, mother order/PO and validated return under original management permission",
+      "writes": [
+        "apps/web/src/factory-batch-panel.tsx"
+      ],
+      "reads": [
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/url-contract.ts",
+        "apps/web/src/factory-flow-panel.tsx"
+      ],
+      "oldTests": [
+        "tests/unit/factory-flow-navigation.test.ts",
+        "tests/unit/digital-journey-projection.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/task-completion-display.test.ts"
+      ],
+      "checks": [
+        "rp3-unit",
+        "rp3-web-types"
+      ]
+    },
+    {
+      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
+      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
+      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
+      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
+      "rule": "New native completion suite belongs to the original finite long-correctness configuration, preserving ordinary/default execution and all business assertions",
+      "writes": [
+        "scripts/test-suite-plan.mjs"
+      ],
+      "reads": [
+        "scripts/test-execution-config.mjs",
+        "scripts/run-business-chain-gate.mjs",
+        "vitest.business-chain.config.ts"
+      ],
+      "oldTests": [
+        "scripts/ci/test-execution-contract.test.mjs"
+      ],
+      "newTests": [
+        "tests/integration/task-completion-postgres.test.ts"
+      ],
+      "checks": [
+        "rp3-canonical",
+        "rp3-native-app"
+      ]
     }
   ],
   "checks": [
     {
-      "id": "actions-policy",
-      "command": "/workspace/.task-toolchains/time-read/node_modules/.bin/node scripts/ci/verify-actions-policy.mjs",
-      "exitCode": 0,
-      "startedAt": "2026-11-17T10:02:06.360952+00:00",
-      "endedAt": "2026-11-17T10:02:06.403274+00:00",
-      "logSha256": "c0153a744a422c030f99059e529aa2066d7153ecc058ddcd2355699dbdaf0079",
-      "status": "passed",
-      "testedHead": "f56ad99c1a574cebae18d47b641d000be6233efc",
-      "sourceFingerprint": "fc824b3058df0e6cf1ca08630f71613e970222f6186a144cf66a2579810c37e2",
-      "context": "Node22.22.2; local uncommitted candidate over actual revert merge f56ad99c, bound by source fingerprint. Existing locked dependency cache; no install, database, network benchmark, deployment or live business data. Logs: /workspace/ci-governance-revalidated-20261117/checks/actions-policy.log",
+      "id": "rp3-packages",
       "kind": "command",
-      "log": "/workspace/ci-governance-revalidated-20261117/checks/actions-policy.log"
-    },
-    {
-      "id": "all-ci-protocol",
-      "command": "/workspace/.task-toolchains/time-read/node_modules/.bin/node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
-      "exitCode": 0,
-      "startedAt": "2026-11-17T10:02:06.404089+00:00",
-      "endedAt": "2026-11-17T10:02:12.880043+00:00",
-      "logSha256": "9f5bd42d1fcd03e1e4367c5abb478027ba897aafed7b6fe57c1313e58c8eede2",
+      "command": "npm run build:packages",
       "status": "passed",
-      "testedHead": "f56ad99c1a574cebae18d47b641d000be6233efc",
-      "sourceFingerprint": "fc824b3058df0e6cf1ca08630f71613e970222f6186a144cf66a2579810c37e2",
-      "context": "Node22.22.2; local uncommitted candidate over actual revert merge f56ad99c, bound by source fingerprint. Existing locked dependency cache; no install, database, network benchmark, deployment or live business data. Logs: /workspace/ci-governance-revalidated-20261117/checks/all-ci-protocol.log",
-      "kind": "tests",
-      "passed": 284,
-      "failed": 0,
-      "skipped": 0,
-      "log": "/workspace/ci-governance-revalidated-20261117/checks/all-ci-protocol.log"
+      "exitCode": 0,
+      "testedHead": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+      "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
+      "startedAt": "2026-11-17T10:23:22.026111+00:00",
+      "endedAt": "2026-11-17T10:23:32.439024+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-resume-packages/command.log",
+      "logSha256": "1eab0f9f6e5a126ce87ed22bd0e880514966e339364ae8bf186c22eccbcab692",
+      "context": "Actual Node22.22.2/npm10.9.9, original locked local workspaces, original workers/bounded configuration. New final integration baseline31aa7c89; no live Acceptance or production data and no deployment. PG/browser check uses a fresh marked low-privilege PG16 container, native AuthService App and original correction commands; actual owned cleanup/absence verified. The native local check selects two affected cases, nine unrelated cases filtered and not counted as passed. Final Full must execute its canonical plan without this local name filter."
     },
     {
-      "id": "changed-lint",
-      "command": "/workspace/.task-toolchains/time-read/node_modules/.bin/node node_modules/eslint/bin/eslint.js --max-warnings=0 scripts/ci/ci-gate-runtime.mjs scripts/ci/full-gate-lanes.mjs scripts/ci/full-gate-risk-map.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/verify-actions-policy.mjs scripts/ci/verify-actions-policy.test.mjs scripts/test-suite-plan.mjs tests/acceptance/m01-cockpit-home-native-browser.ts tests/helpers/bulk-preparation-fixture.ts tests/helpers/production-readiness-fixture.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts tests/unit/full-gate-risk-map.test.ts",
+      "id": "rp3-lint",
+      "kind": "command",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/task-service.ts apps/web/src/factory-batch-panel.tsx apps/web/src/task-workbench-sample.tsx packages/contracts/src/digital-production-tasks.ts scripts/test-suite-plan.mjs tests/integration/development-execution-read-native-browser-postgres.test.ts apps/api/src/production-platform/task-completion-occurrence.ts apps/web/src/task-completion-time.tsx tests/integration/task-completion-postgres.test.ts tests/unit/task-completion-display.test.ts tests/unit/task-completion-occurrence.test.ts",
+      "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-17T10:02:12.882987+00:00",
-      "endedAt": "2026-11-17T10:02:16.525299+00:00",
+      "testedHead": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+      "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
+      "startedAt": "2026-11-17T10:23:59.550569+00:00",
+      "endedAt": "2026-11-17T10:24:01.839482+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-resume-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "status": "passed",
-      "testedHead": "f56ad99c1a574cebae18d47b641d000be6233efc",
-      "sourceFingerprint": "fc824b3058df0e6cf1ca08630f71613e970222f6186a144cf66a2579810c37e2",
-      "context": "Node22.22.2; local uncommitted candidate over actual revert merge f56ad99c, bound by source fingerprint. Existing locked dependency cache; no install, database, network benchmark, deployment or live business data. Logs: /workspace/ci-governance-revalidated-20261117/checks/changed-lint.log",
-      "kind": "command",
-      "log": "/workspace/ci-governance-revalidated-20261117/checks/changed-lint.log"
+      "context": "Actual Node22.22.2/npm10.9.9, original locked local workspaces, original workers/bounded configuration. New final integration baseline31aa7c89; no live Acceptance or production data and no deployment. PG/browser check uses a fresh marked low-privilege PG16 container, native AuthService App and original correction commands; actual owned cleanup/absence verified. The native local check selects two affected cases, nine unrelated cases filtered and not counted as passed. Final Full must execute its canonical plan without this local name filter."
     },
     {
-      "id": "risk-map-unit",
-      "command": "/workspace/.task-toolchains/time-read/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts --reporter=json --outputFile=/workspace/ci-governance-revalidated-20261117/checks/risk-map-unit-results.json",
-      "exitCode": 0,
-      "startedAt": "2026-11-17T10:02:16.525773+00:00",
-      "endedAt": "2026-11-17T10:02:17.481583+00:00",
-      "logSha256": "00e0c6bbde54d9cbf2e81473a866d661dc98a9c60355270803a123d21c1d6b31",
+      "id": "rp3-api-types",
+      "kind": "command",
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
       "status": "passed",
-      "testedHead": "f56ad99c1a574cebae18d47b641d000be6233efc",
-      "sourceFingerprint": "fc824b3058df0e6cf1ca08630f71613e970222f6186a144cf66a2579810c37e2",
-      "context": "Node22.22.2; local uncommitted candidate over actual revert merge f56ad99c, bound by source fingerprint. Existing locked dependency cache; no install, database, network benchmark, deployment or live business data. Logs: /workspace/ci-governance-revalidated-20261117/checks/risk-map-unit.log",
+      "exitCode": 0,
+      "testedHead": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+      "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
+      "startedAt": "2026-11-17T10:24:02.278049+00:00",
+      "endedAt": "2026-11-17T10:24:20.280574+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-resume-api-types/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Actual Node22.22.2/npm10.9.9, original locked local workspaces, original workers/bounded configuration. New final integration baseline31aa7c89; no live Acceptance or production data and no deployment. PG/browser check uses a fresh marked low-privilege PG16 container, native AuthService App and original correction commands; actual owned cleanup/absence verified. The native local check selects two affected cases, nine unrelated cases filtered and not counted as passed. Final Full must execute its canonical plan without this local name filter."
+    },
+    {
+      "id": "rp3-web-types",
+      "kind": "command",
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+      "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
+      "startedAt": "2026-11-17T10:24:20.616120+00:00",
+      "endedAt": "2026-11-17T10:24:51.703299+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-resume-web-types/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Actual Node22.22.2/npm10.9.9, original locked local workspaces, original workers/bounded configuration. New final integration baseline31aa7c89; no live Acceptance or production data and no deployment. PG/browser check uses a fresh marked low-privilege PG16 container, native AuthService App and original correction commands; actual owned cleanup/absence verified. The native local check selects two affected cases, nine unrelated cases filtered and not counted as passed. Final Full must execute its canonical plan without this local name filter."
+    },
+    {
+      "id": "rp3-unit",
       "kind": "tests",
-      "passed": 132,
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-ordinary-instance-projection.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/task-blocker-guidance.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-development-workspace.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/task-completion-occurrence.test.ts tests/unit/task-completion-display.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/journey-fact-model.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/resume-unit-results.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+      "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
+      "startedAt": "2026-11-17T10:24:52.440941+00:00",
+      "endedAt": "2026-11-17T10:25:06.028678+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-resume-unit/command.log",
+      "logSha256": "4e7681040db25ae535112aec36d6e16076911622cb12fb1768c155c9305fdd85",
+      "context": "Actual Node22.22.2/npm10.9.9, original locked local workspaces, original workers/bounded configuration. New final integration baseline31aa7c89; no live Acceptance or production data and no deployment. PG/browser check uses a fresh marked low-privilege PG16 container, native AuthService App and original correction commands; actual owned cleanup/absence verified. The native local check selects two affected cases, nine unrelated cases filtered and not counted as passed. Final Full must execute its canonical plan without this local name filter.",
+      "passed": 347,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "56a55d49f7160afa37c528e164f5cbf61cd59bf5d88698bd0f32d8cde08fbcde"
+          "sha256": "4019e7e38b87ecd99672e6c4bd89b10ead0b2c101b6fe9258ed4b7e02f83d1ab"
         }
-      ],
-      "log": "/workspace/ci-governance-revalidated-20261117/checks/risk-map-unit.log"
+      ]
+    },
+    {
+      "id": "rp3-canonical",
+      "kind": "tests",
+      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+      "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
+      "startedAt": "2026-11-17T10:25:06.299270+00:00",
+      "endedAt": "2026-11-17T10:25:06.749105+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-resume-canonical/command.log",
+      "logSha256": "c185a0bc9de83611945dc77bc8f5f0f04e6720eb8b42dfd69e90660b5eb9757e",
+      "context": "Actual Node22.22.2/npm10.9.9, original locked local workspaces, original workers/bounded configuration. New final integration baseline31aa7c89; no live Acceptance or production data and no deployment. PG/browser check uses a fresh marked low-privilege PG16 container, native AuthService App and original correction commands; actual owned cleanup/absence verified. The native local check selects two affected cases, nine unrelated cases filtered and not counted as passed. Final Full must execute its canonical plan without this local name filter.",
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "rp3-native-app",
+      "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/task-completion-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/pg/rp3-completion-resume-native-app/tests.json --testNamePattern 'renders the real shipping date and native unknown then verified correction|reads a native shipping date'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+      "sourceFingerprint": "c7835632d9ffe69664b5aab18b9da489d58838f3ce7447f769989dcbe02c41cd",
+      "startedAt": "2026-11-17T10:25:31.682766+00:00",
+      "endedAt": "2026-11-17T10:26:02.480733+00:00",
+      "log": "/workspace/sla-rp3-20261117/pg/rp3-completion-resume-native-app/tests.log",
+      "logSha256": "b28f4d7a6481b7c0f3b862ec3be67c4fc40c455a173aab417f0c8f3416a04b6e",
+      "context": "Actual Node22.22.2/npm10.9.9, original locked local workspaces, original workers/bounded configuration. New final integration baseline31aa7c89; no live Acceptance or production data and no deployment. PG/browser check uses a fresh marked low-privilege PG16 container, native AuthService App and original correction commands; actual owned cleanup/absence verified. The native local check selects two affected cases, nine unrelated cases filtered and not counted as passed. Final Full must execute its canonical plan without this local name filter.",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 9,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3aa83d005dfb1a77b5a7e2549702875cd1714b5096d22178932ed1b993fbae68"
+        }
+      ]
     }
   ]
 }

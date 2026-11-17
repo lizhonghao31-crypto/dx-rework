@@ -1,5 +1,7 @@
 import {craftStepLabel} from '@dx-rework/contracts/digital-craft';
 import {FactoryDispatchTimeInput,factoryDispatchTime} from './factory-dispatch-time-input.js';
+import {quotationHref} from './digital-quotation-panel.js';
+import {productionWorkspaceDomainHref} from './digital-detail-route.js';
 import {useState} from 'react';
 import {Button} from '@dx-rework/ui';
 import type {FactoryFlowSheet} from '@dx-rework/contracts/factory-flow';
@@ -27,7 +29,7 @@ export function FactoryBatchPanel({sheet,busy,paused,action,save,upload,images,p
  const next=(sheet.batchWindows??[]).filter(w=>!w.complete&&w.dueAt&&(!relevant||w.kind===relevant)&&(!step||!w.stepRef||w.stepRef===step.stepId)).sort((a,b)=>Date.parse(a.dueAt!)-Date.parse(b.dueAt!))[0];
  return <div className="factory-batch-panel">
  {step&&['overview','logistics','qc'].includes(action)&&<label>办理工艺<select aria-label="办理工艺" disabled={busy||paused} value={step.stepId} onChange={event=>{setSelectedStep(event.target.value);setReturnId('');setSendId('');setFromReturnId('');}}>{sheet.craftSteps!.map(step=><option key={step.stepId} value={step.stepId}>{step.sequence}. {craftStepLabel(step)}</option>)}</select></label>}
- {step?.specialCraft&&<p>工艺负责人：{sheet.craftOwners?.find(owner=>owner.stepRef===step.stepId)?.name??'未指派'}{sheet.canManage&&<> · <a href={`/ui/digital-quotation?kind=order&id=${sheet.orderId}`}>报价与指派</a></>}</p>}
+ {step?.specialCraft&&<p>工艺负责人：{sheet.craftOwners?.find(owner=>owner.stepRef===step.stepId)?.name??'未指派'}{sheet.canManage&&<> · <a href={productionWorkspaceDomainHref(quotationHref({kind:'order',id:sheet.orderId}),window.location.search)}>报价与指派</a></>}</p>}
  {next&&<p>当前最早截止：{new Date(next.dueAt!).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})} · {{process_logistics:'工艺回仓',bulk_qc:'回仓检查',warehouse_dispatch:'仓库发厂'}[next.kind as 'bulk_qc']}</p>}
  <p>裁片已发 {(sheet.batchTotals??[]).reduce((n,l)=>n+l.sent,0)} / 应发 {(sheet.batchTotals??[]).reduce((n,l)=>n+l.quantity,0)}</p><details><summary>各 PO 数量</summary>{sheet.batchTotals?.map(l=><p key={l.lineId}>{label(l.lineId)}：已发 {l.sent} / 应发 {l.quantity}</p>)}</details>
  {sheet.canLogistics&&!sheet.dispatched&&['overview','logistics'].includes(action)&&<form key={`movement:${step?.stepId??"legacy"}:${kind}:${send?.factId}:${fromReturnId}:${sheet.revision}`} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('/logistics',{...(step?{stepRef:step.stepId}:{}),kind,occurredAt:time(f),supplier:String(f.get('supplier')??''),note:String(f.get('note')??''),...(kind!=='工艺沟通'?{lines:quantities(f)}:{}),...(kind==='工艺回仓'?{sendFactId:send?.factId}:{}),...(kind==='工艺发出'&&fromReturnId?{fromReturnId}:{})});}}><fieldset disabled={busy||paused}><legend id="factory-logistics">工艺收发</legend>

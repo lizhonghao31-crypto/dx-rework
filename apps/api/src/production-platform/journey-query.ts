@@ -63,6 +63,7 @@ import {journeySelectionFacts,journeySelectionNodes,type JourneySelectionFacts,t
 import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks,journeyTaskDeadlineExclusive} from './journey-risk-clock.js';
 import {compileJourneySelectionClock,type JourneySelectionDelivery} from './journey-selection-clock.js';
 import {developmentRecordedTime} from './development-occurrence.js';
+import {taskCompletionOccurrence} from './task-completion-occurrence.js';
 import {journeyCuttingGateTime,attachJourneyPackingNodeTime} from './journey-native-times.js';
 import {packingSlaEvidence} from './packing-sla-evidence.js';
 import {readJourneySelections} from './journey-selection-query.js';
@@ -481,7 +482,7 @@ export class DigitalJourneyQuery {
     const materialStates=new Map<number,Awaited<ReturnType<typeof materialReadiness>>>();
     const materialsFor=async(version:number)=>{let value=materialStates.get(version);if(!value){value=await materialReadiness(db,sid!,version);materialStates.set(version,value);}return value;};
     const taskService=new DigitalProductionTaskService(this.database),taskDtos=[],craftOrder=new Map<string,{sequence:number;phase:number}>();
-    const routeTimes=sourceAccess&&sid&&visibleTasks.length?(await db.query(`SELECT f.task_id,f.route_version,f.payload,
+    const routeTimes=sid&&visibleTasks.length?(await db.query(`SELECT f.fact_id,f.task_id,f.route_version,f.payload,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=f.task_id AND e.event_kind='time_corrected'
        AND e.payload->>'originalKind'='completed') AS corrected
       FROM digital_development_route_facts f WHERE f.source_id=$1 AND f.task_id=ANY($2::uuid[])
@@ -506,13 +507,13 @@ export class DigitalJourneyQuery {
         :raw.route_instance_id===currentPrep||(raw.task_kind==='bulk_ship_sample'&&raw.route_instance_id===oid);
       node.actualAt=task.completedAt;node.actualQuality=!task.completedAt?"missing":raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
       const routeTime=routeTimes.find(fact=>fact.task_id===task.taskId&&fact.route_version===task.routeVersion);
-      if(state==='completed'&&routeTime&&!routeTime.corrected){
-        const payload=raw.task_kind==='development_shipping'&&routeTime.payload.sentDate
-          ?{actualCompletedDate:routeTime.payload.sentDate,timeQuality:'补报未核实'}:routeTime.payload;
-        const actual=developmentRecordedTime(payload,asOf);
-        // Preserve exact task completion and its later corrections. Only an
-        // explicit date-only occurrence or shipping day needs this adapter.
-        if(actual?.date){node.actualAt=null;node.actualDate=actual.date;node.actualQuality=actual.quality;}
+      if(raw.source_id){
+        const actual=task.actualCompletion??taskCompletionOccurrence(raw,asOf,routeTime);
+        node.actualDate=actual.date;
+        // The completion DTO declines unprovable/future time, but the existing
+        // Journey chronology classifier must still see a contradictory native
+        // instant. Only a real date or known instant overrides its raw fact.
+        if(actual.precision!=='unknown'){node.actualAt=actual.at;node.actualQuality=actual.quality;}
       }
       const completion=journeyCompletion(node.expectedAt,node.actualAt,node.actualQuality==="verified");node.completionResult=state==="completed"?completion.result:null;node.overdueSeconds=state==="completed"?completion.overdueSeconds:null;
       const events=summaryOnly||compact?[]:(await db.query(`SELECT e.*,u.display_name AS actor_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
