@@ -66,7 +66,10 @@
 - 核对真实PR、完整Head、实际base及授权范围，原样保留CI、Review、失败和未验结果，并记录按用户明确决定合并。使用既有正常合并入口和expected Head，不以补跑、重建或改出成功Final Gate作为尝试合并的额外前提；人工决定不冒充自动认证通过。
 - 平台工具审批、服务端分支保护和真实身份权限仍独立有效，不能承诺所有命令无条件执行。动作被拒或结果不确定，沿§2先核实际结果并报告，不更换渠道、使用force/admin、伪造状态或改变保护来规避拒绝。
 
-默认自动验收顺序：**相关规则与消费者 → 便宜预检 → 必要定向/真实DB验证 → 完整diff → assembled push → 每PR一次初始Light → 必要GitHub Codex Review → 集中修复 → 冻结Head → 显式最终Quick或Full → 核准确回执 → 已授权合并**。
+默认自动验收顺序：**相关规则与消费者 → 便宜预检 → 必要定向/真实DB验证 → 完整diff → assembled push → 每PR一次初始Light ∥ 必要GitHub Codex Review（并行启动） → 收齐两路发现并集中修复 → 冻结最终Head及实际base → 显式最终Quick或Full → 核准确回执 → 已授权合并**。
+
+- assembled push 并创建 PR 后，首次 Light 自动启动；单一控制者同时按已有授权请求一次必要 GitHub Codex Review，不等待 Light 完成或成功。先核是否已有同 Head 的 Review 请求/在途结果，避免重复请求。两者独立执行，不新增 Actions runner、分片或权限，也不取消原在途检查。
+- 收齐 Light 与 Review 的结果后集中修复，记录各自原 SHA、发现和关闭证据；修复完重新核实际 base 并冻结最终 Head/base，再请求所需最终 Quick/Full。Light 失败不是 Review 启动障碍，但已知失败必须处理，不能借并行跳过修复或最终检查。最终请求及合并继续要求必要 Review 完成、发现闭环和准确 tuple；修复 SHA 不冒称已重新 Review。
 
 - 每个PR仅首次opened运行一次Light；后续源码、证据、模式、base变更、重开或重试均不再运行Light。最终Quick/Full不以同Head Light成功为前置；最终Gate仍核当前真实Head/base和所需检查。旧Light只陈述其原SHA；仅完全匹配且校验通过的产物可复用，否则最终Gate执行原检查，不能把旧Light冒称新Head通过。
 
