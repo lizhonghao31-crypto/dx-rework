@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "ba2f72fc78672a7d9b64c509012479be425b6213",
+  "base": "1f7adb55dd3670a81b72b7de460f01a8303c6721",
   "risk": "full",
-  "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+  "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
   "rules": [
     {
       "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX09/FIX13 and RP6 N14/N15; original scoped Acceptance guards and v27 precision rules.",
@@ -28,6 +28,7 @@
       "checks": [
         "rp6-pg",
         "rp6-unit",
+        "rp6-transaction-reader",
         "rp6-static"
       ]
     },
@@ -82,46 +83,69 @@
     {
       "id": "rp6-pg",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/acceptance-sla-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/pg/rp6-clock-final/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/acceptance-sla-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/pg/rp6-clock-integrated/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
-      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
+      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
       "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:01:17.343914+00:00",
-      "endedAt": "2026-11-17T04:02:35.377551+00:00",
-      "logSha256": "388e1a6793d8464829ce43b545372f2039b16013334102a33fc75d246ede6159",
-      "log": "/workspace/sla-rp6-20261117/pg/rp6-clock-final/tests.log",
+      "startedAt": "2026-11-17T04:47:59.030406+00:00",
+      "endedAt": "2026-11-17T04:49:15.198410+00:00",
+      "logSha256": "80f5297b82f065832b02ec7ae0cec9ce4febd361fc2d4ecf6804a5d704304712",
+      "log": "/workspace/sla-rp6-20261117/pg/rp6-clock-integrated/tests.log",
       "passed": 30,
       "failed": 0,
       "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "046e43494490d12c49de2b540c6371fae655616b6a2ceb19bf6fc24910d25af8"
+          "sha256": "73e03c1229d909654d4caa786db522d1496376691d0f150be1cbedb92d502c30"
         }
       ]
     },
     {
       "id": "rp6-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-sla-clock.test.ts tests/unit/acceptance-clock-transaction-reader.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/units-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-sla-clock.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/units-integrated.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
-      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
+      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
       "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:01:18.338317+00:00",
-      "endedAt": "2026-11-17T04:01:23.495565+00:00",
-      "logSha256": "0bd5f94152966b67c73fa9eb1bd02e2fc1e6fb51c92e0566cf28624fa3317948",
-      "log": "/workspace/sla-rp6-20261117/checks/units-final/command.log",
-      "passed": 17,
+      "startedAt": "2026-11-17T04:47:59.830029+00:00",
+      "endedAt": "2026-11-17T04:48:04.549454+00:00",
+      "logSha256": "9edbdb452887511e509ff2ae0e7134615945cd20e910dcafb2cf2138bd568c26",
+      "log": "/workspace/sla-rp6-20261117/checks/units-integrated/command.log",
+      "passed": 7,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "71593f880a933f0a7b9a78ff11c2da9abd4141fbc889dbd6b8abfddfa1702de1"
+          "sha256": "87e6cdcb40974ad3ece446215792c0cadbf910a63f09f645ac6b5354adfedea8"
+        }
+      ]
+    },
+    {
+      "id": "rp6-transaction-reader",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-clock-transaction-reader.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/units-reader-integrated.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
+      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
+      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
+      "startedAt": "2026-11-17T04:49:30.737773+00:00",
+      "endedAt": "2026-11-17T04:49:31.440051+00:00",
+      "logSha256": "d1e1ac4d6f40acaeedb28cfbbcd7c3a88fd70c4dc1b24179576a80911936a7ac",
+      "log": "/workspace/sla-rp6-20261117/checks/units-reader-integrated/command.log",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "eec5f0bcb3a337b503ab8653088b07356c8ebfe50cf17c641f9fa0edd29c5ff7"
         }
       ]
     },
@@ -131,27 +155,27 @@
       "command": "python3 /workspace/sla-rp6-20261117/static.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
-      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
+      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
       "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:02:47.679335+00:00",
-      "endedAt": "2026-11-17T04:03:39.579071+00:00",
+      "startedAt": "2026-11-17T04:49:31.876997+00:00",
+      "endedAt": "2026-11-17T04:50:24.133939+00:00",
       "logSha256": "5979e84255f8e7a7518e1986920cc7fd6f6f7bc36018f65a26846af784d2cf9f",
-      "log": "/workspace/sla-rp6-20261117/checks/static-final/command.log"
+      "log": "/workspace/sla-rp6-20261117/checks/static-integrated/command.log"
     },
     {
       "id": "rp6-browser",
       "kind": "command",
-      "command": "env CLOCK_UI_URL=http://127.0.0.1:4186 CLOCK_UI_OUTPUT=/workspace/sla-rp6-20261117/browser-final PLAYWRIGHT_MODULE=playwright-core CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/acceptance-sla-clock-browser.mjs",
+      "command": "env CLOCK_UI_URL=http://127.0.0.1:4186 CLOCK_UI_OUTPUT=/workspace/sla-rp6-20261117/browser-integrated PLAYWRIGHT_MODULE=playwright-core CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/acceptance-sla-clock-browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
-      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
+      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
       "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:02:48.768377+00:00",
-      "endedAt": "2026-11-17T04:02:55.415691+00:00",
-      "logSha256": "6f2021bc7f15b9fee6fa09d7718ec01a99b90720980f9205aa1e913c38ce0aaf",
-      "log": "/workspace/sla-rp6-20261117/checks/browser-final/command.log"
+      "startedAt": "2026-11-17T04:49:46.417348+00:00",
+      "endedAt": "2026-11-17T04:49:52.783120+00:00",
+      "logSha256": "452cfa862ec7527980d365b0c8e35b86f98b64a7952d7b1c93295e7afe806e86",
+      "log": "/workspace/sla-rp6-20261117/checks/browser-integrated/command.log"
     }
   ]
 }
