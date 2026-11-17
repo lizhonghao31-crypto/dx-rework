@@ -63,6 +63,10 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
   await storage.writeImmutable(objectKey,bytes,{mimeType:'image/png',sha256});
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)",[imageId,objectKey,bytes.length,sha256,root.actorId]);
   const document={...initialDevelopmentDocument(),quantity:1,sizes:['M','L'],sizeQuantities:[1,0],sampleSize:'M',measurements:initialDevelopmentDocument().measurements.map(row=>({...row,values:['50','50']})),materials:[{materialId:randomUUID(),category:'主布' as const,label:'TEST主布',name:'TEST棉',specification:'40支',quantity:'1',color:'黑',width:'',weight:'',composition:'',supplier:'',consumption:'',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:imageId,kind:'款图' as const}]};
+  // This owner/date approval fixture deliberately uses its native manual quote
+  // below. UI defaults now opt into automatic assembly; do not mix that new
+  // initial quote/version with the historical manual-quote precondition.
+  delete document.quotationMode;
   const saved=await forms.save(root,source.sourceId,{expectedVersion:0,document},randomUUID());await forms.publish(root,source.sourceId,saved.version,randomUUID());
   const sourceRow=await forms.read(root,source.sourceId),order=await identity.createOrder(root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:sourceRow.designStyleNo,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:people.merch!.actorId,lines:[{color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),source.sourceId),id=order.productionOrderId;
   const budgetImageId=randomUUID(),budgetObjectKey=`TEST-owner-budget/${budgetImageId}`;

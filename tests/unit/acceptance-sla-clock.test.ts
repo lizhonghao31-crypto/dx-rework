@@ -1,7 +1,7 @@
 import {digitalTaskTiming} from '../../packages/domain/src/digital-task-deadline.js';
 import {describe,expect,it} from 'vitest';
 import {AcceptanceClockAdvanceSchema,AcceptanceClockCreateSchema,AcceptanceClockPreviewSchema,AcceptanceClockStandardSchema} from '../../packages/contracts/src/acceptance-clock.js';
-import {clockRequestIds} from '../../apps/api/src/acceptance-clock/scope.js';
+import {clockRequestIds,clockLifecycleRoots} from '../../apps/api/src/acceptance-clock/scope.js';
 import {observeAcceptanceTime,acceptanceInputNow} from '../../apps/web/src/acceptance-business-time.js';
 import {taskTimeProgress} from '../../apps/web/src/digital-cockpit-model.js';
 import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
@@ -31,8 +31,19 @@ describe('Acceptance clock contracts and client business-time boundary',()=>{
  });
  it('resolves exact native IDs only, rejects oversized nesting and does not treat labels or file bytes as business IDs',()=>{
   expect(clockRequestIds({orderId:id,lines:[{lineId:id}],label:id,bytes:Buffer.from('test')})).toEqual([id]);
+  expect(clockRequestIds({resourceId:id,kind:'source'})).toEqual([]);
   let nested:unknown={orderId:id};for(let n=0;n<20;n++)nested={nested};
   expect(()=>clockRequestIds(nested)).toThrow(/嵌套/);
+ });
+ it('resolves lifecycle resourceId by exact declared kind without admitting arbitrary aliases',async()=>{
+  const source={kind:'source',id,scenarioId:'scene'},other={kind:'order',id:'other',scenarioId:'other-scene'};
+  const db={query:async()=>({rows:[source,other]})};
+  expect(await clockLifecycleRoots(db as never,'source',id)).toEqual([source]);
+  await expect(clockLifecycleRoots(db as never,'order',id)).rejects.toMatchObject({statusCode:400});
+  await expect(clockLifecycleRoots(db as never,'task',id)).rejects.toMatchObject({statusCode:400});
+  await expect(clockLifecycleRoots(db as never,'source','invalid')).rejects.toMatchObject({statusCode:400});
+  expect(await clockLifecycleRoots({query:async()=>({rows:[]})} as never,'source',id)).toEqual([]);
+  expect(await clockLifecycleRoots({query:async()=>({rows:[{...source,scenarioId:null}]})} as never,'source',id)).toEqual([{...source,scenarioId:null}]);
  });
  it('keeps Date.now and unrelated page defaults real while providing an exact scoped business input default',()=>{
   const before=Date.now(),at='2035-01-01T01:02:03.000Z';
@@ -52,6 +63,11 @@ describe('Acceptance clock contracts and client business-time boundary',()=>{
   expect(digitalTaskTiming(task,at).state).toBe('overdue');
   expect(digitalTaskTiming({...task,terminal:true,completedAt:task.dueAt,deadlineExclusive:false},at).onTime).toBe(true);
   expect(digitalTaskTiming({...task,terminal:true,completedAt:task.dueAt,deadlineExclusive:true},at).onTime).toBe(false);
+  for(const offset of [-1,0,1]){
+   const observed=new Date(Date.parse(task.dueAt)+offset);
+   expect(digitalTaskTiming({...task,deadlineExclusive:true},observed).state==='overdue').toBe(offset>=0);
+   expect(digitalTaskTiming({...task,deadlineExclusive:false},observed).state==='overdue').toBe(offset>0);
+  }
  });
 
 });
