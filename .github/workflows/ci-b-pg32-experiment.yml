@@ -20,7 +20,6 @@ jobs:
       NODE_ENV: test
       GIT_SHA: ${{ github.sha }}
       SERVICE_NAME: dx-rework-api
-      EXPERIMENT_EVIDENCE_DIR: ${{ runner.temp }}/ci-b-pg32-evidence
     steps:
       - name: Checkout exact experimental source
         uses: actions/checkout@v4
@@ -39,7 +38,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-          node scripts/experiments/ci-b-pg32.mjs prepare
+          evidence="$RUNNER_TEMP/ci-b-pg32-evidence"
+          mkdir -p "$evidence"
+          echo "EXPERIMENT_EVIDENCE_DIR=$evidence" >> "$GITHUB_ENV"
+          EXPERIMENT_EVIDENCE_DIR="$evidence" node scripts/experiments/ci-b-pg32.mjs prepare
       - name: Build original workspace inputs without root postbuild
         run: npm run build --workspaces --if-present
       - name: Create original isolated low privilege PostgreSQL context
@@ -90,6 +92,7 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
+          export EXPERIMENT_EVIDENCE_DIR="${EXPERIMENT_EVIDENCE_DIR:-$RUNNER_TEMP/ci-b-pg32-evidence}"
           mkdir -p "$EXPERIMENT_EVIDENCE_DIR"
           if docker inspect dx-ci-b-pg32-postgres >/dev/null 2>&1; then
             docker logs dx-ci-b-pg32-postgres > "$EXPERIMENT_EVIDENCE_DIR/postgres-server.log" 2>&1
@@ -101,8 +104,11 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          if docker inspect dx-ci-b-pg32-postgres >/dev/null 2>&1; then docker rm -f dx-ci-b-pg32-postgres; fi
-          if docker inspect dx-ci-b-pg32-postgres >/dev/null 2>&1; then exit 1; fi
+          owned=$(docker ps -a --filter "name=^/dx-ci-b-pg32-postgres$" --format "{{.Names}}")
+          if [[ -n "$owned" ]]; then docker rm -f dx-ci-b-pg32-postgres; fi
+          remaining=$(docker ps -a --filter "name=^/dx-ci-b-pg32-postgres$" --format "{{.Names}}")
+          test -z "$remaining"
+          export EXPERIMENT_EVIDENCE_DIR="${EXPERIMENT_EVIDENCE_DIR:-$RUNNER_TEMP/ci-b-pg32-evidence}"
           mkdir -p "$EXPERIMENT_EVIDENCE_DIR"
           echo 'exact experimental container absent' > "$EXPERIMENT_EVIDENCE_DIR/container-cleanup.txt"
       - name: Preserve one bounded experiment evidence artifact
