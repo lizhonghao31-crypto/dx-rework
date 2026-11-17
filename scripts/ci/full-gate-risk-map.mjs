@@ -139,7 +139,7 @@ const independentTestOnlyChange = (paths) => {
 };
 
 // Reviewed source-domain profile, not a global backend exception. The original
-// mapped readers and shared-write/security bridges stay mandatory; only four
+// mapped readers and shared-write/security bridges stay mandatory; only
 // independently audited, non-consuming suites are omitted from the supplement.
 export const SLA_JOURNEY_SOURCE_PATHS = Object.freeze([
   "apps/api/src/production-platform/development-captured-window.ts",

@@ -492,6 +492,12 @@ describe('reviewed SLA/Journey production-source profile', () => {
     'tests/integration/sample-create-postgres.test.ts',
     'apps/api/src/samples/sample-create-service.ts',
     'packages/contracts/src/index.ts',
+    'scripts/acceptance/worker-people-maintenance.ts',
+    'scripts/acceptance/authorization-guard.ts',
+    'tests/integration/acceptance-worker-people-postgres.test.ts',
+    'apps/api/src/tools/repositories.ts',
+    'apps/api/src/platform/errors.ts',
+    'apps/api/src/platform/migration-manifest.json',
   ])('restores the full chain when an unaudited or independently affected boundary is added: %s', path => {
     const plan=amendmentPlan(['packages/domain/src/digital-sla-plan.ts',path]);
     expect(plan.chain).toBe(true);
