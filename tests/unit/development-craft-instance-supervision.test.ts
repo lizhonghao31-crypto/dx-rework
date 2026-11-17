@@ -22,9 +22,9 @@ function node(id:string,entered:string|null,due:string|null,key='development_cra
 function subject(nodes:JourneyNode[]):OrderJourney{return {id:'source',sourceId:'source',orderId:null,designStyleNo:'TEST independent craft windows',temporaryStyleNo:null,customer:'TEST',category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:at(0),deliveryDate:null,selectedRound:1,adoptedRound:null,sourceVersion:2,instructionVersion:null,lines:[],poDeliveryDates:[],links:[],stages:journeyStages(nodes),progress:{development:null,bulk:null},hitReasons:[]};}
 const row=(id:string,step:string,minute:number)=>({task_id:id,task_kind:'development_craft_dispatch',route_instance_id:'source-route',route_version:1,state:'ready',entered_at:at(minute),entered_quality:'现场登记',completed_at:null,completed_quality:'缺失',due_at:at(minute+30),warning_at:at(minute+21),returned:false,rejected:false,correction_id:null,sla_basis:{seconds:1800,enteredAt:at(minute),warningRatio:0.7,basis:[`craft-step:${step}`,'craft-kind:printing']}});
 afterEach(()=>vi.restoreAllMocks());
-it.each(['development_craft_dispatch','development_materials'])('retains contradictory original completion for exact %s chronology without exposing it as a valid actual',async(kind)=>{
+it.each(['development_craft_dispatch','development_materials'].flatMap(kind=>[false,true].map(exclusive=>[kind,exclusive] as const)))('retains contradictory original completion for exact %s chronology without exposing it as a valid actual, strict=%s',async(kind,exclusive)=>{
  const selectedPlan:SlaPlan={...plan,nodes:plan.nodes.map(value=>({...value,id:kind,parameterKey:kind}))};
- const own={...row('bad-task','own-step',0),task_kind:kind,state:'completed',completed_at:at(60),completed_quality:'现场登记'};
+ const base=row('bad-task','own-step',0),own={...base,sla_basis:{...base.sla_basis,exclusive},task_kind:kind,state:'completed',completed_at:at(60),completed_quality:'现场登记'};
  const evidence=await read([own],selectedPlan),before=structuredClone(own);
  const item=subject([node('bad-task',at(0),at(30),kind)]);
  attachJourneySupervision(item,selectedPlan,selectedPlan,evaluateSlaPlan(selectedPlan,evidence.facts,time,{mode:'read_projection'}),time,{original:1,current:2},false,evidence);
@@ -36,7 +36,7 @@ it.each(['development_craft_dispatch','development_materials'])('retains contrad
  expect(own).toEqual(before);
  const expired={...time,now:at(61)},later=subject([node('bad-task',at(0),at(30),kind)]);
  attachJourneySupervision(later,selectedPlan,selectedPlan,evaluateSlaPlan(selectedPlan,evidence.facts,expired,{mode:'read_projection'}),expired,{original:1,current:2},false,evidence);
- expect(later.supervision?.assessment).toBe('complete');expect(later.stages.flatMap(stage=>stage.nodes)[0]!.timing?.actualEnd).toBe(at(60));
+ expect(later.supervision?.assessment).toBe('complete');expect(later.stages.flatMap(stage=>stage.nodes)[0]!.timing?.actualEnd).toBe(at(60));expect(later.stages.flatMap(stage=>stage.nodes)[0]!.timing?.status).toBe('completed_late');
 });
 describe('exact craft task supervision identity',()=>{
  it('keeps two dispatch R/D windows distinct instead of hanging the second window on both selected task IDs',async()=>{

@@ -34,7 +34,7 @@ function craftInstanceTiming(instance:DevelopmentCraftInstance,plan:SlaPlan|null
  let status=!instance.fact.startedAt&&!instance.fact.businessCompleted&&result.status!=='overdue'?(instance.state==='pending'?'not_started':'unknown'):result.status;
  // Batch evaluation is inclusive. Retain an explicitly captured strict
  // boundary through the same canonical comparison, without rounding a date.
- if(instance.deadline.exclusive&&instance.deadline.at&&instance.fact.startedAt){
+ if(!result.assessmentIssue&&instance.deadline.exclusive&&instance.deadline.at&&instance.fact.startedAt){
   if(instance.fact.businessCompleted&&instance.fact.completedAt&&slaPastDeadline(instance.fact.completedAt,instance.deadline))status='completed_late';
   else if(!instance.fact.businessCompleted&&slaPastDeadline(time.now,instance.deadline))status='overdue';
  }
