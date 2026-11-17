@@ -560,7 +560,9 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     let aggregateStarted=0;
     afterAll(()=>{
       expect(aggregateStarted).toBeGreaterThan(0);
-      expect(performance.now()-aggregateStarted,"complete original pagination workload must remain within 120 seconds").toBeLessThan(120000);
+      // User-approved aggregate CI allowance after observed 121.598s/124.308s
+      // runs. All original role, page, ownership and revocation cases remain.
+      expect(performance.now()-aggregateStarted,"complete original pagination workload must remain within 150 seconds").toBeLessThan(150000);
     });
     it("paginates every authorized role before hydrating only current-page tasks",async()=>{
       aggregateStarted=performance.now();

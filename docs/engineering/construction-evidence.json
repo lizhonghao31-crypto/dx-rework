@@ -2,7 +2,7 @@
   "version": 1,
   "base": "ed156834c310e45d01925dd3d164edd47365ba82",
   "risk": "full",
-  "sourceFingerprint": "d0a6e30f6dc46c5f25d2233558c39844c7ab1d7eeb52e3804955378895bc065f",
+  "sourceFingerprint": "934c4b999c19a53c5e7a809ef01090bbc1cfddf9564929c51f8215a6ef263291",
   "rules": [
     {
       "rule": "Captured factory adjacency supplies every exact logistics/QC dependency without tolerating corrupt graphs",
@@ -128,68 +128,91 @@
         "a-lint",
         "a-protocol"
       ]
+    },
+    {
+      "rule": "User-authorized aggregate pagination allowance preserves every scenario and business assertion",
+      "source": "User authorized approved supplemental Pro body-v3 plan A→D→B→C, Library libfile_fde3_f-82b8febb23108191a5ce7a05f90f9256_c8d3bf5d609c8191bce6411a30e94d44. This A repair addresses proven frozen factory graph/step identity; raw BA013/PURE requests remain separately unattributed. User reaffirms parallel construction while each prior PR waits CI, no deployment.",
+      "initialization": "Latest release actual #1019 merge ed156834. Read existing initial/added immutable adoption/route/work/position and native logistics/QC facts; no GET capture, migration or business-history backfill. Invalidate old native projection calculation with v13; keep shared engine strict, old compatibility facts and fixed/order-time formal P.",
+      "dateAndPermission": "Retain original order/task authorization. Factory exact node/step/phase/route/task identity scopes attachment and native facts; ordinary-role现场复验 not claimed. Native R/D/A, current formal P, original B and legacy continuous forecast retain separate semantics. Original batch aggregate D is earliest open D; completed batches retain exact native D in their windows.",
+      "writes": [
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "reads": [
+        "tests/integration/digital-journey-postgres.test.ts",
+        "scripts/test-execution-config.mjs"
+      ],
+      "oldTests": [
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "expectation": "Latest explicit user instruction after measured121597.93ms and124308.17832ms Full failures: moderately increase only the complete pagination workload budget instead of iterating query optimizations. Inspection of the exact diff confirms only the aggregate120000→150000ms assertion/message and explanatory comment change, all five role/page/ownership/revocation cases and business assertions retained. Second b84 Full executed131 passing business cases but suite gate failed; later PG phases skipped. Current syntax/unit/protocol/native-clock checks pass; the new full-workload runtime remains for final exact Full, not claimed as a speed gain or a completed local benchmark.",
+      "checks": [
+        "a-unit",
+        "a-lint",
+        "a-protocol",
+        "a-native-app"
+      ]
     }
   ],
   "checks": [
     {
       "id": "a-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/factory-supervision-graph.test.ts tests/unit/journey-craft-facts.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-fact-model.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-a-20261117/strict-repair-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/factory-supervision-graph.test.ts tests/unit/journey-craft-facts.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-fact-model.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-a-20261117/allowance-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e1f7364b21ac641243047c237b7c8eb923a72ca8",
-      "sourceFingerprint": "d0a6e30f6dc46c5f25d2233558c39844c7ab1d7eeb52e3804955378895bc065f",
-      "startedAt": "2026-11-17T17:41:29.796185+00:00",
-      "endedAt": "2026-11-17T17:41:37.954607+00:00",
-      "log": "/workspace/sla-supplement-a-20261117/checks/strict-repair-unit/command.log",
-      "logSha256": "c9a177fb3b8279d1f7fe33c294a942ec3f2be1483e5674f3192cc97ae92b915d",
-      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, no business assertion or timeout weakening. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
+      "testedHead": "b84d91e2bd0fe0afeada224d2d3b434206479e41",
+      "sourceFingerprint": "934c4b999c19a53c5e7a809ef01090bbc1cfddf9564929c51f8215a6ef263291",
+      "startedAt": "2026-11-17T18:10:35.018877+00:00",
+      "endedAt": "2026-11-17T18:10:47.298164+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/allowance-unit/command.log",
+      "logSha256": "fcbc47e832405796fef5ae010c3cc5f5fbddc8e131b26aeb524d433fd5ccaeb6",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
       "passed": 212,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "31e813a57a1e2bdccf7381f0a155c5477a37f2b066526313f96d091f4ab6ef6f"
+          "sha256": "79bff3b5a180ad679da74d9adcd5962b1fda98c708fb78c188d6c689497420de"
         }
       ]
     },
     {
       "id": "a-native-app",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/time-reading-clock-postgres.test.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-a-20261117/pg/strict-repair-native/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/time-reading-clock-postgres.test.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-a-20261117/pg/allowance-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e1f7364b21ac641243047c237b7c8eb923a72ca8",
-      "sourceFingerprint": "d0a6e30f6dc46c5f25d2233558c39844c7ab1d7eeb52e3804955378895bc065f",
-      "startedAt": "2026-11-17T17:41:30.686792+00:00",
-      "endedAt": "2026-11-17T17:42:40.222476+00:00",
-      "log": "/workspace/sla-supplement-a-20261117/pg/strict-repair-native/tests.log",
-      "logSha256": "c638dfc4fdf376372dd764f829d11b553565916b4da99fb367f663594688e4c5",
-      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, no business assertion or timeout weakening. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
+      "testedHead": "b84d91e2bd0fe0afeada224d2d3b434206479e41",
+      "sourceFingerprint": "934c4b999c19a53c5e7a809ef01090bbc1cfddf9564929c51f8215a6ef263291",
+      "startedAt": "2026-11-17T18:10:34.364954+00:00",
+      "endedAt": "2026-11-17T18:11:55.076688+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/pg/allowance-native/tests.log",
+      "logSha256": "93c6853c11ff5ba1d91d810845b8f81cb3513a82fa73e8e45838374028f6810f",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
       "passed": 20,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ca89cf7211ca55892ec4c138263b7ca900c425cbeb1de8ca3f6aee883b66ace8"
+          "sha256": "b5eaac257102afe88bcefb1c03821ac46f03a7dec3313ac22c31e5f047cdde27"
         }
       ]
     },
     {
       "id": "a-lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/factory-evaluation-route.ts apps/api/src/production-platform/factory-sla-evidence.ts apps/api/src/production-platform/fixed-factory-timing.ts apps/api/src/production-platform/sla-order-service.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-selection-clock.ts tests/unit/factory-supervision-graph.test.ts tests/unit/full-gate-risk-map.test.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts tests/helpers/business-anchor-fixture.ts scripts/test-suite-plan.mjs scripts/ci/full-gate-risk-map.mjs apps/api/src/production-platform/development-sla-evidence.ts apps/api/src/production-platform/development-craft-instance-evidence.ts apps/api/src/production-platform/journey-snapshot-reads.ts tests/unit/development-craft-instance-supervision.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/factory-evaluation-route.ts apps/api/src/production-platform/factory-sla-evidence.ts apps/api/src/production-platform/fixed-factory-timing.ts apps/api/src/production-platform/sla-order-service.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-selection-clock.ts tests/unit/factory-supervision-graph.test.ts tests/unit/full-gate-risk-map.test.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts tests/helpers/business-anchor-fixture.ts scripts/test-suite-plan.mjs scripts/ci/full-gate-risk-map.mjs apps/api/src/production-platform/development-sla-evidence.ts apps/api/src/production-platform/development-craft-instance-evidence.ts apps/api/src/production-platform/journey-snapshot-reads.ts tests/unit/development-craft-instance-supervision.test.ts tests/integration/digital-journey-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e1f7364b21ac641243047c237b7c8eb923a72ca8",
-      "sourceFingerprint": "d0a6e30f6dc46c5f25d2233558c39844c7ab1d7eeb52e3804955378895bc065f",
-      "startedAt": "2026-11-17T17:42:43.519806+00:00",
-      "endedAt": "2026-11-17T17:42:46.964801+00:00",
-      "log": "/workspace/sla-supplement-a-20261117/checks/strict-repair-lint/command.log",
+      "testedHead": "b84d91e2bd0fe0afeada224d2d3b434206479e41",
+      "sourceFingerprint": "934c4b999c19a53c5e7a809ef01090bbc1cfddf9564929c51f8215a6ef263291",
+      "startedAt": "2026-11-17T18:10:35.018888+00:00",
+      "endedAt": "2026-11-17T18:10:39.328324+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/allowance-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, no business assertion or timeout weakening. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
     },
     {
       "id": "a-api-types",
@@ -197,13 +220,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e1f7364b21ac641243047c237b7c8eb923a72ca8",
-      "sourceFingerprint": "d0a6e30f6dc46c5f25d2233558c39844c7ab1d7eeb52e3804955378895bc065f",
-      "startedAt": "2026-11-17T17:42:43.513913+00:00",
-      "endedAt": "2026-11-17T17:43:04.407065+00:00",
-      "log": "/workspace/sla-supplement-a-20261117/checks/strict-repair-api-types/command.log",
+      "testedHead": "b84d91e2bd0fe0afeada224d2d3b434206479e41",
+      "sourceFingerprint": "934c4b999c19a53c5e7a809ef01090bbc1cfddf9564929c51f8215a6ef263291",
+      "startedAt": "2026-11-17T18:10:35.020524+00:00",
+      "endedAt": "2026-11-17T18:11:01.655786+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/allowance-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, no business assertion or timeout weakening. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
     },
     {
       "id": "a-protocol",
@@ -211,13 +234,13 @@
       "command": "node --test scripts/ci/construction-evidence.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e1f7364b21ac641243047c237b7c8eb923a72ca8",
-      "sourceFingerprint": "d0a6e30f6dc46c5f25d2233558c39844c7ab1d7eeb52e3804955378895bc065f",
-      "startedAt": "2026-11-17T17:42:43.517389+00:00",
-      "endedAt": "2026-11-17T17:42:45.907705+00:00",
-      "log": "/workspace/sla-supplement-a-20261117/checks/strict-repair-protocol/command.log",
-      "logSha256": "e72b6a8cd621cd28f262340146459c9be4ffa509808943a2cea56616a02245c3",
-      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, no business assertion or timeout weakening. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
+      "testedHead": "b84d91e2bd0fe0afeada224d2d3b434206479e41",
+      "sourceFingerprint": "934c4b999c19a53c5e7a809ef01090bbc1cfddf9564929c51f8215a6ef263291",
+      "startedAt": "2026-11-17T18:11:02.847103+00:00",
+      "endedAt": "2026-11-17T18:11:04.142044+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/allowance-protocol/command.log",
+      "logSha256": "d5daf03c6b358d8fb4c8a1a934df3f26c17d2e373f7392283eb6e8b2f2b7ad35",
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results.",
       "passed": 92,
       "failed": 0,
       "skipped": 0
@@ -228,13 +251,13 @@
       "command": "node scripts/acceptance/time-site-inventory.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e1f7364b21ac641243047c237b7c8eb923a72ca8",
-      "sourceFingerprint": "d0a6e30f6dc46c5f25d2233558c39844c7ab1d7eeb52e3804955378895bc065f",
-      "startedAt": "2026-11-17T17:42:43.512338+00:00",
-      "endedAt": "2026-11-17T17:42:45.229831+00:00",
-      "log": "/workspace/sla-supplement-a-20261117/checks/strict-repair-time-inventory/command.log",
+      "testedHead": "b84d91e2bd0fe0afeada224d2d3b434206479e41",
+      "sourceFingerprint": "934c4b999c19a53c5e7a809ef01090bbc1cfddf9564929c51f8215a6ef263291",
+      "startedAt": "2026-11-17T18:11:04.845513+00:00",
+      "endedAt": "2026-11-17T18:11:05.656143+00:00",
+      "log": "/workspace/sla-supplement-a-20261117/checks/allowance-time-inventory/command.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
-      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, no business assertion or timeout weakening. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
+      "context": "Node22.22.2/npm10.9.9. Original worker/finite correctness settings, business assertions unchanged; only user-authorized complete-pagination aggregate budget becomes150s; global/per-test correctness limits unchanged. Native/App uses newly marked low-privilege PG16.16 owned CPU2/memory4GiB container, original authentication, TEST provider only, original real factory commands, actual stop/remove/absence. No Acceptance/production, deployment or new CI experiment. Whole source fingerprint identical before/after execution; docs excluded by original fingerprint contract. Old failing baseline, fixture setup and locator diagnostics retained, not counted as passing results."
     }
   ]
 }
