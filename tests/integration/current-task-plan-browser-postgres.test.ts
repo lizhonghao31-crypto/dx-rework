@@ -3,10 +3,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
-import {currentTaskPlanFixture,prepareCurrentTaskPlanSettings,republishedCurrentTaskPlanFixture,republishedInstructionTaskPlanFixture} from '../helpers/current-task-plan-fixture.js';
+import {currentTaskPlanFixture,prepareCurrentTaskPlanSettings,republishedCurrentTaskPlanFixture,republishedInstructionTaskPlanFixture,republishedBulkPreparationTaskPlanFixture} from '../helpers/current-task-plan-fixture.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -97,6 +98,59 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await tab.context.close();}
   await f.runtime.run(fixture.scene,f.root,async()=>{
    const again=await new DigitalProductionTaskService(f.db).read(fixture.worker,fixture.dispatchId);expect({planned:again.plannedTargets,entered:again.enteredAt,due:again.dueAt,actual:again.actualCompletion}).toEqual({planned:task.plannedTargets,entered:task.enteredAt,due:task.dueAt,actual:task.actualCompletion});
+  });
+  expect(h.errors).toEqual([]);
+ });
+ it.each([{cuttingProcess:'in_house' as const,framework:true},{cuttingProcess:'outsourced' as const,framework:true},{cuttingProcess:'in_house' as const,framework:false},{cuttingProcess:'outsourced' as const,framework:false}])('opens the original bulk page with exact independent PO cutting plans after a later instruction, $cuttingProcess framework=$framework',async({cuttingProcess,framework})=>{
+  const f=h.f;await prepareCurrentTaskPlanSettings(f,framework);
+  const fixture=await republishedBulkPreparationTaskPlanFixture(f,false,{poCount:2,cuttingProcess,framework});
+  const before=await f.runtime.run(fixture.scene,f.root,async()=>{
+   const bulk=await new BulkPreparationService(f.db).read(f.root,fixture.orderId),tasks=bulk.tasks.filter(task=>['bulk_cutting','bulk_cutting_external'].includes(task.taskKind));expect(tasks).toHaveLength(1);
+   const task=tasks[0]!,current=(await fixture.repo.current(fixture.resource()))!,journey=await new DigitalJourneyQuery(f.db).read(f.root,fixture.orderId,undefined,true);
+   expect(task.taskKind).toBe(cuttingProcess==='in_house'?'bulk_cutting':'bulk_cutting_external');expect(task.routeVersion).toBeGreaterThan(1);
+   expect(task.currentPlanTargets?.state,JSON.stringify(task.currentPlanTargets)).toBe('ready');expect(task.currentPlanTargets!.targets).toHaveLength(2);
+   const work=current.input.work.find(work=>work.parameterKey==='bulk_cutting')!;expect(task.currentPlanTargets!.targets.every(target=>target.workRef===work.canonicalWorkRef)).toBe(true);
+   const dates=(await f.db.query('SELECT line_id,customer_warehouse_arrival_date::text AS goal FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[fixture.orderId])).rows;
+   const diagnosis={targets:task.currentPlanTargets,dates,scopes:current.input.scopes.map(scope=>({scopeRef:scope.scopeRef,goal:scope.customerGoal})),framework:Object.values(current.input.frameworkPlans??{}).map(plan=>({input:plan.input,arranged:plan.arranged.filter(row=>row.id==='bulk_cutting'||row.id==='style_label_ready')}))};
+   await writeFile(join(h.evidence,'bulk-plan-'+cuttingProcess+'-'+framework+'.json'),JSON.stringify(diagnosis,null,2));
+   if(framework){
+    // All physical prerequisites are genuinely complete in this framework
+    // fixture. The republished one-hour preparation sequence ends at12:00;
+    // different customer goals alone do not invent different actual conditions.
+    expect(task.currentPlanTargets!.targets.map(target=>target.endAt)).toEqual(['2026-11-17T12:00:00.000Z','2026-11-17T12:00:00.000Z']);
+   }else{
+    // The original non-framework frozen goals differ by two continuous days.
+    // Keep both real scoped targets instead of a latest/aggregate date.
+    expect(new Set(task.currentPlanTargets!.targets.map(target=>target.endAt)).size,JSON.stringify(diagnosis)).toBe(2);
+    expect(Date.parse(task.currentPlanTargets!.targets[1]!.endAt!)-Date.parse(task.currentPlanTargets!.targets[0]!.endAt!)).toBe(2*86400000);
+   }
+   for(const line of dates){
+    const target=task.currentPlanTargets!.targets.find(target=>target.lineId===line.line_id)!;
+    const node=journey.stages.flatMap(stage=>stage.nodes).find(node=>node.records.some(record=>record.domain==='task'&&record.id===task.taskId))!;
+    const scope=node.fixedTargets!.find(value=>value.lineId===line.line_id)!;expect(scope.progress.currentTarget?.at??scope.progress.goalDelta.targetAt).toBe(target.endAt);
+   }
+   return {task,bulk,plan:current};
+  });
+  h.setCollectionScene(fixture.scene);
+  const tab=await h.open(f.root.actorId,cuttingProcess==='in_house'?1165:390,{},'/ui/digital-production?bulk='+fixture.orderId);
+  try{
+   await tab.page.getByRole('heading',{name:'大货产前准备',exact:true}).waitFor();
+   const response=await tab.page.request.get(h.base+'/api/digital-production/orders/'+fixture.orderId+'/bulk-preparation');expect(response.status()).toBe(200);
+   const actual=await response.json();await writeFile(join(h.evidence,'bulk-http-'+cuttingProcess+'-'+framework+'.json'),JSON.stringify({tasks:actual.tasks,lines:actual.cutting.lines},null,2));
+   expect(actual.tasks.find((task:{taskId:string})=>task.taskId===before.task.taskId)?.currentPlanTargets).toEqual(before.task.currentPlanTargets);
+   for(const line of before.bulk.cutting.lines){
+    const row=tab.page.locator('[id="bulk-po-line-'+line.lineId+'"]'),panel=row.getByRole('region',{name:'本单当前计划'}),target=before.task.currentPlanTargets!.targets.find(target=>target.lineId===line.lineId)!;
+    await panel.waitFor();await expect.poll(()=>panel.innerText()).toContain(target.precision==='date'&&target.date?target.date+'（日期）':new Date(target.endAt!).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));
+    expect(await panel.innerText()).toContain(target.scopeLabel);expect(await panel.getAttribute('data-plan-version')).toBe(before.task.currentPlanTargets!.planVersionId);
+    const sibling=before.task.currentPlanTargets!.targets.find(other=>other.lineId!==line.lineId)!;expect(await panel.innerText()).not.toContain(sibling.scopeLabel);
+    const link=row.getByRole('link',{name:'查看／登记原实裁',exact:true});expect(await link.getAttribute('href')).toContain(line.cuttingOrderId!);
+   }
+   await tab.page.screenshot({path:join(h.evidence,'original-bulk-two-PO-current-P-'+cuttingProcess+'-'+framework+'.png'),fullPage:true});
+   expect(h.requests.filter(call=>call.session===tab.session&&call.path.startsWith('/api/digital-production/')&&!['GET','HEAD'].includes(call.method)&&!call.path.startsWith('/api/digital-production/notifications/claim'))).toEqual([]);
+  }catch(error){await writeFile(join(h.evidence,'bulk-page-'+cuttingProcess+'-'+framework+'.html'),await tab.page.content());await writeFile(join(h.evidence,'bulk-page-'+cuttingProcess+'-'+framework+'.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
+  await f.runtime.run(fixture.scene,f.root,async()=>{
+   const again=await new DigitalProductionTaskService(f.db).read(f.root,before.task.taskId);expect({planned:again.plannedTargets,entered:again.enteredAt,due:again.dueAt,actual:again.actualCompletion}).toEqual({planned:before.task.plannedTargets,entered:before.task.enteredAt,due:before.task.dueAt,actual:before.task.actualCompletion});expect(await fixture.repo.current(fixture.resource())).toEqual(before.plan);
+   const prior=await new DigitalProductionTaskService(f.db).read(f.root,fixture.priorId);expect({planned:prior.plannedTargets,entered:prior.enteredAt,due:prior.dueAt,actual:prior.actualCompletion}).toEqual({planned:fixture.priorTask.plannedTargets,entered:fixture.priorTask.enteredAt,due:fixture.priorTask.dueAt,actual:fixture.priorTask.actualCompletion});
   });
   expect(h.errors).toEqual([]);
  });

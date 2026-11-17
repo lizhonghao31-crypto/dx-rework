@@ -18,7 +18,7 @@ import {arrangeTestRound} from './development-arrangement-fixture.js';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {r5OneHourConfiguration} from './r5-order-time-fixture.js';
-import {admittedFrameworkProductionFixture} from './order-time-rewash-fixture.js';
+import {admittedProductionFixture} from './order-time-rewash-fixture.js';
 import {productionReadinessFixture,completeBulkRangeFixture} from './production-readiness-fixture.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
@@ -28,8 +28,8 @@ import {readFixedOrderRoute} from '../../apps/api/src/production-platform/fixed-
 /** Independent explicit TEST input: every applicable work, including the
  * framework-only positioning node, takes one continuous hour. The generic
  * rewash fixture retains its genuine four-hour positioning default. */
-export async function prepareCurrentTaskPlanSettings(f:Awaited<ReturnType<typeof businessAnchorFixture>>){
- const settings=new OrderTimeSettingsService(f.db,true,true),before=await settings.read(f.root),values=prepareTimeFrameworkConfiguration(r5OneHourConfiguration());
+export async function prepareCurrentTaskPlanSettings(f:Awaited<ReturnType<typeof businessAnchorFixture>>,framework=true){
+ const settings=new OrderTimeSettingsService(f.db,true,framework),before=await settings.read(f.root),values=framework?prepareTimeFrameworkConfiguration(r5OneHourConfiguration()):r5OneHourConfiguration();
  for(const [key,rule]of Object.entries(values.nodes))if(rule.kind==='work'||rule.kind==='forecast'||rule.kind==='supervision')values.nodes[key]={...rule,minutes:60,calendar:'continuous'};
  await settings.save(f.root,{expectedVersion:before.version,values},randomUUID());
 }
@@ -109,8 +109,8 @@ export async function republishedCurrentTaskPlanFixture(f:Awaited<ReturnType<typ
 /** A later original instruction can reuse adopted work without copying it into
  * its route's added-work array. Finish only the real preparation/cutting needed
  * to instantiate its warehouse handoff; no synthetic task/position/final state. */
-export async function republishedInstructionTaskPlanFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,addedCraft:boolean){
- const fixture=await admittedFrameworkProductionFixture(f),{scene,orderId,ready,requests,sourceId}=fixture;
+export async function republishedBulkPreparationTaskPlanFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,addedCraft:boolean,options?:{poCount?:number;cuttingProcess?:'in_house'|'outsourced';framework?:boolean}){
+ const fixture=await admittedProductionFixture(f,options?.framework!==false,options),{scene,orderId,ready,requests,sourceId}=fixture;
  return f.runtime.run(scene,f.root,async()=>{
   const service=new DigitalProductionTaskService(f.db),priorId=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind='bulk_pattern'",[ready.preparationId])).rows[0]!.task_id;
   const priorTask=await service.read(f.root,priorId),instructions=new ProductionInstructionService(f.db,true),before=await instructions.read(f.root,orderId);
@@ -124,6 +124,12 @@ export async function republishedInstructionTaskPlanFixture(f:Awaited<ReturnType
   expect(preparation).not.toBe(ready.preparationId);
   await bulk.dispatch(f.people['development-clerk']!,orderId,{expectedVersion:sheet.dispatch.version,patternWorkerId:f.people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());
   for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,orderId,preparation,kind);
+  return {...fixture,sourceId,preparation,priorId,priorTask};
+ });
+}
+export async function republishedInstructionTaskPlanFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,addedCraft:boolean){
+ const fixture=await republishedBulkPreparationTaskPlanFixture(f,addedCraft),{scene,orderId,ready,preparation,sourceId,priorId,priorTask}=fixture;
+ return f.runtime.run(scene,f.root,async()=>{
   const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.cutting_order_id;
   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
   await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());

@@ -6,7 +6,7 @@ import type {DigitalTask,DigitalTaskCurrentPlan} from '@dx-rework/contracts/digi
 import type {StoredOrderTimePlan} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {initialFrameworkMilestoneStandard,evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {selectCurrentTaskPlan} from '../../apps/api/src/production-platform/current-task-plan-targets.js';
-import {TaskPlanTargets} from '../../apps/web/src/task-plan-targets.js';
+import {TaskPlanTargets,BulkCuttingPlanTargets} from '../../apps/web/src/task-plan-targets.js';
 
 const resource={kind:'source' as const,id:'TEST-exact-source'},at=(hour:number)=>new Date(Date.UTC(2026,10,17,hour)).toISOString();
 const task={taskId:'TEST-original-task',resource,round:2,kind:'development_pattern',routeRef:'TEST-original-route',stepRef:null,state:'ready',retired:false};
@@ -81,5 +81,18 @@ describe('native current-plan panel',()=>{
  it('distinguishes unknown, absent and not-applicable without inventing dates',()=>{
   expect(markup(undefined)).toContain('依据待核');expect(markup({state:'unknown',reason:'TEST 缺少可信当前P',planVersionId:null,planRevision:null,targets:[]})).toContain('TEST 缺少可信当前P');
   expect(markup({state:'not_applicable',reason:null,planVersionId:null,planRevision:null,targets:[]})).toContain('已退出当前计划范围');
+ });
+ it('renders only the exact PO cutting target and keeps different PO dates independent',()=>{
+  const current=selectCurrentTaskPlan(version(),task,binding());current.targets=[{...current.targets[0]!,scopeRef:'po:left',lineId:'left',scopeLabel:'PO LEFT',endAt:at(9)},{...current.targets[0]!,scopeRef:'po:right',lineId:'right',scopeLabel:'PO RIGHT',endAt:at(15)}];
+  const native={taskId:'TEST exact cutting',taskKind:'bulk_cutting_external',currentPlanTargets:current} as DigitalTask;
+  const html=(lineId:string)=>renderToStaticMarkup(createElement(BulkCuttingPlanTargets,{tasks:[native],lineId}));
+  expect(html('left')).toContain('PO LEFT');expect(html('left')).not.toContain('PO RIGHT');expect(html('right')).toContain('PO RIGHT');expect(html('right')).not.toContain('PO LEFT');expect(html('left')).not.toBe(html('right'));
+  expect(html('foreign')).toContain('本PO当前计划依据待核');expect(html('foreign')).not.toContain('PO LEFT');expect(html('foreign')).not.toContain('PO RIGHT');
+ });
+ it('does not select a latest cutting task or a paper target when the current PO task is missing or ambiguous',()=>{
+  const current=selectCurrentTaskPlan(version(),task,binding()),cutting={taskId:'TEST first',taskKind:'bulk_cutting',currentPlanTargets:current} as DigitalTask;
+  for(const tasks of [[],[{...cutting,taskKind:'bulk_pattern'}],[cutting,{...cutting,taskId:'TEST second',taskKind:'bulk_cutting_external'}]]){
+   const html=renderToStaticMarkup(createElement(BulkCuttingPlanTargets,{tasks,lineId:'left'}));expect(html).toContain('本PO当前计划依据待核');expect(html).not.toContain('本单安排第');
+  }
  });
 });

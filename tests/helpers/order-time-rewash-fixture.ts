@@ -33,7 +33,7 @@ export async function admittedFrameworkProductionFixture(f:Awaited<ReturnType<ty
  return admittedProductionFixture(f,true);
 }
 /** The same original admission supports both stored arrangement formats. */
-export async function admittedProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,framework:boolean){
+export async function admittedProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,framework:boolean,options?:{poCount?:number;cuttingProcess?:'in_house'|'outsourced'}){
  const scene=await f.scene('2026-11-17T08:00:00.000Z');
  const native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
  const requests=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,native)),washing=new BulkWashingService(f.db),repo=new OrderTimePlanRepository(f.db);
@@ -44,7 +44,7 @@ export async function admittedProductionFixture(f:Awaited<ReturnType<typeof busi
    const identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true,native);
    const style='TEST-REWASH-PLAN-'+randomUUID(),source=await identity.createSource(f.root,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    const ordering=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-17',contractDeliveryDate:'2027-03-01',requiresColorMatching:false,salesYear:2027,salesSeries:'P03',
-    lines:[{formalPoNo:style,color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:'2'}]}]});
+    lines:Array.from({length:options?.poCount??1},(_,index)=>({formalPoNo:style+(options?.poCount&&options.poCount>1?'-'+(index+1):''),color:index?'白':'黑',deliveryDate:null,customerWarehouseArrivalDate:index?'2027-03-03':'2027-03-01',sizes:[{size:'M',quantity:'2'}]}))});
    const developmentDocument=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:'2027-03-01',unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],
     interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original admitted washing order',craft:'无',washing:'免洗',
     productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order:ordering},
@@ -59,7 +59,7 @@ export async function admittedProductionFixture(f:Awaited<ReturnType<typeof busi
    const resource=()=>({kind:'order' as const,id:orderId});
    const command=async()=>{const scope=(await washing.read(f.root,orderId)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:'2026-11-17T08:00:00.000Z',note:'TEST exact native washing scope'};};
    expect(Boolean((await repo.current(resource()))!.input.frameworkPlans)).toBe(framework);
-   const ready=await f.bulkReady('无',undefined,1,undefined,{quantity:2,designerActor:f.root,existingOrder:{orderId,sourceId:source.sourceId}});
+   const ready=await f.bulkReady('无',undefined,options?.poCount??1,undefined,{quantity:2,designerActor:f.root,existingOrder:{orderId,sourceId:source.sourceId},...(options?.cuttingProcess?{cuttingProcess:options.cuttingProcess}:{})});
    const lineId=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[orderId])).rows[0].line_id;
    // This original fixture explicitly created a customer approval without a
    // time. Complete only that known fixture precondition via the supported
