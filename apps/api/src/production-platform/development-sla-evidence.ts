@@ -163,15 +163,17 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
   for(const row of rows){
     const definitionId=aliases[row.task_kind]??row.task_kind,basis=responsibilityBasis(row);
     if(scopedTasks.has(row.task_id)||!row.route_instance_id||!basis||typeof basis.seconds!=='number'||basis.seconds<=0||!saved.plan_json.nodes.some((node:{id:string;kind:string})=>node.id===definitionId&&['duration','included'].includes(node.kind)))continue;
-    const entered=responsibility(row).at,started=entered&&Date.parse(entered)<=Date.parse(time.now)?entered:null;
-    if(entered&&!started)onFutureEvidence?.(entered);
+    const started=responsibility(row).at;
+    if(started&&Date.parse(started)>Date.parse(time.now))onFutureEvidence?.(started);
     const fact:SlaNodeFact={evidence:`task:${row.task_id}:source:${sourceId}:round:${row.route_version}:route:${row.route_instance_id}`,businessCompleted:businessCompleted(row),
       ...(started?{startedAt:started}:{}),standardMinutes:typeof basis.seconds==='number'?basis.seconds/60:null,
       ...(typeof basis.warningRatio==='number'?{standardWarningPercent:basis.warningRatio*100}:{}),
     };
     const captured=developmentCapturedWindow(row,started,fact.evidence);if(captured)fact.responsibilityWindow=captured;
     if(fact.responsibilityWindow?.calendar)fact.standardCalendar=fact.responsibilityWindow.calendar;
-    if(accepted(row)){const at=iso(row.completed_at);if(Date.parse(at)<=Date.parse(time.now))fact.completedAt=at;else onFutureEvidence?.(at);}
+    // Invalid chronology is evidence, not a missing timestamp. The canonical
+    // evaluator must isolate it in both the kind and exact-task projections.
+    if(accepted(row)){const at=iso(row.completed_at);fact.completedAt=at;if(Date.parse(at)>Date.parse(time.now))onFutureEvidence?.(at);}
     const target:SlaTime=started?fact.responsibilityWindow?.deadline??{at:deadline(row),exclusive:basis.exclusive===true,reasons:deadline(row)?[]:['本实例尚无独立截止']}:{at:null,exclusive:false,reasons:['本实例缺少可信责任起点']};
     if(fact.businessCompleted)fact.completedDeadline=structuredClone(target);
     ordinaryTasks.add(row.task_id);

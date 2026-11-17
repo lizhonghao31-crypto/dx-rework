@@ -4,6 +4,7 @@ import type { PoolClient, QueryResult } from "pg";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_ENTRIES = 1024;
+const MAX_CLASSIFICATION_BYTES = 256 * 1024;
 const batchScopes=new WeakMap<PoolClient,ReturnType<typeof journeySnapshotBatches>>();
 /** The caller supplies only candidates with its original full management read range. */
 export function prepareJourneySnapshotBatches(client:PoolClient,orderIds:readonly string[]):void{batchScopes.get(client)?.scope(orderIds);}
@@ -51,14 +52,33 @@ const copy = (result: QueryResult): QueryResult => Object.assign(Object.create(O
 export function reuseJourneySnapshotReads(client: PoolClient): PoolClient {
   const batches=journeySnapshotBatches(client);
   const cache = new Map<string, { result: QueryResult; bytes: number }>();
+  // Classification depends only on the exact immutable SQL text. The original
+  // pagination workload repeatedly scans the same large task query even on a
+  // result-cache hit. Reuse that lexical decision, never its parameters,
+  // authorization or query result. Context changes still clear result reuse.
+  const classifications = new Map<string, { safe: boolean; bytes: number }>();
+  let classificationBytes = 0;
+  const reusable = (text: string): boolean => {
+    const hit = classifications.get(text);
+    if (hit) return hit.safe;
+    const statement = text.trim().replace(/;\s*$/, ""), tokens = readTokens(statement);
+    const safe = /^(SELECT|WITH)\b/i.test(statement) && tokens !== null && !unsafeRead.test(tokens) && !statement.includes(";");
+    const bytes = Buffer.byteLength(text);
+    if (bytes <= MAX_CLASSIFICATION_BYTES) {
+      while (classifications.size >= MAX_ENTRIES || classificationBytes + bytes > MAX_CLASSIFICATION_BYTES) {
+        const key = classifications.keys().next().value!;
+        classificationBytes -= classifications.get(key)!.bytes; classifications.delete(key);
+      }
+      classifications.set(text, { safe, bytes }); classificationBytes += bytes;
+    }
+    return safe;
+  };
   let retained = 0, generation = 0;
   const clear = () => { cache.clear(); batches.clear(); retained = 0; generation++; };
   const remove = (key: string) => { retained -= cache.get(key)?.bytes ?? 0; cache.delete(key); };
   const query = (...args: unknown[]) => {
     const text = args[0], values = args[1] ?? [];
-    const statement = typeof text === "string" ? text.trim().replace(/;\s*$/, "") : "";
-    const tokens = readTokens(statement);
-    if (!/^(SELECT|WITH)\b/i.test(statement) || tokens === null || unsafeRead.test(tokens) || statement.includes(";")
+    if (typeof text !== "string" || !reusable(text)
       || args.length > 2 || !Array.isArray(values) || !values.every(scalar)) {
       // Also invalidate on session-context changes or unsupported query modes.
       clear(); return Reflect.apply(client.query, client, args);
