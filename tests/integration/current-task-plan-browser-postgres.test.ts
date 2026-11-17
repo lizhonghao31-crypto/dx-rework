@@ -3,7 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
-import {currentTaskPlanFixture,prepareCurrentTaskPlanSettings,republishedCurrentTaskPlanFixture} from '../helpers/current-task-plan-fixture.js';
+import {currentTaskPlanFixture,prepareCurrentTaskPlanSettings,republishedCurrentTaskPlanFixture,republishedInstructionTaskPlanFixture} from '../helpers/current-task-plan-fixture.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
@@ -79,6 +79,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await snapshot()).toEqual(before);
   await f.runtime.run(scene,f.root,async()=>{
    const old=await new DigitalProductionTaskService(f.db).read(f.root,priorPaperId);expect({planned:old.plannedTargets,entered:old.enteredAt,due:old.dueAt,completed:old.actualCompletion}).toEqual({planned:priorTask.plannedTargets,entered:priorTask.enteredAt,due:priorTask.dueAt,completed:priorTask.actualCompletion});
+  });
+  expect(h.errors).toEqual([]);
+ });
+ it('shows an inherited warehouse handoff current P on its assigned original page after a later same-scope instruction',async()=>{
+  const f=h.f,fixture=await republishedInstructionTaskPlanFixture(f,false);
+  const task=await f.runtime.run(fixture.scene,fixture.worker,()=>new DigitalProductionTaskService(f.db).read(fixture.worker,fixture.dispatchId));
+  expect(task.currentPlanTargets?.state).toBe('ready');expect(task.currentPlanTargets!.targets[0]!.workRef).toBe(fixture.canonicalWorkRef);
+  const tab=await h.open(fixture.worker.actorId,390,{},'/ui/digital-production?task='+fixture.dispatchId+'&view=read');
+  try{
+   const panel=tab.page.getByRole('region',{name:'本单当前计划'}).first();await panel.waitFor();
+   await expect.poll(()=>panel.innerText()).toContain(new Date(task.currentPlanTargets!.targets[0]!.endAt!).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));
+   expect(await panel.getAttribute('data-plan-version')).toBe(task.currentPlanTargets!.planVersionId);
+   const response=await tab.page.request.get(h.base+'/api/digital-production/tasks/'+fixture.dispatchId);expect(response.status()).toBe(200);expect((await response.json()).currentPlanTargets).toEqual(task.currentPlanTargets);
+   await tab.page.screenshot({path:join(h.evidence,'later-instruction-current-P-390.png'),fullPage:true});
+   expect(h.requests.filter(call=>call.session===tab.session&&call.path.startsWith('/api/digital-production/')&&!['GET','HEAD'].includes(call.method)&&!call.path.startsWith('/api/digital-production/notifications/claim'))).toEqual([]);
+  }finally{await tab.context.close();}
+  await f.runtime.run(fixture.scene,f.root,async()=>{
+   const again=await new DigitalProductionTaskService(f.db).read(fixture.worker,fixture.dispatchId);expect({planned:again.plannedTargets,entered:again.enteredAt,due:again.dueAt,actual:again.actualCompletion}).toEqual({planned:task.plannedTargets,entered:task.enteredAt,due:task.dueAt,actual:task.actualCompletion});
   });
   expect(h.errors).toEqual([]);
  });

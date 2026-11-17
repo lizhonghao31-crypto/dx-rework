@@ -22,7 +22,9 @@ export async function fixedTaskTargets(db:Pick<Pool|PoolClient,'query'>,task:{ta
  const candidates=position?definition?[definition.nodeId]:[]:added.length?added.map(work=>work.id):saved.input.work.filter(work=>(work.parameterKey??work.id)===key).map(work=>work.id);
  if(candidates.length!==1)return {state:'pending',targets:[]};
  const nodeId=candidates[0]!,targets:NonNullable<DigitalTask['plannedTargets']>['targets']=[];
- const ownWork=(route?.work??saved.input.work).find(work=>work.id===nodeId);
+ // A reused route stores positions only; an added route stores only its new
+ // works. An inherited handoff still belongs to the exact adopted node.
+ const ownWork=route?.work.find(work=>work.id===nodeId)??saved.input.work.find(work=>work.id===nodeId);
  capture?.({canonicalWorkRef:ownWork?.canonicalWorkRef??null,captured:Boolean(position&&definition&&position.route_ref===task.routeRef&&Number(position.route_version)===task.round
   &&(definition.kind===task.kind||definition.kind==='bulk_cutting'&&task.kind==='bulk_cutting_external')&&(position.step_id??null)===(definition.stepId??null)&&(position.phase??null)===(definition.phase??null))});
  for(const scope of current.scopes){

@@ -2,7 +2,7 @@
   "version": 1,
   "base": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
   "risk": "full",
-  "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+  "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
   "rules": [
     {
       "rule": "Select current arranged task P by exact original canonical work and share the minimal Journey target selector",
@@ -89,7 +89,7 @@
         "scripts/ci/test-execution-contract.test.mjs",
         "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "expectation": "Real original publish/material verification/arrangement creates genuine paper tasks, not downstream synthetic prerequisites. Real second-round publication preserves old completed history for pure and linked sources; exact printing and included handoff boundaries covered. All affected API/contract/UI/helper consumers select both new native/App suites under existing finite config. No test removal, final name filter, new runner or global timeout.",
+      "expectation": "Real original publish/material verification/arrangement creates genuine paper tasks, not downstream synthetic prerequisites. Real second-round publication preserves old completed history for pure and linked sources; later same-scope and added-scope instructions retain adopted warehouse work through exact captured route binding. Exact printing and included handoff boundaries remain covered. All affected API/contract/UI/helper consumers select both new native/App suites under existing finite config. No test removal, final name filter, new runner or global timeout.",
       "checks": [
         "b-unit",
         "b-native",
@@ -103,15 +103,15 @@
     {
       "id": "b-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/current-task-plan.test.ts tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/task-completion-display.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/candidate-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/current-task-plan.test.ts tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/task-completion-display.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/review-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
-      "startedAt": "2026-11-17T20:14:24.509355+00:00",
-      "endedAt": "2026-11-17T20:14:37.720588+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-unit/command.log",
-      "logSha256": "0968d98dfc8b08c728c805b878a8001f8ef11757fce7b8b6cb9b3a2710475c78",
+      "testedHead": "80c960a302c71a4aec8b54a67d1d5c237415447b",
+      "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
+      "startedAt": "2026-11-17T20:33:35.683204+00:00",
+      "endedAt": "2026-11-17T20:33:50.727546+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/review-unit/command.log",
+      "logSha256": "cd2c4f910e01ab5e0df6da453eb9b2fd8f0894a291abb88343a3abe988c29a89",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
       "passed": 216,
       "failed": 0,
@@ -119,45 +119,45 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0fcdb55673ae28187533ec24a6f38ae491ee31ede4cda3a273d3321755eb6396"
+          "sha256": "980c5c6b0b5978bebdd5f46703c1c41175cb2b912bba6f39852137e41fbe0364"
         }
       ]
     },
     {
       "id": "b-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/current-task-plan-postgres.test.ts tests/integration/current-task-plan-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/pg/candidate-native/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/current-task-plan-postgres.test.ts tests/integration/current-task-plan-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/pg/review-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
-      "startedAt": "2026-11-17T20:13:31.270946+00:00",
-      "endedAt": "2026-11-17T20:14:07.047983+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/pg/candidate-native/tests.log",
-      "logSha256": "f52012c8eac5547d9b1256537e026234db71cb140d3aa208e235ec3916358f7f",
+      "testedHead": "80c960a302c71a4aec8b54a67d1d5c237415447b",
+      "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
+      "startedAt": "2026-11-17T20:33:15.669156+00:00",
+      "endedAt": "2026-11-17T20:34:34.769392+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/pg/review-native/tests.log",
+      "logSha256": "de75d6cbc6ac80aef5a0a8f564f56c51f3cb42352f404834b1b7bf73cfeae0e5",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
-      "passed": 6,
+      "passed": 9,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "793e6b43f982f8b45431e8078db6e172ec12d153dfd6237555b4e433e275b9c4"
+          "sha256": "c08bc37e8eab9a78c6ae894c606b3388216044960c462701a91486f5f5334718"
         }
       ]
     },
     {
       "id": "b-legacy",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/digital-production-tasks-postgres.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/pg/candidate-legacy/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/digital-production-tasks-postgres.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/pg/review-legacy/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
-      "startedAt": "2026-11-17T20:16:36.659478+00:00",
-      "endedAt": "2026-11-17T20:16:50.747977+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/pg/candidate-legacy/tests.log",
-      "logSha256": "51661a8754bb2fe4f13ae2171ec64a93c0ed4e4319b9ff7bf19c7a7f6eccee8d",
+      "testedHead": "80c960a302c71a4aec8b54a67d1d5c237415447b",
+      "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
+      "startedAt": "2026-11-17T20:34:46.945674+00:00",
+      "endedAt": "2026-11-17T20:35:02.996004+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/pg/review-legacy/tests.log",
+      "logSha256": "5207776fcd470878a3ada9f196b0c6f90d02da038702563b6d2dfa6c4deb3301",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
       "passed": 18,
       "failed": 0,
@@ -165,7 +165,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ade92c93db23e404ac95475994aeaedcfb391262461c24a121a7cf24c2b072b4"
+          "sha256": "bda7fe4403990f5c83205cda39372a21acc2d77f600e2038790f4d4c83225ea6"
         }
       ]
     },
@@ -175,11 +175,11 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
-      "startedAt": "2026-11-17T20:14:24.470884+00:00",
-      "endedAt": "2026-11-17T20:15:06.658956+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-web-types/command.log",
+      "testedHead": "80c960a302c71a4aec8b54a67d1d5c237415447b",
+      "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
+      "startedAt": "2026-11-17T20:33:35.813747+00:00",
+      "endedAt": "2026-11-17T20:34:21.235746+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/review-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
     },
@@ -189,11 +189,11 @@
       "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/current-task-plan-targets.ts apps/api/src/production-platform/fixed-task-targets.ts apps/api/src/production-platform/framework-node-targets.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/order-time-work-task-kind.ts apps/api/src/production-platform/task-service.ts apps/web/src/bulk-task-workbench.tsx apps/web/src/digital-production-tasks-panel.tsx apps/web/src/task-plan-targets.tsx apps/web/src/task-workbench-sample.tsx packages/contracts/src/digital-production-tasks.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/helpers/current-task-plan-fixture.ts tests/integration/current-task-plan-browser-postgres.test.ts tests/integration/current-task-plan-postgres.test.ts tests/unit/current-task-plan.test.ts tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
-      "startedAt": "2026-11-17T20:14:24.536363+00:00",
-      "endedAt": "2026-11-17T20:14:28.984340+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-lint/command.log",
+      "testedHead": "80c960a302c71a4aec8b54a67d1d5c237415447b",
+      "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
+      "startedAt": "2026-11-17T20:33:35.683688+00:00",
+      "endedAt": "2026-11-17T20:33:40.439448+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/review-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
     },
@@ -203,11 +203,11 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
-      "startedAt": "2026-11-17T20:14:24.480911+00:00",
-      "endedAt": "2026-11-17T20:14:50.286559+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-api-types/command.log",
+      "testedHead": "80c960a302c71a4aec8b54a67d1d5c237415447b",
+      "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
+      "startedAt": "2026-11-17T20:33:35.713508+00:00",
+      "endedAt": "2026-11-17T20:34:05.428296+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/review-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
     },
@@ -217,12 +217,12 @@
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
-      "startedAt": "2026-11-17T20:14:24.535994+00:00",
-      "endedAt": "2026-11-17T20:14:26.796365+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-protocol/command.log",
-      "logSha256": "8b9801eaccd5accd5acf2462cf0aeb3178d8a1c4dc0d0d0620619f2557f20c0a",
+      "testedHead": "80c960a302c71a4aec8b54a67d1d5c237415447b",
+      "sourceFingerprint": "ae4ab3860cf177f4982123649b9892205d4772b2bb2543e992f2b8aaf2e9ccdc",
+      "startedAt": "2026-11-17T20:33:35.819698+00:00",
+      "endedAt": "2026-11-17T20:33:37.780896+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/review-protocol/command.log",
+      "logSha256": "e9b3dd4f9b85a2fe5524b1723567247da25841f48b434dfa37faf05fd75fd79f",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
       "passed": 21,
       "failed": 0,

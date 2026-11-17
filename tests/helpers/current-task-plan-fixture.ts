@@ -18,6 +18,12 @@ import {arrangeTestRound} from './development-arrangement-fixture.js';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {r5OneHourConfiguration} from './r5-order-time-fixture.js';
+import {admittedFrameworkProductionFixture} from './order-time-rewash-fixture.js';
+import {productionReadinessFixture,completeBulkRangeFixture} from './production-readiness-fixture.js';
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
+import {FixedTimelineAdoptionRepository} from '../../apps/api/src/production-platform/fixed-timeline-adoptions.js';
+import {readFixedOrderRoute} from '../../apps/api/src/production-platform/fixed-order-route.js';
 
 /** Independent explicit TEST input: every applicable work, including the
  * framework-only positioning node, takes one continuous hour. The generic
@@ -98,4 +104,35 @@ export async function republishedCurrentTaskPlanFixture(f:Awaited<ReturnType<typ
    return {paperId:paper[0]!.taskId};
   });
   return {...fixture,paperId:next.paperId,priorPaperId:paperId,priorTask:before};
+}
+
+/** A later original instruction can reuse adopted work without copying it into
+ * its route's added-work array. Finish only the real preparation/cutting needed
+ * to instantiate its warehouse handoff; no synthetic task/position/final state. */
+export async function republishedInstructionTaskPlanFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,addedCraft:boolean){
+ const fixture=await admittedFrameworkProductionFixture(f),{scene,orderId,ready,requests,sourceId}=fixture;
+ return f.runtime.run(scene,f.root,async()=>{
+  const service=new DigitalProductionTaskService(f.db),priorId=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind='bulk_pattern'",[ready.preparationId])).rows[0]!.task_id;
+  const priorTask=await service.read(f.root,priorId),instructions=new ProductionInstructionService(f.db,true),before=await instructions.read(f.root,orderId);
+  const saved=await instructions.save(f.root,orderId,{expectedVersion:before.version,orderVersion:before.currentOrderVersion,sourceRound:before.sourceRound,document:{...before.document,preshrink:'无需预缩',secondaryCraft:addedCraft?'印花':'无',craftSteps:addedCraft?[{craftKind:'printing',sequence:1}]:[],remarks:'TEST later instruction exact current plan'}},randomUUID());
+  const readiness=await productionReadinessFixture(f.db,f.root,orderId,f.people['pattern-room-worker']!.actorId,f.people.warehouse!);
+  const operation={kind:'instruction_publish' as const,orderId,input:{expectedVersion:saved.version,orderVersion:saved.currentOrderVersion,expectedReadinessRevision:readiness.revision}},check=await requests.check(f.root,operation);
+  const pending=await requests.submit(f.root,{operation,fingerprint:check.fingerprint,reason:'TEST later '+(addedCraft?'added':'same')+' instruction scope'},randomUUID()),reviewed=await requests.read(f.root,pending.requestId);
+  await requests.apply(f.root,pending.requestId,{expectedVersion:reviewed.version,fingerprint:reviewed.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+  expect((await instructions.read(f.root,orderId)).publishedVersion).toBe(saved.version);
+  const bulk=new BulkPreparationService(f.db),sheet=await bulk.read(f.root,orderId),preparation=sheet.preparationId!;
+  expect(preparation).not.toBe(ready.preparationId);
+  await bulk.dispatch(f.people['development-clerk']!,orderId,{expectedVersion:sheet.dispatch.version,patternWorkerId:f.people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());
+  for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,orderId,preparation,kind);
+  const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.cutting_order_id;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const dispatch=(await f.db.query("SELECT t.task_id,t.route_instance_id,p.route_position FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) JOIN digital_timeline_task_positions p USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind='warehouse_dispatch'",[preparation])).rows;
+  expect(dispatch).toHaveLength(1);
+  const adoption=(await new FixedTimelineAdoptionRepository(f.db).existing({kind:'order',id:orderId}))!,route=(await readFixedOrderRoute(f.db,adoption,preparation))!;
+  expect(route.kind).toBe(addedCraft?'added_scope':'same_scope');expect(route.work.some(work=>work.id==='warehouse_dispatch')).toBe(false);
+  expect(route.route.find(position=>position.position===dispatch[0]!.route_position)?.nodeId).toBe('warehouse_dispatch');
+  const adopted=adoption.input.work.find(work=>work.id==='warehouse_dispatch')!;expect(adopted.canonicalWorkRef).toBeTruthy();
+  return {...fixture,sourceId,dispatchId:dispatch[0]!.task_id as string,priorId,priorTask,canonicalWorkRef:adopted.canonicalWorkRef!,route,worker:f.people.warehouse!};
+ });
 }

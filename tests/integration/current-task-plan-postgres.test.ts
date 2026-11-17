@@ -1,6 +1,6 @@
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
-import {currentTaskPlanFixture,prepareCurrentTaskPlanSettings,republishedCurrentTaskPlanFixture} from '../helpers/current-task-plan-fixture.js';
+import {currentTaskPlanFixture,prepareCurrentTaskPlanSettings,republishedCurrentTaskPlanFixture,republishedInstructionTaskPlanFixture} from '../helpers/current-task-plan-fixture.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
@@ -29,6 +29,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(node?.expectedAt).toBeTruthy();
    const points=task.currentPlanTargets!.targets.map(value=>value.precision==='date'?value.date:value.endAt);
    expect([...new Set(points)]).toEqual([node!.expectedAt]);
+  });
+ });
+ it.each([false,true])('retains adopted warehouse work on a genuinely republished instruction route (added scope %s)',async addedCraft=>{
+  const fixture=await republishedInstructionTaskPlanFixture(f,addedCraft);
+  await f.runtime.run(fixture.scene,f.root,async()=>{
+   const service=new DigitalProductionTaskService(f.db),task=await service.read(fixture.worker,fixture.dispatchId),journey=await new DigitalJourneyQuery(f.db).read(f.root,fixture.orderId,undefined,true);
+   const current=(await fixture.repo.current(fixture.resource()))!,work=current.input.work.find(work=>work.canonicalWorkRef===fixture.canonicalWorkRef)!;
+   expect(work).toBeTruthy();expect(task.currentPlanTargets?.state,JSON.stringify(task.currentPlanTargets)).toBe('ready');
+   expect(task.currentPlanTargets!.targets.map(target=>target.workRef)).toEqual([fixture.canonicalWorkRef]);expect(task.currentPlanTargets!.planVersionId).toBe(current.id);
+   const node=journey.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===fixture.dispatchId)!;expect(node).toBeTruthy();
+   expect(task.currentPlanTargets!.targets.map(target=>target.endAt)).toEqual([node.expectedAt]);
+   const again=await service.read(fixture.worker,fixture.dispatchId);expect({planned:again.plannedTargets,entered:again.enteredAt,due:again.dueAt,actual:again.actualCompletion}).toEqual({planned:task.plannedTargets,entered:task.enteredAt,due:task.dueAt,actual:task.actualCompletion});
+   const prior=await service.read(f.root,fixture.priorId);expect({planned:prior.plannedTargets,entered:prior.enteredAt,due:prior.dueAt,actual:prior.actualCompletion}).toEqual({planned:fixture.priorTask.plannedTargets,entered:fixture.priorTask.enteredAt,due:fixture.priorTask.dueAt,actual:fixture.priorTask.actualCompletion});
   });
  });
  it.each([false,true])('uses a genuinely republished second-round paper plan and retains the completed first round original B and R/D/A (linked order %s)',async withOrder=>{
