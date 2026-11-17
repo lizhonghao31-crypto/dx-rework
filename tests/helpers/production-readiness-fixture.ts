@@ -28,14 +28,18 @@ export async function productionReadinessFixture(db:Pool,root:TrustedActorContex
   const old=materials.materialDecisions.find(m=>m.materialId===material.materialId);if(old?.preshrinkMethod)continue;
   await technical.saveMaterialDecision(root,source,{roundNumber:sheet.roundNumber??1,materialId:material.materialId,expectedVersion:old?.version??0,highTemperatureRequired:false,preshrinkMethod:'常规梭织预缩',basis:'TEST actual technical prerequisite, not a warehouse decision',supplierEvidenceIds:sheet.document!.files.filter(f=>f.kind==='款图').slice(0,1).map(f=>f.attachmentId),warpShrinkPercent:'1',weftShrinkPercent:'1'},randomUUID());
  }
- const quantities=(await db.query('SELECT l.line_id,(SELECT coalesce(sum(quantity),0)::int FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS order_quantity FROM digital_production_po_lines l WHERE production_order_id=$1',[orderId])).rows.map(r=>({lineId:r.line_id,materialId:null,name:'TEST款号唛',quantity:r.order_quantity,unit:'枚'}));
+ const readQuantities=async()=>(await db.query('SELECT l.line_id,(SELECT coalesce(sum(quantity),0)::int FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS order_quantity FROM digital_production_po_lines l WHERE production_order_id=$1',[orderId])).rows.map(r=>({lineId:r.line_id,materialId:null,name:'TEST款号唛',quantity:r.order_quantity,unit:'枚'}));
+ // Read physical counts only when this invocation needs to record a missing fact.
+ let quantities:Awaited<ReturnType<typeof readQuantities>>|undefined;
  for(const kind of ['style_label_ready','accessories_ready'] as const){const latest=await service.read(root,{kind:'order',id:orderId});if(latest.facts.some(f=>f.kind===kind&&f.state==='ready'))continue;
+  quantities??=await readQuantities();
   await service.record(warehouse,{kind:'order',id:orderId},{kind,scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST physical material prerequisite',quantities,evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());}
  return service.read(root,{kind:'order',id:orderId});
 }
 export async function completeBulkRangeFixture(db:Pool,actor:TrustedActorContext,orderId:string,preparationId:string,kind:'纸样完成'|'唛架完成'|'预缩完成'){
  const service=new ProductionReadinessService(db),state=await service.read(actor,{kind:'order',id:orderId});
- const lines=(await db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[orderId])).rows.map(r=>r.line_id as string);
+ // Preshrink and unenrolled completions do not consume a PO range.
+ const lines=state.enrolled&&kind!=='预缩完成'?(await db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[orderId])).rows.map(r=>r.line_id as string):[];
  return new BulkPreparationService(db).complete(actor,orderId,{preparationId,kind,...(state.enrolled?{expectedReadinessRevision:state.revision,...(kind!=='预缩完成'?{range:{expectedVersion:state.ranges.filter(r=>r.preparationId===preparationId&&r.kind===kind).at(-1)?.version??0,lineIds:lines,complete:true,pendingMaterialIds:[],evidenceIds:[],note:'TEST whole applicable range completed'}}:{})}:{})},randomUUID());
 }
 
