@@ -3740,7 +3740,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   it('R2 task document directory preserves independent budget rights and exact development round',async()=>{
     const fixture=await budgetFixture(false,"TEST-R2"),root=rootActor();
-    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,preparationPath:'positive'}))!;
     const tasks=new DigitalProductionTaskService(database),worker=ready.people.pattern_room_worker!,client=await database.connect();let taskId:string;
     try{await client.query('BEGIN');
       // The new technical prerequisite already creates this exact round's paper task.
@@ -3890,7 +3890,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it('P16 keeps a source-backed analysis and improvement loop inside scope and original export rights',async()=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
-    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,preparationPath:'positive'}))!;
     const analysis=new DigitalAnalysisQuery(database),filters=DigitalAnalysisFilterSchema.parse({from:'2020-01-01',to:'2030-12-31',customer:'PD',designer:fixture.designer.actorId,category:'上衣'});
     const result=await analysis.list(fixture.designer,filters);
     expect(result.total).toBeGreaterThan(0);expect(result.summary.newStyles).toBe(1);expect(result.rows.every(row=>row.styleNo===fixture.order.designStyleNo)).toBe(true);
@@ -4317,7 +4317,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture = await budgetFixture(false,"TEST-LEGACY-ROUNDS","2026-11-20",true), primary = merchandiserActor(), root = rootActor();
     const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
       { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
-      factoryId, craftId("净色车缝"), "none", { cuttingProcess: "in_house", stopAtReady: true }))!;
+      factoryId, craftId("净色车缝"), "none", { cuttingProcess: "in_house", stopAtReady: true ,preparationPath:'positive'}))!;
     const identity = new DigitalProductionIdentityService(database, true, service);
     const formal = `TEST-RECEIVING-SOURCE-${randomUUID().slice(0, 8)}`;
     for (const [index, line] of fixture.order.lines.entries()) {
@@ -4360,7 +4360,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,
       {primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),"none",
-      {cuttingProcess:"in_house",stopAtReady:true}))!;
+      {cuttingProcess:"in_house",stopAtReady:true,preparationPath:'positive'}))!;
     const identity=new DigitalProductionIdentityService(database,true),before=await identity.read(root,ready.id);
     expect(before.lines.every(line=>line.poNumber&&line.poNumber===line.formalStyleNo)).toBe(true);
     const sourceBefore=await service.getCase(readerActor(),ready.caseId);
@@ -4487,7 +4487,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   it('SLA03 independent customer revision preserves the linked mother order and keeps worker access to its instruction',async()=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
-    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,preparationPath:'positive'}))!;
     const {id,sourceId,instruction,bulk,people}=ready,worker=people.pattern_room_worker!;
     const forms=new DigitalDevelopmentService(database,true),rounds=new DevelopmentRoundService(database,true),identity=new DigitalProductionIdentityService(database,true);
     const original=await forms.read(fixture.designer,sourceId),beforeOrder=await identity.read(primary,id),beforeInstruction=await instruction.read(worker,id),beforePreparation=await bulk.read(primary,id);
@@ -4517,7 +4517,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it('P11 freezes no-preshrink at publication and preserves facts, tasks and P0 across reads, sync and a different unpublished draft',async()=>{
     const primary=merchandiserActor(),root=rootActor(),fixture=await budgetFixture();
-    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,preparationPath:'positive'}))!;
     const {id,bulk,instruction,preparationId}=ready;
     const frozen=async()=>({
       instructions:(await database.query('SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version',[id])).rows,

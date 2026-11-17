@@ -1,0 +1,115 @@
+name: Experiment B fixed PG32 (not merge approval)
+
+on:
+  push:
+    branches: [experiment/ci-b-pg32-20261117]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experiment-ci-b-pg32-20261117
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Experimental B - single PG - 32 suites
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      NODE_ENV: test
+      GIT_SHA: ${{ github.sha }}
+      SERVICE_NAME: dx-rework-api
+      EXPERIMENT_EVIDENCE_DIR: ${{ runner.temp }}/ci-b-pg32-evidence
+    steps:
+      - name: Checkout exact experimental source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up repository Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin repository npm
+        run: npm install --global "$(node -p "require('./package.json').packageManager")" --no-audit --no-fund --prefer-offline
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund --prefer-offline
+      - name: Validate frozen workload and record actual environment
+        run: |
+          set -euo pipefail
+          echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          node scripts/experiments/ci-b-pg32.mjs prepare
+      - name: Build original workspace inputs without root postbuild
+        run: npm run build --workspaces --if-present
+      - name: Create original isolated low privilege PostgreSQL context
+        run: |
+          set -euo pipefail
+          docker run --rm -d --name dx-ci-b-pg32-postgres \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres_ci -e POSTGRES_DB=postgres \
+            -p 5432:5432 postgres:16-alpine
+          ready_streak=0
+          for _ in $(seq 1 60); do
+            if docker exec dx-ci-b-pg32-postgres pg_isready -U postgres -d postgres >/dev/null 2>&1; then
+              ready_streak=$((ready_streak + 1))
+              if [[ "$ready_streak" -ge 3 ]]; then break; fi
+            else
+              ready_streak=0
+            fi
+            sleep 1
+          done
+          test "$ready_streak" -ge 3
+          docker exec dx-ci-b-pg32-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE dx_rework_test LOGIN PASSWORD 'dx_rework_ci' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS" \
+            -c "CREATE DATABASE dx_rework_ci OWNER dx_rework_test" \
+            -c "CREATE DATABASE dx_rework_acceptance_clock_test OWNER dx_rework_test" \
+            -c "COMMENT ON DATABASE dx_rework_ci IS 'dx-rework-isolated-test-v1'" \
+            -c "COMMENT ON DATABASE dx_rework_acceptance_clock_test IS 'dx-rework-isolated-test-v1'" \
+            -c "CREATE ROLE dx_rework_acceptance NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE" \
+            -c "CREATE ROLE dx_rework_acceptance_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE" \
+            -c "GRANT dx_rework_acceptance, dx_rework_acceptance_app TO dx_rework_test"
+          docker exec dx-ci-b-pg32-postgres postgres --version > "$EXPERIMENT_EVIDENCE_DIR/postgres-version.txt"
+          docker inspect dx-ci-b-pg32-postgres --format '{{.Image}}' > "$EXPERIMENT_EVIDENCE_DIR/postgres-image.txt"
+          test_url='postgresql://dx_rework_test:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
+          NODE_ENV=test TEST_DATABASE_URL="$test_url" node scripts/test-database-safety.mjs
+          { echo "DATABASE_URL=$test_url"; echo "TEST_DATABASE_URL=$test_url"; } >> "$GITHUB_ENV"
+          echo 'ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://dx_rework_test:dx_rework_ci@127.0.0.1:5432/dx_rework_acceptance_clock_test' >> "$GITHUB_ENV"
+      - name: Seed original base revision migration history
+        run: bash scripts/seed-base-migrations.sh
+      - name: Apply and validate exact experimental migration history
+        run: npm run db:migrate:check
+      - name: Validate original managed resource lifecycle
+        run: node scripts/test-preflight.mjs --database
+      - name: Prepare browser required by frozen canonical plan
+        run: node scripts/ci/prepare-settings-browser.mjs
+      - name: Run exactly frozen PG32 and verify all 573 case identities
+        run: |
+          set -euo pipefail
+          node scripts/experiments/ci-b-pg32.mjs run 2>&1 | tee "$EXPERIMENT_EVIDENCE_DIR/canonical.log"
+      - name: Collect PostgreSQL resource evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$EXPERIMENT_EVIDENCE_DIR"
+          if docker inspect dx-ci-b-pg32-postgres >/dev/null 2>&1; then
+            docker logs dx-ci-b-pg32-postgres > "$EXPERIMENT_EVIDENCE_DIR/postgres-server.log" 2>&1
+            for metric in cpu.stat memory.peak io.stat; do
+              docker exec dx-ci-b-pg32-postgres cat "/sys/fs/cgroup/$metric" > "$EXPERIMENT_EVIDENCE_DIR/pg-$metric" || echo 'metric unavailable' > "$EXPERIMENT_EVIDENCE_DIR/pg-$metric-unavailable.txt"
+            done
+          fi
+      - name: Remove exact experimental database container
+        if: always()
+        run: |
+          set -euo pipefail
+          if docker inspect dx-ci-b-pg32-postgres >/dev/null 2>&1; then docker rm -f dx-ci-b-pg32-postgres; fi
+          if docker inspect dx-ci-b-pg32-postgres >/dev/null 2>&1; then exit 1; fi
+          mkdir -p "$EXPERIMENT_EVIDENCE_DIR"
+          echo 'exact experimental container absent' > "$EXPERIMENT_EVIDENCE_DIR/container-cleanup.txt"
+      - name: Preserve one bounded experiment evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-b-pg32-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-b-pg32-evidence
+          retention-days: 3
+          if-no-files-found: error
