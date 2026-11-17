@@ -139,7 +139,7 @@ export class SlaOrderService {
       if(bulk.production_sheet?.evidence.startsWith('instruction:')&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
       const production=await factoryProductionFacts(client,orderId);
       Object.assign(facts,bulk,await sourcingSlaEvidence(client,orderId),await shipSampleSlaEvidence(client,orderId),production.facts);
-      const factory=await factorySlaEvidence(client,orderId);if(factory)Object.assign(facts,factory.facts);
+      const factory=await factorySlaEvidence(client,orderId,bulk);if(factory)Object.assign(facts,factory.facts);
       const garments=await garmentSlaEvidence(client,orderId);Object.assign(facts,garments.facts);
       const receiving=actor?await new OrderClosureService(this.database).read(actor,orderId,client):await new OrderClosureService(this.database).readFactsWithClient(orderId,client);
       const span=receiving.receivingSpan;facts.receiving_span={businessCompleted:receiving.collection?.status==='已收齐',evidence:`native-receipts:${receiving.revision}`,

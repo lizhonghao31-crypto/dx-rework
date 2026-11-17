@@ -47,7 +47,7 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  const definitions=new Map(plan?.nodes.map(n=>[n.id,n])??[]),originals=new Map(original?calculateSlaPlan(original).map(n=>[n.id,n.end]):[]);
  const instances=native?.instances??[],visible=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.state!=='unavailable'),readRound=item.selectedRound??item.adoptedRound;
  const factoryInstances=native?.factoryInstances??[],factoryById=new Map(factoryInstances.map(instance=>[instance.nodeId,instance]));
- const visibleFactory=(instance:FactorySlaInstance)=>visible.some(node=>instance.taskIds.includes(node.instanceId)&&node.key===(instance.phase==='qc'?'bulk_qc':'process_logistics')&&(!authorizedTaskIds||authorizedTaskIds.has(node.instanceId)));
+ const visibleFactory=(instance:FactorySlaInstance)=>visible.some(node=>instance.taskIds.includes(node.instanceId)&&node.key===instance.taskKind&&(!authorizedTaskIds||authorizedTaskIds.has(node.instanceId)));
  const scopedKeys=new Set(instances.filter(instance=>readRound===null||instance.round===readRound).map(instance=>journeyTimingKey(instance.definitionId)));
  const visibleInstance=(instance:DevelopmentCraftInstance)=>item.sourceId===instance.sourceId&&visible.some(node=>node.instanceId===instance.taskId&&node.round===instance.round&&journeyTimingKey(node.key)===journeyTimingKey(instance.taskKind))&&(!authorizedTaskIds||authorizedTaskIds.has(instance.taskId));
  const timing:JourneyTiming[]=nodes.flatMap(n=>{const definition=definitions.get(n.id);if(!definition||definition.applicable==='no'||definition.kind==='unlimited'||definition.parameterKey==='bulk_cutting'&&external||scopedKeys.has(journeyTimingKey(n.id)))return [];
@@ -74,14 +74,14 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  item.supervision={assessment:nodes.some(n=>!scopedKeys.has(journeyTimingKey(n.id))&&n.assessmentIssue)||timing.some(n=>n.assessmentIssue)?'partially_unavailable':'complete',asOf:time.now,status:plan?'planned':'legacy_unenrolled',originalRevision:revisions.original,currentRevision:revisions.current,nodes:timing,coverage,customerReminderDate:reminder};
  if(native){
   const visibleKeys=new Set(item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!['unavailable','not_applicable'].includes(node.state)).map(node=>journeyTimingKey(node.key)));
-  item.supervision.nativeFacts=Object.entries(native.facts).filter(([id])=>{const factory=factoryById.get(id);if(factory)return visibleFactory(factory);if(factoryInstances.length&&['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_special','bulk_qc'].includes(id))return false;const instance=instances.find(instance=>id===`${instance.definitionId}:task:${instance.taskId}`);return visibleKeys.has(journeyTimingKey(id))&&(instance?visibleInstance(instance):!scopedKeys.has(journeyTimingKey(id)));}).sort(([a],[b])=>a.localeCompare(b))
+  item.supervision.nativeFacts=Object.entries(native.facts).filter(([id])=>{const factory=factoryById.get(id);if(factory)return visibleFactory(factory);if(factoryInstances.length&&(['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_special','bulk_qc'].includes(id)||id==='warehouse_preshrink'&&factoryInstances.some(instance=>instance.taskKind===id)))return false;const instance=instances.find(instance=>id===`${instance.definitionId}:task:${instance.taskId}`);return visibleKeys.has(journeyTimingKey(id))&&(instance?visibleInstance(instance):!scopedKeys.has(journeyTimingKey(id)));}).sort(([a],[b])=>a.localeCompare(b))
    .map(([id,fact])=>({id,sourceRef:fact.evidence,timeRole:'sla_observation',startedAt:fact.startedAt??null,completedAt:fact.completedAt??null,businessCompleted:fact.businessCompleted??null}));
  }
  for(const stage of item.stages)for(const node of stage.nodes){
   if(!node.current)continue;
   if(scopedKeys.has(journeyTimingKey(node.key))){delete node.timing;delete node.timings;}
   const lineIds=new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[]));
-  const matches=timing.filter(t=>{const factory=factoryById.get(t.id);if(factory)return factory.taskIds.includes(node.instanceId)&&node.key===(factory.phase==='qc'?'bulk_qc':'process_logistics')&&(!authorizedTaskIds||authorizedTaskIds.has(node.instanceId));return journeyTimingKey(t.id)===journeyTimingKey(node.key)&&(!t.id.includes(':task:')||t.id.endsWith(':task:'+node.instanceId))&&(!lineIds.size
+  const matches=timing.filter(t=>{const factory=factoryById.get(t.id);if(factory)return factory.taskIds.includes(node.instanceId)&&node.key===factory.taskKind&&(!authorizedTaskIds||authorizedTaskIds.has(node.instanceId));return journeyTimingKey(t.id)===journeyTimingKey(node.key)&&(!t.id.includes(':task:')||t.id.endsWith(':task:'+node.instanceId))&&(!lineIds.size
    ||!item.lines.some(line=>line.id===t.id.split(':')[1])||lineIds.has(t.id.split(':')[1]!));});
   // Multiple PO/batch windows share the existing aggregate's risk, never invent a single aggregate target.
   if(!matches.length)continue;

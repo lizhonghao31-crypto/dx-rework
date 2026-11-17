@@ -6,7 +6,7 @@ import {craftParameterKey} from './fixed-work-definition.js';
 import {fixedCraftSteps} from './fixed-craft-steps.js';
 import {factoryFrozenEvaluationPlan,type FactoryEvaluationRoute,type FactorySlaInstance} from './factory-evaluation-route.js';
 /** Stage completion requires all applicable physical quantities, not the first dispatch. */
-export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:string){
+export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:string,nativeBulkFacts:Readonly<Record<string,SlaNodeFact>>={}){
  const timing=await factoryBatchTiming(db,orderId);if(!timing)return null;
  if('stepLedger'in timing&&timing.stepLedger){
   const steps=await fixedCraftSteps(db,timing.preparationId),facts:Record<string,SlaNodeFact>={};
@@ -36,11 +36,20 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
   const qc=timing.windows.filter(window=>window.kind==='bulk_qc'),dispatch=timing.windows.filter(window=>window.kind==='warehouse_dispatch');
   put('bulk_qc',qc,qc.length===steps.length&&qc.every(window=>window.complete),timing.stepLedger.steps.every(step=>step.completion.every(line=>line.complete)));
   put('warehouse_dispatch',dispatch,timing.ledger.complete,timing.ledger.canDispatch||timing.ledger.complete);
-  const positions=timing.evaluationRoute?(await db.query(`SELECT p.task_id,p.step_id,p.phase,p.route_position FROM digital_timeline_task_positions p
-   JOIN digital_production_task_access a USING(task_id) WHERE p.adoption_id=$1 AND p.route_ref=$2 AND a.production_order_id=$3`,[timing.evaluationRoute.adoptionId,timing.preparationId,orderId])).rows as Array<{task_id:string;step_id:string;phase:string;route_position:number}>:[];
+  const positions=timing.evaluationRoute?(await db.query(`SELECT t.task_id,a.task_kind,p.step_id,p.phase,p.route_position FROM digital_production_tasks t
+   JOIN digital_production_task_access a USING(task_id) LEFT JOIN digital_timeline_task_positions p ON p.task_id=t.task_id AND p.adoption_id=$1 AND p.route_ref=$2
+   WHERE t.route_instance_id=$2 AND a.production_order_id=$3`,[timing.evaluationRoute.adoptionId,timing.preparationId,orderId])).rows as Array<{task_id:string;task_kind:string;step_id:string|null;phase:string|null;route_position:number|null}>:[];
   const instances:FactorySlaInstance[]=(timing.evaluationRoute?.route??[]).flatMap(row=>row.stepId&&(row.phase==='logistics'||row.phase==='qc')?[{
-   nodeId:row.nodeId,stepId:row.stepId,phase:row.phase,routeRef:timing.preparationId,taskIds:positions.filter(position=>position.step_id===row.stepId&&position.phase===row.phase&&position.route_position===row.position).map(position=>position.task_id),lineIds:timing.ledger.totals.map(line=>line.lineId),snapshotId:timing.snapshotId,
+   nodeId:row.nodeId,stepId:row.stepId,phase:row.phase,taskKind:row.phase==='qc'?'bulk_qc':'process_logistics',routeRef:timing.preparationId,taskIds:positions.filter(position=>position.step_id===row.stepId&&position.phase===row.phase&&position.route_position===row.position&&position.task_kind===row.kind).map(position=>position.task_id),lineIds:timing.ledger.totals.map(line=>line.lineId),snapshotId:timing.snapshotId,
   }]:[]);
+  const groupIds=new Set(timing.evaluationRoute?.groups.flatMap(group=>group.nodeIds)??[]);
+  for(const work of timing.evaluationRoute?.work??[])if(groupIds.has(work.id)&&work.parameterKey==='warehouse_preshrink'){
+   const taskIds=positions.filter(position=>position.task_kind==='warehouse_preshrink').map(position=>position.task_id),native=nativeBulkFacts.warehouse_preshrink;
+   instances.push({nodeId:work.id,stepId:null,phase:'work',taskKind:'warehouse_preshrink',routeRef:timing.preparationId,taskIds,lineIds:timing.ledger.totals.map(line=>line.lineId),snapshotId:timing.snapshotId});
+   // The scalar compatibility fact belongs to a real current preparation task.
+   // A retired/other preparation's fact must not certify the appended work.
+   if(native&&taskIds.some(id=>native.evidence===`task:${id}`))facts[work.id]=structuredClone(native);
+  }
   return {preparationId:timing.preparationId,craftKey:steps.length===1?`bulk_${steps[0]!.craftKind}`:null,craftSteps:steps,facts,evaluationRoute:timing.evaluationRoute,instances,windows:timing.windows.map(window=>({...window,lineIds:window.lineId?[window.lineId]:timing.ledger.totals.map(line=>line.lineId)}))};
  }
  const craft=(await db.query('SELECT secondary_craft FROM digital_factory_routes WHERE production_order_id=$1',[orderId])).rows[0].secondary_craft as string;

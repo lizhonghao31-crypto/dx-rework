@@ -53,12 +53,21 @@ describe('original frozen factory supervision graph',()=>{
   expect(()=>orderedSlaNodes(factoryEvaluationPlan(base(),null))).not.toThrow();
   expect(factoryEvaluationPlan(base(),'bulk_printing').nodes.find(node=>node.id==='warehouse_dispatch')!.dependsOn).toContain('sourcing_approval');
  });
+ it('replaces a non-craft group alias once, retains its original stage and binds cutting to the exact added work',()=>{
+  const {steps,frozen}=fixture(['special'],true),original=base(),id='warehouse_preshrink:TEST-current-preparation';
+  original.nodes.push({...baseNode('warehouse_preshrink'),stage:3});original.nodes.find(node=>node.id==='bulk_cutting')!.dependsOn=['warehouse_preshrink'];
+  frozen.work.push({id,parameterKey:'warehouse_preshrink',dependsOn:[],minutes:60,calendar:'continuous',responsibilityMinutes:60,responsibilityCalendar:'continuous',responsibilitySlaRef:'TEST immutable preshrink quota',planningParameterRef:'TEST original P',canonicalWorkRef:'TEST current preparation preshrink',accountingRole:'added_work'});
+  frozen.groups.push({nodeIds:[id],lastNodeId:id,handoffNodeId:'bulk_cutting'});
+  const adapted=factoryEvaluationPlan(original,null,steps,frozen);
+  expect(adapted.nodes.filter(node=>node.parameterKey==='warehouse_preshrink'&&node.applicable==='yes'&&node.countsProgress)).toEqual([expect.objectContaining({id,stage:3})]);
+  expect(adapted.nodes.find(node=>node.id==='bulk_cutting')!.dependsOn).toEqual([id]);expect(()=>orderedSlaNodes(adapted)).not.toThrow();
+ });
 });
 
 it('retains exact step/task identity through stored facts, selection-clock rebuild and restricted visibility',()=>{
  const {frozen,steps}=fixture(),plan=factoryEvaluationPlan(base(),null,steps,frozen),at=(minutes:number)=>new Date(Date.parse('2026-11-17T00:00:00Z')+minutes*60000).toISOString(),time={now:at(60),scenarioId:null,revision:0};
  // A step happens to equal a PO ID. It must never be parsed as that PO.
- const factoryInstances:FactorySlaInstance[]=frozen.route.map((row,index)=>({nodeId:row.nodeId,stepId:row.stepId!,phase:row.phase as 'qc'|'logistics',routeRef:frozen.routeRef,taskIds:['TEST-task-'+index],lineIds:['TEST-real-po'],snapshotId:'TEST original snapshot'}));
+ const factoryInstances:FactorySlaInstance[]=frozen.route.map((row,index)=>({nodeId:row.nodeId,stepId:row.stepId!,phase:row.phase as 'qc'|'logistics',taskKind:row.phase==='qc'?'bulk_qc':'process_logistics',routeRef:frozen.routeRef,taskIds:['TEST-task-'+index],lineIds:['TEST-real-po'],snapshotId:'TEST original snapshot'}));
  const raw:JourneyNode[]=factoryInstances.map((instance,index)=>({key:instance.phase==='qc'?'bulk_qc':'process_logistics',label:'TEST exact '+index,stage:'post_cutting',instanceId:instance.taskIds[0]!,state:'active',current:true,round:1,occurrence:index+1,owner:null,operator:null,assignmentHistory:[],expectedAt:at(index*10+120),expectedKind:'sla',expectedPrecision:'instant',actualAt:null,actualQuality:'missing',enteredAt:at(index*10),sla:'running',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[{domain:'task',id:instance.taskIds[0]!,url:null,version:1,lineId:null,mode:'read'}],inheritedFrom:null,countsInProgress:true,unavailableReason:null,progressApplicability:'applicable'}));
  const untimed:OrderJourney={asOf:time.now,id:'TEST-order',sourceId:null,orderId:'TEST-order',designStyleNo:'TEST',temporaryStyleNo:null,customer:null,category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:at(0),deliveryDate:null,selectedRound:1,adoptedRound:1,sourceVersion:1,instructionVersion:1,lines:[{id:'TEST-real-po',po:'TEST original PO',color:'黑',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1},{id:'TEST-step-0',po:'TEST unrelated PO',color:'白',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1}],poDeliveryDates:[],links:[],stages:journeyStages(raw),progress:{development:null,bulk:null},hitReasons:[]};
  const facts:Record<string,SlaNodeFact>=Object.fromEntries(factoryInstances.map((instance,index)=>[instance.nodeId,{evidence:'TEST native '+index,startedAt:at(index*10),batchCoverageComplete:true,batchWindows:[{startedAt:at(index*10),deadline:at(index*10+120),warningAt:at(index*10+84),completedAt:null,complete:false,evidence:'TEST native '+index}]}]));
