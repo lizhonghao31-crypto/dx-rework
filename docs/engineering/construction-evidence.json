@@ -1,176 +1,181 @@
 {
   "version": 1,
-  "base": "7143c82691592fc0e7ae77ab2c90f9cb80398f60",
+  "base": "ba2f72fc78672a7d9b64c509012479be425b6213",
   "risk": "full",
-  "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
+  "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
   "rules": [
     {
-      "rule": "Development may publish incomplete ordering data without formal creation or invented deadlines; exact frozen craft instance identity stays outside strict choice DTO; new unsaved timing drafts and concurrent stale conflicts must remain clear and safe.",
-      "source": "2026-11-16 user via Dot approved three repairPRs, PR3 time-check and feedback; v27 optional sample date and incomplete ordering development publication, formal confirmation complete input, frozen policy/real facts/history, original approved authority. PACKSTOP2 missing dates and eaf two frozen special actual shape reproduced locally; no original request server stack asserted.",
+      "source": "Reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX01/FIX02; user authorization through Dot; v27 first adoption and real causal responsibility rules.",
+      "initialization": "Original marked low-privilege PG fixture, migrations and role seeder. Preserve old CI/U2 worktrees. No historical source plan reconstruction and no business database writes.",
+      "dateAndPermission": "Native actor/object authorization retained; current Root uses bootstrap identity and active employed mapping. Frozen quota/calendar retained; Sunday-excluded 72h from Nov21 04Z ends Nov25 04Z, assignment does not shift R.",
+      "expectation": "New approval makes only its exact source/order effective atomically; causal recheck determines paper R/D; missing or ambiguous evidence remains unknown; original plans, owner, audit and historical windows preserved.",
+      "rule": "Exact original source/order approval scope, idempotence and rollback",
       "writes": [
-        "apps/api/src/production-platform/fixed-development-work.ts",
-        "apps/api/src/production-platform/fixed-order-work.ts",
-        "apps/api/src/production-platform/fixed-work-definition.ts",
-        "apps/api/src/production-platform/order-time-framework-route.ts",
-        "apps/api/src/production-platform/order-time-native-commands.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-publication-intent.ts",
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "apps/api/src/production-platform/order-time-washing.ts",
-        "apps/web/src/order-time-request-page.tsx",
-        "apps/web/src/order-time-washing-fields.tsx",
-        "apps/web/src/order-time-washing-rebase.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "docs/engineering/construction-evidence.json",
-        "docs/engineering/order-time-check-feedback.md",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/order-time-craft-contract.test.ts",
-        "tests/unit/order-time-publication-intent.test.ts",
-        "tests/unit/order-time-washing-rebase.test.ts"
+        "apps/api/src/production-platform/order-time-request-service.ts#apply",
+        "tests/integration/order-time-requests-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-framework-submission.ts",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/order-time-washing-fields.tsx",
-        "packages/contracts/src/order-time-framework.ts",
-        "packages/contracts/src/digital-craft.ts",
-        "packages/contracts/src/digital-production.ts"
+        "apps/api/src/production-platform/order-time-operation-state.ts#loadOrderTimeOperation",
+        "apps/api/src/production-platform/order-time-plan-repository.ts#confirm",
+        "apps/api/src/production-platform/order-time-native-commands.ts#orderTimeNativeExecutor"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-requests-postgres.test.ts"
+      ],
+      "checks": [
+        "rp1-pg",
+        "rp1-static"
+      ]
+    },
+    {
+      "source": "Reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX01/FIX02; user authorization through Dot; v27 first adoption and real causal responsibility rules.",
+      "initialization": "Original marked low-privilege PG fixture, migrations and role seeder. Preserve old CI/U2 worktrees. No historical source plan reconstruction and no business database writes.",
+      "dateAndPermission": "Native actor/object authorization retained; current Root uses bootstrap identity and active employed mapping. Frozen quota/calendar retained; Sunday-excluded 72h from Nov21 04Z ends Nov25 04Z, assignment does not shift R.",
+      "expectation": "New approval makes only its exact source/order effective atomically; causal recheck determines paper R/D; missing or ambiguous evidence remains unknown; original plans, owner, audit and historical windows preserved.",
+      "rule": "Original task execution eligibility is identical in read and final write guard",
+      "writes": [
+        "apps/api/src/production-platform/task-service.ts#executionBlock"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/task-service.ts#active",
+        "apps/api/src/production-platform/development-execution-service.ts#read"
       ],
       "oldTests": [
         "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/unit/order-time-requests.test.ts",
-        "tests/unit/order-time-settings.test.ts",
-        "tests/unit/order-time-plan.test.ts",
-        "tests/unit/order-time-washing.test.ts"
+        "tests/integration/digital-production-tasks-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/unit/order-time-craft-contract.test.ts",
-        "tests/unit/order-time-publication-intent.test.ts",
-        "tests/unit/order-time-washing-rebase.test.ts"
-      ],
-      "initialization": "No SQL/backfill or live writes. Same publicationFormalInput readiness boundary used by check and native executor; missing contract/partialPO dates/preorder remain development only, explicit formal check returns unknown/coverage and original formal identity guard refuses promotion. Only datedPO scopes get original A/B milestones; no naked missing-date throw or dummy date. Builders and old framework adapters project allowed choice fields while original native route stepId/source/round/canonicalWorkRef/frozen library version persist. Old complete formal drafts and native history remain via original services.",
-      "dateAndPermission": "Real original designer publication App and original Root/manager request transactions used. New success cleared on ordinary, washing and invalid drafts; separate persistent stale conflict survives automatic previews and blocks saving until explicit refresh/review. Three-way washing rebase preserves intentional edits and fresh readonly fee provenance/currentversion, no automatic adoption. Original fingerprint/expectedVersion, started responsibility windows, data versions, old confirmed quotation/budget/contract and role guards remain. Unknown POST recovery not retried; original read-check vs write-outcome splitting retained.",
-      "expectation": "Combined140 units and full35 original PostgreSQL16/authenticated browser cases pass on the exact044+409 preview composition; current actual parent integration must match the complete source fingerprint before local result reuse. Execution retained real HEAD409 with uncommitted044 source, not falsely described as testing at later actual parent commit. Review4583545198 now synchronizes visible raw editor fields and payload after explicit baseline acknowledgement, preserves deliberate or invalid text, and does not reverse independently adopted inspector or inspection duration on a subsequent edit. Includes incomplete/partially dated ordering development publish and strict confirm refusal, ordinary and dual frozen special developer->formal native adoption, unique identities and old saved-work strict projection, no source mutation; two sequential washing edits, two-page stale409 persistent through preview and explicit ack without auto-save, old success removed for200day and invalidtext draft with navigation guard. lint/types/preflight/secret exit0; exact GitHub Full/review/live acceptance still pending. New rewash-round planning identified separately, not misrepresented as covered here.",
       "checks": [
-        "unit",
-        "native-pg",
-        "lint",
-        "types",
-        "preflight",
-        "secret"
+        "rp1-pg",
+        "rp1-static"
+      ]
+    },
+    {
+      "source": "Reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX01/FIX02; user authorization through Dot; v27 first adoption and real causal responsibility rules.",
+      "initialization": "Original marked low-privilege PG fixture, migrations and role seeder. Preserve old CI/U2 worktrees. No historical source plan reconstruction and no business database writes.",
+      "dateAndPermission": "Native actor/object authorization retained; current Root uses bootstrap identity and active employed mapping. Frozen quota/calendar retained; Sunday-excluded 72h from Nov21 04Z ends Nov25 04Z, assignment does not shift R.",
+      "expectation": "New approval makes only its exact source/order effective atomically; causal recheck determines paper R/D; missing or ambiguous evidence remains unknown; original plans, owner, audit and historical windows preserved.",
+      "rule": "Same-round explicit recheck predecessor owns paper responsibility and corrections",
+      "writes": [
+        "apps/api/src/production-platform/development-execution-service.ts#check",
+        "apps/api/src/production-platform/development-task-timing.ts#developmentTaskTiming",
+        "tests/unit/development-craft-timing-review.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/task-service.ts#correctTime",
+        "apps/api/src/production-platform/development-responsibility-window.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/unit/development-craft-timing-review.test.ts"
+      ],
+      "checks": [
+        "rp1-pg",
+        "rp1-unit",
+        "rp1-static"
+      ]
+    },
+    {
+      "source": "Reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX01/FIX02; user authorization through Dot; v27 first adoption and real causal responsibility rules.",
+      "initialization": "Original marked low-privilege PG fixture, migrations and role seeder. Preserve old CI/U2 worktrees. No historical source plan reconstruction and no business database writes.",
+      "dateAndPermission": "Native actor/object authorization retained; current Root uses bootstrap identity and active employed mapping. Frozen quota/calendar retained; Sunday-excluded 72h from Nov21 04Z ends Nov25 04Z, assignment does not shift R.",
+      "expectation": "New approval makes only its exact source/order effective atomically; causal recheck determines paper R/D; missing or ambiguous evidence remains unknown; original plans, owner, audit and historical windows preserved.",
+      "rule": "Controlled qualification-only maintenance is exact, audited, idempotent and blocked without original evidence",
+      "writes": [
+        "apps/api/src/production-platform/order-time-scope-recovery.ts#OrderTimeScopeRecoveryService",
+        "scripts/acceptance/order-time-scope-recovery.ts"
+      ],
+      "reads": [
+        "apps/api/src/access/root-authority.ts#isRootUser",
+        "apps/api/src/production-platform/order-time-request-repository.ts#receipt",
+        "apps/api/src/production-platform/order-time-plan-repository.ts#current"
+      ],
+      "oldTests": [],
+      "checks": [
+        "rp1-pg",
+        "rp1-static",
+        "rp1-cli"
+      ],
+      "noExistingTestsReason": "This new internal maintenance adapter had no original test entry; its strict proof, active Root, concurrency and unchanged-window assertions are added to the original real PG request suite.",
+      "newTests": [
+        "tests/integration/order-time-requests-postgres.test.ts#recovers only an exact original source qualification",
+        "tests/integration/order-time-requests-postgres.test.ts#refuses qualification recovery"
       ]
     }
   ],
   "checks": [
     {
-      "id": "unit",
+      "id": "rp1-pg",
       "kind": "tests",
-      "command": "vitest run tests/unit/order-time-craft-contract.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-washing.test.ts tests/unit/order-time-publication-intent.test.ts tests/unit/order-time-washing-rebase.test.ts tests/unit/order-time-settings.test.ts tests/unit/order-time-plan.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=1",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp1-20261117/pg/rp1-requests-final/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 140,
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
+      "context": "Local Node22.22.2/npm10.9.9; exact RP1 workspace; original Vitest configurations and worker authority. PG16.16 low-privilege marked isolated database in a 2CPU/4GiB owned container; no Acceptance/production connection. Normal and failed scenarios retained; container absence verified.",
+      "startedAt": "2026-11-17T03:44:43.216295+00:00",
+      "endedAt": "2026-11-17T03:45:35.282585+00:00",
+      "logSha256": "57f9776d4955db81643827d574be7a2987535fa1fcbe65cdf65c8c112b4aab57",
+      "logPath": "/workspace/sla-rp1-20261117/pg/rp1-requests-final/tests.log",
+      "passed": 29,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "startedAt": "2026-11-16T09:10:51.795Z",
-      "endedAt": "2026-11-16T09:10:55.558Z",
-      "log": "/tmp/time-combined-preview-unit.log",
-      "logSha256": "edd16baa563602aeaf86d9df1a4dee478908f8bbba15d26d4542e4f8f0db8489",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9d1df5c4ff36f3b1858b53b27f0448f44ae53b7624b595add08267512e4f948a"
+          "sha256": "7afa1486721ad336d5f9d34acd1f57da64dce76554e60ffcd19577d511278ae3"
         }
-      ],
-      "context": "Combined source preview: actual Git HEAD409 with uncommitted044 candidate integration, actual base at execution45176bec; final current branch source equals the original complete source fingerprint, real parent integration and409 ancestry checked. Not claimed as execution at the later actual mergeSHA. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real combined full35-case original service/App suite, no skipped cases. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
+      ]
     },
     {
-      "id": "native-pg",
+      "id": "rp1-unit",
       "kind": "tests",
-      "command": "bash /tmp/time-combined-preview-pg.sh tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-requests.test.ts tests/unit/order-time-plan.test.ts tests/unit/development-craft-timing-review.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp1-20261117/units-final.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 35,
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
+      "context": "Local Node22.22.2/npm10.9.9; exact RP1 workspace; original Vitest configurations and worker authority. PG16.16 low-privilege marked isolated database in a 2CPU/4GiB owned container; no Acceptance/production connection. Actual command output retained; no CI run implied.",
+      "startedAt": "2026-11-17T03:45:06.569531+00:00",
+      "endedAt": "2026-11-17T03:45:12.338927+00:00",
+      "logSha256": "4b55e6c5c7553f0ee0242b4211ae26dfcfdae9b821964a0560dc8e49e0625085",
+      "logPath": "/workspace/sla-rp1-20261117/checks/units-final/command.log",
+      "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "startedAt": "2026-11-16T09:10:57.698Z",
-      "endedAt": "2026-11-16T09:13:14.602Z",
-      "log": "/tmp/time-combined-preview-native.log",
-      "logSha256": "66f027b1481c518aa1900659b726bff7b7f9e21a360e26dec2fffef2f987f8da",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f8c563acee72d1e3a7dc0807888f6094a9dcd71626d550f14919e80d2c74dea8"
+          "sha256": "2c11f3f38aebe331abeb7dd6890e64e77b83c582d3f2361a2ecd9686bed8b6de"
         }
-      ],
-      "context": "Combined source preview: actual Git HEAD409 with uncommitted044 candidate integration, actual base at execution45176bec; final current branch source equals the original complete source fingerprint, real parent integration and409 ancestry checked. Not claimed as execution at the later actual mergeSHA. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real combined full35-case original service/App suite, no skipped cases. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
+      ]
     },
     {
-      "id": "lint",
-      "command": "npm run lint",
-      "startedAt": "2026-11-16T09:13:48.986897+00:00",
-      "endedAt": "2026-11-16T09:14:25.182381+00:00",
-      "exitCode": 0,
-      "log": "/tmp/time-combined-preview-lint.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
+      "id": "rp1-static",
       "kind": "command",
+      "command": "python3 /workspace/sla-rp1-20261117/static.py",
       "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual npm command on the same combined source fingerprint; execution HEAD409 with pending044 integration, later real parent/source equality and ancestry checked. No remote CI success invented."
+      "exitCode": 0,
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
+      "context": "Local Node22.22.2/npm10.9.9; exact RP1 workspace; original Vitest configurations and worker authority. PG16.16 low-privilege marked isolated database in a 2CPU/4GiB owned container; no Acceptance/production connection. Actual command output retained; no CI run implied.",
+      "startedAt": "2026-11-17T03:45:05.157092+00:00",
+      "endedAt": "2026-11-17T03:45:26.530551+00:00",
+      "logSha256": "e92c928aab226b494ac15271dfe604fced7712e1321516f9840903b1eceeb49e",
+      "logPath": "/workspace/sla-rp1-20261117/checks/static-final/command.log"
     },
     {
-      "id": "types",
-      "command": "npm run typecheck",
-      "startedAt": "2026-11-16T09:14:25.183238+00:00",
-      "endedAt": "2026-11-16T09:15:26.361431+00:00",
-      "exitCode": 0,
-      "log": "/tmp/time-combined-preview-types.log",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
+      "id": "rp1-cli",
       "kind": "command",
+      "command": "python3 /workspace/sla-rp1-20261117/check-cli.py",
       "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual npm command on the same combined source fingerprint; execution HEAD409 with pending044 integration, later real parent/source equality and ancestry checked. No remote CI success invented."
-    },
-    {
-      "id": "preflight",
-      "command": "npm run test:preflight",
-      "startedAt": "2026-11-16T09:49:38.232439+00:00",
-      "endedAt": "2026-11-16T09:49:46.536033+00:00",
       "exitCode": 0,
-      "log": "/tmp/order-time-check-integrated-preflight.log",
-      "logSha256": "7e7ed407695455f1a0ab2f8cee54e8e094a36093031300fedbac568b4e2a1295",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual current PR3 worktree command on HEAD409 with real predecessor merge7143c826 pending; exact combined source fingerprint checked. This is not the earlier dirty044 preview run and not remote CI or onsite acceptance.",
-      "kind": "command",
-      "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230"
-    },
-    {
-      "id": "secret",
-      "command": "npm run secret:scan",
-      "startedAt": "2026-11-16T09:49:46.536605+00:00",
-      "endedAt": "2026-11-16T09:49:47.397246+00:00",
-      "exitCode": 0,
-      "log": "/tmp/order-time-check-integrated-secret.log",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual current PR3 worktree command on HEAD409 with real predecessor merge7143c826 pending; exact combined source fingerprint checked. This is not the earlier dirty044 preview run and not remote CI or onsite acceptance.",
-      "kind": "command",
-      "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230"
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
+      "context": "Local Node22.22.2/npm10.9.9; exact RP1 workspace; original Vitest configurations and worker authority. PG16.16 low-privilege marked isolated database in a 2CPU/4GiB owned container; no Acceptance/production connection. Actual command output retained; no CI run implied.",
+      "startedAt": "2026-11-17T03:46:48.388611+00:00",
+      "endedAt": "2026-11-17T03:46:49.292364+00:00",
+      "logSha256": "43f402f19e0916edadffa67bbd3bb7dde4a19e4025f28375b48a296f1234be43",
+      "logPath": "/workspace/sla-rp1-20261117/checks/cli-safety/command.log"
     }
   ]
 }
