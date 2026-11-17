@@ -14,7 +14,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
  const dismiss=async(page:Page)=>{const notice=page.locator('[aria-label="站内提醒"]');if(await notice.isVisible())await notice.getByRole('button',{name:'我知道了',exact:true}).click();};
  beforeAll(async()=>{
-  h=await cockpitHomeBrowser({databaseUrl:url!,productionAssets:true,fixtureProfile:'navigation',evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),'fixed-timeline-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});
+  h=await cockpitHomeBrowser({databaseUrl:url!,productionAssets:true,evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),'fixed-timeline-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});
   configureTimelineAdoption(h.fixture.db,'fixed_v2');
  });
  afterAll(async()=>{if(h){configureTimelineAdoption(h.fixture.db,'legacy');await h.dispose();}});

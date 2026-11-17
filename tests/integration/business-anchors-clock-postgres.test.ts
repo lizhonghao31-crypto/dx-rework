@@ -203,7 +203,7 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecut
    const fault=vi.spyOn(DigitalProductionTaskService.prototype,'completeWithClient').mockImplementationOnce(async function(this:DigitalProductionTaskService,...args){await complete.apply(this,args);throw new Error('TEST budget completion rollback');});
    try{await expect(f.sourcing.createCase(primary,input,key)).rejects.toThrow('TEST budget completion rollback');}finally{fault.mockRestore();}
    expect(await snapshot()).toEqual(before);
-  },1,f.sourcing,{stopBeforeCompletion:true}));
+  }));
   await f.runtime.run(scene,f.root,async()=>{
    expect((await f.sourcing.createCase(ready.primary,ready.input,ready.key)).reused).toBe(true);
    await expect(f.sourcing.createCase(ready.primary,ready.input,randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -230,7 +230,7 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecut
   try{
    for(const delta of [-7,7]){
     const at=new Date(Date.now()+delta*86400000).toISOString(),sceneId=await f.scene(at);
-    await f.runtime.run(sceneId,f.root,async()=>{for(let i=0;i<5;i++){const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});cases.push({caseId:ready.caseId,orderId:ready.id,sceneId,at});}});
+    await f.runtime.run(sceneId,f.root,async()=>{for(let i=0;i<5;i++){const ready=await f.bulkReady('无');cases.push({caseId:ready.caseId,orderId:ready.id,sceneId,at});}});
    }
   }finally{defer.mockRestore();}
   const caseIds=cases.map(c=>c.caseId);
