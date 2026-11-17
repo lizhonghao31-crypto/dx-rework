@@ -1,6 +1,7 @@
 import type {PoolClient} from 'pg';
 import {describe,it,expect,vi} from 'vitest';
 import {reuseJourneySnapshotReads,prepareJourneySnapshotBatches} from '../../apps/api/src/production-platform/journey-snapshot-reads.js';
+import {readNativePackingHeads} from '../../apps/api/src/receiving/receiving-quantity-query.js';
 const ids=Array.from({length:70},(_,i)=>'11111111-1111-4111-8111-'+String(i).padStart(12,'0')),sql='SELECT * FROM digital_production_orders WHERE production_order_id=$1';
 const result=(rows:unknown[])=>({command:'SELECT',rowCount:rows.length,oid:0,fields:[{name:'production_order_id'},{name:'created_at'},{name:'nested'}],rows});
 const fixture=()=>{let changed=false;const query=vi.fn(async(text:string,values:unknown[]=[])=>{
@@ -9,6 +10,16 @@ const fixture=()=>{let changed=false;const query=vi.fn(async(text:string,values:
  return result([{production_order_id:values[0],created_at:new Date('2026-11-06T00:00:00Z'),nested:{changed}}]);
  });const client={query} as unknown as PoolClient,db=reuseJourneySnapshotReads(client);prepareJourneySnapshotBatches(db,ids);return {query,client,db};};
 describe('Journey original per-order reads use bounded same-snapshot batches',()=>{
+ it('retains the same-snapshot scope across native packing history reads without treating an event alias as a write',async()=>{
+  const {query,db}=fixture();
+  await db.query(sql,[ids[0]]);
+  await readNativePackingHeads(db,[ids[0]!]);
+  await readNativePackingHeads(db,[ids[0]!]);
+  expect((await db.query(sql,[ids[2]])).rows[0].production_order_id).toBe(ids[2]);
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(query.mock.calls[0]![0]).toMatch(/^SELECT requested.ordinal/);
+  expect(query.mock.calls[1]![0]).toContain("merge_event.action='receiving.batch.merge'");
+ });
  it('invalidates both caches when the native driver throws synchronously before returning a query promise',async()=>{
   const {query,db}=fixture();await db.query(sql,[ids[0]]);query.mockImplementationOnce(()=>{throw Error('TEST synchronous native query failure');});expect(()=>db.query(sql,[ids[32]])).toThrow('synchronous native query failure');await db.query(sql,[ids[0]]);expect(query.mock.calls.at(-1)![0]).toBe(sql);
  });

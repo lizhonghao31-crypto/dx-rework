@@ -490,7 +490,12 @@ export class DigitalJourneyQuery {
     const summaries=summaryOnly||compact?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id),observed):null;
     for(const raw of visibleTasks) {
       const definition=journeyDefinition(raw.task_kind);if(!definition)continue;
-      const task=summaryOnly||!actor?summaries!.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db);taskDtos.push(task);
+      const routeTime=routeTimes.find(fact=>fact.task_id===raw.task_id&&fact.route_version===raw.route_version);
+      // The same RR snapshot already loaded these exact completion records.
+      // Original task authorization still runs inside read(), before consuming
+      // a context bound to task/source/round; other callers keep native reads.
+      const completionContext=raw.source_id&&raw.source_id===sid?{taskId:raw.task_id,sourceId:sid,routeVersion:raw.route_version,recorded:routeTime??null}:undefined;
+      const task=summaryOnly||!actor?summaries!.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db,completionContext);taskDtos.push(task);
       const state:JourneyState=task.paused&&!["completed","cancelled"].includes(task.state)?"blocked":task.state==="ready"?"active":task.state;
       const node=emptyNode(definition.key,state,task.routeVersion);node.instanceId=task.taskId;node.occurrence=task.occurrence;
       if(['development_craft_dispatch','development_printing','development_embroidery','development_print_embroidery','development_craft_confirmation'].includes(raw.task_kind))node.label=task.label;
@@ -506,7 +511,6 @@ export class DigitalJourneyQuery {
         :raw.task_kind==="sourcing_preparation"?task.state!=="cancelled"
         :raw.route_instance_id===currentPrep||(raw.task_kind==='bulk_ship_sample'&&raw.route_instance_id===oid);
       node.actualAt=task.completedAt;node.actualQuality=!task.completedAt?"missing":raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
-      const routeTime=routeTimes.find(fact=>fact.task_id===task.taskId&&fact.route_version===task.routeVersion);
       if(raw.source_id){
         const actual=task.actualCompletion??taskCompletionOccurrence(raw,asOf,routeTime);
         node.actualDate=actual.date;

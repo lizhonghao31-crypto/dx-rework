@@ -6,8 +6,9 @@ export type JourneyTermination={kind:'cancelled'|'special_closure';at:string|nul
  * the effective termination event has no trustworthy business timestamp.
  */
 export async function journeyTermination(db:Pick<PoolClient,'query'>,resource:{kind:'source'|'order';id:string},asOf:string):Promise<JourneyTermination|null>{
- const lifecycle=(await db.query(`SELECT state FROM digital_production_resource_lifecycle
-   WHERE resource_kind=$1 AND resource_id=$2`,[resource.kind,resource.id])).rows[0];
+ // Match the existing task/quotation lifecycle read byte-for-byte so the
+ // caller-owned RR proxy can reuse the same row, never a later snapshot.
+ const lifecycle=(await db.query('SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id])).rows[0];
  const scopeRef=`${resource.kind}:${resource.id}`;
  const instant=(value:unknown)=>{
   if(value==null)return null;

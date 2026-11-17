@@ -1,5 +1,5 @@
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentResponsibilityProofSql,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
-import {readTaskCompletionOccurrence} from './task-completion-occurrence.js';
+import {readTaskCompletionOccurrence,type TaskCompletionReadContext} from './task-completion-occurrence.js';
 import {taskCraftDisplay} from './task-craft-display.js';
 import {attachFactoryTaskCompletions,factoryCompletionSource} from './factory-task-completion.js';
 import {factoryCompletionOccurrence} from './factory-completion-occurrence.js';
@@ -764,7 +764,7 @@ export class DigitalProductionTaskService {
       });
     });
   }
-  async read(actor: TrustedActorContext, id: string, db: Pick<Pool, "query"> = this.database) {
+  async read(actor: TrustedActorContext, id: string, db: Pick<Pool, "query"> = this.database,completionContext?:TaskCompletionReadContext) {
     const policy = new DigitalProductionAccessPolicy(db);
     await policy.assert(actor, "task", id, "technical");
     const task = await this.task(db, id);
@@ -822,7 +822,7 @@ export class DigitalProductionTaskService {
 
     await attachDevelopmentRegistrations(db,[task]);
     const responsibility=task.source_id?developmentResponsibilityWindow({...task,native_readiness:effective?.native_readiness},effective?.sla_basis?effective.entered_at:task.entered_at,effective?.sla_basis,effective?.responsibility_proof):null;
-    const completion=task.source_id?await readTaskCompletionOccurrence(db,task,observed.now):null;
+    const completion=task.source_id?await readTaskCompletionOccurrence(db,task,observed.now,completionContext):null;
     return { ...craftDisplay,...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:craftDisplay.label,
       ...(plannedTargets?{plannedTargets}:{}),...(completion?{actualCompletion:completion}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,

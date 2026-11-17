@@ -4,6 +4,8 @@ import {developmentRecordedTime} from './development-occurrence.js';
 
 type Task={task_id:string;source_id:string|null;route_version:number;task_kind:string;state:string;completed_at:Date|string|null;completed_quality:string};
 type Recorded={fact_id:string;payload:Record<string,unknown>|null;corrected:boolean};
+/** Already authorized rows from this caller's exact Journey read snapshot. */
+export type TaskCompletionReadContext={taskId:string;sourceId:string|null;routeVersion:number;recorded:Recorded|null};
 /** A later native correction, including explicit unknown, supersedes the old
  * date payload. Neither registration time nor responsibility quality proves A. */
 export function taskCompletionOccurrence(task:Task,asOf:string,recorded?:Recorded):DigitalTaskCompletion{
@@ -21,7 +23,12 @@ export function taskCompletionOccurrence(task:Task,asOf:string,recorded?:Recorde
 }
 /** Called only after original exact task authorization; optional legacy route
  * storage is never queried before its existence is established. */
-export async function readTaskCompletionOccurrence(db:Pick<Pool|PoolClient,'query'>,task:Task,asOf:string):Promise<DigitalTaskCompletion>{
+export async function readTaskCompletionOccurrence(db:Pick<Pool|PoolClient,'query'>,task:Task,asOf:string,context?:TaskCompletionReadContext):Promise<DigitalTaskCompletion>{
+ if(context){
+  if(context.taskId!==task.task_id||context.sourceId!==task.source_id||context.routeVersion!==task.route_version)
+   throw Error('Completion snapshot does not belong to the exact task, source and round');
+  return taskCompletionOccurrence(task,asOf,context.recorded??undefined);
+ }
  let recorded:Recorded|undefined;
  if(task.state==='completed'&&task.source_id&&task.task_kind.startsWith('development_')
   &&(await db.query("SELECT to_regclass('digital_development_route_facts') AS completion_relation")).rows[0]?.completion_relation){
