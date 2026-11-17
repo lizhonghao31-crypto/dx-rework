@@ -1,4 +1,4 @@
-import {nodeOverdue} from '../../apps/web/src/digital-journey-cockpit-model.js';
+import {nodeOverdue,nodeStatus,nodeTerminationLabel,stageStatus,representativeCockpitNodes,matchingNodes} from '../../apps/web/src/digital-journey-cockpit-model.js';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {originalNodeDeadlineLabel} from '../../apps/web/src/journey-sla-details.js';
@@ -6,9 +6,29 @@ import {describe,it,expect} from 'vitest';
 import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {evaluateFixedScheduleScope,type ScheduleScopeInput} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
 import {CockpitActualDates,CockpitFixedTargetDates,cockpitTargetDifference,cockpitOwnStatus,cockpitDuration,cockpitDurationRange,observedTargetDelta,cockpitScopeProgress,cockpitScheduleReason} from '../../apps/web/src/cockpit-fixed-schedule.js';
+import {CockpitNodeSummary} from '../../apps/web/src/cockpit-node-summary.js';
+import {cockpitNodeStatus} from '../../apps/web/src/cockpit-node-rows.js';
 const scope=(id:string,end='2026-11-10T10:00:00.000Z'):ScheduleScopeInput=>({scopeRef:'po:'+id,lineId:id,targetRevision:'TEST1',work:[{id:'work',canonicalWorkRef:'work:'+id,dependsOn:[],start:'2026-11-10T08:00:00.000Z',end,minutes:120,calendar:'continuous',responsibilitySlaRef:'TEST original adopted',responsibilityMinutes:120,responsibilityCalendar:'continuous'}],facts:{work:{ready:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},clockStart:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},completed:{precision:'unknown'},businessCompleted:false,waitingForPredecessors:false,evidenceRefs:['TEST original readiness']}},terminalIds:['work'],customerGoal:end});
 const projected=(input=scope('A'),now='2026-11-10T10:00:00.000Z')=>evaluateFixedScheduleScope(input,now).nodes[0]!;
 const node=(id:string,p=projected()):JourneyNode=>({key:'bulk_cutting',instanceId:id,label:'开裁',stage:'cutting',state:'active',current:true,round:1,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'running',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,fixedTargets:[{scopeRef:p.scopeRef,lineId:id,progress:p}]});
+it('shows proven terminal responsibility without a planned target in the node and compact summary, preserving frozen delay and missing A',()=>{
+ const input=scope('A');input.work=[{...input.work[0]!,start:null,end:null}];
+ for(const asOf of ['2026-11-10T14:00:00.000Z','2026-11-11T14:00:00.000Z']){
+  const progress=evaluateFixedScheduleScope(input,asOf,{kind:'special_closure',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!;
+  expect(progress).toMatchObject({state:'terminated',businessCompleted:false,goalDelta:{kind:'terminated'},ownSla:{state:'terminated',overdueMinutes:{minimum:240,maximum:240}}});
+  const value={...node('A',progress),sla:'unavailable' as const};
+  expect(nodeTerminationLabel(value)).toBe('计时已终止');expect(nodeStatus(value)).toBe('计时已终止');expect(cockpitNodeStatus(value)).toBe('计时已终止');
+  const stage={key:'cutting' as const,label:'开裁',state:'active' as const,nodes:[value]},order={stages:[stage],hitReasons:[]} as OrderJourney;
+  expect(stageStatus(stage)).toBe('计时已终止');expect(representativeCockpitNodes(order)).toEqual([]);expect(matchingNodes(order,'active')).toEqual([]);
+  const html=renderToStaticMarkup(createElement(CockpitNodeSummary,{nodes:[value],selectedId:undefined,onSelect:()=>undefined}));
+  expect(html).toContain('计时已终止');expect(html).not.toContain('进行中');expect(value.actualAt).toBeNull();expect(value.state).toBe('active');
+ }
+});
+it('does not turn one terminated fixed scope into terminal status for a still-running sibling',()=>{
+ const input=scope('A');input.work=[{...input.work[0]!,start:null,end:null}];
+ const stopped=evaluateFixedScheduleScope(input,'2026-11-10T14:00:00.000Z',{kind:'special_closure',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value=node('A',stopped);
+ value.fixedTargets!.push(node('B').fixedTargets![0]!);expect(nodeTerminationLabel(value)).toBeNull();
+});
 describe('approved fixed schedule presentation without changing business classification',()=>{
  it('uses the same scoped actual as the delta, keeping distinct PO dates and unknown instead of stale metadata',()=>{
   const value=node('A');value.state='completed';value.actualAt='2026-01-01T00:00:00Z';value.actualQuality='verified';value.fixedTargets![0]!.progress.goalDelta.actual={precision:'instant',at:'2026-11-10T09:00:00Z'};

@@ -307,4 +307,54 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{db.release();}
  });
 
+ it('keeps a corrected zero receipt as history while two positive qualified washed batches cover real packing in native and scalar readers',async()=>{
+  // This scenario owns its fixture; earlier cases deliberately revoke their
+  // original actors and must remain revoked in that separate history.
+  const isolated=await businessAnchorFixture(url!);
+  try{
+  const scene=await isolated.scene('2026-11-17T08:00:00.000Z'),washingService=new BulkWashingService(isolated.db);
+  await isolated.runtime.run(scene,isolated.root,async()=>{
+   const ready=await isolated.bulkReady('无',undefined,1,undefined,{quantity:2}),id=ready.id;
+   const po=(await isolated.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows[0].line_id;
+   const cut=(await isolated.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].cutting_order_id;
+   const cutter={...isolated.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:2,attachmentIds:[await isolated.image(cutter)]},randomUUID());
+   const warehouse={...isolated.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},receiving=new ReceivingService(isolated.db);
+   const first=(await receiving.create(warehouse,{cuttingOrderId:cut,documentQuantity:2,actualQuantity:2,attachmentIds:[await isolated.image(warehouse)]},randomUUID())).value;
+   const original=(await isolated.db.query('SELECT * FROM receiving_receipts WHERE receipt_id=$1',[first.receiptId])).rows[0];
+   const qc=new GarmentQualityService(isolated.db),originalCheck=(await garmentQuality(isolated.db,id))[0]!;
+   await qc.record(isolated.root,id,{receiptId:originalCheck.receiptId,quantityVersion:originalCheck.quantityVersion,qualifiedQuantity:2,occurredAt:'2026-11-17T08:00:00.000Z',problem:''},randomUUID());
+   const duration={minutes:60,calendar:'continuous' as const,reminder:{enabled:true,percent:70}},client=await isolated.db.connect();
+   try{await client.query('BEGIN');await adoptBulkWashingWithClient(client,isolated.root,id,po,0,{arrangement:{mode:'after_receipt',reference:'TEST zero history',revision:1,accounting:'additional',washing:duration,inspection:duration},staff:{logisticsId:isolated.people['embroidery-washing-merchandiser']!.actorId,inspectorId:isolated.people.qc!.actorId},fee:{kind:'pending'},sourceRef:'TEST original washing adoption'});await client.query('COMMIT');}finally{client.release();}
+   const command=async(scopeId:string)=>{const scope=(await washingService.read(isolated.root,id)).scopes.find(scope=>scope.scopeId===scopeId)!;return {planId:scope.planId,scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:'2026-11-17T08:00:00.000Z',note:'TEST actual batch'};};
+   const originalScope='receipt:'+first.receiptId;
+   const originalSend=await washingService.record(isolated.root,id,{...await command(originalScope),kind:'send',quantity:2},randomUUID());
+   const originalReturn=await washingService.record(isolated.root,id,{...await command(originalScope),kind:'return',sendId:originalSend.eventId,quantity:2},randomUUID());
+   const originalInspection=await washingService.record(isolated.root,id,{...await command(originalScope),kind:'inspection',completionId:originalReturn.eventId,quantity:2,qualifiedQuantity:2},randomUUID());
+   const version=Number((await isolated.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[first.receivingBatchId])).rows[0].version);
+   const corrector={...isolated.root,authorizationCapability:'receiving:correct',authorizationCapabilities:['receiving:correct']};
+   await receiving.correctReceipt(corrector,first.receiptId,{expectedVersion:version,documentQuantity:2,actualQuantity:0,defectiveQuantity:0});
+   for(let index=0;index<2;index++)await receiving.createRepeated(warehouse,{receivingBatchId:first.receivingBatchId,cuttingOrderId:cut,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID());
+   for(const check of (await garmentQuality(isolated.db,id)).filter(check=>check.quantity>0))await qc.record(isolated.root,id,{receiptId:check.receiptId,quantityVersion:check.quantityVersion,qualifiedQuantity:1,occurredAt:'2026-11-17T08:00:00.000Z',problem:''},randomUUID());
+   for(const check of (await garmentQuality(isolated.db,id)).filter(check=>check.quantity>0)){
+    const scopeId='receipt:'+check.receiptId,sent=await washingService.record(isolated.root,id,{...await command(scopeId),kind:'send',quantity:1},randomUUID());
+    const back=await washingService.record(isolated.root,id,{...await command(scopeId),kind:'return',sendId:sent.eventId,quantity:1},randomUUID());
+    await washingService.record(isolated.root,id,{...await command(scopeId),kind:'inspection',completionId:back.eventId,quantity:1,qualifiedQuantity:1},randomUUID());
+   }
+   const batchVersion=Number((await isolated.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[first.receivingBatchId])).rows[0].version);
+   await receiving.recordPacking({...isolated.root,authorizationCapability:'receiving:packing_manage',authorizationCapabilities:['receiving:packing_manage']},{receivingBatchId:first.receivingBatchId,expectedVersion:batchVersion,expectedPackingRevisionId:null,packingQuantity:2,packingTime:{mode:'now'}},randomUUID());
+   const quality=await garmentQuality(isolated.db,id),wash=await readWashingCoverage(isolated.db,id);
+   expect(quality.find(check=>check.receiptId===first.receiptId)).toMatchObject({quantity:0,inspected:false});expect(wash.get(first.receiptId)).toBeNull();
+   const originalFacts=(await washingService.read(isolated.root,id)).scopes.find(scope=>scope.scopeId===originalScope)!.facts;
+   for(const event of [originalSend,originalReturn,originalInspection])expect(originalFacts.find(fact=>fact.id===event.eventId)).toMatchObject({voided:false});
+   expect((await isolated.db.query('SELECT * FROM receiving_receipts WHERE receipt_id=$1',[first.receiptId])).rows[0]).toEqual(original);
+   expect((await readPackingQualityCoverage(isolated.db,[id])).get(po)).toEqual({received:2,inspected:2,qualified:2});
+   const sheet=await new OrderClosureService(isolated.db).read(isolated.root,id),line=sheet.lines.find(line=>line.lineId===po)!;
+   expect(line).toMatchObject({actualQuantity:2,packingQuantity:2,effectivePackingQuantity:2});
+   expect(packingQualityCoverage(line,quality,wash)).toMatchObject({totals:{received:2,inspected:2,qualified:2},effectiveQuantity:2});
+   expect(packingSlaEvidence(sheet).facts['garment_packing:'+po]?.businessCompleted).toBe(true);
+  });
+  }finally{await isolated.dispose();}
+ });
+
 });

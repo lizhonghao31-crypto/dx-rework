@@ -17,9 +17,12 @@ export function effectivePackingQuantity(packed:number|null,received:number,qual
 }
 export function packingQualityCoverage(line:PackingLine,quality:readonly ReceiptQualityFact[]|undefined,washing?:ReadonlyMap<string,number|null>){
  const checks=[...new Map((quality??[]).filter(check=>check.lineId===line.lineId).map(check=>[check.receiptId,check])).values()];
- const totals=quality===undefined||checks.some(check=>washing?.has(check.receiptId)&&washing.get(check.receiptId)===null)?null:{received:checks.reduce((sum,check)=>sum+check.quantity,0),
-  inspected:checks.filter(check=>check.inspected).reduce((sum,check)=>sum+check.quantity,0),
-  qualified:checks.filter(check=>check.inspected).reduce((sum,check)=>sum+Math.min(check.qualifiedQuantity,washing?.get(check.receiptId)??check.qualifiedQuantity),0)};
+ // Zero is an effective native correction, not missing positive quality. Keep
+ // its original row visible, but it has no current pieces requiring washing.
+ const effective=checks.filter(check=>check.quantity>0);
+ const totals=quality===undefined||effective.some(check=>washing?.has(check.receiptId)&&washing.get(check.receiptId)===null)?null:{received:effective.reduce((sum,check)=>sum+check.quantity,0),
+  inspected:effective.filter(check=>check.inspected).reduce((sum,check)=>sum+check.quantity,0),
+  qualified:effective.filter(check=>check.inspected).reduce((sum,check)=>sum+Math.min(check.qualifiedQuantity,washing?.get(check.receiptId)??check.qualifiedQuantity),0)};
  return {checks,totals,effectiveQuantity:line.cutScope==='unresolved'?null:effectivePackingQuantity(line.packingQuantity,line.actualQuantity,totals)};
 }
 
@@ -49,7 +52,7 @@ export const packingQualityCoverageSql=(ordersParameter:'$1'|'$5',washing=false)
 )
 SELECT production_order_id,line_id,sum(quantity)::text AS received,
  sum(CASE WHEN inspected THEN quantity ELSE 0 END)::text AS inspected,
- ${washing?"CASE WHEN bool_or(washing_required AND washing_qualified IS NULL) THEN NULL ELSE sum(CASE WHEN inspected THEN least((payload->>'qualifiedQuantity')::numeric,CASE WHEN washing_required THEN washing_qualified ELSE quantity END) ELSE 0 END)::text END":"sum(CASE WHEN inspected THEN (payload->>'qualifiedQuantity')::numeric ELSE 0 END)::text"} AS qualified
+ ${washing?"CASE WHEN bool_or(quantity>0 AND washing_required AND washing_qualified IS NULL) THEN NULL ELSE sum(CASE WHEN quantity>0 AND inspected THEN least((payload->>'qualifiedQuantity')::numeric,CASE WHEN washing_required THEN washing_qualified ELSE quantity END) ELSE 0 END)::text END":"sum(CASE WHEN inspected THEN (payload->>'qualifiedQuantity')::numeric ELSE 0 END)::text"} AS qualified
 FROM checked_receipt_quality GROUP BY production_order_id,line_id`;
 
 export async function readPackingQualityCoverage(db:Pick<Pool|PoolClient,'query'>,orderIds:readonly string[]){
