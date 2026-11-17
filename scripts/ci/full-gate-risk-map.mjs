@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { POSTGRES_CHAIN_TESTS, SLA_JOURNEY_CHAIN_EXCLUSIONS } from "../test-suite-plan.mjs";
 
 const normalize = (path) => path.trim().replaceAll("\\", "/");
 
@@ -137,6 +138,102 @@ const independentTestOnlyChange = (paths) => {
   return eligible && owners.size === 1;
 };
 
+// Reviewed source-domain profile, not a global backend exception. The original
+// mapped readers and shared-write/security bridges stay mandatory; only four
+// independently audited, non-consuming suites are omitted from the supplement.
+export const SLA_JOURNEY_SOURCE_PATHS = Object.freeze([
+  "apps/api/src/production-platform/development-captured-window.ts",
+  "apps/api/src/production-platform/development-craft-instance-evidence.ts",
+  "apps/api/src/production-platform/development-sla-evidence.ts",
+  "apps/api/src/production-platform/fixed-schedule-basis.ts",
+  "apps/api/src/production-platform/fixed-schedule-progress.ts",
+  "apps/api/src/production-platform/journey-display.ts",
+  "apps/api/src/production-platform/journey-fact-generation.ts",
+  "apps/api/src/production-platform/journey-fact-model.ts",
+  "apps/api/src/production-platform/journey-fact-repository.ts",
+  "apps/api/src/production-platform/journey-fact-updates.ts",
+  "apps/api/src/production-platform/journey-native-times.ts",
+  "apps/api/src/production-platform/journey-progress-dates.ts",
+  "apps/api/src/production-platform/journey-projection.ts",
+  "apps/api/src/production-platform/journey-query.ts",
+  "apps/api/src/production-platform/journey-selection-clock.ts",
+  "apps/api/src/production-platform/journey-selection-facts.ts",
+  "apps/api/src/production-platform/journey-selection-query.ts",
+  "apps/api/src/production-platform/journey-supervision.ts",
+  "apps/api/src/production-platform/journey-terminal-timing.ts",
+  "apps/web/src/cockpit-fixed-schedule.tsx",
+  "apps/web/src/cockpit-node-summary.tsx",
+  "apps/web/src/digital-journey-cockpit-model.ts",
+  "apps/web/src/journey-sla-details.tsx",
+  "packages/contracts/src/digital-production-journey.ts",
+  "packages/domain/src/digital-sla-plan.ts"
+]);
+export const SLA_JOURNEY_SUPPORT_PATHS = Object.freeze([
+  "docs/engineering/acceptance-time-sites-20261027.json",
+  "docs/engineering/construction-evidence.json",
+  "docs/engineering/sla-repair-rp2.md",
+  "tests/integration/digital-journey-postgres.test.ts",
+  "tests/integration/effective-packing-postgres.test.ts",
+  "tests/integration/fixed-progress-postgres.test.ts",
+  "tests/integration/journey-fact-model-postgres.test.ts",
+  "tests/integration/order-time-requests-postgres.test.ts",
+  "tests/integration/special-craft-native-postgres.test.ts",
+  "tests/unit/development-captured-window.test.ts",
+  "tests/unit/development-craft-instance-supervision.test.ts",
+  "tests/unit/development-ordinary-instance-projection.test.ts",
+  "tests/unit/development-round-window-projection.test.ts",
+  "tests/unit/digital-journey-projection.test.ts",
+  "tests/unit/digital-pmc-readonly-access.test.ts",
+  "tests/unit/fixed-schedule-progress.test.ts",
+  "tests/unit/fixed-schedule-selection.test.ts",
+  "tests/unit/journey-compatible-fallback.test.ts",
+  "tests/unit/journey-fact-model.test.ts",
+  "tests/unit/journey-native-times.test.ts",
+  "tests/unit/journey-packing-native-time.test.ts",
+  "tests/unit/journey-progress-dates.test.ts",
+  "tests/unit/journey-projection-isolation.test.ts",
+  "tests/unit/journey-terminal-timing.test.ts",
+  "tests/unit/m01-time-consumers.test.ts",
+  "tests/unit/sla-native-window-projection.test.ts"
+]);
+export const SLA_JOURNEY_REQUIRED_TESTS = Object.freeze([
+  "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+  "tests/integration/development-responsibility-postgres.test.ts",
+  "tests/integration/development-round-history-clock-postgres.test.ts",
+  "tests/integration/development-sla-enrollment-postgres.test.ts",
+  "tests/integration/development-technical-postgres.test.ts",
+  "tests/integration/digital-journey-postgres.test.ts",
+  "tests/integration/digital-production-tasks-postgres.test.ts",
+  "tests/integration/effective-packing-postgres.test.ts",
+  "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+  "tests/integration/fixed-progress-postgres.test.ts",
+  "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+  "tests/integration/fixed-timeline-postgres.test.ts",
+  "tests/integration/journey-diagnostic-postgres.test.ts",
+  "tests/integration/journey-fact-model-postgres.test.ts",
+  "tests/integration/journey-fact-updates-postgres.test.ts",
+  "tests/integration/journey-page-native-browser-postgres.test.ts",
+  "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+  "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
+  "tests/integration/m01-journey-performance-postgres.test.ts",
+  "tests/integration/order-time-reading-postgres.test.ts",
+  "tests/integration/order-time-requests-browser-postgres.test.ts",
+  "tests/integration/order-time-requests-postgres.test.ts",
+  "tests/integration/order-time-settings-postgres.test.ts",
+  "tests/integration/production-readiness-postgres.test.ts",
+  "tests/integration/sourcing-pr03-postgres.test.ts",
+  "tests/integration/special-craft-browser-postgres.test.ts",
+  "tests/integration/special-craft-library-postgres.test.ts",
+  "tests/integration/special-craft-native-postgres.test.ts",
+  "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+  "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+  "tests/integration/workspace-page-facts-postgres.test.ts",
+  "tests/integration/workspace-page-native-browser-postgres.test.ts"
+]);
+export const SLA_JOURNEY_UNRELATED_CHAIN_TESTS = SLA_JOURNEY_CHAIN_EXCLUSIONS;
+const slaJourneyProfileApplies = paths => paths.some(path => SLA_JOURNEY_SOURCE_PATHS.includes(path))
+  && paths.every(path => existsSync(path) && (SLA_JOURNEY_SOURCE_PATHS.includes(path) || SLA_JOURNEY_SUPPORT_PATHS.includes(path)));
+
 const isMigration = (path) =>
   path.startsWith("apps/api/migrations/")
   || path.startsWith("scripts/deploy/migration-execution-compatibility.")
@@ -270,6 +367,7 @@ const addAll = (target, values) => {
 export const classifyFullGatePaths = (inputPaths) => {
   const paths = [...new Set(inputPaths.map(normalize).filter(Boolean))];
   const independentTestOnly = independentTestOnlyChange(paths);
+  let chainProfile = "full";
   const mappedTests = new Set();
   if(paths.some(path=>/factory-(?:task-completion|completion-occurrence)|production-facts-consistency|receiving-(?:service|routes|board-edit-session)|order-board-page|0294_receiving_correction_provenance/.test(path)))addAll(mappedTests,['tests/integration/production-facts-consistency-postgres.test.ts','tests/integration/receiving-postgres.test.ts','tests/integration/receiving-board-native-browser-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts']);
   if(paths.some(path=>/development-responsibility|order-time-native-timing|order-time-reading|development-sla-evidence|journey-task-summary|task-service|digital-production-tasks-panel/.test(path)))addAll(mappedTests,['tests/integration/development-responsibility-postgres.test.ts','tests/integration/development-execution-read-native-browser-postgres.test.ts','tests/integration/digital-production-tasks-postgres.test.ts']);
@@ -543,6 +641,17 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
   }
 
+  // Shared writes are still exercised by the retained real full-business,
+  // Root, readiness, sourcing, closure, rework and operational consumers.
+  // Any extra unknown/auth/schema/helper/CI path invalidates the whole profile.
+  if (slaJourneyProfileApplies(paths) && !migrationSensitive && !deploymentSensitive && !receivingSensitive) {
+    addAll(mappedTests, SLA_JOURNEY_REQUIRED_TESTS);
+    addAll(mappedTests, POSTGRES_CHAIN_TESTS.filter(test => !SLA_JOURNEY_UNRELATED_CHAIN_TESTS.includes(test)));
+    businessChainSensitive = true;
+    chainProfile = "sla-journey-v1";
+    domains.add("sla-journey-reviewed-source-profile");
+  }
+
   const tests = [...mappedTests].sort();
   const dbRequired = migrationSensitive
     || receivingSensitive
@@ -555,6 +664,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     migrationSensitive,
     receivingSensitive,
     businessChainSensitive,
+    chainProfile,
     deploymentSensitive,
     journeyPg13Compat,
     maintenanceSensitive,
@@ -603,6 +713,7 @@ const runCli = () => {
       ["MIGRATION_SENSITIVE", result.migrationSensitive],
       ["RECEIVING_SENSITIVE", result.receivingSensitive],
       ["BUSINESS_CHAIN_SENSITIVE", result.businessChainSensitive],
+      ["CHAIN_PROFILE", result.chainProfile],
       ["DEPLOYMENT_SENSITIVE", result.deploymentSensitive],
       ["JOURNEY_PG13_COMPAT", result.journeyPg13Compat],
       ["MAINTENANCE_SENSITIVE", result.maintenanceSensitive],

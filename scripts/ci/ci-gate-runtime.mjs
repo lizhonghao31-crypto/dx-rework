@@ -40,7 +40,7 @@ export function scopeFor(plan, paths) {
   const risk = classifyFullGatePaths(paths);
   return {event: 'create', base: plan.baseRef, final: 'true', db: String(risk.dbRequired),
     mapped: risk.mappedPostgresTests.join(','), journey: String(risk.journeyPg13Compat),
-    migration: String(risk.migrationSensitive), business_chain: String(risk.businessChainSensitive),
+    migration: String(risk.migrationSensitive), business_chain: String(risk.businessChainSensitive), chain_profile: risk.chainProfile,
     deployment: String(risk.deploymentSensitive),maintenance: String(risk.maintenanceSensitive),activation: String(risk.activationSensitive),transfer: String(risk.transferSensitive)};
 }
 
