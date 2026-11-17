@@ -2,10 +2,10 @@
   "version": 1,
   "base": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
   "risk": "full",
-  "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
+  "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
   "rules": [
     {
-      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
+      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust. Supplemental exact-fe744bbe Review P2 4598884052: summary must receive original completion state/instant; native regression red then green in ordinary and development-scope summaries.",
       "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
       "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
       "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
@@ -88,8 +88,7 @@
       ],
       "checks": [
         "pr4-unit",
-        "pr4-web-types",
-        "pr4-navigation"
+        "pr4-web-types"
       ]
     },
     {
@@ -170,7 +169,6 @@
       "checks": [
         "pr4-unit",
         "pr4-native-app",
-        "pr4-packing-native",
         "pr4-api-types"
       ]
     }
@@ -182,11 +180,11 @@
       "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-termination.ts apps/api/src/production-platform/task-completion-occurrence.ts apps/api/src/production-platform/task-service.ts apps/web/src/factory-batch-panel.tsx apps/web/src/task-completion-time.tsx apps/web/src/task-workbench-sample.tsx packages/contracts/src/digital-production-tasks.ts scripts/test-suite-plan.mjs tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/task-completion-postgres.test.ts tests/unit/journey-termination.test.ts tests/unit/sample-postgres-gate-policy.test.ts tests/unit/task-completion-display.test.ts tests/unit/task-completion-occurrence.test.ts apps/api/src/receiving/receiving-quantity-query.ts tests/integration/m01-journey-performance-postgres.test.ts tests/unit/journey-snapshot-batches.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:15:46.828145+00:00",
-      "endedAt": "2026-11-17T11:15:50.098201+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-cost-final-extra-lint/command.log",
+      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
+      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
+      "startedAt": "2026-11-17T11:26:25.977934+00:00",
+      "endedAt": "2026-11-17T11:26:31.681048+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance."
     },
@@ -196,11 +194,11 @@
       "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:15:26.665249+00:00",
-      "endedAt": "2026-11-17T11:15:59.476900+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-cost-final-api-types/command.log",
+      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
+      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
+      "startedAt": "2026-11-17T11:26:26.019393+00:00",
+      "endedAt": "2026-11-17T11:27:03.193352+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance."
     },
@@ -210,57 +208,34 @@
       "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:15:26.529398+00:00",
-      "endedAt": "2026-11-17T11:16:17.156506+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-cost-final-web-types/command.log",
+      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
+      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
+      "startedAt": "2026-11-17T11:26:25.897846+00:00",
+      "endedAt": "2026-11-17T11:27:17.986573+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance."
     },
     {
       "id": "pr4-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-ordinary-instance-projection.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-workspace.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-diagnostic.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-snapshot-batches.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-termination.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/sample-postgres-gate-policy.test.ts tests/unit/task-blocker-guidance.test.ts tests/unit/task-completion-display.test.ts tests/unit/task-completion-occurrence.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/cost-final-callers-results.json tests/unit/receiving-defective-quantity.test.ts tests/unit/order-board-global-style-search.test.ts tests/unit/order-board-cutting-facts.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/factory-flow-navigation.test.ts tests/unit/development-ordinary-instance-projection.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-workspace.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-diagnostic.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-snapshot-batches.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-termination.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/sample-postgres-gate-policy.test.ts tests/unit/task-blocker-guidance.test.ts tests/unit/task-completion-display.test.ts tests/unit/task-completion-occurrence.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/review-final-callers-results.json tests/unit/receiving-defective-quantity.test.ts tests/unit/order-board-global-style-search.test.ts tests/unit/order-board-cutting-facts.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:15:26.711130+00:00",
-      "endedAt": "2026-11-17T11:16:00.819353+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-cost-final-callers/command.log",
-      "logSha256": "aa4f10ee1f09a695322e5cb9f8b0a1041480af32f4f587e65c39f5f988074cf1",
+      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
+      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
+      "startedAt": "2026-11-17T11:26:25.897602+00:00",
+      "endedAt": "2026-11-17T11:27:02.242959+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-callers/command.log",
+      "logSha256": "fd8374f37050a7c39a20d0ff1e5f7fae5d10dad22e7b4a3feaa1e98209aa1366",
       "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
-      "passed": 416,
+      "passed": 419,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3fcea0fc187cad88f0262304de908bb2ce63ade1840218ab68aa0ae8fee47f45"
-        }
-      ]
-    },
-    {
-      "id": "pr4-navigation",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/factory-flow-navigation.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/cost-final-navigation-results.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:18:29.477938+00:00",
-      "endedAt": "2026-11-17T11:18:31.071216+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-cost-final-navigation/command.log",
-      "logSha256": "348e46d959f32d6b25a04bba30b4d7603127c6dbc41ea8e76244b414a4241d24",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
-      "passed": 3,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "896cd590b01f645e2402c2c4e096ee52bff4db21cf7aad660efb547e6557b292"
+          "sha256": "358006135d3c25ef9464fd20b05813921616a6414b530d6607f39a502a7d1132"
         }
       ]
     },
@@ -270,12 +245,12 @@
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:15:26.687297+00:00",
-      "endedAt": "2026-11-17T11:15:28.295253+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-cost-final-canonical/command.log",
-      "logSha256": "50a6bfd84ac12a681b52703f83931569ee4fb6c0363b969d61eb3e2036b0759c",
+      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
+      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
+      "startedAt": "2026-11-17T11:26:26.084942+00:00",
+      "endedAt": "2026-11-17T11:26:27.835047+00:00",
+      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-canonical/command.log",
+      "logSha256": "2cf45c102c037aecdb6bc7653841ae3d00b16a68ee59945313474d8e70e5b2f6",
       "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
       "passed": 21,
       "failed": 0,
@@ -284,46 +259,23 @@
     {
       "id": "pr4-native-app",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/task-completion-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/pg/rp3-completion-cost-fixed-native/tests.json --testNamePattern 'renders the real shipping date and native unknown then verified correction|reads a native shipping date|measures all candidates before pagination through real AuthService'",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/task-completion-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/pg/rp3-completion-review-final-native/tests.json --testNamePattern 'renders the real shipping date and native unknown then verified correction|reads a native shipping date|measures all candidates before pagination through real AuthService|effective native packing across receiving batches'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:15:09.576950+00:00",
-      "endedAt": "2026-11-17T11:17:29.754119+00:00",
-      "log": "/workspace/sla-rp3-20261117/pg/rp3-completion-cost-fixed-native/tests.log",
-      "logSha256": "722cdd34a5ead9ea1da7620a4bfce201f9aaa307a06d018ce135436732660976",
+      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
+      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
+      "startedAt": "2026-11-17T11:25:52.881214+00:00",
+      "endedAt": "2026-11-17T11:28:11.744891+00:00",
+      "log": "/workspace/sla-rp3-20261117/pg/rp3-completion-review-final-native/tests.log",
+      "logSha256": "4a885e9e4ce506eced181c33970a9efb741cb6760e412563222b5e80d75a08c1",
       "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
-      "passed": 3,
+      "passed": 11,
       "failed": 0,
       "skipped": 9,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "309212a7e5ebcaa53863e285830cd434b3008df97b4cf7a895f9dc35d215128c"
-        }
-      ]
-    },
-    {
-      "id": "pr4-packing-native",
-      "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/effective-packing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/pg/rp3-completion-cost-packing-native/tests.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c4b4c72bca1126e8ac2808aa93b136ab5adbaa70",
-      "sourceFingerprint": "3b62b7d8f7e3dac8df46dcb2339969c99b2a514d46e3b262273994d713a0874e",
-      "startedAt": "2026-11-17T11:17:57.628137+00:00",
-      "endedAt": "2026-11-17T11:18:40.793517+00:00",
-      "log": "/workspace/sla-rp3-20261117/pg/rp3-completion-cost-packing-native/tests.log",
-      "logSha256": "01ca948efaab5a10465e3bfbeda5253c40d5ac1046984559f0cf8e5d07d8963e",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
-      "passed": 8,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "5ff4da5894aab9ddd0c5b5e541458d29f8d51c47ed0e441c2c004a89abd31c17"
+          "sha256": "43fe1b3ec513f74825573891971bdb1ef0ff8e4ad4ed5b118ae95cd718b68bbd"
         }
       ]
     }

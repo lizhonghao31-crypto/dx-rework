@@ -31,3 +31,11 @@ Node22.22.2/npm10.9.9：依赖包构建、改动lint、API/web类型通过；19�
 隔离原88单完整回归七次有效SQL采样均3365，原7100阈值及分页/搜索/导出/88单与89混合/PMC/跟单/无关工人/同有效会话撤权断言全部通过。日期完成及原认证工作台更正两项通过，另9项本地筛除未跑；27文件416项单元及原导航3项、canonical21项、lint/API/web类型通过。原装箱范围/合并历史专项结果由当前construction记录绑定。容器实际清理，不把此本地结果称新Full通过或完整CI提速。
 
 初始ad66aace Review和Light的真实结果仍保留；这批核心读取增量需要补充审查并按新准确Head再Full，旧失败运行不改状态，Light不重跑。后续返洗代码保持独立本地暂停，先解决PR4 CI再推进。
+
+## 补充Review：摘要完成精度
+
+fe744bbe的补充Review P2（4598884052）指出：仅摘要及按scope读取时，原查询字段叫original_state，完成适配器却要求state，且没有收到原摘要完成时刻。真实PG新反例先明确复现日期从2026-11-17变null、quality从unverified变missing。首个本地测试准备曾因schema入口导入错误失败，原记录保留；修正测试入口后才取得上述实际业务红例。
+
+现沿原summary DTO传入state和completedAt，保持raw精确身份/质量及本快照route fact；不新增查询，不改变原授权。回归扩充普通details:false与development范围摘要，均验证原日期→明确未知更正→已核实精确时刻，同时保留完整/compact、原始事实、唯一完成事件及越权拒绝。新准确结果以当前construction记录为准，不沿用修前局部结果冒充通过。
+
+最终补充Review修复候选的实际验证：28文件419项关联单元、21项canonical、lint/API/web类型通过；同一新鲜隔离PG四文件11过、9项筛除未运行，包含新增普通/development摘要三态更正、原页面、原88单全部语义及原装箱8项。七次SQL仍3365，原7100阈值保持；所属容器停止/移除且核不存在。准确时间和来源见当前construction记录；最终Full尚未启动，本地绿色不冒充最终Full通过。

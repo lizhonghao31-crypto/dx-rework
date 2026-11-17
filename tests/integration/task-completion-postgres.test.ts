@@ -9,6 +9,7 @@ import {DevelopmentExecutionService} from '../../apps/api/src/production-platfor
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
+import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {DigitalTaskCompletionSchema} from '@dx-rework/contracts/digital-production-tasks';
 import {installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
 import type {Pool} from 'pg';
@@ -27,16 +28,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await execution.route(f.root,sourceId,{taskId:shipping.taskId,result:'通过',note:'TEST actual shipping day',craftExecution:null,nextAssigneeId:null,sentDate:date,trackingNo:'TEST-SHIPPING-DATE'},randomUUID());
   const fact=(await f.db.query('SELECT fact_id,payload FROM digital_development_route_facts WHERE source_id=$1 AND task_id=$2 AND route_version=$3 ORDER BY sequence DESC LIMIT 1',[sourceId,shipping.taskId,shipping.routeVersion])).rows[0]!;
   const read=async()=>tasks.read(f.root,shipping.taskId),node=async(compact=false)=>(await journeys.read(f.root,sourceId,undefined,compact)).stages.flatMap(stage=>stage.nodes).find(value=>value.instanceId===shipping.taskId)!;
+  const summaryNode=async(scope?:'development')=>{
+   const list=await journeys.list(f.root,JourneyFilterSchema.parse({scope}),true,undefined,{details:false});
+   return list.items.find(item=>item.id===sourceId)!.stages.flatMap(stage=>stage.nodes).find(value=>value.instanceId===shipping.taskId)!;
+  };
   const dated=await read();expect(dated.completedAt).toBeNull();expect(DigitalTaskCompletionSchema.parse(dated.actualCompletion)).toMatchObject({precision:'date',date,at:null,quality:'unverified',sourceRef:`development-route-fact:${fact.fact_id}`});
   for(const compact of [false,true])expect(await node(compact)).toMatchObject({state:'completed',actualAt:null,actualDate:date,actualQuality:'unverified'});
+  for(const scope of [undefined,'development'] as const)expect(await summaryNode(scope)).toMatchObject({state:'completed',actualAt:null,actualDate:date,actualQuality:'unverified'});
   const original=(await tasks.history(f.root,shipping.taskId)).events.find(event=>event.kind==='completed')!;
   await tasks.correctTime(f.root,shipping.taskId,{eventId:original.eventId,occurredAt:null,reason:'TEST original occurrence explicitly unknown'},randomUUID());
   expect((await read()).actualCompletion).toMatchObject({precision:'unknown',at:null,date:null,quality:'missing'});
   for(const compact of [false,true])expect(await node(compact)).toMatchObject({actualAt:null,actualDate:null,actualQuality:'missing'});
+  for(const scope of [undefined,'development'] as const)expect(await summaryNode(scope)).toMatchObject({actualAt:null,actualDate:null,actualQuality:'missing'});
   const at=businessNow().toISOString();
   await tasks.correctTime(f.root,shipping.taskId,{eventId:original.eventId,occurredAt:at,reason:'TEST verify real shipping instant'},randomUUID());
   const verified=await read();expect(verified.completedAt).toBe(at);expect(verified.actualCompletion).toMatchObject({precision:'instant',at,date:null,quality:'verified'});
   for(const compact of [false,true])expect(await node(compact)).toMatchObject({actualAt:at,actualDate:null,actualQuality:'verified'});
+  for(const scope of [undefined,'development'] as const)expect(await summaryNode(scope)).toMatchObject({actualAt:at,actualDate:null,actualQuality:'verified'});
   // Earlier observation must not erase the known future native instant and
   // turn a chronology contradiction into a merely missing timestamp.
   const scoped={query:f.db.query.bind(f.db),connect:f.db.connect.bind(f.db)} as unknown as Pool;

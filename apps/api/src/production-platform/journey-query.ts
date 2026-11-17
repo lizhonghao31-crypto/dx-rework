@@ -512,7 +512,7 @@ export class DigitalJourneyQuery {
         :raw.route_instance_id===currentPrep||(raw.task_kind==='bulk_ship_sample'&&raw.route_instance_id===oid);
       node.actualAt=task.completedAt;node.actualQuality=!task.completedAt?"missing":raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
       if(raw.source_id){
-        const actual=task.actualCompletion??taskCompletionOccurrence(raw,asOf,routeTime);
+        const actual=task.actualCompletion??taskCompletionOccurrence({...raw,state:task.state,completed_at:task.completedAt},asOf,routeTime);
         node.actualDate=actual.date;
         // The completion DTO declines unprovable/future time, but the existing
         // Journey chronology classifier must still see a contradictory native
