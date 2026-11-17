@@ -70,6 +70,17 @@ describe('exact native task current P independent of original B and responsibili
   saved.input.plan.company.nodes.development_craft_dispatch={kind:'included',minutes:30,calendar:'continuous',reminder:{enabled:false,percent:70}};
   expect(selectCurrentTaskPlan(saved,{...task,kind:'development_craft_dispatch',stepRef:'TEST-step'},binding(ref))).toMatchObject({state:'not_applicable',reason:'本任务内含于已安排工作，未单列独立计划时间',targets:[]});
  });
+ it('keeps original added-preshrink identity separate from its proven current preparation work',()=>{
+  const saved=version(),mother={kind:'order' as const,id:'TEST-mother'},ref=`order:${mother.id}:work:warehouse_preshrink`,original=`order:${mother.id}:route:TEST-original-preparation:preshrink`;
+  saved.resource=mother;saved.input.work[0]!.canonicalWorkRef=ref;
+  const native={...task,resource:mother,kind:'warehouse_preshrink'},proof={captured:true,canonicalWorkRef:original,currentPlanWorkRef:ref},before=structuredClone(saved);
+  expect(selectCurrentTaskPlan(saved,native,{captured:true,canonicalWorkRef:original}).state).toBe('unknown');
+  expect(selectCurrentTaskPlan(saved,native,proof)).toMatchObject({state:'ready',targets:[{workRef:ref,endAt:at(9)}]});
+  expect(selectCurrentTaskPlan(saved,native,{...proof,captured:false}).state).toBe('unknown');
+  expect(selectCurrentTaskPlan(saved,native,{...proof,canonicalWorkRef:'order:FOREIGN:route:TEST:preshrink'}).state).toBe('unknown');
+  expect(selectCurrentTaskPlan(saved,native,{...proof,currentPlanWorkRef:'order:FOREIGN:work:warehouse_preshrink'}).state).toBe('unknown');
+  expect(saved).toEqual(before);
+ });
 });
 
 describe('native current-plan panel',()=>{

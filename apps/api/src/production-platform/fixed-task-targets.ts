@@ -4,7 +4,7 @@ import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import type {FixedTimelineTarget} from './fixed-timeline-targets.js';
 import {readFixedOrderRoute} from './fixed-order-route.js';
-export type FixedTaskWorkBinding={canonicalWorkRef:string|null;captured:boolean};
+export type FixedTaskWorkBinding={canonicalWorkRef:string|null;captured:boolean;currentPlanWorkRef?:string};
 
 /** Caller has already authorized this exact task. Read only that work's B;
  * never expose another task's facts, adopted settings or consumer permissions.
@@ -38,7 +38,11 @@ export async function fixedTaskTargets(db:Pick<Pool|PoolClient,'query'>,task:{ta
     WHERE p.preparation_id=$2 AND p.production_order_id=$3 AND p.instruction_version=$5 AND t.state<>'cancelled'
      AND (SELECT count(*) FROM digital_production_tasks peer JOIN digital_production_task_access access USING(task_id)
        WHERE peer.route_instance_id=p.preparation_id AND peer.route_version=p.instruction_version AND access.production_order_id=p.production_order_id AND access.task_kind=ANY($6::text[]) AND peer.state<>'cancelled')=1`,[task.taskId,task.routeRef,task.resource.id,task.kind,task.round,key==='bulk_cutting'?['bulk_cutting','bulk_cutting_external']:[task.kind]])).rows.length===1:false;
- capture?.({canonicalWorkRef:ownWork?.canonicalWorkRef??null,captured:Boolean(position&&definition&&position.route_ref===task.routeRef&&Number(position.route_version)===task.round
+ // The original added-route B retains its scoped preshrink identity. Current
+ // order arrangements use fixedOrderWork's stable warehouse_preshrink work.
+ // Only the exact published native preparation proof may bridge the two.
+ const currentPlanWorkRef=nativePreparation&&task.kind==='warehouse_preshrink'&&ownWork?.accountingRole==='added_work'?`order:${task.resource.id}:work:warehouse_preshrink`:undefined;
+ capture?.({canonicalWorkRef:ownWork?.canonicalWorkRef??null,...(currentPlanWorkRef?{currentPlanWorkRef}:{}),captured:Boolean(position&&definition&&position.route_ref===task.routeRef&&Number(position.route_version)===task.round
   &&(definition.kind===task.kind||definition.kind==='bulk_cutting'&&task.kind==='bulk_cutting_external')&&(position.step_id??null)===(definition.stepId??null)&&(position.phase??null)===(definition.phase??null)||nativePreparation&&ownWork)});
  for(const scope of current.scopes){
   const target=(scope.targets_json as FixedTimelineTarget[]).find(value=>value.id===nodeId);if(!target)continue;

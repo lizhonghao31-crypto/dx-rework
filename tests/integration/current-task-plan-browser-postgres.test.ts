@@ -8,6 +8,9 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
+import {fixedTaskTargets,type FixedTaskWorkBinding} from '../../apps/api/src/production-platform/fixed-task-targets.js';
+import {FixedTimelineAdoptionRepository} from '../../apps/api/src/production-platform/fixed-timeline-adoptions.js';
+import {readFixedOrderRoute} from '../../apps/api/src/production-platform/fixed-order-route.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -153,5 +156,34 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const prior=await new DigitalProductionTaskService(f.db).read(f.root,fixture.priorId);expect({planned:prior.plannedTargets,entered:prior.enteredAt,due:prior.dueAt,actual:prior.actualCompletion}).toEqual({planned:fixture.priorTask.plannedTargets,entered:fixture.priorTask.enteredAt,due:fixture.priorTask.dueAt,actual:fixture.priorTask.actualCompletion});
   });
   expect(h.errors).toEqual([]);
+ });
+ it.each([false,true])('shows a newly required preshrink current P while retaining its original added-route B identity, framework=%s',async framework=>{
+  const f=h.f;await prepareCurrentTaskPlanSettings(f,framework);
+  const fixture=await republishedBulkPreparationTaskPlanFixture(f,false,{framework,addPreshrink:true});
+  const before=await f.runtime.run(fixture.scene,f.root,async()=>{
+   const bulk=await new BulkPreparationService(f.db).read(f.root,fixture.orderId),task=bulk.tasks.find(task=>task.taskKind==='warehouse_preshrink')!;expect(task).toBeDefined();
+   const adoption=(await new FixedTimelineAdoptionRepository(f.db).existing(fixture.resource()))!,route=(await readFixedOrderRoute(f.db,adoption,fixture.preparation))!;
+   expect(adoption.input.work.some(work=>work.parameterKey==='warehouse_preshrink')).toBe(false);
+   const added=route.work.find(work=>work.parameterKey==='warehouse_preshrink')!;expect(added.canonicalWorkRef).toBe(`order:${fixture.orderId}:route:${fixture.preparation}:preshrink`);
+   const captured:FixedTaskWorkBinding[]=[];const fixed=await fixedTaskTargets(f.db,{taskId:task.taskId,resource:fixture.resource(),round:task.routeVersion,routeRef:fixture.preparation,kind:task.taskKind},binding=>captured.push(binding));
+   const current=(await fixture.repo.current(fixture.resource()))!,work=current.input.work.find(work=>work.parameterKey==='warehouse_preshrink')!;
+   expect(captured).toEqual([{captured:true,canonicalWorkRef:added.canonicalWorkRef,currentPlanWorkRef:work.canonicalWorkRef}]);expect(task.plannedTargets).toEqual(fixed);
+   expect(task.currentPlanTargets?.state,JSON.stringify(task.currentPlanTargets)).toBe('ready');expect(task.currentPlanTargets!.planVersionId).toBe(current.id);expect(task.currentPlanTargets!.targets.map(target=>target.workRef)).toEqual([work.canonicalWorkRef]);
+   const journey=await new DigitalJourneyQuery(f.db).read(f.root,fixture.orderId,undefined,true),node=journey.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId)!;expect(node).toBeDefined();expect(task.currentPlanTargets!.targets[0]!.endAt).toBe(node.expectedAt);
+   expect((await new DigitalProductionTaskService(f.db).read(f.people.warehouse!,task.taskId)).currentPlanTargets).toEqual(task.currentPlanTargets);
+   await writeFile(join(h.evidence,'added-preshrink-original-and-current-'+framework+'.json'),JSON.stringify({task,captured,adoption:adoption.adoptionId,originalAddedWork:added,currentWork:work,planId:current.id},null,2));
+   return {task,current,adoption,route};
+  });
+  h.setCollectionScene(fixture.scene);const tab=await h.open(f.root.actorId,390,{},'/ui/digital-production?bulk='+fixture.orderId);
+  try{
+   const section=tab.page.locator('.bulk-preparation-reference-work>section').filter({has:tab.page.getByRole('heading',{level:3}).filter({hasText:before.task.label})}),panel=section.getByRole('region',{name:'本单当前计划'});await panel.waitFor();
+   const target=before.task.currentPlanTargets!.targets[0]!;await expect.poll(()=>panel.innerText()).toContain(target.precision==='date'&&target.date?target.date+'（日期）':new Date(target.endAt!).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));expect(await panel.getAttribute('data-plan-version')).toBe(before.current.id);
+   expect(h.requests.filter(call=>call.session===tab.session&&call.path.startsWith('/api/digital-production/')&&!['GET','HEAD'].includes(call.method)&&!call.path.startsWith('/api/digital-production/notifications/claim'))).toEqual([]);
+   await tab.page.screenshot({path:join(h.evidence,'added-preshrink-original-page-'+framework+'.png'),fullPage:true});
+  }finally{await tab.context.close();}
+  await f.runtime.run(fixture.scene,f.root,async()=>{
+   const after=await new DigitalProductionTaskService(f.db).read(f.root,before.task.taskId);expect({fixed:after.plannedTargets,entered:after.enteredAt,due:after.dueAt,actual:after.actualCompletion}).toEqual({fixed:before.task.plannedTargets,entered:before.task.enteredAt,due:before.task.dueAt,actual:before.task.actualCompletion});
+   expect(await fixture.repo.current(fixture.resource())).toEqual(before.current);expect(await new FixedTimelineAdoptionRepository(f.db).existing(fixture.resource())).toEqual(before.adoption);expect(await readFixedOrderRoute(f.db,before.adoption,fixture.preparation)).toEqual(before.route);
+  });expect(h.errors).toEqual([]);
  });
 });

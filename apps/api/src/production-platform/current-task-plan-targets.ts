@@ -18,8 +18,9 @@ function taskPlanScope(saved:StoredOrderTimePlan,task:Task,binding:FixedTaskWork
  if(task.resource.kind==='order'&&(saved.resource.kind!=='order'||saved.resource.id!==task.resource.id)||saved.resource.kind==='source'&&(task.resource.kind!=='source'||saved.resource.id!==task.resource.id))return missing('当前计划不属于本任务范围');
  if(task.retired||task.state==='cancelled')return missing('原任务已退出当前有效范围','not_applicable');
  const prefix=task.resource.kind==='source'?`source:${task.resource.id}:round:${task.round}:`:`order:${task.resource.id}:`;
- if(!binding.captured||!binding.canonicalWorkRef?.startsWith(prefix))return missing('本任务当前计划的依据尚未核实');
- const matches=saved.input.work.filter(work=>work.canonicalWorkRef===binding.canonicalWorkRef);
+ const reference=binding.currentPlanWorkRef??binding.canonicalWorkRef;
+ if(!binding.captured||!binding.canonicalWorkRef?.startsWith(prefix)||!reference?.startsWith(prefix))return missing('本任务当前计划的依据尚未核实');
+ const matches=saved.input.work.filter(work=>work.canonicalWorkRef===reference);
  if(matches.length!==1){
   const laterRound=task.resource.kind==='source'&&saved.input.work.some(work=>{
    const reference=work.canonicalWorkRef?.match(/^source:([^:]+):round:(\d+):/);return reference?.[1]===task.resource.id&&Number(reference[2])>task.round;
@@ -32,7 +33,7 @@ function taskPlanScope(saved:StoredOrderTimePlan,task:Task,binding:FixedTaskWork
   const included=work.includedIn&&saved.input.scopes.some(scope=>requiredFixedTimelineWork(definitions,scope.terminalIds).some(value=>value.id===work.includedIn));
   return missing(included?'本任务内含于已安排工作，未单列独立计划时间':'当前计划没有本任务的有效交付范围',saved.input.route.complete?'not_applicable':'unknown');
  }
- return {kind:'available' as const,work,scopes,workRef:binding.canonicalWorkRef};
+ return {kind:'available' as const,work,scopes,workRef:reference};
 }
 function scopedTargets(saved:StoredOrderTimePlan,selected:ReturnType<typeof taskPlanScope>,labels:Labels):DigitalTaskCurrentPlan{
  if(selected.kind==='unavailable')return selected.value;

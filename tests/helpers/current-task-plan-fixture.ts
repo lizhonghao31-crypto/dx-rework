@@ -109,12 +109,12 @@ export async function republishedCurrentTaskPlanFixture(f:Awaited<ReturnType<typ
 /** A later original instruction can reuse adopted work without copying it into
  * its route's added-work array. Finish only the real preparation/cutting needed
  * to instantiate its warehouse handoff; no synthetic task/position/final state. */
-export async function republishedBulkPreparationTaskPlanFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,addedCraft:boolean,options?:{poCount?:number;cuttingProcess?:'in_house'|'outsourced';framework?:boolean}){
- const fixture=await admittedProductionFixture(f,options?.framework!==false,options),{scene,orderId,ready,requests,sourceId}=fixture;
+export async function republishedBulkPreparationTaskPlanFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,addedCraft:boolean,options?:{poCount?:number;cuttingProcess?:'in_house'|'outsourced';framework?:boolean;addPreshrink?:boolean}){
+ const fixture=await admittedProductionFixture(f,options?.framework!==false,{...options,...(options?.addPreshrink?{preshrink:'无需预缩' as const}:{})}),{scene,orderId,ready,requests,sourceId}=fixture;
  return f.runtime.run(scene,f.root,async()=>{
   const service=new DigitalProductionTaskService(f.db),priorId=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind='bulk_pattern'",[ready.preparationId])).rows[0]!.task_id;
   const priorTask=await service.read(f.root,priorId),instructions=new ProductionInstructionService(f.db,true),before=await instructions.read(f.root,orderId);
-  const saved=await instructions.save(f.root,orderId,{expectedVersion:before.version,orderVersion:before.currentOrderVersion,sourceRound:before.sourceRound,document:{...before.document,preshrink:'无需预缩',secondaryCraft:addedCraft?'印花':'无',craftSteps:addedCraft?[{craftKind:'printing',sequence:1}]:[],remarks:'TEST later instruction exact current plan'}},randomUUID());
+  const saved=await instructions.save(f.root,orderId,{expectedVersion:before.version,orderVersion:before.currentOrderVersion,sourceRound:before.sourceRound,document:{...before.document,preshrink:options?.addPreshrink?'需要预缩':'无需预缩',secondaryCraft:addedCraft?'印花':'无',craftSteps:addedCraft?[{craftKind:'printing',sequence:1}]:[],remarks:'TEST later instruction exact current plan'}},randomUUID());
   const readiness=await productionReadinessFixture(f.db,f.root,orderId,f.people['pattern-room-worker']!.actorId,f.people.warehouse!);
   const operation={kind:'instruction_publish' as const,orderId,input:{expectedVersion:saved.version,orderVersion:saved.currentOrderVersion,expectedReadinessRevision:readiness.revision}},check=await requests.check(f.root,operation);
   const pending=await requests.submit(f.root,{operation,fingerprint:check.fingerprint,reason:'TEST later '+(addedCraft?'added':'same')+' instruction scope'},randomUUID()),reviewed=await requests.read(f.root,pending.requestId);
