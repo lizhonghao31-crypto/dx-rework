@@ -227,11 +227,11 @@
       "exitCode": 0,
       "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
       "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run. Vitest was configured with JSON outputFile; this exact original command-produced JSON is its test-result log. Original stdout (only report location) is separately retained; no tests rerun and no report bytes changed.",
       "startedAt": "2026-11-17T06:27:37.279649+00:00",
       "endedAt": "2026-11-17T06:28:40.479364+00:00",
-      "logSha256": "387b8bb04c4dbad234885a5cca3652446287ef2d07b2b1d16b60bc533cd24d6f",
-      "log": "/workspace/sla-rp2-20261117/checks/review-final-readers/command.log",
+      "logSha256": "afc1733cb0f08f3dfb07a0f961b05578d8d83b142359c87738b8d8555bdbafe3",
+      "log": "/workspace/sla-rp2-20261117/readers-review-final.json",
       "passed": 143,
       "failed": 0,
       "skipped": 0,
@@ -240,7 +240,9 @@
           "format": "vitest-json",
           "sha256": "afc1733cb0f08f3dfb07a0f961b05578d8d83b142359c87738b8d8555bdbafe3"
         }
-      ]
+      ],
+      "stdoutLog": "/workspace/sla-rp2-20261117/checks/review-final-readers/command.log",
+      "stdoutLogSha256": "387b8bb04c4dbad234885a5cca3652446287ef2d07b2b1d16b60bc533cd24d6f"
     },
     {
       "id": "rp2-native-pg",
