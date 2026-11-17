@@ -26,6 +26,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const fields=page.locator('.r5-time-washing').filter({has:page.getByText('新增返洗计划',{exact:true})});
    await fields.getByLabel('安排本次返洗',{exact:true}).check();
    const quantity=fields.getByLabel('本次计划数量',{exact:true});
+   await quantity.fill('');await page.getByRole('alert').filter({hasText:'有效的本轮返洗计划数量'}).waitFor();
+   await fields.getByLabel('安排本次返洗',{exact:true}).uncheck();
+   expect(await quantity.isDisabled()).toBe(true);
+   await fields.getByLabel('安排本次返洗',{exact:true}).check();
+   expect(await quantity.isEnabled()).toBe(true);expect(await quantity.inputValue()).toBe('1');
    await quantity.fill('2');await page.getByRole('alert').filter({hasText:'有效的本轮返洗计划数量'}).waitFor();
    expect(await page.getByRole('button',{name:'提交',exact:true}).isDisabled()).toBe(true);
    const preview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().method()==='POST');
@@ -66,5 +71,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.errors).toEqual([]);
    await page.screenshot({path:join(h.evidence,`rewash-logistics-${mode}-${width}.png`),fullPage:true});
   }finally{await logistics.context.close();}
+ });
+ it('rechecks the original empty input after removing the last previewed rewash and submits once without a false concurrency conflict',async()=>{
+  const {scene,orderId,repo,resource}=await failedFrameworkWashingFixture(h.f,'after_receipt');
+  const before=await h.f.runtime.run(scene,h.f.root,()=>repo.current(resource()));
+  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?timeOrder='+orderId);
+  try{
+   const page=tab.page;await page.getByRole('heading',{name:'本单时效调整',exact:false}).waitFor();
+   await page.getByText('新增返洗计划',{exact:true}).click();const checkbox=page.getByLabel('安排本次返洗',{exact:true});
+   const selected=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().method()==='POST');
+   await checkbox.check();expect((await selected).status()).toBe(200);
+   await expect.poll(()=>page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(true);
+   const cleared=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().method()==='POST'&&response.request().postDataJSON().rewashing.length===0);
+   await checkbox.uncheck();const empty=await cleared;expect(empty.status()).toBe(200);const check=await empty.json();
+   await expect.poll(()=>page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(true);
+   const arranged=page.waitForResponse(response=>response.url().endsWith('/order-time/arrange')&&response.request().method()==='POST');
+   await page.getByRole('button',{name:'提交',exact:true}).click();const response=await arranged;
+   expect(response.request().postDataJSON()).toMatchObject({rewashing:[],fingerprint:check.fingerprint});expect(response.status()).toBe(200);
+   await page.getByText('本单新安排已生效。',{exact:true}).waitFor();
+   const after=await h.f.runtime.run(scene,h.f.root,()=>repo.current(resource()));
+   expect(after!.revision).toBe(before!.revision+1);expect(after!.input.rewashing??[]).toEqual([]);expect(after!.input.work.map(work=>work.id)).toEqual(before!.input.work.map(work=>work.id));
+   expect(h.requests.filter(call=>call.session===tab.session&&call.method==='POST'&&call.path.endsWith('/order-time/arrange'))).toHaveLength(1);
+  }finally{await tab.context.close();}
  });
 });

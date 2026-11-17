@@ -5,6 +5,7 @@ import {createClientRequestId} from './client-request-id.js';
 
 export function OrderTimeRewashFields({rows,value,disabled,onChange,onInvalid}:{rows:NonNullable<OrderTimeCheckResult['rewashing']>;value:OrderTimeWashingReworkChanges;disabled:boolean;onChange(next:OrderTimeWashingReworkChanges):void;onInvalid(invalid:boolean):void}){
  const [quantities,setQuantities]=useState<Record<string,string>>({});
+ const forgetQuantity=(key:string)=>setQuantities(before=>{const next={...before};delete next[key];return next;});
  const invalidDraft=(draft:OrderTimeWashingReworkChanges,texts:Record<string,string>)=>draft.some(item=>{
   const row=rows.find(row=>row.scopeId===item.scopeId&&row.inspectionId===item.inspectionId&&row.lineId===item.lineId&&row.quantityVersion===item.quantityVersion);
   if(!row)return true;
@@ -13,9 +14,10 @@ export function OrderTimeRewashFields({rows,value,disabled,onChange,onInvalid}:{
  });
  useEffect(()=>{onInvalid(invalidDraft(value,quantities));},[rows,value,quantities,onInvalid]);
  const stale=value.filter(item=>!rows.some(row=>row.scopeId===item.scopeId&&row.inspectionId===item.inspectionId&&row.lineId===item.lineId&&row.quantityVersion===item.quantityVersion));
- return <details className="r5-time-washing"><summary>新增返洗计划</summary><p>只安排选中的真实不合格范围；原计划和已开始责任保留。本次新增返洗须单独提交，不与其他用时调整混在一起。</p>{stale.map(item=><p role="alert" key={item.intentId}>已选返洗范围已变化，草稿仍保留。<button type="button" disabled={disabled} onClick={()=>{const next=value.filter(row=>row.intentId!==item.intentId);onInvalid(invalidDraft(next,quantities));onChange(next);}}>移除失效范围</button></p>)}{rows.length===0&&<p>当前没有尚可新增安排的返洗范围。</p>}{rows.map(row=>{
+ return <details className="r5-time-washing"><summary>新增返洗计划</summary><p>只安排选中的真实不合格范围；原计划和已开始责任保留。本次新增返洗须单独提交，不与其他用时调整混在一起。</p>{stale.map(item=><p role="alert" key={item.intentId}>已选返洗范围已变化，草稿仍保留。<button type="button" disabled={disabled} onClick={()=>{const next=value.filter(row=>row.intentId!==item.intentId);forgetQuantity(item.scopeId+'|'+item.inspectionId);onInvalid(invalidDraft(next,quantities));onChange(next);}}>移除失效范围</button></p>)}{rows.length===0&&<p>当前没有尚可新增安排的返洗范围。</p>}{rows.map(row=>{
   const key=row.scopeId+'|'+row.inspectionId,selected=value.find(item=>item.scopeId===row.scopeId&&item.inspectionId===row.inspectionId&&item.lineId===row.lineId&&item.quantityVersion===row.quantityVersion),text=quantities[key]??String(selected?.quantity??row.availableQuantity);
   const update=(checked:boolean,nextText=text)=>{
+   if(!checked)forgetQuantity(key);
    const quantity=Number(nextText),invalid=checked&&(!/^\d+$/.test(nextText)||!Number.isSafeInteger(quantity)||quantity<=0||quantity>row.availableQuantity);
    const rest=value.filter(item=>item.scopeId!==row.scopeId||item.inspectionId!==row.inspectionId);
    const next=invalid?value:checked?[...rest,{intentId:selected?.intentId??createClientRequestId(),lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,quantity}]:rest;

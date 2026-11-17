@@ -28,6 +28,7 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
  const [rewashing,setRewashing]=useState<OrderTimeWashingReworkChanges>([]),[rewashInvalid,setRewashInvalid]=useState(false);
  const [washing,setWashing]=useState<OrderTimeWashingChanges>([]),[washingInvalid,setWashingInvalid]=useState(false),[washingReset,setWashingReset]=useState(0),[washingRebase,setWashingRebase]=useState(0);
  const [invalid,setInvalid]=useState<Record<string,boolean>>({}),[readRevision,setReadRevision]=useState(0);
+ const emptyChanges=JSON.stringify({overrides:{},washing:[],rewashing:[]}),previewedChanges=useRef(emptyChanges);
  const live=useRef(true),generation=useRef(0),pending=useRef<Pending|null>(null),writing=useRef(false),navigation=useRef(false),currentChanges=useRef({overrides,washing,rewashing});currentChanges.current={overrides,washing,rewashing};
  const operation:OrderTimeOperation|undefined=request?.operation??(resource?{kind:'arrangement',resource}:undefined),requestBase=requestId?'order-time/requests/'+requestId:null;
  const ordinaryInvalid=Object.values(invalid).some(Boolean),dirty=Object.keys(overrides).length>0||washing.length>0||rewashing.length>0||washingInvalid||rewashInvalid||ordinaryInvalid,editable=Boolean(check?.canApply&&(!request||request.state==='pending'));
@@ -39,18 +40,19 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
    const value=next?.check??OrderTimeCheckResultSchema.parse(await digitalRequest('order-time/check','POST',{operation:{kind:'arrangement',resource}}));
    if(!live.current||turn!==generation.current)return;
    const adoptedChanges=acknowledgeConflict?rebaseWashingChanges(original?.washing,currentChanges.current.washing,value.washing):null;
-   setRequest(next);setCheck(value);setOriginal(before=>acknowledgeConflict?value:before??value);setReadRevision(before=>before+1);
+   previewedChanges.current=emptyChanges;setRequest(next);setCheck(value);setOriginal(before=>acknowledgeConflict?value:before??value);setReadRevision(before=>before+1);
    if(acknowledgeConflict){if(adoptedChanges)setWashing(adoptedChanges);setWashingRebase(value=>value+1);setPreviewing(dirty);setConflict('');setNotice('');}
   }catch(value){if(live.current&&turn===generation.current)setError(value instanceof Error?value.message:'本单时效读取失败');}
  };
  useEffect(()=>{void load();},[requestId,resource?.kind,resource?.id]);
  useEffect(()=>{
-  if(!operation||!check||!dirty||uncertain||washingInvalid||rewashInvalid||ordinaryInvalid){setPreviewing(false);return;}
-  const turn=++generation.current,signature=JSON.stringify({overrides,washing,rewashing});setPreviewing(true);
+  const signature=JSON.stringify({overrides,washing,rewashing});
+  if(!operation||!check||(!dirty&&previewedChanges.current===signature)||uncertain||washingInvalid||rewashInvalid||ordinaryInvalid){setPreviewing(false);return;}
+  const turn=++generation.current;setPreviewing(true);
   const timer=window.setTimeout(()=>{void (requestBase?digitalRequest(requestBase+'/preview','POST',{overrides,washing,rewashing}):digitalRequest('order-time/preview','POST',{operation,overrides,washing,rewashing})).then(value=>{
    const next=requestBase?OrderTimeRequestReadSchema.parse(value):null,result=next?.check??OrderTimeCheckResultSchema.parse(value);
    if(!live.current||turn!==generation.current||signature!==JSON.stringify(currentChanges.current))return;
-   if(next)setRequest(next);setCheck(result);setError('');
+   previewedChanges.current=signature;if(next)setRequest(next);setCheck(result);setError('');
   }).catch(value=>{if(live.current&&turn===generation.current)setError(value instanceof Error?value.message:'演算未完成，本次输入保留');}).finally(()=>{if(live.current&&turn===generation.current)setPreviewing(false);});},200);
   return()=>{window.clearTimeout(timer);generation.current++;};
  },[overrides,washing,rewashing,rewashInvalid,washingInvalid,ordinaryInvalid,requestBase,operation?.kind,uncertain,readRevision]);
@@ -63,7 +65,7 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
     const value=response as {saved?:boolean;check?:unknown};if(value.saved!==true)throw new Error('未收到完整生效回执，请核对上次提交');
     if(live.current){const saved=OrderTimeCheckResultSchema.parse(value.check);setCheck(saved);setOriginal(saved);setNotice('本单新安排已生效。');}
    }else{const value=OrderTimeRequestReadSchema.parse(response);if(live.current){setRequest(value);setCheck(value.check);setOriginal(value.check);setNotice(value.state==='applied'?'本单安排已生效，设计师无需再次确认。':'已保存本次处理。');}}
-   pending.current=null;if(live.current){setUncertain(false);setOverrides({});setWashing([]);setWashingInvalid(false);setRewashing([]);setRewashInvalid(false);setWashingReset(value=>value+1);}window.dispatchEvent(new Event('dx-rework:todo-refresh'));
+   pending.current=null;previewedChanges.current=emptyChanges;if(live.current){setUncertain(false);setOverrides({});setWashing([]);setWashingInvalid(false);setRewashing([]);setRewashInvalid(false);setWashingReset(value=>value+1);}window.dispatchEvent(new Event('dx-rework:todo-refresh'));
   }catch(value){
    if(live.current)setError(value instanceof Error?value.message:'本次提交未完成');
    if(value instanceof DigitalRequestError&&!value.resultUnknown){pending.current=null;if(live.current)setUncertain(false);
