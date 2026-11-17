@@ -14,8 +14,8 @@ const snapshot=resolveDigitalSlaSnapshot({version:1,values:digitalSlaDefaults()}
 const row=(id:string,start:number,round=1)=>({task_id:id,task_kind:'development_pattern',route_version:round,route_instance_id:'TEST-route-'+round,state:'ready',entered_at:at(start),task_entered_at:at(start),entered_quality:'现场登记',completed_at:null,completed_quality:'缺失',due_at:at(start+4),warning_at:at(start+2.8),sla_basis:{enteredAt:at(start),seconds:14400,calendarRef:'continuous',timeQuality:'现场登记',basis:[]},returned:false,rejected:false});
 const node=(id:string,start:number,round=1):JourneyNode=>({key:'development_pattern',label:'纸样',stage:'development',instanceId:id,state:'active',round,occurrence:1,current:true,owner:null,operator:null,assignmentHistory:[],expectedAt:at(start+4),expectedKind:'sla',expectedPrecision:'instant',actualAt:null,actualQuality:'missing',enteredAt:at(start),sla:'running',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[{domain:'task',id,url:null,version:round,lineId:null,mode:'read'}],inheritedFrom:null,countsInProgress:true,unavailableReason:null});
 function subject(nodes:JourneyNode[],round=1):OrderJourney{return {id:'TEST-source',sourceId:'TEST-source',orderId:null,designStyleNo:'TEST',temporaryStyleNo:null,customer:null,category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:at(0),deliveryDate:null,selectedRound:round,adoptedRound:round,sourceVersion:1,instructionVersion:null,lines:[],links:[],stages:[{key:'development',label:'开发',state:'active',nodes}],progress:{development:null,bulk:null},hitReasons:[]};}
-async function evidence(rows:DevelopmentCraftRow[],round=1,adoption?:{route_nodes:string[];inherited:Record<string,{taskId:string;roundNumber:number}>}){
- vi.mocked(developmentSlaPlan).mockResolvedValue({plan_json:plan,business_time:{scenarioId:null},revision:1,rule_version:snapshot.ruleVersion,parameters_json:snapshot.parameters});
+async function evidence(rows:DevelopmentCraftRow[],round=1,adoption?:{route_nodes:string[];inherited:Record<string,{taskId:string;roundNumber:number}>},ownPlan=plan){
+ vi.mocked(developmentSlaPlan).mockResolvedValue({plan_json:ownPlan,business_time:{scenarioId:null},revision:1,rule_version:snapshot.ruleVersion,parameters_json:snapshot.parameters});
  const db={query:vi.fn(async(sql:string,values:unknown[])=>{expect(values[0]).toBe('TEST-source');if(sql.startsWith('SELECT t.task_id,'))return {rows};if(sql.startsWith('SELECT round_number'))return {rows:[{round_number:round,route_nodes:['development_pattern'],inherited:{},published_at:at(0),...adoption}]};throw Error('Unexpected exact task read');})};
  return (await developmentSlaEvidence(db as never,'TEST-source',{now:at(8),scenarioId:null,revision:0}))!;
 }
@@ -46,4 +46,17 @@ it('restores only the exact explicitly inherited completed ordinary task, retain
   if(accepted)expect(e.facts.development_pattern!.evidence).toContain('inherited:TEST-old:round:1');
  }
  const rejected=await evidence([{...old,state:'cancelled'}],2,{route_nodes:[],inherited:valid});expect(rejected.facts.development_pattern).toBeUndefined();
+});
+it('retains the native recheck task behind the materials-plan alias through supervision facts and terminal attachment',async()=>{
+ const ownPlan={...plan,nodes:[{...plan.nodes[0]!,id:'development_materials',parameterKey:'development_materials',label:'核配'}]};
+ const recheck={...row('TEST-recheck',2),task_kind:'development_material_recheck'},e=await evidence([recheck],1,undefined,ownPlan);
+ for(const terminated of [false,true]){
+  const selected={...node('TEST-recheck',2),key:'development_material_recheck',label:'物料复核'},item=subject([selected]);
+  const native={...e,...(terminated?{termination:{kind:'special_closure' as const,at:at(4),precision:'instant' as const,originEventRef:'TEST original closure',scopeRef:'source:TEST-source'}}:{})};
+  attachJourneySupervision(item,ownPlan,ownPlan,evaluateSlaPlan(ownPlan,e.facts,{now:at(8),scenarioId:null,revision:0}),{now:at(8),scenarioId:null,revision:0},{original:1,current:1},false,native);
+  expect(item.supervision!.nodes).toHaveLength(1);
+  expect(selected.timing).toMatchObject({id:'development_materials:task:TEST-recheck',label:'物料复核',actualStart:at(2),actualEnd:null,target:{at:at(6)},status:terminated?'terminated':'overdue'});
+  expect(item.supervision!.nativeFacts).toContainEqual(expect.objectContaining({id:'development_materials:task:TEST-recheck',startedAt:at(2),businessCompleted:false}));
+  if(terminated)expect(selected.timing!.termination).toMatchObject({at:at(4),elapsedSeconds:7200,overdueSeconds:0});
+ }
 });

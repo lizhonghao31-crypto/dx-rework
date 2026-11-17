@@ -661,6 +661,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(nativePaper).toMatchObject({enteredAt:'2026-11-21T04:00:00.000Z',dueAt:'2026-11-25T04:00:00.000Z',slaHours:72});
    const detail=await new DigitalJourneyQuery(f.db).read(f.root,prepared.sourceId,undefined,true),projected=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===paper.taskId)!;
    expect(projected.timing).toMatchObject({actualStart:nativePaper.enteredAt,target:{at:nativePaper.dueAt},status:'running'});
+   const nativeRecheck=await tasks.read(f.root,prepared.recheckId),rechecked=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===prepared.recheckId)!;
+   expect(rechecked.timing).toMatchObject({id:`development_materials:task:${prepared.recheckId}`,actualStart:nativeRecheck.enteredAt,actualEnd:nativeRecheck.completedAt,target:{at:nativeRecheck.dueAt}});
+   expect(detail.supervision!.nativeFacts).toContainEqual(expect.objectContaining({id:`development_materials:task:${prepared.recheckId}`,completedAt:nativeRecheck.completedAt,businessCompleted:true}));
    const stored=await new JourneyFactRepository(f.db).buildOne({kind:'source',id:prepared.sourceId});
    expect(stored.model.sla.facts.development_pattern!.responsibilityWindow).toMatchObject({startedAt:nativePaper.enteredAt,deadline:{at:nativePaper.dueAt},warningAt:nativePaper.warningAt,calendar:'beijing_sunday_excluded'});
    return {paperId:paper.taskId,completed:(await tasks.history(f.root,prepared.recheckId)).events.find(e=>e.kind==='completed')!};

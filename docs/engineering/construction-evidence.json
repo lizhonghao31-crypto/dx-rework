@@ -2,7 +2,7 @@
   "version": 1,
   "base": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
   "risk": "full",
-  "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+  "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
   "rules": [
     {
       "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
@@ -30,7 +30,7 @@
       ],
       "checks": [
         "rp2-readers",
-        "rp2-sunday-pg",
+        "rp2-instance-pg",
         "rp2-compatible-pg16"
       ]
     },
@@ -43,6 +43,9 @@
       "writes": [
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
         "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
         "tests/unit/development-ordinary-instance-projection.test.ts",
         "tests/unit/development-round-window-projection.test.ts",
         "tests/unit/development-craft-instance-supervision.test.ts",
@@ -61,7 +64,7 @@
       ],
       "checks": [
         "rp2-readers",
-        "rp2-sunday-pg",
+        "rp2-instance-pg",
         "rp2-compatible-pg13"
       ]
     },
@@ -219,69 +222,69 @@
     {
       "id": "rp2-readers",
       "kind": "tests",
-      "command": "bash -c 'set -e; git diff --check; git diff --name-only HEAD -- apps packages tests > /workspace/sla-rp2-20261117/lint-final-paths.txt; git ls-files --others --exclude-standard -- apps packages tests >> /workspace/sla-rp2-20261117/lint-final-paths.txt; xargs node node_modules/eslint/bin/eslint.js --max-warnings=0 < /workspace/sla-rp2-20261117/lint-final-paths.txt; node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json; node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json; node node_modules/vitest/vitest.mjs run tests/unit/sla-native-window-projection.test.ts tests/unit/development-captured-window.test.ts tests/unit/development-round-window-projection.test.ts tests/unit/development-ordinary-instance-projection.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-compatible-fallback.test.ts tests/unit/journey-packing-native-time.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-fact-updates.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/digital-journey-projection.test.ts --reporter=json --outputFile=/workspace/sla-rp2-20261117/readers-final.json'",
+      "command": "bash -c 'set -e; git diff --check; git diff --name-only 2b40a5e5ca136f646cb9298739ee67aac274c55f -- apps packages tests > /workspace/sla-rp2-20261117/lint-review-paths.txt; xargs node node_modules/eslint/bin/eslint.js --max-warnings=0 < /workspace/sla-rp2-20261117/lint-review-paths.txt; node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json; node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json; node node_modules/vitest/vitest.mjs run tests/unit/sla-native-window-projection.test.ts tests/unit/development-captured-window.test.ts tests/unit/development-round-window-projection.test.ts tests/unit/development-ordinary-instance-projection.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-compatible-fallback.test.ts tests/unit/journey-packing-native-time.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-fact-updates.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-progress-dates.test.ts --reporter=json --outputFile=/workspace/sla-rp2-20261117/readers-review-final.json'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
-      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
-      "startedAt": "2026-11-17T05:53:09.466815+00:00",
-      "endedAt": "2026-11-17T05:54:10.611288+00:00",
-      "logSha256": "6caeaef78cc344a731ec93aa2860b102221e504ba0f3327bd950a33896ba9915",
-      "log": "/workspace/sla-rp2-20261117/checks/current-source-closeout/command.log",
-      "passed": 129,
+      "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
+      "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:27:37.279649+00:00",
+      "endedAt": "2026-11-17T06:28:40.479364+00:00",
+      "logSha256": "387b8bb04c4dbad234885a5cca3652446287ef2d07b2b1d16b60bc533cd24d6f",
+      "log": "/workspace/sla-rp2-20261117/checks/review-final-readers/command.log",
+      "passed": 143,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a5c6f2e97035842dc11e30aab696a62ea5a57ef20ffeb9fc93977a287b52b52f"
+          "sha256": "afc1733cb0f08f3dfb07a0f961b05578d8d83b142359c87738b8d8555bdbafe3"
         }
       ]
     },
     {
       "id": "rp2-native-pg",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/fixed-progress-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp2-20261117/pg/rp2-native-final/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/fixed-progress-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp2-20261117/pg/rp2-review-native-final/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
-      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
-      "startedAt": "2026-11-17T05:56:42.313292+00:00",
-      "endedAt": "2026-11-17T05:57:44.406341+00:00",
-      "logSha256": "07bb6f5e8c90cf4d068e8a23d56c36f23a982cebb59ac26e00ad0d68398b06d9",
-      "log": "/workspace/sla-rp2-20261117/pg/rp2-native-final/tests.log",
+      "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
+      "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:30:17.078367+00:00",
+      "endedAt": "2026-11-17T06:31:19.712009+00:00",
+      "logSha256": "0522a81bfa8c180af8cceca102b7e445c6b97829ca6f5481f1b026baef591664",
+      "log": "/workspace/sla-rp2-20261117/pg/rp2-review-native-final/tests.log",
       "passed": 18,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f87bf145a2aab4785cc94000d1d90dea6dac6d2b81fa47443d539acb582380ea"
+          "sha256": "ec1d7a656eb4d43ddfaed71c5b792160bcb010e44da2a3f4835d101439794909"
         }
       ]
     },
     {
-      "id": "rp2-sunday-pg",
+      "id": "rp2-instance-pg",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp2-20261117/pg/rp2-sunday-current/tests.json --testNamePattern 'connects a same-round material recheck'",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp2-20261117/pg/rp2-review-native-captured/tests.json --testNamePattern 'connects a same-round material recheck|assigns and completes multiple|retains explicitly adopted craft completion|keeps built-in printing price|keeps separate bulk clocks'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
-      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
-      "startedAt": "2026-11-17T05:59:33.510656+00:00",
-      "endedAt": "2026-11-17T05:59:54.257945+00:00",
-      "logSha256": "8fa6777dec6b9c71cbe53bc6474c1d56a7c042e998ab48127227e9a46cbea6df",
-      "log": "/workspace/sla-rp2-20261117/pg/rp2-sunday-current/tests.log",
-      "passed": 2,
+      "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
+      "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:27:03.837678+00:00",
+      "endedAt": "2026-11-17T06:27:51.511235+00:00",
+      "logSha256": "b071723da0b531ec7d0479af5c6f85740078d1aaa0a11a8f02e2669ef75c75d6",
+      "log": "/workspace/sla-rp2-20261117/pg/rp2-review-native-captured/tests.log",
+      "passed": 6,
       "failed": 0,
       "skipped": 27,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f48b7e0914a69d6289a73abdfa58d1a9e61caabc241093d4cfcafa9e53139c01"
+          "sha256": "500e2b57137aca113ceef182d906ec439fc08fcc9169878b075b636e66898404"
         }
       ]
     },
@@ -291,55 +294,55 @@
       "command": "bash /workspace/sla-rp2-20261117/build-compatible-artifact.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
-      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
-      "startedAt": "2026-11-17T05:52:08.501822+00:00",
-      "endedAt": "2026-11-17T05:52:43.462107+00:00",
-      "logSha256": "75c4eae98dea8c02dcad00305a00f3d63136f08bd05e9c94d70d1edf4abc5925",
-      "log": "/workspace/sla-rp2-20261117/checks/build-compatible-fallback/command.log"
+      "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
+      "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:28:23.355718+00:00",
+      "endedAt": "2026-11-17T06:28:35.270073+00:00",
+      "logSha256": "83d931c505c539ca908758cd19c98b7c5dbd31a8dd889504d300f354711333a7",
+      "log": "/workspace/sla-rp2-20261117/checks/review-compatible-build/command.log"
     },
     {
       "id": "rp2-compatible-pg16",
       "kind": "command",
-      "command": "python3 /workspace/sla-rp2-20261117/run-compatible-artifact-local.py rp2-compatible-artifact-16-esm",
+      "command": "python3 /workspace/sla-rp2-20261117/run-compatible-artifact-local.py rp2-review-compatible-16",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
-      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
-      "startedAt": "2026-11-17T05:54:04.824003+00:00",
-      "endedAt": "2026-11-17T05:54:23.353890+00:00",
-      "logSha256": "7f1df83dd4f54c0f85d3e16d830bc2ce0d4b09f45ac65f02362ea8aea025ce9b",
-      "log": "/workspace/sla-rp2-20261117/checks/pg-compatible-artifact-16-esm/command.log"
+      "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
+      "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:28:56.091983+00:00",
+      "endedAt": "2026-11-17T06:29:16.062535+00:00",
+      "logSha256": "ee645e66641f4b3af1366bb410971875312023789fb0f87d06d6d980c64b749f",
+      "log": "/workspace/sla-rp2-20261117/checks/review-compatible-pg16/command.log"
     },
     {
       "id": "rp2-compatible-pg13",
       "kind": "command",
-      "command": "python3 /workspace/sla-rp2-20261117/run-compatible-artifact-local.py rp2-compatible-artifact-13 --image postgres:13.23",
+      "command": "python3 /workspace/sla-rp2-20261117/run-compatible-artifact-local.py rp2-review-compatible-13 --image postgres:13.23",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
-      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
-      "startedAt": "2026-11-17T05:55:48.452797+00:00",
-      "endedAt": "2026-11-17T05:56:10.005295+00:00",
-      "logSha256": "d690c85a1449c50d84e0309191ec3500808ad34152b9c54535e2c898c543fc61",
-      "log": "/workspace/sla-rp2-20261117/checks/pg-compatible-artifact-13/command.log"
+      "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
+      "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:29:38.228360+00:00",
+      "endedAt": "2026-11-17T06:29:58.077134+00:00",
+      "logSha256": "14446e1d6cf71642250e41689e76271c80ada629046cc31b9110008c178977d9",
+      "log": "/workspace/sla-rp2-20261117/checks/review-compatible-pg13/command.log"
     },
     {
       "id": "rp2-time-inventory",
       "kind": "command",
-      "command": "bash -c 'set -e; node scripts/acceptance/time-site-inventory.mjs; node --test scripts/ci/*.test.mjs; node node_modules/vitest/vitest.mjs run tests/unit/business-time-write-contract.test.ts --reporter=json --outputFile=/workspace/sla-rp2-20261117/business-time-inventory-current.json'",
+      "command": "bash -c 'set -e; node scripts/acceptance/time-site-inventory.mjs; node --test scripts/ci/*.test.mjs; node node_modules/vitest/vitest.mjs run tests/unit/business-time-write-contract.test.ts --reporter=json --outputFile=/workspace/sla-rp2-20261117/business-time-review-current.json'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e69b97d69260426fd51039700dbc0e06374a6db8",
-      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
-      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
-      "startedAt": "2026-11-17T06:07:02.690279+00:00",
-      "endedAt": "2026-11-17T06:07:12.707130+00:00",
-      "logSha256": "2fa420d8f7bb5a801f5752b614e5ef40805be30ecd1e6f8df427b299bf5b85cf",
-      "log": "/workspace/sla-rp2-20261117/checks/protocol-inventory-current/command.log"
+      "testedHead": "5e59a1205794efa9f52e2b1996e6396d3c7a1979",
+      "sourceFingerprint": "3814e215d16cb78acf1faf0fa7c4f3bbd1baecc0e1e848a0d8fc6b48cb286fa1",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 8aff26f17a1cc564d538554919c20e43bb330c3a retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:28:57.760082+00:00",
+      "endedAt": "2026-11-17T06:29:08.583298+00:00",
+      "logSha256": "91cbb3ad64e4dc977327dd075e4c750d1b264412d15dfceea5d08fc001796ec2",
+      "log": "/workspace/sla-rp2-20261117/checks/review-protocol-current/command.log"
     }
   ]
 }

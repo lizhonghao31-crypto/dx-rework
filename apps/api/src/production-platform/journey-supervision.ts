@@ -16,7 +16,7 @@ import {attachJourneyNativeTimes} from './journey-native-times.js';
 import {attachJourneyTerminalTiming} from './journey-terminal-timing.js';
 import {journeyTermination,type JourneyTermination} from './journey-termination.js';
 
-const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',development_craft_return:'development_craft_confirmation',external_pattern:'development_external_pattern',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',bulk_print_embroidery:'process_logistics',factory_production:'factory_production_qc',ship_sample_advance:'bulk_ship_sample',garment_inspection:'receiving_inspection',garment_rework:'rework',garment_packing:'packing',receiving_span:'receipts'};
+const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',development_material_recheck:'development_materials',development_craft_return:'development_craft_confirmation',external_pattern:'development_external_pattern',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',bulk_print_embroidery:'process_logistics',factory_production:'factory_production_qc',ship_sample_advance:'bulk_ship_sample',garment_inspection:'receiving_inspection',garment_rework:'rework',garment_packing:'packing',receiving_span:'receipts'};
 export const journeyTimingKey=(id:string)=>aliases[id.split(':')[0]!]??id.split(':')[0]!;
 export type JourneyTimingEvidence={facts:Record<string,SlaNodeFact>;instances?:readonly DevelopmentCraftInstance[];labels?:ReadonlyMap<string,{scopeLabel:string;snapshotId?:string|null}>;termination?:JourneyTermination|null};
 export type JourneyTimingInputs={plan:SlaPlan|null;original:SlaPlan|null;facts:Record<string,SlaNodeFact>;instances?:DevelopmentCraftInstance[];fixedSchedule?:FixedScheduleBasis|null;termination?:JourneyTermination|null};
@@ -46,7 +46,7 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  const definitions=new Map(plan?.nodes.map(n=>[n.id,n])??[]),originals=new Map(original?calculateSlaPlan(original).map(n=>[n.id,n.end]):[]);
  const instances=native?.instances??[],visible=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.state!=='unavailable'),readRound=item.selectedRound??item.adoptedRound;
  const scopedKeys=new Set(instances.filter(instance=>readRound===null||instance.round===readRound).map(instance=>journeyTimingKey(instance.definitionId)));
- const visibleInstance=(instance:DevelopmentCraftInstance)=>item.sourceId===instance.sourceId&&visible.some(node=>node.instanceId===instance.taskId&&node.round===instance.round&&node.key===journeyTimingKey(instance.definitionId))&&(!authorizedTaskIds||authorizedTaskIds.has(instance.taskId));
+ const visibleInstance=(instance:DevelopmentCraftInstance)=>item.sourceId===instance.sourceId&&visible.some(node=>node.instanceId===instance.taskId&&node.round===instance.round&&journeyTimingKey(node.key)===journeyTimingKey(instance.taskKind))&&(!authorizedTaskIds||authorizedTaskIds.has(instance.taskId));
  const timing:JourneyTiming[]=nodes.flatMap(n=>{const definition=definitions.get(n.id);if(!definition||definition.applicable==='no'||definition.kind==='unlimited'||definition.parameterKey==='bulk_cutting'&&external||scopedKeys.has(journeyTimingKey(n.id)))return [];
   const fact=native?.facts[n.id],line=item.lines.find(line=>line.id===n.id.split(':')[1]);
   const windows=fact?.batchWindows?.map(window=>({...window,...(native?.labels?.get(window.evidence)??{scopeLabel:line?`PO ${line.po??'号码尚未取得'} · ${line.color}`:'本批范围依据尚未取得'})}));
@@ -68,15 +68,15 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  const reminder=timing.filter(n=>n.id.startsWith('order_shipping_reminder:')&&n.target.at).map(n=>new Date(Date.parse(n.target.at!)-(n.target.exclusive?1:0)).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})).sort()[0]??null;
  item.supervision={assessment:nodes.some(n=>!scopedKeys.has(journeyTimingKey(n.id))&&n.assessmentIssue)||timing.some(n=>n.assessmentIssue)?'partially_unavailable':'complete',asOf:time.now,status:plan?'planned':'legacy_unenrolled',originalRevision:revisions.original,currentRevision:revisions.current,nodes:timing,coverage,customerReminderDate:reminder};
  if(native){
-  const visibleKeys=new Set(item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!['unavailable','not_applicable'].includes(node.state)).map(node=>node.key));
+  const visibleKeys=new Set(item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!['unavailable','not_applicable'].includes(node.state)).map(node=>journeyTimingKey(node.key)));
   item.supervision.nativeFacts=Object.entries(native.facts).filter(([id])=>{const instance=instances.find(instance=>id===`${instance.definitionId}:task:${instance.taskId}`);return visibleKeys.has(journeyTimingKey(id))&&(instance?visibleInstance(instance):!scopedKeys.has(journeyTimingKey(id)));}).sort(([a],[b])=>a.localeCompare(b))
    .map(([id,fact])=>({id,sourceRef:fact.evidence,timeRole:'sla_observation',startedAt:fact.startedAt??null,completedAt:fact.completedAt??null,businessCompleted:fact.businessCompleted??null}));
  }
  for(const stage of item.stages)for(const node of stage.nodes){
   if(!node.current)continue;
-  if(scopedKeys.has(node.key)){delete node.timing;delete node.timings;}
+  if(scopedKeys.has(journeyTimingKey(node.key))){delete node.timing;delete node.timings;}
   const lineIds=new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[]));
-  const matches=timing.filter(t=>journeyTimingKey(t.id)===node.key&&(!t.id.includes(':task:')||t.id.endsWith(':task:'+node.instanceId))&&(!lineIds.size
+  const matches=timing.filter(t=>journeyTimingKey(t.id)===journeyTimingKey(node.key)&&(!t.id.includes(':task:')||t.id.endsWith(':task:'+node.instanceId))&&(!lineIds.size
    ||!item.lines.some(line=>line.id===t.id.split(':')[1])||lineIds.has(t.id.split(':')[1]!)));
   // Multiple PO/batch windows share the existing aggregate's risk, never invent a single aggregate target.
   if(!matches.length)continue;
