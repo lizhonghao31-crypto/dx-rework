@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {JOURNEY_STAGES,JourneyFilterSchema,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {JOURNEY_STAGES,JourneyFilterSchema,type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {nextFixedScheduleClassification,evaluateFixedJourneyBasis,fixedScheduleBasisSnapshot,attachFixedJourneySchedule,type FixedScheduleBasis} from '../../apps/api/src/production-platform/fixed-schedule-basis.js';
 import {compileJourneySelectionClock} from '../../apps/api/src/production-platform/journey-selection-clock.js';
 import {selectJourneySelections,type JourneySelection} from '../../apps/api/src/production-platform/journey-projection.js';
@@ -60,4 +60,18 @@ describe('one fixed classification for complete scope, finite clock boundaries a
   const row=item(at(6));row.stages[0]!.nodes=['TEST-print','TEST-embroidery'].map(instanceId=>({instanceId,key:'process_logistics',current:true,state:'active',records:[]})) as OrderJourney['stages'][number]['nodes'];
   attachFixedJourneySchedule(row,input,at(6));expect(row.stages[0]!.nodes.map(node=>[node.fixedTargets!.length,node.expectedAt])).toEqual([[1,at(5)],[1,at(9)]]);
  });
+});
+
+it.each(['old-round','other-source','current','inherited','unproven-inheritance','legacy-exact'])('binds fixed paper evidence by exact scope and task: %s',mode=>{
+ const input=basis(),scope=input.scopes[0]!,now=at(4),subject=item(now);subject.sourceId='TEST-source';subject.orderId=null;subject.selectedRound=2;
+ const own:JourneyNode={key:'development_pattern',instanceId:'TEST-paper-round2',label:'纸样',stage:'development',state:'active',round:2,occurrence:1,current:true,owner:null,operator:null,assignmentHistory:[],expectedAt:at(9),expectedKind:'sla',expectedPrecision:'instant',actualAt:null,actualQuality:'missing',enteredAt:at(2),sla:'running',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[{domain:'task',id:'TEST-paper-round2',url:null,version:2,lineId:null,mode:'read'}],inheritedFrom:null,countsInProgress:true,unavailableReason:null};
+ subject.stages.find(stage=>stage.key==='development')!.nodes=[own];
+ const inherited=mode==='inherited'||mode==='unproven-inheritance',wrong=mode==='old-round'||mode==='other-source'||mode==='unproven-inheritance';
+ if(inherited){own.state='inherited';own.inheritedFrom={taskId:'TEST-paper-round1',round:1};own.records=[{...own.records[0]!,id:'TEST-paper-round1',version:1}];}
+ if(mode==='unproven-inheritance')own.records=[];
+ scope.lineId=null;scope.scopeRef='source:TEST-source:round:1';scope.terminalIds=['development_pattern'];scope.work=[{...scope.work[0]!,id:'development_pattern',canonicalWorkRef:mode==='legacy-exact'?'development_pattern':`source:${mode==='other-source'?'OTHER':'TEST-source'}:round:${mode==='old-round'||inherited?1:2}:work:development_pattern`}];
+ scope.facts={development_pattern:{...scope.facts.a!,ownTaskId:mode==='old-round'||inherited?'TEST-paper-round1':'TEST-paper-round2',evidenceRefs:[`task:${inherited?'TEST-paper-round1':'TEST-paper-round2'}:round:${inherited?1:2}`]}};
+ attachFixedJourneySchedule(subject,input,now,{nextChange:false});
+ if(wrong){expect(own.fixedTargets).toBeUndefined();expect(own.expectedAt).toBe(at(9));expect(own.expectedKind).toBe('sla');}
+ else{expect(own.fixedTargets).toHaveLength(1);expect(own.expectedAt).toBe(at(5));expect(own.expectedKind).toBe('plan');expect(own.nativeTaskDeadline?.at).toBe(inherited?undefined:at(9));}
 });

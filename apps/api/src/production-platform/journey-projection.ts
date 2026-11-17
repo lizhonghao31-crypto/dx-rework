@@ -4,7 +4,7 @@ import {journeyObservedDay} from './journey-risk-clock.js';
 
 /** The complete selection contract, independent of task/document/SLA DTO
  * hydration. Callers must supply currently authorized and fresh facts. */
-export type JourneySelectionNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'current'|'planningOnly'|'risks'>;
+export type JourneySelectionNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'current'|'planningOnly'|'completesOrder'|'risks'>;
 /** Filter-specific native SQL reductions. A global selection can carry these
  * booleans instead of transferring every mother's node collection. Detail
  * hydration still supplies the actual nodes/reasons for the selected page. */
@@ -56,7 +56,7 @@ const nodesOf=(item:JourneySelection)=>item.stages.flatMap(stage=>stage.nodes).f
 const ongoing=(item:JourneySelection)=>item.selectionSignals?.ongoing??(!completed(item)&&!specialClosed(item)&&nodesOf(item).some(node=>!isJourneyPlanningNode(node)&&["active","pending","blocked"].includes(node.state)));
 // Special closure stops the order but is not normal delivered completion.
 const specialClosed=(item:JourneySelection)=>item.selectionSignals?.specialClosed??nodesOf(item).some(node=>node.key==="special_closure"&&node.state==="completed");
-const completed=(item:JourneySelection)=>item.selectionSignals?.completed??nodesOf(item).some(node=>node.key==="packing"&&node.state==="completed");
+const completed=(item:JourneySelection)=>item.selectionSignals?.completed??nodesOf(item).some(node=>node.key==="packing"&&node.state==="completed"&&node.completesOrder!==false);
 /** The same unfiltered predicates, compiled once only for a complete native
  * view. Partial permissions or node filters must still use scoped reductions. */
 export function journeyUnfilteredSignals(item:JourneySelection):JourneySelectionSignals{

@@ -123,6 +123,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   WHERE n."fullOrder" AND n.sourcing_id IS NOT NULL AND NOT $7 AND nodes.value->>'key'='sourcing_preparation'
  ), scoped AS (
   SELECT n.kind,n.id,node->>'key' AS key,node->>'stage' AS stage,node->>'state' AS state,
+   coalesce((node->>'completesOrder')::boolean,true) AS completes_order,
    coalesce((node->>'planningOnly')::boolean,false) AS planning,coalesce((node->>'entered')::boolean,false) AS entered,coalesce((node->>'recorded')::boolean,false) AS recorded,
    coalesce(risks,node->'risks','[]'::jsonb) AS risks FROM selected_nodes n WHERE NOT $12::boolean
   UNION ALL
@@ -133,13 +134,13 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
     OR c.value->>'key'='production_reporting' AND n.production_id IS NOT NULL AND NOT n.production_id=ANY($9::uuid[]) THEN 'unavailable'
     WHEN c.value->>'key'='order_information' AND n.oid IS NULL THEN 'uncreated'
     WHEN c.value->>'stage'='creation' AND (n."sourceAccess" OR n."fullOrder") OR c.value->>'stage'='development' AND (n."sourceAccess" OR n."fullOrder" AND n.sid IS NULL) OR c.value->>'stage' NOT IN ('creation','development') AND n."fullOrder" THEN 'uncreated' ELSE 'unavailable' END,
-   false,false,false,'[]'::jsonb FROM framed n CROSS JOIN jsonb_array_elements($4::jsonb) c(value)
+   true,false,false,false,'[]'::jsonb FROM framed n CROSS JOIN jsonb_array_elements($4::jsonb) c(value)
    WHERE NOT $12::boolean AND NOT coalesce(n.fast,false) AND NOT coalesce((c.value->>'planningOnly')::boolean,false) AND NOT EXISTS(SELECT 1 FROM selected_nodes v WHERE v.kind=n.kind AND v.id=n.id AND v.node->>'key'=c.value->>'key')
  ), reduced AS (
   SELECT s.*,((nullif($3::jsonb->>'stage','') IS NULL OR stage=$3::jsonb->>'stage') AND (nullif($3::jsonb->>'node','') IS NULL OR key=$3::jsonb->>'node')
    AND (nullif($3::jsonb->>'state','') IS NULL OR state=$3::jsonb->>'state') AND (nullif($3::jsonb->>'risk','') IS NULL OR risks ? ($3::jsonb->>'risk'))) AS matches FROM scoped s
  ),
-flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed') AS closed,bool_or(key='special_closure' AND state='completed') AS special_closed,
+flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed' AND completes_order) AS closed,bool_or(key='special_closure' AND state='completed') AS special_closed,
   bool_or(NOT planning AND stage<>'creation' AND (entered OR state IN ('active','completed') AND recorded)) AS activated,
   bool_or(NOT planning AND state IN ('active','pending','blocked')) AS ongoing,bool_or(matches) AS matched,
   bool_or(risks ? 'overdue') AS overdue,bool_or(risks ? 'due_soon') AS warning,bool_or(risks ? 'blocked') AS blocked,

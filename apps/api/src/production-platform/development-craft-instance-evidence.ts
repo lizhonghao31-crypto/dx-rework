@@ -1,8 +1,10 @@
 import type {SlaNodeFact,SlaTime} from '@dx-rework/domain/digital-sla-plan';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
+import {developmentCapturedWindow} from './development-captured-window.js';
+import {developmentResponsibilityWindow,type ResponsibilityTask} from './development-responsibility-window.js';
 
 export type DevelopmentCraftInstance={sourceId:string;taskId:string;round:number;routeRef:string;stepRef:string|null;taskKind:string;definitionId:string;state:string;eligible:boolean;fact:SlaNodeFact;deadline:SlaTime;warningAt:string|null};
-export type DevelopmentCraftRow={task_id:string;route_version:number;route_instance_id?:string;task_kind:string;state:string;entered_at:Date|string|null;entered_quality?:string;completed_at:Date|string|null;completed_quality:string;due_at:Date|string|null;warning_at?:Date|string|null;sla_basis:Record<string,unknown>|null;returned:boolean;rejected:boolean;correction_id?:string|null;predecessor_ids?:string[];
+export type DevelopmentCraftRow=ResponsibilityTask&{task_id:string;task_entered_at?:Date|string|null;route_version:number;route_instance_id?:string;task_kind:string;state:string;entered_at:Date|string|null;entered_quality?:string;completed_at:Date|string|null;completed_quality:string;due_at:Date|string|null;warning_at?:Date|string|null;sla_basis:Record<string,unknown>|null;returned:boolean;rejected:boolean;correction_id?:string|null;predecessor_ids?:string[];
  instance_entered_at?:Date|string|null;instance_due_at?:Date|string|null;instance_warning_at?:Date|string|null;instance_sla_basis?:Record<string,unknown>|null};
 const aliases:Record<string,string>={development_craft_confirmation:'development_craft_return'};
 const kinds=new Set(['development_craft_dispatch','development_printing','development_embroidery','development_print_embroidery','development_craft_confirmation']);
@@ -21,13 +23,15 @@ export function developmentCraftInstances(sourceId:string,rows:readonly Developm
   const basis=current(row,'instance_sla_basis',row.sla_basis),identity=[basis,row.sla_basis].flatMap(value=>Array.isArray(value?.basis)?value.basis.filter((ref):ref is string=>typeof ref==='string'&&ref.startsWith('craft-step:')).map(ref=>ref.slice(11)):[]),steps=[...new Set(identity)];
   if(!steps.length)continue;
   const validIdentity=steps.length===1&&Boolean(steps[0])&&Boolean(row.route_instance_id)&&Number.isSafeInteger(row.route_version)&&row.route_version>0;
-  const complete=row.state==='completed'&&!row.returned&&!row.rejected,started=validIdentity?trusted(current(row,'instance_entered_at',row.entered_at),row.entered_quality,time,onFutureEvidence):null,completed=complete?trusted(row.completed_at,row.completed_quality,time,onFutureEvidence):null;
+  const responsibility=developmentResponsibilityWindow({...row,entered_at:Object.hasOwn(row,'task_entered_at')?row.task_entered_at??null:row.entered_at},current(row,'instance_entered_at',row.entered_at),basis,rows);
+  const complete=row.state==='completed'&&!row.returned&&!row.rejected,started=validIdentity?trusted(responsibility.at,responsibility.quality,time,onFutureEvidence):null,completed=complete?trusted(row.completed_at,row.completed_quality,time,onFutureEvidence):null;
   const fact:SlaNodeFact={evidence:`task:${row.task_id}:source:${sourceId}:round:${row.route_version}:step:${steps[0]}`,businessCompleted:complete,
    ...(started?{startedAt:started}:{}),...(completed?{completedAt:completed}:{}),standardMinutes:validIdentity&&typeof basis?.seconds==='number'?basis.seconds/60:null,
    ...(typeof basis?.warningRatio==='number'?{standardWarningPercent:basis.warningRatio*100}:{}),
    ...(['continuous','natural_days','beijing_sunday_excluded'].includes(String(basis?.calendarRef))?{standardCalendar:basis!.calendarRef as NonNullable<SlaNodeFact['standardCalendar']>}:{}),
   };
   const due=started?at(current(row,'instance_due_at',row.due_at)):null,deadline:SlaTime={at:due,exclusive:basis?.exclusive===true,reasons:due?[]:['本实例缺少可信责任起点或已采用截止']};
+  const captured=developmentCapturedWindow(row,started,fact.evidence);if(captured)fact.responsibilityWindow=captured;
   if(complete)fact.completedDeadline=deadline;
   if(row.returned||row.rejected||row.state==='cancelled')fact.waitingFor={reason:'本实例已退回或取消，不能当作有效完成',source:fact.evidence};
   result.push({sourceId,taskId:row.task_id,round:row.route_version,routeRef:row.route_instance_id??'',stepRef:validIdentity?steps[0]!:null,taskKind:row.task_kind,definitionId:aliases[row.task_kind]??row.task_kind,state:row.state,eligible:!row.returned&&!row.rejected&&row.state!=='cancelled',fact,deadline,warningAt:started?at(current(row,'instance_warning_at',row.warning_at)):null});

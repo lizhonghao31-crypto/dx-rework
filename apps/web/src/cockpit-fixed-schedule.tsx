@@ -1,5 +1,6 @@
 import {cockpitDifferenceDays} from './cockpit-difference-days.js';
 import {CockpitDate} from './cockpit-date.js';
+import {nodeTerminationLabel} from './digital-journey-cockpit-model.js';
 import {scopedDeadlineFallback} from './journey-sla-details.js';
 import {useEffect,useRef,useState} from 'react';
 import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
@@ -49,6 +50,7 @@ export function CockpitStageDifference({goal,asOf,wrapUnits=false}:{goal:Schedul
  return <span className={'cockpit-target-difference is-'+(text==='—'?'neutral':amount!>0?'danger':'success')} aria-label={'阶段目标差 '+text}>{wrapUnits?differenceUnits(text):text}</span>;
 }
 export function cockpitOwnStatus(node:JourneyNode):{text:string;tone:'danger'|'warning'|'neutral'}|null{
+ const stopped=nodeTerminationLabel(node);if(stopped)return {text:stopped,tone:'neutral'};
  if(!node.fixedTargets?.length||['inherited','cancelled','not_applicable','unavailable'].includes(node.state))return null;
  const rows=node.fixedTargets.map(t=>t.progress);if(rows.some(p=>p.ownSla.state==='overdue'))return {text:'逾期（有责口径）',tone:'danger'};
  if(rows.some(p=>p.goalDelta.kind==='late'))return rows.every(p=>p.ownSla.state==='within')?{text:'逾期（无责）',tone:'warning'}:{text:'超目标·待核',tone:'warning'};

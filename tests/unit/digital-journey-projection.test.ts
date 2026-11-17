@@ -63,6 +63,17 @@ describe("V2 Journey shared query semantics",()=>{
     expect(selected.total).toBe(1);expect(selected.items[0]?.id).toBe("two");expect(selected.summary.active).toBe(1);
     expect(a.progress).toEqual({development:{applicable:6,completed:1},bulk:null});
   });
+  it('keeps physically completed packing separate from order closure in display, full totals and lightweight selection',()=>{
+    const value=item('physical',[node('packing',{state:'completed',stage:'receiving',completesOrder:false,actualAt:at}),node('factory_production_qc',{stage:'production',state:'active',enteredAt:at})],{orderId:'physical'});
+    value.display=journeyDisplay(value,at);
+    expect(value.display.mainState).toBe('active');
+    const filter=JourneyFilterSchema.parse({kpi:'completed'}),selected=selectJourneys([value],filter,at);
+    expect(selected.total).toBe(0);expect(selected.summary).toMatchObject({active:1,completed:0});
+    const light={...value,stages:value.stages.map(stage=>({nodes:stage.nodes.map(({key,instanceId,stage,state,current,risks,completesOrder})=>({key,instanceId,stage,state,current,risks,completesOrder}))}))};
+    expect(selectJourneySelections([light],filter,at).summary).toEqual(selected.summary);
+    value.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='packing')!.completesOrder=true;
+    expect(journeyDisplay(value,at).mainState).toBe('completed');
+  });
   it("uses the same permission-scoped filtered set for KPI, pagination and export",()=>{
     const orders=Array.from({length:25},(_,index)=>item(`${index}`,[node("pattern",{state:"active",risks:["overdue"]})]));
     const filter=JourneyFilterSchema.parse({search:"第二跟单",merchandiserId:"19b5331b-c76f-4b9a-8773-849e24a35ad1",customer:"PD",startDate:"2026-10-04",endDate:"2026-10-04",kpi:"overdue",page:2});

@@ -9,8 +9,8 @@ import type {JourneyCutScope} from './journey-cut-scopes.js';
 import type {NativeFactoryTimeline} from './factory-production-facts.js';
 
 /** Bump when native mapping, time precision or applicability changes. No user DTO cache. */
-export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-packing-readiness-v9';
-type FactNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'round'|'occurrence'|'current'|'planningOnly'|'progressApplicability'|'expectedAt'|'expectedKind'|'expectedPrecision'|'deadlineMode'|'deadlineExclusive'|'actualAt'|'actualDate'|'actualQuality'|'enteredAt'|'sla'|'countsInProgress'|'inheritedFrom'|'inheritedResult'>&{
+export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-native-window-v10';
+type FactNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'round'|'occurrence'|'current'|'planningOnly'|'completesOrder'|'progressApplicability'|'expectedAt'|'expectedKind'|'expectedPrecision'|'deadlineMode'|'deadlineExclusive'|'actualAt'|'actualDate'|'actualQuality'|'enteredAt'|'sla'|'countsInProgress'|'inheritedFrom'|'inheritedResult'>&{
  ownerId:string|null;operatorId:string|null;blockers:Array<{key:string;ownerId:string|null}>;
  scopes:Array<{domain:string;id:string;lineId:string|null;version:number|null}>;
 };
@@ -32,6 +32,9 @@ const plan=(p:SlaPlan|null):SlaPlan|null=>p?{
  ...(p.retainedNodeSnapshots?{retainedNodeSnapshots:{...p.retainedNodeSnapshots}}:{})
 }:null;
 const fact=(f:SlaNodeFact):SlaNodeFact=>({evidence:f.evidence,
+ ...(f.responsibilityWindow?{responsibilityWindow:{startedAt:f.responsibilityWindow.startedAt,
+  deadline:{at:f.responsibilityWindow.deadline.at,exclusive:f.responsibilityWindow.deadline.exclusive,reasons:[...f.responsibilityWindow.deadline.reasons]},
+  warningAt:f.responsibilityWindow.warningAt,calendar:f.responsibilityWindow.calendar,sourceRef:f.responsibilityWindow.sourceRef}}:{}),
  ...(f.startedAt!==undefined?{startedAt:f.startedAt}:{}),...(f.completedAt!==undefined?{completedAt:f.completedAt}:{}),
  ...(f.completedDate!==undefined?{completedDate:f.completedDate}:{}),
  ...(f.businessCompleted!==undefined?{businessCompleted:f.businessCompleted}:{}),...(f.standardMinutes!==undefined?{standardMinutes:f.standardMinutes}:{}),
@@ -57,6 +60,7 @@ export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs
    factoryTimeline:(native.factoryTimeline??[]).map(scope=>({productionId:scope.productionId,factoryDecisionId:scope.factoryDecisionId,lineId:scope.lineId,quantity:scope.quantity,
     dispatchedAt:scope.dispatchedAt,startTransitionRef:scope.startTransitionRef,completedDate:scope.completedDate,completionTransitionRef:scope.completionTransitionRef}))}:{}),
   nodes:item.stages.flatMap(stage=>stage.nodes).map(n=>({key:n.key,instanceId:n.instanceId,stage:n.stage,state:n.state,round:n.round,occurrence:n.occurrence,current:n.current,
+   ...(n.completesOrder!==undefined?{completesOrder:n.completesOrder}:{}),
    ...(n.planningOnly!==undefined?{planningOnly:n.planningOnly}:{}),...(n.progressApplicability?{progressApplicability:n.progressApplicability}:{}),
    expectedAt:n.expectedAt,expectedKind:n.expectedKind,expectedPrecision:n.expectedPrecision,
    ...(n.deadlineMode?{deadlineMode:n.deadlineMode}:{}),...(n.deadlineExclusive!==undefined?{deadlineExclusive:n.deadlineExclusive}:{}),
@@ -72,7 +76,9 @@ export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs
    targets:r.targets.map(t=>({source:t.source,planId:t.planId,revision:t.revision,scopeRef:t.scopeRef,at:t.at,precision:t.precision,retainedFromRevision:t.retainedFromRevision}))})),
   quantities:item.businessProgress?.quantities?{revision:item.businessProgress.quantities.revision,factoryAttribution:item.businessProgress.quantities.factoryAttribution,
    lines:item.businessProgress.quantities.lines.map(l=>({lineId:l.lineId,demand:l.demand,received:l.received,inspected:l.inspected,qualified:l.qualified,packed:l.packed,...(l.effectivePacked===undefined?{}:{effectivePacked:l.effectivePacked}),remainingReceipt:l.remainingReceipt,remainingShipment:l.remainingShipment,qualityGap:l.qualityGap,qualityConflict:l.qualityConflict,factoryAttribution:l.factoryAttribution,reasons:[...l.reasons]}))}:null,
-  sla:{plan:plan(inputs.plan),original:plan(inputs.original),facts:Object.fromEntries(Object.entries(inputs.facts).map(([key,value])=>[key,fact(value)])),...(inputs.instances?.length?{instances:inputs.instances.map(instance=>({sourceId:instance.sourceId,taskId:instance.taskId,round:instance.round,routeRef:instance.routeRef,stepRef:instance.stepRef,taskKind:instance.taskKind,definitionId:instance.definitionId,state:instance.state,eligible:instance.eligible,fact:fact(instance.fact),deadline:{at:instance.deadline.at,exclusive:instance.deadline.exclusive,reasons:[...instance.deadline.reasons]},warningAt:instance.warningAt}))}:{})},
+  sla:{plan:plan(inputs.plan),original:plan(inputs.original),facts:Object.fromEntries(Object.entries(inputs.facts).map(([key,value])=>[key,fact(value)])),
+   ...(inputs.termination!==undefined?{termination:inputs.termination?{kind:inputs.termination.kind,at:inputs.termination.at,precision:inputs.termination.precision,originEventRef:inputs.termination.originEventRef,scopeRef:inputs.termination.scopeRef}:null}:{}),
+   ...(inputs.instances?.length?{instances:inputs.instances.map(instance=>({sourceId:instance.sourceId,taskId:instance.taskId,round:instance.round,routeRef:instance.routeRef,stepRef:instance.stepRef,taskKind:instance.taskKind,definitionId:instance.definitionId,state:instance.state,eligible:instance.eligible,fact:fact(instance.fact),deadline:{at:instance.deadline.at,exclusive:instance.deadline.exclusive,reasons:[...instance.deadline.reasons]},warningAt:instance.warningAt}))}:{})},
   revisions:{original:item.supervision?.originalRevision??null,current:item.supervision?.currentRevision??null}};
 }
 /** Canonical object key order makes equivalent source facts stable across rebuilds. */

@@ -1,181 +1,331 @@
 {
   "version": 1,
-  "base": "1f7adb55dd3670a81b72b7de460f01a8303c6721",
+  "base": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
   "risk": "full",
-  "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
+  "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
   "rules": [
     {
-      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX09/FIX13 and RP6 N14/N15; original scoped Acceptance guards and v27 precision rules.",
-      "initialization": "Preserved CI/U2/RP1 workspaces; fresh marked low-privilege PG16 fixture and original identity seed. Production does not install Acceptance hooks; no historical event repair or deployment.",
-      "dateAndPermission": "Only allowed lifecycle source/order resourceId is resolved. Original UAT identity, scene lock and cross-scene guards remain. Business occurrence uses scene time; audit/authentication remain real. Date exclusive B and ordinary hour D retain distinct equality rules.",
-      "expectation": "Exact lifecycle commands use the current trusted scene; wrong kind and mixed scopes reject before writes. Ordinary/no-hook server uses real time. Preview states boundary type without falsely claiming B-1ms is overdue.",
-      "rule": "Lifecycle resolves exact typed scene resource and retains original authentication, lock and real audit time",
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
+      "initialization": "Actual integrated release base includes RP1 and RP6 merges. Original schema/seed in fresh marked low-privilege owned PG; original commands create real fixtures. No historical business rewrite or live derived rebuild. Matching v10 API/web/background consumers and verified compatible fallback required before deployment activation.",
+      "dateAndPermission": "Frozen P, captured R/D/warning, trustworthy actual A, termination C and recorded/audit times remain distinct. Exact source/round/task/step/PO matching; original role scopes and partial-role SQL retained. Missing precision/calendar/clock proof remains unknown, inclusive/strict boundaries remain separate.",
+      "expectation": "Current instance uses its own captured window; unfinished terminal windows stop without invented A or active overtime, completed evidence remains. Physical packing does not imply whole-order closure; dirty/failed/obsolete never appear as a current normal object.",
+      "rule": "Captured native Sunday-excluded D and warning survive supervision without interpolation or current-policy overwrite",
       "writes": [
-        "apps/api/src/acceptance-clock/scope.ts#clockLifecycleRoots",
-        "apps/api/src/acceptance-clock/hooks.ts#registerAcceptanceClockHooks",
-        "tests/integration/acceptance-sla-clock-postgres.test.ts",
-        "tests/unit/acceptance-sla-clock.test.ts"
+        "apps/api/src/production-platform/development-captured-window.ts",
+        "apps/api/src/production-platform/development-craft-instance-evidence.ts",
+        "apps/api/src/production-platform/development-sla-evidence.ts",
+        "packages/domain/src/digital-sla-plan.ts",
+        "tests/unit/development-captured-window.test.ts",
+        "tests/unit/sla-native-window-projection.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/acceptance-clock/runtime.ts#assertActor",
-        "apps/api/src/production-platform/task-service.ts#controlResource",
-        "apps/api/src/production-platform/task-routes.ts"
+        "apps/api/src/production-platform/development-responsibility-window.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/journey-supervision.ts"
       ],
       "oldTests": [
-        "tests/integration/acceptance-sla-clock-postgres.test.ts",
-        "tests/unit/acceptance-sla-clock.test.ts"
+        "tests/unit/digital-sla-plan.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts"
       ],
       "checks": [
-        "rp6-pg",
-        "rp6-unit",
-        "rp6-transaction-reader",
-        "rp6-static"
+        "rp2-readers",
+        "rp2-sunday-pg",
+        "rp2-compatible-pg16"
       ]
     },
     {
-      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX09/FIX13 and RP6 N14/N15; original scoped Acceptance guards and v27 precision rules.",
-      "initialization": "Preserved CI/U2/RP1 workspaces; fresh marked low-privilege PG16 fixture and original identity seed. Production does not install Acceptance hooks; no historical event repair or deployment.",
-      "dateAndPermission": "Only allowed lifecycle source/order resourceId is resolved. Original UAT identity, scene lock and cross-scene guards remain. Business occurrence uses scene time; audit/authentication remain real. Date exclusive B and ordinary hour D retain distinct equality rules.",
-      "expectation": "Exact lifecycle commands use the current trusted scene; wrong kind and mixed scopes reject before writes. Ordinary/no-hook server uses real time. Preview states boundary type without falsely claiming B-1ms is overdue.",
-      "rule": "Exclusive boundary type does not claim every preview instant is overdue",
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
+      "initialization": "Actual integrated release base includes RP1 and RP6 merges. Original schema/seed in fresh marked low-privilege owned PG; original commands create real fixtures. No historical business rewrite or live derived rebuild. Matching v10 API/web/background consumers and verified compatible fallback required before deployment activation.",
+      "dateAndPermission": "Frozen P, captured R/D/warning, trustworthy actual A, termination C and recorded/audit times remain distinct. Exact source/round/task/step/PO matching; original role scopes and partial-role SQL retained. Missing precision/calendar/clock proof remains unknown, inclusive/strict boundaries remain separate.",
+      "expectation": "Current instance uses its own captured window; unfinished terminal windows stop without invented A or active overtime, completed evidence remains. Physical packing does not imply whole-order closure; dirty/failed/obsolete never appear as a current normal object.",
+      "rule": "Round and ordinary/craft instance evidence cannot borrow another task or unapproved inherited round",
       "writes": [
-        "apps/web/src/acceptance-clock-panel.tsx#AcceptanceClockPanel",
-        "tests/acceptance/acceptance-sla-clock-browser.mjs"
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "tests/unit/development-ordinary-instance-projection.test.ts",
+        "tests/unit/development-round-window-projection.test.ts",
+        "tests/unit/development-craft-instance-supervision.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/acceptance-clock/control-service.ts#preview",
-        "packages/domain/src/digital-task-deadline.ts#digitalTaskTiming"
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/api/src/production-platform/development-craft-instance-evidence.ts",
+        "apps/api/src/production-platform/journey-query.ts"
       ],
       "oldTests": [
-        "tests/unit/acceptance-sla-clock.test.ts",
-        "tests/acceptance/acceptance-sla-clock-browser.mjs"
+        "tests/unit/development-craft-instance-supervision.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts"
       ],
       "checks": [
-        "rp6-unit",
-        "rp6-browser",
-        "rp6-static"
+        "rp2-readers",
+        "rp2-sunday-pg",
+        "rp2-compatible-pg13"
       ]
     },
     {
-      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX09/FIX13 and RP6 N14/N15; original scoped Acceptance guards and v27 precision rules.",
-      "initialization": "Preserved CI/U2/RP1 workspaces; fresh marked low-privilege PG16 fixture and original identity seed. Production does not install Acceptance hooks; no historical event repair or deployment.",
-      "dateAndPermission": "Only allowed lifecycle source/order resourceId is resolved. Original UAT identity, scene lock and cross-scene guards remain. Business occurrence uses scene time; audit/authentication remain real. Date exclusive B and ordinary hour D retain distinct equality rules.",
-      "expectation": "Exact lifecycle commands use the current trusted scene; wrong kind and mixed scopes reject before writes. Ordinary/no-hook server uses real time. Preview states boundary type without falsely claiming B-1ms is overdue.",
-      "rule": "Restore the old owner-date clock fixture explicit manual-quote precondition after UI default drift, without weakening quote or date guards",
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
+      "initialization": "Actual integrated release base includes RP1 and RP6 merges. Original schema/seed in fresh marked low-privilege owned PG; original commands create real fixtures. No historical business rewrite or live derived rebuild. Matching v10 API/web/background consumers and verified compatible fallback required before deployment activation.",
+      "dateAndPermission": "Frozen P, captured R/D/warning, trustworthy actual A, termination C and recorded/audit times remain distinct. Exact source/round/task/step/PO matching; original role scopes and partial-role SQL retained. Missing precision/calendar/clock proof remains unknown, inclusive/strict boundaries remain separate.",
+      "expectation": "Current instance uses its own captured window; unfinished terminal windows stop without invented A or active overtime, completed evidence remains. Physical packing does not imply whole-order closure; dirty/failed/obsolete never appear as a current normal object.",
+      "rule": "Rework work completion retains its real window A independently from later quantity and financial administration",
       "writes": [
-        "tests/helpers/acceptance-sourcing-approval-fixture.ts"
+        "apps/api/src/production-platform/journey-native-times.ts",
+        "tests/unit/journey-native-times.test.ts",
+        "tests/integration/fixed-progress-postgres.test.ts"
       ],
       "reads": [
-        "tests/helpers/customer-quotation-fixture.ts#customerQuotationFixture",
-        "apps/api/src/production-platform/quotation-service.ts#save",
-        "tests/integration/acceptance-sla-clock-postgres.test.ts"
+        "apps/api/src/production-platform/rework-sla-evidence.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts"
       ],
       "oldTests": [
-        "tests/integration/acceptance-sla-clock-postgres.test.ts"
+        "tests/unit/journey-native-times.test.ts",
+        "tests/integration/fixed-progress-postgres.test.ts"
       ],
       "checks": [
-        "rp6-pg",
-        "rp6-static"
+        "rp2-readers",
+        "rp2-native-pg"
+      ]
+    },
+    {
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
+      "initialization": "Actual integrated release base includes RP1 and RP6 merges. Original schema/seed in fresh marked low-privilege owned PG; original commands create real fixtures. No historical business rewrite or live derived rebuild. Matching v10 API/web/background consumers and verified compatible fallback required before deployment activation.",
+      "dateAndPermission": "Frozen P, captured R/D/warning, trustworthy actual A, termination C and recorded/audit times remain distinct. Exact source/round/task/step/PO matching; original role scopes and partial-role SQL retained. Missing precision/calendar/clock proof remains unknown, inclusive/strict boundaries remain separate.",
+      "expectation": "Current instance uses its own captured window; unfinished terminal windows stop without invented A or active overtime, completed evidence remains. Physical packing does not imply whole-order closure; dirty/failed/obsolete never appear as a current normal object.",
+      "rule": "Packing physical completion and date precision do not close unrelated unfinished order obligations",
+      "writes": [
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-display.ts",
+        "apps/api/src/production-platform/journey-projection.ts",
+        "apps/api/src/production-platform/journey-selection-facts.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/unit/journey-packing-native-time.test.ts",
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/integration/effective-packing-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/packing-sla-evidence.ts",
+        "apps/api/src/production-platform/packing-quality-coverage.ts",
+        "apps/api/src/production-platform/journey-selection-access.ts"
+      ],
+      "oldTests": [
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/integration/effective-packing-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts"
+      ],
+      "checks": [
+        "rp2-readers",
+        "rp2-native-pg",
+        "rp2-compatible-pg13"
+      ]
+    },
+    {
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
+      "initialization": "Actual integrated release base includes RP1 and RP6 merges. Original schema/seed in fresh marked low-privilege owned PG; original commands create real fixtures. No historical business rewrite or live derived rebuild. Matching v10 API/web/background consumers and verified compatible fallback required before deployment activation.",
+      "dateAndPermission": "Frozen P, captured R/D/warning, trustworthy actual A, termination C and recorded/audit times remain distinct. Exact source/round/task/step/PO matching; original role scopes and partial-role SQL retained. Missing precision/calendar/clock proof remains unknown, inclusive/strict boundaries remain separate.",
+      "expectation": "Current instance uses its own captured window; unfinished terminal windows stop without invented A or active overtime, completed evidence remains. Physical packing does not imply whole-order closure; dirty/failed/obsolete never appear as a current normal object.",
+      "rule": "Exact cancellation or special closure freezes unfinished responsibility across live and finite selector observations",
+      "writes": [
+        "apps/api/src/production-platform/journey-terminal-timing.ts",
+        "apps/api/src/production-platform/journey-selection-clock.ts",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-node-summary.tsx",
+        "apps/web/src/journey-sla-details.tsx",
+        "tests/unit/journey-terminal-timing.test.ts",
+        "tests/unit/m01-time-consumers.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-termination.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/web/src/digital-journey-cockpit-model.ts"
+      ],
+      "oldTests": [
+        "tests/unit/m01-time-consumers.test.ts",
+        "tests/integration/fixed-progress-postgres.test.ts"
+      ],
+      "checks": [
+        "rp2-readers",
+        "rp2-native-pg",
+        "rp2-compatible-pg16",
+        "rp2-compatible-pg13"
+      ]
+    },
+    {
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
+      "initialization": "Actual integrated release base includes RP1 and RP6 merges. Original schema/seed in fresh marked low-privilege owned PG; original commands create real fixtures. No historical business rewrite or live derived rebuild. Matching v10 API/web/background consumers and verified compatible fallback required before deployment activation.",
+      "dateAndPermission": "Frozen P, captured R/D/warning, trustworthy actual A, termination C and recorded/audit times remain distinct. Exact source/round/task/step/PO matching; original role scopes and partial-role SQL retained. Missing precision/calendar/clock proof remains unknown, inclusive/strict boundaries remain separate.",
+      "expectation": "Current instance uses its own captured window; unfinished terminal windows stop without invented A or active overtime, completed evidence remains. Physical packing does not imply whole-order closure; dirty/failed/obsolete never appear as a current normal object.",
+      "rule": "Trustworthy completion missing P, date-only A, missing A and missing responsibility retain distinct coverage",
+      "writes": [
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "tests/unit/fixed-schedule-progress.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/web/src/cockpit-fixed-schedule.tsx"
+      ],
+      "oldTests": [
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/integration/fixed-progress-postgres.test.ts"
+      ],
+      "checks": [
+        "rp2-readers",
+        "rp2-native-pg"
+      ]
+    },
+    {
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library v1, RP2 FIX03/04/05/06/14 and FIX08 backend; N4/N5/N6/N7. Existing v27 native-fact, precision and frozen-plan rules remain authoritative.",
+      "initialization": "Actual integrated release base includes RP1 and RP6 merges. Original schema/seed in fresh marked low-privilege owned PG; original commands create real fixtures. No historical business rewrite or live derived rebuild. Matching v10 API/web/background consumers and verified compatible fallback required before deployment activation.",
+      "dateAndPermission": "Frozen P, captured R/D/warning, trustworthy actual A, termination C and recorded/audit times remain distinct. Exact source/round/task/step/PO matching; original role scopes and partial-role SQL retained. Missing precision/calendar/clock proof remains unknown, inclusive/strict boundaries remain separate.",
+      "expectation": "Current instance uses its own captured window; unfinished terminal windows stop without invented A or active overtime, completed evidence remains. Physical packing does not imply whole-order closure; dirty/failed/obsolete never appear as a current normal object.",
+      "rule": "Shared v10 fields, old readers and compiled read-compatible fallback preserve dirty/failed and prevent unsafe older-binary rollback",
+      "writes": [
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-fact-generation.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/production-platform/journey-fact-updates.ts",
+        "tests/unit/journey-fact-model.test.ts",
+        "tests/unit/journey-compatible-fallback.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/journey-selection-clock.ts",
+        "apps/api/src/server.ts",
+        "tests/integration/journey-fact-updates-postgres.test.ts"
+      ],
+      "oldTests": [
+        "tests/unit/journey-fact-model.test.ts",
+        "tests/unit/journey-fact-updates.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/journey-fact-updates-postgres.test.ts"
+      ],
+      "checks": [
+        "rp2-readers",
+        "rp2-native-pg",
+        "rp2-compatible-build",
+        "rp2-compatible-pg16",
+        "rp2-compatible-pg13"
       ]
     }
   ],
   "checks": [
     {
-      "id": "rp6-pg",
+      "id": "rp2-readers",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/acceptance-sla-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/pg/rp6-clock-integrated/tests.json",
+      "command": "bash -c 'set -e; git diff --check; git diff --name-only HEAD -- apps packages tests > /workspace/sla-rp2-20261117/lint-final-paths.txt; git ls-files --others --exclude-standard -- apps packages tests >> /workspace/sla-rp2-20261117/lint-final-paths.txt; xargs node node_modules/eslint/bin/eslint.js --max-warnings=0 < /workspace/sla-rp2-20261117/lint-final-paths.txt; node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json; node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json; node node_modules/vitest/vitest.mjs run tests/unit/sla-native-window-projection.test.ts tests/unit/development-captured-window.test.ts tests/unit/development-round-window-projection.test.ts tests/unit/development-ordinary-instance-projection.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-compatible-fallback.test.ts tests/unit/journey-packing-native-time.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-fact-updates.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/digital-journey-projection.test.ts --reporter=json --outputFile=/workspace/sla-rp2-20261117/readers-final.json'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
-      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
-      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:47:59.030406+00:00",
-      "endedAt": "2026-11-17T04:49:15.198410+00:00",
-      "logSha256": "80f5297b82f065832b02ec7ae0cec9ce4febd361fc2d4ecf6804a5d704304712",
-      "log": "/workspace/sla-rp6-20261117/pg/rp6-clock-integrated/tests.log",
-      "passed": 30,
-      "failed": 0,
-      "skipped": 1,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "73e03c1229d909654d4caa786db522d1496376691d0f150be1cbedb92d502c30"
-        }
-      ]
-    },
-    {
-      "id": "rp6-unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-sla-clock.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/units-integrated.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
-      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
-      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:47:59.830029+00:00",
-      "endedAt": "2026-11-17T04:48:04.549454+00:00",
-      "logSha256": "9edbdb452887511e509ff2ae0e7134615945cd20e910dcafb2cf2138bd568c26",
-      "log": "/workspace/sla-rp6-20261117/checks/units-integrated/command.log",
-      "passed": 7,
+      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
+      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T05:53:09.466815+00:00",
+      "endedAt": "2026-11-17T05:54:10.611288+00:00",
+      "logSha256": "6caeaef78cc344a731ec93aa2860b102221e504ba0f3327bd950a33896ba9915",
+      "log": "/workspace/sla-rp2-20261117/checks/current-source-closeout/command.log",
+      "passed": 129,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "87e6cdcb40974ad3ece446215792c0cadbf910a63f09f645ac6b5354adfedea8"
+          "sha256": "a5c6f2e97035842dc11e30aab696a62ea5a57ef20ffeb9fc93977a287b52b52f"
         }
       ]
     },
     {
-      "id": "rp6-transaction-reader",
+      "id": "rp2-native-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-clock-transaction-reader.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/units-reader-integrated.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/fixed-progress-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp2-20261117/pg/rp2-native-final/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
-      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
-      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:49:30.737773+00:00",
-      "endedAt": "2026-11-17T04:49:31.440051+00:00",
-      "logSha256": "d1e1ac4d6f40acaeedb28cfbbcd7c3a88fd70c4dc1b24179576a80911936a7ac",
-      "log": "/workspace/sla-rp6-20261117/checks/units-reader-integrated/command.log",
-      "passed": 10,
+      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
+      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T05:56:42.313292+00:00",
+      "endedAt": "2026-11-17T05:57:44.406341+00:00",
+      "logSha256": "07bb6f5e8c90cf4d068e8a23d56c36f23a982cebb59ac26e00ad0d68398b06d9",
+      "log": "/workspace/sla-rp2-20261117/pg/rp2-native-final/tests.log",
+      "passed": 18,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "eec5f0bcb3a337b503ab8653088b07356c8ebfe50cf17c641f9fa0edd29c5ff7"
+          "sha256": "f87bf145a2aab4785cc94000d1d90dea6dac6d2b81fa47443d539acb582380ea"
         }
       ]
     },
     {
-      "id": "rp6-static",
-      "kind": "command",
-      "command": "python3 /workspace/sla-rp6-20261117/static.py",
+      "id": "rp2-sunday-pg",
+      "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp2-20261117/pg/rp2-sunday-current/tests.json --testNamePattern 'connects a same-round material recheck'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
-      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
-      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:49:31.876997+00:00",
-      "endedAt": "2026-11-17T04:50:24.133939+00:00",
-      "logSha256": "5979e84255f8e7a7518e1986920cc7fd6f6f7bc36018f65a26846af784d2cf9f",
-      "log": "/workspace/sla-rp6-20261117/checks/static-integrated/command.log"
+      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
+      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T05:59:33.510656+00:00",
+      "endedAt": "2026-11-17T05:59:54.257945+00:00",
+      "logSha256": "8fa6777dec6b9c71cbe53bc6474c1d56a7c042e998ab48127227e9a46cbea6df",
+      "log": "/workspace/sla-rp2-20261117/pg/rp2-sunday-current/tests.log",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 27,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "f48b7e0914a69d6289a73abdfa58d1a9e61caabc241093d4cfcafa9e53139c01"
+        }
+      ]
     },
     {
-      "id": "rp6-browser",
+      "id": "rp2-compatible-build",
       "kind": "command",
-      "command": "env CLOCK_UI_URL=http://127.0.0.1:4186 CLOCK_UI_OUTPUT=/workspace/sla-rp6-20261117/browser-integrated PLAYWRIGHT_MODULE=playwright-core CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/acceptance-sla-clock-browser.mjs",
+      "command": "bash /workspace/sla-rp2-20261117/build-compatible-artifact.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "90f33773eab7baa7c36e4f830e07f617be237593",
-      "sourceFingerprint": "5918099faca8a149a8c61f70cec0e9cf7159cd02d622dde0b88a4579fbdaff50",
-      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
-      "startedAt": "2026-11-17T04:49:46.417348+00:00",
-      "endedAt": "2026-11-17T04:49:52.783120+00:00",
-      "logSha256": "452cfa862ec7527980d365b0c8e35b86f98b64a7952d7b1c93295e7afe806e86",
-      "log": "/workspace/sla-rp6-20261117/checks/browser-integrated/command.log"
+      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
+      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T05:52:08.501822+00:00",
+      "endedAt": "2026-11-17T05:52:43.462107+00:00",
+      "logSha256": "75c4eae98dea8c02dcad00305a00f3d63136f08bd05e9c94d70d1edf4abc5925",
+      "log": "/workspace/sla-rp2-20261117/checks/build-compatible-fallback/command.log"
+    },
+    {
+      "id": "rp2-compatible-pg16",
+      "kind": "command",
+      "command": "python3 /workspace/sla-rp2-20261117/run-compatible-artifact-local.py rp2-compatible-artifact-16-esm",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
+      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T05:54:04.824003+00:00",
+      "endedAt": "2026-11-17T05:54:23.353890+00:00",
+      "logSha256": "7f1df83dd4f54c0f85d3e16d830bc2ce0d4b09f45ac65f02362ea8aea025ce9b",
+      "log": "/workspace/sla-rp2-20261117/checks/pg-compatible-artifact-16-esm/command.log"
+    },
+    {
+      "id": "rp2-compatible-pg13",
+      "kind": "command",
+      "command": "python3 /workspace/sla-rp2-20261117/run-compatible-artifact-local.py rp2-compatible-artifact-13 --image postgres:13.23",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "2b40a5e5ca136f646cb9298739ee67aac274c55f",
+      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T05:55:48.452797+00:00",
+      "endedAt": "2026-11-17T05:56:10.005295+00:00",
+      "logSha256": "d690c85a1449c50d84e0309191ec3500808ad34152b9c54535e2c898c543fc61",
+      "log": "/workspace/sla-rp2-20261117/checks/pg-compatible-artifact-13/command.log"
     }
   ]
 }

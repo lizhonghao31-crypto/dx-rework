@@ -1,5 +1,6 @@
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
 import {developmentCraftInstances,craftInstanceAggregates} from './development-craft-instance-evidence.js';
+import {developmentCapturedWindow} from './development-captured-window.js';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import type { PoolClient } from "pg";
 import type { SlaPlan, SlaNodeFact, SlaTime } from "@dx-rework/domain/digital-sla-plan";
@@ -62,7 +63,6 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
   const deadline=(row:typeof rows[number])=>responsibility(row).at&&(Object.hasOwn(row,'instance_due_at')?row.instance_due_at:row.due_at)?iso(Object.hasOwn(row,'instance_due_at')?row.instance_due_at:row.due_at):null;
   const instances=developmentCraftInstances(sourceId,rows,time,onFutureEvidence),scopedTasks=new Set(instances.map(instance=>instance.taskId));
   const facts: Record<string, SlaNodeFact> = {};
-  const originalTargets: Record<string, SlaTime> = {};
   const first = rows.filter(row => row.route_version === 1);
   const businessCompleted = (row: typeof first[number]) => row.state === "completed" && !row.returned && !row.rejected;
   const accepted = (row: typeof first[number]) => row.state === "completed" && row.completed_at
@@ -75,8 +75,6 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     if (!saved.plan_json.nodes.some((node: { id: string }) => node.id === nodeId)) continue;
     // An inherited legacy task/policy is not proof of a captured new-model window.
     if (!row.sla_basis) continue;
-    originalTargets[nodeId] = { at: deadline(row), exclusive: false,
-      reasons: deadline(row) ? [] : ["原任务没有独立时限或可信起点"] };
     const fact: SlaNodeFact = { evidence: `task:${row.task_id}:round:1${row.correction_id ? `;correction:${row.correction_id}` : ""}` };
     fact.businessCompleted = businessCompleted(row);
     // Older revisions may contain a planned tail-window start as entered_at.
@@ -85,11 +83,13 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
       ? [...first].reverse().find(candidate => ["development_printing", "development_embroidery", "development_print_embroidery"].includes(candidate.task_kind) && accepted(candidate))?.completed_at
       : responsibility(row).at;
     if(enteredAt){if(Date.parse(iso(enteredAt))<=Date.parse(time.now))fact.startedAt=iso(enteredAt);else onFutureEvidence?.(iso(enteredAt));}
+    const captured=developmentCapturedWindow(row,fact.startedAt??null,fact.evidence);if(captured)fact.responsibilityWindow=captured;
+    if(fact.responsibilityWindow?.calendar)fact.standardCalendar=fact.responsibilityWindow.calendar;
     if(typeof responsibilityBasis(row)?.warningRatio==='number')fact.standardWarningPercent=responsibilityBasis(row).warningRatio*100;
     if (typeof responsibilityBasis(row)?.seconds==='number') fact.standardMinutes = responsibilityBasis(row).seconds / 60;
     if (accepted(row)) {
       fact.completedAt = iso(row.completed_at);
-      fact.completedDeadline = { at: deadline(row), exclusive: false,
+      fact.completedDeadline = { at: deadline(row), exclusive: responsibilityBasis(row)?.exclusive===true,
         reasons: deadline(row) ? [] : ["原任务没有独立时限或可信起点"] };
     } else if (row.state === "completed" && !row.completed_at) {
       // Business completion remains valid. The evaluator separately marks its timing unrated.
@@ -102,16 +102,15 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
   const originalFacts = structuredClone(facts);
   const latestRound = (await db.query(`SELECT round_number,route_nodes,inherited,published_at FROM digital_development_rounds
     WHERE source_id=$1${requestedRound!==undefined?' AND round_number=$2':''} ORDER BY round_number DESC LIMIT 1`, requestedRound!==undefined?[sourceId,requestedRound]:[sourceId])).rows[0];
-  // A correction does not erase the first attempt or grant a fresh original SLA window.
-  // Nodes not yet recreated on the sequential correction route must not remain "completed".
+  // originalFacts preserves the first attempt. Newly required work in a later
+  // round owns its own task window; absent current evidence never borrows R/D/A.
   for (const kind of (latestRound?.route_nodes ?? []) as string[]) {
     const nodeId = aliases[kind] ?? kind;
     if (!saved.plan_json.nodes.some((node: { id: string }) => node.id === nodeId)) continue;
     const current = rows.filter(row => !scopedTasks.has(row.task_id) && row.route_version === latestRound.round_number
       && (aliases[row.task_kind] ?? row.task_kind) === nodeId);
     const row = [...current].reverse().find(accepted) ?? current.at(-1);
-    const fact: SlaNodeFact = { ...facts[nodeId], evidence: `development-round:${sourceId}:${latestRound.round_number}${row ? `;task:${row.task_id}` : ""}` };
-    delete fact.completedAt; delete fact.completedDeadline; delete fact.waitingFor;
+    const fact: SlaNodeFact = { evidence: `development-round:${sourceId}:${latestRound.round_number}${row ? `;task:${row.task_id}` : ""}` };
     fact.businessCompleted = Boolean(row && businessCompleted(row));
     if(!fact.startedAt&&row?.sla_basis&&responsibility(row).at&&Date.parse(responsibility(row).at!)>Date.parse(time.now))onFutureEvidence?.(responsibility(row).at!);
     if (!fact.startedAt && row?.sla_basis && responsibility(row).at && Date.parse(responsibility(row).at!) <= Date.parse(time.now)) {
@@ -119,10 +118,11 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
       if(typeof responsibilityBasis(row)?.warningRatio==='number')fact.standardWarningPercent=responsibilityBasis(row).warningRatio*100;
     if (typeof responsibilityBasis(row)?.seconds==='number') fact.standardMinutes = responsibilityBasis(row).seconds / 60;
     }
+    if(row){const captured=developmentCapturedWindow(row,fact.startedAt??null,fact.evidence);if(captured)fact.responsibilityWindow=captured;if(fact.responsibilityWindow?.calendar)fact.standardCalendar=fact.responsibilityWindow.calendar;}
     if (row && accepted(row) && row.sla_basis) {
       fact.completedAt = iso(row.completed_at);
-      fact.completedDeadline = originalTargets[nodeId] ?? { at: deadline(row),
-        exclusive: false, reasons: deadline(row) ? [] : ["本轮没有可信截止点"] };
+      fact.completedDeadline = { at: deadline(row),
+        exclusive: responsibilityBasis(row)?.exclusive===true, reasons: deadline(row) ? [] : ["本轮没有可信截止点"] };
     } else fact.waitingFor = { reason: `第${latestRound.round_number}轮${row?.state === "cancelled" ? "已取消，不能当作完成" : "纠正尚未有效完成"}`, source: fact.evidence };
     facts[nodeId] = fact;
   }
@@ -155,6 +155,39 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     if(!own)continue;
     const inherited=craftInstanceAggregates([own],own.round)[nodeId];
     if(inherited){inherited.evidence+=`;adopted:development-round:${sourceId}:${selectedRound};inherited:${own.taskId}:round:${own.round}`;facts[nodeId]=inherited;}
+  }
+  // Ordinary development tasks are instances too. Keep kind summaries for the
+  // original plan, but expose each actually captured task window separately so
+  // supervision cannot paste a sibling occurrence or another round onto it.
+  const ordinaryTasks=new Set<string>();
+  for(const row of rows){
+    const definitionId=aliases[row.task_kind]??row.task_kind,basis=responsibilityBasis(row);
+    if(scopedTasks.has(row.task_id)||!row.route_instance_id||!basis||typeof basis.seconds!=='number'||basis.seconds<=0||!saved.plan_json.nodes.some((node:{id:string;kind:string})=>node.id===definitionId&&['duration','included'].includes(node.kind)))continue;
+    const entered=responsibility(row).at,started=entered&&Date.parse(entered)<=Date.parse(time.now)?entered:null;
+    if(entered&&!started)onFutureEvidence?.(entered);
+    const fact:SlaNodeFact={evidence:`task:${row.task_id}:source:${sourceId}:round:${row.route_version}:route:${row.route_instance_id}`,businessCompleted:businessCompleted(row),
+      ...(started?{startedAt:started}:{}),standardMinutes:typeof basis.seconds==='number'?basis.seconds/60:null,
+      ...(typeof basis.warningRatio==='number'?{standardWarningPercent:basis.warningRatio*100}:{}),
+    };
+    const captured=developmentCapturedWindow(row,started,fact.evidence);if(captured)fact.responsibilityWindow=captured;
+    if(fact.responsibilityWindow?.calendar)fact.standardCalendar=fact.responsibilityWindow.calendar;
+    if(accepted(row)){const at=iso(row.completed_at);if(Date.parse(at)<=Date.parse(time.now))fact.completedAt=at;else onFutureEvidence?.(at);}
+    const target:SlaTime=started?fact.responsibilityWindow?.deadline??{at:deadline(row),exclusive:basis.exclusive===true,reasons:deadline(row)?[]:['本实例尚无独立截止']}:{at:null,exclusive:false,reasons:['本实例缺少可信责任起点']};
+    if(fact.businessCompleted)fact.completedDeadline=structuredClone(target);
+    ordinaryTasks.add(row.task_id);
+    instances.push({sourceId,taskId:row.task_id,round:row.route_version,routeRef:row.route_instance_id,stepRef:null,taskKind:row.task_kind,definitionId,state:row.state,eligible:!row.returned&&!row.rejected&&row.state!=='cancelled',fact,deadline:target,warningAt:started?fact.responsibilityWindow?.warningAt??null:null});
+  }
+  if(selectedRound>1)for(const key of new Set(instances.filter(instance=>ordinaryTasks.has(instance.taskId)).map(instance=>instance.definitionId))){
+    if((latestRound?.route_nodes??[]).some((kind:string)=>(aliases[kind]??kind)===key))continue;
+    delete facts[key];
+    if(!adoptedAt||Date.parse(adoptedAt)>Date.parse(time.now))continue;
+    const selected=Object.entries(latestRound?.inherited??{}).filter(([kind])=>(aliases[kind]??kind)===key).flatMap(([,value])=>{
+      const ref=value as {taskId?:unknown;roundNumber?:unknown}|null;
+      if(!ref||typeof ref.taskId!=='string'||!Number.isSafeInteger(ref.roundNumber)||Number(ref.roundNumber)>=selectedRound)return [];
+      return instances.filter(instance=>ordinaryTasks.has(instance.taskId)&&instance.sourceId===sourceId&&instance.taskId===ref.taskId&&instance.round===ref.roundNumber&&instance.definitionId===key&&instance.eligible&&instance.fact.businessCompleted);
+    });
+    const unique=[...new Map(selected.map(instance=>[instance.taskId,instance])).values()];
+    if(unique.length===1){const own=unique[0]!;facts[key]={...structuredClone(own.fact),evidence:`${own.fact.evidence};adopted:development-round:${sourceId}:${selectedRound};inherited:${own.taskId}:round:${own.round}`};}
   }
   for(const instance of instances){
     facts[`${instance.definitionId}:task:${instance.taskId}`]=structuredClone(instance.fact);

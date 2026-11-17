@@ -41,17 +41,18 @@ export function journeySelectionFacts(item:OrderJourney,inputs:JourneyTimingInpu
   if(!date)return;const end=slaDateBoundary(date).at!;
   reconsider(new Date(Date.parse(end)-86400000).toISOString());reconsider(end);
  };
- if(inputs.plan)evaluateSlaPlan(inputs.plan,inputs.facts,time,{mode:'read_projection',onNextChange:reconsider});
+ const termination=inputs.termination??inputs.fixedSchedule?.termination;
+ if(inputs.plan&&!termination)evaluateSlaPlan(inputs.plan,inputs.facts,time,{mode:'read_projection',onNextChange:reconsider});
  const current=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current),byTask=new Map(tasks.map(task=>[task.id,task]));
  for(const node of current){
   const task=byTask.get(node.instanceId);
   // Use the original task state before presentation substitutes e.g. a linked
   // procurement record. The native still-open task must not lose its boundary.
-  if(task&&['active','blocked'].includes(task.state)){
+  if(!termination&&task&&['active','blocked'].includes(task.state)){
    reconsider(task.dueAt,task.deadlineExclusive===false);reconsider(task.warningAt);
   }
   if(!open(node))continue;
-  if(node.expectedPrecision==='date'&&/^\d{4}-\d{2}-\d{2}$/.test(node.expectedAt??''))reconsiderDate(node.expectedAt);
+  if(!termination&&node.expectedPrecision==='date'&&/^\d{4}-\d{2}-\d{2}$/.test(node.expectedAt??''))reconsiderDate(node.expectedAt);
  }
  const terminal=item.display?.mainState==='completed'||item.display?.mainState==='closed'||item.display?.mainState==='cancelled';
  if(!terminal){
@@ -73,6 +74,7 @@ export function journeySelectionFacts(item:OrderJourney,inputs:JourneyTimingInpu
  * presentation replace it. These are native alternatives, not cached grants. */
 export function journeySelectionNodes(nodes:readonly JourneyNode[]):JourneySelectionFacts['nodes']{
  return nodes.filter(node=>node.current).map(node=>({key:node.key,instanceId:node.instanceId,stage:node.stage,state:node.state,current:true,
+  ...(node.completesOrder===undefined?{}:{completesOrder:node.completesOrder}),
   ...(node.planningOnly===undefined?{}:{planningOnly:node.planningOnly}),risks:[...node.risks],entered:Boolean(node.enteredAt),recorded:node.records.length>0,
   ...(node.expectedPrecision==='date'&&node.expectedAt&&/^\d{4}-\d{2}-\d{2}$/.test(node.expectedAt)?{dateTarget:node.expectedAt}:{})}));
 }

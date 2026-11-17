@@ -19,7 +19,10 @@ export type SlaPlan = { retainedNodeSnapshots?: Record<string,string>; nodes: Sl
 export type SlaTime = { at: string | null; exclusive: boolean; reasons: string[] };
 export type SlaPlannedNode = { id: string; start: SlaTime; end: SlaTime };
 export type SlaBatchWindow={startedAt:string|null;deadline:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;calendarRef?:'continuous'|'natural_days'|'beijing_sunday_excluded'|null;policyAtStart?:boolean};
+export type SlaResponsibilityWindow={startedAt:string;deadline:SlaTime;warningAt:string|null;calendar:'continuous'|'natural_days'|'beijing_sunday_excluded'|null;sourceRef:string};
 export type SlaNodeFact = {
+  /** Exact native instance window. Its captured D/warning are independent of P. */
+  responsibilityWindow?:SlaResponsibilityWindow;
   /** Native batch read model, never a second editable fact source. */
   batchWindows?:SlaBatchWindow[]; batchCoverageComplete?:boolean;
   startedAt?: string; completedAt?: string; evidence: string;
@@ -186,6 +189,11 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     if(f?.waitingFor&&(!f.waitingFor.reason.trim()||!f.waitingFor.source.trim()))throw new Error("Business hold evidence required");
     if(f?.remaining){const r=f.remaining;if(!r.source.trim()||!Number.isSafeInteger(r.minutes)||r.minutes<0||instant(r.validUntil)<instant(r.asOf))throw new Error("Invalid remaining-work estimate");}
     for(const w of f?.batchWindows??[]){if(!w.evidence.trim())throw new Error('Batch window evidence required');for(const at of [w.startedAt,w.deadline,w.warningAt,w.completedAt])if(at)instant(at);}
+    const captured=f?.responsibilityWindow;
+    if(captured){
+      instant(captured.startedAt);if(captured.deadline.at)instant(captured.deadline.at);if(captured.warningAt)instant(captured.warningAt);
+      if(!captured.sourceRef.trim()||captured.calendar!==null&&!['continuous','natural_days','beijing_sunday_excluded'].includes(captured.calendar))throw Error('Invalid native responsibility window evidence');
+    }
     const actuals=[{startedAt:f?.startedAt,completedAt:f?.completedAt},...(f?.batchWindows??[])];
     for(const actual of actuals){reconsider(actual.startedAt);reconsider(actual.completedAt);}
     for(const window of f?.batchWindows??[])if(!window.complete){reconsider(window.deadline,true);reconsider(window.warningAt);}
@@ -201,6 +209,7 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
       result.set(n.id,{...p,actualStart:null,actualEnd:null,deadline:unknown,forecast:unknown,status:"unknown",forecastBasis:"unknown",planOverdue:false,assessmentIssue:issue,...(provenRisk?{provenRisk}:{})});
       forecastWindows.set(n.id,{id:n.id,start:unknown,end:unknown});continue;
     }
+    const capturedMismatch=Boolean(captured&&(!f?.startedAt||instant(captured.startedAt)!==instant(f.startedAt)));
     let deadline = missing(`${n.label}缺少可信开始时间`);
     if (n.kind === "order_date" || n.kind === "offset") deadline = p.end;
     else if (f?.startedAt && (n.kind === "duration" || n.kind === "included")) {
@@ -209,7 +218,8 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     }
     else if (n.kind === "estimate") deadline = missing("仅物流预计，不是收货硬期限");
     else if (n.kind === "unlimited") deadline = missing("无独立时限");
-    if (f?.completedAt && f.completedDeadline) {
+    if(captured)deadline=capturedMismatch?missing('原责任窗口起点与当前可信事实不一致'):structuredClone(captured.deadline);
+    if (f?.completedAt && f.completedDeadline && !capturedMismatch) {
       if (f.completedDeadline.at) instant(f.completedDeadline.at);
       deadline = structuredClone(f.completedDeadline);
     }
@@ -226,16 +236,17 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
         forecastBasis = "actual";
         status = deadline.at === null ? "completed_unrated" : slaPastDeadline(f.completedAt, deadline) ? "completed_late" : "completed_on_time";
       } else {
-        if (slaPastDeadline(time.now, deadline)) status = "overdue";
+        if(capturedMismatch)status='unknown';
+        else if (slaPastDeadline(time.now, deadline)) status = "overdue";
         else if (f?.startedAt) {
           status = "running";
           if (deadline.at) {
-            const warningAt=instant(f.startedAt)+(instant(deadline.at)-instant(f.startedAt))*(f.standardWarningPercent??plan.warningPercent)/100;
-            reconsider(warningAt);
-            if(now>=warningAt)status="warning";
+            const warningAt=captured?(captured.warningAt?instant(captured.warningAt):null):instant(f.startedAt)+(instant(deadline.at)-instant(f.startedAt))*(f.standardWarningPercent??plan.warningPercent)/100;
+            if(warningAt!==null){reconsider(warningAt);if(now>=warningAt)status="warning";}
           }
         }
-        if (f?.waitingFor) {
+        if(capturedMismatch)forecast=missing('原责任窗口起点与当前可信事实不一致');
+        else if (f?.waitingFor) {
           if (!f.waitingFor.reason.trim() || !f.waitingFor.source.trim()) throw new Error("Business hold evidence required");
           forecast = missing(f.waitingFor.reason);
         } else if (f?.remaining) {

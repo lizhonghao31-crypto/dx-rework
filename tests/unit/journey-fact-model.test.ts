@@ -2,12 +2,24 @@ import {expect,it} from 'vitest';
 import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {minimalJourneyFacts,journeyFactFingerprint} from '../../apps/api/src/production-platform/journey-fact-model.js';
 import type {JourneyFactTask} from '../../apps/api/src/production-platform/journey-fact-model.js';
+import {evaluateSlaPlan,type SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 const node:JourneyNode={key:'development_pattern',instanceId:'TEST-current',label:'TEST',stage:'development',state:'inherited',round:2,occurrence:1,current:true,
  owner:{id:'TEST-owner',name:'PRIVATE name'},operator:null,assignmentHistory:[],expectedAt:'2026-11-08',expectedKind:'plan',expectedPrecision:'date',deadlineMode:'date_target',deadlineExclusive:true,
  actualAt:null,actualDate:null,actualQuality:'missing',enteredAt:null,sla:'not_started',completionResult:null,overdueSeconds:null,risks:['overdue'],blockers:[],
  records:[{domain:'task',id:'TEST-current',lineId:'TEST-po',version:2,url:'/ui/private-secret',mode:'handle'}],countsInProgress:true,unavailableReason:null,
  inheritedFrom:{taskId:'TEST-original',round:1},inheritedResult:{actualAt:'2026-11-01T00:00:00.000Z',quality:'verified',adoptedAt:'2026-11-02T00:00:00.000Z',adoptedRound:2,adoptionSourceRef:'development-round:TEST-source:2',reason:'真实采用'}};
 const item:OrderJourney={id:'TEST-order',sourceId:'TEST-source',orderId:'TEST-order',designStyleNo:'PRIVATE style',temporaryStyleNo:null,customer:'PRIVATE customer',category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:'2026-11-01T00:00:00.000Z',deliveryDate:null,selectedRound:2,adoptedRound:2,sourceVersion:3,instructionVersion:1,lines:[],links:[],stages:[{key:'development',label:'TEST',state:'inherited',nodes:[node]}],progress:{development:null,bulk:null},hitReasons:[]};
+it('roundtrips the captured native responsibility window while rejecting unrelated private fields and still reads old facts',()=>{
+ const startedAt='2026-11-21T04:00:00.000Z',dueAt='2026-11-25T04:00:00.000Z';
+ const window={startedAt,deadline:{at:dueAt,exclusive:false,reasons:[] as string[]},warningAt:'2026-11-24T06:24:00.000Z',calendar:'beijing_sunday_excluded' as const,sourceRef:'task:TEST-pattern:round:2',privateActor:'PRIVATE'};
+ const p:SlaPlan={nodes:[{id:'pattern',label:'纸样',stage:2,parameterKey:'development_pattern',applicable:'yes',countsProgress:true,kind:'duration',minutes:4320,offsetDays:null,dependsOn:[],anchorKey:'published',targetKey:null,includedIn:null,includedPosition:'end'}],anchors:{published:{precision:'instant',value:startedAt,source:'TEST native'}},warningPercent:70,stageBufferMinutes:0};
+ const model=minimalJourneyFacts(item,{plan:p,original:p,facts:{pattern:{startedAt,evidence:window.sourceRef,responsibilityWindow:window}}});
+ expect(model.sla.facts.pattern!.responsibilityWindow).toEqual({startedAt,deadline:window.deadline,warningAt:window.warningAt,calendar:window.calendar,sourceRef:window.sourceRef});
+ expect(JSON.stringify(model)).not.toContain('PRIVATE');
+ expect(evaluateSlaPlan(model.sla.plan!,model.sla.facts,{now:'2026-11-24T04:00:00.000Z',scenarioId:null,revision:0})[0]).toMatchObject({deadline:{at:dueAt},forecast:{at:dueAt},status:'running'});
+ const fingerprint=journeyFactFingerprint(model);window.deadline.reasons.push('MUTATED');expect(journeyFactFingerprint(model)).toBe(fingerprint);
+ const old=minimalJourneyFacts(item,{plan:null,original:null,facts:{pattern:{evidence:'TEST legacy'}}});expect(old.sla.facts.pattern).toEqual({evidence:'TEST legacy'});
+});
 it('stores only explicit facts, not identity, action, attachment, price or time-sensitive status fields',()=>{
  const source=structuredClone(item);Object.assign(source,{authorizationCapabilities:['PRIVATE privilege'],unitPrice:'PRIVATE money',styleImageUrl:'/api/private-image'});Object.assign(source.stages[0]!.nodes[0]!,{canExecute:true,privateToken:'PRIVATE token'});
  const original=structuredClone(source),model=minimalJourneyFacts(source,{plan:null,original:null,facts:{pattern:{evidence:'TEST native',startedAt:'2026-11-01T00:00:00.000Z',businessCompleted:true,...{canExecute:true,price:'PRIVATE price'}}}});
@@ -19,6 +31,13 @@ it('retains the original responsibility calendars in the shared facts without co
  const model=minimalJourneyFacts(item,{plan:null,original:null,facts:{factory:input}});
  expect(model.sla.facts.factory).toMatchObject({standardCalendar:'beijing_sunday_excluded',batchWindows:[{calendarRef:'beijing_sunday_excluded'}]});
  expect(JSON.stringify(model)).not.toContain('PRIVATE');
+});
+it('keeps explicit packing work completion separate from whole-order closure through the shared whitelist',()=>{
+ const input=structuredClone(item);input.stages[0]!.nodes[0]!.key='packing';input.stages[0]!.nodes[0]!.completesOrder=false;
+ const stored=JSON.parse(JSON.stringify(minimalJourneyFacts(input,{plan:null,original:null,facts:{}})));
+ expect(stored.nodes[0].completesOrder).toBe(false);
+ delete input.stages[0]!.nodes[0]!.completesOrder;
+ expect(minimalJourneyFacts(input,{plan:null,original:null,facts:{}}).nodes[0]).not.toHaveProperty('completesOrder');
 });
 it('retains date precision, unknown execution start, original result and separate actual adoption without synthesizing midnight',()=>{
  const dependencies=[{taskId:'TEST-current',predecessorId:'TEST-prior',...{canExecute:true}}];
