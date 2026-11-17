@@ -20,7 +20,7 @@ beforeEach(()=>{
  fixture.facts={development_pattern:{startedAt:'2026-10-19T02:00:00.000Z',completedAt:'2026-10-19T01:00:00.000Z',evidence:'TEST old inconsistent fact'},development_sewing:{startedAt:'2026-10-19T00:00:00.000Z',evidence:'TEST valid independent fact'}};
 });
 it('isolates a classified bad authorized projection without losing an independently provable overdue node',async()=>{
- const legacy={query:vi.fn(async(sql:string)=>{if(["SELECT to_regclass('digital_timeline_adoptions') AS relation","SELECT to_regclass('digital_order_time_plan_versions') AS relation"].includes(sql))return {rows:[{relation:null}],rowCount:1};throw Error('Unexpected legacy projection query: '+sql);})} as unknown as PoolClient;
+ const legacy={query:vi.fn(async(sql:string)=>{if(sql.startsWith('SELECT state FROM digital_production_resource_lifecycle'))return {rows:[],rowCount:0};if(["SELECT to_regclass('digital_timeline_adoptions') AS relation","SELECT to_regclass('digital_order_time_plan_versions') AS relation"].includes(sql))return {rows:[{relation:null}],rowCount:1};throw Error('Unexpected legacy projection query: '+sql);})} as unknown as PoolClient;
  const row=item();await readJourneySupervision({} as Pool,legacy,actor,row,time);
  expect(row.supervision?.nodes.find(n=>n.id==='development_pattern')?.status).toBe('unknown');
  expect(row.supervision?.nodes.find(n=>n.id==='development_sewing')?.status).toBe('overdue');
@@ -30,7 +30,12 @@ it('retains strict calculation for commands and other default callers',()=>{
  expect(()=>evaluateSlaPlan(fixture.plan!,fixture.facts,time)).toThrow('SLA completion precedes start');
 });
 it.each([new Error('TEST database unavailable'),new ApplicationError('FORBIDDEN','TEST permission',403),new ApplicationError('ACCEPTANCE_ISOLATION','TEST scope',409)])('does not swallow data-access, permission or scope exceptions: %s',async error=>{
- fixture.error=error;await expect(readJourneySupervision({} as Pool,{} as PoolClient,actor,item(),time)).rejects.toBe(error);
+ const db={query:vi.fn(async(sql:string)=>{if(sql.startsWith('SELECT state FROM digital_production_resource_lifecycle'))return {rows:[],rowCount:0};throw Error('Unexpected prerequisite query: '+sql);})} as unknown as PoolClient;
+ fixture.error=error;await expect(readJourneySupervision({} as Pool,db,actor,item(),time)).rejects.toBe(error);
+});
+it('propagates the original termination read failure without replacing it with a normal running projection',async()=>{
+ const error=new Error('TEST original lifecycle read unavailable'),db={query:vi.fn().mockRejectedValue(error)} as unknown as PoolClient;
+ await expect(readJourneySupervision({} as Pool,db,actor,item(),time)).rejects.toBe(error);
 });
 
 it.each(['past','current','future','ordinary'])("%s observation retains invalid future facts as unavailable, never clamps or rewrites them",mode=>{
