@@ -68,7 +68,8 @@
       "testedHead": "f56ad99c1a574cebae18d47b641d000be6233efc",
       "sourceFingerprint": "fc824b3058df0e6cf1ca08630f71613e970222f6186a144cf66a2579810c37e2",
       "context": "Node22.22.2; local uncommitted candidate over actual revert merge f56ad99c, bound by source fingerprint. Existing locked dependency cache; no install, database, network benchmark, deployment or live business data. Logs: /workspace/ci-governance-revalidated-20261117/checks/actions-policy.log",
-      "kind": "command"
+      "kind": "command",
+      "log": "/workspace/ci-governance-revalidated-20261117/checks/actions-policy.log"
     },
     {
       "id": "all-ci-protocol",
@@ -84,7 +85,8 @@
       "kind": "tests",
       "passed": 284,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "log": "/workspace/ci-governance-revalidated-20261117/checks/all-ci-protocol.log"
     },
     {
       "id": "changed-lint",
@@ -97,7 +99,8 @@
       "testedHead": "f56ad99c1a574cebae18d47b641d000be6233efc",
       "sourceFingerprint": "fc824b3058df0e6cf1ca08630f71613e970222f6186a144cf66a2579810c37e2",
       "context": "Node22.22.2; local uncommitted candidate over actual revert merge f56ad99c, bound by source fingerprint. Existing locked dependency cache; no install, database, network benchmark, deployment or live business data. Logs: /workspace/ci-governance-revalidated-20261117/checks/changed-lint.log",
-      "kind": "command"
+      "kind": "command",
+      "log": "/workspace/ci-governance-revalidated-20261117/checks/changed-lint.log"
     },
     {
       "id": "risk-map-unit",
@@ -119,7 +122,8 @@
           "format": "vitest-json",
           "sha256": "56a55d49f7160afa37c528e164f5cbf61cd59bf5d88698bd0f32d8cde08fbcde"
         }
-      ]
+      ],
+      "log": "/workspace/ci-governance-revalidated-20261117/checks/risk-map-unit.log"
     }
   ]
 }
