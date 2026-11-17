@@ -1,0 +1,22 @@
+{
+  "kind": "one authorized experiment; no formal CI policy change",
+  "executionBase": "ba2f72fc78672a7d9b64c509012479be425b6213",
+  "original": "32b63e06fddd80b8e147b98d8684fa0bce95eec1",
+  "B": "8863d6484b4b56da1d5a77848ce8f83bcae5082c",
+  "variantsOrder": [
+    "original",
+    "b"
+  ],
+  "job": "one ubuntu-24.04 hosted runner",
+  "postgres": "same resolved postgres:16-alpine image, separate fresh container and marked low-privilege databases per variant; no simultaneous PG",
+  "plan": "unchanged existing canonical 32 suites / 573 case identity multiset",
+  "formalCiChanged": false,
+  "pr": null,
+  "merge": false,
+  "limits": [
+    "same job removes cross-host difference but not time-varying load",
+    "B is second: OS/dependency/browser/build warming may favor it",
+    "same test result-cache initial empty rule; no extra full run",
+    "573 identical case identities does not prove equal assertion invocation/history; six repeated preparation groups omitted only in B; original helper and dedicated lifecycle/permission coverage retained"
+  ]
+}
