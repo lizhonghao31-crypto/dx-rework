@@ -1,281 +1,417 @@
 {
   "version": 1,
-  "base": "31aa7c89c6d0974ef28db012d178ba1e2d585289",
+  "base": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
   "risk": "full",
-  "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
+  "sourceFingerprint": "a95ac44608d9c21b12a0fdbffb0cb13303a0c95a3e9a60b516854461adc688b0",
   "rules": [
     {
-      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust. Supplemental exact-fe744bbe Review P2 4598884052: summary must receive original completion state/instant; native regression red then green in ordinary and development-scope summaries.",
-      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
-      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
-      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
-      "rule": "Authorized task and full/compact Journey consume exact effective completion precision and native correction chain",
+      "rule": "Explicit manager intent introduces independent frozen new work through the existing original transaction",
+      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
+      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
+      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
+      "expectation": "No automatic plan from logistics or failed check; original P retained while new washing/check use their exact frozen duration and calendar. Same key replay and different-key competition append once; audit/plan rollback together and original rejection remains.",
       "writes": [
-        "packages/contracts/src/digital-production-tasks.ts",
-        "apps/api/src/production-platform/task-completion-occurrence.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "tests/integration/task-completion-postgres.test.ts",
-        "tests/unit/task-completion-occurrence.test.ts"
+        "apps/api/src/production-platform/bulk-washing-rework-source.ts",
+        "apps/api/src/production-platform/bulk-washing-rework-planning.ts",
+        "apps/api/src/production-platform/order-time-washing-rework.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-request-routes.ts",
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "packages/contracts/src/order-time-washing-rework.ts",
+        "packages/contracts/src/order-time-requests.ts",
+        "packages/contracts/package.json"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-occurrence.ts",
-        "apps/api/src/production-platform/development-route-service.ts",
-        "apps/api/src/production-platform/journey-task-summary.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts"
+        "apps/api/src/production-platform/order-time-framework.ts",
+        "apps/api/src/production-platform/order-time-framework-route.ts",
+        "apps/api/src/production-platform/order-time-request-repository.ts"
       ],
       "oldTests": [
-        "tests/unit/development-occurrence.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/unit/order-time-plan.test.ts",
+        "tests/unit/order-time-framework.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts"
       ],
       "checks": [
-        "pr4-unit",
-        "pr4-native-app",
-        "pr4-api-types"
+        "pr5-unit",
+        "pr5-native-app",
+        "pr5-api-types"
       ]
     },
     {
-      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
-      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
-      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
-      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
-      "rule": "Original workbench renders five actual completion states and optional old DTOs without trust inversion",
+      "rule": "Native logistics binds planned rewash without changing original failed facts or granting planning authority",
+      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
+      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
+      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
+      "expectation": "Reject wrong inspection, factory/PO/version, oversubscription, early historic occurrence and unauthorized arrangement; native real windows and original quality/receipts preserved. Legacy unplanned started history remains readable. Both original authenticated logistics routes save one exact command.",
       "writes": [
-        "apps/web/src/task-completion-time.tsx",
-        "apps/web/src/task-workbench-sample.tsx",
-        "tests/unit/task-completion-display.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/bulk-washing-rework-binding.ts",
+        "apps/api/src/production-platform/bulk-washing-service.ts",
+        "packages/contracts/src/bulk-washing.ts",
+        "apps/web/src/bulk-washing-panel.tsx"
       ],
       "reads": [
-        "apps/web/src/digital-development-execution-panel.tsx",
-        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/bulk-washing-ledger.ts",
+        "apps/web/src/bulk-washing-actions.ts"
+      ],
+      "oldTests": [
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/unit/bulk-washing-ledger.test.ts",
+        "tests/unit/bulk-washing-actions.test.ts"
+      ],
+      "checks": [
+        "pr5-unit",
+        "pr5-native-app",
+        "pr5-api-types",
+        "pr5-web-types"
+      ]
+    },
+    {
+      "rule": "Read exact planned and historical rewash rounds without same-kind target overwrite or extra original quantity denominator",
+      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
+      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
+      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
+      "expectation": "Each exact new scope/work keeps own P/R/D/A; missing/other round facts not borrowed, original failed quality not erased, read does not append plan. Planned and unplanned history survive fact serialization and calculation version rebuild; no extra original garment progress unit.",
+      "writes": [
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
         "apps/api/src/production-platform/fixed-schedule-progress.ts",
-        "apps/web/src/journey-sla-details.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/journey-progress-dates.test.ts",
-        "tests/unit/m01-time-consumers.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
-      ],
-      "checks": [
-        "pr4-unit",
-        "pr4-native-app",
-        "pr4-web-types"
-      ]
-    },
-    {
-      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
-      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
-      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
-      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
-      "rule": "Factory quotation navigation preserves actual root/Acceptance base, mother order/PO and validated return under original management permission",
-      "writes": [
-        "apps/web/src/factory-batch-panel.tsx"
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-time-framework.ts",
+        "apps/api/src/production-platform/journey-washing-projection.ts",
+        "apps/api/src/production-platform/journey-washing-rework-facts.ts",
+        "apps/api/src/production-platform/order-time-native-timing.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "tests/unit/journey-washing-projection.test.ts",
+        "tests/unit/order-time-reading.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/digital-quotation-panel.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/url-contract.ts",
-        "apps/web/src/factory-flow-panel.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/factory-flow-navigation.test.ts",
-        "tests/unit/digital-journey-projection.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/task-completion-display.test.ts"
-      ],
-      "checks": [
-        "pr4-unit",
-        "pr4-web-types"
-      ]
-    },
-    {
-      "source": "Approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 RP3 FIX07/FIX08/N8 and FIX10/N9; latest user continuation/push authorization; v27 precision and completion trust.",
-      "initialization": "Latest real release base31aa7c89; RP2 actual merge retained. Native existing schema, original tasks and correction facts; new optional completion DTO, no migration/backfill or historical writes. API/UI must match before field acceptance.",
-      "dateAndPermission": "Exact source/task/routeVersion, correction precedence and original authorization before read; A precision/quality independent from R quality, P/D and audit time. Same-environment navigation uses original canManage and validated return context.",
-      "expectation": "Date stays date without midnight; unverified time stays labelled pending; known trusted A does not become unknown because P is absent. Native history and permissions remain unchanged; component/native-App evidence does not replace onsite role or full navigation acceptance.",
-      "rule": "New native completion suite belongs to the original finite long-correctness configuration, preserving ordinary/default execution and all business assertions",
-      "writes": [
-        "scripts/test-suite-plan.mjs"
-      ],
-      "reads": [
-        "scripts/test-execution-config.mjs",
-        "scripts/run-business-chain-gate.mjs",
-        "vitest.business-chain.config.ts"
-      ],
-      "oldTests": [
-        "scripts/ci/test-execution-contract.test.mjs"
-      ],
-      "newTests": [
-        "tests/integration/task-completion-postgres.test.ts"
-      ],
-      "checks": [
-        "pr4-canonical",
-        "pr4-native-app"
-      ]
-    },
-    {
-      "rule": "Repair the baseline sample gate consumer without weakening approved isolated-entry selection or complete-chain safety fallback",
-      "source": "Actual #1016 Full44063103734 job133971526278: sample-postgres-gate-policy line14 failed for two reviewed test-only entries; user authorized correcting known failures.",
-      "initialization": "Unit policy consumer only; no fixture/native state or runner changes. Uses actual classifier, canonical plan and current static cases ownership.",
-      "dateAndPermission": "No business time, quantity, account, permission or live data changes; source/shared/unknown/multi-owner changes still require the complete original necessary chain.",
-      "expectation": "Sample source changes remain full-chain; the reviewed single runnable owner retains high risk, FULL, DB_REQUIRED and exact real execution, while cases+owner deduplicate. Mixed public/unknown/security inputs retain all necessary chain tests.",
-      "writes": [
-        "tests/unit/sample-postgres-gate-policy.test.ts"
-      ],
-      "reads": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/test-suite-plan.mjs"
-      ],
-      "oldTests": [
-        "tests/unit/sample-postgres-gate-policy.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "checks": [
-        "pr4-unit"
-      ]
-    },
-    {
-      "rule": "Preserve the existing 88-order SQL budget by reusing exact authorized same-snapshot completion and lifecycle facts and avoiding a packing event alias that falsely invalidated readonly reuse",
-      "source": "Actual #1017 Full44066290905 PG133982927796 fails physical SQL cap7100 with7107; prior #1013 has7101. User requires fix CI before next PR; full physical-template trace identifies redundant occurrence read and readonly merge alias invalidation.",
-      "writes": [
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/task-completion-occurrence.ts",
-        "apps/api/src/production-platform/journey-termination.ts",
-        "apps/api/src/receiving/receiving-quantity-query.ts",
-        "tests/unit/task-completion-occurrence.test.ts",
-        "tests/unit/journey-termination.test.ts",
-        "tests/unit/journey-snapshot-batches.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-snapshot-reads.ts",
-        "apps/api/src/production-platform/journey-snapshot-batches.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/packing-sla-evidence.ts"
+        "apps/api/src/production-platform/journey-washing-facts.ts",
+        "apps/api/src/production-platform/journey-visual-progress.ts"
       ],
       "oldTests": [
-        "tests/unit/journey-snapshot-reads.test.ts",
-        "tests/unit/journey-snapshot-batches.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts"
+        "tests/unit/journey-fact-model.test.ts",
+        "tests/unit/journey-washing-facts.test.ts",
+        "tests/unit/order-time-reading.test.ts"
       ],
-      "initialization": "Current actual release base31aa7c89. Reuse only current caller-owned readonly RR snapshot; standalone reads preserve native query fallback. No schema, data backfill, shared/global cache or test configuration change.",
-      "dateAndPermission": "Original task authorization runs before consuming exact task/source/round context. Correction-to-unknown remains effective; new snapshot reads new events and same-session role revocation remains enforced. Only SQL alias changes in original packing query; fields, joins, filters and business history unchanged.",
-      "expectation": "Original cap7100 and all88 pagination/search/export/role/revocation semantics retained; no raising threshold or suppressing unsafe reads. Existing merge history, Root decreases, quantity correction and actual precision continue to agree in original consumers. Optional failure-stage trace is diagnostic, not passed evidence.",
       "checks": [
-        "pr4-unit",
-        "pr4-native-app",
-        "pr4-api-types"
+        "pr5-unit",
+        "pr5-native-app",
+        "pr5-api-types"
+      ]
+    },
+    {
+      "rule": "Original manager page selects real rewash scope and quantity before logistics, retaining draft and feedback safety",
+      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
+      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
+      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
+      "expectation": "Invalid or stale scope blocks submit and preserves draft; no caller duration or effective time, original preview/fingerprint/unknown receipt/conflict and permission remain. Desktop1165 and narrow390 original authenticated App proves one arrange then one assigned logistics start.",
+      "writes": [
+        "apps/web/src/order-time-request-page.tsx",
+        "apps/web/src/order-time-rewash-fields.tsx"
+      ],
+      "reads": [
+        "apps/web/src/order-time-washing-fields.tsx",
+        "apps/web/src/digital-production-api.ts",
+        "apps/web/src/use-digital-detail-navigation-guard.ts"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/order-time-washing-rebase.test.ts"
+      ],
+      "checks": [
+        "pr5-unit",
+        "pr5-native-app",
+        "pr5-web-types"
+      ]
+    },
+    {
+      "rule": "Versioned stored rewash input extends the original check without rewriting old migrations, immutable history or privileges",
+      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
+      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
+      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
+      "expectation": "Fresh lowpriv migrations accept original v1 and actual new input, reject unknown, empty, disguised or source-scoped new format. New current/history parser validates work/identity/terminal/introduced source; no old binary rollback after new format writes, use compatible fix. Ordinary business SQL only, no deployment executor changes.",
+      "writes": [
+        "apps/api/migrations/0295_order_time_rewash_input.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "scripts/migration-lib.mjs",
+        "scripts/migration-history-policy.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/migration-history.test.ts",
+        "tests/unit/current-migration-manifest-checksum.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts"
+      ],
+      "checks": [
+        "pr5-native-app",
+        "pr5-unit",
+        "pr5-migrations"
+      ]
+    },
+    {
+      "rule": "Current canonical plan includes native and original App regressions plus existing affected bridges with unchanged assertions and isolation",
+      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
+      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
+      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
+      "expectation": "New suites are genuine canonical entries under the original correctness budget and locked Chromium preparation. Exact profile expected sets gain both suites, no exemptions/skips/timeout raises. Shared helper preserves full original admission, known approval-time supplement, failed washing and lowpriv state for these regressions only.",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/test-suite-plan.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/helpers/order-time-rewash-fixture.ts",
+        "tests/integration/order-time-washing-rework-postgres.test.ts",
+        "tests/integration/order-time-washing-rework-browser-postgres.test.ts",
+        "tests/unit/bulk-washing-rework-source.test.ts",
+        "tests/unit/bulk-washing-rework-planning.test.ts",
+        "tests/unit/journey-washing-rework.test.ts",
+        "tests/unit/order-time-rewash-input.test.ts"
+      ],
+      "reads": [
+        "scripts/ci/prepare-settings-browser.mjs",
+        "vitest.business-chain.config.ts",
+        "tests/helpers/business-anchor-fixture.ts"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts"
+      ],
+      "checks": [
+        "pr5-unit",
+        "pr5-native-app",
+        "pr5-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pr4-lint",
+      "id": "pr5-lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-termination.ts apps/api/src/production-platform/task-completion-occurrence.ts apps/api/src/production-platform/task-service.ts apps/web/src/factory-batch-panel.tsx apps/web/src/task-completion-time.tsx apps/web/src/task-workbench-sample.tsx packages/contracts/src/digital-production-tasks.ts scripts/test-suite-plan.mjs tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/task-completion-postgres.test.ts tests/unit/journey-termination.test.ts tests/unit/sample-postgres-gate-policy.test.ts tests/unit/task-completion-display.test.ts tests/unit/task-completion-occurrence.test.ts apps/api/src/receiving/receiving-quantity-query.ts tests/integration/m01-journey-performance-postgres.test.ts tests/unit/journey-snapshot-batches.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/bulk-washing-rework-binding.ts apps/api/src/production-platform/bulk-washing-rework-planning.ts apps/api/src/production-platform/bulk-washing-rework-source.ts apps/api/src/production-platform/bulk-washing-service.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-time-framework.ts apps/api/src/production-platform/journey-washing-projection.ts apps/api/src/production-platform/journey-washing-rework-facts.ts apps/api/src/production-platform/order-time-native-timing.ts apps/api/src/production-platform/order-time-operation-state.ts apps/api/src/production-platform/order-time-plan-repository.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/order-time-request-routes.ts apps/api/src/production-platform/order-time-request-service.ts apps/api/src/production-platform/order-time-washing-rework.ts apps/web/src/bulk-washing-panel.tsx apps/web/src/order-time-request-page.tsx apps/web/src/order-time-rewash-fields.tsx packages/contracts/src/bulk-washing.ts packages/contracts/src/order-time-requests.ts packages/contracts/src/order-time-washing-rework.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/helpers/order-time-rewash-fixture.ts tests/integration/order-time-washing-rework-browser-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts tests/unit/bulk-washing-rework-planning.test.ts tests/unit/bulk-washing-rework-source.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/order-time-reading.test.ts tests/unit/order-time-rewash-input.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
-      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
-      "startedAt": "2026-11-17T11:26:25.977934+00:00",
-      "endedAt": "2026-11-17T11:26:31.681048+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance."
+      "testedHead": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
+      "sourceFingerprint": "a95ac44608d9c21b12a0fdbffb0cb13303a0c95a3e9a60b516854461adc688b0",
+      "startedAt": "2026-11-17T12:44:18.726327+00:00",
+      "endedAt": "2026-11-17T12:44:21.586247+00:00",
+      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. Bounded input evidence captured while original full source still matched; only later canonical membership alignment is outside those runtime inputs.",
+      "log": "/workspace/sla-rp5-20261117/checks/rewash-ready-lint/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "id": "pr4-api-types",
+      "id": "pr5-api-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
-      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
-      "startedAt": "2026-11-17T11:26:26.019393+00:00",
-      "endedAt": "2026-11-17T11:27:03.193352+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-api-types/command.log",
+      "testedHead": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
+      "sourceFingerprint": "b5ceb316180874fc7df8216fff9822cb37d30f22b1c39158030207bf397095e0",
+      "startedAt": "2026-11-17T12:41:20.608476+00:00",
+      "endedAt": "2026-11-17T12:41:48.960135+00:00",
+      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. Bounded input evidence captured while original full source still matched; only later canonical membership alignment is outside those runtime inputs.",
+      "log": "/workspace/sla-rp5-20261117/checks/rewash-final-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance."
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/integration",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        ".node-version",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "scripts/check-migrations.mjs",
+        "scripts/migration-branches.json",
+        "scripts/migration-history-policy.mjs",
+        "scripts/migration-integration-check.mjs",
+        "scripts/migration-lib.mjs",
+        "scripts/migration-main-extensions.json",
+        "scripts/owned-command.mjs",
+        "scripts/test-database-safety.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-fixture-prerequisites.mjs",
+        "scripts/test-preflight.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/test-runtime-metadata.mjs"
+      ],
+      "inputFingerprint": "9c92e5cc22165396f182396c03d47560cc03678dba66b6e2a041b8552e2e3b89"
     },
     {
-      "id": "pr4-web-types",
+      "id": "pr5-web-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
-      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
-      "startedAt": "2026-11-17T11:26:25.897846+00:00",
-      "endedAt": "2026-11-17T11:27:17.986573+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-web-types/command.log",
+      "testedHead": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
+      "sourceFingerprint": "b5ceb316180874fc7df8216fff9822cb37d30f22b1c39158030207bf397095e0",
+      "startedAt": "2026-11-17T12:41:20.660681+00:00",
+      "endedAt": "2026-11-17T12:42:05.413037+00:00",
+      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. Bounded input evidence captured while original full source still matched; only later canonical membership alignment is outside those runtime inputs.",
+      "log": "/workspace/sla-rp5-20261117/checks/rewash-final-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance."
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/integration",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        ".node-version",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "scripts/check-migrations.mjs",
+        "scripts/migration-branches.json",
+        "scripts/migration-history-policy.mjs",
+        "scripts/migration-integration-check.mjs",
+        "scripts/migration-lib.mjs",
+        "scripts/migration-main-extensions.json",
+        "scripts/owned-command.mjs",
+        "scripts/test-database-safety.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-fixture-prerequisites.mjs",
+        "scripts/test-preflight.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/test-runtime-metadata.mjs"
+      ],
+      "inputFingerprint": "9c92e5cc22165396f182396c03d47560cc03678dba66b6e2a041b8552e2e3b89"
     },
     {
-      "id": "pr4-unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/factory-flow-navigation.test.ts tests/unit/development-ordinary-instance-projection.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-workspace.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-diagnostic.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-snapshot-batches.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-termination.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/sample-postgres-gate-policy.test.ts tests/unit/task-blocker-guidance.test.ts tests/unit/task-completion-display.test.ts tests/unit/task-completion-occurrence.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/review-final-callers-results.json tests/unit/receiving-defective-quantity.test.ts tests/unit/order-board-global-style-search.test.ts tests/unit/order-board-cutting-facts.test.ts",
+      "id": "pr5-migrations",
+      "kind": "command",
+      "command": "node scripts/check-migrations.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
-      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
-      "startedAt": "2026-11-17T11:26:25.897602+00:00",
-      "endedAt": "2026-11-17T11:27:02.242959+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-callers/command.log",
-      "logSha256": "fd8374f37050a7c39a20d0ff1e5f7fae5d10dad22e7b4a3feaa1e98209aa1366",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
-      "passed": 419,
+      "testedHead": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
+      "sourceFingerprint": "b5ceb316180874fc7df8216fff9822cb37d30f22b1c39158030207bf397095e0",
+      "startedAt": "2026-11-17T12:41:46.934031+00:00",
+      "endedAt": "2026-11-17T12:41:47.067360+00:00",
+      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. Bounded input evidence captured while original full source still matched; only later canonical membership alignment is outside those runtime inputs.",
+      "log": "/workspace/sla-rp5-20261117/checks/rewash-final-migrations/command.log",
+      "logSha256": "508e2136e927a716e3ffa1c0090e819d8e8659862739dde352757fe03528fdf2",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/integration",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        ".node-version",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "scripts/check-migrations.mjs",
+        "scripts/migration-branches.json",
+        "scripts/migration-history-policy.mjs",
+        "scripts/migration-integration-check.mjs",
+        "scripts/migration-lib.mjs",
+        "scripts/migration-main-extensions.json",
+        "scripts/owned-command.mjs",
+        "scripts/test-database-safety.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-fixture-prerequisites.mjs",
+        "scripts/test-preflight.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/test-runtime-metadata.mjs"
+      ],
+      "inputFingerprint": "9c92e5cc22165396f182396c03d47560cc03678dba66b6e2a041b8552e2e3b89"
+    },
+    {
+      "id": "pr5-unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/bulk-washing-rework-source.test.ts tests/unit/bulk-washing-rework-planning.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/order-time-rewash-input.test.ts tests/unit/order-time-reading.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/bulk-washing-actions.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/bulk-washing-ledger.test.ts tests/unit/bulk-washing-windows.test.ts tests/unit/journey-washing-facts.test.ts tests/unit/order-time-washing.test.ts tests/unit/order-time-plan.test.ts tests/unit/order-time-framework.test.ts tests/unit/order-time-framework-facts.test.ts tests/unit/order-time-framework-submission.test.ts tests/unit/order-time-requests.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/migration-history.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp5-20261117/rewash-plan-aligned-unit.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
+      "sourceFingerprint": "a95ac44608d9c21b12a0fdbffb0cb13303a0c95a3e9a60b516854461adc688b0",
+      "startedAt": "2026-11-17T12:43:41.506893+00:00",
+      "endedAt": "2026-11-17T12:43:52.597855+00:00",
+      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. Bounded input evidence captured while original full source still matched; only later canonical membership alignment is outside those runtime inputs.",
+      "log": "/workspace/sla-rp5-20261117/checks/rewash-plan-aligned-unit/command.log",
+      "logSha256": "63244355b7d264a913954446c52aef3b7567d31d6bef7d461a4450e598f98741",
+      "passed": 339,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "358006135d3c25ef9464fd20b05813921616a6414b530d6607f39a502a7d1132"
+          "sha256": "48f1fdaf7dec97c0f2665c5b992f5111411b626e305f40070bc574cd47778c16"
         }
       ]
     },
     {
-      "id": "pr4-canonical",
+      "id": "pr5-native-app",
       "kind": "tests",
-      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-washing-rework-browser-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/bulk-washing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp5-20261117/pg/rewash-app-native-final/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
-      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
-      "startedAt": "2026-11-17T11:26:26.084942+00:00",
-      "endedAt": "2026-11-17T11:26:27.835047+00:00",
-      "log": "/workspace/sla-rp3-20261117/checks/completion-review-final-canonical/command.log",
-      "logSha256": "2cf45c102c037aecdb6bc7653841ae3d00b16a68ee59945313474d8e70e5b2f6",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
-      "passed": 21,
+      "testedHead": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
+      "sourceFingerprint": "b5ceb316180874fc7df8216fff9822cb37d30f22b1c39158030207bf397095e0",
+      "startedAt": "2026-11-17T12:40:45.429974+00:00",
+      "endedAt": "2026-11-17T12:43:01.995480+00:00",
+      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. Bounded input evidence captured while original full source still matched; only later canonical membership alignment is outside those runtime inputs.",
+      "log": "/workspace/sla-rp5-20261117/pg/rewash-app-native-final/tests.log",
+      "logSha256": "589580275c85871529db41b23f1c47080737ede9b9589fe20c6b60c01f19c0a6",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/integration",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        ".node-version",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "scripts/check-migrations.mjs",
+        "scripts/migration-branches.json",
+        "scripts/migration-history-policy.mjs",
+        "scripts/migration-integration-check.mjs",
+        "scripts/migration-lib.mjs",
+        "scripts/migration-main-extensions.json",
+        "scripts/owned-command.mjs",
+        "scripts/test-database-safety.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-fixture-prerequisites.mjs",
+        "scripts/test-preflight.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/test-runtime-metadata.mjs"
+      ],
+      "inputFingerprint": "9c92e5cc22165396f182396c03d47560cc03678dba66b6e2a041b8552e2e3b89",
+      "passed": 45,
       "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "pr4-native-app",
-      "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/task-completion-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp3-20261117/pg/rp3-completion-review-final-native/tests.json --testNamePattern 'renders the real shipping date and native unknown then verified correction|reads a native shipping date|measures all candidates before pagination through real AuthService|effective native packing across receiving batches'",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "fe744bbe3f30c10b36fd5fea5ee39351b3c6ed07",
-      "sourceFingerprint": "06db1df5d0dfdcf15255d0da9ec992d4f790572b5ba971d8c41339d99e662420",
-      "startedAt": "2026-11-17T11:25:52.881214+00:00",
-      "endedAt": "2026-11-17T11:28:11.744891+00:00",
-      "log": "/workspace/sla-rp3-20261117/pg/rp3-completion-review-final-native/tests.log",
-      "logSha256": "4a885e9e4ce506eced181c33970a9efb741cb6760e412563222b5e80d75a08c1",
-      "context": "Actual Node22.22.2/npm10.9.9; original worker and finite test configuration; source unchanged before/after this command. Native PG uses fresh marked low-privilege PG16.16, original workflows, owned stop/remove/absence verification. No Acceptance/production data, no increased runner/timeout or removed budget/semantics assertions. Local native evidence is not onsite or complete CI acceptance.",
-      "passed": 11,
-      "failed": 0,
-      "skipped": 9,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "43fe1b3ec513f74825573891971bdb1ef0ff8e4ad4ed5b118ae95cd718b68bbd"
+          "sha256": "112508c7fda18c819e340567d6e83fd628e8ec3b1222f616e70a02d74948c234"
         }
       ]
     }
