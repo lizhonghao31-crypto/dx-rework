@@ -446,4 +446,49 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   }finally{await app.close();}
  },testExecutionConfig.correctnessTimeoutMs);
 
+ it.each(['source','order'] as const)('uses the original lifecycle HTTP %s route with scene business time and real registration time',async kind=>{
+  const scene=await runtime.create(actor(),{name:'TEST-lifecycle-'+kind,requestKey:randomUUID()}),sourceId=scene.sourceIds[0]!,identity=new DigitalProductionIdentityService(db,true);
+  const at='2035-04-05T16:00:00.123Z';
+  await runtime.run(scene.scenarioId,actor(),()=>runtime.repository.change(scene.scenarioId,rootId,{expectedVersion:scene.version,requestKey:randomUUID(),at}));
+  const source=(await db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0];
+  const resourceId=kind==='source'?sourceId:(await runtime.run(scene.scenarioId,actor(),()=>identity.createOrder(actor(),DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.design_style_no,orderDate:'2035-04-06',lines:[{color:'黑',sizes:[{size:'M',quantity:1}],deliveryDate:'2036-03-01'}]}),randomUUID()))).productionOrderId;
+  const auth=new AuthService(new AcceptanceDingTalkProvider(db,corp,secret),new PostgresAuthStore(db,corp,'uat-root'),corp,3600000,secret),root=new RootAuthority(db,corp,'uat-root');
+  const control=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret)),login=await auth.switchAcceptanceIdentity(control,'root'),cookie=`dx_acceptance_control=${control}; dx_rework_session=${login.token}`;
+  const app=Fastify({logger:false});app.setErrorHandler((error,_request,reply)=>reply.code((error as {statusCode?:number}).statusCode??500).send({error:{message:error.message}}));
+  registerAcceptanceClockRoutes(app,runtime,auth,root);
+  registerDigitalIdentityRoutes(app,{service:identity,creationEnabled:true,authenticate:token=>auth.authenticate(token),root,taskService:new DigitalProductionTaskService(db)});
+  const request=(action:string,headers:Record<string,string>={},body:Record<string,unknown>={})=>app.inject({method:'POST',url:`/digital-production/lifecycle/${kind}/${resourceId}`,headers:{cookie,'idempotency-key':randomUUID(),...headers},payload:{action,reason:'TEST original lifecycle occurrence',...body}});
+  try{
+   const other=await runtime.create(actor(),{name:'TEST-lifecycle-other',requestKey:randomUUID()});
+   expect((await request('cancel',{'x-acceptance-scenario':other.scenarioId})).statusCode).toBe(409);
+   expect((await request('cancel',{}, {orderId:other.sourceIds[0]})).statusCode).toBe(409);
+   const wrong=await app.inject({method:'POST',url:`/digital-production/lifecycle/${kind==='source'?'order':'source'}/${resourceId}`,headers:{cookie,'idempotency-key':randomUUID()},payload:{action:'cancel',reason:'TEST wrong kind'}});expect(wrong.statusCode,wrong.body).toBe(400);
+   expect((await db.query('SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2',[kind,resourceId])).rowCount).toBe(0);
+   const before=Date.now();
+   for(const action of ['pause','resume','cancel']){
+    const response=await request(action);expect(response.statusCode,response.body).toBe(200);expect(response.headers['x-acceptance-clock']).toBe('scenario');
+    expect(response.json().state).toBe(action==='resume'?'active':action==='pause'?'paused':'cancelled');
+    const event=(await db.query('SELECT occurred_at,recorded_at FROM digital_production_task_events WHERE resource_kind=$1 AND resource_id=$2 AND event_kind=$3 ORDER BY recorded_at DESC LIMIT 1',[kind,resourceId,action])).rows[0];
+    expect(event.occurred_at.toISOString()).toBe(at);expect(event.recorded_at.getTime()).toBeGreaterThanOrEqual(before);expect(event.recorded_at.getTime()).toBeLessThanOrEqual(Date.now());
+   }
+   const events=(await db.query("SELECT event_id,occurred_at FROM digital_production_task_events WHERE resource_kind=$1 AND resource_id=$2 AND event_kind IN('pause','resume','cancel') ORDER BY event_id",[kind,resourceId])).rows;
+   const current=await runtime.repository.row(scene.scenarioId);await runtime.run(scene.scenarioId,actor(),()=>runtime.repository.change(scene.scenarioId,rootId,{expectedVersion:current.version,requestKey:randomUUID(),at:'2035-04-06T16:00:00.123Z'}));
+   expect((await db.query("SELECT event_id,occurred_at FROM digital_production_task_events WHERE resource_kind=$1 AND resource_id=$2 AND event_kind IN('pause','resume','cancel') ORDER BY event_id",[kind,resourceId])).rows).toEqual(events);
+  }finally{await app.close();}
+ });
+
+ it.each([true,false])('keeps an ordinary lifecycle on real time, guarded server=%s',async guarded=>{
+  const identity=new DigitalProductionIdentityService(db,true),source=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-ordinary-lifecycle-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
+  const auth=new AuthService(new AcceptanceDingTalkProvider(db,corp,secret),new PostgresAuthStore(db,corp,'uat-root'),corp,3600000,secret),root=new RootAuthority(db,corp,'uat-root');
+  const control=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret)),login=await auth.switchAcceptanceIdentity(control,'root');
+  const app=Fastify({logger:false});if(guarded)registerAcceptanceClockRoutes(app,runtime,auth,root);
+  registerDigitalIdentityRoutes(app,{service:identity,creationEnabled:true,authenticate:token=>auth.authenticate(token),root,taskService:new DigitalProductionTaskService(db)});
+  try{
+   const before=Date.now(),response=await app.inject({method:'POST',url:`/digital-production/lifecycle/source/${source.sourceId}`,headers:{cookie:`dx_acceptance_control=${control}; dx_rework_session=${login.token}`,'idempotency-key':randomUUID()},payload:{action:'cancel',reason:'TEST ordinary real-time lifecycle'}});
+   expect(response.statusCode,response.body).toBe(200);expect(response.headers['x-acceptance-clock']).toBeUndefined();
+   const event=(await db.query("SELECT occurred_at,recorded_at FROM digital_production_task_events WHERE resource_kind='source' AND resource_id=$1 AND event_kind='cancel'",[source.sourceId])).rows[0];
+   for(const at of [event.occurred_at,event.recorded_at]){expect(at.getTime()).toBeGreaterThanOrEqual(before);expect(at.getTime()).toBeLessThanOrEqual(Date.now());}
+  }finally{await app.close();}
+ });
+
 });

@@ -29,8 +29,8 @@ try{
   }
   if(path.includes('/resource/'))return send({scene});
   if(path.endsWith('/standards'))return send([{id:scene.configurationId,version:1}]);
-  if(path.endsWith('/targets'))return send([{id:'material-check',label:'开发文员核料 · 4小时',dueAt:'2026-10-26T04:00:00Z',warningAt:'2026-10-26T02:48:00Z',exclusive:false}]);
-  if(path.endsWith('/preview'))return send({at:'2026-10-26T02:48:00.000Z',token:'fixture-boundary',label:'开发文员核料',version:scene.version,exclusive:false});
+  if(path.endsWith('/targets'))return send([{id:'material-check',label:'开发文员核料 · 4小时',dueAt:'2026-10-26T04:00:00Z',warningAt:'2026-10-26T02:48:00Z',exclusive:false},{id:'date-check',label:'TEST日期截止',dueAt:'2027-04-05T16:00:00.000Z',warningAt:null,exclusive:true}]);
+  if(path.endsWith('/preview')){const exclusive=payload.nodeId==='date-check';return send({at:exclusive?new Date(Date.parse('2027-04-05T16:00:00.000Z')+(payload.boundary==='due_before'?-1:payload.boundary==='due_after'?1:0)).toISOString():'2026-10-26T02:48:00.000Z',token:'fixture-boundary',label:exclusive?'TEST日期截止':'开发文员核料',version:scene.version,exclusive});}
   if(path.endsWith('/advance')){
    if(conflict){conflict=false;scene={...scene,version:scene.version+1};return send({error:{message:'测试时间或标准已更新，请刷新后重新预览'}},409);}
    assert.equal(payload.expectedVersion,scene.version);assert.ok(Date.parse(payload.at)>Date.parse(scene.now));
@@ -56,6 +56,16 @@ try{
  assert.equal(await page.getByLabel('未保存业务输入').inputValue(),'TEST未保存内容');
 
  await page.screenshot({path:resolve(out,'clock-pc-expanded.png'),fullPage:true});
+ await page.getByLabel('跳转节点').selectOption('date-check');
+ for(const [boundary,suffix] of [['due_before','.999'],['due','.000'],['due_after','.001']]){
+  await page.getByLabel('边界').selectOption(boundary);
+  await page.getByRole('button',{name:'查看跳转结果'}).click();
+  const preview=page.locator('.acceptance-clock__preview');await preview.waitFor();
+  assert.ok((await preview.textContent()).includes('日期截止采用排他边界'));
+  assert.ok((await preview.textContent()).includes(suffix));
+  assert.equal((await preview.textContent()).includes('此刻已越过'),false);
+  assert.equal(await page.getByLabel('未保存业务输入').inputValue(),'TEST未保存内容');
+ }
  await page.getByLabel('跳转节点').selectOption('material-check');
  await page.getByRole('button',{name:'查看跳转结果'}).click();
  await page.getByRole('button',{name:'确认推进'}).waitFor();
@@ -89,6 +99,6 @@ try{
  await page.waitForURL(url=>url.searchParams.get('development')===scene.sourceIds[0]);
  assert.equal(creationAttempts[4].requestKey,creationAttempts[3].requestKey);
  assert.deepEqual(failures,[]);
- console.log(JSON.stringify({suite:'acceptance-clock-component-browser',passed:14,requests,viewports:['1440x1000','390x844'],evidence:out,scope:'real component with deterministic API responses; not a full application business acceptance'}));
+ console.log(JSON.stringify({suite:'acceptance-clock-component-browser',passed:14,boundaryCases:['B-1ms','B','B+1ms'],requests,viewports:['1440x1000','390x844'],evidence:out,scope:'real component with deterministic API responses; not a full application business acceptance'}));
  await context.close();
 }finally{await browser.close();await Promise.all([unlink(html),unlink(entry)]);}

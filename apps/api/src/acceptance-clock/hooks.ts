@@ -6,7 +6,7 @@ import {businessActor} from '../access/business-authority.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {withAcceptanceBusinessTime} from './business-time.js';
-import {clockRequestIds,clockRoots,clockUuid,clockOrderTimeRequestRoots} from './scope.js';
+import {clockRequestIds,clockRoots,clockUuid,clockOrderTimeRequestRoots,clockLifecycleRoots} from './scope.js';
 import {clockConflict} from './repository.js';
 import type {AcceptanceClockRuntime} from './runtime.js';
 
@@ -30,6 +30,10 @@ export function registerAcceptanceClockHooks(app:FastifyInstance,runtime:Accepta
    const claimed=request.headers['x-acceptance-scenario'];
    if(claimed!==undefined&&!clockUuid(claimed))throw new ApplicationError('VALIDATION_ERROR','测试场景标识无效',400);
    const roots=(await Promise.all(clockRequestIds(request.params,request.body,request.query).map(id=>clockRoots(runtime.database,id)))).flat();
+   if(path==='/digital-production/lifecycle/:kind/:resourceId'){
+    const params=request.params as {kind?:unknown;resourceId?:unknown};
+    roots.push(...await clockLifecycleRoots(runtime.database,params.kind,params.resourceId));
+   }
    if(/^\/digital-production\/order-time\/requests\/:requestId(?:\/|$)/.test(path))roots.push(...await clockOrderTimeRequestRoots(runtime.database,(request.params as {requestId?:unknown}).requestId));
    const scenes=new Set(roots.map(r=>r.scenarioId).filter((id):id is string=>Boolean(id)));
    if(claimed)scenes.add(claimed as string);

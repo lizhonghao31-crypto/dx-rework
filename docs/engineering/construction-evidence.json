@@ -1,176 +1,157 @@
 {
   "version": 1,
-  "base": "7143c82691592fc0e7ae77ab2c90f9cb80398f60",
+  "base": "ba2f72fc78672a7d9b64c509012479be425b6213",
   "risk": "full",
-  "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
+  "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
   "rules": [
     {
-      "rule": "Development may publish incomplete ordering data without formal creation or invented deadlines; exact frozen craft instance identity stays outside strict choice DTO; new unsaved timing drafts and concurrent stale conflicts must remain clear and safe.",
-      "source": "2026-11-16 user via Dot approved three repairPRs, PR3 time-check and feedback; v27 optional sample date and incomplete ordering development publication, formal confirmation complete input, frozen policy/real facts/history, original approved authority. PACKSTOP2 missing dates and eaf two frozen special actual shape reproduced locally; no original request server stack asserted.",
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX09/FIX13 and RP6 N14/N15; original scoped Acceptance guards and v27 precision rules.",
+      "initialization": "Preserved CI/U2/RP1 workspaces; fresh marked low-privilege PG16 fixture and original identity seed. Production does not install Acceptance hooks; no historical event repair or deployment.",
+      "dateAndPermission": "Only allowed lifecycle source/order resourceId is resolved. Original UAT identity, scene lock and cross-scene guards remain. Business occurrence uses scene time; audit/authentication remain real. Date exclusive B and ordinary hour D retain distinct equality rules.",
+      "expectation": "Exact lifecycle commands use the current trusted scene; wrong kind and mixed scopes reject before writes. Ordinary/no-hook server uses real time. Preview states boundary type without falsely claiming B-1ms is overdue.",
+      "rule": "Lifecycle resolves exact typed scene resource and retains original authentication, lock and real audit time",
       "writes": [
-        "apps/api/src/production-platform/fixed-development-work.ts",
-        "apps/api/src/production-platform/fixed-order-work.ts",
-        "apps/api/src/production-platform/fixed-work-definition.ts",
-        "apps/api/src/production-platform/order-time-framework-route.ts",
-        "apps/api/src/production-platform/order-time-native-commands.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-publication-intent.ts",
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "apps/api/src/production-platform/order-time-washing.ts",
-        "apps/web/src/order-time-request-page.tsx",
-        "apps/web/src/order-time-washing-fields.tsx",
-        "apps/web/src/order-time-washing-rebase.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "docs/engineering/construction-evidence.json",
-        "docs/engineering/order-time-check-feedback.md",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/order-time-craft-contract.test.ts",
-        "tests/unit/order-time-publication-intent.test.ts",
-        "tests/unit/order-time-washing-rebase.test.ts"
+        "apps/api/src/acceptance-clock/scope.ts#clockLifecycleRoots",
+        "apps/api/src/acceptance-clock/hooks.ts#registerAcceptanceClockHooks",
+        "tests/integration/acceptance-sla-clock-postgres.test.ts",
+        "tests/unit/acceptance-sla-clock.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-framework-submission.ts",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/order-time-washing-fields.tsx",
-        "packages/contracts/src/order-time-framework.ts",
-        "packages/contracts/src/digital-craft.ts",
-        "packages/contracts/src/digital-production.ts"
+        "apps/api/src/acceptance-clock/runtime.ts#assertActor",
+        "apps/api/src/production-platform/task-service.ts#controlResource",
+        "apps/api/src/production-platform/task-routes.ts"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/unit/order-time-requests.test.ts",
-        "tests/unit/order-time-settings.test.ts",
-        "tests/unit/order-time-plan.test.ts",
-        "tests/unit/order-time-washing.test.ts"
+        "tests/integration/acceptance-sla-clock-postgres.test.ts",
+        "tests/unit/acceptance-sla-clock.test.ts"
       ],
-      "newTests": [
-        "tests/unit/order-time-craft-contract.test.ts",
-        "tests/unit/order-time-publication-intent.test.ts",
-        "tests/unit/order-time-washing-rebase.test.ts"
-      ],
-      "initialization": "No SQL/backfill or live writes. Same publicationFormalInput readiness boundary used by check and native executor; missing contract/partialPO dates/preorder remain development only, explicit formal check returns unknown/coverage and original formal identity guard refuses promotion. Only datedPO scopes get original A/B milestones; no naked missing-date throw or dummy date. Builders and old framework adapters project allowed choice fields while original native route stepId/source/round/canonicalWorkRef/frozen library version persist. Old complete formal drafts and native history remain via original services.",
-      "dateAndPermission": "Real original designer publication App and original Root/manager request transactions used. New success cleared on ordinary, washing and invalid drafts; separate persistent stale conflict survives automatic previews and blocks saving until explicit refresh/review. Three-way washing rebase preserves intentional edits and fresh readonly fee provenance/currentversion, no automatic adoption. Original fingerprint/expectedVersion, started responsibility windows, data versions, old confirmed quotation/budget/contract and role guards remain. Unknown POST recovery not retried; original read-check vs write-outcome splitting retained.",
-      "expectation": "Combined140 units and full35 original PostgreSQL16/authenticated browser cases pass on the exact044+409 preview composition; current actual parent integration must match the complete source fingerprint before local result reuse. Execution retained real HEAD409 with uncommitted044 source, not falsely described as testing at later actual parent commit. Review4583545198 now synchronizes visible raw editor fields and payload after explicit baseline acknowledgement, preserves deliberate or invalid text, and does not reverse independently adopted inspector or inspection duration on a subsequent edit. Includes incomplete/partially dated ordering development publish and strict confirm refusal, ordinary and dual frozen special developer->formal native adoption, unique identities and old saved-work strict projection, no source mutation; two sequential washing edits, two-page stale409 persistent through preview and explicit ack without auto-save, old success removed for200day and invalidtext draft with navigation guard. lint/types/preflight/secret exit0; exact GitHub Full/review/live acceptance still pending. New rewash-round planning identified separately, not misrepresented as covered here.",
       "checks": [
-        "unit",
-        "native-pg",
-        "lint",
-        "types",
-        "preflight",
-        "secret"
+        "rp6-pg",
+        "rp6-unit",
+        "rp6-static"
+      ]
+    },
+    {
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX09/FIX13 and RP6 N14/N15; original scoped Acceptance guards and v27 precision rules.",
+      "initialization": "Preserved CI/U2/RP1 workspaces; fresh marked low-privilege PG16 fixture and original identity seed. Production does not install Acceptance hooks; no historical event repair or deployment.",
+      "dateAndPermission": "Only allowed lifecycle source/order resourceId is resolved. Original UAT identity, scene lock and cross-scene guards remain. Business occurrence uses scene time; audit/authentication remain real. Date exclusive B and ordinary hour D retain distinct equality rules.",
+      "expectation": "Exact lifecycle commands use the current trusted scene; wrong kind and mixed scopes reject before writes. Ordinary/no-hook server uses real time. Preview states boundary type without falsely claiming B-1ms is overdue.",
+      "rule": "Exclusive boundary type does not claim every preview instant is overdue",
+      "writes": [
+        "apps/web/src/acceptance-clock-panel.tsx#AcceptanceClockPanel",
+        "tests/acceptance/acceptance-sla-clock-browser.mjs"
+      ],
+      "reads": [
+        "apps/api/src/acceptance-clock/control-service.ts#preview",
+        "packages/domain/src/digital-task-deadline.ts#digitalTaskTiming"
+      ],
+      "oldTests": [
+        "tests/unit/acceptance-sla-clock.test.ts",
+        "tests/acceptance/acceptance-sla-clock-browser.mjs"
+      ],
+      "checks": [
+        "rp6-unit",
+        "rp6-browser",
+        "rp6-static"
+      ]
+    },
+    {
+      "source": "User-approved reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX09/FIX13 and RP6 N14/N15; original scoped Acceptance guards and v27 precision rules.",
+      "initialization": "Preserved CI/U2/RP1 workspaces; fresh marked low-privilege PG16 fixture and original identity seed. Production does not install Acceptance hooks; no historical event repair or deployment.",
+      "dateAndPermission": "Only allowed lifecycle source/order resourceId is resolved. Original UAT identity, scene lock and cross-scene guards remain. Business occurrence uses scene time; audit/authentication remain real. Date exclusive B and ordinary hour D retain distinct equality rules.",
+      "expectation": "Exact lifecycle commands use the current trusted scene; wrong kind and mixed scopes reject before writes. Ordinary/no-hook server uses real time. Preview states boundary type without falsely claiming B-1ms is overdue.",
+      "rule": "Restore the old owner-date clock fixture explicit manual-quote precondition after UI default drift, without weakening quote or date guards",
+      "writes": [
+        "tests/helpers/acceptance-sourcing-approval-fixture.ts"
+      ],
+      "reads": [
+        "tests/helpers/customer-quotation-fixture.ts#customerQuotationFixture",
+        "apps/api/src/production-platform/quotation-service.ts#save",
+        "tests/integration/acceptance-sla-clock-postgres.test.ts"
+      ],
+      "oldTests": [
+        "tests/integration/acceptance-sla-clock-postgres.test.ts"
+      ],
+      "checks": [
+        "rp6-pg",
+        "rp6-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "unit",
+      "id": "rp6-pg",
       "kind": "tests",
-      "command": "vitest run tests/unit/order-time-craft-contract.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-washing.test.ts tests/unit/order-time-publication-intent.test.ts tests/unit/order-time-washing-rebase.test.ts tests/unit/order-time-settings.test.ts tests/unit/order-time-plan.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=1",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/acceptance-sla-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/pg/rp6-clock-final/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 140,
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
+      "startedAt": "2026-11-17T04:01:17.343914+00:00",
+      "endedAt": "2026-11-17T04:02:35.377551+00:00",
+      "logSha256": "388e1a6793d8464829ce43b545372f2039b16013334102a33fc75d246ede6159",
+      "log": "/workspace/sla-rp6-20261117/pg/rp6-clock-final/tests.log",
+      "passed": 30,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "startedAt": "2026-11-16T09:10:51.795Z",
-      "endedAt": "2026-11-16T09:10:55.558Z",
-      "log": "/tmp/time-combined-preview-unit.log",
-      "logSha256": "edd16baa563602aeaf86d9df1a4dee478908f8bbba15d26d4542e4f8f0db8489",
+      "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9d1df5c4ff36f3b1858b53b27f0448f44ae53b7624b595add08267512e4f948a"
+          "sha256": "046e43494490d12c49de2b540c6371fae655616b6a2ceb19bf6fc24910d25af8"
         }
-      ],
-      "context": "Combined source preview: actual Git HEAD409 with uncommitted044 candidate integration, actual base at execution45176bec; final current branch source equals the original complete source fingerprint, real parent integration and409 ancestry checked. Not claimed as execution at the later actual mergeSHA. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real combined full35-case original service/App suite, no skipped cases. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
+      ]
     },
     {
-      "id": "native-pg",
+      "id": "rp6-unit",
       "kind": "tests",
-      "command": "bash /tmp/time-combined-preview-pg.sh tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-sla-clock.test.ts tests/unit/acceptance-clock-transaction-reader.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp6-20261117/units-final.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 35,
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
+      "startedAt": "2026-11-17T04:01:18.338317+00:00",
+      "endedAt": "2026-11-17T04:01:23.495565+00:00",
+      "logSha256": "0bd5f94152966b67c73fa9eb1bd02e2fc1e6fb51c92e0566cf28624fa3317948",
+      "log": "/workspace/sla-rp6-20261117/checks/units-final/command.log",
+      "passed": 17,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "startedAt": "2026-11-16T09:10:57.698Z",
-      "endedAt": "2026-11-16T09:13:14.602Z",
-      "log": "/tmp/time-combined-preview-native.log",
-      "logSha256": "66f027b1481c518aa1900659b726bff7b7f9e21a360e26dec2fffef2f987f8da",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f8c563acee72d1e3a7dc0807888f6094a9dcd71626d550f14919e80d2c74dea8"
+          "sha256": "71593f880a933f0a7b9a78ff11c2da9abd4141fbc889dbd6b8abfddfa1702de1"
         }
-      ],
-      "context": "Combined source preview: actual Git HEAD409 with uncommitted044 candidate integration, actual base at execution45176bec; final current branch source equals the original complete source fingerprint, real parent integration and409 ancestry checked. Not claimed as execution at the later actual mergeSHA. Node22.22.2/npm10.9.9 locked packages, original business-chain config single worker; exact owned512MiB tmpfs PG16-bookworm container with safety-marked non-superuser isolated DB, original authenticated Apps/services and cleanup exit0. No live Acceptance/production writes. Current native check is the real combined full35-case original service/App suite, no skipped cases. Both pages preserve native versions, real concurrent inspector/inspection edits, explicit ack and next duration edit plus final persisted version3. Original singleton logistics role constraint retained, new fixture uses a separate allowed QC identity. Local results are not remote Full or onsite acceptance."
+      ]
     },
     {
-      "id": "lint",
-      "command": "npm run lint",
-      "startedAt": "2026-11-16T09:13:48.986897+00:00",
-      "endedAt": "2026-11-16T09:14:25.182381+00:00",
-      "exitCode": 0,
-      "log": "/tmp/time-combined-preview-lint.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
+      "id": "rp6-static",
       "kind": "command",
+      "command": "python3 /workspace/sla-rp6-20261117/static.py",
       "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual npm command on the same combined source fingerprint; execution HEAD409 with pending044 integration, later real parent/source equality and ancestry checked. No remote CI success invented."
+      "exitCode": 0,
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
+      "startedAt": "2026-11-17T04:02:47.679335+00:00",
+      "endedAt": "2026-11-17T04:03:39.579071+00:00",
+      "logSha256": "5979e84255f8e7a7518e1986920cc7fd6f6f7bc36018f65a26846af784d2cf9f",
+      "log": "/workspace/sla-rp6-20261117/checks/static-final/command.log"
     },
     {
-      "id": "types",
-      "command": "npm run typecheck",
-      "startedAt": "2026-11-16T09:14:25.183238+00:00",
-      "endedAt": "2026-11-16T09:15:26.361431+00:00",
-      "exitCode": 0,
-      "log": "/tmp/time-combined-preview-types.log",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
+      "id": "rp6-browser",
       "kind": "command",
+      "command": "env CLOCK_UI_URL=http://127.0.0.1:4186 CLOCK_UI_OUTPUT=/workspace/sla-rp6-20261117/browser-final PLAYWRIGHT_MODULE=playwright-core CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/acceptance-sla-clock-browser.mjs",
       "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual npm command on the same combined source fingerprint; execution HEAD409 with pending044 integration, later real parent/source equality and ancestry checked. No remote CI success invented."
-    },
-    {
-      "id": "preflight",
-      "command": "npm run test:preflight",
-      "startedAt": "2026-11-16T09:49:38.232439+00:00",
-      "endedAt": "2026-11-16T09:49:46.536033+00:00",
       "exitCode": 0,
-      "log": "/tmp/order-time-check-integrated-preflight.log",
-      "logSha256": "7e7ed407695455f1a0ab2f8cee54e8e094a36093031300fedbac568b4e2a1295",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual current PR3 worktree command on HEAD409 with real predecessor merge7143c826 pending; exact combined source fingerprint checked. This is not the earlier dirty044 preview run and not remote CI or onsite acceptance.",
-      "kind": "command",
-      "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230"
-    },
-    {
-      "id": "secret",
-      "command": "npm run secret:scan",
-      "startedAt": "2026-11-16T09:49:46.536605+00:00",
-      "endedAt": "2026-11-16T09:49:47.397246+00:00",
-      "exitCode": 0,
-      "log": "/tmp/order-time-check-integrated-secret.log",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "testedHead": "409bab428b5e94400f40b467f55a22c57b8f0769",
-      "context": "Actual current PR3 worktree command on HEAD409 with real predecessor merge7143c826 pending; exact combined source fingerprint checked. This is not the earlier dirty044 preview run and not remote CI or onsite acceptance.",
-      "kind": "command",
-      "status": "passed",
-      "sourceFingerprint": "f2b831dd70aacf13eef4019a0d7c5dae5d76345c1d47956b3dd5db7a0cdb9230"
+      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
+      "sourceFingerprint": "595c088fd87c803a7ef41c2c916ef50f5dae4a91f9255477cda69357e424be32",
+      "context": "Local Node22.22.2/npm10.9.9, original configurations/workers; PG16.16 owned 2CPU/4GiB low-privilege marked isolated database. Original Root control/business authentication for lifecycle HTTP. No Acceptance or production connection. Component browser uses deterministic responses, not a live App acceptance.",
+      "startedAt": "2026-11-17T04:02:48.768377+00:00",
+      "endedAt": "2026-11-17T04:02:55.415691+00:00",
+      "logSha256": "6f2021bc7f15b9fee6fa09d7718ec01a99b90720980f9205aa1e913c38ce0aaf",
+      "log": "/workspace/sla-rp6-20261117/checks/browser-final/command.log"
     }
   ]
 }
