@@ -197,6 +197,7 @@ export const SLA_JOURNEY_SUPPORT_PATHS = Object.freeze([
   "tests/unit/sla-native-window-projection.test.ts"
 ]);
 export const SLA_JOURNEY_REQUIRED_TESTS = Object.freeze([
+  "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
   "tests/integration/bulk-washing-postgres.test.ts",
   "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
   "tests/integration/order-time-washing-rework-postgres.test.ts",
@@ -382,6 +383,9 @@ export const classifyFullGatePaths = (inputPaths) => {
   if(paths.some(path=>/cockpit|journey-visual-progress|journey-framework-events|journey-time-framework|journey-time-ratio|framework-node-targets|time-framework-journey|fixed-schedule-basis|order-time-activation|special-craft-activation/.test(path)))addAll(mappedTests,['tests/integration/time-framework-cockpit-native-browser-postgres.test.ts']);
   if(paths.some(path=>/bulk-washing|factory-flow-(?:service|panel|read)|production-closure-service|production-reporting-service|garment-quality|packing-quality-coverage|receiving-service|todo-destination/.test(path)))addAll(mappedTests,['tests/integration/bulk-washing-postgres.test.ts','tests/integration/bulk-washing-browser-postgres.test.ts']);
   if(paths.some(path=>/special-craft|digital-craft|sla-settings-workspace|task-routes|task-service|development-craft-instance-evidence|task-craft-display|development-sla-evidence|journey-supervision|journey-task-summary/.test(path)))addAll(mappedTests,['tests/integration/special-craft-library-postgres.test.ts','tests/integration/special-craft-native-postgres.test.ts','tests/integration/special-craft-browser-postgres.test.ts']);
+  if(paths.some(path=>/factory-(?:sla-evidence|evaluation-route|supervision)|fixed-factory-timing|sla-order-service|journey-(?:supervision|fact-model|selection-clock)/.test(path))){
+    addAll(mappedTests,['tests/integration/factory-supervision-instances-browser-postgres.test.ts','tests/integration/special-craft-native-postgres.test.ts','tests/integration/special-craft-browser-postgres.test.ts']);
+  }
   if(paths.some(path=>/quotation|development-commercial-fields|0288_automatic_quotation_sources/.test(path))){
     addAll(mappedTests,['tests/integration/customer-quotation-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/automatic-quotation-native-browser-postgres.test.ts']);
   }

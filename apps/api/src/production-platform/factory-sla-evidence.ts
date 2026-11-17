@@ -4,6 +4,7 @@ import {factoryBatchTiming} from './factory-batch-timing.js';
 import type {AdoptedCraftStep} from '@dx-rework/contracts/digital-craft';
 import {craftParameterKey} from './fixed-work-definition.js';
 import {fixedCraftSteps} from './fixed-craft-steps.js';
+import {factoryFrozenEvaluationPlan,type FactoryEvaluationRoute,type FactorySlaInstance} from './factory-evaluation-route.js';
 /** Stage completion requires all applicable physical quantities, not the first dispatch. */
 export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:string){
  const timing=await factoryBatchTiming(db,orderId);if(!timing)return null;
@@ -19,6 +20,11 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
   for(const step of timing.stepLedger.steps){
    const windows=timing.windows.filter(window=>window.kind==='process_logistics'&&window.stepRef===step.step.stepId),covered=step.completion.every(line=>line.complete);
    put(`${craftParameterKey(step.step,'bulk')}:${step.step.stepId}`,windows,covered&&windows.length>0&&windows.every(window=>window.complete),covered);
+   for(const phase of ['logistics','qc'] as const){
+    const position=timing.evaluationRoute?.route.find(row=>row.stepId===step.step.stepId&&row.phase===phase);if(!position)continue;
+    const own=timing.windows.filter(window=>window.stepRef===step.step.stepId&&window.kind===(phase==='qc'?'bulk_qc':'process_logistics'));
+    put(position.nodeId,own,covered&&own.length>0&&own.every(window=>window.complete),covered);
+   }
   }
   // Legacy kind readers still receive the whole applicable kind, never the
   // last special step. New plans select the exact immutable step identity.
@@ -30,7 +36,12 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
   const qc=timing.windows.filter(window=>window.kind==='bulk_qc'),dispatch=timing.windows.filter(window=>window.kind==='warehouse_dispatch');
   put('bulk_qc',qc,qc.length===steps.length&&qc.every(window=>window.complete),timing.stepLedger.steps.every(step=>step.completion.every(line=>line.complete)));
   put('warehouse_dispatch',dispatch,timing.ledger.complete,timing.ledger.canDispatch||timing.ledger.complete);
-  return {preparationId:timing.preparationId,craftKey:steps.length===1?`bulk_${steps[0]!.craftKind}`:null,craftSteps:steps,facts,windows:timing.windows.map(window=>({...window,lineIds:window.lineId?[window.lineId]:timing.ledger.totals.map(line=>line.lineId)}))};
+  const positions=timing.evaluationRoute?(await db.query(`SELECT p.task_id,p.step_id,p.phase,p.route_position FROM digital_timeline_task_positions p
+   JOIN digital_production_task_access a USING(task_id) WHERE p.adoption_id=$1 AND p.route_ref=$2 AND a.production_order_id=$3`,[timing.evaluationRoute.adoptionId,timing.preparationId,orderId])).rows as Array<{task_id:string;step_id:string;phase:string;route_position:number}>:[];
+  const instances:FactorySlaInstance[]=(timing.evaluationRoute?.route??[]).flatMap(row=>row.stepId&&(row.phase==='logistics'||row.phase==='qc')?[{
+   nodeId:row.nodeId,stepId:row.stepId,phase:row.phase,routeRef:timing.preparationId,taskIds:positions.filter(position=>position.step_id===row.stepId&&position.phase===row.phase&&position.route_position===row.position).map(position=>position.task_id),lineIds:timing.ledger.totals.map(line=>line.lineId),snapshotId:timing.snapshotId,
+  }]:[]);
+  return {preparationId:timing.preparationId,craftKey:steps.length===1?`bulk_${steps[0]!.craftKind}`:null,craftSteps:steps,facts,evaluationRoute:timing.evaluationRoute,instances,windows:timing.windows.map(window=>({...window,lineIds:window.lineId?[window.lineId]:timing.ledger.totals.map(line=>line.lineId)}))};
  }
  const craft=(await db.query('SELECT secondary_craft FROM digital_factory_routes WHERE production_order_id=$1',[orderId])).rows[0].secondary_craft as string;
  const craftKey=craft==='无'?null:craft==='印花'?'bulk_printing':craft==='绣花'?'bulk_embroidery':'bulk_print_embroidery';
@@ -53,7 +64,8 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
   :timing.ledger.pendingSends.find(send=>send.factId===window.key)?.rows.map(line=>line.lineId)??[]}));
  return {preparationId:timing.preparationId,craftKey,facts,windows};
 }
-export function factoryEvaluationPlan(plan:SlaPlan,craftKey:string|null,steps?:readonly AdoptedCraftStep[]){
+export function factoryEvaluationPlan(plan:SlaPlan,craftKey:string|null,steps?:readonly AdoptedCraftStep[],frozen?:FactoryEvaluationRoute){
+ if(frozen)return factoryFrozenEvaluationPlan(plan,frozen,steps??[]);
  const copy=structuredClone(plan);
  if(steps?.length){
   for(const node of copy.nodes){

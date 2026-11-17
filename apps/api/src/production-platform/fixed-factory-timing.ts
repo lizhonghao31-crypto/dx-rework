@@ -9,6 +9,7 @@ import {firstContractBusinessReady} from './contract-business-ready.js';
 import {readFixedOrderRoute} from './fixed-order-route.js';
 import {orderTimePolicyHistory} from './order-time-native-timing.js';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import type {FactoryEvaluationRoute} from './factory-evaluation-route.js';
 
 const latest=(values:Array<Date|string|null|undefined>)=>values.length&&values.every(Boolean)?new Date(Math.max(...values.map(value=>new Date(value!).getTime()))).toISOString():null;
 
@@ -29,6 +30,9 @@ export function terminalDispatchObligations(ledger:Pick<ReturnType<typeof factor
 export async function fixedFactoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:string,row:{preparation_id:string;sla_snapshot_id:string;completed_at:Date|string|null;order_time_managed?:string},lines:FactoryScope[],facts:BatchFact[],checks:BatchCheck[]){
  const saved=await new FixedTimelineAdoptionRepository(db).existing({kind:'order',id:orderId});if(!saved)throw Error('本路线缺少原冻结计划');
  const scope=await readFixedOrderRoute(db,saved,row.preparation_id),workItems=[...(scope?.work??[]),...saved.input.work];
+ const evaluationRoute:FactoryEvaluationRoute={adoptionId:saved.adoptionId,routeRef:row.preparation_id,sourceRef:scope?.eventRef??saved.creationEventRef,
+  work:[...new Map([...saved.input.work,...(scope?.work??[])].map(work=>[work.id,work])).values()],route:scope?.route??saved.input.route??[],
+  replacedWorkIds:(saved.input.route??[]).filter(position=>position.phase==='logistics'||position.phase==='qc').map(position=>position.nodeId),groups:scope?.groups??[]};
  const steps=await fixedCraftSteps(db,row.preparation_id),stepLedger=steps.length?factoryStepLedger(lines,facts,checks,steps):null;
  const ledger=stepLedger??factoryBatchLedger(lines,facts,checks,true),warning=saved.input.unified.values.parameters.warning_ratio!.value;
  const ratio=warning.kind==='ratio'?warning.percent/100:0.7,windows:FactoryWindow[]=[];
@@ -52,7 +56,7 @@ export async function fixedFactoryBatchTiming(db:Pick<PoolClient,'query'>,orderI
   add(step.step.stepId,'process_logistics',route.find(position=>position.stepId===step.step.stepId&&position.phase==='logistics')!.nodeId,started,complete,complete?latest(own.filter(fact=>fact.kind==='工艺回仓').map(fact=>fact.occurred_at)):null,step.step.stepId);
   const returned=own.filter(fact=>fact.kind==='工艺回仓'),firstReturn=returned[0]?.occurred_at;
   const ownChecks=checks.filter(check=>returned.some(fact=>fact.fact_id===check.return_fact_id));
-  add(`${step.step.stepId}:qc`,'bulk_qc',`bulk_qc:${step.step.stepId}`,firstReturn?new Date(firstReturn).toISOString():null,complete,
+  add(`${step.step.stepId}:qc`,'bulk_qc',route.find(position=>position.stepId===step.step.stepId&&position.phase==='qc')!.nodeId,firstReturn?new Date(firstReturn).toISOString():null,complete,
    complete?latest(ownChecks.map(check=>check.checked_at)):null,step.step.stepId);
  }
  const contract=await firstContractBusinessReady(db,orderId);
@@ -66,5 +70,5 @@ export async function fixedFactoryBatchTiming(db:Pick<PoolClient,'query'>,orderI
   const dispatched=facts.filter(fact=>fact.kind==='仓库实际发厂'&&Array.isArray(fact.payload.lines)&&fact.payload.lines.some((scope:FactoryScope)=>scope.lineId===line.lineId));
   add(`dispatch:${line.lineId}`,'warehouse_dispatch','warehouse_dispatch',started,line.remaining===0,line.remaining===0?latest(dispatched.map(fact=>fact.occurred_at)):null,undefined,line.lineId);
  }
- return {routeSchemaVersion:2 as const,preparationId:row.preparation_id,snapshotId:row.sla_snapshot_id,warningRatio:ratio,windows,ledger,stepLedger};
+ return {routeSchemaVersion:2 as const,preparationId:row.preparation_id,snapshotId:row.sla_snapshot_id,warningRatio:ratio,windows,ledger,stepLedger,evaluationRoute};
 }

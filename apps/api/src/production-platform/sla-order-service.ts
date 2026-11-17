@@ -166,7 +166,7 @@ export class SlaOrderService {
         }
       }
       const bulkPlan=bulkEvaluationPlan(current.plan,preshrink,facts);
-      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(bulkPlan,factory.craftKey,'craftSteps'in factory?factory.craftSteps:undefined):bulkPlan, facts),rework.facts);
+      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(bulkPlan,factory.craftKey,'craftSteps'in factory?factory.craftSteps:undefined,'evaluationRoute'in factory?factory.evaluationRoute:undefined):bulkPlan, facts),rework.facts);
       const evaluated=evaluateSlaPlan(evaluationPlan,facts,time,options);
       // Display-only ranges must not enter strict before/after business comparisons.
       const nodes=options.mode==='read_projection'?attachFactoryLogisticsRanges(evaluated,evaluationPlan,
