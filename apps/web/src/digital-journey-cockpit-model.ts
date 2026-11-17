@@ -101,6 +101,8 @@ export function stageTimes(stage: OrderJourney["stages"][number]) {
 }
 export function stageStatus(stage: OrderJourney["stages"][number], asOf?: string): string {
   if (stage.state !== "completed") {
+    const unfinished=stage.nodes.filter(node=>node.current&&!["completed","inherited","cancelled","not_applicable"].includes(node.state));
+    if(unfinished.length&&unfinished.every(node=>nodeTerminationLabel(node)))return unfinished.some(node=>nodeTerminationLabel(node)!.includes('待核'))?'已终止 · 责任时间待核':'计时已终止';
     const overdue = stage.nodes.filter(node => node.current && node.risks.includes("overdue")).sort((a,b)=>(b.overdueSeconds??0)-(a.overdueSeconds??0))[0];
     return journeyStateLabels[stage.state] + (overdue ? " · " + nodeOverdue(overdue, asOf) : "");
   }
@@ -113,16 +115,18 @@ export function stageStatus(stage: OrderJourney["stages"][number], asOf?: string
 export function orderStatus(order: OrderJourney): string {
   if(order.display)return {closed:"已特殊结案",completed:"整单已完成",overdue:"逾期",due_soon:"临期",active:"进行中",not_started:"未启动",cancelled:"已取消"}[order.display.mainState];
   const nodes = order.stages.flatMap(stage => stage.nodes).filter(node => node.current);
-  if (nodes.some(node => (node.key === "special_closure" || node.key === "packing" && node.completesOrder !== false) && node.state === "completed")) return "整单已完成";
+  if (nodes.some(node => node.key === "packing" && node.completesOrder !== false && node.state === "completed")) return "整单已完成";
+  if (nodes.some(node => node.key === "special_closure" && node.state === "completed")) return "已特殊结案";
   if (nodes.some(node => node.state === "blocked")) return "受阻";
   if (nodes.some(node => ["active", "pending"].includes(node.state))) return "进行中";
   return "未启动";
 }
 /** One compact representative; every parallel node remains reachable in the detail work area. */
 export function representativeCockpitNodes(order:OrderJourney,filter:Partial<Pick<CockpitContext,'stage'|'node'|'state'|'risk'>>={}):JourneyNode[]{
+  if(order.display&&['closed','completed','cancelled'].includes(order.display.mainState))return [];
   const stages=new Map(order.stages.map((stage,index)=>[stage.key,index]));
   const nodeOrder=new Map(JOURNEY_NODES.map((node,index)=>[node.key,index]));
-  const candidates=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.stage!=="creation"&&!["completed","cancelled","inherited","not_applicable","unavailable"].includes(node.state)&&(!filter.stage||node.stage===filter.stage)&&(!filter.node||node.key===filter.node)&&(!filter.state||node.state===filter.state)&&(!filter.risk||node.risks.includes(filter.risk)));
+  const candidates=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!nodeTerminationLabel(node)&&node.stage!=="creation"&&!["completed","cancelled","inherited","not_applicable","unavailable"].includes(node.state)&&(!filter.stage||node.stage===filter.stage)&&(!filter.node||node.key===filter.node)&&(!filter.state||node.state===filter.state)&&(!filter.risk||node.risks.includes(filter.risk)));
   const working=candidates.filter(node=>["active","blocked"].includes(node.state)||node.risks.includes("overdue")||node.risks.includes("due_soon"));
   const rank=(node:JourneyNode)=>node.risks.includes("overdue")?0:node.risks.includes("due_soon")?1:2;
   const deadline=(node:JourneyNode)=>node.expectedAt?Date.parse(node.expectedPrecision==="date"?`${node.expectedAt}T00:00:00+08:00`:node.expectedAt):Infinity;
@@ -131,7 +135,7 @@ export function representativeCockpitNodes(order:OrderJourney,filter:Partial<Pic
   return !working.length&&!waiting.length?result.slice(0,1):result;
 }
 export function matchingNodes(order: OrderJourney, kpi: CockpitContext["kpi"]): JourneyNode[] {
-  const nodes = order.stages.flatMap(stage => stage.nodes);
+  const nodes = order.stages.flatMap(stage => stage.nodes).filter(node=>!nodeTerminationLabel(node));
   const ids = new Set(order.hitReasons.map(reason => reason.nodeId));
   const matched = nodes.filter(node => node.current && ids.has(node.instanceId));
   if (matched.length) return matched;
@@ -182,7 +186,7 @@ export function journeyDetailSelection(order: OrderJourney, context: CockpitCont
   const historicalRow = nodes.find(node => node.instanceId === context.row);
   const requested = (context.expanded ?? "").split(",").filter(key => order.stages.some(stage => stage.key === key));
   const current = nodes.filter(node => node.current && node.state !== "not_applicable");
-  const working = current.filter(node => node.state === "active" || node.state === "blocked");
+  const working = current.filter(node => !nodeTerminationLabel(node)&&(node.state === "active" || node.state === "blocked"));
   const completed = current.filter(node => node.state === "completed");
   const fallback = working[0] ?? current.find(node => node.state === "pending" && node.records.length > 0)
     ?? completed.at(-1) ?? current.find(node => node.state !== "unavailable");
@@ -191,7 +195,7 @@ export function journeyDetailSelection(order: OrderJourney, context: CockpitCont
     : context.round ? ["development"] : historicalRow ? [historicalRow.stage] : fallback ? [fallback.stage] : [];
   const inScope = nodes.filter(node => !stages.length || stages.includes(node.stage));
   const visible = inScope.filter(node => node.state !== "not_applicable" || node === explicitNode || node === historicalRow);
-  const selected = explicitNode ?? visible.find(node => node.current && ["active", "blocked"].includes(node.state))
+  const selected = explicitNode ?? visible.find(node => node.current && !nodeTerminationLabel(node) && ["active", "blocked"].includes(node.state))
     ?? visible.find(node => node.current && node.state === "pending" && node.records.length > 0)
     ?? visible.filter(node => node.current && node.state === "completed").at(-1)
     ?? visible.find(node => node.current && node.state !== "unavailable");

@@ -1,311 +1,288 @@
 {
   "version": 1,
-  "base": "b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772",
+  "base": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
   "risk": "full",
-  "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
+  "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
   "rules": [
     {
-      "rule": "Explicit manager intent introduces independent frozen new work through the existing original transaction",
-      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
-      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
-      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
-      "expectation": "No automatic plan from logistics or failed check; original P retained while new washing/check use their exact frozen duration and calendar. Same key replay and different-key competition append once; audit/plan rollback together and original rejection remains.",
+      "rule": "Current positive native receipt quantities define effective packing quality while original zero history remains readable",
+      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
+      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
+      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
       "writes": [
-        "apps/api/src/production-platform/bulk-washing-rework-source.ts",
-        "apps/api/src/production-platform/bulk-washing-rework-planning.ts",
-        "apps/api/src/production-platform/order-time-washing-rework.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-request-routes.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "packages/contracts/src/order-time-washing-rework.ts",
-        "packages/contracts/src/order-time-requests.ts",
-        "packages/contracts/package.json"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-framework.ts",
-        "apps/api/src/production-platform/order-time-framework-route.ts",
-        "apps/api/src/production-platform/order-time-request-repository.ts"
-      ],
-      "oldTests": [
-        "tests/unit/order-time-plan.test.ts",
-        "tests/unit/order-time-framework.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
-      ],
-      "checks": [
-        "pr5-unit",
-        "pr5-native-app",
-        "pr5-api-types"
-      ]
-    },
-    {
-      "rule": "Native logistics binds planned rewash without changing original failed facts or granting planning authority",
-      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
-      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
-      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
-      "expectation": "Reject wrong inspection, factory/PO/version, oversubscription, early historic occurrence and unauthorized arrangement; native real windows and original quality/receipts preserved. Legacy unplanned started history remains readable. Both original authenticated logistics routes save one exact command.",
-      "writes": [
-        "apps/api/src/production-platform/bulk-washing-rework-binding.ts",
-        "apps/api/src/production-platform/bulk-washing-service.ts",
-        "packages/contracts/src/bulk-washing.ts",
-        "apps/web/src/bulk-washing-panel.tsx"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/bulk-washing-ledger.ts",
-        "apps/web/src/bulk-washing-actions.ts"
-      ],
-      "oldTests": [
+        "apps/api/src/production-platform/packing-quality-coverage.ts",
+        "tests/unit/packing-quality-effective-receipts.test.ts",
         "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/unit/bulk-washing-ledger.test.ts",
-        "tests/unit/bulk-washing-actions.test.ts"
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
+      "reads": [
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/production-platform/bulk-washing-coverage.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/packing-readiness-evidence.ts"
+      ],
+      "oldTests": [
+        "tests/unit/packing-readiness-evidence.test.ts",
+        "tests/unit/packing-sla-evidence.test.ts",
+        "tests/integration/bulk-washing-postgres.test.ts"
+      ],
+      "expectation": "Original2 pieces genuinely washed and QCed before Root correction0; two new positive1-piece receipts independently QCed/washed and packed2. Raw receipt and old wash events retained; scalar/native qualified and effective packing both2, unknown positive coverage still rejected.",
       "checks": [
-        "pr5-unit",
-        "pr5-native-app",
-        "pr5-api-types",
-        "pr5-web-types"
+        "quality-unit",
+        "quality-native-app",
+        "quality-api-types"
       ]
     },
     {
-      "rule": "Read exact planned and historical rewash rounds without same-kind target overwrite or extra original quantity denominator",
-      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
-      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
-      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
-      "expectation": "Each exact new scope/work keeps own P/R/D/A; missing/other round facts not borrowed, original failed quality not erased, read does not append plan. Planned and unplanned history survive fact serialization and calculation version rebuild; no extra original garment progress unit.",
+      "rule": "Terminal proof governs current activity summaries without inventing completion or losing frozen responsibility",
+      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
+      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
+      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
       "writes": [
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/web/src/cockpit-home.tsx",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md"
+      ],
+      "reads": [
+        "apps/web/src/cockpit-node-summary.tsx",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts"
+      ],
+      "oldTests": [
+        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/m01-cockpit-workspace.test.ts",
+        "tests/unit/digital-journey-cockpit.test.ts"
+      ],
+      "expectation": "Original closure clock at13:00 and24h later retains240late with Aempty/raw unfinished state. Original App home shows special closure and no false running representative; exact original QC row remains readable as terminated. Mixed running/terminated scope not overgeneralized; progress-bar layout unchanged.",
+      "checks": [
+        "quality-unit",
+        "quality-home-consumers",
+        "quality-native-app",
+        "quality-web-types"
+      ]
+    },
+    {
+      "rule": "Stored Journey calculations rebuild for current effective quality and preserve exact craft and old-round facts",
+      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
+      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
+      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
+      "writes": [
         "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-time-framework.ts",
-        "apps/api/src/production-platform/journey-washing-projection.ts",
-        "apps/api/src/production-platform/journey-washing-rework-facts.ts",
-        "apps/api/src/production-platform/order-time-native-timing.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "tests/unit/journey-washing-projection.test.ts",
-        "tests/unit/order-time-reading.test.ts",
         "tests/integration/special-craft-native-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-washing-facts.ts",
-        "apps/api/src/production-platform/journey-visual-progress.ts"
+        "apps/api/src/production-platform/journey-fact-repository.ts"
       ],
       "oldTests": [
         "tests/unit/journey-fact-model.test.ts",
-        "tests/unit/journey-washing-facts.test.ts",
-        "tests/unit/order-time-reading.test.ts"
+        "tests/integration/special-craft-native-postgres.test.ts"
       ],
+      "expectation": "New calculation version prevents old stored zero-polluted quality snapshot reuse. Same current special-craft identities/rounds/native windows and explicitly inherited technical completion remain intact; no old fact rewriting or actual timestamp fabrication.",
       "checks": [
-        "pr5-unit",
-        "pr5-native-app",
-        "pr5-api-types"
+        "quality-unit",
+        "quality-native-facts",
+        "quality-api-types"
       ]
     },
     {
-      "rule": "Original manager page selects real rewash scope and quantity before logistics, retaining draft and feedback safety",
-      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization. Current reviewed Head4b9cb335 P2 4599799334/4599799341: clear only removed invalid quantity and restore an empty-input preview; authenticated native App red/green regression preserves real conflicts.",
-      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
-      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
-      "expectation": "Invalid or stale scope blocks submit and preserves draft; no caller duration or effective time, original preview/fingerprint/unknown receipt/conflict and permission remain. Desktop1165 and narrow390 original authenticated App proves one arrange then one assigned logistics start.",
+      "rule": "Exact canonical tests and shared native admission preserve original coverage, browser authentication and cleanup",
+      "source": "User authorized ongoing grouped SLA repairs and normal PR/Review/Full/merge; Dot isolated TEST-U4-NEG zero receipt and TEST-U7-LATE-1117-P01 special-closure observations, 2026-11-17. Original approved v27 termination and effective quality rules, not a new completion or quantity policy. No deployment/live data authorization.",
+      "initialization": "Actual release merge40db998e after #1018. Preserve all original receipt/QC/washing/packing and closure history. No data migration or backfill. Fact calculation v12 requires normal bounded native rebuild; old approved washing plan/rewash work identities unchanged.",
+      "dateAndPermission": "Read-only production behavior; original Root correction/closure and assigned native services used only in marked isolated fixtures. P/R/D/A, correction quantity version, business completion and frozen240-minute delay remain separate; unknown positive quality stays unknown. No role/permission changes.",
       "writes": [
-        "apps/web/src/order-time-request-page.tsx",
-        "apps/web/src/order-time-rewash-fields.tsx"
-      ],
-      "reads": [
-        "apps/web/src/order-time-washing-fields.tsx",
-        "apps/web/src/digital-production-api.ts",
-        "apps/web/src/use-digital-detail-navigation-guard.ts"
-      ],
-      "oldTests": [
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/unit/order-time-washing-rebase.test.ts"
-      ],
-      "checks": [
-        "pr5-unit",
-        "pr5-native-app",
-        "pr5-web-types"
-      ]
-    },
-    {
-      "rule": "Versioned stored rewash input extends the original check without rewriting old migrations, immutable history or privileges",
-      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization.",
-      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
-      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
-      "expectation": "Fresh lowpriv migrations accept original v1 and actual new input, reject unknown, empty, disguised or source-scoped new format. New current/history parser validates work/identity/terminal/introduced source; no old binary rollback after new format writes, use compatible fix. Ordinary business SQL only, no deployment executor changes.",
-      "writes": [
-        "apps/api/migrations/0295_order_time_rewash_input.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "scripts/migration-lib.mjs",
-        "scripts/migration-history-policy.mjs"
-      ],
-      "oldTests": [
-        "tests/unit/migration-history.test.ts",
-        "tests/unit/current-migration-manifest-checksum.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
-      ],
-      "checks": [
-        "pr5-native-app",
-        "pr5-unit",
-        "pr5-migrations"
-      ]
-    },
-    {
-      "rule": "Current canonical plan includes native and original App regressions plus existing affected bridges with unchanged assertions and isolation",
-      "source": "User-approved SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1 FIX12; v27 sections7.1/9.4/12.2 and Dot exact original arrange/confirm anchor proof, 2026-11-17 continuation with push/review/normal merge authorization. No deployment or live history authorization. Unique Light44086410970 failed missing time-site candidates. Three changed/new entries reviewed explicitly; old notes retained; exact original controller preflight38 now passes, Light not rerun.",
-      "initialization": "Actual release base b8733c5b9c2d47e42ff4e17b485c8cfeb7cf3772 after #1017. Original legacy snapshots and already-started unplanned rewash history remain; initial work, quantity and former windows never replaced. New marked lowpriv PG schema validates migration0295 and both format versions; no business data backfill.",
-      "dateAndPermission": "Original manager arrange permission, source/order/PO/factory/quantityVersion/inspection and stable intent checked; logistics only starts exact previously effective work. Original business clock separates arrangement time, P, native R/D, A and recorded audit. Unknown or historical unplanned A cannot fabricate P.",
-      "expectation": "New suites are genuine canonical entries under the original correctness budget and locked Chromium preparation. Exact profile expected sets gain both suites, no exemptions/skips/timeout raises. Shared helper preserves full original admission, known approval-time supplement, failed washing and lowpriv state for these regressions only.",
-      "writes": [
+        "tests/helpers/order-time-rewash-fixture.ts",
+        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/helpers/order-time-rewash-fixture.ts",
-        "tests/integration/order-time-washing-rework-postgres.test.ts",
-        "tests/integration/order-time-washing-rework-browser-postgres.test.ts",
-        "tests/unit/bulk-washing-rework-source.test.ts",
-        "tests/unit/bulk-washing-rework-planning.test.ts",
-        "tests/unit/journey-washing-rework.test.ts",
-        "tests/unit/order-time-rewash-input.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
       "reads": [
         "scripts/ci/prepare-settings-browser.mjs",
         "vitest.business-chain.config.ts",
         "tests/helpers/business-anchor-fixture.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "tests/acceptance/supplychain-settings-browser.ts"
       ],
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
+        "tests/integration/order-time-washing-rework-postgres.test.ts",
+        "tests/integration/order-time-washing-rework-browser-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
+      "expectation": "Extract only unchanged full native admission for both old and new fixtures; all original rewash plan and authenticated App cases retained. New original App suite genuinely mapped to finite long config/Chromium, required profile gains actual bulk-washing bridge; no skipped assertions, timeout increase, CI experiment or extra runner.",
       "checks": [
-        "pr5-unit",
-        "pr5-native-app",
-        "pr5-lint",
-        "pr5-protocol"
+        "quality-unit",
+        "quality-native-app",
+        "quality-native-facts",
+        "quality-protocol",
+        "quality-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pr5-lint",
+      "id": "quality-lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/bulk-washing-rework-binding.ts apps/api/src/production-platform/bulk-washing-rework-planning.ts apps/api/src/production-platform/bulk-washing-rework-source.ts apps/api/src/production-platform/bulk-washing-service.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-time-framework.ts apps/api/src/production-platform/journey-washing-projection.ts apps/api/src/production-platform/journey-washing-rework-facts.ts apps/api/src/production-platform/order-time-native-timing.ts apps/api/src/production-platform/order-time-operation-state.ts apps/api/src/production-platform/order-time-plan-repository.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/order-time-request-routes.ts apps/api/src/production-platform/order-time-request-service.ts apps/api/src/production-platform/order-time-washing-rework.ts apps/web/src/bulk-washing-panel.tsx apps/web/src/order-time-request-page.tsx apps/web/src/order-time-rewash-fields.tsx packages/contracts/src/bulk-washing.ts packages/contracts/src/order-time-requests.ts packages/contracts/src/order-time-washing-rework.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/helpers/order-time-rewash-fixture.ts tests/integration/order-time-washing-rework-browser-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts tests/unit/bulk-washing-rework-planning.test.ts tests/unit/bulk-washing-rework-source.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/order-time-reading.test.ts tests/unit/order-time-rewash-input.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/packing-quality-coverage.ts apps/web/src/cockpit-home.tsx apps/web/src/digital-journey-cockpit-model.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/helpers/order-time-rewash-fixture.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/packing-quality-effective-receipts.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4b9cb3359a34199cfba50855168af723675c9f29",
-      "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
-      "startedAt": "2026-11-17T12:57:47.385786+00:00",
-      "endedAt": "2026-11-17T12:57:50.289024+00:00",
-      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. All results bind the unchanged exact current source before and after execution.",
-      "log": "/workspace/sla-rp5-20261117/checks/rewash-current-all-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:55:26.085340+00:00",
+      "endedAt": "2026-11-17T13:55:30.218040+00:00",
+      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-lint/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
     },
     {
-      "id": "pr5-api-types",
+      "id": "quality-api-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4b9cb3359a34199cfba50855168af723675c9f29",
-      "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
-      "startedAt": "2026-11-17T12:54:37.507792+00:00",
-      "endedAt": "2026-11-17T12:55:08.245453+00:00",
-      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. All results bind the unchanged exact current source before and after execution.",
-      "log": "/workspace/sla-rp5-20261117/checks/rewash-review-final-api-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:55:26.003639+00:00",
+      "endedAt": "2026-11-17T13:55:58.084253+00:00",
+      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-api-types/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
     },
     {
-      "id": "pr5-web-types",
+      "id": "quality-web-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4b9cb3359a34199cfba50855168af723675c9f29",
-      "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
-      "startedAt": "2026-11-17T12:54:37.507782+00:00",
-      "endedAt": "2026-11-17T12:55:23.301349+00:00",
-      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. All results bind the unchanged exact current source before and after execution.",
-      "log": "/workspace/sla-rp5-20261117/checks/rewash-review-final-web-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:55:26.105560+00:00",
+      "endedAt": "2026-11-17T13:56:12.850864+00:00",
+      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-web-types/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
     },
     {
-      "id": "pr5-migrations",
+      "id": "quality-migrations",
       "kind": "command",
       "command": "node scripts/check-migrations.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4b9cb3359a34199cfba50855168af723675c9f29",
-      "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
-      "startedAt": "2026-11-17T12:55:02.386930+00:00",
-      "endedAt": "2026-11-17T12:55:02.550679+00:00",
-      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. All results bind the unchanged exact current source before and after execution.",
-      "log": "/workspace/sla-rp5-20261117/checks/rewash-review-final-migrations/command.log",
-      "logSha256": "508e2136e927a716e3ffa1c0090e819d8e8659862739dde352757fe03528fdf2"
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:55:49.937857+00:00",
+      "endedAt": "2026-11-17T13:55:50.090839+00:00",
+      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-migrations/command.log",
+      "logSha256": "508e2136e927a716e3ffa1c0090e819d8e8659862739dde352757fe03528fdf2",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract."
     },
     {
-      "id": "pr5-unit",
+      "id": "quality-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/bulk-washing-rework-source.test.ts tests/unit/bulk-washing-rework-planning.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/order-time-rewash-input.test.ts tests/unit/order-time-reading.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/bulk-washing-actions.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/bulk-washing-ledger.test.ts tests/unit/bulk-washing-windows.test.ts tests/unit/journey-washing-facts.test.ts tests/unit/order-time-washing.test.ts tests/unit/order-time-plan.test.ts tests/unit/order-time-framework.test.ts tests/unit/order-time-framework-facts.test.ts tests/unit/order-time-framework-submission.test.ts tests/unit/order-time-requests.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/migration-history.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp5-20261117/rewash-review-final-unit-results.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-quality-effective-receipts.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/journey-terminal-timing.test.ts tests/unit/journey-termination.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/packing-readiness-evidence.test.ts tests/unit/packing-sla-evidence.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/order-time-rewash-input.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/projection-ready-unit-results.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4b9cb3359a34199cfba50855168af723675c9f29",
-      "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
-      "startedAt": "2026-11-17T12:54:40.928276+00:00",
-      "endedAt": "2026-11-17T12:55:01.742994+00:00",
-      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. All results bind the unchanged exact current source before and after execution.",
-      "log": "/workspace/sla-rp5-20261117/checks/rewash-review-final-unit/command.log",
-      "logSha256": "f1a08ea3a2a07519ea311dac4b47c22bdb42cc3307b72ad60b75c9552149ad59",
-      "passed": 339,
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:55:30.988557+00:00",
+      "endedAt": "2026-11-17T13:55:49.408203+00:00",
+      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-unit/command.log",
+      "logSha256": "8f0ed145d1ac858c8026996a5e1865bfa6e9137785f5b6d09d60a5f5c4a0ec7e",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
+      "passed": 264,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f68ea55a924baab0d0bc10815db0cee2e2106906f088441d39376183d0ff7721"
+          "sha256": "e12b5ae0c358a46045f11ba84eba4615236fea3c1d854ad08f21a7712717dfdb"
         }
       ]
     },
     {
-      "id": "pr5-native-app",
+      "id": "quality-home-consumers",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-washing-rework-browser-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/bulk-washing-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp5-20261117/pg/rewash-review-native-app/tests.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/m01-cockpit-workspace.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/projection-ready-home-consumers-results.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4b9cb3359a34199cfba50855168af723675c9f29",
-      "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
-      "startedAt": "2026-11-17T12:54:08.964792+00:00",
-      "endedAt": "2026-11-17T12:56:36.383960+00:00",
-      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. All results bind the unchanged exact current source before and after execution.",
-      "log": "/workspace/sla-rp5-20261117/pg/rewash-review-native-app/tests.log",
-      "logSha256": "a5e365b8df619afa69a52c39cea3d3fec3b9ccfea5c705692b705d80dec110ce",
-      "passed": 46,
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:58:39.462953+00:00",
+      "endedAt": "2026-11-17T13:58:42.132601+00:00",
+      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-home-consumers/command.log",
+      "logSha256": "b6f7fa587ac7bd70195e52349850e5dce43a7cdef59c15b7bf6fd8a406ba0c60",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
+      "passed": 18,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "713e226640dc07a1fdbbd7705e28780a9be487511bc224a9b72864cf483cd46e"
+          "sha256": "85f31e4676996d0094a5198c852bf91e425d7926031ba24f9914366f13c617e3"
         }
       ]
     },
     {
-      "id": "pr5-protocol",
+      "id": "quality-native-app",
+      "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/bulk-washing-postgres.test.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts tests/integration/order-time-washing-rework-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/pg/quality-terminal-original-locks/tests.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:55:13.905333+00:00",
+      "endedAt": "2026-11-17T13:57:48.240002+00:00",
+      "log": "/workspace/sla-pr6-20261117/pg/quality-terminal-original-locks/tests.log",
+      "logSha256": "21fbde42b4c995c225bfc6c5a1e7c3695841a9deb81b6d093724efebdc208a84",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2f93a1f4df5672f2492e4bc5a7f290071e5c92aab43500a3195b61c078caa921"
+        }
+      ]
+    },
+    {
+      "id": "quality-native-facts",
+      "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/special-craft-native-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-pr6-20261117/pg/quality-cached-facts-special/tests.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:58:23.921999+00:00",
+      "endedAt": "2026-11-17T13:59:15.437224+00:00",
+      "log": "/workspace/sla-pr6-20261117/pg/quality-cached-facts-special/tests.log",
+      "logSha256": "8688a2661b1d8e472165f02e31b0c2069d49e8e4f2f858e964f30d8b9f4b4baf",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1d5624c06ccdf364b9ae7e5a5a3cb459f168b0eaa41d30c717a7478f51e15551"
+        }
+      ]
+    },
+    {
+      "id": "quality-protocol",
       "kind": "tests",
       "command": "node --test scripts/ci/pr-gate-controller.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4b9cb3359a34199cfba50855168af723675c9f29",
-      "sourceFingerprint": "c134ec5e2b591a475b1fdfa61c3a839c71b17408786bf14fd9faad061982138f",
-      "startedAt": "2026-11-17T12:57:50.576053+00:00",
-      "endedAt": "2026-11-17T12:57:51.265612+00:00",
-      "context": "Node22.22.2/npm10.9.9, original finite long correctness config and worker bounds. Native tests: fresh marked lowpriv PostgreSQL16.16, 2 CPU/4GiB container, owned stop/remove and absence proof; original App/AuthService with only named TEST external provider and transport adapters. No Acceptance/production database, CI experiments, timeout or assertion weakening. All results bind the unchanged exact current source before and after execution.",
-      "log": "/workspace/sla-rp5-20261117/checks/rewash-current-protocol/command.log",
-      "logSha256": "1f65e6d3afd3628b2e61db3e8cb239805619d43095edd89869dc5cb41436a8c1",
+      "testedHead": "40db998e8ed7f16e1d0cf999c2690521b31de9f8",
+      "sourceFingerprint": "f29dde218623294cbd7cfb2012f896def4b96c3219bd7d00094ea855c3990d62",
+      "startedAt": "2026-11-17T13:56:09.944013+00:00",
+      "endedAt": "2026-11-17T13:56:11.052943+00:00",
+      "log": "/workspace/sla-pr6-20261117/checks/projection-ready-protocol/command.log",
+      "logSha256": "82c7688957a5cc8b9ccb6dc7819449822c37141747bdb19172a46c0927b1787e",
+      "context": "Node22.22.2/npm10.9.9; unchanged original worker/correctness bounds. Native tests use newly marked lowpriv PostgreSQL16 owned container, 2 CPU/4GiB, actual stop/remove/absence evidence. Original authenticated App with named TEST provider/transport adapters only; no Acceptance/production DB, time threshold or business assertion weakening. Exact complete source matched before and after each command; docs excluded by original fingerprint contract.",
       "passed": 38,
       "failed": 0,
       "skipped": 0

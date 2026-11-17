@@ -29,7 +29,7 @@ export async function prepareRewashSettings(f:Awaited<ReturnType<typeof business
   await settings.save(f.root,{expectedVersion:current.version,values:prepareTimeFrameworkConfiguration(values)},randomUUID());
 
 }
-export async function failedFrameworkWashingFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,mode:'factory'|'after_receipt'){
+export async function admittedFrameworkProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>){
  const scene=await f.scene('2026-11-17T08:00:00.000Z');
  const native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
  const requests=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,native)),washing=new BulkWashingService(f.db),repo=new OrderTimePlanRepository(f.db);
@@ -64,6 +64,12 @@ export async function failedFrameworkWashingFixture(f:Awaited<ReturnType<typeof 
    const comment=sheet.comments.find(row=>row.isFinal&&row.decision==='approved')!;
    if(comment&&!comment.occurredAt)await technical.supplementCommentTime(f.root,ready.sourceId,{commentId:comment.commentId,commentVersion:comment.version,
     actualTime:{precision:'instant',at:'2026-11-17T08:00:00.000Z'},note:'TEST known original fixture approval occurrence'},randomUUID());
+   return {scene,orderId,lineId,sourceId:source.sourceId,ready,requests,washing,repo,resource,command};
+ });
+}
+export async function failedFrameworkWashingFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,mode:'factory'|'after_receipt'){
+ const {scene,orderId,lineId,ready,requests,washing,repo,resource,command}=await admittedFrameworkProductionFixture(f);
+ return f.runtime.run(scene,f.root,async()=>{
    const duration={minutes:60,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
    const document:BulkWashingAdoption={arrangement:{mode,reference:'TEST frozen original washing',revision:1,accounting:mode==='factory'?'included_in_factory':'additional',washing:duration,inspection:duration},
     staff:{logisticsId:f.people['embroidery-washing-merchandiser']!.actorId,inspectorId:f.people.qc!.actorId},fee:{kind:'pending'},sourceRef:'TEST original manager adoption'};
