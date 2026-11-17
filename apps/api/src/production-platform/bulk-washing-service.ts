@@ -1,3 +1,4 @@
+import {assertWashingReworkBinding,attachWashingReworkPlans} from './bulk-washing-rework-binding.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {BulkWashingCommandSchema,type BulkWashingCommand,type BulkWashingSheet,type BulkWashingScopeView} from '@dx-rework/contracts/bulk-washing';
@@ -75,6 +76,7 @@ export class BulkWashingService{
  async read(actor:TrustedActorContext,orderId:string){
   const db=await this.pool.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.authorizeRead(db,actor,orderId);
    const result=await readBulkWashing(db,orderId,actor);if(!await washingOrderActive(db,orderId))for(const scope of result.scopes)scope.canLogistics=scope.canInspect=scope.canCorrect=false;
+   if(result.scopes.some(scope=>(scope.ledger.rework?.available.length??0)>0||(scope.ledger.rework?.sent??0)>0)){const {OrderTimePlanRepository}=await import('./order-time-plan-repository.js');attachWashingReworkPlans(result,await new OrderTimePlanRepository(db).current({kind:'order',id:orderId}));}
    await db.query('COMMIT');return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
@@ -92,6 +94,7 @@ export class BulkWashingService{
    const state=await readBulkWashing(db,orderId,actor),scope=state.scopes.find(s=>s.scopeId===input.scopeId);
    if(!scope||scope.planId!==input.planId||scope.quantityVersion!==input.quantityVersion||scope.revision!==input.expectedRevision)washingConflict('洗水范围、数量或安排已变化，请刷新核对');
    const own=scope!,events=await washingEvents(db,orderId),id=randomUUID();
+   if((input.kind==='send'||input.kind==='factory_start')&&(input.reworkOfInspectionId||input.rewashWorkId)){const {OrderTimePlanRepository}=await import('./order-time-plan-repository.js');assertWashingReworkBinding(await new OrderTimePlanRepository(db).current({kind:'order',id:orderId}),own,input);}
    if(input.occurredAt&&Date.parse(input.occurredAt)>businessNow().getTime())washingConflict('实际发生时间不能晚于当前时间');
    if(input.kind!=='void'&&input.occurredAt&&own.availableAt&&Date.parse(input.occurredAt)<Date.parse(own.availableAt))washingConflict('实际发生时间早于本批可办理范围');
    if(input.kind==='inspection'&&input.qualifiedQuantity<input.quantity&&!input.note.trim())washingConflict('洗后不合格须说明质量问题');

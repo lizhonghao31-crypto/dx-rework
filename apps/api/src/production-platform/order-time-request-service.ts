@@ -1,3 +1,4 @@
+import type {OrderTimeWashingReworkChanges} from '@dx-rework/contracts/order-time-washing-rework';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
@@ -43,22 +44,22 @@ export class OrderTimeRequestService{
   else if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,actor.actorId===row!.designer_id?'sample_designer':'order_merchandiser'))digitalForbidden();
   return row!;
  }
- private async result(db:PoolClient,actor:TrustedActorContext,row:OrderTimeRequestRow,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[]):Promise<OrderTimeRequestRead>{
+ private async result(db:PoolClient,actor:TrustedActorContext,row:OrderTimeRequestRow,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[],rewashing:OrderTimeWashingReworkChanges=[]):Promise<OrderTimeRequestRead>{
   // Publication can consume a revision draft or create a new native source.
   // Its receipt must read the committed result, not require the old draft again.
   const target=row.state==='applied'&&row.applied_plan_id?(await db.query('SELECT resource_kind,source_id,production_order_id FROM digital_order_time_plan_versions WHERE plan_version_id=$1',[row.applied_plan_id])).rows[0]:null;
   const operation:OrderTimeOperation=target?{kind:'arrangement',resource:{kind:target.resource_kind,id:target.resource_kind==='source'?target.source_id:target.production_order_id}}:await currentOrderTimeOperation(db,row.operation_json);
-  const state=await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes,washing);
+  const state=await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes,washing,rewashing);
   return {requestId:row.request_id,version:row.version,state:row.state,operation,requestedBy:{id:row.requested_by,name:row.requested_name??null},designerId:row.designer_id,reason:row.reason,returnReason:row.return_reason,
    appliedBy:row.applied_by?{id:row.applied_by,name:row.applied_name??null}:null,result:row.state==='applied'?{orderId:row.result_order_id,lateMinutes:row.result_late_minutes===null?null:Number(row.result_late_minutes)}:null,
    check:state.check,canWithdraw:actor.actorId===row.designer_id&&['pending','returned'].includes(row.state)};
  }
- check(actor:TrustedActorContext,raw:unknown,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[]){const operation=OrderTimeOperationSchema.parse(raw);return this.transaction(false,async db=>(await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes,washing)).check);}
- read(actor:TrustedActorContext,id:string,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[]){return this.transaction(false,async db=>this.result(db,actor,await this.visible(db,actor,id),changes,washing));}
+ check(actor:TrustedActorContext,raw:unknown,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[],rewashing:OrderTimeWashingReworkChanges=[]){const operation=OrderTimeOperationSchema.parse(raw);return this.transaction(false,async db=>(await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes,washing,rewashing)).check);}
+ read(actor:TrustedActorContext,id:string,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[],rewashing:OrderTimeWashingReworkChanges=[]){return this.transaction(false,async db=>this.result(db,actor,await this.visible(db,actor,id),changes,washing,rewashing));}
  arrange(actor:TrustedActorContext,raw:unknown,key:string){const input=OrderTimeArrangementSchema.parse(raw);return this.transaction(true,async db=>{
   await assertSlaSettingsActor(db,actor,true);const repo=new OrderTimeRequestRepository(db);
   return repo.receipt(actor.actorId,'arrange:'+input.resource.kind+':'+input.resource.id,key,input,async()=>{
-   const operation:OrderTimeOperation={kind:'arrangement',resource:input.resource},time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides,input.washing);
+   const operation:OrderTimeOperation={kind:'arrangement',resource:input.resource},time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides,input.washing,input.rewashing);
    const subject=(await db.query(`SELECT effective FROM digital_order_time_subjects WHERE resource_kind=$1 AND ${input.resource.kind==='source'?'source_id':'production_order_id'}=$2`,[input.resource.kind,input.resource.id])).rows[0];
    if(subject&&!subject.effective)conflict('ORDER_TIME_REQUEST_REQUIRED','新订单尚未生效，请从设计师原申请接续办理');
    if(input.fingerprint!==state.check.fingerprint)conflict('ORDER_TIME_STALE','原单资料已更新，本次调整已保留，请重新核对后提交');
@@ -101,7 +102,7 @@ export class OrderTimeRequestService{
   await assertSlaSettingsActor(db,actor,true);const row=await this.visible(db,actor,id,true),repo=new OrderTimeRequestRepository(db);
   return repo.receipt(actor.actorId,'apply:'+id,key,input,async()=>{
    if(row.version!==input.expectedVersion||row.state!=='pending')conflict('ORDER_TIME_STALE','申请已由其他人处理或更新，请刷新查看结果');
-   const operation=await currentOrderTimeOperation(db,row.operation_json),time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides,input.washing);
+   const operation=await currentOrderTimeOperation(db,row.operation_json),time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides,input.washing,input.rewashing);
    if(input.fingerprint!==state.check.fingerprint)conflict('ORDER_TIME_STALE','原单资料已更新，本次调整已保留，请重新核对后提交');
    if(state.check.feasibility==='unknown')conflict('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请先补齐本单适用流程及必要时间');
    if(state.check.feasibility==='insufficient'&&!input.acceptLate)conflict('ORDER_TIME_LATE_CONFIRMATION',orderTimeGapText(state.check));

@@ -1,3 +1,5 @@
+import {OrderTimeRewashFields} from './order-time-rewash-fields.js';
+import type {OrderTimeWashingReworkChanges} from '@dx-rework/contracts/order-time-washing-rework';
 import {JOURNEY_STAGES} from '@dx-rework/contracts/digital-production-journey';
 import {OrderTimeWashingFields} from './order-time-washing-fields.js';
 import {rebaseWashingChanges} from './order-time-washing-rebase.js';
@@ -23,11 +25,13 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
  const [request,setRequest]=useState<OrderTimeRequestRead|null>(null),[check,setCheck]=useState<OrderTimeCheckResult|null>(null),[original,setOriginal]=useState<OrderTimeCheckResult|null>(null),[overrides,setOverrides]=useState<Record<string,OrderTimeRule>>({}),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[previewing,setPreviewing]=useState(false),[uncertain,setUncertain]=useState(false);
  const [selectedStage,setSelectedStage]=useState<number|null>(null);
  const [conflict,setConflict]=useState('');
+ const [rewashing,setRewashing]=useState<OrderTimeWashingReworkChanges>([]),[rewashInvalid,setRewashInvalid]=useState(false);
  const [washing,setWashing]=useState<OrderTimeWashingChanges>([]),[washingInvalid,setWashingInvalid]=useState(false),[washingReset,setWashingReset]=useState(0),[washingRebase,setWashingRebase]=useState(0);
  const [invalid,setInvalid]=useState<Record<string,boolean>>({}),[readRevision,setReadRevision]=useState(0);
- const live=useRef(true),generation=useRef(0),pending=useRef<Pending|null>(null),writing=useRef(false),navigation=useRef(false),currentChanges=useRef({overrides,washing});currentChanges.current={overrides,washing};
+ const emptyChanges=JSON.stringify({overrides:{},washing:[],rewashing:[]}),previewedChanges=useRef(emptyChanges);
+ const live=useRef(true),generation=useRef(0),pending=useRef<Pending|null>(null),writing=useRef(false),navigation=useRef(false),currentChanges=useRef({overrides,washing,rewashing});currentChanges.current={overrides,washing,rewashing};
  const operation:OrderTimeOperation|undefined=request?.operation??(resource?{kind:'arrangement',resource}:undefined),requestBase=requestId?'order-time/requests/'+requestId:null;
- const ordinaryInvalid=Object.values(invalid).some(Boolean),dirty=Object.keys(overrides).length>0||washing.length>0||washingInvalid||ordinaryInvalid,editable=Boolean(check?.canApply&&(!request||request.state==='pending'));
+ const ordinaryInvalid=Object.values(invalid).some(Boolean),dirty=Object.keys(overrides).length>0||washing.length>0||rewashing.length>0||washingInvalid||rewashInvalid||ordinaryInvalid,editable=Boolean(check?.canApply&&(!request||request.state==='pending'));
  useDigitalDetailNavigationGuard(dirty||uncertain,busy,navigation,uncertain?'上次提交结果还没核对，是否离开本单？':'本单时效还没提交，是否离开？');
  useEffect(()=>{live.current=true;return()=>{live.current=false;generation.current++;};},[]);
  const load=async(acknowledgeConflict=false)=>{
@@ -36,21 +40,22 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
    const value=next?.check??OrderTimeCheckResultSchema.parse(await digitalRequest('order-time/check','POST',{operation:{kind:'arrangement',resource}}));
    if(!live.current||turn!==generation.current)return;
    const adoptedChanges=acknowledgeConflict?rebaseWashingChanges(original?.washing,currentChanges.current.washing,value.washing):null;
-   setRequest(next);setCheck(value);setOriginal(before=>acknowledgeConflict?value:before??value);setReadRevision(before=>before+1);
+   previewedChanges.current=emptyChanges;setRequest(next);setCheck(value);setOriginal(before=>acknowledgeConflict?value:before??value);setReadRevision(before=>before+1);
    if(acknowledgeConflict){if(adoptedChanges)setWashing(adoptedChanges);setWashingRebase(value=>value+1);setPreviewing(dirty);setConflict('');setNotice('');}
   }catch(value){if(live.current&&turn===generation.current)setError(value instanceof Error?value.message:'本单时效读取失败');}
  };
  useEffect(()=>{void load();},[requestId,resource?.kind,resource?.id]);
  useEffect(()=>{
-  if(!operation||!check||!dirty||uncertain||washingInvalid||ordinaryInvalid){setPreviewing(false);return;}
-  const turn=++generation.current,signature=JSON.stringify({overrides,washing});setPreviewing(true);
-  const timer=window.setTimeout(()=>{void (requestBase?digitalRequest(requestBase+'/preview','POST',{overrides,washing}):digitalRequest('order-time/preview','POST',{operation,overrides,washing})).then(value=>{
+  const signature=JSON.stringify({overrides,washing,rewashing});
+  if(!operation||!check||(!dirty&&previewedChanges.current===signature)||uncertain||washingInvalid||rewashInvalid||ordinaryInvalid){setPreviewing(false);return;}
+  const turn=++generation.current;setPreviewing(true);
+  const timer=window.setTimeout(()=>{void (requestBase?digitalRequest(requestBase+'/preview','POST',{overrides,washing,rewashing}):digitalRequest('order-time/preview','POST',{operation,overrides,washing,rewashing})).then(value=>{
    const next=requestBase?OrderTimeRequestReadSchema.parse(value):null,result=next?.check??OrderTimeCheckResultSchema.parse(value);
    if(!live.current||turn!==generation.current||signature!==JSON.stringify(currentChanges.current))return;
-   if(next)setRequest(next);setCheck(result);setError('');
+   previewedChanges.current=signature;if(next)setRequest(next);setCheck(result);setError('');
   }).catch(value=>{if(live.current&&turn===generation.current)setError(value instanceof Error?value.message:'演算未完成，本次输入保留');}).finally(()=>{if(live.current&&turn===generation.current)setPreviewing(false);});},200);
   return()=>{window.clearTimeout(timer);generation.current++;};
- },[overrides,washing,washingInvalid,ordinaryInvalid,requestBase,operation?.kind,uncertain,readRevision]);
+ },[overrides,washing,rewashing,rewashInvalid,washingInvalid,ordinaryInvalid,requestBase,operation?.kind,uncertain,readRevision]);
  const write=async(path:string,body:unknown)=>{
   if(writing.current||conflict)return;writing.current=true;setBusy(true);setError('');setNotice('');pending.current??={path,body:structuredClone(body),key:createClientRequestId()};
   const command=pending.current;
@@ -60,7 +65,7 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
     const value=response as {saved?:boolean;check?:unknown};if(value.saved!==true)throw new Error('未收到完整生效回执，请核对上次提交');
     if(live.current){const saved=OrderTimeCheckResultSchema.parse(value.check);setCheck(saved);setOriginal(saved);setNotice('本单新安排已生效。');}
    }else{const value=OrderTimeRequestReadSchema.parse(response);if(live.current){setRequest(value);setCheck(value.check);setOriginal(value.check);setNotice(value.state==='applied'?'本单安排已生效，设计师无需再次确认。':'已保存本次处理。');}}
-   pending.current=null;if(live.current){setUncertain(false);setOverrides({});setWashing([]);setWashingInvalid(false);setWashingReset(value=>value+1);}window.dispatchEvent(new Event('dx-rework:todo-refresh'));
+   pending.current=null;previewedChanges.current=emptyChanges;if(live.current){setUncertain(false);setOverrides({});setWashing([]);setWashingInvalid(false);setRewashing([]);setRewashInvalid(false);setWashingReset(value=>value+1);}window.dispatchEvent(new Event('dx-rework:todo-refresh'));
   }catch(value){
    if(live.current)setError(value instanceof Error?value.message:'本次提交未完成');
    if(value instanceof DigitalRequestError&&!value.resultUnknown){pending.current=null;if(live.current)setUncertain(false);
@@ -69,10 +74,10 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
   }finally{writing.current=false;if(live.current)setBusy(false);}
  };
  const submit=async()=>{
-  if(!check||!editable||previewing||uncertain||error||conflict||washingInvalid||Object.values(invalid).some(Boolean)||check.feasibility==='unknown')return;
+  if(!check||!editable||previewing||uncertain||error||conflict||washingInvalid||rewashInvalid||Object.values(invalid).some(Boolean)||check.feasibility==='unknown')return;
   const acceptLate=check.feasibility==='insufficient';
   if(acceptLate&&!await confirmInApp(orderTimeGapText(check)+'\n确认后直接生效，交期风险仍保留。',{title:'提交本单时效',confirmLabel:'确认',cancelLabel:'取消',className:'r5-time-late-confirmation'}))return;
-  await write(requestBase?requestBase+'/apply':'order-time/arrange',{...(request?{expectedVersion:request.version}:{resource}),fingerprint:check.fingerprint,overrides,washing,acceptLate});
+  await write(requestBase?requestBase+'/apply':'order-time/arrange',{...(request?{expectedVersion:request.version}:{resource}),fingerprint:check.fingerprint,overrides,washing,rewashing,acceptLate});
  };
  const close=async(action:'return'|'withdraw')=>{
   if(!request||!requestBase||busy||uncertain)return;
@@ -97,11 +102,13 @@ export function OrderTimeRequestPage({requestId,resource,onClose}:{requestId?:st
   {uncertain&&<p role="status">上次提交结果待核对，原内容已保留。<Button disabled={busy} onClick={()=>pending.current&&void write(pending.current.path,pending.current.body)}>核对上次提交结果</Button></p>}
   {check.washing&&<OrderTimeWashingFields key={washingReset} rows={check.washing} rebaseRevision={washingRebase} plan={check.plan} disabled={disabled} onChange={value=>{if(!equal(value,currentChanges.current.washing))setNotice('');setWashing(value);setError('');}} onInvalid={bad=>{if(bad)setNotice('');setWashingInvalid(bad);}}/>}
   {washingInvalid&&<p role="alert">请补齐洗水用时和办理人员。</p>}
+  {editable&&check.rewashing&&<OrderTimeRewashFields key={`rewash:${washingReset}`} rows={check.rewashing} value={rewashing} disabled={disabled} onChange={next=>{setRewashing(next);setNotice('');setError('');}} onInvalid={setRewashInvalid}/>}
+  {rewashInvalid&&<p role="alert">请填写有效的本轮返洗计划数量。</p>}
   <div className="r5-time-layout"><div className="r5-time-table"><nav className="r5-time-stage-tabs" aria-label="本单时效阶段">{stages.map(stage=><button type="button" key={stage.key} aria-pressed={activeStage===stage.number} onClick={()=>setSelectedStage(stage.number)}>{stage.label}</button>)}</nav><table><thead><tr><th>适用节点</th><th>原用时</th><th>本次用时</th><th>哪些天计时</th><th>提醒</th></tr></thead><tbody>{visibleRows.map(row=>{
    const rule=overrides[row.parameterKey]??row.rule,baseline=original?.rows.find(old=>old.parameterKey===row.parameterKey)?.rule??row.rule;
    return <tr key={row.parameterKey}><th>{row.label}{row.begun?<small>已开始，保留原责任窗口</small>:row.preserveBegun?<small>已开始部分保留原时效</small>:null}</th><td>{baseline?nodeTimeText(baseline,row.parameterKey):'还没设置'}</td>{rule?<RuleFields key={row.parameterKey} label={row.label} value={rule} disabled={disabled||row.begun} onInvalid={bad=>{if(bad)setNotice('');setInvalid(before=>before[row.parameterKey]===bad?before:{...before,[row.parameterKey]:bad});}} onChange={value=>{setNotice('');setOverrides(before=>({...before,[row.parameterKey]:value}));setError('');}}/>:<td colSpan={3}>还没设置</td>}</tr>;
   })}</tbody></table></div><aside className="r5-time-changes"><h2>变动明细</h2>{check.factoryCommitments?.map(row=><p key={row.lineId}><span>{row.label} 工厂交货 {row.date}</span><strong>计划回货 {row.plannedReceipt?date(row.plannedReceipt):'待核实'}{row.status==='insufficient'&&' · 超出承诺'}</strong></p>)}{changes.map(row=><p key={row.parameterKey}><span>{row.label}</span><strong>{row.rule?nodeTimeText(original?.rows.find(old=>old.parameterKey===row.parameterKey)?.rule??row.rule):'未设置'} → {nodeTimeText(overrides[row.parameterKey]!)}</strong></p>)}<p><span>原方案</span><strong>{timeText(original?.requiredMinutes??null)} → 本次{timeText(check.requiredMinutes)}</strong></p><p><span>{check.forecastQuality==='lower_bound'?'完成下界':'按当前安排'}</span><strong>{date(check.expectedEnd)}</strong></p></aside></div>
-  <footer className="r5-time-actions"><div>{request?.canWithdraw&&<Button disabled={busy||uncertain} onClick={()=>void close('withdraw')}>撤回申请</Button>}{editable&&request&&<Button disabled={busy||uncertain} onClick={()=>void close('return')}>退回设计师</Button>}</div><div>{editable&&<><Button disabled={disabled} onClick={()=>{setNotice('');setOverrides(Object.fromEntries(rows.filter(row=>!row.begun&&row.originalRule).map(row=>[row.parameterKey,row.originalRule!])));}}>恢复标准</Button><Button variant="primary" disabled={disabled||previewing||Boolean(error)||Boolean(conflict)||washingInvalid||Object.values(invalid).some(Boolean)||check.feasibility==='unknown'} onClick={()=>void submit()}>提交</Button></>}{request&&check.canRequest&&['needs_designer','returned','withdrawn'].includes(request.state)&&<Button variant="primary" disabled={busy||uncertain} onClick={()=>void resubmit()}>提交时效调整申请</Button>}</div></footer>
+  <footer className="r5-time-actions"><div>{request?.canWithdraw&&<Button disabled={busy||uncertain} onClick={()=>void close('withdraw')}>撤回申请</Button>}{editable&&request&&<Button disabled={busy||uncertain} onClick={()=>void close('return')}>退回设计师</Button>}</div><div>{editable&&<><Button disabled={disabled} onClick={()=>{setNotice('');setOverrides(Object.fromEntries(rows.filter(row=>!row.begun&&row.originalRule).map(row=>[row.parameterKey,row.originalRule!])));}}>恢复标准</Button><Button variant="primary" disabled={disabled||previewing||Boolean(error)||Boolean(conflict)||washingInvalid||rewashInvalid||Object.values(invalid).some(Boolean)||check.feasibility==='unknown'} onClick={()=>void submit()}>提交</Button></>}{request&&check.canRequest&&['needs_designer','returned','withdrawn'].includes(request.state)&&<Button variant="primary" disabled={busy||uncertain} onClick={()=>void resubmit()}>提交时效调整申请</Button>}</div></footer>
  </section>;
 }
 

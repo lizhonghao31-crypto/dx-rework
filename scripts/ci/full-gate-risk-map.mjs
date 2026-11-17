@@ -197,6 +197,8 @@ export const SLA_JOURNEY_SUPPORT_PATHS = Object.freeze([
   "tests/unit/sla-native-window-projection.test.ts"
 ]);
 export const SLA_JOURNEY_REQUIRED_TESTS = Object.freeze([
+  "tests/integration/order-time-washing-rework-postgres.test.ts",
+  "tests/integration/order-time-washing-rework-browser-postgres.test.ts",
   "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   "tests/integration/development-responsibility-postgres.test.ts",
   "tests/integration/development-round-history-clock-postgres.test.ts",
@@ -369,6 +371,7 @@ export const classifyFullGatePaths = (inputPaths) => {
   const independentTestOnly = independentTestOnlyChange(paths);
   let chainProfile = "full";
   const mappedTests = new Set();
+  if(paths.some(path=>/washing-rework|order-time-rewash|0295_order_time_rewash_input/.test(path)||/^apps\/api\/src\/production-platform\/(?:bulk-washing-service|order-time-(?:plan-repository|operation-state|request-(?:service|routes)|reading|native-timing)|fixed-schedule-(?:basis|progress)|journey-time-framework)\.ts$/.test(path)))addAll(mappedTests,['tests/integration/order-time-washing-rework-postgres.test.ts','tests/integration/order-time-washing-rework-browser-postgres.test.ts']);
   if(paths.some(path=>/factory-(?:task-completion|completion-occurrence)|production-facts-consistency|receiving-(?:service|routes|board-edit-session)|order-board-page|0294_receiving_correction_provenance/.test(path)))addAll(mappedTests,['tests/integration/production-facts-consistency-postgres.test.ts','tests/integration/receiving-postgres.test.ts','tests/integration/receiving-board-native-browser-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts']);
   if(paths.some(path=>/development-responsibility|order-time-native-timing|order-time-reading|development-sla-evidence|journey-task-summary|task-service|digital-production-tasks-panel/.test(path)))addAll(mappedTests,['tests/integration/development-responsibility-postgres.test.ts','tests/integration/development-execution-read-native-browser-postgres.test.ts','tests/integration/digital-production-tasks-postgres.test.ts']);
   if(paths.some(path=>/^apps\/web\/src\/(?:document-upload-previews|digital-development-execution-panel|development-external-pattern|development-result-upload|task-workbench-sample)\.tsx$/.test(path)))addAll(mappedTests,['tests/integration/development-execution-read-native-browser-postgres.test.ts','tests/integration/digital-development-execution-postgres.test.ts','tests/integration/development-technical-postgres.test.ts']);

@@ -7,6 +7,8 @@ import {JOURNEY_STAGES,type JourneyNode,type OrderJourney} from '@dx-rework/cont
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import type {ScheduleOccurrence} from '@dx-rework/contracts';
 import type {StoredOrderTimePlan} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {preparedStoredRewash} from '../../apps/api/src/production-platform/order-time-washing-rework.js';
+import type {OrderTimeWashingReworkPlan} from '@dx-rework/contracts/order-time-washing-rework';
 import {orderTimeReadingBasis,attachOrderTimeCoverage} from '../../apps/api/src/production-platform/order-time-reading.js';
 import {evaluateOrderTimeScenario} from '../../apps/api/src/production-platform/order-time-schedule.js';
 import {evaluateFixedJourneyBasis,attachFixedJourneySchedule,fixedScheduleBasisSnapshot,nextFixedScheduleClassification,type FixedScheduleBasis} from '../../apps/api/src/production-platform/fixed-schedule-basis.js';
@@ -32,6 +34,25 @@ function stored():StoredOrderTimePlan{
 }
 const evidence=()=>({tasks:[],readiness:new Map(),cutting:[],cutCompletions:[]});
 const build=(saved=stored(),row=item(),old:FixedScheduleBasis|null=null)=>orderTimeReadingBasis(saved,resource,row,{},evidence(),old);
+it('reads a formally arranged rewash with its real budget and frozen policy while preserving the shared round marker',()=>{
+ const saved=stored(),view=item(),id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+ const nativePolicy={minutes:120,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
+ const rewash:OrderTimeWashingReworkPlan={intentId:id(1),orderId:id(2),lineId:id(3),scopeId:'receipt:'+id(4),factoryDecisionId:null,
+  quantityVersion:'TEST original quantity',inspectionId:id(5),quantity:1,planId:id(6),round:1,inspectionAt:at(0),introducedAt:at(1),introducedEventRef:'audit_events:'+id(7),
+  arrangement:{mode:'after_receipt',reference:'TEST captured original policy',revision:1,accounting:'additional',washing:nativePolicy,inspection:{...nativePolicy,minutes:60}}};
+ const prepared=preparedStoredRewash(rewash),goal={precision:'instant' as const,value:at(12),source:'TEST original goal'},template=structuredClone(saved.targets['TEST scope']!.a!);
+ saved.resource={kind:'order',id:rewash.orderId};saved.input.version='order-time-input-rewash-v1';saved.input.work=prepared.work;saved.input.rewashing=[rewash];
+ saved.input.plan.company.nodes.bulk_return_washing=duration(100);
+ saved.input.scopes=[{scopeRef:'TEST scope',lineId:rewash.lineId,terminalIds:[prepared.requiredForDelivery],customerGoalIds:[prepared.requiredForDelivery],customerGoal:goal,goals:{[prepared.requiredForDelivery]:goal}}];
+ saved.targets={'TEST scope':Object.fromEntries(prepared.work.map((work,index)=>[work.id,{...structuredClone(template),id:work.id,start:{...template.start,at:at(index?3:1)},end:{...template.end,at:at(index?4:3)}}]))};
+ view.orderId=rewash.orderId;view.asOf=at(2);
+ const proof={...evidence(),washing:Object.fromEntries(prepared.work.map(work=>[work.id,{ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,notYetReady:true,evidenceRefs:['TEST exact new work']}]))};
+ const basis=orderTimeReadingBasis(saved,saved.resource,view,{},proof,null),work=basis.scopes[0]!.work;
+ expect(work).toMatchObject([{accountingRole:'original_work',rewashRound:1,minutes:120,responsibilityMinutes:120,start:at(1),end:at(3)},
+  {accountingRole:'original_work',rewashRound:1,minutes:60,responsibilityMinutes:60,start:at(3),end:at(4)}]);
+ expect(fixedScheduleBasisSnapshot(basis).scopes[0]!.work.map(work=>work.rewashRound)).toEqual([1,1]);
+ expect(evaluateFixedJourneyBasis(basis,at(2),false).scopes[0]!.nodes.find(work=>work.id===prepared.requiredForDelivery)!.goalDelta.targetAt).toBe(at(4));
+});
 describe('R5 exact frozen order-time reading and independent visible endpoints',()=>{
  it('retains completed deviation against the occurrence-time version while exposing the later current arrangement',()=>{
   const original=stored(),changed=structuredClone(original),row=item();

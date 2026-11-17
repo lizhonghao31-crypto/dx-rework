@@ -6,6 +6,16 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES,
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('keeps independent rewash plans, strict stored input and their shared native setup in both actual service and authenticated App coverage',()=>{
+ const suites=['tests/integration/order-time-washing-rework-postgres.test.ts','tests/integration/order-time-washing-rework-browser-postgres.test.ts'];
+ for(const file of ['apps/api/src/production-platform/order-time-washing-rework.ts','apps/api/src/production-platform/bulk-washing-rework-binding.ts','apps/api/src/production-platform/bulk-washing-rework-source.ts','apps/api/src/production-platform/bulk-washing-rework-planning.ts','apps/api/src/production-platform/journey-washing-rework-facts.ts','apps/web/src/order-time-rewash-fields.tsx','packages/contracts/src/order-time-washing-rework.ts','apps/api/migrations/0295_order_time_rewash_input.sql','tests/helpers/order-time-rewash-fixture.ts','apps/api/src/production-platform/order-time-plan-repository.ts','apps/api/src/production-platform/order-time-operation-state.ts','apps/api/src/production-platform/order-time-request-service.ts','apps/api/src/production-platform/order-time-reading.ts','apps/api/src/production-platform/fixed-schedule-basis.ts']){
+  const risk=classifyFullGatePaths([file]);
+  for(const suite of suites)expect(risk.mappedPostgresTests,file).toContain(suite);
+  const plan=fullGatePostgresPlan({DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),MAPPED_POSTGRES_TESTS:risk.mappedPostgresTests.join(','),BUSINESS_CHAIN_SENSITIVE:String(risk.businessChainSensitive),MIGRATION_SENSITIVE:String(risk.migrationSensitive),DEPLOYMENT_SENSITIVE:String(risk.deploymentSensitive)});
+  for(const suite of suites)expect(plan.plan?.some(entry=>entry.path===suite&&entry.config==='vitest.business-chain.config.ts'),file+':'+suite).toBe(true);
+ }
+});
+
 it('runs every consumer of the original shared authenticated App browser with the existing long correctness configuration',()=>{
  const suites=readdirSync('tests/integration').filter(name=>name.endsWith('.test.ts')).map(name=>'tests/integration/'+name).filter(path=>/from ['"]\.\.\/acceptance\/supplychain-settings-browser\.js['"]/.test(readFileSync(path,'utf8')));
  expect(suites).toContain('tests/integration/budget-washing-fees-browser-postgres.test.ts');

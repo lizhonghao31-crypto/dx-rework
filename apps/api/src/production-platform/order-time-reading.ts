@@ -1,3 +1,5 @@
+import {preparedStoredRewash} from './order-time-washing-rework.js';
+import {journeyWashingReworkFact,journeyUnplannedWashingRework} from './journey-washing-rework-facts.js';
 import {attachFactoryTaskCompletions} from './factory-task-completion.js';
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentReadyCorrectionSql,type ReadyCorrection} from './development-responsibility-window.js';
 import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
@@ -38,7 +40,7 @@ const aliases:Record<string,string>={production_sheet:'production_instruction',w
 const keyOf=(work:OrderTimeWork)=>work.parameterKey.startsWith('development_special_')?'development_printing':aliases[work.parameterKey]??work.parameterKey;
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
 type NativeTask={ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;route_instance_id:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
-type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
+type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;unplannedRewashing?:ReturnType<typeof journeyUnplannedWashingRework>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
@@ -125,6 +127,7 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  * order arrangement changes. No current-company lookup or implicit adoption. */
 export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,evidence:Evidence,legacy:FixedScheduleBasis|null):FixedScheduleBasis{
  const definitions=buildOrderTimeWork(saved.input.plan,saved.input.work),byId=new Map(saved.input.work.map(work=>[work.id,work]));
+ const rewashByWork=new Map((saved.input.rewashing??[]).flatMap(row=>preparedStoredRewash(row).work.map((work,index)=>[work.id,{row,inspection:index===1}] as const)));
  const completionTargets=new Map<FrozenTimeFramework,ReturnType<typeof frameworkNodeTargets>>();
  const scopes=saved.input.scopes.map(scope=>{
   const original=legacy?.scopes.find(value=>value.scopeRef===scope.scopeRef||scope.lineId&&value.lineId===scope.lineId);
@@ -190,12 +193,14 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const atStart=begun&&captured&&capturedRule?.kind==='work'?{responsibilitySlaRef:`order-time:${captured.id}:${source.parameterKey}`,responsibilityMinutes:capturedRule.minutes,responsibilityCalendar:capturedRule.calendar}:null;
    // Exact native task/batch windows own their clocks. Other original events
    // select this order's confirmed policy at R, never a later arrangement.
-   const originalOwn=taskOwn??(own.native?.standardCalendar||own.native?.batchWindows?.length?nativeOwn:null)??atStart??nativeOwn??(begun&&old?{responsibilitySlaRef:old.responsibilitySlaRef,responsibilityMinutes:old.responsibilityMinutes,responsibilityCalendar:old.responsibilityCalendar}:begun?{responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:policy);
+   const rewash=rewashByWork.get(source.id),rewashPolicy=rewash&&rewash.row.arrangement.mode!=='none'?(rewash.inspection?rewash.row.arrangement.inspection:rewash.row.arrangement.washing):null;
+   const rewashOwn=rewashPolicy?{responsibilitySlaRef:`bulk-washing-plan:${rewash!.row.planId}:${rewash!.inspection?'inspection':'washing'}`,responsibilityMinutes:rewashPolicy.minutes,responsibilityCalendar:rewashPolicy.calendar}:null;
+   const originalOwn=rewashOwn??taskOwn??(own.native?.standardCalendar||own.native?.batchWindows?.length?nativeOwn:null)??atStart??nativeOwn??(begun&&old?{responsibilitySlaRef:old.responsibilitySlaRef,responsibilityMinutes:old.responsibilityMinutes,responsibilityCalendar:old.responsibilityCalendar}:begun?{responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:policy);
    const capturedWarning=atStart&&start&&capturedRule?.minutes!==null&&capturedRule?.calendar&&capturedRule.reminder.enabled?shiftFixedTimeline(start,capturedRule.minutes*capturedRule.reminder.percent/100,capturedRule.calendar):null;
-   const reminder=orderTimeRule(saved.input.plan,source.parameterKey)?.rule.reminder;
+   const reminder=rewashPolicy?.reminder??orderTimeRule(saved.input.plan,source.parameterKey)?.rule.reminder;
    const goal=!framework&&scope.customerGoalIds.includes(source.id),anchor=scope.goals[source.id];
    const eventConstraint=frameworkTargets?.get(source.id),eventTarget=eventConstraint&&eventConstraint!==target?{end:eventConstraint.end.at,...frameworkTargetPrecision(eventConstraint),exclusive:eventConstraint.end.exclusive}:undefined;
-   return {...definition,stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
+   return {...definition,...(rewash?{accountingRole:'original_work' as const,rewashRound:rewash.row.round}:{}),stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
     start:target?.start.at??null,end:target?.end.at??null,...(target?{startExclusive:target.start.exclusive,endExclusive:target.end.exclusive}:{}),...originalOwn,...(eventTarget?{eventTarget}:{}),
     responsibilitySlaRef:originalOwn.responsibilitySlaRef,responsibilityMinutes:originalOwn.responsibilityMinutes??null,responsibilityCalendar:originalOwn.responsibilityCalendar??null,
     ...(begun?{responsibilityWarningAt:fact.clockStart.precision==='unknown'?null:own.task?.warning_at?.toISOString()??(atStart?capturedWarning:old?.responsibilityWarningAt??null)}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
@@ -204,6 +209,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   // Native accepted redo remains real work even when it was not in the
   // original route. Preserve its original handoff/clock and reconnect only
   // those native additions; never restore a superseded planned route.
+  for(const history of evidence.unplannedRewashing??[])if(history.lineId===scope.lineId){work.push(structuredClone(history.work));facts[history.work.id]=structuredClone(history.fact);}
   const ids=new Set(work.map(node=>node.id)),added=original?.work.filter(node=>node.accountingRole==='added_work'&&!ids.has(node.id))??[];
   // A craft's processing report does not close its parent window. Reconcile
   // only that frozen work's included return, so another craft/round cannot
@@ -266,10 +272,14 @@ export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:O
    const quantities=(await db.query(`SELECT po.line_id,r.actual_cut_count::int AS quantity FROM digital_production_po_lines po
     LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id
     LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1`,[resource.id])).rows;
-   evidence.washing={};
+   evidence.washing={};evidence.unplannedRewashing=sheet.scopes.flatMap(scope=>{
+    const plan=plans.find(plan=>plan.id===scope.planId);
+    return plan?journeyUnplannedWashingRework(resource.id,scope,plan,asOf):[];
+   });
    for(const w of work){const lineId=saved.input.scopes.find(s=>s.lineId&&w.id.endsWith(':'+s.lineId))?.lineId;if(!lineId)continue;
     const rows=quantities.filter(q=>q.line_id===lineId),quantity=rows.length===1&&rows[0].quantity!==null?Number(rows[0].quantity):null;
-    evidence.washing[w.id]=journeyWashingFact(sheet.scopes,plans,lineId,w.parameterKey,quantity,asOf);
+    const rewash=saved.input.rewashing?.find(row=>preparedStoredRewash(row).work.some(work=>work.id===w.id));
+    evidence.washing[w.id]=rewash?journeyWashingReworkFact(rewash,sheet.scopes.find(scope=>scope.scopeId===rewash.scopeId),w.parameterKey.endsWith('_inspection'),asOf):journeyWashingFact(sheet.scopes,plans,lineId,w.parameterKey,quantity,asOf);
    }
   }
 

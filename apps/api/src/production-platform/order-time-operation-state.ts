@@ -4,7 +4,9 @@ import {beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contrac
 import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import {orderTimeCreated} from './order-time-created.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
-import {frameworkScopeInputs,retainedFrameworkWork,overlayFrameworkCompletion} from './order-time-framework-route.js';
+import {frameworkScopeInputs,overlayFrameworkCompletion} from './order-time-framework-route.js';
+import {orderTimeWashingReworkState,attachWashingReworkInput,retainedWashingReworkTargets} from './order-time-washing-rework.js';
+import type {OrderTimeWashingReworkChanges} from '@dx-rework/contracts/order-time-washing-rework';
 import {evaluateFrameworkSubmission} from './order-time-framework-submission.js';
 import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import type {Pool,PoolClient} from 'pg';
@@ -43,7 +45,7 @@ export const orderTimeOperationScope=scoped;
 
 /** Original actor and original native rows, all on the caller's single client.
  * The public operation contains intent, never an authorized actor or a DTO. */
-export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedActorContext,raw:OrderTimeOperation,time:BusinessTime,changes:Record<string,OrderTimeRule>={},washingChanges:OrderTimeWashingChanges=[]){
+export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedActorContext,raw:OrderTimeOperation,time:BusinessTime,changes:Record<string,OrderTimeRule>={},washingChanges:OrderTimeWashingChanges=[],rewashChanges:OrderTimeWashingReworkChanges=[]){
  const operation=OrderTimeOperationSchema.parse(raw),resource=scoped(operation),policy=new DigitalProductionAccessPolicy(db);
  if(resource)await policy.assert(actor,resource.kind,resource.id,'technical');
  const sourceId=resource?.kind==='source'?resource.id:resource?.kind==='order'?(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]?.source_id??null:null;
@@ -139,6 +141,12 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  }
  const value=orderTimeInputFromRoute(plan,route,goals,!missing.length,missing,sourceId?{kind:'source',id:sourceId}:resource??undefined);
  if(plan.company.framework){value.factoryCommitments=factoryCommitments;sourceVersion.factoryCommitments=factoryCommitments;}
+ if(rewashChanges.length&&(!manager||operation.kind!=='arrangement'||!order||!saved?.input.frameworkPlans))conflict('请由原有权人员在已采用的本单安排中新增返洗工作');
+ if(rewashChanges.length&&(Object.keys(changes).length||washingChanges.length))conflict('新增返洗请保留原节点安排，其他调整沿原入口另行办理');
+ const hasWashing=Boolean(rewashChanges.length||saved?.input.rewashing?.length||saved?.input.work.some(work=>/^bulk_(factory|return)_washing/.test(work.parameterKey))
+  ||washing&&[...washing.values()].some(row=>row.document&&row.document.arrangement.mode!=='none'));
+ const rewashing=order&&plan.company.framework&&saved&&hasWashing?await orderTimeWashingReworkState(db,order.production_order_id,saved,rewashChanges):null;
+ const rewashBounds=rewashing?attachWashingReworkInput(value,rewashing.rows):{};
  const tasks=resource?(await db.query(`SELECT t.task_id,t.route_version,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,a.source_id,a.production_order_id,p.step_id,
   d.due_at,d.sla_basis,EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) LEFT JOIN digital_timeline_task_positions p USING(task_id)
@@ -194,7 +202,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   const applicable=value.work.filter(work=>work.parameterKey===key);
   if(applicable.length&&applicable.every(work=>begunStates.get(work.id)?.all)&&JSON.stringify(original?.overrides[key]??original?.company.nodes[key]??company.nodes[key])!==JSON.stringify(rule))conflict('已开始的节点保留原用时和责任时钟，请调整尚未开始的节点');
  }
- const notBefore:Record<string,SlaAnchor>={};
+ const notBefore:Record<string,SlaAnchor>={...rewashBounds};
  if(development){
   const native=operation.kind==='development_revision'?null:await materialReadiness(db,sourceId!,round),byId=new Map(native?.materials.map(row=>[row.materialId,row])??[]);
   const expected=(await db.query(`SELECT DISTINCT ON(material_id) material_id,expected_date::text AS expected_date,event_id FROM digital_development_material_events WHERE source_id=$1 AND route_version=$2 AND action='修改预计日期' ORDER BY material_id,sequence DESC`,[sourceId,round])).rows;
@@ -206,6 +214,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   if(dates.length){const first=value.work.find(work=>work.parameterKey==='development_materials');if(first)notBefore[first.id]={precision:'date',value:dates.at(-1)!,source:'本单已登记的最晚物料到位日'};}
  }
  if(washing)sourceVersion.washing=[...washing];
+ if(rewashing)sourceVersion.rewashing=rewashing.sourceVersion;
  sourceVersion.customerDates=dates;sourceVersion.workFacts=[...progress];sourceVersion.materialBounds=notBefore;
  const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal});
  const datedScopes=value.scopes.filter(scope=>scope.customerGoal.precision==='date');
@@ -235,7 +244,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    sourceVersion.frameworkFactRevisions=native.revisions;
   }
   value.frameworkContext={route:frameworkRoute,acceptedAt,notBefore,progress:Object.fromEntries(progress)};
-  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs({...value,scopes:datedScopes},frameworkRoute,acceptedAt,notBefore).map(input=>({input,retained:retainedFrameworkWork(input,progress,saved?.input.frameworkPlans?.[input.scopeRef],time.now)})),observedAt:time.now,mode:'automatic',acceptLate:false});
+  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs({...value,scopes:datedScopes},frameworkRoute,acceptedAt,notBefore).map(input=>({input,retained:retainedWashingReworkTargets(input,progress,saved?.input.frameworkPlans?.[input.scopeRef],time.now,Boolean(rewashing?.added),value.rewashing)})),observedAt:time.now,mode:'automatic',acceptLate:false});
   check.fingerprint=fixedTimelineIdentity({prior:check.fingerprint,sourceVersion,frameworkProgress:[...progress]});
   // The caller already authorized this exact order. Reuse the native scoped
   // receipt ledger and the same transaction; no first receipt is manufactured
@@ -253,6 +262,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   check.forecastQuality=unresolvedNativeRemainder?'lower_bound':check.expectedEnd?'conditional':'unknown';
  }
  if(washing)check.washing=[...washing].map(([lineId,row])=>({lineId,label:row.label,version:row.version,document:row.document}));
+ if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);
  void database;
  return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production};
 }

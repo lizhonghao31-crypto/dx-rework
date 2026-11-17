@@ -1,3 +1,4 @@
+import {OrderTimeWashingReworkChangesSchema} from '@dx-rework/contracts/order-time-washing-rework';
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
 import {OrderTimeRuleSchema} from '@dx-rework/contracts/order-time-plan';
@@ -16,11 +17,11 @@ export function registerOrderTimeRequestRoutes(app:FastifyInstance,dependencies:
  const key=(request:FastifyRequest)=>typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:'';
  const body=<T,>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError('VALIDATION_ERROR',result.error.issues[0]?.message??'请核对本单时效资料',400);return result.data;};
  app.post('/digital-production/order-time/check',async request=>service.check(await actor(request),body(OrderTimeCheckSchema,request.body).operation));
- app.post('/digital-production/order-time/preview',async request=>{const input=body(OrderTimeCheckSchema.extend({overrides:z.record(z.string(),OrderTimeRuleSchema),washing:OrderTimeWashingChangesSchema.optional()}).strict(),request.body);return service.check(await actor(request),input.operation,input.overrides,input.washing);});
+ app.post('/digital-production/order-time/preview',async request=>{const input=body(OrderTimeCheckSchema.extend({overrides:z.record(z.string(),OrderTimeRuleSchema),washing:OrderTimeWashingChangesSchema.optional(),rewashing:OrderTimeWashingReworkChangesSchema.optional()}).strict(),request.body);return service.check(await actor(request),input.operation,input.overrides,input.washing,input.rewashing);});
  app.post('/digital-production/order-time/requests',async request=>service.submit(await actor(request),body(OrderTimeRequestSchema,request.body),key(request)));
  app.post('/digital-production/order-time/arrange',async request=>service.arrange(await actor(request),body(OrderTimeArrangementSchema,request.body),key(request)));
  app.get('/digital-production/order-time/requests/:requestId',async request=>service.read(await actor(request),id(request)));
- app.post('/digital-production/order-time/requests/:requestId/preview',async request=>{const input=body(z.object({overrides:z.record(z.string(),OrderTimeRuleSchema),washing:OrderTimeWashingChangesSchema.optional()}).strict(),request.body);return service.read(await actor(request),id(request),input.overrides,input.washing);});
+ app.post('/digital-production/order-time/requests/:requestId/preview',async request=>{const input=body(z.object({overrides:z.record(z.string(),OrderTimeRuleSchema),washing:OrderTimeWashingChangesSchema.optional(),rewashing:OrderTimeWashingReworkChangesSchema.optional()}).strict(),request.body);return service.read(await actor(request),id(request),input.overrides,input.washing,input.rewashing);});
  app.post('/digital-production/order-time/requests/:requestId/resubmit',async request=>service.resubmit(await actor(request),id(request),body(OrderTimeRequestSchema.extend({expectedVersion:OrderTimeApplySchema.shape.expectedVersion}),request.body),key(request)));
  app.post('/digital-production/order-time/requests/:requestId/apply',async request=>service.apply(await actor(request),id(request),body(OrderTimeApplySchema,request.body),key(request)));
  app.post('/digital-production/order-time/requests/:requestId/return',async request=>service.close(await actor(request),id(request),body(OrderTimeReturnSchema,request.body),key(request),'returned'));

@@ -41,7 +41,7 @@ export function frameworkJourneyBasis(saved:StoredOrderTimePlan,scopes:readonly 
 export function evaluateJourneyFramework(basis:JourneyFrameworkBasis,scopes:readonly ScheduleScopeInput[],progress:readonly ScheduleScopeProgress[],asOf:string,termination:ScheduleTermination|null):JourneyTimeFramework{
  const unique=new Map<string,boolean>();
  const output=basis.map(row=>{const scope=scopes.find(s=>s.scopeRef===row.scopeRef)!,result=progress.find(s=>s.scopeRef===row.scopeRef)!;
-  for(const work of scope.work){if(work.includedIn||work.accountingRole==='event')continue;const key=work.canonicalWorkRef;unique.set(key,(unique.get(key)??true)&&scope.facts[work.id]?.businessCompleted===true);}
+  for(const work of scope.work){if(work.includedIn||work.accountingRole==='event'||work.rewashRound)continue;const key=work.canonicalWorkRef;unique.set(key,(unique.get(key)??true)&&scope.facts[work.id]?.businessCompleted===true);}
   return {...row,milestones:row.milestones.map(m=>{
    const completion=frameworkCompletion(scope,m.workIds,asOf),nodes=m.workIds.map(id=>result.nodes.find(n=>n.id===id));
    const work:ScheduleWork={id:m.key,canonicalWorkRef:m.key,dependsOn:[],start:null,end:m.at,minutes:0,calendar:'continuous',responsibilitySlaRef:null,targetPrecision:'date',targetDate:m.date,...(m.completionTarget!==undefined?{completionTarget:m.completionTarget}:{})};

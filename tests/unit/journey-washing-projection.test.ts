@@ -47,6 +47,21 @@ it.each(['factory','after_receipt'] as const)('shows only adopted %s work under 
  expect(nodes(item).some(row=>row.key.startsWith(key))).toBe(false);
 });
 
+it.each(['factory','after_receipt'] as const)('keeps each %s rewash instance attached to its own P instead of the same-kind aggregate',mode=>{
+ const {item,basis,wash}=fixture(mode),scope=basis.scopes[0]!,original=scope.work.find(work=>work.id===wash)!;
+ const ids=[1,2].map(round=>`${wash.split(':')[0]}:rewash:TEST-${round}:red`);
+ scope.work=[...scope.work,...ids.map((id,index)=>({...original,id,canonicalWorkRef:`TEST-rewash-${index+1}`,rewashRound:index+1,start:at(4+index*4),end:at(6+index*4),dependsOn:[]}))];
+ for(const [index,id] of ids.entries())scope.facts[id]={ready:{precision:'instant',at:at(4+index*4)},clockStart:{precision:'instant',at:at(4+index*4)},completed:{precision:'instant',at:at(7+index*4)},businessCompleted:true,waitingForPredecessors:false,evidenceRefs:[id]};
+ attachFixedJourneySchedule(item,basis,at(12),{nextChange:false});
+ const rows=nodes(item).filter(node=>node.key===wash.split(':')[0]);expect(rows).toHaveLength(3);
+ for(const row of rows){const own=[wash,...ids].find(id=>row.instanceId.endsWith(':'+id))!;expect(row.fixedTargets!.map(target=>target.progress.id)).toEqual([own]);}
+ for(const [index,id] of ids.entries()){
+  const row=rows.find(node=>node.instanceId.endsWith(':'+id))!;
+  expect(row.fixedTargets![0]!.progress.goalDelta.targetAt).toBe(at(6+index*4));
+  expect(row).toMatchObject({countsInProgress:false,planningOnly:true,actualAt:at(7+index*4)});
+ }
+});
+
 it('retains partial quantities and independent wash/check completion in progress, instead of counting a received batch as the whole PO',()=>{
  const {item,basis,key,wash,check}=fixture(),row=batch();
  const project=(expected:number)=>{

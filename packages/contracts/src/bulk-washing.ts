@@ -22,9 +22,9 @@ export type BulkWashingArrangement=z.infer<typeof BulkWashingArrangementSchema>;
  * It never turns washed quantities into new receipts or additional garments. */
 export type BulkWashingScope={scopeId:string;lineId:string;factoryDecisionId:string|null;quantityVersion:string;quantity:number};
 export type BulkWashingFact={id:string;scopeId:string;quantityVersion:string;occurredAt:string|null} & (
- |{kind:'send';quantity:number;reworkOfInspectionId?:string|undefined}
+ |{kind:'send';quantity:number;reworkOfInspectionId?:string|undefined;rewashWorkId?:string|undefined}
  |{kind:'return';sendId:string;quantity:number}
- |{kind:'factory_start';quantity:number;reworkOfInspectionId?:string|undefined}
+ |{kind:'factory_start';quantity:number;reworkOfInspectionId?:string|undefined;rewashWorkId?:string|undefined}
  |{kind:'factory_complete';startId:string;quantity:number}
  |{kind:'receipt_link';completionId:string;receiptId:string;receiptQuantityVersion:string;quantity:number}
  |{kind:'inspection';completionId:string;quantity:number;qualifiedQuantity:number}
@@ -42,9 +42,9 @@ const commandBase={planId:z.uuid(),scopeId:z.string().min(1).max(300),quantityVe
  expectedRevision:z.number().int().nonnegative(),occurredAt:z.iso.datetime({offset:true}).nullable(),note:z.string().trim().max(2000)};
 const positive=z.number().int().positive().max(2147483647);
 export const BulkWashingCommandSchema=z.discriminatedUnion('kind',[
- z.object({...commandBase,kind:z.literal('send'),quantity:positive,reworkOfInspectionId:z.uuid().optional()}).strict(),
+ z.object({...commandBase,kind:z.literal('send'),quantity:positive,reworkOfInspectionId:z.uuid().optional(),rewashWorkId:z.uuid().optional()}).strict(),
  z.object({...commandBase,kind:z.literal('return'),sendId:z.uuid(),quantity:positive}).strict(),
- z.object({...commandBase,kind:z.literal('factory_start'),quantity:positive,reworkOfInspectionId:z.uuid().optional()}).strict(),
+ z.object({...commandBase,kind:z.literal('factory_start'),quantity:positive,reworkOfInspectionId:z.uuid().optional(),rewashWorkId:z.uuid().optional()}).strict(),
  z.object({...commandBase,kind:z.literal('factory_complete'),quantity:positive,startId:z.uuid()}).strict(),
  z.object({...commandBase,kind:z.literal('inspection'),completionId:z.uuid(),quantity:positive,qualifiedQuantity:z.number().int().nonnegative()}).strict(),
  z.object({...commandBase,kind:z.literal('receipt_link'),completionId:z.uuid(),receiptId:z.uuid(),receiptQuantityVersion:z.string().min(1).max(300),quantity:positive}).strict(),
@@ -52,6 +52,8 @@ export const BulkWashingCommandSchema=z.discriminatedUnion('kind',[
 ]);
 export type BulkWashingCommand=z.infer<typeof BulkWashingCommandSchema>;
 export type BulkWashingScopeView=BulkWashingScope&{planId:string;mode:Exclude<BulkWashingMode,'none'>;label:string;revision:number;
+ requireRewashPlan?:boolean;
+ rewashPlans?:Array<{intentId:string;inspectionId:string;round:number;quantity:number;remaining:number;washingPlannedAt:string|null;inspectionPlannedAt:string|null}>;
  receivedAt:string|null;availableAt:string|null;canLogistics:boolean;canInspect:boolean;canCorrect:boolean;
  windows:Array<{id:string;kind:'washing'|'inspection';state:'active'|'completed'|'voided';startedAt:string|null;dueAt:string|null;completedAt:string|null;minutes:number;overdueMinutes:number|null}>;
  receipts?:Array<{receiptId:string;quantity:number;quantityVersion:string}>;

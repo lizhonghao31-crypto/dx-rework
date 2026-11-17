@@ -3,7 +3,7 @@ import type {PoolClient} from 'pg';
 import type {FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
 import {FrozenOrderTimePlanSchema,orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {orderTimeAdmission} from './order-time-admission.js';
-import {OrderTimePlanRepository,type StoredOrderTimePlan} from './order-time-plan-repository.js';
+import {assertOrderTimeRewashInput,OrderTimePlanRepository,type StoredOrderTimePlan} from './order-time-plan-repository.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {validateDigitalSlaSnapshot,type DigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
@@ -25,7 +25,8 @@ export function orderTimeSnapshot(snapshot:DigitalSlaSnapshot,plan:FrozenOrderTi
 export type OrderTimePolicyVersion={id:string;at:string;plan:FrozenOrderTimePlan;history?:Pick<StoredOrderTimePlan,'input'|'targets'|'revision'|'time'>};
 export async function orderTimePolicyHistory(db:DB,resource:{kind:'source'|'order';id:string}):Promise<OrderTimePolicyVersion[]>{
  return (await db.query(`SELECT plan_version_id,input_snapshot,business_time,fixed_targets,revision,identity_hash FROM digital_order_time_plan_versions WHERE resource_kind=$1 AND ${resource.kind==='source'?'source_id':'production_order_id'}=$2 ORDER BY revision DESC`,[resource.kind,resource.id])).rows.map(row=>{
-  if(row.input_snapshot.version!=='order-time-input-v1'||fixedTimelineIdentity({input:row.input_snapshot,targets:row.fixed_targets})!==row.identity_hash)throw Error('本单历史时间方案版本或校验不受当前程序支持');
+  if(!['order-time-input-v1','order-time-input-rewash-v1'].includes(row.input_snapshot.version)||fixedTimelineIdentity({input:row.input_snapshot,targets:row.fixed_targets})!==row.identity_hash)throw Error('本单历史时间方案版本或校验不受当前程序支持');
+  assertOrderTimeRewashInput(row.input_snapshot,resource,true);
   return {id:String(row.plan_version_id),at:String(row.business_time.now),plan:FrozenOrderTimePlanSchema.parse(row.input_snapshot.plan),history:{input:row.input_snapshot,targets:row.fixed_targets,revision:row.revision,time:row.business_time}};
  });
 }

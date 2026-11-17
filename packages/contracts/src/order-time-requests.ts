@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {OrderTimeWashingReworkChangesSchema,OrderTimeWashingReworkChoiceSchema} from './order-time-washing-rework.js';
 import {SERIES_MILESTONES} from './digital-series-plan.js';
 import {BulkWashingAdoptionSchema} from './bulk-washing.js';
 import {FrameworkMilestoneResultSchema} from './order-time-framework.js';
@@ -29,7 +30,7 @@ export const OrderTimeCheckSchema=z.object({operation:OrderTimeOperationSchema})
 export const OrderTimeRequestSchema=z.object({operation:OrderTimeOperationSchema,fingerprint:z.string().length(64),reason:z.string().trim().min(1).max(2000)}).strict();
 export const OrderTimeWashingChangesSchema=z.array(z.object({lineId:z.uuid(),expectedVersion:z.number().int().nonnegative(),document:BulkWashingAdoptionSchema}).strict()).max(50).refine(rows=>new Set(rows.map(row=>row.lineId)).size===rows.length,'请选择不重复的洗水PO');
 export type OrderTimeWashingChanges=z.infer<typeof OrderTimeWashingChangesSchema>;
-export const OrderTimeApplySchema=z.object({expectedVersion:z.number().int().positive(),fingerprint:z.string().length(64),overrides:z.record(z.string(),OrderTimeRuleSchema),acceptLate:z.boolean().default(false),washing:OrderTimeWashingChangesSchema.optional()}).strict();
+export const OrderTimeApplySchema=z.object({expectedVersion:z.number().int().positive(),fingerprint:z.string().length(64),overrides:z.record(z.string(),OrderTimeRuleSchema),acceptLate:z.boolean().default(false),washing:OrderTimeWashingChangesSchema.optional(),rewashing:OrderTimeWashingReworkChangesSchema.optional()}).strict();
 export const OrderTimeArrangementSchema=OrderTimeApplySchema.omit({expectedVersion:true}).extend({resource:z.object({kind:z.enum(['source','order']),id:z.string().uuid()}).strict()}).strict();
 export const OrderTimeReturnSchema=z.object({expectedVersion:z.number().int().positive(),reason:z.string().trim().min(1).max(2000)}).strict();
 export const OrderTimeWithdrawSchema=z.object({expectedVersion:z.number().int().positive()}).strict();
@@ -41,6 +42,7 @@ export const OrderTimeCheckResultSchema=z.object({
  feasibility:z.enum(['sufficient','insufficient','unknown','not_applicable']),availableMinutes:z.number().nullable(),requiredMinutes:z.number().nullable(),lateMinutes:z.number().nullable(),expectedEnd:z.string().nullable(),forecastQuality:z.enum(['conditional','lower_bound','unknown']),
  factoryCommitments:z.array(z.object({lineId:z.string(),label:z.string(),date:z.string(),version:z.number().int().nonnegative(),source:z.string(),plannedReceipt:z.string().nullable(),lateMinutes:z.number().nonnegative().nullable(),status:z.enum(['sufficient','insufficient','unknown'])}).strict()).optional(),
  washing:z.array(z.object({lineId:z.uuid(),label:z.string(),version:z.number().int().nonnegative(),document:BulkWashingAdoptionSchema.nullable()}).strict()).optional(),
+ rewashing:z.array(OrderTimeWashingReworkChoiceSchema).optional(),
  framework:z.object({milestones:z.array(FrameworkMilestoneResultSchema.extend({scopeRef:z.string()})),riskAccepted:z.boolean()}).strict().optional(),
  canRequest:z.boolean(),canApply:z.boolean(),sourceVersion:z.record(z.string(),z.unknown()),
 }).strict();

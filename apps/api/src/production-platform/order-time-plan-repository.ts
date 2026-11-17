@@ -1,8 +1,10 @@
 import {randomUUID} from 'node:crypto';
+import {OrderTimeWashingReworkPlanSchema,type OrderTimeWashingReworkPlan} from '@dx-rework/contracts/order-time-washing-rework';
 import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import {FrozenTimeFrameworkSchema,type FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
 import type {OrderTimeNativeProgress} from './order-time-request-plan.js';
-import {frameworkScopeInputs,retainedFrameworkWork} from './order-time-framework-route.js';
+import {frameworkScopeInputs} from './order-time-framework-route.js';
+import {preparedStoredRewash,retainedWashingReworkTargets} from './order-time-washing-rework.js';
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from './order-time-framework.js';
 import type {PoolClient} from 'pg';
 import {validateBusinessTime,type BusinessTime,type BusinessTimeScope} from '@dx-rework/domain/business-clock';
@@ -15,7 +17,8 @@ import {evaluateOrderTimeScenario,type OrderTimeScope,type OrderTimeWork} from '
 import type {FixedTimelineTarget} from './fixed-timeline-targets.js';
 
 type DB=Pick<PoolClient,'query'>;
-export type OrderTimeInput={version:'order-time-input-v1';plan:FrozenOrderTimePlan;work:OrderTimeWork[];
+export type OrderTimeInput={version:'order-time-input-v1'|'order-time-input-rewash-v1';plan:FrozenOrderTimePlan;work:OrderTimeWork[];
+ rewashing?:OrderTimeWashingReworkPlan[];
  frameworkContext?:{route:SeriesRoute;acceptedAt:SlaAnchor;notBefore:Record<string,SlaAnchor>;progress:Record<string,OrderTimeNativeProgress>};
  frameworkPlans?:Record<string,FrozenTimeFramework>;
  factoryCommitments?:Array<{lineId:string;label:string;date:string;version:number;source:string}>;
@@ -26,10 +29,34 @@ export type StoredOrderTimePlan={id:string;resource:BusinessTimeScope;revision:n
 type Row={plan_version_id:string;resource_kind:'source'|'order';source_id:string|null;production_order_id:string|null;
  revision:number;input_snapshot:OrderTimeInput;fixed_targets:Targets;identity_hash:string;business_time:BusinessTime;created_by:string;source_event_ref:string;change_kind:StoredOrderTimePlan['changeKind']};
 const identity=(input:OrderTimeInput,targets:Targets)=>fixedTimelineIdentity({input,targets});
+/** New work metadata and the actual frozen DAG are one versioned input.
+ * Old snapshots remain v1; unsupported/mixed new inputs cannot be interpreted
+ * as an original aggregate washing plan by a compatible reader. */
+export function assertOrderTimeRewashInput(input:OrderTimeInput,resource:BusinessTimeScope,requireIntroduced:boolean){
+ const rows=input.rewashing??[];
+ if((input.version==='order-time-input-rewash-v1')!==(rows.length>0))throw Error('返洗计划格式版本与工作范围不一致');
+ if(!rows.length&&input.work.some(work=>/^bulk_(?:factory|return)_washing(?:_inspection)?:rewash:/.test(work.id)))
+  throw Error('返洗计划格式版本与工作范围不一致');
+ if(!rows.length)return;
+ if(resource.kind!=='order'||!input.plan.company.framework||!input.frameworkContext)throw Error('返洗计划须沿原订单正式安排');
+ if(new Set(rows.map(row=>row.intentId)).size!==rows.length)throw Error('返洗工作身份不能重复');
+ for(const row of rows){
+  OrderTimeWashingReworkPlanSchema.parse(row);
+  if(row.orderId!==resource.id)throw Error('返洗计划不属于原订单');
+  if(requireIntroduced&&(!row.introducedAt||!row.introducedEventRef))throw Error('返洗正式安排缺少原生效来源');
+  const prepared=preparedStoredRewash(row),scopes=input.scopes.filter(scope=>scope.lineId===row.lineId);
+  if(scopes.length!==1||!scopes[0]!.terminalIds.includes(prepared.requiredForDelivery)||!scopes[0]!.customerGoalIds.includes(prepared.requiredForDelivery))throw Error('返洗工作未完整进入原PO交付范围');
+  for(const expected of prepared.work){
+   const matches=input.work.filter(work=>work.id===expected.id);
+   if(matches.length!==1||fixedTimelineIdentity(matches[0])!==fixedTimelineIdentity(expected))throw Error('返洗工作身份、依赖或原采用用时不一致');
+  }
+ }
+}
 function saved(row:Row):StoredOrderTimePlan{
  const input=row.input_snapshot,targets=row.fixed_targets;
- if(input.version!=='order-time-input-v1'||identity(input,targets)!==row.identity_hash)throw Error('本单时间方案版本或校验不受当前程序支持');
+ if(!['order-time-input-v1','order-time-input-rewash-v1'].includes(input.version)||identity(input,targets)!==row.identity_hash)throw Error('本单时间方案版本或校验不受当前程序支持');
  FrozenOrderTimePlanSchema.parse(input.plan);
+ assertOrderTimeRewashInput(input,{kind:row.resource_kind,id:(row.production_order_id??row.source_id)!},true);
  for(const plan of Object.values(input.frameworkPlans??{}))FrozenTimeFrameworkSchema.parse(plan);
  return {id:row.plan_version_id,resource:{kind:row.resource_kind,id:(row.production_order_id??row.source_id)!},revision:row.revision,input,targets,
   identityHash:row.identity_hash,time:validateBusinessTime(row.business_time),actorId:row.created_by,eventRef:row.source_event_ref,changeKind:row.change_kind};
@@ -69,18 +96,39 @@ export class OrderTimePlanRepository{
   if(!await this.available())throw Error('本单时间方案迁移尚未完成');
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||!input.eventRef.trim()||!input.requestKey.trim()||input.requestKey.length>200)throw Error('本单时间方案身份或版本无效');
   const time=validateBusinessTime(input.time),value=structuredClone(input.value);
-  if(value.version!=='order-time-input-v1')throw Error('本单时间输入版本不受支持');
+  if(!['order-time-input-v1','order-time-input-rewash-v1'].includes(value.version))throw Error('本单时间输入版本不受支持');
   FrozenOrderTimePlanSchema.parse(value.plan);
   const resource=input.resource,table=resource.kind==='source'?'digital_production_sources':'digital_production_orders',column=resource.kind==='source'?'source_id':'production_order_id';
+  assertOrderTimeRewashInput(value,resource,false);
   if(!(await this.db.query(`SELECT ${column} FROM ${table} WHERE ${column}=$1 FOR UPDATE`,[resource.id])).rowCount)throw Error('本单不存在');
   const prior=(await this.db.query('SELECT * FROM digital_order_time_plan_versions WHERE request_key=$1',[input.requestKey])).rows[0];
   if(prior){
-   const result=saved(prior);
-   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity({...result.input,frameworkPlans:undefined})!==fixedTimelineIdentity({...value,frameworkPlans:undefined}))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
+   const result=saved(prior),replayed=structuredClone(value);
+   // The introduction was supplied by this exact original append, not the
+   // caller. Replaying the same pre-effective intent must not create another
+   // plan or fail merely because the stored receipt now contains that source.
+   for(const row of replayed.rewashing??[])if(!row.introducedAt&&!row.introducedEventRef){
+    const stored=result.input.rewashing?.find(previous=>previous.intentId===row.intentId);
+    if(stored&&fixedTimelineIdentity({...stored,introducedAt:null,introducedEventRef:null})===fixedTimelineIdentity(row)){
+     row.introducedAt=stored.introducedAt;row.introducedEventRef=stored.introducedEventRef;
+    }
+   }
+   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity({...result.input,frameworkPlans:undefined})!==fixedTimelineIdentity({...replayed,frameworkPlans:undefined}))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
    return result;
   }
   const previous=await this.current(resource);
   if((previous?.revision??0)!==input.expectedRevision)throw new SlaVersionConflict('本单安排已更新，请刷新后重试');
+  const oldRewash=new Map((previous?.input.rewashing??[]).map(row=>[row.intentId,row]));
+  const newRewash=(value.rewashing??[]).filter(row=>!oldRewash.has(row.intentId));
+  for(const row of value.rewashing??[]){
+   OrderTimeWashingReworkPlanSchema.parse(row);
+   if(resource.kind!=='order'||row.orderId!==resource.id)throw Error('返洗计划不属于原订单');
+   const old=oldRewash.get(row.intentId);
+   if(old){if(fixedTimelineIdentity(old)!==fixedTimelineIdentity(row))throw Error('既有返洗计划身份、范围和采用不能被覆盖');}
+   else{if(row.introducedAt||row.introducedEventRef)throw Error('新增返洗不能伪造原生效来源');row.introducedAt=time.now;row.introducedEventRef=input.eventRef;}
+  }
+  if([...oldRewash.keys()].some(id=>!value.rewashing?.some(row=>row.intentId===id)))throw Error('旧返洗计划须保留原安排与历史');
+
   if(previous){
    if(previous.time.scenarioId!==time.scenarioId||Date.parse(time.now)<Date.parse(previous.time.now)||time.revision<previous.time.revision)throw Error('本单时间来源或版本不能倒退');
    if(fixedTimelineIdentity(previous.input.plan.company)!==fixedTimelineIdentity(value.plan.company))throw Error('不能用后来公司标准覆盖本单原标准');
@@ -133,7 +181,7 @@ export class OrderTimePlanRepository{
    for(const scope of frameworkScopeInputs(value,context.route,context.acceptedAt,context.notBefore)){
     const old=previous?.input.frameworkPlans?.[scope.scopeRef];
     if(old&&kind==='customer_date_change'&&!changedScopes.has(scope.scopeRef)){plans[scope.scopeRef]=structuredClone(old);continue;}
-    const result=evaluateTimeFrameworkCandidate(scope,{purpose:'order_proposal',observedAt:time.now,retained:retainedFrameworkWork(scope,progress,old,time.now)});
+    const result=evaluateTimeFrameworkCandidate(scope,{purpose:'order_proposal',observedAt:time.now,retained:retainedWashingReworkTargets(scope,progress,old,time.now,newRewash.length>0,value.rewashing)});
     plans[scope.scopeRef]=freezeTimeFrameworkCandidate(result,{reference:`${input.eventRef}:${scope.scopeRef}`,revision:(old?.revision??0)+1,previousReference:old?.reference??null,eventRef:input.eventRef});
    }
    value.frameworkPlans=plans;
