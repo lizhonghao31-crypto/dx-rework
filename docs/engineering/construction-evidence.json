@@ -115,7 +115,7 @@
       "startedAt": "2026-11-17T03:44:43.216295+00:00",
       "endedAt": "2026-11-17T03:45:35.282585+00:00",
       "logSha256": "57f9776d4955db81643827d574be7a2987535fa1fcbe65cdf65c8c112b4aab57",
-      "logPath": "/workspace/sla-rp1-20261117/pg/rp1-requests-final/tests.log",
+      "log": "/workspace/sla-rp1-20261117/pg/rp1-requests-final/tests.log",
       "passed": 29,
       "failed": 0,
       "skipped": 0,
@@ -138,7 +138,7 @@
       "startedAt": "2026-11-17T03:45:06.569531+00:00",
       "endedAt": "2026-11-17T03:45:12.338927+00:00",
       "logSha256": "4b55e6c5c7553f0ee0242b4211ae26dfcfdae9b821964a0560dc8e49e0625085",
-      "logPath": "/workspace/sla-rp1-20261117/checks/units-final/command.log",
+      "log": "/workspace/sla-rp1-20261117/checks/units-final/command.log",
       "passed": 47,
       "failed": 0,
       "skipped": 0,
@@ -161,7 +161,7 @@
       "startedAt": "2026-11-17T03:45:05.157092+00:00",
       "endedAt": "2026-11-17T03:45:26.530551+00:00",
       "logSha256": "e92c928aab226b494ac15271dfe604fced7712e1321516f9840903b1eceeb49e",
-      "logPath": "/workspace/sla-rp1-20261117/checks/static-final/command.log"
+      "log": "/workspace/sla-rp1-20261117/checks/static-final/command.log"
     },
     {
       "id": "rp1-cli",
@@ -175,7 +175,7 @@
       "startedAt": "2026-11-17T03:46:48.388611+00:00",
       "endedAt": "2026-11-17T03:46:49.292364+00:00",
       "logSha256": "43f402f19e0916edadffa67bbd3bb7dde4a19e4025f28375b48a296f1234be43",
-      "logPath": "/workspace/sla-rp1-20261117/checks/cli-safety/command.log"
+      "log": "/workspace/sla-rp1-20261117/checks/cli-safety/command.log"
     }
   ]
 }
