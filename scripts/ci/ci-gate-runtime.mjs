@@ -111,7 +111,7 @@ export function certifyFinal(environment = process.env) {
   if (execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim() !== plan.head) throw new Error('Approval checkout differs');
   try { execFileSync('git', ['cat-file', '-e', `${plan.base}^{commit}`], {stdio: 'ignore'}); }
   catch { execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', plan.base], {stdio: 'pipe'}); }
-  const paths = execFileSync('git', ['diff', '--name-only', plan.base, plan.head], {encoding: 'utf8'}).trim().split('\n').filter(Boolean);
+  const paths = execFileSync('git', ['diff', '--no-renames', '--name-only', plan.base, plan.head], {encoding: 'utf8'}).trim().split('\n').filter(Boolean);
   const expectedScope = scopeFor(plan, paths);
   if (plan.kind === 'quick' && classifyFullGatePaths(paths).highRisk) throw new Error('Sensitive diff cannot receive a Quick approval');
   for (const [key, value] of Object.entries(expectedScope)) if (scope[key] !== value) throw new Error(`Actual scope ${key} differs`);

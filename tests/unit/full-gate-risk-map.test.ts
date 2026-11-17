@@ -1,9 +1,8 @@
 import { readFileSync,readdirSync } from "node:fs";
-import { basename } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES, INDEPENDENT_POSTGRES_TESTS } from "../../scripts/ci/full-gate-risk-map.mjs";
+import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES, INDEPENDENT_POSTGRES_TESTS, hasStaticPostgresCaseImport, assertStaticPostgresCaseImport } from "../../scripts/ci/full-gate-risk-map.mjs";
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
@@ -208,7 +207,7 @@ describe("Full Gate sensitive path mapping", () => {
     expect(result.dbRequired).toBe(true);
     expect(result.businessChainSensitive).toBe(!INDEPENDENT_POSTGRES_TESTS.includes(suite));
     expect(result.mappedPostgresTests).toEqual([suite]);
-    expect(readFileSync(suite, "utf8")).toContain(basename(module).replace(/\.ts$/, ".js"));
+    expect(hasStaticPostgresCaseImport(readFileSync(suite, "utf8"), module)).toBe(true);
     expect(() => assertMappedPostgresTests(result.mappedPostgresTests)).not.toThrow();
   });
 
@@ -436,5 +435,29 @@ describe('reviewed single-owner PostgreSQL test-only selection', () => {
       const risk=classifyFullGatePaths([path]);
       expect(risk.highRisk).toBe(true);expect(risk.businessChainSensitive).toBe(true);
     }
+  });
+});
+
+describe('case bindings use executable static imports, not textual mentions', () => {
+  const module='tests/integration/receiving-analysis-postgres.cases.ts';
+  it('recognizes the original side-effect import', () => {
+    expect(hasStaticPostgresCaseImport('import "./receiving-analysis-postgres.cases.js";',module)).toBe(true);
+  });
+  it.each([
+    '// import "./receiving-analysis-postgres.cases.js";',
+    '/* import "./receiving-analysis-postgres.cases.js"; */',
+    'const explanation = \'import "./receiving-analysis-postgres.cases.js";\';',
+    'const explanation = `import "./receiving-analysis-postgres.cases.js";`;',
+    'import type { Something } from "./receiving-analysis-postgres.cases.js";',
+    'void import("./receiving-analysis-postgres.cases.js");',
+    '',
+  ])('rejects a missing static execution edge: %s', source => {
+    expect(hasStaticPostgresCaseImport(source,module)).toBe(false);
+    expect(()=>assertStaticPostgresCaseImport(source,module,"tests/integration/receiving-postgres.test.ts")).toThrow("POSTGRES_CASE_IMPORT_REQUIRED");
+  });
+  it('does not preserve coverage when the import is removed but its comment remains', () => {
+    const before='import "./receiving-analysis-postgres.cases.js";\n// receiving-analysis-postgres.cases.js';
+    expect(hasStaticPostgresCaseImport(before,module)).toBe(true);
+    expect(hasStaticPostgresCaseImport(before.split('\n').slice(1).join('\n'),module)).toBe(false);
   });
 });

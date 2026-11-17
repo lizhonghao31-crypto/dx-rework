@@ -19,7 +19,7 @@ const pgIds=new Set(['db_start','db_seed','db_migrate','resource_smoke','setting
 export const owner=id=>id==='tests'?'non-db':pgIds.has(id)?'postgres':'prepare';
 const flags={db:'DB_REQUIRED',mapped:'MAPPED_POSTGRES_TESTS',journey:'JOURNEY_PG13_COMPAT',migration:'MIGRATION_SENSITIVE',business_chain:'BUSINESS_CHAIN_SENSITIVE',deployment:'DEPLOYMENT_SENSITIVE',maintenance:'MAINTENANCE_SENSITIVE',activation:'ACTIVATION_SENSITIVE',transfer:'TRANSFER_SENSITIVE'};
 export function expectedInputs(plan){
- const paths=git('diff','--name-only',plan.base,plan.head).split('\n').filter(Boolean);
+ const paths=git('diff','--no-renames','--name-only',plan.base,plan.head).split('\n').filter(Boolean);
  const scope=scopeFor(plan,paths);
  const environment={BASE_SHA:plan.base,...Object.fromEntries(Object.entries(flags).map(([k,v])=>[v,scope[k]]))};
  const excluded=new Set(postgresTestFiles());

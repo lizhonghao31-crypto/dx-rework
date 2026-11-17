@@ -45,17 +45,96 @@ export const INDEPENDENT_POSTGRES_TESTS = Object.freeze([
   "tests/integration/sample-read-postgres.test.ts",
 ]);
 
+// Dependency-free: resolve/certify run before npm install. This bounded lexer
+// recognizes only top-level, literal, semicolon-terminated side-effect imports.
+// Unsupported templates/regex before the binding fail closed, never match text.
+export const hasStaticPostgresCaseImport = (source, modulePath) => {
+  const expected = "./" + modulePath.split("/").at(-1).replace(/\.ts$/, ".js");
+  let position = 0;
+  const stack = [];
+  const trivia = () => {
+    while (position < source.length) {
+      if (/\s/.test(source[position])) { position++; continue; }
+      if (source.startsWith("//", position)) {
+        const end = source.indexOf("\n", position + 2);
+        position = end < 0 ? source.length : end + 1; continue;
+      }
+      if (source.startsWith("/*", position)) {
+        const end = source.indexOf("*/", position + 2);
+        if (end < 0) return false;
+        position = end + 2; continue;
+      }
+      break;
+    }
+    return true;
+  };
+  const quoted = () => {
+    const quote = source[position++];
+    const start = position;
+    let escaped = false;
+    while (position < source.length) {
+      const char = source[position++];
+      if (char === "\\") { escaped = true; position++; continue; }
+      if (char === quote) return {value: source.slice(start, position - 1), escaped};
+      if (char === "\n" || char === "\r") return null;
+    }
+    return null;
+  };
+  while (position < source.length) {
+    if (!trivia()) return false;
+    const char = source[position];
+    if (char === undefined) break;
+    if (char === "'" || char === '"') { if (!quoted()) return false; continue; }
+    if (char === "\x60" || char === "/") return false;
+    if (/[A-Za-z_$]/.test(char)) {
+      const start = position++;
+      while (position < source.length && /[\w$]/.test(source[position])) position++;
+      if (source.slice(start, position) !== "import" || stack.length) continue;
+      if (!trivia()) return false;
+      if (source[position] !== "'" && source[position] !== '"') continue;
+      const literal = quoted();
+      if (!literal || !trivia()) return false;
+      if (source[position] === ";" && !literal.escaped && literal.value === expected) return true;
+      continue;
+    }
+    if ("({[".includes(char)) stack.push(char);
+    else if (")}]".includes(char)) {
+      const open = stack.pop();
+      if (open !== {")":"(", "}":"{", "]":"["}[char]) return false;
+    }
+    position++;
+  }
+  return false;
+};
+
+export const assertStaticPostgresCaseImport = (source, module, owner) => {
+  if (!hasStaticPostgresCaseImport(source, module)) {
+    throw new Error(`POSTGRES_CASE_IMPORT_REQUIRED: ${module} -> ${owner}`);
+  }
+};
+
 const independentTestOnlyChange = (paths) => {
   if (!paths.length) return false;
   const owners = new Set();
+  let eligible = true;
   for (const path of paths) {
     const owner = POSTGRES_CASE_SUITES[path] ?? path;
-    if (!INDEPENDENT_POSTGRES_TESTS.includes(owner) || !existsSync(path) || !existsSync(owner)) return false;
-    if (path !== owner && !readFileSync(owner, "utf8").includes(path.split("/").at(-1).replace(/\.ts$/, ".js"))) return false;
+    if (!INDEPENDENT_POSTGRES_TESTS.includes(owner) || !existsSync(path) || !existsSync(owner)) {
+      eligible = false;
+      continue;
+    }
+    // Validate all known case bindings even if only the owner changed, and even
+    // in a mixed diff. A broad chain cannot execute a case whose import is gone.
+    for (const [module, runnable] of Object.entries(POSTGRES_CASE_SUITES)) {
+      if (runnable !== owner) continue;
+      if (!existsSync(module)) {
+        throw new Error(`POSTGRES_CASE_IMPORT_REQUIRED: ${module} -> ${owner}`);
+      }
+      assertStaticPostgresCaseImport(readFileSync(owner, "utf8"), module, owner);
+    }
     owners.add(owner);
   }
-  // More than one runnable owner is a multi-domain change until reviewed.
-  return owners.size === 1;
+  return eligible && owners.size === 1;
 };
 
 const isMigration = (path) =>
