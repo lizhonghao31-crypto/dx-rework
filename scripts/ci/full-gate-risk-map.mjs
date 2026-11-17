@@ -642,7 +642,8 @@ export const classifyFullGatePaths = (inputPaths) => {
   }
 
   // The domain barrel loads this shared engine indirectly via naturalTimeRatio.
-  // Engine changes keep the complete chain, plus the explicit native consumers.
+  // Engine changes keep the reviewed shared-engine chain (only SQL own-tail excluded),
+  // plus the explicit native consumers.
   if (paths.includes("packages/domain/src/digital-sla-plan.ts")) {
     addAll(mappedTests, SLA_JOURNEY_REQUIRED_TESTS);
     businessChainSensitive = true;
