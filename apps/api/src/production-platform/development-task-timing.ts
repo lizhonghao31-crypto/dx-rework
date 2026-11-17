@@ -48,9 +48,20 @@ export async function developmentTaskTiming(db:DB,task:Task,options:{prerequisit
   const published=task.route_version===1?saved.plan_json.anchors.development_published?.value:document.published_at;
   const basis:string[]=[];
   const fixedPrior=position?(await db.query('SELECT task_id,route_position FROM digital_timeline_task_positions WHERE route_ref=$1 AND route_version=$2 AND route_position<$3 ORDER BY route_position DESC',[position.route_ref,task.route_version,position.route_position])).rows:[];
+  // A replenishment recheck is causal work outside the frozen route positions.
+  // Its explicitly recorded dependency, not a same-kind timestamp, owns the
+  // pattern window. Retain the original route fallback only when no such edge
+  // was ever recorded; incomplete or ambiguous edges must not borrow another A.
+  const patternPredecessors=kind==='development_pattern'?(await db.query(`SELECT p.task_id,p.route_instance_id,p.route_version,a.source_id,a.task_kind,c.route_instance_id AS current_route
+    FROM digital_production_task_dependencies d JOIN digital_production_tasks c ON c.task_id=d.task_id
+    JOIN digital_production_tasks p ON p.task_id=d.predecessor_id JOIN digital_production_task_access a ON a.task_id=p.task_id
+    WHERE d.task_id=$1 AND a.task_kind IN ('development_materials','development_material_recheck')`,[task.task_id])).rows:[];
   const completed=(...kinds:string[]):string|null=>{
     const candidates=rows.filter(r=>kinds.includes(r.task_kind)&&(r.route_version===task.route_version||kinds.some(k=>inherited[k]?.taskId===r.task_id)));
-    const row=position?fixedPrior.map(prior=>candidates.find(row=>row.task_id===prior.task_id)).find(Boolean)??candidates.find(row=>row.route_version!==task.route_version):candidates[0];
+    const causal=patternPredecessors.length===1?patternPredecessors[0]:null;
+    const exact=causal&&causal.source_id===task.source_id&&(causal.route_version===task.route_version&&causal.route_instance_id===causal.current_route||inherited[causal.task_kind]?.taskId===causal.task_id);
+    const row=patternPredecessors.length?(exact?candidates.find(row=>row.task_id===causal.task_id):null)
+      :position?fixedPrior.map(prior=>candidates.find(row=>row.task_id===prior.task_id)).find(Boolean)??candidates.find(row=>row.route_version!==task.route_version):candidates[0];
     if(!row)return null;
     basis.push(`task:${row.task_id}:completed`);
     // Reused work may enable a new correction round, but cannot start its window before that round was published.

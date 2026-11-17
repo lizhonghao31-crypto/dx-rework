@@ -112,15 +112,18 @@ export class DigitalProductionTaskService {
   private resource(task: { production_order_id: string | null; source_id: string | null }): Resource {
     return task.production_order_id ? { kind: "order", id: task.production_order_id } : { kind: "source", id: task.source_id! };
   }
-  private async active(client: PoolClient, resource: Resource) {
+  private async executionBlock(client: Pick<Pool, "query">, resource: Resource): Promise<string | null> {
     const parent=(await client.query(`SELECT to_jsonb(p)->>'order_time_managed' AS managed FROM ${resource.kind==='source'?'digital_production_sources':'digital_production_orders'} p WHERE ${resource.kind==='source'?'source_id':'production_order_id'}=$1`,[resource.id])).rows[0];
     if(parent?.managed==='true'&&!orderTimeAdmission(client)){
       const subject=(await client.query(`SELECT effective FROM digital_order_time_subjects WHERE resource_kind=$1 AND ${resource.kind==='source'?'source_id':'production_order_id'}=$2`,[resource.kind,resource.id])).rows[0];
-      if(subject?.effective===false)fail('本单时效尚未生效，请先处理本单时效申请');
+      if(subject?.effective===false)return '本单时效尚未生效，请先处理本单时效申请';
     }
-    if(resource.kind==='order'&&(await client.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[resource.id])).rowCount)fail('母单已特殊结案');
+    if(resource.kind==='order'&&(await client.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[resource.id])).rowCount)return '母单已特殊结案';
     const state = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state ?? "active";
-    if (state !== "active") fail(state === "paused" ? "订单已暂停" : "订单已取消");
+    return state === "active" ? null : state === "paused" ? "订单已暂停" : "订单已取消";
+  }
+  private async active(client: PoolClient, resource: Resource) {
+    const blocked=await this.executionBlock(client,resource);if(blocked)fail(blocked);
   }
   private async conditionsReady(client: PoolClient, id: string, completion = false) {
     const unmet = await client.query(`SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied AND (stage='activation' OR $2::boolean)
@@ -824,7 +827,7 @@ export class DigitalProductionTaskService {
       enteredAt: responsibility?responsibility.at:iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
       dueAt: retired||responsibility&&!responsibility.at?null:iso(effective?.due_at ?? null), warningAt: retired||responsibility&&!responsibility.at?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
       policyVersion: currentPolicy.version as number, timeQuality: (responsibility?.quality??(effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality)) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
-      blockedReason: task.blocked_reason as string | null, canExecute: !retired && !paused && await policy.allowed(actor, "task", id, "execute") };
+      blockedReason: task.blocked_reason as string | null, canExecute: !retired && !paused && !await this.executionBlock(db,resource) && await policy.allowed(actor, "task", id, "execute") };
   }
   async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){
     if(!(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 AND closed_by=$2',[orderId,actor.actorId])).rowCount)digitalForbidden();

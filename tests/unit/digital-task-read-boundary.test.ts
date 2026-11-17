@@ -26,6 +26,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     state: "ready", entered_at: "2026-10-06T14:00:00Z", created_at: "2026-10-06T14:00:00Z", completed_at: null,
     entered_quality: "现场登记", completed_quality: "缺失", blocked_reason: null });
   const own = task("bulk_pattern", workerId, "pattern_room_worker"), foreign = task("warehouse_preshrink", warehouseId, "warehouse_receiver");
+  const eligibility={managed:false,effective:true,state:'active',closed:false};
   const rows = [own, foreign];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
@@ -49,13 +50,19 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     else if (sql.includes("SELECT 1 FROM app_users u JOIN user_role_assignments")) found = activeRoles.get(String(params[0]))?.includes(String(params[1])) ? [{}] : [];
     else if (sql.startsWith("SELECT * FROM digital_production_orders")) found = params[0] === orderId ? [order] : [];
     else if (sql.startsWith("SELECT * FROM digital_production_sources")) found = params[0] === sourceId ? [source] : [];
+    else if(sql==="SELECT to_jsonb(p)->>'order_time_managed' AS managed FROM digital_production_orders p WHERE production_order_id=$1"){expect(params).toEqual([orderId]);found=[{managed:String(eligibility.managed)}];}
+    else if(sql==="SELECT to_jsonb(p)->>'order_time_managed' AS managed FROM digital_production_sources p WHERE source_id=$1"){expect(params).toEqual([sourceId]);found=[{managed:String(eligibility.managed)}];}
+    else if(sql==="SELECT effective FROM digital_order_time_subjects WHERE resource_kind=$1 AND production_order_id=$2"){expect(params).toEqual(['order',orderId]);found=[{effective:eligibility.effective}];}
+    else if(sql==="SELECT effective FROM digital_order_time_subjects WHERE resource_kind=$1 AND source_id=$2"){expect(params).toEqual(['source',sourceId]);found=[{effective:eligibility.effective}];}
+    else if(sql==="SELECT to_regclass('digital_order_closures') AS relation")found=[{relation:'digital_order_closures'}];
+    else if(sql==='SELECT 1 FROM digital_order_closures WHERE production_order_id=$1'){expect(params).toEqual([orderId]);found=eligibility.closed?[{}]:[];}
     else if (sql.includes("to_regclass('digital_bulk_preparations')")) found = [{ relation: "digital_bulk_preparations" }];
     else if (sql.includes("to_regclass('digital_development_documents')")) found = [{ relation: null }];
     else if (sql.startsWith("SELECT a.task_id,a.assignee_id,a.required_role")) found = rows.filter(row => row.production_order_id === params[0]);
     else if (sql.startsWith("SELECT t.*,a.production_order_id")) found = rows.filter(row => row.task_id === params[0]);
     else if (sql.startsWith("SELECT r.entered_at")) found = [];
     else if (sql.startsWith("SELECT * FROM digital_production_deadline_policies")) found = [{ label: "TEST task", version: 1, sla_seconds: 3600 }];
-    else if (sql.startsWith("SELECT state FROM digital_production_resource_lifecycle")) found = [];
+    else if (sql.startsWith("SELECT state FROM digital_production_resource_lifecycle")){expect(params).toEqual(params[0]==='source'?['source',sourceId]:['order',orderId]);found=[{state:eligibility.state}];}
     else if (sql.startsWith("SELECT created_by,primary_merchandiser_id")) found = [order];
     else if (sql.startsWith("SELECT created_by,design_style_no")) found = [source];
     else if (sql.startsWith("SELECT display_name FROM app_users")) found = [{ display_name: params[0] === workerId ? "TEST本人" : "TEST仓管" }];
@@ -80,11 +87,20 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     return { rows: found, rowCount: found.length };
   });
   const pool = { query } as unknown as Pool, policy = new DigitalProductionAccessPolicy(pool), service = new DigitalProductionTaskService(pool);
-  return { orderId, sourceId, preparationId, workerId, warehouseId, designerId, primaryId, own, foreign, rows, actor, activeRoles, order, source, pool, query, policy, service };
+  return { orderId, sourceId, preparationId, workerId, warehouseId, designerId, primaryId, own, foreign, rows, actor, activeRoles, order, source, pool, query, policy, service,eligibility };
 }
 
 describe("task metadata is authorized independently from necessary order documents", () => {
   afterEach(() => vi.restoreAllMocks());
+  it.each(['not-effective','paused','cancelled','closed'])('retains authorized read but refuses execution for %s without admitting a sibling',async reason=>{
+    const f=fixture();f.eligibility.managed=true;
+    if(reason==='not-effective')f.eligibility.effective=false;
+    else if(reason==='closed')f.eligibility.closed=true;
+    else f.eligibility.state=reason;
+    expect(await f.service.read(f.actor(),f.own.task_id)).toMatchObject({taskId:f.own.task_id,canExecute:false});
+    await expect(f.service.read(f.actor(),f.foreign.task_id)).rejects.toMatchObject({statusCode:404});
+    await expect(f.pool.query('SELECT unexpected_isolated_query')).rejects.toThrow('Unexpected isolated query');
+  });
 
   it.each(['absent','unenrolled','frozen'] as const)('keeps the %s SLA read inside the authorized order and rejects unknown queries',async mode=>{
     const f=fixture(mode),read=await f.service.read(f.actor(),f.own.task_id);

@@ -17,6 +17,8 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {OrderTimeScopeRecoveryService} from '../../apps/api/src/production-platform/order-time-scope-recovery.js';
+import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
@@ -625,6 +627,170 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    for(const item of work){expect(Object.keys(item.craftStep!)).not.toContain('stepId');expect(item.craftStep!.specialCraft!.version).toBe(1);expect(item.canonicalWorkRef).toContain(':step:');}
    const read=await requests.check(f.root,{kind:'arrangement',resource});expect(read.framework!.milestones).toHaveLength(8);
    expect((await forms.read(row.actor,row.sourceId)).document!.craftSteps).toEqual(steps);
+  });
+ });
+
+ it.each([false,true])('connects a same-round material recheck to the original paper R and Sunday-excluded D, framework=%s',async(framework)=>{
+  const settings=new OrderTimeSettingsService(f.db),current=await settings.read(f.root),values=framework?prepareTimeFrameworkConfiguration(r5OneHourConfiguration()):r5OneHourConfiguration();
+  await settings.save(f.root,{expectedVersion:current.version,values:{...values,nodes:{...values.nodes,development_pattern:{kind:'work',minutes:4320,calendar:'beijing_sunday_excluded',reminder:{enabled:true,percent:80}}}}},randomUUID());
+  const scene=await f.scene('2026-11-20T04:00:00.000Z'),execution=new DevelopmentExecutionService(f.db,true),tasks=new DigitalProductionTaskService(f.db),clerk=f.people['development-clerk']!;
+  const prepared=await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2027-10-01',true),before=await forms.read(row.actor,row.sourceId);
+   const saved=await forms.save(row.actor,row.sourceId,{expectedVersion:before.version,document:{...before.document!,materials:before.document!.materials.map(m=>({...m,available:false,expectedDate:'2026-11-21'})),productionPlanning:{craftSteps:[],preshrink:false}}},randomUUID());
+   if(row.operation.kind!=='development_publish')throw Error('TEST original publish required');
+   const published=await forms.publish(row.actor,row.sourceId,saved.version,randomUUID(),row.operation.input.patternOrder),taskId=published.taskId!,materialId=row.material!.materialId;
+   const entry={materialId,usage:'use' as const,physical:false,quantity:true,color:true,specification:true,note:'',confirmedWith:''},issues=[{materialId,field:'physical' as const,reason:'TEST real missing material',need:'supply' as const}];
+   const verification=await execution.saveMaterials(clerk,row.sourceId,{taskId,expectedVersion:0,expectedDocumentVersion:published.version,entries:[entry],result:'缺项退回',returnIssues:issues},randomUUID());
+   await execution.check(clerk,row.sourceId,{taskId,expectedVerificationVersion:verification.version,result:'缺项退回',returnIssues:issues,note:'TEST return missing material',items:[entry]},randomUUID());
+   const supply=(await execution.read(row.actor,row.sourceId)).tasks.find(t=>t.taskKind==='development_material_supply'&&t.state==='ready')!;
+   await forms.materialEvent(row.actor,row.sourceId,materialId,{expectedVersion:published.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST original material arrival'},randomUUID());
+   const recheck=await execution.resubmit(row.actor,row.sourceId,supply.taskId,randomUUID()) as {taskId:string};
+   return {...row,initialTaskId:taskId,recheckId:recheck.taskId,materialId};
+  });
+  await f.advance(scene,'2026-11-21T04:00:00.000Z');
+  const passed=await f.runtime.run(scene,f.root,async()=>{
+   const view=await execution.read(clerk,prepared.sourceId),verification=view.materialVerification!,entries=[{materialId:prepared.materialId,usage:'use' as const,physical:true,quantity:true,color:true,specification:true,note:'',confirmedWith:''}];
+   const saved=await execution.saveMaterials(clerk,prepared.sourceId,{taskId:prepared.recheckId,expectedVersion:verification.version,expectedDocumentVersion:verification.documentVersion,entries,result:'通过'},randomUUID());
+   const key=randomUUID(),body={taskId:prepared.recheckId,expectedVerificationVersion:saved.version,result:'通过' as const,note:'TEST current recheck passed',items:entries};
+   const result=await execution.check(clerk,prepared.sourceId,body,key),paper=(await execution.read(f.root,prepared.sourceId)).tasks.find(t=>t.taskKind==='development_pattern')!;
+   expect(await execution.check(clerk,prepared.sourceId,body,key)).toEqual(result);
+   expect((await f.db.query('SELECT predecessor_id FROM digital_production_task_dependencies WHERE task_id=$1',[paper.taskId])).rows).toEqual([{predecessor_id:prepared.recheckId}]);
+   expect((await f.db.query("SELECT 1 FROM digital_production_task_events WHERE task_id=$1 AND event_kind='material_returned'",[prepared.initialTaskId])).rowCount).toBe(1);
+   expect((await f.db.query('SELECT route_schema_version FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision DESC LIMIT 1',[prepared.sourceId])).rows[0].route_schema_version).toBe(2);
+   expect(await tasks.read(f.root,paper.taskId)).toMatchObject({enteredAt:'2026-11-21T04:00:00.000Z',dueAt:'2026-11-25T04:00:00.000Z',slaHours:72});
+   return {paperId:paper.taskId,completed:(await tasks.history(f.root,prepared.recheckId)).events.find(e=>e.kind==='completed')!};
+  });
+  await f.advance(scene,'2026-11-21T06:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   await execution.arrange(clerk,prepared.sourceId,await arrangementInput(f.db,execution,clerk,prepared.sourceId,f.people['pattern-room-worker']!.actorId),randomUUID());
+   expect(await tasks.read(f.root,passed.paperId)).toMatchObject({enteredAt:'2026-11-21T04:00:00.000Z',dueAt:'2026-11-25T04:00:00.000Z'});
+   for(const at of ['2026-11-21T05:00:00.000Z',null,'2026-11-21T04:00:00.000Z']){
+    await tasks.correctTime(f.root,prepared.recheckId,{eventId:passed.completed.eventId,occurredAt:at,reason:'TEST verify exact predecessor occurrence'},randomUUID());
+    expect(await tasks.read(f.root,passed.paperId)).toMatchObject({enteredAt:at,dueAt:at?at.replace('11-21','11-25'):null});
+   }
+   expect((await f.db.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1 AND task_kind='development_pattern'",[prepared.sourceId])).rows[0].n).toBe(1);
+  });
+ });
+
+ describe('linked source and order first activation',()=>{
+  const orderedDraft=async()=>{
+   const row=await make('2027-10-01',true),before=await forms.read(row.actor,row.sourceId);
+   const ordering=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:before.designStyleNo,orderDate:'2027-10-01',contractDeliveryDate:'2027-10-01',requiresColorMatching:false,salesYear:2027,salesSeries:'P10',
+    lines:[{formalPoNo:'TEST-READY-SCOPE-'+randomUUID(),color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2027-10-01',sizes:[{size:'M',quantity:'1'}]}]});
+   const saved=await forms.save(row.actor,row.sourceId,{expectedVersion:before.version,document:{...before.document!,productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order:ordering}}},randomUUID());
+   if(row.operation.kind!=='development_publish')throw Error('TEST development publication required');
+   return {...row,operation:{...row.operation,input:{...row.operation.input,expectedVersion:saved.version}}};
+  };
+  const application=async(row:Awaited<ReturnType<typeof orderedDraft>>)=>{
+   const pending=await submit(row),manager=f.people['production-management']!;
+   const overrides={development_materials:{kind:'work' as const,minutes:45,calendar:'continuous' as const,reminder:{enabled:true,percent:80}}};
+   const preview=await requests.read(manager,pending.requestId,overrides);
+   return {pending,manager,body:{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides,acceptLate:true},key:randomUUID()};
+  };
+  it.each([false,true])('keeps a source READY task executable after its original order application, framework=%s',async(framework)=>{
+   const settings=new OrderTimeSettingsService(f.db),current=await settings.read(f.root);
+   await settings.save(f.root,{expectedVersion:current.version,values:framework?prepareTimeFrameworkConfiguration(r5OneHourConfiguration()):r5OneHourConfiguration()},randomUUID());
+   const scene=await f.scene('2027-10-01T15:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+    const unrelated=await make('2027-10-01',true),row=await orderedDraft(),ap=await application(row);
+    await expect(forms.publish(row.actor,row.sourceId,row.operation.input.expectedVersion,randomUUID(),row.operation.input.patternOrder)).rejects.toMatchObject({code:'ORDER_TIME_REQUEST_REQUIRED'});
+    expect((await f.db.query('SELECT effective FROM digital_order_time_subjects WHERE source_id=$1',[row.sourceId])).rows[0].effective).toBe(false);
+    expect((await f.db.query('SELECT 1 FROM digital_production_task_access WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+    const applied=await requests.apply(ap.manager,ap.pending.requestId,ap.body,ap.key),orderId=applied.result!.orderId!;
+    const execution=new DevelopmentExecutionService(f.db,true),clerk=f.people['development-clerk']!,view=await execution.read(clerk,row.sourceId);
+    const task=view.tasks.find(task=>task.taskKind==='development_materials')!,verification=view.materialVerification!;
+    expect(task).toMatchObject({sourceId:row.sourceId,orderId:null,canExecute:true,state:'ready'});
+    const items=[{materialId:row.material!.materialId,physical:true,quantity:true,color:true,specification:true}];
+    await execution.saveMaterials(clerk,row.sourceId,{taskId:task.taskId,expectedDocumentVersion:verification.documentVersion,expectedVersion:verification.version,entries:items.map(item=>({...item,usage:'use',note:'',confirmedWith:''})),note:'TEST original READY material check',result:'通过'},randomUUID());
+    await execution.check(clerk,row.sourceId,{taskId:task.taskId,expectedVerificationVersion:verification.version+1,result:'通过',note:'TEST original READY material check',items},randomUUID());
+    expect(await new DigitalProductionTaskService(f.db).read(clerk,task.taskId)).toMatchObject({state:'completed',slaHours:0.75});
+    const repo=new OrderTimePlanRepository(f.db),sourcePlan=(await repo.current({kind:'source',id:row.sourceId}))!,orderPlan=(await repo.current({kind:'order',id:orderId}))!;
+    expect(sourcePlan).not.toBeNull();expect(orderPlan).not.toBeNull();
+    expect(sourcePlan.input.plan.company).toEqual(orderPlan.input.plan.company);
+    expect(sourcePlan.input.plan.overrides).toEqual(ap.body.overrides);
+    expect(sourcePlan.eventRef).toBe(orderPlan.eventRef);expect(sourcePlan.revision).toBe(1);expect(orderPlan.revision).toBe(1);
+    expect((await f.db.query('SELECT effective FROM digital_order_time_subjects WHERE source_id=$1 OR production_order_id=$2',[row.sourceId,orderId])).rows).toEqual([{effective:true},{effective:true}]);
+    expect(await requests.apply(ap.manager,ap.pending.requestId,ap.body,ap.key)).toEqual(applied);
+    expect(await repo.current({kind:'source',id:row.sourceId})).toEqual(sourcePlan);expect(await repo.current({kind:'order',id:orderId})).toEqual(orderPlan);
+    expect((await f.db.query('SELECT effective FROM digital_order_time_subjects WHERE source_id=$1',[unrelated.sourceId])).rows[0].effective).toBe(false);
+    expect(await repo.current({kind:'source',id:unrelated.sourceId})).toBeNull();
+    const unrelatedResource={kind:'source' as const,id:unrelated.sourceId},unrelatedCheck=await requests.check(f.root,{kind:'arrangement',resource:unrelatedResource});
+    await expect(requests.arrange(f.root,{resource:unrelatedResource,overrides:{},fingerprint:unrelatedCheck.fingerprint,acceptLate:true},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_REQUEST_REQUIRED'});
+   });
+  });
+  it('rolls back both plans, native publication and effectiveness when the order plan cannot commit, then replays once',async()=>{
+   const scene=await f.scene('2027-10-01T15:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+    const row=await orderedDraft(),ap=await application(row),before=await forms.read(row.actor,row.sourceId),confirm=OrderTimePlanRepository.prototype.confirm;
+    let sourcePlanWasWritten=false;
+    const spy=vi.spyOn(OrderTimePlanRepository.prototype,'confirm').mockImplementation(async function(this:OrderTimePlanRepository,input,refresh){
+     if(input.resource.kind==='order')throw Error('TEST order plan persistence failure');
+     const saved=await confirm.call(this,input,refresh);sourcePlanWasWritten=true;return saved;
+    });
+    try{await expect(requests.apply(ap.manager,ap.pending.requestId,ap.body,ap.key)).rejects.toThrow('TEST order plan persistence failure');}finally{spy.mockRestore();}
+    expect(sourcePlanWasWritten).toBe(true);
+    expect((await forms.read(row.actor,row.sourceId)).version).toBe(before.version);
+    expect((await f.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+    expect((await f.db.query('SELECT 1 FROM digital_production_task_access WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+    expect((await f.db.query('SELECT 1 FROM digital_order_time_plan_versions WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+    expect((await f.db.query('SELECT effective FROM digital_order_time_subjects WHERE source_id=$1',[row.sourceId])).rows[0].effective).toBe(false);
+    expect((await requests.read(ap.manager,ap.pending.requestId)).state).toBe('pending');
+    expect((await f.db.query("SELECT 1 FROM audit_events WHERE action='order_time_activated' AND after_state->>'requestId'=$1",[ap.pending.requestId])).rowCount).toBe(0);
+    expect((await f.db.query("SELECT 1 FROM digital_order_time_request_events WHERE request_id=$1 AND action='applied'",[ap.pending.requestId])).rowCount).toBe(0);
+    expect((await f.db.query('SELECT 1 FROM digital_production_commands WHERE command=$1 AND key=$2',['order-time:apply:'+ap.pending.requestId,ap.key])).rowCount).toBe(0);
+    const applied=await requests.apply(ap.manager,ap.pending.requestId,ap.body,ap.key);
+    expect(await requests.apply(ap.manager,ap.pending.requestId,ap.body,ap.key)).toEqual(applied);
+    expect((await f.db.query('SELECT 1 FROM digital_order_time_plan_versions WHERE source_id=$1 OR production_order_id=$2',[row.sourceId,applied.result!.orderId])).rowCount).toBe(2);
+   });
+  });
+  it('recovers only an exact original source qualification, preserving frozen plans and task windows with one audited idempotent update',async()=>{
+   const scene=await f.scene('2027-10-01T15:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+    const row=await orderedDraft(),ap=await application(row),applied=await requests.apply(ap.manager,ap.pending.requestId,ap.body,ap.key),orderId=applied.result!.orderId!,recovery=new OrderTimeScopeRecoveryService(f.db,new RootAuthority(f.db,"anchor-test",undefined));
+    const frozen=async()=>({plans:(await f.db.query('SELECT * FROM digital_order_time_plan_versions WHERE source_id=$1 OR production_order_id=$2 ORDER BY plan_version_id',[row.sourceId,orderId])).rows,
+     tasks:(await f.db.query('SELECT t.*,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 ORDER BY t.task_id',[row.sourceId])).rows,
+     revisions:(await f.db.query('SELECT r.* FROM digital_production_deadline_revisions r JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 ORDER BY revision_id',[row.sourceId])).rows});
+    const original=await frozen();await f.db.query('UPDATE digital_order_time_subjects SET effective=false WHERE source_id=$1',[row.sourceId]);
+    const clerk=f.people['development-clerk']!,task=(await new DevelopmentExecutionService(f.db,true).read(clerk,row.sourceId)).tasks.find(t=>t.taskKind==='development_materials')!;
+    expect(task.canExecute).toBe(false);await expect(new DigitalProductionTaskService(f.db).complete(clerk,task.taskId,{},randomUUID())).rejects.toThrow('尚未生效');
+    await expect(recovery.preview(clerk,ap.pending.requestId)).rejects.toMatchObject({statusCode:403});
+    await expect(recovery.preview({...clerk,actorRoles:['root_superuser']},ap.pending.requestId)).rejects.toMatchObject({statusCode:403});
+    await f.db.query("UPDATE identity_mappings SET active=false WHERE user_id=$1 AND provider='dingtalk'",[f.root.actorId]);
+    try{await expect(recovery.preview(f.root,ap.pending.requestId)).rejects.toMatchObject({statusCode:403});}
+    finally{await f.db.query("UPDATE identity_mappings SET active=true WHERE user_id=$1 AND provider='dingtalk'",[f.root.actorId]);}
+    const preview=await recovery.preview(f.root,ap.pending.requestId);expect(preview).toMatchObject({state:'ready',proof:{sourceId:row.sourceId,orderId,effective:false}});
+    const body={requestId:ap.pending.requestId,fingerprint:preview.fingerprint,reason:'TEST recover an existing original approval reference only'},key=randomUUID();
+    await expect(recovery.recover(f.root,{...body,fingerprint:'0'.repeat(64)},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_STALE'});
+    const [result,concurrent]=await Promise.all([recovery.recover(f.root,body,key),recovery.recover(f.root,body,key)]);expect(concurrent).toEqual(result);expect(result).toMatchObject({sourceId:row.sourceId,changed:true});
+    expect(await recovery.recover(f.root,body,key)).toEqual(result);await expect(recovery.recover(f.root,{...body,reason:'different'},key)).rejects.toMatchObject({code:'ORDER_TIME_CONFLICT'});
+    expect(await frozen()).toEqual(original);expect(await new DigitalProductionTaskService(f.db).read(clerk,task.taskId)).toMatchObject({canExecute:true});
+    const current=await recovery.preview(f.root,ap.pending.requestId);expect(current.state).toBe('already_consistent');
+    expect(await recovery.recover(f.root,{...body,fingerprint:current.fingerprint},randomUUID())).toMatchObject({changed:false,auditId:null});
+    expect((await f.db.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1 AND action='order_time_scope_consistency_recovered'",[row.sourceId])).rows[0].n).toBe(1);
+   });
+  });
+  it('refuses qualification recovery when original source evidence is unavailable, the request is pending or lifecycle is terminated',async()=>{
+   const scene=await f.scene('2027-10-01T15:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+    const row=await orderedDraft(),ap=await application(row),recovery=new OrderTimeScopeRecoveryService(f.db,new RootAuthority(f.db,"anchor-test",undefined));
+    expect(await recovery.preview(f.root,ap.pending.requestId)).toMatchObject({state:'blocked',blockers:['原申请不是已生效的批准记录']});
+    const applied=await requests.apply(ap.manager,ap.pending.requestId,ap.body,ap.key);await f.db.query('UPDATE digital_order_time_subjects SET effective=false WHERE source_id=$1',[row.sourceId]);
+    const current=OrderTimePlanRepository.prototype.current,spy=vi.spyOn(OrderTimePlanRepository.prototype,'current').mockImplementation(async function(this:OrderTimePlanRepository,resource){return resource.kind==='source'?null:current.call(this,resource);});
+    try{
+     const preview=await recovery.preview(f.root,ap.pending.requestId);expect(preview.state).toBe('blocked');expect(preview.blockers.join()).toContain('缺少原批准开发方案');
+     await expect(recovery.recover(f.root,{requestId:ap.pending.requestId,fingerprint:preview.fingerprint,reason:'TEST unavailable original evidence'},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_RECOVERY_BLOCKED'});
+    }finally{spy.mockRestore();}
+    await f.db.query("INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by) VALUES('source',$1,'cancelled',$2) ON CONFLICT(resource_kind,resource_id) DO UPDATE SET state='cancelled'",[row.sourceId,f.root.actorId]);
+    const blocked=await recovery.preview(f.root,ap.pending.requestId);expect(blocked).toMatchObject({state:'blocked',blockers:['资源已暂停、取消或特殊结案，不恢复办理资格']});
+    expect((await f.db.query('SELECT effective FROM digital_order_time_subjects WHERE source_id=$1',[row.sourceId])).rows[0].effective).toBe(false);
+    expect((await f.db.query("SELECT 1 FROM audit_events WHERE entity_id=$1 AND action='order_time_scope_consistency_recovered'",[row.sourceId])).rowCount).toBe(0);
+    expect(applied.result!.orderId).toBeTruthy();
+   });
+  });
+  it.each([false,true])('rejects a mismatched or missing native source instead of activating another saved draft, missing=%s',async(missing)=>{
+   const scene=await f.scene('2027-10-01T15:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+    const row=await orderedDraft(),other=await make('2027-10-01',true),ap=await application(row),execute=orderTimeNativeExecutor(f.db,true,native);
+    const wrong=new OrderTimeRequestService(f.db,async(...args)=>({...await execute(...args),sourceId:missing?null:other.sourceId}));
+    await expect(wrong.apply(ap.manager,ap.pending.requestId,ap.body,ap.key)).rejects.toMatchObject({code:'ORDER_TIME_CONFLICT'});
+    expect((await f.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+    expect((await f.db.query('SELECT effective FROM digital_order_time_subjects WHERE source_id=ANY($1::uuid[])',[[row.sourceId,other.sourceId]])).rows.every(row=>row.effective===false)).toBe(true);
+    expect((await f.db.query('SELECT 1 FROM digital_order_time_plan_versions WHERE source_id=ANY($1::uuid[])',[[row.sourceId,other.sourceId]])).rowCount).toBe(0);
+   });
   });
  });
 

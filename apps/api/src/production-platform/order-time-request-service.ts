@@ -113,6 +113,25 @@ export class OrderTimeRequestService{
     const native=state.operation.kind==='arrangement'?{sourceId:state.sourceId,orderId:state.orderId}:await this.execute(db,actor,state.operation,'order-time:'+id+':'+row.version);
     const target=native.orderId?{kind:'order' as const,id:native.orderId}:native.sourceId?{kind:'source' as const,id:native.sourceId}:resource;
     if(!target)throw Error('原业务办理没有返回本单身份');
+    const sourceOperation=state.operation.kind==='development_publish'||state.operation.kind==='confirm_order'?state.operation:null;
+    if(sourceOperation&&native.sourceId!==sourceOperation.sourceId)conflict('ORDER_TIME_CONFLICT','原业务返回的开发来源与原申请不一致');
+    if(state.operation.kind==='confirm_order'&&!native.orderId)conflict('ORDER_TIME_CONFLICT','正式确认没有返回原订单身份');
+    if(native.sourceId&&native.orderId){
+     const linked=(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[native.orderId])).rows[0];
+     if(linked?.source_id!==native.sourceId||sourceOperation&&sourceOperation.sourceId!==native.sourceId)conflict('ORDER_TIME_CONFLICT','原业务返回的开发来源与正式订单不一致');
+     if(sourceOperation){
+      // Publication may create an order while its original READY tasks still
+      // belong to the source. Adopt that exact source first on this client so
+      // order plan confirmation inherits its frozen policy and original targets.
+      // An already adopted source keeps its existing version and history.
+      const source={kind:'source' as const,id:native.sourceId},plans=new OrderTimePlanRepository(db);
+      if(!await plans.current(source)){
+       const actual=await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource:source},time,input.overrides);
+       await plans.confirm({resource:source,expectedRevision:0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version+':source'});
+      }
+      await db.query("UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind='source' AND source_id=$1",[source.id]);
+     }
+    }
     // Re-read actual native task/step/PO identities after publication on this
     // same client; temporary preview IDs never become real execution events.
     if(input.washing?.length){if(target.kind!=='order')conflict('ORDER_TIME_INPUT_REQUIRED','请在正式订单采用洗水安排');for(const change of input.washing)await adoptBulkWashingWithClient(db,actor,target.id,change.lineId,change.expectedVersion,change.document);}
