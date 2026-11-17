@@ -326,6 +326,20 @@
       "endedAt": "2026-11-17T05:56:10.005295+00:00",
       "logSha256": "d690c85a1449c50d84e0309191ec3500808ad34152b9c54535e2c898c543fc61",
       "log": "/workspace/sla-rp2-20261117/checks/pg-compatible-artifact-13/command.log"
+    },
+    {
+      "id": "rp2-time-inventory",
+      "kind": "command",
+      "command": "bash -c 'set -e; node scripts/acceptance/time-site-inventory.mjs; node --test scripts/ci/*.test.mjs; node node_modules/vitest/vitest.mjs run tests/unit/business-time-write-contract.test.ts --reporter=json --outputFile=/workspace/sla-rp2-20261117/business-time-inventory-current.json'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "e69b97d69260426fd51039700dbc0e06374a6db8",
+      "sourceFingerprint": "9fd6e2a136e3967b4d01414ad809e824044ab59596c2fabd4be281f3815b811e",
+      "context": "Local Node22.22.2/npm10.9.9, original Vitest worker/correctness policy. Single marked low-privilege owned PG16.16 or PG13.23, exact container removed. Compiled fallback 962e32651c220e6135b01a6b8b6e93a4f0b4481c retains all v10 readers and stops derived writes. No Acceptance/production data or deployment. Selective excluded cases are not counted as run.",
+      "startedAt": "2026-11-17T06:07:02.690279+00:00",
+      "endedAt": "2026-11-17T06:07:12.707130+00:00",
+      "logSha256": "2fa420d8f7bb5a801f5752b614e5ef40805be30ecd1e6f8df427b299bf5b85cf",
+      "log": "/workspace/sla-rp2-20261117/checks/protocol-inventory-current/command.log"
     }
   ]
 }
