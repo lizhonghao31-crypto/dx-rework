@@ -2,7 +2,7 @@
   "version": 1,
   "base": "ba2f72fc78672a7d9b64c509012479be425b6213",
   "risk": "full",
-  "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
+  "sourceFingerprint": "706ff377a388df2b3313f18fdef6b4ffe10b46f3b19a060b3b84a992a2b4903d",
   "rules": [
     {
       "source": "Reviewed SLA_14_Issues_Repair_Construction_Plan_v1_20261117.md Library version1, FIX01/FIX02; user authorization through Dot; v27 first adoption and real causal responsibility rules.",
@@ -34,7 +34,8 @@
       "expectation": "New approval makes only its exact source/order effective atomically; causal recheck determines paper R/D; missing or ambiguous evidence remains unknown; original plans, owner, audit and historical windows preserved.",
       "rule": "Original task execution eligibility is identical in read and final write guard",
       "writes": [
-        "apps/api/src/production-platform/task-service.ts#executionBlock"
+        "apps/api/src/production-platform/task-service.ts#executionBlock",
+        "tests/unit/digital-task-read-boundary.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/task-service.ts#active",
@@ -58,7 +59,7 @@
       "writes": [
         "apps/api/src/production-platform/development-execution-service.ts#check",
         "apps/api/src/production-platform/development-task-timing.ts#developmentTaskTiming",
-        "tests/unit/development-craft-timing-review.test.ts"
+        "tests/unit/development-material-predecessor-timing.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/task-service.ts#correctTime",
@@ -124,28 +125,41 @@
           "format": "vitest-json",
           "sha256": "7afa1486721ad336d5f9d34acd1f57da64dce76554e60ffcd19577d511278ae3"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/api/src",
+        "packages",
+        "tests/helpers",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "3b00f6864b7e06e8e256ef4f3af4f247fc497f04874f5a361c6d2de441148076"
     },
     {
       "id": "rp1-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-requests.test.ts tests/unit/order-time-plan.test.ts tests/unit/development-craft-timing-review.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp1-20261117/units-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-requests.test.ts tests/unit/order-time-plan.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/development-material-predecessor-timing.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/impact-shadow-graph.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-rp1-20261117/units-consumers-fixed.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
-      "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
+      "testedHead": "0af3e1a1b52484f0644acd751c38550f9335ea4a",
+      "sourceFingerprint": "706ff377a388df2b3313f18fdef6b4ffe10b46f3b19a060b3b84a992a2b4903d",
       "context": "Local Node22.22.2/npm10.9.9; exact RP1 workspace; original Vitest configurations and worker authority. PG16.16 low-privilege marked isolated database in a 2CPU/4GiB owned container; no Acceptance/production connection. Actual command output retained; no CI run implied.",
-      "startedAt": "2026-11-17T03:45:06.569531+00:00",
-      "endedAt": "2026-11-17T03:45:12.338927+00:00",
-      "logSha256": "4b55e6c5c7553f0ee0242b4211ae26dfcfdae9b821964a0560dc8e49e0625085",
-      "log": "/workspace/sla-rp1-20261117/checks/units-final/command.log",
-      "passed": 47,
+      "startedAt": "2026-11-17T04:10:29.234738+00:00",
+      "endedAt": "2026-11-17T04:10:41.275849+00:00",
+      "logSha256": "d2d12e96a912cc4f73ccbcfdffa8deb9b74bc231c682ea1c36ca4e0151b03345",
+      "log": "/workspace/sla-rp1-20261117/checks/units-consumers-fixed/command.log",
+      "passed": 87,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2c11f3f38aebe331abeb7dd6890e64e77b83c582d3f2361a2ecd9686bed8b6de"
+          "sha256": "1c22e494265a285b74ee5c79d9004f8d4e89a2e4f263e200c3bc8abaf1645d65"
         }
       ]
     },
@@ -155,13 +169,13 @@
       "command": "python3 /workspace/sla-rp1-20261117/static.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba2f72fc78672a7d9b64c509012479be425b6213",
-      "sourceFingerprint": "8714c5a42ab91b051d888b2e6432979c29f9fbb067e62c1ea535a7d49069b66f",
+      "testedHead": "0af3e1a1b52484f0644acd751c38550f9335ea4a",
+      "sourceFingerprint": "706ff377a388df2b3313f18fdef6b4ffe10b46f3b19a060b3b84a992a2b4903d",
       "context": "Local Node22.22.2/npm10.9.9; exact RP1 workspace; original Vitest configurations and worker authority. PG16.16 low-privilege marked isolated database in a 2CPU/4GiB owned container; no Acceptance/production connection. Actual command output retained; no CI run implied.",
-      "startedAt": "2026-11-17T03:45:05.157092+00:00",
-      "endedAt": "2026-11-17T03:45:26.530551+00:00",
-      "logSha256": "e92c928aab226b494ac15271dfe604fced7712e1321516f9840903b1eceeb49e",
-      "log": "/workspace/sla-rp1-20261117/checks/static-final/command.log"
+      "startedAt": "2026-11-17T04:11:15.864656+00:00",
+      "endedAt": "2026-11-17T04:11:37.362853+00:00",
+      "logSha256": "fda7323a1c247ce21fba21d9f4142ac187f4ae31f5df2146ef0f212f894d1172",
+      "log": "/workspace/sla-rp1-20261117/checks/static-consumers-fixed/command.log"
     },
     {
       "id": "rp1-cli",
@@ -175,7 +189,20 @@
       "startedAt": "2026-11-17T03:46:48.388611+00:00",
       "endedAt": "2026-11-17T03:46:49.292364+00:00",
       "logSha256": "43f402f19e0916edadffa67bbd3bb7dde4a19e4025f28375b48a296f1234be43",
-      "log": "/workspace/sla-rp1-20261117/checks/cli-safety/command.log"
+      "log": "/workspace/sla-rp1-20261117/checks/cli-safety/command.log",
+      "inputPaths": [
+        "apps/api/src",
+        "packages",
+        "tests/helpers",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "3b00f6864b7e06e8e256ef4f3af4f247fc497f04874f5a361c6d2de441148076"
     }
   ]
 }

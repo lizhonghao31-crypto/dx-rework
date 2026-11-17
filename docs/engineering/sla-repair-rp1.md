@@ -37,3 +37,9 @@ NODE_ENV=test node --import tsx scripts/acceptance/order-time-scope-recovery.ts 
 本地原始报告保留于 `/workspace/sla-rp1-20261117/`；提交内 `construction-evidence.json` 记录准确命令、来源、结果和日志摘要。首次完整请求回归 27 过／2 失败，失败为维护校验错误强求两个资源本地政策修订号一致；已修政策比较及原回执证明并定向验证。前期新 fixture 的标准配置层级、物料预计日和错误使用旧改派入口均保留失败记录，未放宽业务守卫。最终结果以同批实际报告为准。
 
 现场真实认证／交互验收、旧 READY 维护执行、其他 RP 与部署分别记录，不能从本地或 CI 通过推定。
+
+## 首次 Full 的 non-DB 回归
+
+`44013920073`、准确候选 `0af3e1a1b52484f0644acd751c38550f9335ea4a` 的 non-DB 线为 4176 通过、11 失败、11 原有跳过。10 项是原 `digital-task-read-boundary.test.ts` 的严格 SQL 模拟没有声明新增资格读取；另一项为在影子策略固定的旧测试文件增加了 6 项声明，使 18 项清单变为 24 项。未改 CI 选测、声明规则或拒绝分支：仅补精确对象／参数的允许查询并新增未生效、暂停、取消、结案不可执行反例；新的 6 项因果回归移至独立 `development-material-predecessor-timing.test.ts`，旧测试文件恢复原内容。
+
+集中定向 6 文件共 87 通过、0 失败、0 跳过；lint/API 类型通过。生产代码、请求 PG 用例、fixture 和工具链均未改变；在修改无关单测前以原完整来源指纹捕获请求套件的明确输入范围及指纹，沿原治理规则复用本地 29 项 PG 证据，不把旧 Head 的 GitHub Full 当作新 Head 通过。首次 Full 的 PG 及最终结果继续按真实终态保留；修复后仅对准确候选发起必要 Full，Light 不重跑。审查仍明确标原审核提交，单测修复不冒称已被重审。
