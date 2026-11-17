@@ -62,6 +62,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
    // budget for this legacy full88 compatibility reader and do not confuse it
    // with the indexed15-row page budget guarded by PERF03's own suite.
    phase('query-counters',{diagnosticSql:records.slice(3).map(row=>row.calls.sql),physicalSql:currentDriverSqlCalls,deleteReadTemplates:physicalTemplates.filter(row=>row.sql.includes('whole_order')).map(({sql,calls})=>({sql,calls}))});
+   // Preserve the already measured original SQL templates even if a required
+   // budget assertion fails. This is diagnostic evidence, never a pass receipt;
+   // the successful end-of-test report below replaces it only after semantics.
+   if(process.env.M01_JOURNEY_PERF_EVIDENCE)await writeFile(process.env.M01_JOURNEY_PERF_EVIDENCE,JSON.stringify({stage:'before-required-budget-and-semantics',currentDriverSqlCalls,physicalTemplates},null,2)+'\n');
    expect(records.slice(3).every((row,index)=>row.calls.sql<=currentDriverSqlCalls[index]!)).toBe(true);
    if(!scene)expect(currentDriverSqlCalls.every(calls=>calls<=7100)).toBe(true);
 

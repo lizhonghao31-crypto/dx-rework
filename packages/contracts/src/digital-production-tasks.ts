@@ -1,6 +1,13 @@
 import { z } from "zod";
 export const DigitalTaskStateSchema = z.enum(["pending", "ready", "blocked", "completed", "cancelled"]);
 export const DigitalTimeQualitySchema = z.enum(["现场登记", "补报未核实", "已核实", "缺失"]);
+/** Actual completion precision and trust are independent from responsibility R. */
+export const DigitalTaskCompletionSchema = z.discriminatedUnion('precision',[
+  z.object({precision:z.literal('instant'),at:z.iso.datetime({offset:true}),date:z.null(),quality:z.enum(['verified','unverified']),sourceRef:z.string().nullable()}).strict(),
+  z.object({precision:z.literal('date'),at:z.null(),date:z.iso.date(),quality:z.enum(['verified','unverified']),sourceRef:z.string().nullable()}).strict(),
+  z.object({precision:z.literal('unknown'),at:z.null(),date:z.null(),quality:z.literal('missing'),sourceRef:z.string().nullable()}).strict(),
+]);
+export type DigitalTaskCompletion = z.infer<typeof DigitalTaskCompletionSchema>;
 export const DigitalTaskCompleteSchema = z.object({ occurredAt: z.iso.datetime({ offset: true }).nullable().optional(), note: z.string().trim().max(1000).default("") }).strict();
 export const DigitalTaskBlockSchema = z.object({ reason: z.string().trim().min(1).max(1000) }).strict();
 export const DigitalTaskAssignmentSchema = z.object({ assigneeId: z.string().uuid() }).strict();
@@ -10,6 +17,8 @@ export type DigitalTaskState = z.infer<typeof DigitalTaskStateSchema>;
 export type DigitalTimeQuality = z.infer<typeof DigitalTimeQualitySchema>;
 export type DigitalTaskBlocker = {condition:string;name:string;missing:string;responsibleRole:string;action:string|null;evidenceId:string|null;verified:boolean};
 export type DigitalTask = {
+  actualCompletion?:DigitalTaskCompletion;
+  completedTimeQuality?:DigitalTimeQuality;
   /** Fixed B for this authorized work only. dueAt remains its own R-based D. */
   plannedTargets?: {state:'ready'|'pending';targets:Array<{scopeRef:string;lineId:string|null;targetRevision:string;startAt:string|null;endAt:string|null;precision:'instant'|'date';date:string|null}>};
   retiredRule?:string;

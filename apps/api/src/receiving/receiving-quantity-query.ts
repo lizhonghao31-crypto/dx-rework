@@ -16,13 +16,13 @@ export const RECEIVING_GROUP_RESOLUTION_SCOPE_SQL = `EXISTS(
  */
 export const RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL="coalesce(packing.scope_unresolved,cardinality(packing_scope.merge_event_ids)>0)";
 export const RECEIVING_GROUP_PACKING_JOIN_SQL = `LEFT JOIN LATERAL (
- SELECT coalesce(array_agg(merge.event_id::text ORDER BY merge.event_id::text),ARRAY[]::text[]) AS merge_event_ids
- FROM operation_events merge JOIN receiving_batches target ON merge.entity_id=target.receiving_batch_id::text
- WHERE totals.group_key LIKE 'style:%' AND merge.action='receiving.batch.merge' AND merge.entity_type='receiving_batch'
+ SELECT coalesce(array_agg(merge_event.event_id::text ORDER BY merge_event.event_id::text),ARRAY[]::text[]) AS merge_event_ids
+ FROM operation_events merge_event JOIN receiving_batches target ON merge_event.entity_id=target.receiving_batch_id::text
+ WHERE totals.group_key LIKE 'style:%' AND merge_event.action='receiving.batch.merge' AND merge_event.entity_type='receiving_batch'
  AND coalesce('cut:'||target.cutting_order_id::text,'style:'||upper(btrim(target.style_no)))=totals.group_key
  AND EXISTS(SELECT 1 FROM receiving_batches source JOIN receiving_packing_revisions original USING(receiving_batch_id)
-  WHERE source.receiving_batch_id::text=merge.after_state->>'sourceReceivingBatchId'
-  AND (source.cutting_order_id IS NOT NULL OR 'style:'||upper(btrim(merge.after_state->'source'->>'styleNo'))<>totals.group_key))
+  WHERE source.receiving_batch_id::text=merge_event.after_state->>'sourceReceivingBatchId'
+  AND (source.cutting_order_id IS NOT NULL OR 'style:'||upper(btrim(merge_event.after_state->'source'->>'styleNo'))<>totals.group_key))
 ) packing_scope ON true
 LEFT JOIN LATERAL (
  SELECT head.packing_revision_id,head.receiving_batch_id,head.recorded_by,head.created_at,head.operation_event_id,head.packing_quantity AS source_quantity,
@@ -43,10 +43,10 @@ LEFT JOIN LATERAL (
  ) head
  CROSS JOIN LATERAL(SELECT NOT head.superseded
   AND (head.deleted_at IS NULL OR EXISTS(
-   SELECT 1 FROM operation_events merge JOIN receiving_batches target ON target.receiving_batch_id::text=merge.after_state->>'targetReceivingBatchId'
-   WHERE merge.action='receiving.batch.merge' AND merge.after_state->>'sourceReceivingBatchId'=head.receiving_batch_id::text
+   SELECT 1 FROM operation_events merge_event JOIN receiving_batches target ON target.receiving_batch_id::text=merge_event.after_state->>'targetReceivingBatchId'
+   WHERE merge_event.action='receiving.batch.merge' AND merge_event.after_state->>'sourceReceivingBatchId'=head.receiving_batch_id::text
    AND coalesce('cut:'||target.cutting_order_id::text,'style:'||upper(btrim(target.style_no)))=totals.group_key
-   AND (head.cutting_order_id IS NOT NULL AND target.cutting_order_id=head.cutting_order_id OR head.cutting_order_id IS NULL AND target.cutting_order_id IS NULL AND 'style:'||upper(btrim(merge.after_state->'source'->>'styleNo'))=totals.group_key)
+   AND (head.cutting_order_id IS NOT NULL AND target.cutting_order_id=head.cutting_order_id OR head.cutting_order_id IS NULL AND target.cutting_order_id IS NULL AND 'style:'||upper(btrim(merge_event.after_state->'source'->>'styleNo'))=totals.group_key)
    AND EXISTS(SELECT 1 FROM receiving_batches active WHERE coalesce('cut:'||active.cutting_order_id::text,'style:'||upper(btrim(active.style_no)))=totals.group_key AND active.deleted_at IS NULL)))
   AND coalesce(head.after_state->'packingScopeMergeEventIds','[]'::jsonb)?&packing_scope.merge_event_ids AS complete) quality
 ) packing ON true`;

@@ -28,6 +28,9 @@ import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-ser
 import {PatternRoomPriceService} from "../../apps/api/src/pattern-room/price-service.js";
 import {RootAwareTodoProjectionService} from "../../apps/api/src/todos/root-aware-projection-service.js";
 import {TodoService} from "../../apps/api/src/todos/service.js";
+import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {arrangeTestRound} from "../helpers/development-arrangement-fixture.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
@@ -422,4 +425,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await context.close();}
  });
 
+ it('renders the real shipping date and native unknown then verified correction in the authenticated workbench',async()=>{
+  const [made]=await exerciseDevelopmentSlaNative(f.db,new RootAwareTodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,undefined,[['无','免洗']],{fixedCraftSteps:[],routeActualTime:kind=>kind==='development_confirmation'?{precision:'instant',at:businessNow().toISOString()}:undefined});
+  const current=await execution.read(f.root,made!.sourceId),shipping=current.tasks.find(task=>task.taskKind==='development_shipping')!,date=beijingCalendarDate(businessNow());
+  await execution.route(f.root,made!.sourceId,{taskId:shipping.taskId,result:'通过',note:'TEST actual date-only shipping',craftExecution:null,nextAssigneeId:null,sentDate:date,trackingNo:'TEST-NATIVE-DATE'},randomUUID());
+  const tasks=new DigitalProductionTaskService(f.db),original=(await tasks.history(f.root,shipping.taskId)).events.find(event=>event.kind==='completed')!;
+  const context=await browser.newContext({viewport:{width:1165,height:1000}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);const page=await context.newPage();
+  const open=async(id=shipping.taskId)=>{await page.goto(base+`/ui/digital-production?task=${id}&taskView=read`);await page.locator('.task-workbench-sample header').waitFor();};
+  try{
+   const actual=page.locator('.task-workbench-sample header small');
+   const paper=current.tasks.find(task=>task.taskKind==='development_pattern')!,reported=current.tasks.find(task=>task.taskKind==='development_confirmation')!;
+   await open(paper.taskId);expect((await tasks.read(f.root,paper.taskId)).actualCompletion?.quality).toBe('verified');expect(await actual.textContent()).not.toContain('待核');
+   await open(reported.taskId);expect((await tasks.read(f.root,reported.taskId)).actualCompletion).toMatchObject({precision:'instant',quality:'unverified'});await expect.poll(()=>actual.textContent()).toContain('时间待核');
+   await open();
+   await expect.poll(()=>actual.textContent()).toContain(date+'（仅日期 · 时间待核）');expect(await actual.textContent()).not.toContain('00:00');
+   await tasks.correctTime(f.root,shipping.taskId,{eventId:original.eventId,occurredAt:null,reason:'TEST explicit original unknown'},randomUUID());
+   await open();await expect.poll(()=>actual.textContent()).toContain('实际完成 时间未知');
+   const at=businessNow().toISOString();await tasks.correctTime(f.root,shipping.taskId,{eventId:original.eventId,occurredAt:at,reason:'TEST original actual verified'},randomUUID());
+   await open();await expect.poll(()=>actual.textContent()).not.toContain('时间未知');expect(await actual.textContent()).not.toContain('待核');
+   expect((await tasks.read(f.root,shipping.taskId)).actualCompletion).toMatchObject({precision:'instant',at,quality:'verified'});
+   expect((await tasks.history(f.root,shipping.taskId)).events.filter(event=>event.kind==='completed')).toEqual([original]);
+  }finally{await context.close();}
+ });
 });

@@ -1,4 +1,5 @@
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentResponsibilityProofSql,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
+import {readTaskCompletionOccurrence,type TaskCompletionReadContext} from './task-completion-occurrence.js';
 import {taskCraftDisplay} from './task-craft-display.js';
 import {attachFactoryTaskCompletions,factoryCompletionSource} from './factory-task-completion.js';
 import {factoryCompletionOccurrence} from './factory-completion-occurrence.js';
@@ -763,7 +764,7 @@ export class DigitalProductionTaskService {
       });
     });
   }
-  async read(actor: TrustedActorContext, id: string, db: Pick<Pool, "query"> = this.database) {
+  async read(actor: TrustedActorContext, id: string, db: Pick<Pool, "query"> = this.database,completionContext?:TaskCompletionReadContext) {
     const policy = new DigitalProductionAccessPolicy(db);
     await policy.assert(actor, "task", id, "technical");
     const task = await this.task(db, id);
@@ -821,12 +822,13 @@ export class DigitalProductionTaskService {
 
     await attachDevelopmentRegistrations(db,[task]);
     const responsibility=task.source_id?developmentResponsibilityWindow({...task,native_readiness:effective?.native_readiness},effective?.sla_basis?effective.entered_at:task.entered_at,effective?.sla_basis,effective?.responsibility_proof):null;
+    const completion=task.source_id?await readTaskCompletionOccurrence(db,task,observed.now,completionContext):null;
     return { ...craftDisplay,...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:craftDisplay.label,
-      ...(plannedTargets?{plannedTargets}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
+      ...(plannedTargets?{plannedTargets}:{}),...(completion?{actualCompletion:completion}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: responsibility?responsibility.at:iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
       dueAt: retired||responsibility&&!responsibility.at?null:iso(effective?.due_at ?? null), warningAt: retired||responsibility&&!responsibility.at?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
-      policyVersion: currentPolicy.version as number, timeQuality: (responsibility?.quality??(effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality)) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
+      policyVersion: currentPolicy.version as number, timeQuality: (responsibility?.quality??(effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality)) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as DigitalTimeQuality,
       blockedReason: task.blocked_reason as string | null, canExecute: !retired && !paused && !await this.executionBlock(db,resource) && await policy.allowed(actor, "task", id, "execute") };
   }
   async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){
