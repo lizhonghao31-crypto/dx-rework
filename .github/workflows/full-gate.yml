@@ -138,7 +138,7 @@ jobs:
           HEAD_SHA: ${{ inputs.head_sha }}
         run: |
           set -euo pipefail
-          git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
+          git diff --no-renames --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
           node scripts/ci/full-gate-risk-map.mjs --github-env "$GITHUB_ENV" "$RUNNER_TEMP/full-gate-changed-files.txt"
 
       - name: Compare exact candidate with current remote main migration history

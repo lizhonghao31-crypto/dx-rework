@@ -24,11 +24,17 @@
 
 ## Review与恢复
 
-本地验证后请求GitHub Codex Review，正常一轮；集中修复后记录被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。
+本地必要验证及完整 diff 组装完成、PR 创建后，首次 Light 与必要 GitHub Codex Review 并行启动：Light 由 opened 自动启动；单一控制者核已有同 Head 请求后，按已有授权请求一次 Review，不等待 Light 结论。Review 不是额外 Actions job，不新增 runner、凭据或写权限。两路结果都收齐后集中修复，再冻结最终 Head 和实际 base、请求最终 Quick/Full；记录 Light SHA、被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。
 
 `watch-review --pr <N> --head <Head40> --request-id <ID> --watch --apply --review-retry-authorized --state-dir <private-dir>`使用已存在的15分钟恢复授权。时间从请求的服务端created_at起，先核已完成/新请求/在途状态，防重复发送；本地锁只对同一控制者有效，不能冒充跨机器互斥。拒绝和不确定写入保留journal，先只读reconcile，不删除锁或另换发送通道。
 
 低风险Quick确实不需Review时，协议允许带`--review-not-required --review-reason <理由> --review-authorization <已有授权来源>`。这不授予豁免；Full、已经开始/失败的Review或未关闭finding不能被此声明抹掉。
+
+## 并行边界与最终收口
+
+`ci.yml` 的 Light 仅受 PR opened/首次 attempt 条件约束；Codex Review 由现有 GitHub Review 服务独立处理，不在该 workflow 的 job 依赖图内。`pr-gate-controller.mjs` 的 `reviewStep` 不读取 Light job，`requestFinal`/`verifyMerge` 仍调用必要 Review 核证及线程闭环。无需修改 workflow concurrency；现有 Light 与最终 Gate 的同 PR 排队保持，防止重复资源消耗。
+
+并行只缩短 Light 与 Review 的串行等待，不减少任何检查。已知 Light/Review 发现进入同一修复及外置收口包；不得把运行中、失败、旧 SHA 或未闭合 Review 当作通过。新实质风险沿原协议处理；原正常一轮 Review 及恢复防重复规则不变。Full 复用 Light 仍要求最终 Head/base 与源成功产物完全匹配；发生修复导致不匹配时执行原检查，不为复用补跑 Light。
 
 ## 执行与复用证据
 

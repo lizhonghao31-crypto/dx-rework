@@ -27,6 +27,11 @@ const stepBlock = (source, name) => {
 
 const countOccurrences = (source, needle) => source.split(needle).length - 1;
 
+// Both workflow classifiers must retain old and new rename paths from the
+// frozen tuple. Match the executable shell line, not a comment containing the
+// expected command, and do not accept filters/pipes that can omit deletions.
+const exactRiskDiff = (source, kind) => source.match(/^[ \t]*git diff --no-renames --name-only "\$\{BASE_SHA\}" "\$\{HEAD_SHA\}"[ \t]+>[ \t]+"\$RUNNER_TEMP\/(quick|full)-gate-changed-files\.txt"[ \t]*$/m)?.[1] === kind;
+
 export const containsSecretsContext = (source) => /\$\{\{\s*secrets\b/i.test(source);
 
 for (const expression of [
@@ -97,7 +102,8 @@ assert(quick.includes("full-gate-risk-map.mjs --require-quick-safe"), "Quick Gat
 const classifier = stepBlock(quick, "Classify Quick Gate scope");
 assert(classifier.includes("BASE_SHA"), "Quick Gate classifier must use exact PR base SHA");
 assert(classifier.includes("HEAD_SHA"), "Quick Gate classifier must use exact PR head SHA");
-assert(classifier.includes('git diff --name-only "${BASE_SHA}" "${HEAD_SHA}"'), "Quick Gate classifier must classify exact PR diff");
+assert(exactRiskDiff(classifier,"quick"), "Quick Gate classifier must classify exact PR diff with rename paths preserved");
+assert(exactRiskDiff(stepBlock(full,"Classify Full Gate risk from exact PR diff"),"full"), "Full Gate classifier must classify exact PR diff with rename paths preserved");
 assert(classifier.includes("governance_only=false"), "Quick Gate governance classifier must fail closed");
 assert(classifier.includes("web_only=false"), "Quick Gate web classifier must fail closed");
 assert(countOccurrences(quick, "backup-postgres.sh") === 0, "Quick Gate must delegate deployment sensitivity to the shared classifier");

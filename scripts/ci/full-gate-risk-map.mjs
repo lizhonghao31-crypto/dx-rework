@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { POSTGRES_CHAIN_TESTS, SLA_JOURNEY_CHAIN_EXCLUSIONS } from "../test-suite-plan.mjs";
 
 const normalize = (path) => path.trim().replaceAll("\\", "/");
 
@@ -35,6 +36,203 @@ export const POSTGRES_CASE_SUITES = Object.freeze({
   "tests/integration/member-module-policy-postgres.cases.ts": "tests/integration/full-business-chain-postgres.test.ts",
   "tests/integration/own-tail-responsibility-history.cases.ts": "tests/integration/own-tail-responsibility-history-postgres.test.ts",
 });
+
+// Reviewed test-only leaf entries. Shared permission/history wrappers stay broad.
+// This changes only the automatic chain supplement, never Full or suite contents.
+export const INDEPENDENT_POSTGRES_TESTS = Object.freeze([
+  "tests/integration/receiving-postgres.test.ts",
+  "tests/integration/sourcing-pr03-postgres.test.ts",
+  "tests/integration/production-closure-postgres.test.ts",
+  "tests/integration/sample-read-postgres.test.ts",
+]);
+
+// Dependency-free: resolve/certify run before npm install. This bounded lexer
+// recognizes only top-level, literal, semicolon-terminated side-effect imports.
+// Unsupported templates/regex before the binding fail closed, never match text.
+export const hasStaticPostgresCaseImport = (source, modulePath) => {
+  const expected = "./" + modulePath.split("/").at(-1).replace(/\.ts$/, ".js");
+  let position = 0;
+  const stack = [];
+  const trivia = () => {
+    while (position < source.length) {
+      if (/\s/.test(source[position])) { position++; continue; }
+      if (source.startsWith("//", position)) {
+        const end = source.indexOf("\n", position + 2);
+        position = end < 0 ? source.length : end + 1; continue;
+      }
+      if (source.startsWith("/*", position)) {
+        const end = source.indexOf("*/", position + 2);
+        if (end < 0) return false;
+        position = end + 2; continue;
+      }
+      break;
+    }
+    return true;
+  };
+  const quoted = () => {
+    const quote = source[position++];
+    const start = position;
+    let escaped = false;
+    while (position < source.length) {
+      const char = source[position++];
+      if (char === "\\") { escaped = true; position++; continue; }
+      if (char === quote) return {value: source.slice(start, position - 1), escaped};
+      if (char === "\n" || char === "\r") return null;
+    }
+    return null;
+  };
+  while (position < source.length) {
+    if (!trivia()) return false;
+    const char = source[position];
+    if (char === undefined) break;
+    if (char === "'" || char === '"') { if (!quoted()) return false; continue; }
+    if (char === "\x60" || char === "/") return false;
+    if (/[A-Za-z_$]/.test(char)) {
+      const start = position++;
+      while (position < source.length && /[\w$]/.test(source[position])) position++;
+      if (source.slice(start, position) !== "import" || stack.length) continue;
+      if (!trivia()) return false;
+      if (source[position] !== "'" && source[position] !== '"') continue;
+      const literal = quoted();
+      if (!literal || !trivia()) return false;
+      if (source[position] === ";" && !literal.escaped && literal.value === expected) return true;
+      continue;
+    }
+    if ("({[".includes(char)) stack.push(char);
+    else if (")}]".includes(char)) {
+      const open = stack.pop();
+      if (open !== {")":"(", "}":"{", "]":"["}[char]) return false;
+    }
+    position++;
+  }
+  return false;
+};
+
+export const assertStaticPostgresCaseImport = (source, module, owner) => {
+  if (!hasStaticPostgresCaseImport(source, module)) {
+    throw new Error(`POSTGRES_CASE_IMPORT_REQUIRED: ${module} -> ${owner}`);
+  }
+};
+
+const independentTestOnlyChange = (paths) => {
+  if (!paths.length) return false;
+  const owners = new Set();
+  let eligible = true;
+  for (const path of paths) {
+    const owner = POSTGRES_CASE_SUITES[path] ?? path;
+    if (!INDEPENDENT_POSTGRES_TESTS.includes(owner) || !existsSync(path) || !existsSync(owner)) {
+      eligible = false;
+      continue;
+    }
+    // Validate all known case bindings even if only the owner changed, and even
+    // in a mixed diff. A broad chain cannot execute a case whose import is gone.
+    for (const [module, runnable] of Object.entries(POSTGRES_CASE_SUITES)) {
+      if (runnable !== owner) continue;
+      if (!existsSync(module)) {
+        throw new Error(`POSTGRES_CASE_IMPORT_REQUIRED: ${module} -> ${owner}`);
+      }
+      assertStaticPostgresCaseImport(readFileSync(owner, "utf8"), module, owner);
+    }
+    owners.add(owner);
+  }
+  return eligible && owners.size === 1;
+};
+
+// Reviewed source-domain profile, not a global backend exception. The original
+// mapped readers and shared-write/security bridges stay mandatory; only
+// independently audited, non-consuming suites are omitted from the supplement.
+export const SLA_JOURNEY_SOURCE_PATHS = Object.freeze([
+  "apps/api/src/production-platform/development-captured-window.ts",
+  "apps/api/src/production-platform/development-craft-instance-evidence.ts",
+  "apps/api/src/production-platform/development-sla-evidence.ts",
+  "apps/api/src/production-platform/fixed-schedule-basis.ts",
+  "apps/api/src/production-platform/fixed-schedule-progress.ts",
+  "apps/api/src/production-platform/journey-display.ts",
+  "apps/api/src/production-platform/journey-fact-generation.ts",
+  "apps/api/src/production-platform/journey-fact-model.ts",
+  "apps/api/src/production-platform/journey-fact-repository.ts",
+  "apps/api/src/production-platform/journey-fact-updates.ts",
+  "apps/api/src/production-platform/journey-native-times.ts",
+  "apps/api/src/production-platform/journey-progress-dates.ts",
+  "apps/api/src/production-platform/journey-projection.ts",
+  "apps/api/src/production-platform/journey-query.ts",
+  "apps/api/src/production-platform/journey-selection-clock.ts",
+  "apps/api/src/production-platform/journey-selection-facts.ts",
+  "apps/api/src/production-platform/journey-selection-query.ts",
+  "apps/api/src/production-platform/journey-supervision.ts",
+  "apps/api/src/production-platform/journey-terminal-timing.ts",
+  "apps/web/src/cockpit-fixed-schedule.tsx",
+  "apps/web/src/cockpit-node-summary.tsx",
+  "apps/web/src/digital-journey-cockpit-model.ts",
+  "apps/web/src/journey-sla-details.tsx",
+  "packages/contracts/src/digital-production-journey.ts",
+
+]);
+export const SLA_JOURNEY_SUPPORT_PATHS = Object.freeze([
+  "docs/engineering/acceptance-time-sites-20261027.json",
+  "docs/engineering/construction-evidence.json",
+  "docs/engineering/sla-repair-rp2.md",
+  "tests/integration/digital-journey-postgres.test.ts",
+  "tests/integration/effective-packing-postgres.test.ts",
+  "tests/integration/fixed-progress-postgres.test.ts",
+  "tests/integration/journey-fact-model-postgres.test.ts",
+  "tests/integration/order-time-requests-postgres.test.ts",
+  "tests/integration/special-craft-native-postgres.test.ts",
+  "tests/unit/development-captured-window.test.ts",
+  "tests/unit/development-craft-instance-supervision.test.ts",
+  "tests/unit/development-ordinary-instance-projection.test.ts",
+  "tests/unit/development-round-window-projection.test.ts",
+  "tests/unit/digital-journey-projection.test.ts",
+  "tests/unit/digital-pmc-readonly-access.test.ts",
+  "tests/unit/fixed-schedule-progress.test.ts",
+  "tests/unit/fixed-schedule-selection.test.ts",
+  "tests/unit/journey-compatible-fallback.test.ts",
+  "tests/unit/journey-fact-model.test.ts",
+  "tests/unit/journey-native-times.test.ts",
+  "tests/unit/journey-packing-native-time.test.ts",
+  "tests/unit/journey-progress-dates.test.ts",
+  "tests/unit/journey-projection-isolation.test.ts",
+  "tests/unit/journey-terminal-timing.test.ts",
+  "tests/unit/m01-time-consumers.test.ts",
+  "tests/unit/sla-native-window-projection.test.ts"
+]);
+export const SLA_JOURNEY_REQUIRED_TESTS = Object.freeze([
+  "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+  "tests/integration/development-responsibility-postgres.test.ts",
+  "tests/integration/development-round-history-clock-postgres.test.ts",
+  "tests/integration/development-sla-enrollment-postgres.test.ts",
+  "tests/integration/development-technical-postgres.test.ts",
+  "tests/integration/digital-journey-postgres.test.ts",
+  "tests/integration/digital-production-tasks-postgres.test.ts",
+  "tests/integration/effective-packing-postgres.test.ts",
+  "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+  "tests/integration/fixed-progress-postgres.test.ts",
+  "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+  "tests/integration/fixed-timeline-postgres.test.ts",
+  "tests/integration/journey-diagnostic-postgres.test.ts",
+  "tests/integration/journey-fact-model-postgres.test.ts",
+  "tests/integration/journey-fact-updates-postgres.test.ts",
+  "tests/integration/journey-page-native-browser-postgres.test.ts",
+  "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+  "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
+  "tests/integration/m01-journey-performance-postgres.test.ts",
+  "tests/integration/order-time-reading-postgres.test.ts",
+  "tests/integration/order-time-requests-browser-postgres.test.ts",
+  "tests/integration/order-time-requests-postgres.test.ts",
+  "tests/integration/order-time-settings-postgres.test.ts",
+  "tests/integration/production-readiness-postgres.test.ts",
+  "tests/integration/sourcing-pr03-postgres.test.ts",
+  "tests/integration/special-craft-browser-postgres.test.ts",
+  "tests/integration/special-craft-library-postgres.test.ts",
+  "tests/integration/special-craft-native-postgres.test.ts",
+  "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+  "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+  "tests/integration/workspace-page-facts-postgres.test.ts",
+  "tests/integration/workspace-page-native-browser-postgres.test.ts"
+]);
+export const SLA_JOURNEY_UNRELATED_CHAIN_TESTS = SLA_JOURNEY_CHAIN_EXCLUSIONS;
+const slaJourneyProfileApplies = paths => paths.some(path => SLA_JOURNEY_SOURCE_PATHS.includes(path))
+  && paths.every(path => existsSync(path) && (SLA_JOURNEY_SOURCE_PATHS.includes(path) || SLA_JOURNEY_SUPPORT_PATHS.includes(path)));
 
 const isMigration = (path) =>
   path.startsWith("apps/api/migrations/")
@@ -98,7 +296,7 @@ const isDeployment = (path) =>
   || SHARED_GATE_INPUTS.has(path);
 
 const isBackendOrContract = (path) =>
-  path.startsWith("apps/api/src/") || path.startsWith("packages/contracts/src/");
+  path.startsWith("apps/api/src/") || path.startsWith("packages/contracts/src/") || path.startsWith("packages/domain/src/");
 
 const isPostgresTest = (path) =>
   /^tests\/integration\/.*postgres.*\.(?:test|cases)\.ts$/.test(path);
@@ -168,6 +366,8 @@ const addAll = (target, values) => {
 
 export const classifyFullGatePaths = (inputPaths) => {
   const paths = [...new Set(inputPaths.map(normalize).filter(Boolean))];
+  const independentTestOnly = independentTestOnlyChange(paths);
+  let chainProfile = "full";
   const mappedTests = new Set();
   if(paths.some(path=>/factory-(?:task-completion|completion-occurrence)|production-facts-consistency|receiving-(?:service|routes|board-edit-session)|order-board-page|0294_receiving_correction_provenance/.test(path)))addAll(mappedTests,['tests/integration/production-facts-consistency-postgres.test.ts','tests/integration/receiving-postgres.test.ts','tests/integration/receiving-board-native-browser-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts']);
   if(paths.some(path=>/development-responsibility|order-time-native-timing|order-time-reading|development-sla-evidence|journey-task-summary|task-service|digital-production-tasks-panel/.test(path)))addAll(mappedTests,['tests/integration/development-responsibility-postgres.test.ts','tests/integration/development-execution-read-native-browser-postgres.test.ts','tests/integration/digital-production-tasks-postgres.test.ts']);
@@ -400,7 +600,8 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
     if (path === "scripts/test-database-safety.mjs" || path.startsWith("scripts/test-resource-")) mappedTests.add("tests/integration/test-resource-contract-postgres.test.ts");
     if (isPostgresTest(path) || Object.hasOwn(POSTGRES_CASE_SUITES, path)) {
-      businessChainSensitive = true;
+      businessChainSensitive ||= !independentTestOnly;
+      if (independentTestOnly) domains.add("independent-postgres-test");
       domains.add("postgres-test");
       if (path.endsWith(".cases.ts")) {
         const suite = POSTGRES_CASE_SUITES[path];
@@ -440,6 +641,27 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
   }
 
+  // The domain barrel loads this shared engine indirectly via naturalTimeRatio.
+  // Engine changes keep the reviewed shared-engine chain (only SQL own-tail excluded),
+  // plus the explicit native consumers.
+  if (paths.includes("packages/domain/src/digital-sla-plan.ts")) {
+    addAll(mappedTests, SLA_JOURNEY_REQUIRED_TESTS);
+    businessChainSensitive = true;
+    domains.add("shared-sla-engine-full-chain");
+    if (paths.every(path => existsSync(path) && (path === "packages/domain/src/digital-sla-plan.ts" || SLA_JOURNEY_SOURCE_PATHS.includes(path) || SLA_JOURNEY_SUPPORT_PATHS.includes(path)))) chainProfile = "sla-journey-engine-v1";
+  }
+
+  // Shared writes are still exercised by the retained real full-business,
+  // Root, readiness, sourcing, closure, rework and operational consumers.
+  // Any extra unknown/auth/schema/helper/CI path invalidates the whole profile.
+  if (slaJourneyProfileApplies(paths) && !migrationSensitive && !deploymentSensitive && !receivingSensitive) {
+    addAll(mappedTests, SLA_JOURNEY_REQUIRED_TESTS);
+    addAll(mappedTests, POSTGRES_CHAIN_TESTS.filter(test => !SLA_JOURNEY_UNRELATED_CHAIN_TESTS.includes(test)));
+    businessChainSensitive = true;
+    chainProfile = "sla-journey-v1";
+    domains.add("sla-journey-reviewed-source-profile");
+  }
+
   const tests = [...mappedTests].sort();
   const dbRequired = migrationSensitive
     || receivingSensitive
@@ -452,6 +674,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     migrationSensitive,
     receivingSensitive,
     businessChainSensitive,
+    chainProfile,
     deploymentSensitive,
     journeyPg13Compat,
     maintenanceSensitive,
@@ -500,6 +723,7 @@ const runCli = () => {
       ["MIGRATION_SENSITIVE", result.migrationSensitive],
       ["RECEIVING_SENSITIVE", result.receivingSensitive],
       ["BUSINESS_CHAIN_SENSITIVE", result.businessChainSensitive],
+      ["CHAIN_PROFILE", result.chainProfile],
       ["DEPLOYMENT_SENSITIVE", result.deploymentSensitive],
       ["JOURNEY_PG13_COMPAT", result.journeyPg13Compat],
       ["MAINTENANCE_SENSITIVE", result.maintenanceSensitive],

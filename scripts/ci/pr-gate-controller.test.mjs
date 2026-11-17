@@ -183,3 +183,24 @@ test('cheap CI preflight includes the shared time-source inventory and explicit 
  assert.equal(entry.semanticStatus,'reviewed-real-audit-security');
  assert.ok(entry.semanticReview);assert.ok(entry.evidence);
 });
+
+for(const lightState of ['running','failed','absent'])test(`Review observation is independent of initial Light: ${lightState}`,async()=>{
+ const{api,state}=fixture();
+ state.comments=[request,summary('running')];
+ if(lightState==='absent')state.runs.light=[];
+ else if(lightState==='running')state.runs.light[0].status='in_progress';
+ else state.runs.light[0].conclusion='failure';
+ const result=await reviewStep(api,901,head,10,{now:Date.parse(request.created_at)+60_000});
+ assert.equal(result.action,'wait');
+ assert.equal(state.reads.some(path=>path.includes('/actions/')),false);
+ assert.equal(state.writes.length,0);
+});
+test('parallel Light does not let unfinished Review or unresolved findings start Full',async()=>{
+ for(const fault of ['running_review','unresolved_finding']){
+  const{api,state}=fixture();state.runs.light[0].status='in_progress';
+  if(fault==='running_review')state.comments=[request,summary('running')];
+  else state.threads=[{id:'known',isResolved:false}];
+  await assert.rejects(()=>requestFinal(api,901,head,{apply:true}),/Review/);
+  assert.equal(state.writes.some(write=>write.path.endsWith('/git/refs')),false);
+ }
+});
