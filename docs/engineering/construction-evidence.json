@@ -1,183 +1,228 @@
 {
   "version": 1,
-  "base": "ed7ca5129e8ace3287b79fbbfcb1652355e5206b",
+  "base": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
   "risk": "full",
-  "sourceFingerprint": "21d5ac4553d7cf8c052fec1a9f05104c9e12cfa443013dc647bc1cab760b8c05",
+  "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
   "rules": [
     {
-      "rule": "Qualify every linked rule delta against the authorized target current actual work and extra settings before propagating it",
-      "source": "User authorized approved Pro supplement A→D→B→C, ADD-C applicability/atomicity repair, with default36h success and24h adjustment refusal retained as distinct original observations. Original request18c82d9bac5d0543371bc9f5516cf3e0 does not identify the successful request or an idempotency key. No live retry or original-server-stack attribution.",
-      "initialization": "Build on the preceding A actual merge ed7ca5129e8ace3287b79fbbfcb1652355e5206b. Current original linked source/order and frozen company relation only; qualification uses original loader/current valid work plus extraSettings, same client/actor/time, no adoption/history migration or new privileged path. Missing/ambiguous scope is a failure, never an empty successful update.",
-      "dateAndPermission": "Preserve original permission, applicability, begun-work, feasibility, fingerprint and version guards. Keep original company/plan/calendar, historical frozen adoptions, existing native R/D/A and active work IDs. A current P may change from a legal arrangement; independent branch joins do not imply a12-hour overall shift. No new roles, dates, approval or recovery endpoint.",
+      "rule": "Select current arranged task P by exact original canonical work and share the minimal Journey target selector",
+      "source": "User authorized approved Pro supplement A→D→B→C, B/BA112 exact native current plan display with actual original pages. Keep original fixed B, original R/D/A and all prior histories; Root original UUID/field comparison remains pending, never invent a corrected24.5h date.",
+      "initialization": "Final preceding actual merge 32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda. Native task read after original authorization, same RR client/clock; exact captured adoption/route/round/step/phase or a genuine original publication-route and unique native instance. No current plan on old partial schemas is unknown, not an invented adoption.",
+      "dateAndPermission": "Read-only current effective P, original mixed/date precision and PO scopes. Original fixed B and R/D/A unchanged. No historical/latest-kind lookup, foreign counterpart, manufactured P, status write, new role or current company adoption. Original unknown/ambiguity/future/scenario mismatch remains explicit; included handoffs without separate arranged P are not applicable to an independent target.",
       "writes": [
-        "apps/api/src/production-platform/order-time-linked-applicability.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/current-task-plan-targets.ts",
+        "apps/api/src/production-platform/fixed-task-targets.ts",
+        "apps/api/src/production-platform/framework-node-targets.ts",
+        "apps/api/src/production-platform/order-time-work-task-kind.ts",
+        "apps/api/src/production-platform/order-time-reading.ts"
+      ],
+      "reads": [
         "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-automatic.ts",
-        "tests/unit/order-time-linked-applicability.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "apps/api/src/production-platform/order-time-native-commands.ts",
-        "apps/api/src/production-platform/order-time-request-plan.ts"
+        "apps/api/src/production-platform/fixed-timeline-targets.ts",
+        "apps/api/src/production-platform/whole-order-visibility.ts"
       ],
       "oldTests": [
-        "tests/unit/order-time-framework.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/unit/order-time-reading.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts"
       ],
-      "expectation": "Framework and non-framework use the same exact filtered delta. Foreign C is absent from the target only when current actual qualification proves it; unknown/permission/read/stale/begun errors propagate. Preserve genuine shared settings and extraSettings, unlinked/different-company boundaries, original identity and inputs. Empty target changes create neither override nor target revision; do not globally suppress linking.",
+      "expectation": "Choose linked mother only when it actually contains the exact work; current source new round may retain its own exact effective P without searching history. Keep completed previous tasks and Fixed B/R/D/A unchanged, and preserve pure-development versus forward-framework semantics. PO labels use one bounded query, no full Journey per native task or per-PO N+1. Missing identity or scope stays unknown; duplicate/cross-round/cross-step targets never borrowed.",
       "checks": [
-        "d-unit",
-        "d-native",
-        "d-api-types",
-        "d-lint"
+        "b-unit",
+        "b-native",
+        "b-legacy",
+        "b-api-types",
+        "b-lint"
       ]
     },
     {
-      "rule": "Original default36 and adjusted24 publication, linking and receipts remain one atomic native command",
-      "source": "User authorized approved Pro supplement A→D→B→C, ADD-C applicability/atomicity repair, with default36h success and24h adjustment refusal retained as distinct original observations. Original request18c82d9bac5d0543371bc9f5516cf3e0 does not identify the successful request or an idempotency key. No live retry or original-server-stack attribution.",
-      "initialization": "Build on the preceding A actual merge ed7ca5129e8ace3287b79fbbfcb1652355e5206b. Current original linked source/order and frozen company relation only; qualification uses original loader/current valid work plus extraSettings, same client/actor/time, no adoption/history migration or new privileged path. Missing/ambiguous scope is a failure, never an empty successful update.",
-      "dateAndPermission": "Preserve original permission, applicability, begun-work, feasibility, fingerprint and version guards. Keep original company/plan/calendar, historical frozen adoptions, existing native R/D/A and active work IDs. A current P may change from a legal arrangement; independent branch joins do not imply a12-hour overall shift. No new roles, dates, approval or recovery endpoint.",
+      "rule": "Expose a separate optional current-plan read contract and render it in the three original task surfaces",
+      "source": "User authorized approved Pro supplement A→D→B→C, B/BA112 exact native current plan display with actual original pages. Keep original fixed B, original R/D/A and all prior histories; Root original UUID/field comparison remains pending, never invent a corrected24.5h date.",
+      "initialization": "Final preceding actual merge 32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda. Native task read after original authorization, same RR client/clock; exact captured adoption/route/round/step/phase or a genuine original publication-route and unique native instance. No current plan on old partial schemas is unknown, not an invented adoption.",
+      "dateAndPermission": "Read-only current effective P, original mixed/date precision and PO scopes. Original fixed B and R/D/A unchanged. No historical/latest-kind lookup, foreign counterpart, manufactured P, status write, new role or current company adoption. Original unknown/ambiguity/future/scenario mismatch remains explicit; included handoffs without separate arranged P are not applicable to an independent target.",
       "writes": [
-        "tests/integration/order-time-linked-applicability-browser-postgres.test.ts",
-        "tests/helpers/order-time-rewash-fixture.ts",
-        "docs/engineering/order-time-linked-applicability-repair.md"
+        "packages/contracts/src/digital-production-tasks.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/task-plan-targets.tsx",
+        "apps/web/src/task-plan-targets.css",
+        "apps/web/src/task-workbench-sample.tsx",
+        "apps/web/src/bulk-task-workbench.tsx",
+        "apps/web/src/digital-production-tasks-panel.tsx"
       ],
       "reads": [
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "tests/acceptance/supplychain-settings-browser.ts"
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/web/src/digital-production-api.ts"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/digital-production-tasks-postgres.test.ts",
+        "tests/unit/task-completion-display.test.ts"
       ],
-      "expectation": "Separate legitimate isolated requests preserve default36h success and adjusted24h success after preview/apply/published-instruction reread. Real framework App edits36→24 and submits once; compare actual calendar/rule/work/versions and unchanged historical adoptions. Same-key replay creates no writes, changed-body conflicts; different-key competition has one stale loser. A controlled real PG linked append failure after main append rolls back main/linked plans, request, adoption audit and command receipt; known rolled-back TEST recovery then replays once. Original live appliedv6 is not reset and live unknown commands are not touched.",
+      "expectation": "Original signed worker page at1165/390 and pure new-round original page show the same exact P/version as original Journey, distinct from native D, with original role denial and no business writes. Multi-PO targets/date precision/unknown/zero are retained, no PO average or completion substitution; the legitimate bodyless notification claim is distinct from task/plan mutation. No claim about unprovided original Root page or all old historical samples.",
       "checks": [
-        "d-native",
-        "d-unit",
-        "d-api-types",
-        "d-lint"
+        "b-native",
+        "b-unit",
+        "b-legacy",
+        "b-api-types",
+        "b-web-types",
+        "b-lint"
       ]
     },
     {
-      "rule": "Every affected original caller and helper selects the new authentic database regression in the complete canonical plan",
-      "source": "User authorized approved Pro supplement A→D→B→C, ADD-C applicability/atomicity repair, with default36h success and24h adjustment refusal retained as distinct original observations. Original request18c82d9bac5d0543371bc9f5516cf3e0 does not identify the successful request or an idempotency key. No live retry or original-server-stack attribution.",
-      "initialization": "Build on the preceding A actual merge ed7ca5129e8ace3287b79fbbfcb1652355e5206b. Current original linked source/order and frozen company relation only; qualification uses original loader/current valid work plus extraSettings, same client/actor/time, no adoption/history migration or new privileged path. Missing/ambiguous scope is a failure, never an empty successful update.",
-      "dateAndPermission": "Preserve original permission, applicability, begun-work, feasibility, fingerprint and version guards. Keep original company/plan/calendar, historical frozen adoptions, existing native R/D/A and active work IDs. A current P may change from a legal arrangement; independent branch joins do not imply a12-hour overall shift. No new roles, dates, approval or recovery endpoint.",
+      "rule": "Keep exact identity and original page regressions in the complete canonical plan",
+      "source": "User authorized approved Pro supplement A→D→B→C, B/BA112 exact native current plan display with actual original pages. Keep original fixed B, original R/D/A and all prior histories; Root original UUID/field comparison remains pending, never invent a corrected24.5h date.",
+      "initialization": "Final preceding actual merge 32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda. Native task read after original authorization, same RR client/clock; exact captured adoption/route/round/step/phase or a genuine original publication-route and unique native instance. No current plan on old partial schemas is unknown, not an invented adoption.",
+      "dateAndPermission": "Read-only current effective P, original mixed/date precision and PO scopes. Original fixed B and R/D/A unchanged. No historical/latest-kind lookup, foreign counterpart, manufactured P, status write, new role or current company adoption. Original unknown/ambiguity/future/scenario mismatch remains explicit; included handoffs without separate arranged P are not applicable to an independent target.",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/current-task-plan.test.ts",
+        "tests/helpers/current-task-plan-fixture.ts",
+        "tests/integration/current-task-plan-postgres.test.ts",
+        "tests/integration/current-task-plan-browser-postgres.test.ts",
+        "docs/engineering/current-task-plan-repair.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-automatic.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
+        "tests/helpers/order-time-rewash-fixture.ts",
         "scripts/test-execution-config.mjs"
       ],
       "oldTests": [
         "scripts/ci/test-execution-contract.test.mjs",
         "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "expectation": "New native/App suite is discovered once under the existing finite long correctness configuration for every changed apply/arrange/automatic/repository/qualification/helper consumer. Existing suite memberships and original business assertions remain. No new runner, skip, final name filter, clock, global timeout or optimization experiment.",
+      "expectation": "Real original publish/material verification/arrangement creates genuine paper tasks, not downstream synthetic prerequisites. Real second-round publication preserves old completed history for pure and linked sources; exact printing and included handoff boundaries covered. All affected API/contract/UI/helper consumers select both new native/App suites under existing finite config. No test removal, final name filter, new runner or global timeout.",
       "checks": [
-        "d-unit",
-        "d-protocol",
-        "d-native",
-        "d-lint"
+        "b-unit",
+        "b-native",
+        "b-legacy",
+        "b-protocol",
+        "b-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "d-unit",
+      "id": "b-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-linked-applicability.test.ts tests/unit/order-time-framework.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-d-20261117/candidate-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/current-task-plan.test.ts tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/task-completion-display.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/candidate-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ed7ca5129e8ace3287b79fbbfcb1652355e5206b",
-      "sourceFingerprint": "21d5ac4553d7cf8c052fec1a9f05104c9e12cfa443013dc647bc1cab760b8c05",
-      "startedAt": "2026-11-17T19:29:57.172157+00:00",
-      "endedAt": "2026-11-17T19:30:01.375336+00:00",
-      "log": "/workspace/sla-supplement-d-20261117/checks/candidate-unit/command.log",
-      "logSha256": "99ea45e85119de2706d083fe37c22fccd66d84ca98190addb4586ed004b0c903",
+      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+      "startedAt": "2026-11-17T20:14:24.509355+00:00",
+      "endedAt": "2026-11-17T20:14:37.720588+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-unit/command.log",
+      "logSha256": "0968d98dfc8b08c728c805b878a8001f8ef11757fce7b8b6cb9b3a2710475c78",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
-      "passed": 171,
+      "passed": 216,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4c8452d4acc160c7c5c0b7da19ca2ed7c21631cac6c4026a0a76741cc4648b1c"
+          "sha256": "0fcdb55673ae28187533ec24a6f38ae491ee31ede4cda3a273d3321755eb6396"
         }
       ]
     },
     {
-      "id": "d-native",
+      "id": "b-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-linked-applicability-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-d-20261117/pg/candidate-native/tests.json --testNamePattern 'linked source and order first activation|linked arrangements retain current native applicability and atomicity'",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/current-task-plan-postgres.test.ts tests/integration/current-task-plan-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/pg/candidate-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ed7ca5129e8ace3287b79fbbfcb1652355e5206b",
-      "sourceFingerprint": "21d5ac4553d7cf8c052fec1a9f05104c9e12cfa443013dc647bc1cab760b8c05",
-      "startedAt": "2026-11-17T19:29:56.637875+00:00",
-      "endedAt": "2026-11-17T19:31:15.542358+00:00",
-      "log": "/workspace/sla-supplement-d-20261117/pg/candidate-native/tests.log",
-      "logSha256": "35e91c0f08f28a24b1c9478e88c89e28f1354569852605fd2e56e69e06b01620",
+      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+      "startedAt": "2026-11-17T20:13:31.270946+00:00",
+      "endedAt": "2026-11-17T20:14:07.047983+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/pg/candidate-native/tests.log",
+      "logSha256": "f52012c8eac5547d9b1256537e026234db71cb140d3aa208e235ec3916358f7f",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
-      "passed": 9,
+      "passed": 6,
       "failed": 0,
-      "skipped": 22,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9de041cf66eaad0fb4ba5db00ae86f1e6c50c78b3636b7d66bc00b7fb38dab39"
+          "sha256": "793e6b43f982f8b45431e8078db6e172ec12d153dfd6237555b4e433e275b9c4"
         }
       ]
     },
     {
-      "id": "d-lint",
-      "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/order-time-automatic.ts apps/api/src/production-platform/order-time-operation-state.ts apps/api/src/production-platform/order-time-plan-repository.ts apps/api/src/production-platform/order-time-request-service.ts apps/api/src/production-platform/order-time-linked-applicability.ts tests/helpers/order-time-rewash-fixture.ts tests/unit/order-time-linked-applicability.test.ts tests/unit/full-gate-risk-map.test.ts tests/integration/order-time-linked-applicability-browser-postgres.test.ts scripts/test-suite-plan.mjs scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
+      "id": "b-legacy",
+      "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/digital-production-tasks-postgres.test.ts --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/pg/candidate-legacy/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ed7ca5129e8ace3287b79fbbfcb1652355e5206b",
-      "sourceFingerprint": "21d5ac4553d7cf8c052fec1a9f05104c9e12cfa443013dc647bc1cab760b8c05",
-      "startedAt": "2026-11-17T19:29:57.179007+00:00",
-      "endedAt": "2026-11-17T19:30:00.235199+00:00",
-      "log": "/workspace/sla-supplement-d-20261117/checks/candidate-lint/command.log",
+      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+      "startedAt": "2026-11-17T20:16:36.659478+00:00",
+      "endedAt": "2026-11-17T20:16:50.747977+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/pg/candidate-legacy/tests.log",
+      "logSha256": "51661a8754bb2fe4f13ae2171ec64a93c0ed4e4319b9ff7bf19c7a7f6eccee8d",
+      "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ade92c93db23e404ac95475994aeaedcfb391262461c24a121a7cf24c2b072b4"
+        }
+      ]
+    },
+    {
+      "id": "b-web-types",
+      "kind": "command",
+      "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+      "startedAt": "2026-11-17T20:14:24.470884+00:00",
+      "endedAt": "2026-11-17T20:15:06.658956+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
     },
     {
-      "id": "d-api-types",
+      "id": "b-lint",
+      "kind": "command",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/current-task-plan-targets.ts apps/api/src/production-platform/fixed-task-targets.ts apps/api/src/production-platform/framework-node-targets.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/order-time-work-task-kind.ts apps/api/src/production-platform/task-service.ts apps/web/src/bulk-task-workbench.tsx apps/web/src/digital-production-tasks-panel.tsx apps/web/src/task-plan-targets.tsx apps/web/src/task-workbench-sample.tsx packages/contracts/src/digital-production-tasks.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/helpers/current-task-plan-fixture.ts tests/integration/current-task-plan-browser-postgres.test.ts tests/integration/current-task-plan-postgres.test.ts tests/unit/current-task-plan.test.ts tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+      "startedAt": "2026-11-17T20:14:24.536363+00:00",
+      "endedAt": "2026-11-17T20:14:28.984340+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-lint/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
+    },
+    {
+      "id": "b-api-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ed7ca5129e8ace3287b79fbbfcb1652355e5206b",
-      "sourceFingerprint": "21d5ac4553d7cf8c052fec1a9f05104c9e12cfa443013dc647bc1cab760b8c05",
-      "startedAt": "2026-11-17T19:29:57.180415+00:00",
-      "endedAt": "2026-11-17T19:30:20.670990+00:00",
-      "log": "/workspace/sla-supplement-d-20261117/checks/candidate-api-types/command.log",
+      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+      "startedAt": "2026-11-17T20:14:24.480911+00:00",
+      "endedAt": "2026-11-17T20:14:50.286559+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
     },
     {
-      "id": "d-protocol",
+      "id": "b-protocol",
       "kind": "tests",
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ed7ca5129e8ace3287b79fbbfcb1652355e5206b",
-      "sourceFingerprint": "21d5ac4553d7cf8c052fec1a9f05104c9e12cfa443013dc647bc1cab760b8c05",
-      "startedAt": "2026-11-17T19:29:57.176532+00:00",
-      "endedAt": "2026-11-17T19:29:58.303540+00:00",
-      "log": "/workspace/sla-supplement-d-20261117/checks/candidate-protocol/command.log",
-      "logSha256": "a6900e2cc4e3eb140742f98a01ca96cc4c1064fa7934b5f9fa06c3f016d0636e",
+      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+      "sourceFingerprint": "b9688b35697f5e078bfa6c0361fe7820f9ee1b8cd7c3bf9791e1fcf3d8954662",
+      "startedAt": "2026-11-17T20:14:24.535994+00:00",
+      "endedAt": "2026-11-17T20:14:26.796365+00:00",
+      "log": "/workspace/sla-supplement-b-20261117/checks/candidate-protocol/command.log",
+      "logSha256": "8b9801eaccd5accd5acf2462cf0aeb3178d8a1c4dc0d0d0620619f2557f20c0a",
       "context": "Current actual preceding merge base; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
       "passed": 21,
       "failed": 0,
