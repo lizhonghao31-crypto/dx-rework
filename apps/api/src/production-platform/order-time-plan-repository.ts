@@ -26,6 +26,9 @@ export type OrderTimeInput={version:'order-time-input-v1'|'order-time-input-rewa
 type Targets=Record<string,Record<string,FixedTimelineTarget>>;
 export type StoredOrderTimePlan={id:string;resource:BusinessTimeScope;revision:number;input:OrderTimeInput;targets:Targets;
  identityHash:string;time:BusinessTime;actorId:string;eventRef:string;changeKind:'initial'|'arrangement'|'customer_date_change'};
+/** Server-only qualification from the same actor, transaction and business
+ * observation. An unknown scope is an error, never an empty update set. */
+export type LinkedOrderTimeQualification={value:OrderTimeInput;updates:Record<string,OrderTimeRule>};
 type Row={plan_version_id:string;resource_kind:'source'|'order';source_id:string|null;production_order_id:string|null;
  revision:number;input_snapshot:OrderTimeInput;fixed_targets:Targets;identity_hash:string;business_time:BusinessTime;created_by:string;source_event_ref:string;change_kind:StoredOrderTimePlan['changeKind']};
 const identity=(input:OrderTimeInput,targets:Targets)=>fixedTimelineIdentity({input,targets});
@@ -75,7 +78,7 @@ export class OrderTimePlanRepository{
    AND ${resource.kind==='source'?'source_id':'production_order_id'}=$2 ORDER BY revision DESC LIMIT 1`,[resource.kind,resource.id])).rows[0];
   return row?saved(row):null;
  }
- async confirm(input:{resource:BusinessTimeScope;expectedRevision:number;value:OrderTimeInput;actorId:string;eventRef:string;time:BusinessTime;requestKey:string},refreshLinked?:(resource:BusinessTimeScope,changes:Record<string,OrderTimeRule>)=>Promise<OrderTimeInput>):Promise<StoredOrderTimePlan>{
+ async confirm(input:{resource:BusinessTimeScope;expectedRevision:number;value:OrderTimeInput;actorId:string;eventRef:string;time:BusinessTime;requestKey:string},refreshLinked?:(resource:BusinessTimeScope,changes:Record<string,OrderTimeRule>)=>Promise<LinkedOrderTimeQualification>):Promise<StoredOrderTimePlan>{
   const previous=await this.current(input.resource),result=await this.append(input,'arrangement');
   if(!previous||result.revision<=previous.revision)return result;
   const keys=new Set([...Object.keys(previous.input.plan.overrides),...Object.keys(result.input.plan.overrides)]),changed=Object.fromEntries([...keys].filter(key=>fixedTimelineIdentity(orderTimeRule(previous.input.plan,key)?.rule??null)!==fixedTimelineIdentity(orderTimeRule(result.input.plan,key)?.rule??null)).flatMap(key=>{const rule=orderTimeRule(result.input.plan,key)?.rule;return rule?[[key,rule]]:[];}));
@@ -88,7 +91,12 @@ export class OrderTimePlanRepository{
   if(!linked||!counterpart||fixedTimelineIdentity(counterpart.input.plan.company)!==fixedTimelineIdentity(result.input.plan.company))return result;
   const updates=Object.fromEntries(Object.entries(changed).filter(([key,rule])=>fixedTimelineIdentity(orderTimeRule(counterpart.input.plan,key)?.rule??null)!==fixedTimelineIdentity(rule)));
   if(!Object.keys(updates).length)return result;
-  const value=counterpart.input.frameworkContext?await (refreshLinked??(()=>{throw Error('关联本单调整须重新读取事实');}))(linked,updates):structuredClone(counterpart.input);value.plan={...value.plan,revision:counterpart.input.plan.revision+1,overrides:{...value.plan.overrides,...updates}};
+  if(!refreshLinked)throw Error('关联本单调整须重新核对当前适用范围与事实');
+  const qualified=await refreshLinked(linked,updates),selected=qualified.updates;
+  for(const [key,rule]of Object.entries(selected))if(!Object.hasOwn(updates,key)||fixedTimelineIdentity(updates[key])!==fixedTimelineIdentity(rule))throw Error('关联适用范围不能引入额外时效修改');
+  if(!Object.keys(selected).length)return result;
+  const value=qualified.value;if(fixedTimelineIdentity(value.plan.company)!==fixedTimelineIdentity(counterpart.input.plan.company))throw new SlaVersionConflict('关联对象原时效基线已更新，请重新核对');
+  value.plan={...value.plan,revision:counterpart.input.plan.revision+1,overrides:{...value.plan.overrides,...selected}};
   await this.append({resource:linked,expectedRevision:counterpart.revision,value,actorId:input.actorId,eventRef:input.eventRef,time:input.time,requestKey:'order-time:linked:'+fixedTimelineIdentity([input.requestKey,linked])},'arrangement');
   return result;
  }

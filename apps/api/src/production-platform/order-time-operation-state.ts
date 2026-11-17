@@ -92,7 +92,8 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  // round's work its own keys; inherited completed work is not scheduled again.
  const dev=built&&round>1?{...built,previous:built.previous?built.previous+':round:'+round:null,route:built.route.map(node=>({...node,nodeId:node.nodeId+':round:'+round})),work:built.work.map(work=>({...work,id:work.id+':round:'+round,dependsOn:work.dependsOn.map(id=>id+':round:'+round),...(work.includedIn?{includedIn:work.includedIn+':round:'+round}:{})}))}:built;
  const publicationOrder=publicationFormalInput(development,{serverToday:beijingCalendarDate(new Date(time.now)),minimumInitialCustomerDate:minimumInitialCustomerDate(new Date(time.now)),orderTimeEnabled:true},Boolean(plan.company.framework));
- if(resource?.kind==='order'||operation.kind==='confirm_order'||operation.kind==='direct_order'||publicationOrder){
+ const includesProduction=resource?.kind==='order'||operation.kind==='confirm_order'||operation.kind==='direct_order'||Boolean(publicationOrder);
+ if(includesProduction){
   let lines:Array<{id:string;po:string;date:string|null;customerDateVersion?:number}>;
   if(order){
    const rows=(await db.query('SELECT line_id,coalesce(po_number,formal_style_no) AS po,customer_warehouse_arrival_date::text AS date,customer_date_version,factory_delivery_date::text AS factory_date,factory_date_version,factory_date_source FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[resource!.id])).rows;
@@ -264,5 +265,6 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(washing)check.washing=[...washing].map(([lineId,row])=>({lineId,label:row.label,version:row.version,document:row.document}));
  if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);
  void database;
- return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production};
+ const linkedApplicability={complete:Boolean(!sourceId||development)&&(!includesProduction||Boolean(production&&production.craftSteps!==null&&production.preshrink!==null)),parameterKeys:[...new Set([...value.work.map(work=>work.parameterKey),...extraSettings.keys()])]};
+ return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production,linkedApplicability};
 }

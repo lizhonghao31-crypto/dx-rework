@@ -417,6 +417,13 @@ it('keeps frozen factory graph, exact fact serialization and clock rebuild in th
  }
 });
 
+it('executes the linked-applicability App and transactional regression for every real confirmation caller',()=>{
+ for(const name of ['order-time-linked-applicability','order-time-plan-repository','order-time-operation-state','order-time-request-service','order-time-automatic']){
+  const plan=amendmentPlan([`apps/api/src/production-platform/${name}.ts`]);
+  expect(plan.plan.filter(row=>row.path==='tests/integration/order-time-linked-applicability-browser-postgres.test.ts')).toEqual([{path:'tests/integration/order-time-linked-applicability-browser-postgres.test.ts',config:'vitest.business-chain.config.ts',memberships:['mapped']}]);
+ }
+});
+
 it('keeps incomplete-publication and exact native craft choices in original request and App regressions',()=>{
  for(const file of ['order-time-publication-intent','fixed-development-work','fixed-order-work','fixed-work-definition']){
   const risk=classifyFullGatePaths([`apps/api/src/production-platform/${file}.ts`]);

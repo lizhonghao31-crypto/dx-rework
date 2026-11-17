@@ -30,6 +30,10 @@ export async function prepareRewashSettings(f:Awaited<ReturnType<typeof business
 
 }
 export async function admittedFrameworkProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>){
+ return admittedProductionFixture(f,true);
+}
+/** The same original admission supports both stored arrangement formats. */
+export async function admittedProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,framework:boolean){
  const scene=await f.scene('2026-11-17T08:00:00.000Z');
  const native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
  const requests=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,native)),washing=new BulkWashingService(f.db),repo=new OrderTimePlanRepository(f.db);
@@ -54,7 +58,7 @@ export async function admittedFrameworkProductionFixture(f:Awaited<ReturnType<ty
    const orderId=applied.result!.orderId!;expect(orderId).toBeTruthy();
    const resource=()=>({kind:'order' as const,id:orderId});
    const command=async()=>{const scope=(await washing.read(f.root,orderId)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:'2026-11-17T08:00:00.000Z',note:'TEST exact native washing scope'};};
-   expect((await repo.current(resource()))!.input.frameworkPlans).toBeDefined();
+   expect(Boolean((await repo.current(resource()))!.input.frameworkPlans)).toBe(framework);
    const ready=await f.bulkReady('无',undefined,1,undefined,{quantity:2,designerActor:f.root,existingOrder:{orderId,sourceId:source.sourceId}});
    const lineId=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[orderId])).rows[0].line_id;
    // This original fixture explicitly created a customer approval without a
