@@ -136,7 +136,7 @@ jobs:
             test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
             git fetch --no-tags origin "${BASE_SHA}"
 
-            git diff --no-renames --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/quick-gate-changed-files.txt"
+            git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/quick-gate-changed-files.txt"
             mapfile -t changed_files < "$RUNNER_TEMP/quick-gate-changed-files.txt"
             if [[ "$SELECTED_KIND" == "quick" ]]; then
               node scripts/ci/full-gate-risk-map.mjs --require-quick-safe "$RUNNER_TEMP/quick-gate-changed-files.txt"

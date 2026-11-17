@@ -1,8 +1,9 @@
 import { readFileSync,readdirSync } from "node:fs";
+import { basename } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES, INDEPENDENT_POSTGRES_TESTS, hasStaticPostgresCaseImport, assertStaticPostgresCaseImport, SLA_JOURNEY_SOURCE_PATHS, SLA_JOURNEY_SUPPORT_PATHS, SLA_JOURNEY_REQUIRED_TESTS, SLA_JOURNEY_UNRELATED_CHAIN_TESTS } from "../../scripts/ci/full-gate-risk-map.mjs";
+import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
@@ -100,7 +101,7 @@ it('maps the original receipt packing editor to its authenticated browser flow',
 });
 const amendmentPlan=(paths:string[])=>{
  const r=classifyFullGatePaths(paths);
- return fullGatePostgresPlan({BASE_SHA:'7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e',DB_REQUIRED:String(r.dbRequired),BUSINESS_CHAIN_SENSITIVE:String(r.businessChainSensitive),MIGRATION_SENSITIVE:String(r.migrationSensitive),DEPLOYMENT_SENSITIVE:String(r.deploymentSensitive),MAPPED_POSTGRES_TESTS:r.mappedPostgresTests.join(','),CHAIN_PROFILE:r.chainProfile});
+ return fullGatePostgresPlan({BASE_SHA:'7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e',DB_REQUIRED:String(r.dbRequired),BUSINESS_CHAIN_SENSITIVE:String(r.businessChainSensitive),MIGRATION_SENSITIVE:String(r.migrationSensitive),DEPLOYMENT_SENSITIVE:String(r.deploymentSensitive),MAPPED_POSTGRES_TESTS:r.mappedPostgresTests.join(',')});
 };
 
 describe('same-round correction source-only PG coverage',()=>{
@@ -205,10 +206,9 @@ describe("Full Gate sensitive path mapping", () => {
   it.each(Object.entries(POSTGRES_CASE_SUITES))("maps imported module %s to runnable suite %s", (module, suite) => {
     const result = classifyFullGatePaths([module]);
     expect(result.dbRequired).toBe(true);
-    expect(result.businessChainSensitive).toBe(!INDEPENDENT_POSTGRES_TESTS.includes(suite));
+    expect(result.businessChainSensitive).toBe(true);
     expect(result.mappedPostgresTests).toEqual([suite]);
-    if(INDEPENDENT_POSTGRES_TESTS.includes(suite)) expect(hasStaticPostgresCaseImport(readFileSync(suite, "utf8"), module)).toBe(true);
-    else expect(readFileSync(suite,"utf8")).toContain(module.split("/").at(-1)!.replace(/\.ts$/, ".js"));
+    expect(readFileSync(suite, "utf8")).toContain(basename(module).replace(/\.ts$/, ".js"));
     expect(() => assertMappedPostgresTests(result.mappedPostgresTests)).not.toThrow();
   });
 
@@ -262,7 +262,7 @@ describe("Full Gate sensitive path mapping", () => {
   it("runs receiving analysis cases through the real receiving suite", () => {
     const result = classifyFullGatePaths(["tests/integration/receiving-analysis-postgres.cases.ts"]);
     expect(result.dbRequired).toBe(true);
-    expect(result.businessChainSensitive).toBe(false);
+    expect(result.businessChainSensitive).toBe(true);
     expect(result.mappedPostgresTests).toEqual(["tests/integration/receiving-postgres.test.ts"]);
   });
 
@@ -397,128 +397,4 @@ it('keeps incomplete-publication and exact native craft choices in original requ
   for(const suite of ['order-time-requests-postgres','order-time-requests-browser-postgres'])expect(risk.mappedPostgresTests).toContain(`tests/integration/${suite}.test.ts`);
  }
  expect(classifyFullGatePaths(['apps/web/src/order-time-washing-rebase.ts']).mappedPostgresTests).toContain('tests/integration/order-time-requests-browser-postgres.test.ts');
-});
-
-describe('reviewed single-owner PostgreSQL test-only selection', () => {
-  it.each(INDEPENDENT_POSTGRES_TESTS)('keeps Full and the unchanged runnable entry without unrelated chain: %s', suite => {
-    const risk=classifyFullGatePaths([suite]), plan=amendmentPlan([suite]);
-    expect(risk.highRisk).toBe(true);
-    expect(risk.dbRequired).toBe(true);
-    expect(risk.businessChainSensitive).toBe(false);
-    expect(plan.chain).toBe(false);
-    expect(plan.plan.map(row=>row.path)).toEqual(risk.mappedPostgresTests);
-    expect(plan.plan.map(row=>row.path)).toContain(suite);
-  });
-  it('deduplicates the reviewed case and its owner without weakening execution context', () => {
-    const suite='tests/integration/receiving-postgres.test.ts';
-    const plan=amendmentPlan(['tests/integration/receiving-analysis-postgres.cases.ts',suite,suite]);
-    expect(plan.chain).toBe(false);
-    expect(plan.plan).toEqual([{path:suite,config:configForSuite(suite),memberships:['mapped']}]);
-  });
-  it.each([
-    'tests/helpers/business-anchor-fixture.ts',
-    'apps/api/src/production-platform/journey-fact-repository.ts',
-    'apps/api/src/auth/service.ts',
-    'apps/api/migrations/9999_test.sql',
-    'packages/domain/src/digital-sla-plan.ts',
-    'packages/domain/src/new-unclassified-domain.ts',
-    'tests/integration/unknown-postgres.test.ts',
-    'tests/integration/sample-read-postgres.test.ts',
-    'tests/integration/member-module-policy-postgres.cases.ts',
-    'vitest.config.ts',
-  ])('retains the conservative chain for mixed or multi-owner input: %s', extra => {
-    const plan=amendmentPlan(['tests/integration/receiving-postgres.test.ts',extra]);
-    expect(plan.chain).toBe(true);
-    for(const suite of POSTGRES_CHAIN_TESTS)expect(plan.plan.map(row=>row.path)).toContain(suite);
-  });
-  it('fails closed for standalone unknown domain code and deleted test entries', () => {
-    for(const path of ['packages/domain/src/new-unclassified-domain.ts','tests/integration/removed-postgres.test.ts']){
-      const risk=classifyFullGatePaths([path]);
-      expect(risk.highRisk).toBe(true);expect(risk.businessChainSensitive).toBe(true);
-    }
-  });
-});
-
-describe('case bindings use executable static imports, not textual mentions', () => {
-  const module='tests/integration/receiving-analysis-postgres.cases.ts';
-  it('recognizes the original side-effect import', () => {
-    expect(hasStaticPostgresCaseImport('import "./receiving-analysis-postgres.cases.js";',module)).toBe(true);
-  });
-  it.each([
-    '// import "./receiving-analysis-postgres.cases.js";',
-    '/* import "./receiving-analysis-postgres.cases.js"; */',
-    'const explanation = \'import "./receiving-analysis-postgres.cases.js";\';',
-    'const explanation = `import "./receiving-analysis-postgres.cases.js";`;',
-    'import type { Something } from "./receiving-analysis-postgres.cases.js";',
-    'void import("./receiving-analysis-postgres.cases.js");',
-    '',
-  ])('rejects a missing static execution edge: %s', source => {
-    expect(hasStaticPostgresCaseImport(source,module)).toBe(false);
-    expect(()=>assertStaticPostgresCaseImport(source,module,"tests/integration/receiving-postgres.test.ts")).toThrow("POSTGRES_CASE_IMPORT_REQUIRED");
-  });
-  it('does not preserve coverage when the import is removed but its comment remains', () => {
-    const before='import "./receiving-analysis-postgres.cases.js";\n// receiving-analysis-postgres.cases.js';
-    expect(hasStaticPostgresCaseImport(before,module)).toBe(true);
-    expect(hasStaticPostgresCaseImport(before.split('\n').slice(1).join('\n'),module)).toBe(false);
-  });
-});
-
-describe('reviewed SLA/Journey production-source profile', () => {
-  it('retains exact mapped readers plus every non-exempt chain bridge for the RP2 source family', () => {
-    const input=[...SLA_JOURNEY_SOURCE_PATHS,...SLA_JOURNEY_SUPPORT_PATHS];
-    const risk=classifyFullGatePaths(input),plan=amendmentPlan(input);
-    const expected=[...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...POSTGRES_CHAIN_TESTS.filter(path=>!SLA_JOURNEY_UNRELATED_CHAIN_TESTS.includes(path))])].sort();
-    expect(plan.plan.map(row=>row.path)).toEqual(expected);
-    expect(risk.highRisk).toBe(true);expect(risk.dbRequired).toBe(true);
-    expect(risk.journeyPg13Compat).toBe(true);
-    expect(risk.domains).toContain('sla-journey-reviewed-source-profile');
-    for(const path of SLA_JOURNEY_UNRELATED_CHAIN_TESTS)expect(plan.plan.map(row=>row.path)).not.toContain(path);
-    for(const row of plan.plan)expect(row.config).toBe(configForSuite(row.path));
-  });
-  it('explicitly maps the shared SLA engine to the actual Journey consumers, not only the old generic chain', () => {
-    const plan=amendmentPlan(['packages/domain/src/digital-sla-plan.ts']);
-    for(const path of SLA_JOURNEY_REQUIRED_TESTS)expect(plan.plan.map(row=>row.path)).toContain(path);
-    expect(plan.chain).toBe(true);
-    for(const path of POSTGRES_CHAIN_TESTS.filter(path=>!path.includes('own-tail-responsibility-history')))expect(plan.plan.map(row=>row.path)).toContain(path);
-    expect(classifyFullGatePaths(['packages/domain/src/digital-sla-plan.ts']).chainProfile).toBe('sla-journey-engine-v1');
-  });
-  it.each([
-    'apps/api/src/auth/service.ts','apps/api/src/access/service.ts',
-    'apps/api/src/production-platform/task-service.ts',
-    'apps/api/src/production-platform/journey-new-unclassified.ts',
-    'packages/domain/src/new-unclassified-domain.ts',
-    'apps/api/migrations/9999_test.sql',
-    'tests/helpers/business-anchor-fixture.ts',
-    'scripts/ci/full-gate-risk-map.mjs',
-    'tests/integration/own-tail-responsibility-history-postgres.test.ts',
-    'tests/integration/sample-create-postgres.test.ts',
-    'apps/api/src/samples/sample-create-service.ts',
-    'packages/contracts/src/index.ts',
-    'scripts/acceptance/worker-people-maintenance.ts',
-    'scripts/acceptance/authorization-guard.ts',
-    'tests/integration/acceptance-worker-people-postgres.test.ts',
-    'apps/api/src/tools/repositories.ts',
-    'apps/api/src/platform/errors.ts',
-    'apps/api/src/platform/migration-manifest.json',
-  ])('restores the full chain when an unaudited or independently affected boundary is added: %s', path => {
-    const plan=amendmentPlan(['packages/domain/src/digital-sla-plan.ts',path]);
-    expect(plan.chain).toBe(true);
-    for(const test of POSTGRES_CHAIN_TESTS)expect(plan.plan.map(row=>row.path)).toContain(test);
-  });
-});
-
-it('rejects forged or incompatible chain profile context', () => {
- const env={BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'true',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:'tests/integration/digital-journey-postgres.test.ts',CHAIN_PROFILE:'sla-journey-v1'};
- expect(()=>fullGatePostgresPlan({...env,CHAIN_PROFILE:'unknown'})).toThrow('POSTGRES_CHAIN_PROFILE_UNKNOWN');
- expect(()=>fullGatePostgresPlan({...env,MIGRATION_SENSITIVE:'true'})).toThrow('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
- expect(()=>fullGatePostgresPlan({...env,DEPLOYMENT_SENSITIVE:'true'})).toThrow('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
- expect(()=>fullGatePostgresPlan({...env,DB_REQUIRED:'false',BUSINESS_CHAIN_SENSITIVE:'false'})).toThrow('POSTGRES_CHAIN_PROFILE_CONTEXT_INVALID');
-});
-
-it('restores the four indirectly loaded suites and retains only independent historical exclusion for engine changes', () => {
- const paths=[...SLA_JOURNEY_SOURCE_PATHS,...SLA_JOURNEY_SUPPORT_PATHS,'packages/domain/src/digital-sla-plan.ts'];
- const risk=classifyFullGatePaths(paths),plan=amendmentPlan(paths);
- expect(risk.chainProfile).toBe('sla-journey-engine-v1');
- const retained=POSTGRES_CHAIN_TESTS.filter(path=>!path.includes('own-tail-responsibility-history'));
- expect(plan.plan.map(row=>row.path)).toEqual([...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...retained])].sort());
 });

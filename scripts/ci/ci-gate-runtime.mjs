@@ -40,7 +40,7 @@ export function scopeFor(plan, paths) {
   const risk = classifyFullGatePaths(paths);
   return {event: 'create', base: plan.baseRef, final: 'true', db: String(risk.dbRequired),
     mapped: risk.mappedPostgresTests.join(','), journey: String(risk.journeyPg13Compat),
-    migration: String(risk.migrationSensitive), business_chain: String(risk.businessChainSensitive), chain_profile: risk.chainProfile,
+    migration: String(risk.migrationSensitive), business_chain: String(risk.businessChainSensitive),
     deployment: String(risk.deploymentSensitive),maintenance: String(risk.maintenanceSensitive),activation: String(risk.activationSensitive),transfer: String(risk.transferSensitive)};
 }
 
@@ -111,7 +111,7 @@ export function certifyFinal(environment = process.env) {
   if (execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim() !== plan.head) throw new Error('Approval checkout differs');
   try { execFileSync('git', ['cat-file', '-e', `${plan.base}^{commit}`], {stdio: 'ignore'}); }
   catch { execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', plan.base], {stdio: 'pipe'}); }
-  const paths = execFileSync('git', ['diff', '--no-renames', '--name-only', plan.base, plan.head], {encoding: 'utf8'}).trim().split('\n').filter(Boolean);
+  const paths = execFileSync('git', ['diff', '--name-only', plan.base, plan.head], {encoding: 'utf8'}).trim().split('\n').filter(Boolean);
   const expectedScope = scopeFor(plan, paths);
   if (plan.kind === 'quick' && classifyFullGatePaths(paths).highRisk) throw new Error('Sensitive diff cannot receive a Quick approval');
   for (const [key, value] of Object.entries(expectedScope)) if (scope[key] !== value) throw new Error(`Actual scope ${key} differs`);
