@@ -1,13 +1,12 @@
 import {CockpitDate} from './cockpit-date.js';
 import {cockpitOwnStatus,CockpitTargetDifference,CockpitFixedTargetDates,CockpitActualDates} from './cockpit-fixed-schedule.js';
-import type {ReactNode} from "react";
 import {hasDateOnlyTarget,hasOriginalTaskDeadline,nodeTargetLabel} from './journey-sla-details.js';
 import {StatusBadge,type Tone} from "@dx-rework/ui";
 import {NodeTable} from "@dx-rework/ui/production";
 import type {JourneyNode,JourneyRecord,OrderJourney} from "@dx-rework/contracts/digital-production-journey";
-import {createWebUrls} from "../url-contract.js";
-import {journeyRecordHref,journeyStateLabels,nodeStatus,type CockpitContext} from "./digital-journey-cockpit-model.js";
-const urls=createWebUrls(import.meta.env.BASE_URL);
+import {journeyStateLabels,nodeStatus,type CockpitContext} from "./digital-journey-cockpit-model.js";
+import {CockpitRecordLink} from './cockpit-record-link.js';
+export {CockpitRecordLink};
 export const cockpitPerson=(person:JourneyNode["owner"],status?:JourneyNode['ownerStatus'])=>person?.name??(person?.id?"姓名未登记":status==='unassigned'?"未指派":status==='unavailable'?"无权限查看":"负责人尚未取得");
 export const cockpitNodeOwner=(node:JourneyNode)=>node.owner?cockpitPerson(node.owner,node.ownerStatus):node.responsibilityRole??cockpitPerson(null,node.ownerStatus);
 export const cockpitNodeTone=(node:JourneyNode):Tone=>cockpitOwnStatus(node)?.tone??(node.risks.includes("overdue")?"danger":node.risks.includes("due_soon")?"warning":node.state==="completed"||node.state==="inherited"?"success":node.state==="active"?"info":"neutral");
@@ -17,10 +16,6 @@ export const cockpitRecordLabel=(record:JourneyRecord)=>recordLabels[record.doma
 /** Submitting an unfinished result is normal work, rather than an activation blocker. */
 export const cockpitVisibleBlockers=(node:JourneyNode)=>node.blockers.filter(blocker=>!blocker.key.startsWith('completion:'));
 
-export function CockpitRecordLink({record,context,children,disabled=false,onNavigate}:{record:JourneyRecord;context:CockpitContext;children:ReactNode;disabled?:boolean;onNavigate?:()=>CockpitContext}){
-  const href=record.url?journeyRecordHref(record.url,context,record.mode):"";
-  return href&&!disabled?<a href={urls.pageUrl(href)} onClick={event=>{if(onNavigate&&record.url)event.currentTarget.href=urls.pageUrl(journeyRecordHref(record.url,onNavigate(),record.mode));}}>{children}</a>:<span className="journey-muted" aria-disabled="true">{disabled?children:"记录暂不可用"}</span>;
-}
 export function CockpitNodeRows({nodes,selectedId,context,onSelect,asOf,lines=[],idPrefix='journey-node'}:{lines?:OrderJourney['lines'];nodes:JourneyNode[];selectedId:string|undefined;context:CockpitContext;asOf:string|undefined;onSelect:(node:JourneyNode)=>void;idPrefix?:string}){
   return <NodeTable className="journey-node-table"><colgroup><col className="node-name"/><col className="node-owner"/><col className="node-status"/><col className="node-time"/><col className="node-time"/><col className="node-record"/></colgroup>
     <thead><tr><th>节点 / 轮次</th><th>负责人</th><th>状态</th><th>原截止 / 节点目标</th><th>实际完成时间</th><th>记录</th></tr></thead>

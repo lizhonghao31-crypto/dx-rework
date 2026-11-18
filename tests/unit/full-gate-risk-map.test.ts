@@ -47,6 +47,13 @@ it('keeps factory read-region changes in the original authenticated washing and 
  for(const file of ['apps/web/src/factory-flow-read.ts','apps/web/src/factory-flow-panel.tsx'])expect(classifyFullGatePaths([file]).mappedPostgresTests).toContain('tests/integration/bulk-washing-browser-postgres.test.ts');
 });
 
+it('selects exact native-window navigation and original App return coverage for every projection, route and link consumer',()=>{
+ const suite='tests/integration/washing-window-navigation-browser-postgres.test.ts';
+ for(const path of ['apps/api/src/production-platform/journey-washing-window-record.ts','apps/api/src/production-platform/journey-washing-facts.ts','apps/api/src/production-platform/journey-washing-rework-facts.ts','apps/api/src/production-platform/journey-washing-projection.ts','apps/api/src/production-platform/fixed-schedule-basis.ts','apps/api/src/production-platform/fixed-schedule-progress.ts','apps/api/src/production-platform/journey-fact-model.ts','apps/web/src/bulk-washing-panel.tsx','apps/web/src/washing-window-target.ts','apps/web/src/washing-window-target.css','apps/web/src/cockpit-record-link.tsx','apps/web/src/cockpit-detail.tsx','apps/web/src/cockpit-node-dates.tsx','apps/web/src/cockpit-node-rows.tsx','apps/web/src/digital-detail-route.ts','apps/web/src/factory-task-target.ts','apps/web/src/factory-flow-panel.tsx','apps/web/src/journey-sla-details.tsx','apps/web/src/node-materials-panel.tsx','packages/contracts/src/bulk-washing.ts','packages/contracts/src/digital-production-journey.ts','tests/helpers/order-time-rewash-fixture.ts',suite])expect(classifyFullGatePaths([path]).mappedPostgresTests,path).toContain(suite);
+ expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
+ expect(settingsBrowserRequired({DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite})).toBe(true);
+});
+
 it('keeps washing projection changes in the native quantity, fact model and request regression plan',()=>{
  for(const file of ['journey-washing-facts','journey-washing-projection']){
   const risk=classifyFullGatePaths([`apps/api/src/production-platform/${file}.ts`]);

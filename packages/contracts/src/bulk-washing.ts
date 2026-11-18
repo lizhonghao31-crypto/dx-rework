@@ -21,6 +21,11 @@ export type BulkWashingArrangement=z.infer<typeof BulkWashingArrangementSchema>;
 /** A ledger is for one PO, factory and allocation/receipt quantity version.
  * It never turns washed quantities into new receipts or additional garments. */
 export type BulkWashingScope={scopeId:string;lineId:string;factoryDecisionId:string|null;quantityVersion:string;quantity:number};
+/** Original native identity, opaque across URLs. Never infer its scope by
+ * splitting colons or choosing the latest window/ledger revision. */
+export type BulkWashingWindowIdentity={scopeId:string;windowId:string};
+export const bulkWashingWindowReference=(scopeId:string,windowId:string)=>`washing:${scopeId}:${windowId}`;
+export const BulkWashingWindowReferenceSchema=z.string().min(10).max(400).regex(/^washing:[A-Za-z0-9._:-]+$/,'洗水窗口编号无效');
 export type BulkWashingFact={id:string;scopeId:string;quantityVersion:string;occurredAt:string|null} & (
  |{kind:'send';quantity:number;reworkOfInspectionId?:string|undefined;rewashWorkId?:string|undefined}
  |{kind:'return';sendId:string;quantity:number}

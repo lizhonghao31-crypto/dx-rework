@@ -44,7 +44,12 @@ export function NodeMaterialsPanel({order,node,control,busy=false}:{order:OrderJ
   const restore=control.restore.current;if(!restore.pending||restore.key!==key||busy||view.open&&!shown)return;
   const root=panel.current?.closest('.journey-current-panel'),wanted=[...(root?.querySelectorAll<HTMLElement>('[data-material-focus]')??[])].find(e=>e.dataset.materialFocus===restore.focus);
   const target=wanted?.matches('a,button,input,select,summary,[tabindex]')?wanted:wanted?.querySelector<HTMLElement>('a,button,input,select,summary,[tabindex]');
-  if(target){const frame=requestAnimationFrame(()=>target.focus({preventScroll:true}));restore.pending=false;return()=>cancelAnimationFrame(frame);}
+  if(target){
+   if(restore.focus.startsWith('washing-window:')){
+    for(let parent=wanted?.parentElement;parent&&parent!==root;parent=parent.parentElement)if(parent instanceof HTMLDetailsElement)parent.open=true;
+   }
+   const frame=requestAnimationFrame(()=>{if(restore.focus.startsWith('washing-window:'))target.scrollIntoView({block:'nearest'});target.focus({preventScroll:true});});restore.pending=false;return()=>cancelAnimationFrame(frame);
+  }
  },[key,busy,shown,view.open]);
  const rows=filterNodeMaterials(shown?.rows??[],view.filter),waiting=rows.filter(pending),available=rows.filter(row=>!pending(row));
  const rowView=(row:NodeMaterial)=><article key={row.id} className="node-material-row" data-material-state={row.state}>
