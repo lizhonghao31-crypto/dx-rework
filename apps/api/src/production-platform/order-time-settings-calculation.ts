@@ -44,7 +44,9 @@ export function orderTimeSettingsCalculation(raw:OrderTimeCalculation):OrderTime
   const customerDate=input.lines[index]!.customerDate,goal=slaAnchorTime(customerDate?{precision:'date',value:customerDate,source:'本次填写的客户交期'}:{precision:'unknown',reason:'请填写客户交期'},'客户交期');
   const rows=work.map(node=>{const target=targets.find(t=>t.id===node.id)??fixedConsumerTargets(work,consumer).find(t=>t.id===node.id)!,key=node.parameterKey??node.id,meta=catalog.get(key);return {id:node.id,parameterKey:key,label:meta?.label??(key==='source_confirmation'?'开发交接':key==='development_craft_confirmation'?'确认工艺回收':'流程交接'),stage:meta?.stage??2,minutes:node.minutes,calendar:node.calendar,startAt:target.start.at,startExclusive:target.start.exclusive,endAt:target.end.at,endExclusive:target.end.exclusive,includedIn:node.includedIn??null,missing:[...new Set([...target.start.reasons,...target.end.reasons])]};});
   const stages=Array.from({length:7},(_,i)=>{const stage=i+1,nodes=rows.filter(r=>r.stage===stage&&ids.has(r.id)&&!r.includedIn),times=nodes.map(n=>forward.find(f=>f.id===n.id)!);return {stage,spanMinutes:times.length&&times.every(t=>t.start.at&&t.end.at)?(Math.max(...times.map(t=>Date.parse(t.end.at!)))-Math.min(...times.map(t=>Date.parse(t.start.at!))))/60000:null};});
-  const difference=expectedEnd&&goal.at?(Date.parse(goal.at)-Date.parse(expectedEnd)-(goal.exclusive&&Date.parse(goal.at)===Date.parse(expectedEnd)?1:0))/60000:null;
-  return {...(candidate?{milestones:candidate.milestones}:{}),id:input.lines[index]!.id,customerDate:input.lines[index]!.customerDate,totalSpanMinutes:expectedEnd?(Date.parse(expectedEnd)-Date.parse(input.startAt))/60000:null,expectedEnd,marginMinutes:difference,stages,rows};
+  const difference=expectedEnd&&goal.at?(Date.parse(goal.at)-Date.parse(expectedEnd))/60000:null;
+  const closedEnd=ends.some(end=>end.at===expectedEnd&&!end.exclusive);
+  const deliveryStatus=difference===null?'unknown' as const:difference<0||difference===0&&goal.exclusive&&closedEnd?'insufficient' as const:'sufficient' as const;
+  return {...(candidate?{milestones:candidate.milestones}:{}),id:input.lines[index]!.id,customerDate:input.lines[index]!.customerDate,totalSpanMinutes:expectedEnd?(Date.parse(expectedEnd)-Date.parse(input.startAt))/60000:null,expectedEnd,marginMinutes:difference,deliveryStatus,stages,rows};
  })};
 }

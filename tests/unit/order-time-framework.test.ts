@@ -162,11 +162,11 @@ describe('three-layer time foundation, no live adoption',()=>{
   expect(result.arranged.find(row=>row.id==='pack')!.end.at).toBe(iso(9));
   expect(result.milestones.find(row=>row.key==='processing_dispatch')!.date).toBe('2026-11-05');
  });
- it('treats exact next-day Beijing midnight as beyond a date-only delivery deadline',()=>{
-  const input=fixture();input.acceptedAt=anchor(2,0);input.customerDelivery.date='2026-11-07';
-  const result=evaluateTimeFrameworkCandidate(input,{purpose:'order_proposal',observedAt:at(2,0)});
-  expect(result.arranged.find(row=>row.id==='pack')!.end.at).toBe(iso(8,0));
-  expect(result.milestones.find(row=>row.key==='planned_shipment')).toMatchObject({status:'insufficient',lateMinutes:1/60000});
+ it.each([[-1,'sufficient',1/60000,0],[0,'insufficient',0,0],[1,'insufficient',-1/60000,1/60000]] as const)('keeps the true difference at %i ms from the exclusive Beijing date deadline', (offset,status,marginMinutes,lateMinutes)=>{
+  const input=fixture(),start=new Date(Date.parse(at(2,0))+offset).toISOString();input.acceptedAt={...anchor(2,0),value:start};input.customerDelivery.date='2026-11-07';
+  const result=evaluateTimeFrameworkCandidate(input,{purpose:'order_proposal',observedAt:start});
+  expect(result.arranged.find(row=>row.id==='pack')!.end.at).toBe(new Date(Date.parse(iso(8,0))+offset).toISOString());
+  expect(result.milestones.find(row=>row.key==='planned_shipment')).toMatchObject({status,marginMinutes,lateMinutes});
  });
  it('keeps an exact-boundary late branch when another completion shares its exclusive upper bound',()=>{
   const input=fixture();input.bindings.find(row=>row.key==='fabric_receipt')!.workIds=['fabric','pattern'];
@@ -174,7 +174,7 @@ describe('three-layer time foundation, no live adoption',()=>{
   for(const ordered of [['fabric','pattern'],['pattern','fabric']]){
    input.bindings.find(row=>row.key==='fabric_receipt')!.workIds=ordered;
    const result=evaluateTimeFrameworkCandidate(input,{...context(),retained:{fabric:{target:target('fabric',true),sourceRef:'TEST retained date bound'},pattern:{target:target('pattern',false),sourceRef:'TEST retained exact plan'}}});
-   expect(result.milestones.find(row=>row.key==='fabric_receipt')).toMatchObject({status:'insufficient',planned:{exclusive:false},lateMinutes:1/60000,blockingWorkIds:['pattern']});
+   expect(result.milestones.find(row=>row.key==='fabric_receipt')).toMatchObject({status:'insufficient',planned:{exclusive:false},marginMinutes:0,lateMinutes:0,blockingWorkIds:['pattern']});
   }
  });
  it('rejects retained wrong identities, backwards time, dependency cycles and duplicate work',()=>{
