@@ -115,7 +115,11 @@ it('compares factory return, not factory production, without moving either plan 
  expect(orderTimeFactoryCommitments([], [candidate])).toEqual([]);
  expect(orderTimeFactoryCommitments([{...commitment,lineId:'blue'}],[candidate])[0]).toMatchObject({status:'unknown',plannedReceipt:null});
  const boundary=structuredClone(candidate);boundary.arranged[0]!.end.at='2027-03-05T16:00:00.000Z';
- expect(orderTimeFactoryCommitments([commitment],[boundary])[0]!.lateMinutes).toBeGreaterThan(0);
+ const exact=orderTimeFactoryCommitments([commitment],[boundary]);
+ expect(exact[0]).toMatchObject({status:'insufficient',lateMinutes:0});
+ expect(orderTimeGapText({lateMinutes:0,factoryCommitments:exact})).toContain('红PO工厂交货时间不足；最终交期仍可满足');
+ boundary.arranged[0]!.end.exclusive=true;
+ expect(orderTimeFactoryCommitments([commitment],[boundary])[0]).toMatchObject({status:'sufficient',lateMinutes:0});
 });
 
 it('does not require changing an inapplicable urgent cycle to shorten this order normal cycle',()=>{
