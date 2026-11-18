@@ -221,8 +221,13 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(washing)sourceVersion.washing=[...washing];
  if(rewashing)sourceVersion.rewashing=rewashing.sourceVersion;
  sourceVersion.customerDates=dates;sourceVersion.workFacts=[...progress];sourceVersion.materialBounds=notBefore;
- const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal});
  const datedScopes=value.scopes.filter(scope=>scope.customerGoal.precision==='date');
+ if(operation.kind==='arrangement'&&saved&&!(plan.company.framework&&frameworkRoute&&datedScopes.length)){
+  const pending=[...pendingWork].sort();
+  sourceVersion.formalPendingWork=pending;
+  value.formalInputs={version:'approved-remaining-v1',progress:Object.fromEntries(progress),notBefore,pendingWork:pending};
+ }
+ const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal});
  if(plan.company.framework&&frameworkRoute&&datedScopes.length){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
   const created=resource?await orderTimeCreated(db,resource):null;
@@ -270,7 +275,5 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);
  void database;
  const linkedApplicability={complete:Boolean(!sourceId||development)&&(!includesProduction||Boolean(production&&production.craftSteps!==null&&production.preshrink!==null)),parameterKeys:[...new Set([...value.work.map(work=>work.parameterKey),...extraSettings.keys()])]};
- if(operation.kind==='arrangement'&&saved&&!value.frameworkContext)
-  value.formalInputs={version:'approved-remaining-v1',progress:Object.fromEntries(progress),notBefore,pendingWork:[...pendingWork].sort()};
  return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production,linkedApplicability};
 }
