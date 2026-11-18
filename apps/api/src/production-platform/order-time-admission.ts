@@ -15,7 +15,7 @@ import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {DevelopmentCycleValuesSchema} from '@dx-rework/contracts/digital-development-technical';
 
 type DB=Pick<PoolClient,'query'>;
-export type OrderTimeAdmission={requestId:string|null;requestVersion:number|null;actorId:string;designerId:string;operation:OrderTimeOperation;plan:FrozenOrderTimePlan;time:BusinessTime;activationEventId?:string;generatedOrderId?:string};
+export type OrderTimeAdmission={requestId:string|null;requestVersion:number|null;actorId:string;designerId:string;operation:OrderTimeOperation;plan:FrozenOrderTimePlan;time:BusinessTime;activationEventId?:string;generatedOrderId?:string;approvedFactoryWork?:true};
 const admissions=new WeakMap<DB,OrderTimeAdmission>();
 /** Only the original command's owned client carries this scope. No token,
  * session/user identity replacement or cross-request grant is introduced. */
