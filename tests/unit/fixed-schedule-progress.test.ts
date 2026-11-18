@@ -30,6 +30,21 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
  it('does not consume now once per unstarted descendant',()=>{const works=Array.from({length:6},(_,index)=>work('n'+index,index*2,index*2+2,index?['n'+(index-1)]:[])),facts=Object.fromEntries(works.map((node,index)=>[node.id,fact(index?null:0,null)]));expect(evaluate(scope(works,facts),3).lagMinutes!.minimum).toBe(60);});
  it('retains structural parallel float and waits for the last required branch',()=>{const works=[work('long',0,5),work('short',3,5),work('end',5,6,['long','short'])],facts={long:fact(0,null),short:fact(0,null),end:fact(null,null)},input=scope(works,facts),running=evaluate(input,3);expect(running.state).toBe('normal');expect(running.nodes[1]!.ownSla).toMatchObject({state:'overdue',overdueMinutes:{minimum:60}});input.facts={...facts,long:fact(0,3)};expect(evaluate(input,3).lagMinutes!.minimum).toBe(0);input.facts={...facts,long:fact(0,3),short:fact(0,3),end:fact(3,null)};expect(evaluate(input,3).lagMinutes!.minimum).toBe(-120);});
  it('aligns a shared tighter own target to this consumer without awarding unused float',()=>{const input=scope([work('a',0,5),work('b',1,3),work('c',5,6,['a','b'])],{a:fact(0,2),b:fact(1,null),c:fact(null,null)});expect(evaluate(input,3).lagMinutes!.minimum).toBe(0);input.facts={...input.facts,b:fact(1,3),c:fact(3,null)};expect(evaluate(input,3).lagMinutes!.minimum).toBe(-120);});
+ it('carries exact whole-millisecond credit across an unfinished dependency and join while retaining native R/D/A',()=>{
+  const done='2026-11-18T01:50:48.407Z',frozen='2027-05-28T16:00:00.000Z';
+  const expected='2026-11-18T01:51:48.407Z',goal='2027-05-28T16:01:00.000Z';
+  const ready={precision:'instant' as const,at:done};
+  const input=scope([
+   work('native',0,1,[],{start:'2027-05-28T15:59:00.000Z',end:frozen,minutes:1,responsibilityMinutes:1}),
+   work('inserted',1,1,['native'],{start:frozen,end:frozen,originalHandoffAt:frozen,accountingRole:'added_work',responsibilitySlaRef:null}),
+   work('join',1,2,['inserted','native'],{start:frozen,end:goal,minutes:1,responsibilityMinutes:1}),
+  ],{native:fact(null,null,{ready:{precision:'instant',at:'2026-11-18T01:49:48.407Z'},clockStart:{precision:'instant',at:'2026-11-18T01:49:48.407Z'},completed:ready,businessCompleted:true}),join:fact(null,null,{ready,clockStart:ready})});
+  const result=evaluateFixedScheduleScope(input,done);
+  expect(result.nodes[0]).toMatchObject({goalDelta:{targetAt:frozen,actual:ready},ownSla:{deadlineAt:done,state:'within'}});
+  expect(result.nodes[1]).toMatchObject({availabilityBound:{earliest:done,latest:done},creditLimit:{earliest:done,latest:done}});
+  expect(result.nodes[2]).toMatchObject({availabilityBound:{earliest:expected,latest:expected},creditLimit:{earliest:expected,latest:expected},goalDelta:{targetAt:goal,actual:unknown},ownSla:{deadlineAt:expected,state:'within'}});
+  expect(result.completionEstimate).toEqual({kind:'conditional',earliest:expected,latest:expected});
+ });
  it.each([[0,-2],[1,-1],[2,0],[3,1]])('spends added work progressively at%s without granting its own SLA budget', (duration,lag)=>{const input=scope([work('a',0,8),work('repair',6,8,['a'],{accountingRole:'added_work',originalHandoffAt:at(8)}),work('next',8,10,['repair'])],{a:fact(0,6),repair:fact(6,null,{impactStartedAt:at(6)}),next:fact(null,null)});expect(evaluate(input,6+duration).lagMinutes!.minimum).toBe(lag*60);});
  it('passes the original handoff through consecutive added scopes with different new B ends',()=>{const input=scope([work('a',0,10),work('r1',7,9,['a'],{accountingRole:'added_work',originalHandoffAt:at(10)}),work('r2',8,10,['r1'],{accountingRole:'added_work',originalHandoffAt:at(10)}),work('b',10,12,['r2'])],{a:fact(0,7),r1:fact(7,7,{impactStartedAt:at(7)}),r2:fact(null,null),b:fact(null,null)});expect(evaluate(input,7).lagMinutes!.minimum).toBe(-180);});
  it('does not infer an original handoff from the new added target',()=>{const input=scope([work('r',6,8,[],{accountingRole:'added_work'})],{r:fact(6,null)});expect(evaluate(input,6).state).toBe('unknown');});

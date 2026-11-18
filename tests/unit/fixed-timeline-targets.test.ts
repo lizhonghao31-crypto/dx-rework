@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {fixedTimelineTargets,shiftFixedTimeline,type FixedTimelineWork} from '../../apps/api/src/production-platform/fixed-timeline-targets.js';
+import {fixedMinutesToMilliseconds,fixedTimelineElapsedMilliseconds,fixedTimelineForward,fixedTimelineTargets,shiftFixedTimeline,shiftFixedTimelineMilliseconds,type FixedTimelineWork} from '../../apps/api/src/production-platform/fixed-timeline-targets.js';
 import {fixedConsumerTargets,type FixedTimelineConsumer,type FixedTimelineInput} from '../../apps/api/src/production-platform/fixed-timeline-adoptions.js';
 const work=(id:string,minutes:number,dependsOn:string[]=[]):FixedTimelineWork=>({id,minutes,dependsOn,calendar:'continuous'});
 const end={precision:'instant' as const,value:'2026-11-09T12:00:00.000Z',source:'TEST approved PO H'};
@@ -26,6 +26,67 @@ it('preserves Sunday zero and follows the original Sunday-excluded positive and 
  const sunday='2026-11-08T05:00:00.123Z';expect(shiftFixedTimeline(sunday,0,'beijing_sunday_excluded')).toBe(sunday);
  expect(shiftFixedTimeline('2026-11-07T15:00:00.000Z',60,'beijing_sunday_excluded')).toBe('2026-11-08T16:00:00.000Z');
  expect(shiftFixedTimeline('2026-11-08T16:00:00.000Z',-60,'beijing_sunday_excluded')).toBe('2026-11-07T15:00:00.000Z');
+});
+it('recovers the exact observed whole milliseconds through both planning directions',()=>{
+ const delta=16_553_351_593,minutes=delta/60_000;
+ const start='2026-11-18T01:50:48.407Z',finish='2027-05-28T16:00:00.000Z';
+ expect(Math.abs(minutes*60_000-delta)).toBeGreaterThan(1e-6);
+ expect(fixedMinutesToMilliseconds(minutes)).toBe(delta);
+ expect(fixedMinutesToMilliseconds(-minutes)).toBe(-delta);
+ for(const calendar of ['continuous','natural_days'] as const){
+  const nodes=[{...work('pack',minutes),calendar}];
+  expect(fixedTimelineTargets(nodes,{pack:{...end,value:finish}})[0]!.start.at).toBe(start);
+  expect(fixedTimelineForward(nodes,{...end,value:start})[0]!.end.at).toBe(finish);
+ }
+});
+it('keeps true submillisecond and unsafe inputs outside the fixed timeline',()=>{
+ for(const minutes of [.25/60_000,.5/60_000,-.5/60_000,Infinity,NaN,(Number.MAX_SAFE_INTEGER+1)/60_000]){
+  expect(()=>fixedMinutesToMilliseconds(minutes)).toThrow('合法毫秒精度');
+ }
+ expect(()=>shiftFixedTimelineMilliseconds(0,.5,'continuous')).toThrow('合法毫秒精度');
+ expect(()=>shiftFixedTimelineMilliseconds(8_640_000_000_000_000,1,'natural_days')).toThrow('时刻超出有效范围');
+ expect(()=>fixedTimelineElapsedMilliseconds(-8_640_000_000_000_000,8_640_000_000_000_000,'continuous')).toThrow('合法毫秒精度');
+});
+it('skips whole Beijing weeks without changing midnight or one-millisecond boundaries',()=>{
+ const monday=Date.parse('2026-11-09T00:00:00+08:00'),day=86_400_000,weeks=10_000,calendar='beijing_sunday_excluded';
+ const limit=monday+weeks*7*day;
+ expect(shiftFixedTimelineMilliseconds(monday,weeks*6*day,calendar)).toBe(limit);
+ expect(shiftFixedTimelineMilliseconds(limit,-weeks*6*day,calendar)).toBe(monday);
+ expect(shiftFixedTimelineMilliseconds(monday,weeks*6*day-1,calendar)).toBe(limit-day-1);
+ expect(shiftFixedTimelineMilliseconds(limit,1,calendar)).toBe(limit+1);
+ expect(shiftFixedTimelineMilliseconds(limit,-1,calendar)).toBe(limit-day-1);
+ expect(fixedTimelineElapsedMilliseconds(monday+1,limit,calendar)).toBe(weeks*6*day-1);
+ expect(fixedTimelineElapsedMilliseconds(limit,monday+1,calendar)).toBe(1-weeks*6*day);
+ expect(fixedTimelineElapsedMilliseconds(limit-day,limit,calendar)).toBe(0);
+});
+it('agrees with counting individual Beijing dates at partial-week boundaries',()=>{
+ const day=86_400_000,offset=28_800_000,calendar='beijing_sunday_excluded';
+ const begin=Date.parse('2026-11-07T22:10:20.123+08:00');
+ const count=(from:number,to:number)=>{
+  let total=0;
+  for(let start=from;start<to;){
+   const local=new Date(start+offset);
+   const midnight=Date.UTC(local.getUTCFullYear(),local.getUTCMonth(),local.getUTCDate()+1)-offset;
+   const end=Math.min(midnight,to);
+   if(local.getUTCDay()!==0)total+=end-start;
+   start=end;
+  }
+  return total;
+ };
+ for(const days of [0,1,3,7,11,33]){
+  const end=begin+days*day+2*offset;
+  const counted=count(begin,end);
+  expect(fixedTimelineElapsedMilliseconds(begin,end,calendar)).toBe(counted);
+  expect(fixedTimelineElapsedMilliseconds(end,begin,calendar)).toBe(-counted);
+  // Partial destinations on a Sunday are equivalent on the counted clock;
+  // the positive and reverse movement contracts choose their own boundaries.
+  for(const delta of [counted-1,counted,counted+1]){
+   const forward=shiftFixedTimelineMilliseconds(begin,delta,calendar);
+   const backward=shiftFixedTimelineMilliseconds(end,-delta,calendar);
+   expect(count(begin,forward)).toBe(delta);
+   expect(count(backward,end)).toBe(delta);
+  }
+ }
 });
 it('does not manufacture deadlines for unknown targets, disconnected work or cyclic routes',()=>{
  expect(()=>fixedTimelineTargets([work('pack',60)],{pack:{precision:'unknown',reason:'TEST missing H'}})).toThrow('终点缺少');

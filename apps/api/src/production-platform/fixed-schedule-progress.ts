@@ -1,5 +1,5 @@
 import type {FixedScheduleCalendar,ScheduleOccurrence,ScheduleRange,ScheduleGoalDelta,ScheduleNodeProgress,ScheduleScopeProgress,ScheduleDurationSummary} from '@dx-rework/contracts';
-import {shiftFixedTimeline} from './fixed-timeline-targets.js';
+import {fixedTimelineElapsedMilliseconds,shiftFixedTimeline,shiftFixedTimelineMilliseconds} from './fixed-timeline-targets.js';
 import type {BulkWashingWindowIdentity} from '@dx-rework/contracts/bulk-washing';
 
 export type ScheduleWork={rewashRound?:number;id:string;canonicalWorkRef:string;stage?:number;dependsOn:readonly string[];dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedScheduleCalendar}>>;start:string|null;end:string|null;startExclusive?:boolean;endExclusive?:boolean;eventTarget?:{end:string|null;targetPrecision:'instant'|'date';targetDate:string|null;exclusive:boolean};minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;responsibilityWarningAt?:string|null;responsibilityReminderPercent?:number|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string;completionTarget?:{end:string;endExclusive?:boolean;targetRevision:string;targetPrecision:'instant'|'date';targetDate:string|null}|null};
@@ -30,13 +30,11 @@ function completedBounds(fact:ScheduleFact|undefined,asOf:string):Interval|null{
 /** Signed minutes on the adopted clock; comparisons and zero movement preserve
  * physical Sunday instants instead of normalizing them to Monday. */
 export function scheduleElapsed(from:number,to:number,calendar:FixedScheduleCalendar):number{
- if(from===to)return 0;if(to<from)return -scheduleElapsed(to,from,calendar);
- if(calendar!=='beijing_sunday_excluded')return (to-from)/MINUTE;
- let total=0,at=from;
- while(at<to){const day=new Date(at+OFFSET),end=Date.UTC(day.getUTCFullYear(),day.getUTCMonth(),day.getUTCDate()+1)-OFFSET,next=Math.min(end,to);if(day.getUTCDay()!==0)total+=next-at;at=next;}
- return total/MINUTE;
+ return fixedTimelineElapsedMilliseconds(from,to,calendar)/MINUTE;
 }
 const shift=(at:number,minutes:number,calendar:FixedScheduleCalendar)=>minutes===0?at:Date.parse(shiftFixedTimeline(iso(at),minutes,calendar));
+const carryCredit=(at:number,reference:number,credit:number,calendar:FixedScheduleCalendar)=>
+ shiftFixedTimelineMilliseconds(at,Math.min(0,fixedTimelineElapsedMilliseconds(reference,credit,calendar)),calendar);
 const range=(minimum:number,maximum:number):ScheduleRange=>({minimum,maximum});
 const state=(lag:ScheduleRange|null)=>!lag?'unknown' as const:lag.minimum>0?'late' as const:lag.maximum<=0?'normal' as const:'unknown' as const;
 const unknown:ScheduleOccurrence={precision:'unknown'};
@@ -121,17 +119,17 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
     for(const side of [0,1] as const){
      const candidates=deps.map((dep,index)=>{
       const arrival=dependencyArrival(dep!,index,side);
-      return dep!.completed?arrival:Math.max(arrival,shift(start,Math.min(0,scheduleElapsed(dep!.reference,dep!.credit[side],calendar)),calendar));
+      return dep!.completed?arrival:Math.max(arrival,carryCredit(start,dep!.reference,dep!.credit[side],calendar));
      });
      const join=candidates.length?Math.max(...candidates):start;
-     const joinCredit=allComplete&&deps.length?join:shift(start,Math.min(0,scheduleElapsed(start,join,calendar)),calendar);
-     const position=Math.max(join,shift(start,Math.min(0,scheduleElapsed(start,joinCredit,calendar)),calendar),ready?.[side]??(input.plannedReadiness?Math.max(now,start):-Infinity));
+     const joinCredit=allComplete&&deps.length?join:carryCredit(start,start,join,calendar);
+     const position=Math.max(join,carryCredit(start,start,joinCredit,calendar),ready?.[side]??(input.plannedReadiness?Math.max(now,start):-Infinity));
      if(work.accountingRole==='added_work'){
       const impact=timestamp(fact?.impactStartedAt),active=impact!==null&&impact<=now;
       available.push(active?Math.max(join,now):join);credit.push(active?Math.max(joinCredit,now):joinCredit);lowerBound ||= active;
      }else{
       const quota=shift(position,budget!,calendar),bound=ready?Math.max(quota,now):quota;
-      available.push(bound);credit.push(shift(end,Math.min(0,scheduleElapsed(end,bound,calendar)),calendar));lowerBound ||= Boolean(ready&&now>=quota)||Boolean(input.plannedReadiness&&!ready&&now>start);
+      available.push(bound);credit.push(carryCredit(end,end,bound,calendar));lowerBound ||= Boolean(ready&&now>=quota)||Boolean(input.plannedReadiness&&!ready&&now>start);
      }
     }
     // A future date position keeps its open endpoint even when an upstream

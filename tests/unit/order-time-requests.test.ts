@@ -46,6 +46,19 @@ describe('R5 per-order conditional remaining-time evaluation',()=>{
   expect(orderTimeRemaining(value,time,progress).scopes[0]).toMatchObject({requiredSpanMinutes:4320,expectedEnd:{at:at(10)}});
   progress.get('a')!.deadline=at(6);const result=orderTimeRemaining(value,time,progress);expect(result.lowerBound).toBe(true);expect(result.scopes[0]!.expectedEnd!.at).toBe(at(9));
  });
+ it('passes whole milliseconds from an active deadline and a partially spent stage reserve through forward planning',()=>{
+  const value=input(),now='2026-11-18T01:50:48.407Z',deadline='2027-05-28T16:00:00.000Z';
+  const completion='2027-05-30T16:00:00.000Z',observation={...time,now};
+  const active=new Map<string,OrderTimeNativeProgress>([['a',{completed:false,actualAt:null,readyAt:now,deadline,calendar:'continuous'}]]);
+  expect(orderTimeRemaining(value,observation,active).scopes[0]!.expectedEnd?.at).toBe(completion);
+  value.work[1]!.stage=3;
+  value.plan.company.stageBufferMinutes=525600;
+  // The physical 14,982,648,407 elapsed milliseconds leave exactly the same
+  // 16,553,351,593 ms in the reserve, before the remaining two-day work.
+  const actualAt=new Date(Date.parse(now)-14_982_648_407).toISOString();
+  const completed=new Map<string,OrderTimeNativeProgress>([['a',{completed:true,actualAt,readyAt:null,deadline:null}]]);
+  expect(orderTimeRemaining(value,observation,completed).scopes[0]!.expectedEnd?.at).toBe(completion);
+ });
  it('joins truly parallel prerequisites by the last branch and keeps necessary unknown route inputs unknown',()=>{
   const value=input();value.work[1]!.dependsOn=[];value.scopes[0]!.terminalIds=['a','b'];value.scopes[0]!.goals.a=value.scopes[0]!.customerGoal;
   expect(orderTimeRemaining(value,time,new Map()).scopes[0]!.requiredSpanMinutes).toBe(2880);

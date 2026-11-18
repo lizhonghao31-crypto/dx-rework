@@ -8,39 +8,100 @@ export type FixedTimelineWork={
  dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedTimelineCalendar}>>;
 };
 export type FixedTimelineTarget={id:string;start:SlaTime;end:SlaTime};
-const MINUTE=60000,BEIJING=8*60*MINUTE;
+const MINUTE=60000,BEIJING=8*60*MINUTE,DAY=24*60*MINUTE,WEEK=7*DAY,WORK_WEEK=6*DAY;
+const DATE_LIMIT=8_640_000_000_000_000;
+const precisionError=()=>Error('固定计划时长须为合法毫秒精度');
+const checkedInstant=(value:number)=>{
+ if(!Number.isSafeInteger(value)||Math.abs(value)>DATE_LIMIT)throw Error('固定计划时刻超出有效范围');
+ return value;
+};
 const instant=(value:string)=>{
  const result=Date.parse(value);
  if(!/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)||!Number.isFinite(result))throw Error('固定计划需要可信具体时刻');
  return result;
 };
+const localDay=(clock:number)=>Math.floor((clock+BEIJING)/DAY);
+const dayStart=(day:number)=>day*DAY-BEIJING;
+const weekday=(day:number)=>((day+4)%7+7)%7; // 1970-01-01 was Thursday.
+const checkCalendar=(calendar:FixedTimelineCalendar)=>{
+ if(calendar!=='continuous'&&calendar!=='natural_days'&&calendar!=='beijing_sunday_excluded')throw Error('固定计划日历未采用');
+};
+
+export function fixedMinutesToMilliseconds(minutes:number):number{
+ const magnitude=Math.abs(minutes),raw=magnitude*MINUTE,integer=Math.round(raw);
+ if(!Number.isFinite(minutes)||!Number.isSafeInteger(integer))throw precisionError();
+ if(Math.abs(raw-integer)>1e-6){
+  // An internally derived integer / MINUTE can multiply back one ULP away.
+  // Recover only its unambiguous canonical encoding, with the old tolerance.
+  if(magnitude!==integer/MINUTE||!Number.isSafeInteger(integer-1)||!Number.isSafeInteger(integer+1)
+   ||magnitude===(integer-1)/MINUTE||magnitude===(integer+1)/MINUTE)throw precisionError();
+ }
+ return minutes<0?-integer:integer;
+}
+
+function skipCalendarWeeks(clock:number,weeks:number):number{
+ const delta=weeks*WEEK;
+ if(Number.isSafeInteger(delta))return checkedInstant(clock+delta);
+ // Physical time can exceed the safe span even when the resulting Date fits.
+ return checkedInstant(Number(BigInt(clock)+BigInt(weeks)*BigInt(WEEK)));
+}
 
 /** Original contract Sunday calendar for nonzero movement. Zero preserves the
  * physical instant, including Sunday; it is not a request to find a workday.
  */
 export function shiftFixedTimeline(value:string,minutes:number,calendar:FixedTimelineCalendar):string{
- let clock=instant(value),remaining=Math.round(Math.abs(minutes)*MINUTE);
- if(!Number.isFinite(minutes)||!Number.isSafeInteger(remaining)||Math.abs(Math.abs(minutes)*MINUTE-remaining)>1e-6)throw Error('固定计划时长须为合法毫秒精度');
- if(!['continuous','natural_days','beijing_sunday_excluded'].includes(calendar))throw Error('固定计划日历未采用');
- if(!remaining)return value;
- if(calendar!=='beijing_sunday_excluded')return new Date(clock+Math.sign(minutes)*remaining).toISOString();
- if(minutes>0){
+ const clock=instant(value),milliseconds=fixedMinutesToMilliseconds(minutes);
+ const shifted=shiftFixedTimelineMilliseconds(clock,milliseconds,calendar);
+ return milliseconds===0?value:new Date(shifted).toISOString();
+}
+
+export function shiftFixedTimelineMilliseconds(clock:number,milliseconds:number,calendar:FixedTimelineCalendar):number{
+ checkedInstant(clock);checkCalendar(calendar);
+ if(!Number.isSafeInteger(milliseconds))throw precisionError();
+ if(milliseconds===0)return clock;
+ if(calendar!=='beijing_sunday_excluded')return checkedInstant(clock+milliseconds);
+ let remaining=Math.abs(milliseconds);
+ if(milliseconds>0){
   while(true){
-   const local=new Date(clock+BEIJING),next=Date.UTC(local.getUTCFullYear(),local.getUTCMonth(),local.getUTCDate()+1)-BEIJING;
-   if(local.getUTCDay()===0){clock=next;continue;}
-   if(!remaining)return new Date(clock).toISOString();
+   const day=localDay(clock),next=dayStart(day+1),dayOfWeek=weekday(day);
+   if(dayOfWeek===0){clock=checkedInstant(next);continue;}
+   if(!remaining)return clock;
+   if(dayOfWeek===1&&clock===dayStart(day)&&remaining>=WORK_WEEK){
+    const weeks=Math.floor(remaining/WORK_WEEK);
+    clock=skipCalendarWeeks(clock,weeks);remaining-=weeks*WORK_WEEK;continue;
+   }
    const available=next-clock;
-   if(remaining<available)return new Date(clock+remaining).toISOString();
-   remaining-=available;clock=next;
+   if(remaining<available)return checkedInstant(clock+remaining);
+   remaining-=available;clock=checkedInstant(next);
   }
  }
  while(remaining){
+  const day=localDay(clock);
+  if(weekday(day)===1&&clock===dayStart(day)&&remaining>=WORK_WEEK){
+   const weeks=Math.floor(remaining/WORK_WEEK);
+   clock=skipCalendarWeeks(clock,-weeks);remaining-=weeks*WORK_WEEK;continue;
+  }
   // At midnight, subtraction belongs to the day immediately before it.
-  const local=new Date(clock-1+BEIJING),previous=Date.UTC(local.getUTCFullYear(),local.getUTCMonth(),local.getUTCDate())-BEIJING;
-  if(local.getUTCDay()===0){clock=previous;continue;}
-  const used=Math.min(remaining,clock-previous);clock-=used;remaining-=used;
+  const previousDay=localDay(clock-1),previous=dayStart(previousDay);
+  if(weekday(previousDay)===0){clock=checkedInstant(previous);continue;}
+  const used=Math.min(remaining,clock-previous);clock=checkedInstant(clock-used);remaining-=used;
  }
- return new Date(clock).toISOString();
+ return clock;
+}
+
+export function fixedTimelineElapsedMilliseconds(from:number,to:number,calendar:FixedTimelineCalendar):number{
+ checkedInstant(from);checkedInstant(to);checkCalendar(calendar);
+ const span=to-from;
+ if(!Number.isSafeInteger(span))throw precisionError();
+ if(span===0||calendar!=='beijing_sunday_excluded')return span;
+ const length=Math.abs(span),weeks=Math.floor(length/WEEK),end=Math.max(from,to);
+ let at=Math.min(from,to)+weeks*WEEK,total=weeks*WORK_WEEK;
+ while(at<end){
+  const day=localDay(at),next=Math.min(end,dayStart(day+1));
+  if(weekday(day)!==0)total+=next-at;
+  at=next;
+ }
+ return span<0?-total:total;
 }
 
 function orderedFixedWork(work:readonly FixedTimelineWork[],preserveUnknown:boolean){

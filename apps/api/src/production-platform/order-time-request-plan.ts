@@ -10,7 +10,7 @@ import type {OrderTimeCheckResult} from '@dx-rework/contracts/order-time-request
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
 import type {OrderTimeInput} from './order-time-plan-repository.js';
 import {buildOrderTimeWork} from './order-time-schedule.js';
-import {fixedTimelineForward,requiredFixedTimelineWork,shiftFixedTimeline,type FixedTimelineCalendar} from './fixed-timeline-targets.js';
+import {fixedMinutesToMilliseconds,fixedTimelineElapsedMilliseconds,fixedTimelineForward,requiredFixedTimelineWork,shiftFixedTimelineMilliseconds,type FixedTimelineCalendar} from './fixed-timeline-targets.js';
 
 export type OrderTimeNativeProgress={completed:boolean;actualAt:string|null;actualDate?:string|null;readyAt:string|null;deadline:string|null;calendar?:FixedTimelineCalendar|null;unresolvedOverrun?:boolean};
 /** Scheduling upper bound for a completed date, never its actual timestamp.
@@ -81,7 +81,7 @@ export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progre
    if(deadline>now&&calendar){
     // The native deadline is already on its original counted calendar. Find
     // its remaining counted duration without treating excluded days as work.
-    let low=0,high=525600*60000;while(low<high){const mid=Math.floor((low+high)/2);if(Date.parse(shiftFixedTimeline(time.now,mid/60000,calendar))<deadline)low=mid+1;else high=mid;}minutes=high/60000;
+    let low=0,high=525600*60000;while(low<high){const mid=Math.floor((low+high)/2);if(shiftFixedTimelineMilliseconds(now,mid,calendar)<deadline)low=mid+1;else high=mid;}minutes=high/60000;
    }else lowerBound=true;
    node.minutes=calendar?minutes:null;node.calendar=calendar;
   }
@@ -90,7 +90,10 @@ export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progre
   if(!node.dependencyReserves)continue;
   node.dependencyReserves=Object.fromEntries(Object.entries(node.dependencyReserves).map(([id,reserve])=>{
    const source=byId.get(id)!,prior=progress.get(source.canonicalWorkRef??id);
-   return [id,prior?.completed&&prior.actualAt?{...reserve,minutes:Math.max(0,reserve.minutes-Math.max(0,Date.parse(time.now)-Date.parse(prior.actualAt))/60000)}:reserve];
+   if(!prior?.completed||!prior.actualAt)return [id,reserve];
+   const original=fixedMinutesToMilliseconds(reserve.minutes);
+   const elapsed=Math.max(0,fixedTimelineElapsedMilliseconds(Date.parse(prior.actualAt),Date.parse(time.now),'continuous'));
+   return [id,{...reserve,minutes:Math.max(0,original-elapsed)/60000}];
   }));
  }
  // Included work remains inside the same parent and cannot add a second span.

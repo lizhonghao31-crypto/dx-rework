@@ -1,229 +1,202 @@
 {
   "version": 1,
-  "base": "d64be1e79010c1bdea8a0215b181a3bd88f4b7cb",
+  "base": "d88f673fcdd0613c689749a797f8340717108928",
   "risk": "full",
-  "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
-  "rules": [
-    {
-      "rule": "Restore original designer parent intent and raw child draft across genuine browser reload without creating or replaying business commands",
-      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Actual merged1026 release base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; the actual merged base is recorded for this publication.",
-      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
-      "writes": [
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/development-creation-draft.ts",
-        "apps/web/src/use-development-creation-draft.ts",
-        "tests/unit/development-creation-draft.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/digital-production-api.ts",
-        "apps/api/src/production-platform/development-service.ts"
-      ],
-      "oldTests": [
-        "tests/unit/development-creation-draft.test.ts"
-      ],
-      "expectation": "Original development/certain-order/preorder parent intent and raw values/row identities survive actual page.reload with zero automatic writes beyond1200ms. Explicit original save alone creates, exact acknowledged source is reused. Unknown creation remains blocked; original publish/confirm each recover through exact original-key GET without another POST. Known source acknowledgement remains durable if following read fails. Unretained local file bytes require explicit reselection; legacy live C/D/E/F/PACKSTOP terminals are not inferred. In the same SPA tab, closing and reopening a bound draft verifies the authoritative source/version before editing, continues across multiple saves, and preserves the local draft without mutating a newer server version. The local-only view identity uses the browser compatibility provider; a missing native randomUUID neither prevents a raw draft from restoring nor generates a business key.",
-      "checks": [
-        "recovery-unit",
-        "recovery-native",
-        "recovery-web-types",
-        "recovery-lint"
-      ]
-    },
-    {
-      "rule": "Preserve raw instruction drafts and independent immutable save/decision envelopes through reload, conflicts and read failure",
-      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Actual merged1026 release base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; the actual merged base is recorded for this publication.",
-      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
-      "writes": [
-        "apps/web/src/production-instruction-panel.tsx",
-        "apps/web/src/instruction-recovery-state.ts",
-        "apps/web/src/use-instruction-recovery.ts",
-        "tests/unit/instruction-recovery-state.test.ts",
-        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/digital-production-api.ts",
-        "apps/web/src/digital-production-access-panel.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/instruction-recovery-state.test.ts"
-      ],
-      "expectation": "Original raw incomplete form restores after reload with no autosave. Server-committed but browser503 save and PO decision each use one original-key readonly GET, no duplicate PUT/POST. Confirm minimal success before optional latest-sheet read, preserve later draft and another unresolved envelope, keep known success on subsequent read failure. Future/corrupt/unwritable storage and changed version/round block replacement or implicit submission.",
-      "checks": [
-        "recovery-unit",
-        "recovery-native",
-        "recovery-web-types",
-        "recovery-lint"
-      ]
-    },
-    {
-      "rule": "Read minimal original actor command receipts with exact namespaces and current object read permission",
-      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Actual merged1026 release base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; the actual merged base is recorded for this publication.",
-      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
-      "writes": [
-        "apps/api/src/production-platform/instruction-command-receipts.ts",
-        "apps/api/src/production-platform/production-instruction-routes.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/po-customer-date-service.ts",
-        "packages/contracts/src/production-instruction.ts",
-        "tests/unit/instruction-command-receipts.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/development-service.ts"
-      ],
-      "oldTests": [
-        "tests/unit/instruction-command-receipts.test.ts",
-        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
-      ],
-      "expectation": "Save and decision namespaces never mix. Readonly RR transaction checks current access before original actor/key lookup; request/direction/hash mismatch stays unconfirmed and historical body never leaves API. Genuine approval revocation preserves receipt read in the same session, object-read revocation then denies; foreign object/actor/key denies. Business command/audit/plan state remains unchanged by GET. Original transaction refusal and post-commit sheet-read failure remain distinct.",
-      "checks": [
-        "recovery-unit",
-        "recovery-native",
-        "recovery-api-types",
-        "recovery-lint"
-      ]
-    },
-    {
-      "rule": "Keep both original native recovery suites and reviewed contract in the canonical plan",
-      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Actual merged1026 release base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; the actual merged base is recorded for this publication.",
-      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
-      "writes": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/test-suite-plan.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "docs/engineering/native-draft-command-recovery-repair.md",
-        "docs/engineering/acceptance-time-sites-20261027.json"
-      ],
-      "reads": [
-        "scripts/test-execution-config.mjs",
-        "tests/acceptance/supplychain-settings-browser.ts"
-      ],
-      "oldTests": [
-        "scripts/ci/test-execution-contract.test.mjs",
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "expectation": "Add both real native/App suites for affected parent/form/service/contract/helper paths while preserving all prior canonical registrations and conservative full fallback. Original finite configuration and roles remain; no new worker, global timeout, skipped assertions or extra benchmark. Current complete source validation and fresh committed checkout do not claim final Gate or onsite live unknown-request closure.",
-      "checks": [
-        "recovery-unit",
-        "recovery-native",
-        "recovery-protocol",
-        "recovery-lint"
-      ]
-    }
-  ],
+  "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
   "checks": [
     {
-      "id": "recovery-unit",
+      "id": "precision-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/client-request-id.test.ts tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/uuid-final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
-      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
-      "startedAt": "2026-11-18T05:16:37.129705+00:00",
-      "endedAt": "2026-11-18T05:16:41.612171+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-unit/command.log",
-      "logSha256": "3f1e237bbcd7fc6d616cfc18ac71fb4010716cf39a7b7cb4528dcf684bc572c6",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation.",
-      "passed": 167,
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-framework.test.ts tests/unit/order-time-reading.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-millisecond-precision-20261118/aligned-unit.json",
+      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
+      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
+      "startedAt": "2026-11-18T05:46:06.044437+00:00",
+      "endedAt": "2026-11-18T05:46:11.271806+00:00",
+      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-unit/command.log",
+      "logSha256": "ee9c7af86981cb0c7d0e8f598c053160362e3d14c67c7fe7f776cf3c7c175c16",
+      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation.",
+      "passed": 131,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "06339af32a75b0e3ae2b4543385742ed349a125c9ae4697de10322b42705a1c9"
+          "sha256": "d1369d0cf0575d8ad84a2585e7afbb9e3f1491e47471ee95912ca7ead7113161"
         }
       ]
     },
     {
-      "id": "recovery-native",
+      "id": "precision-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/UUID-compat-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
-      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
-      "startedAt": "2026-11-18T05:16:15.243692+00:00",
-      "endedAt": "2026-11-18T05:18:19.712147+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/pg/UUID-compat-native/tests.log",
-      "logSha256": "0434cde9a4e930e140c6dbeef13aedac0b8401b36b40cdc714c6c27b5f7b15b0",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation.",
-      "passed": 15,
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/fixed-progress-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-reading-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-millisecond-precision-20261118/pg/precision-original-consumers/tests.json",
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "2f70786892f9f1b62f044932a43639a0503ef9c1ecf1c9674eb4ea685e00f452",
+      "startedAt": "2026-11-18T05:03:25.116630+00:00",
+      "endedAt": "2026-11-18T05:05:03.250513+00:00",
+      "log": "/workspace/sla-millisecond-precision-20261118/pg/precision-original-consumers/tests.log",
+      "logSha256": "6f4462535cc7bdb62e46077b0267201feaf90a58690a887301e9cfc084062fbe",
+      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation.",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "vitest.config.ts",
+        "tests/integration/fixed-progress-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
+        "tests/integration/order-time-washing-rework-postgres.test.ts",
+        "apps/web/src/attachment-upload-recovery.ts",
+        "apps/web/src/request-response-feedback.ts",
+        "apps/web/src/digital-development-editing.ts"
+      ],
+      "inputFingerprint": "5426960d78b4d8dad9bb12033d99480a2960772423c2101840f01a817231c51f",
+      "passed": 49,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "abfb888a7111ed7e32088a1c57d5d199bf10c374587939f0685d1e343b3b9de8"
+          "sha256": "9afa613a69ca1b8146345c675271a0ee250b6390890c8ca1c76892684188d515"
         }
       ]
     },
     {
-      "id": "recovery-api-types",
+      "id": "precision-lint",
       "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/fixed-timeline-targets.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/order-time-request-plan.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-requests.test.ts",
+      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
+      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
+      "startedAt": "2026-11-18T05:46:11.556110+00:00",
+      "endedAt": "2026-11-18T05:46:12.830038+00:00",
+      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-lint/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation."
+    },
+    {
+      "id": "precision-types",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
-      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
-      "startedAt": "2026-11-18T05:16:50.525552+00:00",
-      "endedAt": "2026-11-18T05:17:09.923500+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-api-types/command.log",
+      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
+      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
+      "startedAt": "2026-11-18T05:46:13.180447+00:00",
+      "endedAt": "2026-11-18T05:46:31.800574+00:00",
+      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation."
+      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation."
     },
     {
-      "id": "recovery-web-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
-      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
-      "startedAt": "2026-11-18T05:17:10.300990+00:00",
-      "endedAt": "2026-11-18T05:17:44.804232+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-web-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation."
-    },
-    {
-      "id": "recovery-lint",
-      "kind": "command",
-      "command": "python3 /workspace/sla-instruction-recovery-20261117/lint-current.py",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
-      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
-      "startedAt": "2026-11-18T05:16:41.921448+00:00",
-      "endedAt": "2026-11-18T05:16:42.934564+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-lint/command.log",
-      "logSha256": "9b04384091d6ec027d5ea962148d09194a3498bb4200299c4886e9a3236a57cf",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation."
-    },
-    {
-      "id": "recovery-protocol",
+      "id": "precision-protocol",
       "kind": "tests",
-      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
-      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
-      "startedAt": "2026-11-18T05:16:43.354912+00:00",
-      "endedAt": "2026-11-18T05:16:50.222176+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-protocol/command.log",
-      "logSha256": "b2ba534dfaec7ce754f26c9bb04cdc0ca1046f15c02ac4fad273e8b8811e1486",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation.",
+      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
+      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
+      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
+      "startedAt": "2026-11-18T05:46:32.114836+00:00",
+      "endedAt": "2026-11-18T05:46:39.932119+00:00",
+      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-protocol/command.log",
+      "logSha256": "fdc973ae79299f591fccfde1cf4ff82670c2ef57924d7991e035b9327764c4b3",
+      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation.",
       "passed": 284,
       "failed": 0,
       "skipped": 0
+    }
+  ],
+  "rules": [
+    {
+      "rule": "Recover canonical minute encodings of whole milliseconds and move on the original calendar",
+      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, first precision-only repair.",
+      "initialization": "Actual merged release base d88f673fcdd0613c689749a797f8340717108928 with exact same authorized API, migrations, fixture, toolchain configuration and native test input fingerprint as the earlier isolated 49-test result.",
+      "dateAndPermission": "Retain public minute fields and adopted scope, revision, R/D/A and date exclusivity. Use safe integer milliseconds for internal motion and elapsed handoff credit, with literal submillisecond and unsafe offsets rejected. Preserve all three existing calendar semantics and native authorization.",
+      "writes": [
+        "apps/api/src/production-platform/fixed-timeline-targets.ts",
+        "tests/unit/fixed-timeline-targets.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/fixed-consumer-targets.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts"
+      ],
+      "oldTests": [
+        "tests/unit/fixed-timeline-targets.test.ts",
+        "tests/unit/order-time-framework.test.ts"
+      ],
+      "expectation": "Independent known date difference -16553351593ms is reversible on continuous and natural-days clocks. Beijing local midnight and excluded-Sunday edges remain exact to one millisecond and whole weeks are bounded. Actual fractional milliseconds and unsafe values fail closed.",
+      "checks": [
+        "precision-unit",
+        "precision-native",
+        "precision-lint",
+        "precision-types",
+        "precision-protocol"
+      ]
+    },
+    {
+      "rule": "Carry integer credit through each dependency and join before rendering public minutes",
+      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, first precision-only repair.",
+      "initialization": "Actual merged release base d88f673fcdd0613c689749a797f8340717108928 with exact same authorized API, migrations, fixture, toolchain configuration and native test input fingerprint as the earlier isolated 49-test result.",
+      "dateAndPermission": "Retain public minute fields and adopted scope, revision, R/D/A and date exclusivity. Use safe integer milliseconds for internal motion and elapsed handoff credit, with literal submillisecond and unsafe offsets rejected. Preserve all three existing calendar semantics and native authorization.",
+      "writes": [
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/journey-selection-clock.ts",
+        "apps/api/src/production-platform/development-cycle-evidence.ts"
+      ],
+      "oldTests": [
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/integration/fixed-progress-postgres.test.ts"
+      ],
+      "expectation": "Four former minutes round trips use the original integer delta. The exact synthetic DAG preserves known actual and deadline, conditional prediction and earlier credit. Native regression retains responsibility evidence, completion, date bounds and cancellation history.",
+      "checks": [
+        "precision-unit",
+        "precision-native",
+        "precision-lint",
+        "precision-types",
+        "precision-protocol"
+      ]
+    },
+    {
+      "rule": "Keep remaining-time search and reserve subtraction on the same whole-millisecond clock",
+      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, first precision-only repair.",
+      "initialization": "Actual merged release base d88f673fcdd0613c689749a797f8340717108928 with exact same authorized API, migrations, fixture, toolchain configuration and native test input fingerprint as the earlier isolated 49-test result.",
+      "dateAndPermission": "Retain public minute fields and adopted scope, revision, R/D/A and date exclusivity. Use safe integer milliseconds for internal motion and elapsed handoff credit, with literal submillisecond and unsafe offsets rejected. Preserve all three existing calendar semantics and native authorization.",
+      "writes": [
+        "apps/api/src/production-platform/order-time-request-plan.ts",
+        "tests/unit/order-time-requests.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-time-schedule.ts",
+        "apps/api/src/production-platform/order-time-reading.ts"
+      ],
+      "oldTests": [
+        "tests/unit/order-time-requests.test.ts",
+        "tests/integration/order-time-washing-rework-postgres.test.ts"
+      ],
+      "expectation": "The original active deadline and partially spent reserve reach the same exact forward instant. The native plan, washing, rework, and current-task tests retain original boundaries and outcomes.",
+      "checks": [
+        "precision-unit",
+        "precision-native",
+        "precision-lint",
+        "precision-types",
+        "precision-protocol"
+      ]
     }
   ]
 }
