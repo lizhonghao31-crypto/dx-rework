@@ -22,6 +22,21 @@ type QuoteRow=AssembledQuotation;
 const conflict=(message:string,code='QUOTATION_CONFLICT'):never=>{throw new ApplicationError(code,message,409);};
 const enabledRoles=['sample_designer','order_merchandiser','pattern_room_worker','ie_reviewer','embroidery_washing_merchandiser','owner_group','production_management'];
 const readRoles=[...enabledRoles,'pmc'];
+type QuoteDirectoryRow={source_id:string|null;production_order_id:string|null;style_no:string;customer_code:string|null;
+ source_designer:string|null;primary_merchandiser_id:string|null;version:number|null;confirmed_version:number|null;assignments:QuotationAssignment[]|null};
+function quotationAuthority(actor:TrustedActorContext,roles:ReadonlySet<string>,designerId:string|null,primaryId:string|null,assignments:readonly QuotationAssignment[]){
+ const root=isRootActor(actor),designer=roles.has('sample_designer')&&designerId===actor.actorId,merch=roles.has('order_merchandiser')&&primaryId===actor.actorId;
+ const full=root||designer||merch||roles.has('owner_group')||roles.has('production_management')||roles.has('pmc');
+ const ownRow=assignments.some(assignment=>assignment.technicalAssigneeId===actor.actorId&&roles.has('pattern_room_worker')||assignment.priceAssigneeId===actor.actorId&&roles.has(assignment.priceRole));
+ return {full,allowed:full||ownRow,structure:root||designer,confirm:root||designer||merch};
+}
+async function quotationRoles(db:Database,actor:TrustedActorContext,roleScope:readonly string[]){
+ const active=new Set<string>();
+ if(isRootActor(actor))return active;
+ const access=new DigitalProductionAccessPolicy(db);
+ for(const role of roleScope)if(actor.actorRoles.includes(role)&&await access.activeRole(actor.actorId,role))active.add(role);
+ return active;
+}
 export class DigitalQuotationService{
  constructor(private readonly database:Pool,private readonly creationEnabled:boolean){}
  private async context(db:Database,actor:TrustedActorContext,resource:QuotationResource,readOnly=false){
@@ -31,16 +46,12 @@ export class DigitalQuotationService{
   const order=resource.kind==='order'?row:(await db.query('SELECT * FROM digital_production_orders WHERE source_id=$1',[resource.id])).rows[0];
   const sourceId=resource.kind==='source'?resource.id:row.source_id??null,orderId=order?.production_order_id??null;
   const quote=(await db.query('SELECT * FROM digital_quotation_documents WHERE production_order_id=$1 OR ($2::uuid IS NOT NULL AND source_id=$2)',[orderId,sourceId])).rows[0] as QuoteRow|undefined;
-  const roles=new Set<string>();
-  if(!isRootActor(actor))for(const role of (readOnly?readRoles:enabledRoles))if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,role))roles.add(role);
+  const roles=await quotationRoles(db,actor,readOnly?readRoles:enabledRoles);
   const sourceDesigner=sourceId?(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]?.created_by:row.created_by;
-  const designer=roles.has('sample_designer')&&sourceDesigner===actor.actorId;
-  const merch=roles.has('order_merchandiser')&&order?.primary_merchandiser_id===actor.actorId;
-  const full=isRootActor(actor)||designer||merch||roles.has('owner_group')||roles.has('production_management')||roles.has('pmc');
-  const ownRow=(quote?.assignments??[]).some(a=>a.technicalAssigneeId===actor.actorId&&roles.has('pattern_room_worker')||a.priceAssigneeId===actor.actorId&&roles.has(a.priceRole));
-  if(!full&&!ownRow)digitalNotFound();
-  const sourceDocument=quote?.assembly&&sourceId&&(isRootActor(actor)||designer)?await developmentDocumentRow(db,sourceId):undefined;
-  return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure:isRootActor(actor)||designer,confirm:isRootActor(actor)||designer||merch};
+  const {full,allowed,structure,confirm}=quotationAuthority(actor,roles,sourceDesigner,order?.primary_merchandiser_id??null,quote?.assignments??[]);
+  if(!allowed)digitalNotFound();
+  const sourceDocument=quote?.assembly&&sourceId&&structure?await developmentDocumentRow(db,sourceId):undefined;
+  return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure,confirm};
  }
  async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number):Promise<QuotationSheet>{
   const c=await this.context(db,actor,resource,true),q=c.quote;
@@ -81,16 +92,34 @@ export class DigitalQuotationService{
    budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null}};
  }
  async list(actor:TrustedActorContext){
-  const active=new Set<string>();if(!isRootActor(actor))for(const role of readRoles)if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,role))active.add(role);
-  // Resource names are projected only after scope checks; no all-order directory.
-  const rows=(await this.database.query(`SELECT q.source_id,q.production_order_id FROM digital_quotation_documents q
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const active=await quotationRoles(db,actor,readRoles);
+   // Keep the original native candidate order and cap before resolving the exact scope.
+   const rows=(await db.query<QuoteDirectoryRow>(`WITH candidates AS (SELECT q.source_id,q.production_order_id,q.updated_at FROM digital_quotation_documents q
    WHERE $1::boolean OR EXISTS(SELECT 1 FROM jsonb_array_elements(q.assignments) a WHERE ($5::boolean AND a->>'technicalAssigneeId'=$2::text) OR (a->>'priceAssigneeId'=$2::text AND a->>'priceRole'=ANY($6::text[])))
    OR EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.production_order_id=q.production_order_id AND (($3::boolean AND o.created_by=$2::uuid) OR ($4::boolean AND o.primary_merchandiser_id=$2::uuid)))
    OR ($3::boolean AND EXISTS(SELECT 1 FROM digital_production_sources s WHERE s.source_id=q.source_id AND s.created_by=$2::uuid))
-   ORDER BY q.updated_at DESC LIMIT 100`,[isRootActor(actor)||active.has('owner_group')||active.has('production_management')||active.has('pmc'),actor.actorId,active.has('sample_designer'),active.has('order_merchandiser'),active.has('pattern_room_worker'),[...active].filter(r=>['sample_designer','ie_reviewer','embroidery_washing_merchandiser','pattern_room_worker'].includes(r))])).rows;
-  const items=[];
-  for(const row of rows){const resource:QuotationResource=row.production_order_id?{kind:'order',id:row.production_order_id}:{kind:'source',id:row.source_id};if(!await acceptanceIncludesNative(this.database,resource.id))continue;try{const sheet=await this.read(actor,resource);items.push({resource,designStyleNo:sheet.designStyleNo,customerCode:sheet.customerCode,version:sheet.version,status:sheet.status});}catch(error){if(!(error instanceof ApplicationError&&error.statusCode===404))throw error;}}
-  return {items};
+   ORDER BY q.updated_at DESC LIMIT 100)
+   SELECT c.source_id,c.production_order_id,CASE WHEN c.production_order_id IS NULL THEN s.design_style_no ELSE o.design_style_no END AS style_no,
+    coalesce(o.customer_code,s.customer_code) AS customer_code,CASE WHEN s.source_id IS NULL THEN o.created_by ELSE s.created_by END AS source_designer,
+    o.primary_merchandiser_id,quote.version,quote.confirmed_version,quote.assignments
+   FROM candidates c LEFT JOIN digital_production_orders o ON o.production_order_id=c.production_order_id OR (c.production_order_id IS NULL AND o.source_id=c.source_id)
+   LEFT JOIN digital_production_sources s ON s.source_id=CASE WHEN c.production_order_id IS NULL THEN c.source_id ELSE o.source_id END
+   LEFT JOIN LATERAL(SELECT q.version,q.confirmed_version,q.assignments FROM digital_quotation_documents q
+    WHERE q.production_order_id=o.production_order_id OR (s.source_id IS NOT NULL AND q.source_id=s.source_id) LIMIT 1) quote ON true
+   ORDER BY c.updated_at DESC`,[isRootActor(actor)||active.has('owner_group')||active.has('production_management')||active.has('pmc'),actor.actorId,active.has('sample_designer'),active.has('order_merchandiser'),active.has('pattern_room_worker'),[...active].filter(r=>['sample_designer','ie_reviewer','embroidery_washing_merchandiser','pattern_room_worker'].includes(r))])).rows;
+   const items=[];
+   for(const row of rows){
+    const resource:QuotationResource=row.production_order_id?{kind:'order',id:row.production_order_id}:{kind:'source',id:row.source_id!};
+    if(!await acceptanceIncludesNative(this.database,resource.id,db))continue;
+    try{await acceptanceBusinessContext()?.assertScope(resource);}catch(error){if(error instanceof ApplicationError&&error.statusCode===404)continue;throw error;}
+    if(!quotationAuthority(actor,active,row.source_designer,row.primary_merchandiser_id,row.assignments??[]).allowed)continue;
+    items.push({resource,designStyleNo:row.style_no,customerCode:row.customer_code,version:row.version??0,status:row.version!==null&&row.version===row.confirmed_version?'confirmed' as const:'draft' as const});
+   }
+   await db.query('COMMIT');return {items};
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  async participants(actor:TrustedActorContext,resource:QuotationResource){
   const c=await this.context(this.database,actor,resource);if(!c.structure)digitalForbidden();

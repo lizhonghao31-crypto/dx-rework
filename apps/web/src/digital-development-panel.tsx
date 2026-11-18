@@ -32,7 +32,8 @@ const urls = createWebUrls(import.meta.env.BASE_URL);
 const initial = initialDevelopmentDocument;
 type RoundHistory={roundNumber:number;origin:string;customerComment:string;internalProblem:string;explanation:string;affectedNodes:string[];inherited:Record<string,{taskId:string;roundNumber:number}>};
 type Rounds={rounds:RoundHistory[];draft:{version:number;payload:DevelopmentRevision}|null};
-export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=false,contained=false,onVersionChange}:{sourceId:string;onClose:()=>void;onVersionChange?:((version:number|undefined)=>void)|undefined;initialRound?:number|undefined;contained?:boolean;embedded?:boolean}) {
+export type DevelopmentSheetRead=(sheet:DevelopmentSheet,requestedRound:number|undefined)=>void;
+export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=false,contained=false,onVersionChange,onRead}:{sourceId:string;onClose:()=>void;onVersionChange?:((version:number|undefined)=>void)|undefined;onRead?:DevelopmentSheetRead|undefined;initialRound?:number|undefined;contained?:boolean;embedded?:boolean}) {
   const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [sheet,setSheet]=useState<DevelopmentSheet|null>(null),[document,setDocument]=useState<DevelopmentDocument>(initial);
   const [showPublishedDocument,setShowPublishedDocument]=useState(false);
@@ -56,13 +57,14 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const timeApplication=useOrderTimeApplication(()=>{setDirty(false);});
   useDigitalDetailNavigationGuard(dirty, busy, writing, "有未保存修改，确定离开？");
   const base=`sources/${sourceId}/development`;
-  useEffect(()=>{let live=true;void digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`).then(value=>{if(live){setSheet(value);installDocument(value.document??initial());setDirty(false);setError("");if(value.status==="published")void digitalRequest<Rounds>(`${base}/rounds`).then(data=>{if(live)setRounds(data);}).catch(reason=>{if(live)setError(reason.message);});}}).catch(reason=>{if(live)setError(reason.message);});return()=>{live=false;};},[sourceId,selectedRound]);
+  const applySheet=(value:DevelopmentSheet)=>{setSheet(value);onRead?.(value,selectedRound);};
+  useEffect(()=>{let live=true;void digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`).then(value=>{if(live){applySheet(value);installDocument(value.document??initial());setDirty(false);setError("");if(value.status==="published")void digitalRequest<Rounds>(`${base}/rounds`).then(data=>{if(live)setRounds(data);}).catch(reason=>{if(live)setError(reason.message);});}}).catch(reason=>{if(live)setError(reason.message);});return()=>{live=false;};},[sourceId,selectedRound,onRead]);
   const edit=(patch:Partial<DevelopmentDocument>)=>{setDocument(current=>({...current,...patch}));setDirty(true);};
   const run=async(path:string,body:unknown,method="POST")=>{
     if(writing.current)return;writing.current=true;setBusy(true);setError("");
     const payload=JSON.stringify([path,body,method]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
     try{if(path===base+'/publish'&&!await timeApplication.inspect({kind:'development_publish',sourceId,input:body as {expectedVersion:number;patternOrder?:DevelopmentPatternChoice}},Boolean(sheet?.orderTimeEnabled)))return;
-      const value=await digitalRequest<DevelopmentSheet>(path,method,body,operation.current.key);setSheet(value);installDocument(value.document??initial());setDirty(false);previews.saved();operation.current=null;}
+      const value=await digitalRequest<DevelopmentSheet>(path,method,body,operation.current.key);applySheet(value);installDocument(value.document??initial());setDirty(false);previews.saved();operation.current=null;}
     catch(reason){setError(reason instanceof Error?reason.message:"操作失败");}finally{writing.current=false;setBusy(false);}
   };
   const beginRevision=()=>{
@@ -108,7 +110,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)).length===0;};
   const save=()=>{if(!validate())return;if(revision)void revisionAction(false);else void run(base,{expectedVersion:sheet!.version,document},"PUT");};
   const publish=()=>{if(!validate(true))return;if(dirty){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice&&sheet?.revisionSource?.outputKind!=='工艺布片'){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,...(sheet?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})});}};
-  const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);setSheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
+  const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);applySheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   const readRef=useTodoContentRead({routeName:'digital_development',entityId:sourceId,developmentRound:sheet?.roundNumber??1},Boolean(sheet?.document));
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
   if(!embedded&&sheet?.canEdit&&!revision&&(sheet.status==="draft"||(!showPublishedDocument&&sheet.document?.customerOrderDraft?.withOrder&&!sheet.productionOrderId)))return <ResumeDevelopmentCreateForm contained={contained} key={`${sheet.sourceId}:${sheet.version}`} sheet={sheet} onClose={onClose} onCreated={()=>void reload()} onViewPublished={()=>setShowPublishedDocument(true)}/>;

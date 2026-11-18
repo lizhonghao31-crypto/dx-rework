@@ -175,7 +175,12 @@ function quotationDatabase(roles: string[], assignee = OTHER) {
       assignments: [{rowId: ROW, technicalAssigneeId: assignee, priceAssigneeId: OTHER, priceRole: 'sample_designer'}],
       consumption_sources: {}, price_sources: {},
     }];
-    if (sql.startsWith('SELECT q.source_id,q.production_order_id ')) return values[0] ? [{source_id: null, production_order_id: ORDER}] : [];
+    if (sql.startsWith('WITH candidates AS (SELECT q.source_id,q.production_order_id,q.updated_at ')) {
+      return values[0] && values[1] === ACTOR ? [{source_id: null, production_order_id: ORDER,
+        style_no: order().design_style_no, customer_code: order().customer_code, source_designer: OTHER,
+        primary_merchandiser_id: OTHER, version: 1, confirmed_version: null,
+        assignments: [{rowId: ROW, technicalAssigneeId: assignee, priceAssigneeId: OTHER, priceRole: 'sample_designer'}]}] : [];
+    }
     if (sql.startsWith('SELECT id,display_name FROM app_users ')) return [{id: ACTOR, display_name: 'TEST reader'}, {id: OTHER, display_name: 'TEST designer'}];
     if (sql.startsWith('SELECT version,quote_id,quote_version,status FROM digital_budget_documents ')) return [];
     if (sql.startsWith('SELECT version FROM digital_quotation_versions ')) return [{version: 1}];
@@ -189,7 +194,8 @@ describe('PMC full quotation reads preserve original row and command permissions
     const result = await service.read(actor(role), {kind: 'order', id: ORDER});
     expect(result).toMatchObject({fullCost: true, document, canStructure: false, canConfirm: false, versions: [1]});
     expect(result.rows[0]).toMatchObject({unitPrice: '10', consumption: '1.2', canEditConsumption: false, canEditPrice: false});
-    expect((await service.list(actor(role))).items).toHaveLength(1);
+    expect(await service.list(actor(role))).toEqual({items: [{resource: {kind: 'order', id: ORDER},
+      designStyleNo: result.designStyleNo, customerCode: result.customerCode, version: 1, status: 'draft'}]});
   });
 
   it('does not expose revoked PMC quotation data', async () => {
