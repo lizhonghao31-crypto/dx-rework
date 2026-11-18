@@ -35,6 +35,22 @@ describe('R5 per-order conditional remaining-time evaluation',()=>{
   const value=input(),original=structuredClone(value),result=orderTimeRemaining(value,time,new Map());
   expect(result.scopes[0]).toMatchObject({feasibility:'insufficient',lateMinutes:1440,requiredSpanMinutes:5760,expectedEnd:{at:at(11)}});expect(value).toEqual(original);
  });
+ it.each([[-1,'sufficient',0],[0,'insufficient',0],[1,'insufficient',1/60000]] as const)('preserves exact differences at %i ms around the legacy application cutoff', (milliseconds,feasibility,lateMinutes)=>{
+  const value=input();value.scopes[0]!.customerGoal={precision:'date',value:'2027-01-11',source:'TEST exact exclusive customer date'};
+  const observed={...time,now:new Date(Date.parse('2027-01-07T16:00:00.000Z')+milliseconds).toISOString()};
+  const args={value,time:observed,progress:new Map(),sourceVersion:{},resource:{kind:'source' as const,id:'TEST source'},styleNo:'TEST',customerDates:[],canRequest:true,canApply:true};
+  expect(orderTimeRemaining(value,observed,args.progress).scopes[0]).toMatchObject({feasibility,lateMinutes});
+  expect(orderTimeCheck(args)).toMatchObject({feasibility,lateMinutes});
+ });
+ it('uses a closed endpoint when two legacy terminals share the final deadline',()=>{
+  const value=input(),scope=value.scopes[0]!;scope.customerGoal={precision:'date',value:'2027-01-11',source:'TEST exclusive customer date'};
+  const boundary='2027-01-11T16:00:00.000Z',observation={...time,now:at(12)};
+  const progress=new Map<string,OrderTimeNativeProgress>([['a',{completed:true,actualAt:null,actualDate:'2027-01-11',readyAt:null,deadline:null}],['b',{completed:true,actualAt:boundary,readyAt:null,deadline:null}]]);
+  for(const terminals of [['a','b'],['b','a']]){
+   scope.terminalIds=terminals;
+   expect(orderTimeRemaining(value,observation,progress).scopes[0]).toMatchObject({feasibility:'insufficient',lateMinutes:0,expectedEnd:{at:boundary,exclusive:false}});
+  }
+ });
  it('does not zero an unfinished sibling that shares the same company parameter or count completed work twice',()=>{
   const value=input();value.work[1]!.parameterKey='a';
   const progress=new Map<string,OrderTimeNativeProgress>([['a',{completed:true,actualAt:at(6),readyAt:at(4),deadline:at(6)}]]),result=orderTimeRemaining(value,time,progress);
