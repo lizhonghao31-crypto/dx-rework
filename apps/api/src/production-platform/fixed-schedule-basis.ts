@@ -22,6 +22,7 @@ import {nativeFactoryTimeline} from './factory-production-facts.js';
 import {journeyTermination,type JourneyTermination} from './journey-termination.js';
 import {evaluateFixedScheduleScope,fixedDurationSummary,type ScheduleScopeInput,type ScheduleFact,type ScheduleWork} from './fixed-schedule-progress.js';
 import {readOrderTimeBasis,attachOrderTimeCoverage} from './order-time-reading.js';
+import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
 import {fixedScheduleStages} from './fixed-schedule-stages.js';
 
 export type FixedScheduleBasis={framework?:JourneyFrameworkBasis;version:'fixed-schedule-basis-v1';policyVersion?:'order-time-plan-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean;notApplicableNodes?:Array<'process_logistics'|'bulk_qc'>};
@@ -42,9 +43,9 @@ const latest=(values:ScheduleOccurrence[]):ScheduleOccurrence=>{
 /** Internal factual basis only. The existing Journey/SLA caller first checks
  * live full-resource/field scope and owns the RR snapshot. No extra connection,
  * transaction, Root actor, current settings or GET target reconstruction. */
-export async function readFixedScheduleBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,closure?:OrderClosureSheet,time?:BusinessTime):Promise<FixedScheduleBasis|null>{
+export async function readFixedScheduleBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,closure?:OrderClosureSheet,time?:BusinessTime,onSourcePlan?:(saved:StoredOrderTimePlan)=>void):Promise<FixedScheduleBasis|null>{
  const legacy=await readLegacyFixedScheduleBasis(db,resource,item,native,asOf,closure);
- return readOrderTimeBasis(db,resource,item,native,asOf,legacy,time,legacy?legacy.termination:undefined);
+ return readOrderTimeBasis(db,resource,item,native,asOf,legacy,time,legacy?legacy.termination:undefined,onSourcePlan);
 }
 async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,closure?:OrderClosureSheet):Promise<FixedScheduleBasis|null>{
  const repository=new FixedTimelineAdoptionRepository(db),current=await repository.currentTargets(resource,resource.kind==='source'?item.adoptedRound??item.selectedRound??undefined:undefined);

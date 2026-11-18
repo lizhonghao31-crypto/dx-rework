@@ -1,155 +1,161 @@
 {
   "version": 1,
-  "base": "6b075a7bfa41542756ca7be5f7db7b7e9c08bc39",
+  "base": "95a2f5b9047966319458a8a6629688efc4190c23",
   "risk": "full",
-  "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
+  "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
   "rules": [
     {
-      "rule": "Identify authorized literal search matches before expensive legacy projection",
-      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, search-only successor. The existing task hydration remains under the separate performance planning decision.",
-      "initialization": "Actual precision repair release merge 6b075a7bfa41542756ca7be5f7db7b7e9c08bc39 with identical tree to the predecessor used in the exact local source tests.",
-      "dateAndPermission": "Use original technical scope, exact actor and original linked-domain access within the same read-only repeatable snapshot. Preserve the literal keyword contract, actual clocks by native scope, final eligible ordering and current data.",
+      "rule": "Resolve current inner- and outer-washing supervision from the adopted source plan",
+      "source": "Approved T2-014/T2-015 source washing supervision repair, Library libfile_fde3_f-e1a06556bfe4819186e5e9638db7e49d_c8d3bf5d609c8191bce6411a30e94d44.",
+      "initialization": "Actual PAGE25 search repair release merge 95a2f5b9047966319458a8a6629688efc4190c23. Reproduced both original-rule shapes in isolated PostgreSQL before patch.",
+      "dateAndPermission": "Use the existing authorized Journey snapshot, its selected source round, exact frozen work identity, original publication anchor and native observation. This is a read projection, with no recorded fact or business clock writes.",
       "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-search-metadata.ts",
-        "apps/api/src/production-platform/journey-projection.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/source-current-supervision.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/order-merchandisers.ts",
-        "apps/api/src/production-platform/development-amendment-repository.ts"
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-schedule.ts"
       ],
       "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/unit/digital-journey-projection.test.ts"
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
-      "expectation": "Only authorized matching candidates reach original summary and detail projection. Literal wildcard symbols, Chinese, mixed case, PO temporary identity, visible child ID, sourcing ERP and style name preserve the original matching and access boundaries. Matched or empty-search projection failures remain visible.",
+      "expectation": "The two actual native arrangement routes increase the frozen duration by 24h. Their exact current plan and rolling estimate are computed from the adopted graph, share the same supervisor and node value, and preserve the 30 minute included dispatch without duplicating it.",
       "checks": [
-        "search-unit",
-        "search-native",
-        "search-lint",
-        "search-types",
-        "search-protocol"
+        "source-washing-unit",
+        "source-washing-native",
+        "source-washing-lint",
+        "source-washing-protocol"
       ]
     },
     {
-      "rule": "Retain whole-permitted facets and actual clock observation across a filtered request",
-      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, search-only successor. The existing task hydration remains under the separate performance planning decision.",
-      "initialization": "Actual precision repair release merge 6b075a7bfa41542756ca7be5f7db7b7e9c08bc39 with identical tree to the predecessor used in the exact local source tests.",
-      "dateAndPermission": "Use original technical scope, exact actor and original linked-domain access within the same read-only repeatable snapshot. Preserve the literal keyword contract, actual clocks by native scope, final eligible ordering and current data.",
+      "rule": "Keep native responsibility and actual completion independent from future plan and forecast",
+      "source": "Approved T2-014/T2-015 source washing supervision repair, Library libfile_fde3_f-e1a06556bfe4819186e5e9638db7e49d_c8d3bf5d609c8191bce6411a30e94d44.",
+      "initialization": "Actual PAGE25 search repair release merge 95a2f5b9047966319458a8a6629688efc4190c23. Reproduced both original-rule shapes in isolated PostgreSQL before patch.",
+      "dateAndPermission": "Use the existing authorized Journey snapshot, its selected source round, exact frozen work identity, original publication anchor and native observation. This is a read projection, with no recorded fact or business clock writes.",
       "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/journey-page-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/source-current-supervision.ts",
+        "apps/api/src/production-platform/fixed-timeline-targets.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/api/src/acceptance-clock/business-time.ts",
-        "apps/api/src/production-platform/journey-selection-query.ts",
-        "apps/api/src/production-platform/journey-snapshot-reads.ts"
+        "apps/api/src/production-platform/development-sla-evidence.ts",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/journey-terminal-timing.ts"
       ],
       "oldTests": [
-        "tests/integration/journey-page-native-browser-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts"
+        "tests/unit/fixed-timeline-targets.test.ts",
+        "tests/unit/development-craft-instance-supervision.test.ts"
       ],
-      "expectation": "Global facets retain authorized off-match values. Fixed and live retain their original meaning even when the only matching item is fixed. The real signed browser observes the registered no-scope GET skipping a nonmatching exception and retaining a matched exception. Existing pagination, workspace and indexed consumers continue through their native paths.",
+      "expectation": "Read-only supervisor projections preserve the original enrollment and task R/D/A. When the unstarted historical forecast expires, it becomes unknown without moving the adopted planned finish or fabricating an actual event. The original fixed timeline and other routes still execute their existing cases.",
       "checks": [
-        "search-unit",
-        "search-native",
-        "search-lint",
-        "search-types",
-        "search-protocol"
+        "source-washing-unit",
+        "source-washing-native",
+        "source-washing-lint",
+        "source-washing-protocol"
+      ]
+    },
+    {
+      "rule": "Check managed special-craft saves against the exact original PUT response",
+      "source": "Full 44258353869 / PostgreSQL job 134646839953 failed at special-craft-browser-postgres.test.ts:213 while polling for draft version 2; the isolated unchanged candidate passed the failed case once.",
+      "initialization": "Original authenticated settings browser on isolated PG16, with a managed draft still at version 1 before reordering.",
+      "dateAndPermission": "Keep the original designer save path, frozen craft definitions, ordering assertions, and rejection of a worker save.",
+      "writes": [
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-development-create-form.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "expectation": "Wait for the matching PUT on the exact source, require its successful receipt for the original version 1, then independently read stored version 2 and verify ordered frozen steps. The reviewed product source and application deadlines do not change.",
+      "checks": [
+        "source-washing-native",
+        "source-washing-lint",
+        "source-washing-protocol"
       ]
     }
   ],
   "checks": [
     {
-      "id": "search-unit",
+      "id": "source-washing-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-journey-projection.test.ts tests/unit/journey-compatible-fallback.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-journey-search-20261118/final-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/journey-fact-model.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/digital-journey-projection.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/repair-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
-      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
-      "startedAt": "2026-11-18T05:56:04.074431+00:00",
-      "endedAt": "2026-11-18T05:56:09.346798+00:00",
-      "log": "/workspace/sla-journey-search-20261118/checks/final-unit/command.log",
-      "logSha256": "af474f29290e5a294c2da74e5ee2e1d54fa0d96e91588e500989a2ff413e6049",
-      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace.",
-      "passed": 162,
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T08:00:03.182608+00:00",
+      "endedAt": "2026-11-18T08:00:07.083886+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-unit/command.log",
+      "logSha256": "d1e830ad7c90bb7c02a0a80a8b7d08cdcf89e7d85108acf1babeedbb535f6540",
+      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
+      "passed": 48,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cafaf7ae753f115d69b19240ebf0b06a031e8861acf281a02a37271ba3c6d748"
+          "sha256": "0931089548ccbf33ae168cd72f446f295e8343d30f9ae36fbcf73974f796f5f9"
         }
       ]
     },
     {
-      "id": "search-native",
+      "id": "source-washing-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts tests/integration/journey-page-native-browser-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-journey-search-20261118/pg/final-numeric-joined-search/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/special-craft-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/pg/craft-receipt-and-washing/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
-      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
-      "startedAt": "2026-11-18T05:55:23.578327+00:00",
-      "endedAt": "2026-11-18T05:57:54.560424+00:00",
-      "log": "/workspace/sla-journey-search-20261118/pg/final-numeric-joined-search/tests.log",
-      "logSha256": "2e4f24587c82f04267ad1492d8720a43b3fd6e89d0925d002f1506c6a5054830",
-      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace.",
-      "passed": 43,
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T07:54:04.689986+00:00",
+      "endedAt": "2026-11-18T07:55:15.244160+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/pg/craft-receipt-and-washing/tests.log",
+      "logSha256": "a2f2b114bb84c1fa1f21095f5af5de25f9a656d795021202dfea990b0791f5d9",
+      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
+      "passed": 37,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "99364aaf6e6eb5957fc24c3b50d0b656f50617404d1784e20e4351e3cab27129"
+          "sha256": "cb947d230a78c362b730c25f4c7a20a779f5d1199ca45f09052149c544728862"
         }
       ]
     },
     {
-      "id": "search-lint",
+      "id": "source-washing-lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-search-metadata.ts apps/api/src/production-platform/journey-projection.ts tests/integration/digital-journey-postgres.test.ts tests/integration/journey-page-native-browser-postgres.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-timeline-targets.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/source-current-supervision.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
-      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
-      "startedAt": "2026-11-18T05:58:18.147915+00:00",
-      "endedAt": "2026-11-18T05:58:19.959903+00:00",
-      "log": "/workspace/sla-journey-search-20261118/checks/final-lint/command.log",
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T07:59:51.475281+00:00",
+      "endedAt": "2026-11-18T07:59:53.478434+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace."
+      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed."
     },
     {
-      "id": "search-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
-      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
-      "startedAt": "2026-11-18T05:58:20.469184+00:00",
-      "endedAt": "2026-11-18T05:58:38.606268+00:00",
-      "log": "/workspace/sla-journey-search-20261118/checks/final-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace."
-    },
-    {
-      "id": "search-protocol",
+      "id": "source-washing-protocol",
       "kind": "tests",
-      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
+      "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
-      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
-      "startedAt": "2026-11-18T05:58:38.923207+00:00",
-      "endedAt": "2026-11-18T05:58:45.613393+00:00",
-      "log": "/workspace/sla-journey-search-20261118/checks/final-protocol/command.log",
-      "logSha256": "7e4b942131519d02b0b6334cb475b5ab3cf6e9a6806e05bb409c7296930bb249",
-      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace.",
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T07:59:54.048035+00:00",
+      "endedAt": "2026-11-18T08:00:02.894186+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-preflight/command.log",
+      "logSha256": "84f70193b5fc6a925cf8ba1f0fdcdf13c6ba298499d388c0c6ac09f502303154",
+      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
       "passed": 284,
       "failed": 0,
       "skipped": 0

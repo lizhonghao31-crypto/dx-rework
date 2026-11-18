@@ -195,9 +195,15 @@ export function fixedTimelineTargets(work:readonly FixedTimelineWork[],ends:Read
 
 /** Exact forward arrangement on the same validated DAG/calendars. The inputs
  * are planning assumptions, never completion events or employee clock starts.
+ * The rolling projection may replace a window with a trusted observation
+ * before its downstream work is evaluated. It does not change the graph.
  */
-export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:SlaAnchor,notBefore:Readonly<Record<string,SlaAnchor>>={},options:{minimumStart?:SlaAnchor;retained?:Readonly<Record<string,FixedTimelineTarget>>;completions?:Readonly<Record<string,SlaTime>>}={}):FixedTimelineTarget[]{
+export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:SlaAnchor,notBefore:Readonly<Record<string,SlaAnchor>>={},options:{minimumStart?:SlaAnchor;retained?:Readonly<Record<string,FixedTimelineTarget>>;completions?:Readonly<Record<string,SlaTime>>;project?:(target:Readonly<FixedTimelineTarget>)=>Pick<FixedTimelineTarget,'start'|'end'>}={}):FixedTimelineTarget[]{
  const {ordered}=orderedFixedWork(work,true),targets=new Map<string,FixedTimelineTarget>();
+ const record=(target:FixedTimelineTarget)=>{
+  const projection=options.project?.(target);
+  targets.set(target.id,projection?{...target,...projection}:target);
+ };
  for(const [id,row]of Object.entries(options.retained??{})){
   if(row.id!==id||!work.some(node=>node.id===id))throw Error('保留安排不属于本范围工作');
   if(row.start.at)instant(row.start.at);if(row.end.at)instant(row.end.at);
@@ -223,7 +229,7 @@ export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:Sla
   const end=begin.at===null?{...begin,reasons:[...begin.reasons]}:node.minutes===0?{...begin}
    :node.minutes===null||!node.calendar?missing(node.minutes===null?'本工作用时尚未采用':'本工作日历尚未采用')
    :{...begin,at:shiftFixedTimeline(begin.at,node.minutes,node.calendar),reasons:[...begin.reasons]};
-  targets.set(node.id,{id:node.id,start:begin,end});
+  record({id:node.id,start:begin,end});
  }
  for(const node of ordered.filter(node=>node.includedIn)){
   const retained=options.retained?.[node.id];if(retained){targets.set(node.id,structuredClone(retained));continue;}
@@ -231,7 +237,7 @@ export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:Sla
   const moved=base.at===null?{...base,reasons:[...base.reasons]}:node.minutes===0?{...base}
    :node.minutes===null||!node.calendar?missing('内含交接用时或日历待核')
    :{...base,at:shiftFixedTimeline(base.at,(node.includedPosition==='end'?-1:1)*node.minutes,node.calendar),reasons:[...base.reasons]};
-  targets.set(node.id,{id:node.id,start:node.includedPosition==='end'?moved:{...base},end:node.includedPosition==='end'?{...base}:moved});
+  record({id:node.id,start:node.includedPosition==='end'?moved:{...base},end:node.includedPosition==='end'?{...base}:moved});
  }
  return work.map(node=>targets.get(node.id)!);
 }

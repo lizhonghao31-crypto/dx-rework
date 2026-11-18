@@ -258,9 +258,10 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   pending:!saved.input.route.complete||scopes.some(scope=>{const required=new Set(requiredFixedTimelineWork(scope.work,scope.terminalIds).map(work=>work.id));return scope.work.some(work=>required.has(work.id)&&(!work.start||!work.end));})};
 }
 
-export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,legacy:FixedScheduleBasis|null,time?:BusinessTime,termination?:JourneyTermination|null):Promise<FixedScheduleBasis|null>{
+export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,legacy:FixedScheduleBasis|null,time?:BusinessTime,termination?:JourneyTermination|null,onSourcePlan?:(saved:StoredOrderTimePlan)=>void):Promise<FixedScheduleBasis|null>{
  const saved=await new OrderTimePlanRepository(db).current(resource);if(!saved)return legacy;
  if(time&&saved.time.scenarioId!==time.scenarioId)throw Error('本单时间方案与当前业务时钟范围不一致');
+ if(resource.kind==='source')onSourcePlan?.(saved);
  const evidence=await taskEvidence(db,resource,item);evidence.termination=termination===undefined?await journeyTermination(db,resource,asOf):termination;
  const root=saved.input.work.find(work=>work.canonicalWorkRef?.startsWith('creation:'))?.canonicalWorkRef?.match(/^creation:(source|order):([0-9a-f-]{36})$/);
  evidence.policies=await orderTimePolicyHistory(db,resource);
