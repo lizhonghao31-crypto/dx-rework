@@ -3,6 +3,7 @@ import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-produc
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 import {attachJourneyPackingTime} from '../../apps/api/src/production-platform/journey-native-times.js';
+import {journeyBusinessProgress} from '../../apps/api/src/production-platform/journey-business-progress.js';
 const at=(hours:number)=>new Date(Date.parse('2026-11-15T00:00:00.000Z')+hours*3600000).toISOString();
 function fixture(){
  const node={key:'packing',instanceId:'packing:0',current:true,state:'active',records:[{domain:'closure',id:'TEST-order',lineId:null}]} as JourneyNode;
@@ -13,6 +14,17 @@ function fixture(){
  return {node,qc,item,sheet,facts};
 }
 describe('exact packing physical completion projection',()=>{
+ it('counts scoped, recorded native packing at the last actual instant without verifying its time quality',()=>{
+  const {node,item,sheet,facts}=fixture();
+  const completed=(asOf:string)=>journeyBusinessProgress(item,asOf).requirements.find(row=>row.key==='packing')?.completed;
+  attachJourneyPackingTime(item,sheet,facts,at(5));
+  expect(node).toMatchObject({actualAt:at(5),actualQuality:'unverified',completesOrder:false});
+  expect(completed(at(4))).toBe(false);
+  expect(completed(at(5))).toBe(true);
+  expect(completed(at(8))).toBe(true);
+  node.records=[];
+  expect(completed(at(8))).toBe(false);
+ });
  it('uses the final covered physical A while QC/financial closure and unrelated nodes remain open',()=>{
   const {node,qc,item,sheet,facts}=fixture(),before=structuredClone(facts);
   attachJourneyPackingTime(item,sheet,facts,at(8));

@@ -22,6 +22,9 @@ export function cockpitTerminationHistory(node:JourneyNode){
 
 export function cockpitResponsibilityResult(node:JourneyNode){
  const stopped=cockpitTerminationHistory(node);if(stopped)return stopped;
+ if(node.key==='rework'&&node.current&&node.nativeWindows?.length===1&&node.nativeWindows[0]!.complete&&node.completionResult==='late'&&node.overdueSeconds!==null){
+  return {text:'作业超时 '+cockpitDurationRange({minimum:node.overdueSeconds/60,maximum:node.overdueSeconds/60}),tone:'danger'} as const;
+ }
  const overdue=node.fixedTargets?.flatMap(target=>target.progress.ownSla.state==='overdue'&&target.progress.ownSla.overdueMinutes?[target.progress.ownSla.overdueMinutes]:[])??[];
  if(overdue.length){const range={minimum:Math.max(...overdue.map(row=>row.minimum)),maximum:Math.max(...overdue.map(row=>row.maximum))};return {text:'逾期 '+cockpitDurationRange(range),tone:'danger'} as const;}
  const status=cockpitOwnStatus(node);if(status)return status;

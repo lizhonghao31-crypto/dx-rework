@@ -1,8 +1,9 @@
-import type {JourneyBusinessDate,JourneyBusinessDateGroup,JourneyBusinessRequirement,JourneyNode,JourneyTiming,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {JourneyBusinessDate,JourneyBusinessDateGroup,JourneyBusinessRequirement,JourneyTiming,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {isCalendarDate} from '@dx-rework/contracts/series-calendar';
 import {journeyTimingKey} from './journey-supervision.js';
 
-type Point={at:string;precision:'instant'|'date';quality:'verified'|'recorded'};
+import {journeyActualPoint,type JourneyCompletionPoint as Point} from './journey-completion-evidence.js';
+export {journeyActualPoint} from './journey-completion-evidence.js';
 const day=(at:string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(at));
 const instant=(at:string)=>/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)&&Number.isFinite(Date.parse(at));
 const end=(date:string)=>Date.parse(`${date}T00:00:00+08:00`)+86400000;
@@ -16,18 +17,6 @@ function latest(points:Point[]):Point|null{
  const quality=points.every(point=>point.quality==='verified')?'verified':'recorded';
  if(exact&&(!dates.length||dates.every(point=>Date.parse(exact.at)>=end(point.at))))return {...exact,quality};
  return {at:points.map(point=>point.precision==='date'?point.at:day(point.at)).sort().at(-1)!,precision:'date',quality};
-}
-export function journeyActualPoint(node:JourneyNode,asOf:string):Point|null{
- if(node.state==='inherited'){
-  const adoption=node.inheritedResult;
-  return node.inheritedFrom&&node.progressApplicability!=='unknown'&&adoption?.adoptionSourceRef&&adoption.adoptedRound===node.round
-   &&adoption.adoptedAt&&instant(adoption.adoptedAt)&&Date.parse(adoption.adoptedAt)<=Date.parse(asOf)
-   ?{at:adoption.adoptedAt,precision:'instant',quality:'recorded'}:null;
- }
- if(node.state!=='completed'||node.actualQuality==='missing'||node.actualQuality==='unavailable')return null;
- if(node.timing?.assessmentIssue)return null;
- if(node.actualDate&&isCalendarDate(node.actualDate))return node.actualDate>day(asOf)||node.enteredAt&&instant(node.enteredAt)&&node.actualDate<day(node.enteredAt)?null:{at:node.actualDate,precision:'date',quality:node.actualQuality==='verified'?'verified':'recorded'};
- return node.actualAt&&instant(node.actualAt)&&Date.parse(node.actualAt)<=Date.parse(asOf)&&(!node.enteredAt||Date.parse(node.actualAt)>=Date.parse(node.enteredAt))?{at:node.actualAt,precision:'instant',quality:node.actualQuality==='verified'?'verified':'recorded'}:null;
 }
 const base=(total:number):JourneyBusinessDate=>({at:null,precision:'unknown',quality:'unknown',status:total?'unknown':'not_applicable',covered:0,total,reasons:[]});
 const withPoint=(value:JourneyBusinessDate,point:Point|null,complete:boolean):JourneyBusinessDate=>point?complete?{...value,at:point.at,precision:point.precision,quality:point.quality}:{...value,coveredAt:{at:point.at,precision:point.precision}}:value;
@@ -46,7 +35,7 @@ export function journeyBusinessDates(order:OrderJourney):NonNullable<NonNullable
   const rows=input.filter(row=>row.applicability!=='not_applicable'),total=rows.length;
   const plans:Point[]=[],actuals:Point[]=[],forecasts:Point[]=[],bases=new Set<JourneyBusinessDateGroup['forecast']['bases'][number]>();
   const planReasons:string[]=[],actualReasons:string[]=[],forecastReasons:string[]=[];
-  let planned=0,actual=0,forecast=0,completedWithoutTime=0,pendingForecasts=0;
+  let planned=0,actual=0,forecast=0,completedWithoutTime=0,pendingForecasts=0,actualIncomplete=false;
   for(const row of rows){
    const nodes=allNodes.filter(node=>row.instanceIds.includes(node.instanceId));
    const matching=timings.filter(timing=>journeyTimingKey(timing.id)===journeyTimingKey(row.key)
@@ -56,6 +45,12 @@ export function journeyBusinessDates(order:OrderJourney):NonNullable<NonNullable
    }
    const targetPoints=row.targets.map(target=>target.precision==='date'?isCalendarDate(target.at)?{at:target.at,precision:'date' as const,quality:'recorded' as const}:null:instant(target.at)?{at:target.at,precision:'instant' as const,quality:'recorded' as const}:null);
    if(targetPoints.length&&targetPoints.every(point=>point!==null)){planned++;plans.push(latest(targetPoints as Point[])!);}else planReasons.push(`${row.label}尚无完整对应的已采用计划日期`);
+   const recordedCompletion=nodes.length>0&&nodes.length===row.instanceIds.length&&nodes.every(node=>node.state==='completed'||node.state==='inherited');
+   if(!row.completed&&!recordedCompletion)actualIncomplete=true;
+   if(recordedCompletion&&!row.completed){
+    const reason=nodes.some(node=>node.state==='inherited')?'本轮采用完成时间尚未取得，原成果时间不作本轮完成时间':'原完成记录缺少截至本次观察的可信时间';
+    actualReasons.push(`${row.label}：${reason}`);forecastReasons.push(`${row.label}：${reason}`);continue;
+   }
    let completedPoint:Point|null=null;
    if(row.completed){
     if(nodes.some(node=>node.state==='inherited'&&!journeyActualPoint(node,progress.asOf)))actualReasons.push(`${row.label}沿用原成果，本轮采用完成时间尚未取得，原成果时间不作本轮完成时间`);
@@ -93,7 +88,6 @@ export function journeyBusinessDates(order:OrderJourney):NonNullable<NonNullable
   // inventing any past actual time. With no remaining forecast, unknown completed
   // dates still cannot become an overall completion or an asOf timestamp.
   if(pendingForecasts)forecast+=completedWithoutTime;
-  const actualIncomplete=rows.some(row=>row.applicability==='applicable'&&!row.completed);
   const actualDate=withPoint({...base(total),covered:actual,status:!total?'not_applicable':actualIncomplete?'incomplete':actual===total?'complete':'unknown',reasons:actualReasons},latest(actuals),!actualIncomplete&&actual===total);
   const planAvailable=progress.plan.status==='complete'||progress.plan.status==='partial';
   const adoptedPlan=withPoint({...base(total),covered:planAvailable?planned:0,status:!total?'not_applicable':!planAvailable?'unknown':planned===total?'complete':planned?'partial':'unknown',reasons:planAvailable?planReasons:progress.plan.reasons},planAvailable?latest(plans):null,planAvailable&&planned===total);

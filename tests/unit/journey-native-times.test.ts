@@ -4,25 +4,29 @@ import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import {attachJourneyNativeTimes,journeyCuttingGateTime} from '../../apps/api/src/production-platform/journey-native-times.js';
 import type {NativeCuttingReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
 import {journeyActualPoint} from '../../apps/api/src/production-platform/journey-progress-dates.js';
+import {cockpitResponsibilityResult} from '../../apps/web/src/cockpit-node-summary.js';
 
 const start='2026-11-04T00:00:00.000Z',end='2026-11-04T06:00:00.000Z',asOf='2026-11-05T00:00:00.000Z';
 const fixture=()=>{
  const node={key:'rework',instanceId:'TEST-rework',round:null,occurrence:null,current:true,state:'completed',enteredAt:null,actualAt:null,actualQuality:'missing',completionResult:'unknown',records:[{domain:'rework',id:'TEST-rework',lineId:'TEST-line',url:null,version:null,mode:'read'}]} as JourneyNode;
  const item={orderId:'TEST-order',stages:[{nodes:[node]}]} as OrderJourney;
- const window={windowKey:'TEST-window',lineId:'TEST-line',reworkId:'TEST-rework',startedAt:start,completedAt:end,complete:true,deadline:null,warningAt:null,evidence:'rework:TEST-rework:effective-worker-reports',snapshotId:null};
+ const window={windowKey:'rework:TEST-rework:TEST-assignment',assignmentId:'TEST-assignment',lineId:'TEST-line',reworkId:'TEST-rework',startedAt:start,completedAt:end,complete:true,deadline:null,warningAt:null,evidence:'rework:TEST-rework:assignment:TEST-assignment:effective-worker-reports',snapshotId:null};
  return {node,item,native:{orderId:'TEST-order',rework:[window],receiving:undefined}};
 };
 it('Final10 exact rework and PO use complete effective worker times in the original actual-date consumer',()=>{
  const {node,item,native}=fixture();attachJourneyNativeTimes(item,native,asOf);
- expect(node).toMatchObject({state:'completed',enteredAt:start,actualAt:end,actualQuality:'unverified'});
- expect(journeyActualPoint(node,asOf)).toEqual({at:end,precision:'instant',quality:'recorded'});
+ expect(node).toMatchObject({state:'completed',enteredAt:start,actualAt:end,actualQuality:'verified'});
+ expect(journeyActualPoint(node,asOf)).toEqual({at:end,precision:'instant',quality:'verified'});
  attachJourneyNativeTimes(item,{...native,rework:[{...native.rework[0]!,complete:false,completedAt:null}]},asOf);
  expect(node).toMatchObject({state:'completed',actualAt:null,actualQuality:'missing'});
  native.rework=[];attachJourneyNativeTimes(item,native,asOf);expect(node).toMatchObject({enteredAt:null,actualAt:null});
 });
-it.each(['order','rework','line','retired'])('Final10 never copies a completion from mismatched %s scope',kind=>{
+it.each(['order','rework','line','retired','assignment','missing-own-scope','duplicate-window'])('Final10 never copies a completion from mismatched %s scope',kind=>{
  const {node,item,native}=fixture();
  if(kind==='order')native.orderId='TEST-other';if(kind==='rework')native.rework[0]!.reworkId='TEST-other';if(kind==='line')native.rework[0]!.lineId='TEST-other';if(kind==='retired')node.current=false;
+ if(kind==='assignment')native.rework[0]!.assignmentId='TEST-older-assignment';
+ if(kind==='duplicate-window')native.rework.push({...native.rework[0]!});
+ if(kind==='missing-own-scope')node.records.push({...node.records[0]!,lineId:'TEST-missing-line'});
  attachJourneyNativeTimes(item,native,asOf);expect(node.actualAt).toBeNull();expect(node.enteredAt).toBeNull();
 });
 it('keeps rework administration active while projecting its completed worker window, never a future A',()=>{
@@ -31,11 +35,14 @@ it('keeps rework administration active while projecting its completed worker win
 });
 it('projects running and late-finished rework without using later review/financial registration time',()=>{
  const {node,item,native}=fixture();node.state='active';const window=native.rework[0]!;
- window.deadline=new Date(Date.parse(start)+48*3600000).toISOString();window.complete=false;window.completedAt=null;
+ window.deadline=new Date(Date.parse(start)+48*3600000).toISOString();window.snapshotId='TEST-original-policy';window.complete=false;window.completedAt=null;
  const observed=new Date(Date.parse(start)+74*3600000).toISOString();attachJourneyNativeTimes(item,native,observed);
  expect(node).toMatchObject({state:'active',sla:'running',actualAt:null,enteredAt:start});
- window.complete=true;window.completedAt=new Date(Date.parse(start)+50*3600000).toISOString();attachJourneyNativeTimes(item,native,observed);
- expect(node).toMatchObject({state:'active',sla:'finished',actualAt:window.completedAt,enteredAt:start});
+ window.complete=true;window.completedAt=new Date(Date.parse(start)+50*3600000).toISOString();
+ native.rework.push({...window,lineId:'TEST-other-line',reworkId:'TEST-other-rework',complete:false,completedAt:null});
+ attachJourneyNativeTimes(item,native,observed);
+ expect(node).toMatchObject({state:'active',sla:'finished',actualAt:window.completedAt,enteredAt:start,completionResult:'late',overdueSeconds:7200,nativeWindows:[{completedAt:window.completedAt,deadline:window.deadline,complete:true}]});
+ expect(cockpitResponsibilityResult(node)).toEqual({text:'作业超时 2小时',tone:'danger'});
  expect((Date.parse(node.actualAt!)-Date.parse(node.enteredAt!))/3600000).toBe(50);
  expect((Date.parse(node.actualAt!)-Date.parse(window.deadline))/3600000).toBe(2);
 });
