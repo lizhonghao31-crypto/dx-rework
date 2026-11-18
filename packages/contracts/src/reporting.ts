@@ -67,6 +67,16 @@ export const ManagementReworkQuerySchema = DashboardQuerySchema.extend({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
 }).strict();
 
+export const WorkflowQueueStatusSchema = z.enum([
+  "pending_process_configuration", "pending_ie_review", "pending_task_assignment", "in_progress",
+  "pending_order_review", "pending_final_quantity_ie_review", "pending_quantity_adjustment_ie_review",
+]);
+
+export const ManagementReworkQueueQuerySchema = ManagementReworkQuerySchema.safeExtend({
+  status: WorkflowQueueStatusSchema,
+  statuses: z.string().transform(value => value.split(",")).pipe(z.array(WorkflowQueueStatusSchema).min(1).max(7)),
+});
+
 export const ReportQuerySchema = DashboardQuerySchema.extend({
   personType: z.enum(["internal", "temporary"]).optional(),
   wageSource: z.enum(["order_rework", "pattern_room"]).optional(),
@@ -224,6 +234,12 @@ export const ManagementReworkPageSchema = z.object({
   canViewReports: z.boolean(),
 }).strict();
 
+export const ManagementReworkQueueSchema = z.object({
+  selected: WorkflowQueueStatusSchema,
+  page: ManagementReworkPageSchema,
+  statuses: z.array(z.object({status: WorkflowQueueStatusSchema, totalCount: z.number().int().nonnegative()}).strict()),
+}).strict();
+
 export const WageSettlementPreviewSchema = z.object({
   lineIds: z.array(IdSchema),
   personCount: z.number().int().nonnegative(),
@@ -272,6 +288,9 @@ export type ManagementReworkRow = z.infer<typeof ManagementReworkRowSchema>;
 export type ManagementDashboardResponse = z.infer<typeof ManagementDashboardResponseSchema>;
 export type SiteDashboardResponse = z.infer<typeof SiteDashboardResponseSchema>;
 export type ManagementReworkPage = z.infer<typeof ManagementReworkPageSchema>;
+export type WorkflowQueueStatus = z.infer<typeof WorkflowQueueStatusSchema>;
+export type ManagementReworkQueueQuery = z.infer<typeof ManagementReworkQueueQuerySchema>;
+export type ManagementReworkQueue = z.infer<typeof ManagementReworkQueueSchema>;
 export type ReportPreviewResponse = z.infer<typeof ReportPreviewResponseSchema>;
 
 const ReworkHistoryEntrySchema = z.object({ id: z.string().uuid(), label: z.string(), at: z.string(), actor: z.string() }).strict();

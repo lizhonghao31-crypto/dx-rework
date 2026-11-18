@@ -1107,7 +1107,21 @@ export class ReworkInitiationService {
        ORDER BY orders.updated_at DESC,orders.rework_order_id`,
       values,
     );
-    return Promise.all(result.rows.map((row) => this.dto(this.database, row)));
+    const attachments = new Map<string, string[]>();
+    if (result.rows.length) {
+      const files = await this.database.query<{ entity_id: string; attachment_id: string }>(
+        `SELECT entity_id,attachment_id FROM attachments
+         WHERE entity_type='rework_order' AND entity_id=ANY($1::text[])
+         ORDER BY entity_id,created_at,attachment_id`,
+        [result.rows.map((row) => row.rework_order_id)],
+      );
+      for (const file of files.rows) {
+        const ids = attachments.get(file.entity_id) ?? [];
+        ids.push(file.attachment_id);
+        attachments.set(file.entity_id, ids);
+      }
+    }
+    return result.rows.map((row) => this.projectOrder(row, attachments.get(row.rework_order_id) ?? []));
   }
 
   async listInitiationOptions(
@@ -1796,6 +1810,10 @@ export class ReworkInitiationService {
     client: Pick<PoolClient, "query">,
     row: ReworkOrderRow,
   ): Promise<ReworkOrderResponse> {
+    return this.projectOrder(row, await this.attachmentIds(client, row.rework_order_id));
+  }
+
+  private projectOrder(row: ReworkOrderRow, attachmentIds: string[]): ReworkOrderResponse {
     const factory = factoryFromRow(row);
     return {
       reworkOrderId: row.rework_order_id,
@@ -1829,7 +1847,7 @@ export class ReworkInitiationService {
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
-      attachmentIds: await this.attachmentIds(client, row.rework_order_id),
+      attachmentIds,
       hasOtherOpenStyleOrder: Boolean(row.has_other_open_style_order),
       version: row.version,
       createdAt: row.created_at.toISOString(),

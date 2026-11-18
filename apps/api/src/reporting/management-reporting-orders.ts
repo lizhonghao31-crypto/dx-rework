@@ -2,9 +2,10 @@ import { type Queryable, type FactRow, TIMEZONE, type ReworkListCursor } from ".
 
 const CLOSED_ORDER_RANK_SQL = "CASE WHEN order_record.status IN ('completed','cancelled') THEN 1 ELSE 0 END";
 
-export async function fetchFacts(source: Queryable, options: {
+export type ReworkFactOptions = {
   q?: string;
   status?: string;
+  queueStatuses?: readonly string[];
   reworkKind?: "qc_rework" | "inhouse_finishing";
   responsibilityType?: string;
   currentHandlerUserId?: string;
@@ -21,7 +22,19 @@ export async function fetchFacts(source: Queryable, options: {
   workTaskActorUserId?: string;
   includeTemporaryProxyTasks?: boolean;
   relatedOrderActorUserId?: string;
-}) {
+};
+
+export async function fetchFacts(source: Queryable, options: ReworkFactOptions) {
+  const query = reworkFactsQuery(options, false);
+  return source.query<FactRow>(query.text, query.values);
+}
+
+export async function fetchQueueCounts(source: Queryable, options: ReworkFactOptions) {
+  const query = reworkFactsQuery(options, true);
+  return source.query<{ status:string; total_count:string }>(query.text, query.values);
+}
+
+function reworkFactsQuery(options: ReworkFactOptions, countsOnly: boolean) {
   const values: unknown[] = [];
   const bind = (value: unknown): string => { values.push(value); return `$${values.length}`; };
   const where = ["order_record.status<>'deleted'"];
@@ -38,6 +51,7 @@ export async function fetchFacts(source: Queryable, options: {
       ))`);
   }
   if (options.status) where.push(`order_record.status=${bind(options.status)}`);
+  if (options.queueStatuses) where.push(`order_record.status=ANY(${bind(options.queueStatuses)}::text[])`);
   if (options.reworkKind) where.push(`order_record.rework_kind=${bind(options.reworkKind)}`);
   if (options.responsibilityType) where.push(`EXISTS(SELECT 1 FROM responsibility_types types WHERE types.rework_order_id=order_record.rework_order_id AND types.responsibility_type=${bind(options.responsibilityType)})`);
   if (options.currentHandlerUserId) where.push(`COALESCE(todo_stats.current_handler,current_determination.handler_user_id,order_record.merchandiser_user_id)=${bind(options.currentHandlerUserId)}::uuid`);
@@ -82,7 +96,7 @@ export async function fetchFacts(source: Queryable, options: {
     if (options.includeTemporaryProxyTasks) {
       visibility.push("visible_member.person_type_snapshot='temporary'");
     }
-    where.push(`EXISTS(
+    where.push(`(${options.queueStatuses ? "order_record.status<>'in_progress' OR " : ""}EXISTS(
       SELECT 1
       FROM rework_work_tasks visible_task
       JOIN rework_work_task_members visible_member ON visible_member.work_task_id=visible_task.work_task_id
@@ -90,15 +104,14 @@ export async function fetchFacts(source: Queryable, options: {
       WHERE visible_task.rework_order_id=order_record.rework_order_id
         AND visible_task.status='active'
         AND (${visibility.join(" OR ")})
-    )`);
+    ))`);
   }
-  const limit = bind(options.limit);
-  const offset = bind(options.offset ?? 0);
   const orderBy = options.openFirst
     ? `${CLOSED_ORDER_RANK_SQL} ASC,order_record.updated_at DESC,order_record.rework_order_id DESC`
     : "order_record.updated_at DESC,order_record.rework_order_id DESC";
-  return source.query<FactRow>(
-    `WITH current_determinations AS (
+  const tail = countsOnly ? "GROUP BY order_record.status"
+    : `ORDER BY ${orderBy} LIMIT ${bind(options.limit)} OFFSET ${bind(options.offset ?? 0)}`;
+  return {text: `WITH current_determinations AS (
        SELECT determination.* FROM rework_responsibility_determinations determination
        WHERE NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations successor WHERE successor.replaces_determination_id=determination.determination_id)
      ), responsibility AS (
@@ -184,7 +197,7 @@ export async function fetchFacts(source: Queryable, options: {
          AND before_state->>'status' IS DISTINCT FROM after_state->>'status'
        ORDER BY entity_id,created_at DESC,event_id DESC
      )
-     SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,
+     SELECT ${countsOnly ? 'order_record.status,count(*)::text total_count' : `order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,
        order_record.status,order_record.rework_kind,
        CASE order_record.status
          WHEN 'draft' THEN 'N01' WHEN 'pending_process_configuration' THEN 'N02'
@@ -240,7 +253,7 @@ export async function fetchFacts(source: Queryable, options: {
            )
        ) attachment_count,
        order_record.updated_at,
-       count(*) OVER()::text total_count
+       count(*) OVER()::text total_count`}
      FROM rework_orders order_record
      LEFT JOIN current_determinations current_determination ON current_determination.rework_order_id=order_record.rework_order_id
      LEFT JOIN responsibility ON responsibility.rework_order_id=order_record.rework_order_id
@@ -251,7 +264,5 @@ export async function fetchFacts(source: Queryable, options: {
      LEFT JOIN followup_stats ON followup_stats.rework_order_id=order_record.rework_order_id
      LEFT JOIN latest_event ON latest_event.rework_order_id=order_record.rework_order_id
      WHERE ${where.join(" AND ")}
-     ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
-    values,
-  );
+     ${tail}`, values};
 }

@@ -1273,8 +1273,25 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       randomUUID(),
     );
     expect(activated).toMatchObject({ reworkStatus: "in_progress", tasksCreated: 2 });
-    const n04Started = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    const taskReads = correctnessBudget.spyOn(database, "query");
+    const n04Started = await work.list(tailAssign(), submitted.value.reworkOrderId).then(result => {
+      const sql = taskReads.mock.calls.map(([query]) => typeof query === "string" ? query : "");
+      expect(sql.filter(query => query.includes("member.work_task_id=ANY"))).toHaveLength(1);
+      expect(sql.filter(query => query.includes("jsonb_to_recordset") && query.includes("pending_return"))).toHaveLength(1);
+      return result;
+    }).finally(() => taskReads.mockRestore());
     expect(n04Started.reworkStatus).toBe("in_progress");
+    expect(n04Started.tasks).toHaveLength(2);
+    const queueReader = new ManagementReportingService(database);
+    const queueQuery = {
+      q: submitted.value.reworkNo!, status:"in_progress" as const, limit:15, page:1,
+      statuses:["pending_task_assignment","in_progress","pending_order_review"] as const,
+    };
+    const queue = await queueReader.listReworkQueue(worker(), {...queueQuery,statuses:[...queueQuery.statuses]});
+    expect(queue.statuses).toEqual([{status:"in_progress",totalCount:1}]);
+    expect(queue.page.items.map(item=>item.reworkOrderId)).toEqual([submitted.value.reworkOrderId]);
+    const emptyQueuePage = await queueReader.listReworkQueue(worker(), {...queueQuery,statuses:[...queueQuery.statuses],page:2});
+    expect(emptyQueuePage.page).toMatchObject({items:[],totalCount:1,canViewReports:false});
     const workerTask = n04Started.tasks.find((item) => item.executionKind === "worker")!;
     const tailTask = n04Started.tasks.find((item) => item.executionKind === "tail_inspection")!;
     expect(workerTask).toMatchObject({
@@ -2240,7 +2257,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // 2026-09-15: identical finance reads, historical voucher scope, no new writes.
     const globalReader=actor(ids.financeRead,["finance_read"],"rework:finance_nodes:read","external_responsibility:view","tools:user","wage:settlement_mark");
     for (const node of FinanceNodeKeySchema.options) expect(await readFinanceNode(database,globalReader,submitted.value.reworkOrderId,node)).toEqual(reads.get(node));
-    const historicalBatch=await external.get(globalReader,submitted.value.reworkOrderId);
+    const ledgerReads=correctnessBudget.spyOn(database,"query");
+    const historicalBatch=await external.get(globalReader,submitted.value.reworkOrderId).then(result=>{
+      const sql=ledgerReads.mock.calls.map(([query])=>typeof query==="string"?query:"");
+      expect(sql.filter(query=>query.includes("LATERAL external_deduction_scope(scoped.case_id)"))).toHaveLength(1);
+      expect(sql.filter(query=>query.includes("WHERE source.case_id=ANY"))).toHaveLength(1);
+      expect(sql.filter(query=>query.includes("WHERE target_case.case_id=ANY")&&query.includes("can_payables_follow_up"))).toHaveLength(1);
+      return result;
+    }).finally(()=>ledgerReads.mockRestore());
+    expect(historicalBatch!.cases.length+(historicalBatch!.historicalCases?.length??0)).toBeGreaterThan(1);
     expect(historicalBatch!.canAllocateSuppliers).toBe(false);
     const historicalCase=historicalBatch!.historicalCases!.find(item=>item.caseId===processingCaseId)!;
     expect(historicalCase.evidenceAttachments?.map(file=>file.attachmentId).sort()).toEqual([...voucherIds].sort());

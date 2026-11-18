@@ -59,6 +59,13 @@ type Result<T> = Readonly<{ value: T; reused: boolean }>;
 const hash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope, payload })).digest("hex");
 const numberValue = (value: string | number): number => Number(value);
+const WORK_TASK_READ = `SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,
+  task.assignment_mode,task.status,item.process_name,item.execution_kind,item.special_process_type,item.pricing_unit,
+  COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment
+    WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective'
+    ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price
+  FROM rework_work_tasks task
+  JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id`;
 type Decimal = Readonly<{ units: bigint; scale: number }>;
 const MONEY_SCALE = 3;
 
@@ -1068,7 +1075,7 @@ export class WorkReportingService {
   }
 
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> {
-    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.execution_kind,item.special_process_type,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
+    const result = await client.query<WorkTaskRow>(`${WORK_TASK_READ} WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
   }
 
@@ -1209,43 +1216,77 @@ export class WorkReportingService {
 
   private async taskDto(client: Pick<Pool, "query"> | PoolClient, id: string, actor: TrustedActorContext): Promise<WorkTaskResponse> {
     const task = await this.task(client as PoolClient, id, false);
-    const members = await this.members(client, id);
-    const ownWorker = task.execution_kind === "worker" && this.isOwnWorker(actor, members);
-    const ownTailInspector = task.execution_kind === "tail_inspection" && this.isOwnTailInspector(actor, members);
-    const proxyTask = this.canProxyReport(actor, members);
-    const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor) || this.isIeExecutionReader(actor);
-    if (!manager && !ownWorker && !ownTailInspector && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
-    const returnScope = members.filter((person) => isRootActor(actor)
-      || ((ownWorker || ownTailInspector) && person.app_user_id === actor.actorId)
-      || (proxyTask && person.person_type === "temporary")).map((person) => person.person_id);
-    const used = await client.query<{ quantity: string; returned_report: WorkTaskResponse["returnedReport"] | null }>(
-      `WITH pending_return AS (
-        SELECT rejection.reason,report.actual_quantity
-        FROM rework_work_reports report
-        JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
-        WHERE report.work_task_id=$1 AND report.rework_order_id=$3 AND report.configuration_item_id=$4
-          AND report.status='submitted' AND rejection.rework_order_id=report.rework_order_id
-          AND cardinality($2::uuid[])>0
-          AND (rejection.rejected_person_id IS NULL OR rejection.rejected_person_id=ANY($2::uuid[]))
-          AND NOT EXISTS(SELECT 1 FROM rework_work_reports successor WHERE successor.resubmits_work_report_id=report.work_report_id)
-      ) SELECT COALESCE(sum(report.actual_quantity),0) AS quantity,
-        (SELECT CASE WHEN count(*)=1 THEN jsonb_agg(jsonb_build_object('reason',reason,'originalQuantity',actual_quantity))->0 END FROM pending_return) AS returned_report
-      FROM rework_work_reports report WHERE report.work_task_id=$1 AND report.status='submitted'
-        AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)`,
-      [task.work_task_id,returnScope,task.rework_order_id,task.configuration_item_id],
+    return (await this.projectAuthorizedTasks(client, [task], actor))[0]!;
+  }
+
+  private async projectAuthorizedTasks(client: Pick<Pool, "query">, tasks: readonly WorkTaskRow[], actor: TrustedActorContext): Promise<WorkTaskResponse[]> {
+    if (!tasks.length) return [];
+    const memberRows = await client.query<PersonRow & { work_task_id: string }>(
+      `SELECT member.work_task_id,member.person_id,member.person_type_snapshot AS person_type,
+          member.display_name_snapshot AS display_name,person.app_user_id
+       FROM rework_work_task_members member JOIN business_people person ON person.person_id=member.person_id
+       WHERE member.work_task_id=ANY($1::uuid[]) ORDER BY member.work_task_id,member.person_id`,
+      [tasks.map((task) => task.work_task_id)],
     );
-    const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0");
-    const personalView = (ownWorker || ownTailInspector) && !manager && !proxyTask;
-    const visibleMembers = personalView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
-    return {
+    const membersByTask = new Map<string, PersonRow[]>();
+    for (const member of memberRows.rows) {
+      const members = membersByTask.get(member.work_task_id) ?? [];
+      members.push(member);
+      membersByTask.set(member.work_task_id, members);
+    }
+    const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor) || this.isIeExecutionReader(actor);
+    const visible = tasks.map((task) => {
+      const members = membersByTask.get(task.work_task_id) ?? [];
+      const ownWorker = task.execution_kind === "worker" && this.isOwnWorker(actor, members);
+      const ownTailInspector = task.execution_kind === "tail_inspection" && this.isOwnTailInspector(actor, members);
+      const proxyTask = this.canProxyReport(actor, members);
+      if (!manager && !ownWorker && !ownTailInspector && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
+      const returnScope = members.filter((person) => isRootActor(actor)
+        || ((ownWorker || ownTailInspector) && person.app_user_id === actor.actorId)
+        || (proxyTask && person.person_type === "temporary")).map((person) => person.person_id);
+      const visibleMembers = (ownWorker || ownTailInspector) && !manager && !proxyTask
+        ? members.filter((person) => person.app_user_id === actor.actorId) : members;
+      return { task, members, visibleMembers, returnScope };
+    });
+    const used = await client.query<{ work_task_id: string; quantity: string; returned_report: WorkTaskResponse["returnedReport"] | null }>(
+      `WITH authorized AS MATERIALIZED (
+        SELECT * FROM jsonb_to_recordset($1::jsonb) AS selected(work_task_id uuid,rework_order_id uuid,configuration_item_id uuid,return_scope uuid[])
+      ), pending_return AS (
+        SELECT task.work_task_id,
+          CASE WHEN count(*)=1 THEN jsonb_agg(jsonb_build_object('reason',rejection.reason,'originalQuantity',report.actual_quantity))->0 END AS returned_report
+        FROM authorized task JOIN rework_work_reports report ON report.work_task_id=task.work_task_id
+        JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
+        WHERE report.rework_order_id=task.rework_order_id AND report.configuration_item_id=task.configuration_item_id
+          AND report.status='submitted' AND rejection.rework_order_id=report.rework_order_id
+          AND cardinality(task.return_scope)>0
+          AND (rejection.rejected_person_id IS NULL OR rejection.rejected_person_id=ANY(task.return_scope))
+          AND NOT EXISTS(SELECT 1 FROM rework_work_reports successor WHERE successor.resubmits_work_report_id=report.work_report_id)
+        GROUP BY task.work_task_id
+      ), quantities AS (
+        SELECT report.work_task_id,sum(report.actual_quantity) AS quantity
+        FROM authorized task JOIN rework_work_reports report ON report.work_task_id=task.work_task_id
+        WHERE report.status='submitted'
+          AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
+        GROUP BY report.work_task_id
+      ) SELECT task.work_task_id,COALESCE(quantities.quantity,0) AS quantity,pending_return.returned_report
+      FROM authorized task LEFT JOIN quantities USING(work_task_id) LEFT JOIN pending_return USING(work_task_id)`,
+      [JSON.stringify(visible.map(({ task, returnScope }) => ({ work_task_id: task.work_task_id,
+        rework_order_id: task.rework_order_id, configuration_item_id: task.configuration_item_id, return_scope: returnScope })))],
+    );
+    const usedByTask = new Map(used.rows.map((row) => [row.work_task_id, row]));
+    return visible.map(({ task, members, visibleMembers }) => {
+      const report = usedByTask.get(task.work_task_id);
+      const submittedQuantity = numberValue(report?.quantity ?? "0");
+      return {
       workTaskId: task.work_task_id, reworkOrderId: task.rework_order_id, configurationItemId: task.configuration_item_id,
       processName: task.execution_kind === "tail_inspection" && task.special_process_type !== "other_craft" ? "整查" : task.process_name, executionKind: task.execution_kind, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
       unitPrice: task.unit_price === null ? null : numberValue(task.unit_price), mode: task.assignment_mode, version: task.task_version, status: task.status,
       canSubmitReport: this.canSubmitReport(actor, task, members) && submittedQuantity === 0,
       members: visibleMembers.map(({ person_id, display_name, person_type }) => ({ personId: person_id, displayName: display_name, personType: person_type })),
       submittedQuantity, remainingQuantity: submittedQuantity > 0 ? 0 : numberValue(task.planned_quantity),
-      ...(submittedQuantity === 0 && used.rows[0]?.returned_report ? { returnedReport: used.rows[0].returned_report } : {}),
-    };
+      ...(submittedQuantity === 0 && report?.returned_report ? { returnedReport: report.returned_report } : {}),
+      };
+    });
   }
 
   private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> {
@@ -1265,15 +1306,12 @@ export class WorkReportingService {
     }
     if (!manager && filters.length === 0) error("当前用户无权读取返工执行任务", 403, "FORBIDDEN");
     const access = manager ? "" : ` AND (${filters.map((value) => `(${value})`).join(" OR ")})`;
-    const result = await client.query<{ work_task_id: string }>(
-      `SELECT task.work_task_id
-       FROM rework_work_tasks task
-       JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id
-       WHERE task.rework_order_id=$1 AND task.status='active'${access}
+    const result = await client.query<WorkTaskRow>(
+      `${WORK_TASK_READ} WHERE task.rework_order_id=$1 AND task.status='active'${access}
        ORDER BY task.created_at,task.work_task_id`,
-      values,
+      manager ? [orderId] : values,
     );
-    return Promise.all(result.rows.map((row) => this.taskDto(client, row.work_task_id, actor)));
+    return this.projectAuthorizedTasks(client, result.rows, actor);
   }
 
   private async mutate<T>(actor: TrustedActorContext, action: string, key: string, payload: unknown, statusCode: number, work: (client: PoolClient) => Promise<T>): Promise<Result<T>> { const client = await this.database.connect(); try { await client.query("BEGIN"); const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key, requestHash: hash(action, payload), expiresAt: new Date(Date.now()+24*60*60*1000) }, async () => ({ statusCode, response: await work(client) })); await client.query("COMMIT"); return { value: outcome.response, reused: outcome.reused }; } catch (cause) { await client.query("ROLLBACK"); throw cause; } finally { client.release(); } }

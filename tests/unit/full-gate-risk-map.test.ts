@@ -6,6 +6,16 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES,
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('maps rework collection consumers to their native authorization, queue and closure regressions',()=>{
+ const suites=['full-business-chain','management-reporting','production-closure','m01-production-statistics'];
+ for(const file of ['apps/api/src/rework/work-reporting-service.ts','apps/api/src/rework/rework-business-detail-service.ts',
+  'apps/api/src/rework/fixed-external-responsibility-service.ts','apps/api/src/rework/production-external-responsibility-service.ts',
+  'apps/api/src/reporting/management-reporting-orders.ts','apps/api/src/production-platform/order-closure-service.ts',
+  'apps/web/src/reporting/reporting-client.ts','apps/web/src/reporting/workflow-queue-page.tsx','packages/contracts/src/reporting.ts']){
+  expect(classifyFullGatePaths([file]).mappedPostgresTests,file).toEqual(expect.arrayContaining(suites.map(name=>`tests/integration/${name}-postgres.test.ts`)));
+ }
+});
+
 it('retains both original authenticated draft/receipt browsers for every recovery producer and current page consumer',()=>{
  const suites=['tests/integration/instruction-recovery-native-browser-postgres.test.ts','tests/integration/development-creation-draft-native-browser-postgres.test.ts'];
  for(const path of ['apps/api/src/production-platform/instruction-command-receipts.ts','apps/api/src/production-platform/po-customer-date-service.ts','apps/api/src/production-platform/production-instruction-service.ts','apps/api/src/production-platform/production-instruction-routes.ts','packages/contracts/src/production-instruction.ts','apps/web/src/instruction-recovery-state.ts','apps/web/src/use-instruction-recovery.ts','apps/web/src/production-instruction-panel.tsx','apps/web/src/development-creation-draft.ts','apps/web/src/use-development-creation-draft.ts','apps/web/src/digital-designer-workspace.tsx','apps/web/src/digital-development-create-form.tsx',...suites]){
