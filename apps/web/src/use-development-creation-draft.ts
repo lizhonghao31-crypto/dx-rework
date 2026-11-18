@@ -6,6 +6,15 @@ import {recoverDevelopmentSubmission,type PendingDevelopmentSubmission} from './
 import {readCreationDraft,writeCreationDraft,clearCreationDraft,type CreationDraftIdentity,type CreationDraftRecord,type CreationDraftSnapshot} from './development-creation-draft.js';
 
 export type CreationOutgoing={path:string;method:'POST'|'PUT';key:string;body:string;sourceId:string|null;beforeVersion:number|null;native?:PendingDevelopmentSubmission};
+async function readCreationSource(record:CreationDraftRecord){
+ const sheet=record.phase!=='draft'&&record.sourceId?await digitalRequest<DevelopmentSheet>(`sources/${record.sourceId}/development`):undefined;
+ if(sheet&&record.phase!=='draft'&&sheet.sourceId!==record.sourceId)throw Error('原开发档案身份不匹配，不能恢复办理');
+ if(record.phase==='bound'&&sheet){
+  if(sheet.productionOrderId)return {sheet,mode:'complete' as const,problem:'原开发档案已有客户订单；本页旧草稿保留，不能重新创建或确认。'};
+  if(sheet.version!==(record.version??0))return {sheet,mode:'conflict' as const,problem:'原开发档案版本已变化；本页草稿保留，请先核对，未自动保存。'};
+ }
+ return {sheet,mode:record.phase==='pending'?'pending' as const:'editable' as const,problem:''};
+}
 export function useDevelopmentCreationDraft(){
  const current=useRef<CreationDraftRecord|null>(null),owner=useRef<CreationDraftIdentity|null>(null),epoch=useRef(0),view=useRef(''),loaded=useRef(''),blocked=useRef(false),resolved=useRef<{path:string;key:string}|undefined>(undefined);
  const [viewId,setViewId]=useState(''),[restored,setRestored]=useState<CreationDraftRecord|null>(null),[sourceSheet,setSourceSheet]=useState<DevelopmentSheet|undefined>(),[problem,setProblem]=useState(''),[mode,setMode]=useState<'none'|'editable'|'pending'|'conflict'|'complete'>('none');
@@ -14,29 +23,35 @@ export function useDevelopmentCreationDraft(){
   writeCreationDraft(window.sessionStorage,record,proof);current.current=record;resolved.current=undefined;blocked.current=record.phase==='pending';
  };
  const load=async(access:DigitalAccessOptions,creationEnabled:boolean,editor:string|null)=>{
-  const identity={actorId:access.actorId,environment:window.location.origin+import.meta.env.BASE_URL},namespace=JSON.stringify(identity),stamp=epoch.current;
+  const identity={actorId:access.actorId,environment:window.location.origin+import.meta.env.BASE_URL},namespace=JSON.stringify(identity);
   if(loaded.current===namespace)return null;
+  const stamp=++epoch.current;
+  if(owner.current){current.current=null;view.current='';resolved.current=undefined;setRestored(null);setViewId('');setSourceSheet(undefined);setMode('none');setProblem('');}
   owner.current=identity;loaded.current=namespace;blocked.current=true;
   try{
-   const record=readCreationDraft(window.sessionStorage,identity);if(!record){blocked.current=false;return null;}let protection=false;
-   if(record.phase!=='draft'&&record.sourceId){const sheet=await digitalRequest<DevelopmentSheet>(`sources/${record.sourceId}/development`);if(stamp!==epoch.current)return null;if(sheet.sourceId!==record.sourceId)throw Error('原开发档案身份不匹配，不能恢复办理');setSourceSheet(sheet);
-    if(record.phase==='bound'&&(sheet.productionOrderId||record.version===null&&sheet.version!==0||record.version!==null&&sheet.version!==record.version)){protection=true;setMode(sheet.productionOrderId?'complete':'conflict');setProblem(sheet.productionOrderId?'原开发档案已有客户订单；本页旧草稿保留，不能重新创建或确认。':'原开发档案版本已变化；本页草稿保留，请先核对，未自动保存。');}
-    else setMode(record.phase==='pending'?'pending':'editable');
-   }else{
-    if(!access.create||!creationEnabled)throw Error('当前身份不能创建；本页原草稿仍保留。');
-    setMode(record.phase==='pending'?'pending':'editable');
-   }
+   const record=readCreationDraft(window.sessionStorage,identity);if(!record){blocked.current=false;return null;}
+   if((record.phase==='draft'||!record.sourceId)&&(!access.create||!creationEnabled))throw Error('当前身份不能创建；本页原草稿仍保留。');
+   const hydrated=await readCreationSource(record);
    if(stamp!==epoch.current)return null;current.current=record;view.current=record.viewId;setViewId(record.viewId);setRestored(record);
-   blocked.current=record.phase==='pending'||protection;
+   setSourceSheet(hydrated.sheet);setMode(hydrated.mode);setProblem(hydrated.problem);
+   blocked.current=hydrated.mode!=='editable';
    // Unrelated existing documents never get an unsent new-order snapshot.
    if(editor&&(record.phase==='draft'||record.sourceId!==editor))return null;
    return record.open?record.snapshot.intent:null;
-  }catch(error){blocked.current=true;setProblem(error instanceof Error?error.message:'本页创建资料尚未核实，不能开启新单');return null;}
+  }catch(error){if(stamp===epoch.current){blocked.current=true;setProblem(error instanceof Error?error.message:'本页创建资料尚未核实，不能开启新单');}return null;}
  };
- const open=()=>{
+ const open=async()=>{
   if(!owner.current||blocked.current&&!current.current)throw Error(problem||'当前身份或本页草稿尚未核实，不能创建');
   const record=current.current;
-  if(record){const protection=blocked.current;persist({...record,open:true});blocked.current=blocked.current||protection;setRestored(record);setViewId(record.viewId);setMode(record.phase==='pending'?'pending':mode==='conflict'||mode==='complete'?mode:'editable');return record.snapshot.intent;}
+  if(record){
+   // In-page navigation can remount the form before another access load.
+   // Read the original bound identity/version before mounting that editor.
+   const stamp=epoch.current,hydrated=await readCreationSource(record);
+   if(stamp!==epoch.current||current.current!==record)return null;
+   const next={...record,open:true};persist(next);
+   blocked.current=hydrated.mode!=='editable';setRestored(next);setViewId(next.viewId);setSourceSheet(hydrated.sheet);setMode(hydrated.mode);setProblem(hydrated.problem);
+   return next.snapshot.intent;
+  }
   // Local view identity only, never an idempotency key or source identifier.
   view.current=crypto.randomUUID();setViewId(view.current);setRestored(null);setSourceSheet(undefined);setMode('editable');return 'development' as const;
  };

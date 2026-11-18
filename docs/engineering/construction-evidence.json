@@ -2,7 +2,7 @@
   "version": 1,
   "base": "d64be1e79010c1bdea8a0215b181a3bd88f4b7cb",
   "risk": "full",
-  "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
+  "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
   "rules": [
     {
       "rule": "Restore original designer parent intent and raw child draft across genuine browser reload without creating or replaying business commands",
@@ -24,7 +24,7 @@
       "oldTests": [
         "tests/unit/development-creation-draft.test.ts"
       ],
-      "expectation": "Original development/certain-order/preorder parent intent and raw values/row identities survive actual page.reload with zero automatic writes beyond1200ms. Explicit original save alone creates, exact acknowledged source is reused. Unknown creation remains blocked; original publish/confirm each recover through exact original-key GET without another POST. Known source acknowledgement remains durable if following read fails. Unretained local file bytes require explicit reselection; legacy live C/D/E/F/PACKSTOP terminals are not inferred.",
+      "expectation": "Original development/certain-order/preorder parent intent and raw values/row identities survive actual page.reload with zero automatic writes beyond1200ms. Explicit original save alone creates, exact acknowledged source is reused. Unknown creation remains blocked; original publish/confirm each recover through exact original-key GET without another POST. Known source acknowledgement remains durable if following read fails. Unretained local file bytes require explicit reselection; legacy live C/D/E/F/PACKSTOP terminals are not inferred. In the same SPA tab, closing and reopening a bound draft verifies the authoritative source/version before editing, continues across multiple saves, and preserves the local draft without mutating a newer server version.",
       "checks": [
         "recovery-unit",
         "recovery-native",
@@ -54,7 +54,7 @@
       "expectation": "Original raw incomplete form restores after reload with no autosave. Server-committed but browser503 save and PO decision each use one original-key readonly GET, no duplicate PUT/POST. Confirm minimal success before optional latest-sheet read, preserve later draft and another unresolved envelope, keep known success on subsequent read failure. Future/corrupt/unwritable storage and changed version/round block replacement or implicit submission.",
       "checks": [
         "recovery-unit",
-        "recovery-native",
+        "recovery-instruction-native",
         "recovery-web-types",
         "recovery-lint"
       ]
@@ -84,7 +84,7 @@
       "expectation": "Save and decision namespaces never mix. Readonly RR transaction checks current access before original actor/key lookup; request/direction/hash mismatch stays unconfirmed and historical body never leaves API. Genuine approval revocation preserves receipt read in the same session, object-read revocation then denies; foreign object/actor/key denies. Business command/audit/plan state remains unchanged by GET. Original transaction refusal and post-commit sheet-read failure remain distinct.",
       "checks": [
         "recovery-unit",
-        "recovery-native",
+        "recovery-instruction-native",
         "recovery-api-types",
         "recovery-lint"
       ]
@@ -115,7 +115,8 @@
         "recovery-unit",
         "recovery-native",
         "recovery-protocol",
-        "recovery-lint"
+        "recovery-lint",
+        "recovery-instruction-native"
       ]
     }
   ],
@@ -123,46 +124,69 @@
     {
       "id": "recovery-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/review-stack-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/same-tab-review-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
-      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
-      "startedAt": "2026-11-18T04:13:36.243394+00:00",
-      "endedAt": "2026-11-18T04:13:40.829547+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-unit/command.log",
-      "logSha256": "97a092c64475db04b12eae29f0df591a226c2fc56b6c3c2ad8b55fa935d2ce71",
-      "context": "Approved BA100/PR-E and PO decision recovery, actual merged washing-navigation base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb, identical tree to tested12091c89. Current source includes cancellation1025 and actual1022/1024; actual release ancestry aligned before publication. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+      "startedAt": "2026-11-18T04:56:49.498428+00:00",
+      "endedAt": "2026-11-18T04:56:53.237764+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-unit/command.log",
+      "logSha256": "2a21566e42dbdaf40549516b7ca1dbed44d66d10beb04855a9228ce406fa8d4c",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
       "passed": 162,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bb37dcdcb5ad30567166302c393040b92c7056f1731669a52e2716043c661fc7"
+          "sha256": "9023b6434ba2e621393a6c787a57b8b9394dcb01fec7276a6137217cf5dd8e41"
         }
       ]
     },
     {
       "id": "recovery-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/review-stack-original-recovery/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-command-receipt-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/same-tab-review/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
-      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
-      "startedAt": "2026-11-18T04:13:24.066105+00:00",
-      "endedAt": "2026-11-18T04:15:34.862154+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/pg/review-stack-original-recovery/tests.log",
-      "logSha256": "802fd70bb11d894556d720fd24d76b12dc09cde56547f1431d2c9967e22adc4e",
-      "context": "Approved BA100/PR-E and PO decision recovery, actual merged washing-navigation base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb, identical tree to tested12091c89. Current source includes cancellation1025 and actual1022/1024; actual release ancestry aligned before publication. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
-      "passed": 15,
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+      "startedAt": "2026-11-18T04:54:59.254148+00:00",
+      "endedAt": "2026-11-18T04:56:20.322185+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/pg/same-tab-review/tests.log",
+      "logSha256": "fff8d616ca054d91862d663a8ea908c96730b248a6250e3ee9db7844190cec64",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
+      "passed": 8,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5229cbfe05c8cf01bd3ec1390663ea7afd082f417874cfd70ab25f5170a3a295"
+          "sha256": "9080c11a570b6f3170c6c0ded952606d4a9f47d1eb7cdae8ee157ab7da7227e1"
+        }
+      ]
+    },
+    {
+      "id": "recovery-instruction-native",
+      "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/same-tab-review-companion/tests.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+      "startedAt": "2026-11-18T04:57:48.880676+00:00",
+      "endedAt": "2026-11-18T04:59:27.242719+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/pg/same-tab-review-companion/tests.log",
+      "logSha256": "15852bb989c9511480e6d7c3d517d97a341af65549f5c80ac05f331bb41432c7",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8c4f44544e8595297dbe06b8585458a1dbb36a109baebd75a7661036ca6e9e38"
         }
       ]
     },
@@ -172,13 +196,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
-      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
-      "startedAt": "2026-11-18T04:13:41.150882+00:00",
-      "endedAt": "2026-11-18T04:13:59.970923+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-api-types/command.log",
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+      "startedAt": "2026-11-18T04:57:01.318470+00:00",
+      "endedAt": "2026-11-18T04:57:18.806309+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved BA100/PR-E and PO decision recovery, actual merged washing-navigation base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb, identical tree to tested12091c89. Current source includes cancellation1025 and actual1022/1024; actual release ancestry aligned before publication. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay."
     },
     {
       "id": "recovery-web-types",
@@ -186,13 +210,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
-      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
-      "startedAt": "2026-11-18T04:14:00.294833+00:00",
-      "endedAt": "2026-11-18T04:14:33.102722+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-web-types/command.log",
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+      "startedAt": "2026-11-18T04:57:19.106663+00:00",
+      "endedAt": "2026-11-18T04:57:48.612466+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved BA100/PR-E and PO decision recovery, actual merged washing-navigation base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb, identical tree to tested12091c89. Current source includes cancellation1025 and actual1022/1024; actual release ancestry aligned before publication. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay."
     },
     {
       "id": "recovery-lint",
@@ -200,13 +224,13 @@
       "command": "python3 /workspace/sla-instruction-recovery-20261117/lint-current.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
-      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
-      "startedAt": "2026-11-18T04:14:33.465107+00:00",
-      "endedAt": "2026-11-18T04:14:34.821365+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-lint/command.log",
-      "logSha256": "abf0e6e51b79f9ee36170ea1d125aa992aef3370a5770548630ba105eba26212",
-      "context": "Approved BA100/PR-E and PO decision recovery, actual merged washing-navigation base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb, identical tree to tested12091c89. Current source includes cancellation1025 and actual1022/1024; actual release ancestry aligned before publication. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+      "startedAt": "2026-11-18T04:56:53.520873+00:00",
+      "endedAt": "2026-11-18T04:56:54.463006+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-lint/command.log",
+      "logSha256": "5834ccf365e50cd00d4aacf53afe1f6b6400c3cfd355f227333d2bc353831910",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay."
     },
     {
       "id": "recovery-protocol",
@@ -214,13 +238,13 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
-      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
-      "startedAt": "2026-11-18T04:14:35.171636+00:00",
-      "endedAt": "2026-11-18T04:14:42.211305+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-protocol/command.log",
-      "logSha256": "f1028b330c1cff47db4c3d1e993bbdfc69ee5e81d26d60864022df43eed5ad95",
-      "context": "Approved BA100/PR-E and PO decision recovery, actual merged washing-navigation base d64be1e79010c1bdea8a0215b181a3bd88f4b7cb, identical tree to tested12091c89. Current source includes cancellation1025 and actual1022/1024; actual release ancestry aligned before publication. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
+      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
+      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+      "startedAt": "2026-11-18T04:56:54.826969+00:00",
+      "endedAt": "2026-11-18T04:57:00.992961+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-protocol/command.log",
+      "logSha256": "541fc00b1005274d1ba035d5ae590038a0562ae48a1143e41b35c7ba4f974c32",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
       "passed": 284,
       "failed": 0,
       "skipped": 0

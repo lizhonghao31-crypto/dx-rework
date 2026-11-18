@@ -39,7 +39,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(h.evidence,'pure-create-reload-'+mode+'.png'),fullPage:true});
   }catch(error){await writeFile(join(h.evidence,'pure-create-reload-'+mode+'-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
- it('saves a restored pure draft only on the explicit original save and reuses its acknowledged source after another reload',async()=>{
+ it('reuses the acknowledged source and current version when reopening a saved creation draft in the same tab and after reload',async()=>{
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer'),style='TEST-CREATION-SAVE-'+randomUUID();
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
@@ -49,12 +49,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect.poll(async()=>{const records=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));return records[0]?.phase;}).toBe('bound');
    const created=h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources'&&row.method==='POST');expect(created).toHaveLength(1);
    expect((await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rows).toEqual([{source_id:sheet.sourceId}]);
-   await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();expect(await page.getByRole('textbox',{name:'设计款号',exact:true}).inputValue()).toBe(style);await page.waitForTimeout(2700);
-   expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources'&&row.method==='POST')).toHaveLength(1);expect(h.requests.filter(row=>row.session===tab.session&&row.path===`/api/digital-production/sources/${sheet.sourceId}/development`&&row.method==='PUT')).toHaveLength(1);
-   const instructions=page.locator('#development-instructions'),details=instructions.locator('xpath=ancestor::details[1]');if(await details.count()&&!await details.evaluate(node=>(node as HTMLDetailsElement).open))await details.locator('summary').first().click();await instructions.fill('TEST explicit second save after restored source');
-   const second=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/digital-production/sources/${sheet.sourceId}/development`&&response.request().method()==='PUT');await save.click();expect((await second).status()).toBe(200);
+   const boundPath=`/api/digital-production/sources/${sheet.sourceId}/development`,countPuts=()=>h.requests.filter(row=>row.session===tab.session&&row.path===boundPath&&row.method==='PUT').length;
+   const reopen=async()=>{await page.getByRole('button',{name:'返回列表',exact:true}).click();await page.getByRole('button',{name:'新建开发订单',exact:true}).click();};
+   for(const [index,reload]of [false,true,false].entries()){
+    if(reload)await page.reload();else await reopen();
+    const field=page.getByRole('textbox',{name:'设计款号',exact:true});await field.waitFor();expect(await field.inputValue()).toBe(style);
+    if(reload)await page.waitForTimeout(2700);
+    const version=index+1;expect(countPuts()).toBe(version);
+    const instructions=page.locator('#development-instructions'),details=instructions.locator('xpath=ancestor::details[1]');if(await details.count()&&!await details.evaluate(node=>(node as HTMLDetailsElement).open))await details.locator('summary').first().click();
+    const text=`TEST explicit save after reopen ${version}`;await instructions.fill(text);
+    const savedAgain=page.waitForResponse(response=>new URL(response.url()).pathname===boundPath&&response.request().method()==='PUT');await save.click();
+    const result=await savedAgain;expect(result.status(),await result.text()).toBe(200);expect(result.request().postDataJSON().expectedVersion).toBe(version);
+    expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:version+1,document:{instructions:text}});
+   }
+   await page.getByRole('button',{name:'返回列表',exact:true}).click();
+   const service=new DigitalDevelopmentService(h.db,true,h.patternOrders),latest=await service.read(h.f.root,sheet.sourceId);
+   await service.save(h.f.root,sheet.sourceId,{expectedVersion:latest.version,document:{...latest.document!,instructions:'TEST newer authorized edit'}},randomUUID());
+   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await page.getByRole('alert').filter({hasText:'原开发档案版本已变化'}).waitFor();expect(await save.count()).toBe(0);expect(countPuts()).toBe(4);
    expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources'&&row.method==='POST')).toHaveLength(1);
-   expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:2,document:{instructions:'TEST explicit second save after restored source'}});
+   expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:5,document:{instructions:'TEST newer authorized edit'}});
   }catch(error){await writeFile(join(h.evidence,'explicit-save-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
  it('retains an acknowledged-server but browser-unknown source creation across real reload without issuing a duplicate source command',async()=>{
