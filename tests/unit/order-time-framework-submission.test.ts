@@ -29,6 +29,18 @@ describe('PR06 submission decision using merged PR01 only, no business writer en
   expect(text).toContain('0.34天');expect(text).toContain('最终交期仍可满足');expect(text).not.toContain('晚交0');
   expect(orderTimeGapText({lateMinutes:null})).toBe('完成时间尚待核实');
  });
+ it('reports final delivery as insufficient when a closed endpoint has exactly zero margin',()=>{
+  const item=scope();
+  item.input.customerDelivery.date='2026-11-07';
+  item.input.plan.company.nodes.pack={kind:'work',minutes:40*60,calendar:'continuous',reminder:{enabled:true,percent:70}};
+  const result=evaluate([item]);
+  expect(result.action).toBe('request_adjustment');
+  const milestones=result.candidates[0]!.milestones.map(row=>({...row,scopeRef:item.input.scopeRef}));
+  expect(milestones.find(row=>row.key==='planned_shipment')).toMatchObject({status:'insufficient',marginMinutes:0,lateMinutes:0});
+  const text=orderTimeGapText({lateMinutes:0,framework:{riskAccepted:false,milestones}});
+  expect(text).toContain('计划出货时间不足');expect(text).toContain('最终交期时间不足');
+  expect(text).not.toMatch(/晚0天|最终交期仍可满足/);
+ });
  it('requires explicit confirmation on the same adjustment submission and preserves accepted gaps',()=>{
   expect(evaluate([scope()],'adjustment').action).toBe('confirm_gap');
   const result=evaluate([scope()],'adjustment',true);expect(result.action).toBe('adopt');expect(result.riskAccepted).toBe(true);expect(result.gaps[0]!.lateMinutes).toBe(480);
