@@ -87,6 +87,16 @@ export function nodeTerminationLabel(node:JourneyNode):string|null{
  const unknown=timings.some(timing=>timing.status==='unknown')||fixedStop&&fixed.some(target=>target.progress.ownSla.state==='unknown');
  return (node.state==='cancelled'?'已取消 · ':'')+(unknown?'已终止 · 责任时间待核':'计时已终止');
 }
+/** Detail selection must not promote one stopped PO/window to the whole node.
+ * Keep the existing label contract; any other unfinished responsibility proof
+ * (including an unknown one) prevents whole-node exclusion or a read-only fallback. */
+export function nodeIsTerminated(node:JourneyNode):boolean{
+ if(!nodeTerminationLabel(node))return false;
+ const timings=[...(node.timings??[]),...(node.timing?[node.timing]:[])];
+ if(timings.some(timing=>timing.kind!=='estimate'&&!timing.termination&&timing.status!=='not_applicable'&&!timing.status.startsWith('completed')))return false;
+ return !(node.fixedTargets??[]).some(target=>!target.progress.businessCompleted&&target.progress.goalDelta.kind!=='terminated');
+}
+export const nodeIsInProgress=(node:JourneyNode)=>['active','blocked'].includes(node.state)&&!nodeIsTerminated(node);
 export function stageTimes(stage: OrderJourney["stages"][number]) {
   if (stage.state === "not_applicable") return { expected: "不适用", actual: "不适用" };
   if (stage.state === "unavailable") return { expected: "无可见时间", actual: "无可见时间" };
@@ -186,7 +196,7 @@ export function journeyDetailSelection(order: OrderJourney, context: CockpitCont
   const historicalRow = nodes.find(node => node.instanceId === context.row);
   const requested = (context.expanded ?? "").split(",").filter(key => order.stages.some(stage => stage.key === key));
   const current = nodes.filter(node => node.current && node.state !== "not_applicable");
-  const working = current.filter(node => !nodeTerminationLabel(node)&&(node.state === "active" || node.state === "blocked"));
+  const working = current.filter(nodeIsInProgress);
   const completed = current.filter(node => node.state === "completed");
   const fallback = working[0] ?? current.find(node => node.state === "pending" && node.records.length > 0)
     ?? completed.at(-1) ?? current.find(node => node.state !== "unavailable");
@@ -195,7 +205,7 @@ export function journeyDetailSelection(order: OrderJourney, context: CockpitCont
     : context.round ? ["development"] : historicalRow ? [historicalRow.stage] : fallback ? [fallback.stage] : [];
   const inScope = nodes.filter(node => !stages.length || stages.includes(node.stage));
   const visible = inScope.filter(node => node.state !== "not_applicable" || node === explicitNode || node === historicalRow);
-  const selected = explicitNode ?? visible.find(node => node.current && !nodeTerminationLabel(node) && ["active", "blocked"].includes(node.state))
+  const selected = explicitNode ?? visible.find(node => node.current && nodeIsInProgress(node))
     ?? visible.find(node => node.current && node.state === "pending" && node.records.length > 0)
     ?? visible.filter(node => node.current && node.state === "completed").at(-1)
     ?? visible.find(node => node.current && node.state !== "unavailable");

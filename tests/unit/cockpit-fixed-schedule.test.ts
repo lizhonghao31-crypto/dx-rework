@@ -1,9 +1,9 @@
-import {nodeOverdue,nodeStatus,nodeTerminationLabel,stageStatus,representativeCockpitNodes,matchingNodes} from '../../apps/web/src/digital-journey-cockpit-model.js';
+import {nodeOverdue,nodeStatus,nodeTerminationLabel,nodeIsInProgress,nodeIsTerminated,stageStatus,representativeCockpitNodes,matchingNodes} from '../../apps/web/src/digital-journey-cockpit-model.js';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {originalNodeDeadlineLabel} from '../../apps/web/src/journey-sla-details.js';
 import {describe,it,expect} from 'vitest';
-import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {JourneyNode,JourneyTiming,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {evaluateFixedScheduleScope,type ScheduleScopeInput} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
 import {CockpitActualDates,CockpitFixedTargetDates,cockpitTargetDifference,cockpitOwnStatus,cockpitDuration,cockpitDurationRange,observedTargetDelta,cockpitScopeProgress,cockpitScheduleReason} from '../../apps/web/src/cockpit-fixed-schedule.js';
 import {CockpitNodeSummary} from '../../apps/web/src/cockpit-node-summary.js';
@@ -11,6 +11,28 @@ import {cockpitNodeStatus} from '../../apps/web/src/cockpit-node-rows.js';
 const scope=(id:string,end='2026-11-10T10:00:00.000Z'):ScheduleScopeInput=>({scopeRef:'po:'+id,lineId:id,targetRevision:'TEST1',work:[{id:'work',canonicalWorkRef:'work:'+id,dependsOn:[],start:'2026-11-10T08:00:00.000Z',end,minutes:120,calendar:'continuous',responsibilitySlaRef:'TEST original adopted',responsibilityMinutes:120,responsibilityCalendar:'continuous'}],facts:{work:{ready:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},clockStart:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},completed:{precision:'unknown'},businessCompleted:false,waitingForPredecessors:false,evidenceRefs:['TEST original readiness']}},terminalIds:['work'],customerGoal:end});
 const projected=(input=scope('A'),now='2026-11-10T10:00:00.000Z')=>evaluateFixedScheduleScope(input,now).nodes[0]!;
 const node=(id:string,p=projected()):JourneyNode=>({key:'bulk_cutting',instanceId:id,label:'开裁',stage:'cutting',state:'active',current:true,round:1,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'running',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,fixedTargets:[{scopeRef:p.scopeRef,lineId:id,progress:p}]});
+const responsibility=(id:string,stopped=false):JourneyTiming=>({id,label:'TEST original PO '+id,stage:'cutting',kind:'duration',status:stopped?'terminated':'running',actualStart:'2026-11-10T08:00:00.000Z',actualEnd:null,target:{at:'2026-11-10T10:00:00.000Z',reasons:[]},original:{at:'2026-11-10T10:00:00.000Z',reasons:[]},current:{at:'2026-11-10T10:00:00.000Z',reasons:[]},forecast:{at:null,reasons:[]},forecastBasis:'unknown',...(stopped?{termination:{kind:'special_closure',at:'2026-11-10T14:00:00.000Z',sourceRef:'TEST exact original closure',elapsedSeconds:21600,overdueSeconds:14400}}:{})});
+it.each(['active','blocked'] as const)('excludes a stopped %s from detail progress but preserves state, missing A and frozen240 minutes',state=>{
+ const p=evaluateFixedScheduleScope(scope('A'),'2026-11-11T14:00:00.000Z',{kind:'special_closure',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value={...node('A',p),state},before=structuredClone(value);
+ expect(nodeIsInProgress(value)).toBe(false);expect(nodeIsTerminated(value)).toBe(true);expect(value.fixedTargets![0]!.progress.ownSla.overdueMinutes).toEqual({minimum:240,maximum:240});expect(value).toEqual(before);
+ value.fixedTargets![0]!.progress.ownSla.state='unknown';expect(nodeIsInProgress(value)).toBe(false);
+});
+it('keeps real multi-scope progress and mixed original timing DTOs open instead of reusing the any-termination label as a whole-node decision',()=>{
+ const stopped=evaluateFixedScheduleScope(scope('A'),'2026-11-10T14:00:00.000Z',{kind:'special_closure',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value=node('A',stopped);
+ value.fixedTargets!.push(node('B').fixedTargets![0]!);value.timings=[responsibility('po:A',true),responsibility('po:B')];const before=structuredClone(value);
+ expect(nodeTerminationLabel(value)).toBe('计时已终止');expect(nodeIsTerminated(value)).toBe(false);expect(nodeIsInProgress(value)).toBe(true);expect(value).toEqual(before);
+ delete value.fixedTargets;expect(nodeIsInProgress(value)).toBe(true);
+ value.timings![1]!.status='unknown';expect(nodeIsInProgress(value)).toBe(true);
+ value.timings![1]!.status='completed_unrated';expect(nodeIsInProgress(value)).toBe(false);
+});
+it('retains an unfinished fixed scope even when all available legacy timings are stopped, and does not mistake missing time for termination',()=>{
+ const value=node('A');value.timings=[responsibility('po:A',true)];expect(nodeIsInProgress(value)).toBe(true);
+ delete value.timings;value.fixedTargets![0]!.progress.ownSla.state='unknown';expect(nodeIsInProgress(value)).toBe(true);
+ delete value.fixedTargets;value.timing={...responsibility('po:A',true),status:'unknown',termination:{kind:'cancelled',at:null,sourceRef:'TEST cancellation with unknown occurrence',elapsedSeconds:null,overdueSeconds:null}};expect(nodeIsInProgress(value)).toBe(false);
+});
+it('never adds original non-working states to detail progress',()=>{
+ for(const state of ['completed','inherited','cancelled','not_applicable','unavailable','pending','uncreated'] as const)expect(nodeIsInProgress({...node('A'),state})).toBe(false);
+});
 it('shows proven terminal responsibility without a planned target in the node and compact summary, preserving frozen delay and missing A',()=>{
  const input=scope('A');input.work=[{...input.work[0]!,start:null,end:null}];
  for(const asOf of ['2026-11-10T14:00:00.000Z','2026-11-11T14:00:00.000Z']){
