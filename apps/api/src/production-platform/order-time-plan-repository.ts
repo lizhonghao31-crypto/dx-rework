@@ -15,7 +15,7 @@ import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {SlaVersionConflict,SlaIdempotencyConflict} from './sla-configuration-repository.js';
 import {evaluateOrderTimeScenario,type OrderTimeScope,type OrderTimeWork} from './order-time-schedule.js';
 import type {FixedTimelineTarget} from './fixed-timeline-targets.js';
-import {formalRemainingSchedule,type FormalRemainingInputs} from './order-time-formal-arrangement.js';
+import {formalRemainingSchedule,retainFormalTargets,type FormalRemainingInputs} from './order-time-formal-arrangement.js';
 
 type DB=Pick<PoolClient,'query'>;
 export type OrderTimeInput={version:'order-time-input-v1'|'order-time-input-rewash-v1';plan:FrozenOrderTimePlan;work:OrderTimeWork[];
@@ -188,6 +188,10 @@ export class OrderTimePlanRepository{
   }
   if(previous&&kind==='arrangement'&&value.formalInputs&&!value.frameworkContext)
    value.formalTargets=formalRemainingSchedule(value,value.formalInputs,previous,time,input.eventRef).targets;
+  else if(previous?.input.formalTargets){
+   const carried=retainFormalTargets(value,previous);
+   if(carried)value.formalTargets=carried;else delete value.formalTargets;
+  }
   if(value.frameworkContext){
    const context=value.frameworkContext,progress=new Map(Object.entries(context.progress));
    const plans:Record<string,FrozenTimeFramework>={};

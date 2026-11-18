@@ -30,6 +30,8 @@ import * as sourcingTiming from '../../apps/api/src/production-platform/sourcing
 import {orderTimeTodos} from '../../apps/api/src/production-platform/order-time-todos.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {arrangementInput} from '../helpers/development-arrangement-fixture.js';
+import {publishedTechnicalFixture} from '../helpers/development-technical-fixture.js';
+import {taskResult} from '../helpers/development-task-result-fixture.js';
 import {slaNotificationPreferences} from '../../apps/api/src/production-platform/sla-notification-preferences.js';
 import {DigitalPoDateRepository} from '../../apps/api/src/production-platform/po-date-repository.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
@@ -781,6 +783,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(Date.parse(targets.development_cutting!.end.at!)).toBeGreaterThanOrEqual(Date.parse(now)+60*3600000);
    expect(scope.terminalIds.map(id=>targets[id]!.end.at!).sort().at(-1)).toBe(preview.expectedEnd);
    expect(await tasks.read(f.root,paper.taskId)).toMatchObject({state:'pending',enteredAt:start,dueAt:'2026-12-06T11:00:00.000Z'});
+  });
+ });
+
+ it('does not resurrect the same stale legacy P when its original pending task becomes ready',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,false),standard=await settings.read(f.root);
+  await settings.save(f.root,{expectedVersion:standard.version,values:r5OneHourConfiguration()},randomUUID());
+  const scene=await f.scene('2026-12-01T00:00:00.000Z'),execution=new DevelopmentExecutionService(f.db,true),clerk=f.people['development-clerk']!,worker=f.people['pattern-room-worker']!.actorId;
+  const row=await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2026-12-05',true);if(row.operation.kind!=='development_publish')throw Error('TEST original publication required');
+   const published=await forms.publish(row.actor,row.sourceId,row.operation.input.expectedVersion,randomUUID(),row.operation.input.patternOrder);
+   const view=await execution.read(clerk,row.sourceId),verification=view.materialVerification!,items=[{materialId:row.material!.materialId,physical:true,quantity:true,color:true,specification:true}];
+   await execution.saveMaterials(clerk,row.sourceId,{taskId:published.taskId!,expectedDocumentVersion:verification.documentVersion,expectedVersion:verification.version,entries:items.map(item=>({...item,usage:'use',note:'',confirmedWith:''}))},randomUUID());
+   await execution.check(clerk,row.sourceId,{taskId:published.taskId!,expectedVerificationVersion:verification.version+1,result:'通过',note:'TEST original material',items},randomUUID());
+   return row;
+  });
+  const resource={kind:'source' as const,id:row.sourceId},repo=new OrderTimePlanRepository(f.db),tasks=new DigitalProductionTaskService(f.db);
+  await f.advance(scene,'2026-12-06T00:00:00.000Z');
+  const {version,cutId,originalB,workRef}=await f.runtime.run(scene,f.root,async()=>{
+   const first=(await repo.current(resource))!,previous=structuredClone(first.input),legacy=structuredClone(previous);
+   legacy.plan={...previous.plan,revision:previous.plan.revision+1,overrides:{development_cutting:{kind:'work',minutes:48*60,calendar:'continuous',reminder:{enabled:false,percent:70}}}};
+   const client=await f.db.connect();try{
+    await client.query('BEGIN');const repository=new OrderTimePlanRepository(client),time=await new ContextBusinessClock(f.db,client).read(resource);
+    for(const [i,value] of [previous,legacy].entries())await repository.confirm({resource,expectedRevision:i+1,value,actorId:f.root.actorId,eventRef:'TEST legacy arrangement '+(i+2),time,requestKey:randomUUID()});
+    await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   const version=(await repo.current(resource))!,cut=(await execution.read(f.root,row.sourceId)).tasks.find(task=>task.taskKind==='development_cutting')!;
+   expect(version.input.formalTargets).toBeUndefined();
+   expect(await tasks.read(f.root,cut.taskId)).toMatchObject({state:'pending',currentPlanTargets:{state:'unknown',planRevision:3,targets:[{endAt:null}]}});
+   return {version,cutId:cut.taskId,originalB:version.targets[version.input.scopes[0]!.scopeRef]!.development_cutting!.end.at,workRef:version.input.work.find(work=>work.id==='development_cutting')!.canonicalWorkRef};
+  });
+  await f.advance(scene,'2026-12-06T06:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const state=await execution.read(f.root,row.sourceId),sheet=await forms.read(row.actor,row.sourceId),paper=state.tasks.find(task=>task.taskKind==='development_pattern')!;
+   await execution.configureFixedCutting(f.root,row.sourceId,{expectedVersion:state.fixedCutting!.version,assigneeId:worker,reason:'TEST original cutting assignment'},randomUUID());
+   await execution.arrange(clerk,row.sourceId,await arrangementInput(f.db,execution,clerk,row.sourceId,worker),randomUUID());
+   expect((await tasks.read(f.root,paper.taskId)).state).toBe('ready');
+   const artifact=await publishedTechnicalFixture(f.db,f.root,row.sourceId,sheet.document!,sheet.version,worker,f.attachments,f.storage);
+   await execution.complete(f.root,row.sourceId,{taskId:paper.taskId,note:'TEST real paper completion and cutting handoff',
+    attachmentIds:artifact?[]:[await taskResult(f.db,execution,f.root,row.sourceId,paper.taskId,'纸样成果')],...(artifact?{artifactRef:{id:artifact.artifactSetId,version:artifact.version,scopeRef:'整款'}}:{})},randomUUID());
+   expect(await tasks.read(f.root,cutId)).toMatchObject({state:'ready',completedAt:null,currentPlanTargets:{state:'unknown',planVersionId:version.id,planRevision:3,targets:[{endAt:null}]}});
+   const detail=await new DigitalJourneyQuery(f.db).read(f.root,row.sourceId,undefined,true);
+   expect(detail.fixedSchedule?.scopes[0]?.nodes.find(node=>node.canonicalWorkRef===workRef)).toMatchObject({currentTarget:{at:null},goalDelta:{targetAt:originalB,actual:{precision:'unknown'}}});
+   expect(await repo.current(resource)).toEqual(version);
   });
  });
 
