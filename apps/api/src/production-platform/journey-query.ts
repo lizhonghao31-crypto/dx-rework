@@ -35,8 +35,8 @@ import { OrderClosureService } from "./order-closure-service.js";
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
 import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
-import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,journeyMatchesMetadata } from "./journey-projection.js";
-import { canReadProductionReporting, productionVisibilityFor, productionVisibilityArgs } from "../sourcing/production-reporting-service.js";
+import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,journeyMatchesMetadata,journeyMatchesSearch } from "./journey-projection.js";
+import {journeyCandidateClock,readJourneyCandidateVisibility,readJourneyCommercialMetadata,readJourneySearchMetadata,readJourneyStyleIdentity,type JourneyCandidate as Candidate,type JourneySearchMetadata} from './journey-search-metadata.js';
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
 import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
@@ -71,10 +71,9 @@ import {readJourneySelections} from './journey-selection-query.js';
 type FactCapture={timing:(inputs:JourneyTimingInputs)=>void;tasks:(tasks:Array<{id:string;routeInstanceId:string}>)=>void;
  time?:(time:BusinessTime)=>void;nativeNodes?:(nodes:JourneyNode[])=>void;untimedNodes?:(nodes:JourneyNode[])=>void;
  untimedItem?:(item:OrderJourney,delivery:JourneySelectionDelivery)=>void;recheckAt?:(at:string)=>void};
+type PreparedJourneySearch={metadata:JourneySearchMetadata;observation:Awaited<ReturnType<ContextBusinessClock['readObservation']>>};
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
-type Candidate = { has_order_time_plan?:boolean;source: {order_time_managed?:boolean;development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
-  order: {order_time_managed?:boolean;production_order_id:string;source_id:string|null;created_by:string;primary_merchandiser_id:string|null;design_style_no:string;temporary_style_no:string|null;customer_code:string;product_group:string;contract_delivery_date:string|null;created_at:string}|null };
 const record = (domain:string,id:string,url:string|null,version:number|null=null):JourneyRecord => ({domain,id,url,version,lineId:null,mode:"read"});
 const taskUrl = (id:string) => `/ui/digital-production?task=${encodeURIComponent(id)}`;
 const developmentUrl = (id:string,round?:number) => `/ui/digital-production?development=${id}${round === undefined ? "" : `&round=${round}`}`;
@@ -133,26 +132,51 @@ export class DigitalJourneyQuery {
       const patternKinds=options.patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>options.patternBusiness==="all"||(options.patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
       const rows=await journeyMeasure('candidates',()=>this.candidates(db,actor,null,patternKinds));journeyCandidateCount(rows.length);
       rememberWholeOrderSnapshot(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
+      if(isDigitalManagementReader(actor)&&(actor.actorRoles.includes('root_superuser')||(actor.authorizationCapabilities??[]).includes('sourcing:view')))this.merchandiserNames.set(db,await readOrderMerchandisersByOrder(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[])));
+      const search=filter.search.toLocaleLowerCase();
+      const prepared=search&&!patternKinds?await this.prepareSearch(db,actor,rows,asOf):null;
+      const matched=prepared?[...prepared].flatMap(([row,{metadata}])=>journeyMatchesSearch({...metadata.identity,...metadata.commercial},search)?[row]:[]):rows;
       // The original management policy grants the full read range for these exact candidates.
       // Assigned/technical partial readers retain their original per-object path.
-      if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
-      if(isDigitalManagementReader(actor)&&(actor.actorRoles.includes('root_superuser')||(actor.authorizationCapabilities??[]).includes('sourcing:view')))this.merchandiserNames.set(db,await readOrderMerchandisersByOrder(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[])));
-      for(const row of rows) { const item=await journeyMeasure('summary_projection',()=>this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope)));if(item){items.push(item);candidates.set(item.id,row);} }
+      if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,matched.flatMap(row=>row.order?[row.order.production_order_id]:[]));
+      for(const row of matched) { const item=await journeyMeasure('summary_projection',()=>this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope),undefined,prepared?.get(row)));if(item){items.push(item);candidates.set(item.id,row);} }
       const endFilter=journeySpan('filter_page');
+      const facetItems=prepared?[...prepared.values()].map(({metadata})=>({customer:metadata.identity.customer,category:metadata.category,merchandisers:metadata.commercial.merchandisers})):items;
       const facets = {
-        customers: [...new Set(items.map(item=>item.customer).filter((value):value is string=>Boolean(value)))].sort(),
-        categories: [...new Set(items.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
-        merchandisers: [...new Map(items.flatMap(item=>item.merchandisers).map(person=>[person.id,person])).values()],
+        customers: [...new Set(facetItems.map(item=>item.customer).filter((value):value is string=>Boolean(value)))].sort(),
+        categories: [...new Set(facetItems.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
+        merchandisers: [...new Map(facetItems.flatMap(item=>item.merchandisers).map(person=>[person.id,person])).values()],
       };
       const result=selectJourneys(items,filter,asOf,!exportAll);
       endFilter();
       if(summaryOnly&&options.details!==false&&!filter.scope){
         const details:OrderJourney[]=[];
-        for(const summary of selectPage?selectPage(result.items):result.items){const detail=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidates.get(summary.id)!,asOf));if(detail)details.push({...detail,hitReasons:summary.hitReasons});}
+        for(const summary of selectPage?selectPage(result.items):result.items){
+          const row=candidates.get(summary.id)!;
+          const detail=await journeyMeasure('detail_projection',()=>this.project(db,actor,row,asOf,undefined,false,null,false,false,undefined,prepared?.get(row)));
+          if(detail)details.push({...detail,hitReasons:summary.hitReasons});
+        }
         result.items=details;
       }
-      return {...result,observationMode:items.some(item=>item.observationMode==='live')?'live' as const:'fixed' as const,canManagePolicies:isDigitalLeader(actor),facets};
+      const live=prepared?[...prepared.values()].some(({observation})=>observation.mode==='live'):items.some(item=>item.observationMode==='live');
+      return {...result,observationMode:live?'live' as const:'fixed' as const,canManagePolicies:isDigitalLeader(actor),facets};
     });
+  }
+  private async prepareSearch(db:PoolClient,actor:TrustedActorContext,rows:Candidate[],asOf:string){
+    const visible=new Map<Candidate,JourneySearchMetadata>(),people=this.merchandiserNames.get(db);
+    for(const row of rows){
+      const metadata=await readJourneySearchMetadata(db,actor,row,people);
+      if(metadata)visible.set(row,metadata);
+    }
+    const scopes=[...visible.keys()].map(journeyCandidateClock);
+    const clock=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).readManyObservations(scopes,{now:()=>new Date(asOf),mode:'live'}));
+    const prepared=new Map<Candidate,PreparedJourneySearch>();
+    for(const [row,metadata]of visible){
+      const scope=journeyCandidateClock(row),key=businessScopeKey(scope),observation=clock.get(key)!;
+      if(observation.time.scenarioId)this.observations.get(db)?.set(key,{scope,time:observation.time});
+      prepared.set(row,{metadata,observation});
+    }
+    return prepared;
   }
   /** Read minimal authorized facts once, then hydrate only the objects the
    * workspace actually displays. No GET-side rebuild or stale-result fallback. */
@@ -372,27 +396,20 @@ export class DigitalJourneyQuery {
     if(!item)throw Error('本单原始时间事实暂时不可读取');
     return timing;
   }
-  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
-    const scope:BusinessTimeScope=oid?{kind:'order',id:oid}:{kind:'source',id:sid!};
+    const scope=journeyCandidateClock(row);
     // Use SQL snapshot time only as the ordinary fallback. Guarded context and
     // actual reader results (including null scenario IDs) retain precedence.
-    const observation=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).readObservation(scope,{now:()=>new Date(asOf),mode:'live'}));
+    const observation=prepared?.observation??await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).readObservation(scope,{now:()=>new Date(asOf),mode:'live'}));
     const observed=observation.time;
     capture?.time?.(observed);
     if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     asOf=observed.now;
-    const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
-    const canonicalId=attached?oid!:(sid??oid!);
-    const sourceAccess=Boolean(sid&&(!actor||await policy.allowed(actor,"source",sid,"technical")));
-    const orderAccess=Boolean(oid&&(!actor||await policy.allowed(actor,"order",oid,"technical")));
-    // Order access through one assigned technical task must not expose its sibling task metadata.
-    const fullOrder=orderAccess&&(!actor||isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor)
-      || actor.actorRoles.includes("sample_designer")&&order?.created_by===actor.actorId
-      || actor.actorRoles.includes("order_merchandiser")&&order?.primary_merchandiser_id===actor.actorId
-      || actor.actorRoles.includes("development_clerk"));
+    const visibility=prepared?.metadata.visibility??await readJourneyCandidateVisibility(policy,actor,row);
+    const {sourceAccess,orderAccess,fullOrder}=visibility;
     const tasks=(await db.query(`SELECT a.task_id,a.task_kind,a.source_id,a.production_order_id,a.assignee_id,a.required_role,t.route_version,t.occurrence,t.completed_quality,t.route_instance_id,t.state AS original_state,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned
       FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
@@ -455,9 +472,8 @@ export class DigitalJourneyQuery {
       if(index>=0)baseNodes[index]=node;else if(current.length<=1)baseNodes.push(node);
       return node;
     };
-    const chosenIdentity=orderAccess?order!:(source??order!);
-    const creator=source?.created_by??order!.created_by;
-    const designer=(await db.query("SELECT display_name FROM app_users WHERE id=$1",[creator])).rows[0]?.display_name??null;
+    const identity=prepared?.metadata.identity??await readJourneyStyleIdentity(db,row,orderAccess);
+    const {creator,designer}=identity;
     if(sourceAccess&&sid) {
       setFact("product_development","completed",[record("development",sid,developmentUrl(sid,currentDocument?round??1:undefined),currentDocument?.version??currentDocument?.document_version??null)],iso(source!.created_at),{id:creator,name:designer});
       setFact("development_publish",currentDocument?(document?.status==="published"||round&&round>1?"completed":"active"):"uncreated",[record("development",sid,developmentUrl(sid,currentDocument?round??1:undefined),currentDocument?.version??currentDocument?.document_version??null)],iso(currentDocument?.published_at),{id:creator,name:designer}).operator=currentDocument?.published_by?{id:currentDocument.published_by,name:null}:null;
@@ -611,45 +627,9 @@ export class DigitalJourneyQuery {
     const requirementEvidence:RequirementEvidence=new Map();
     const devTask=taskDtos.find(task=>task.sourceId===sid&&task.routeVersion===round);
     if(sourceAccess&&document?.status==="published"&&devTask)progress.development={applicable:devTask.routeProgress.applicable,completed:devTask.routeProgress.completed};
-    const lines=orderAccess&&oid?(await db.query(`SELECT l.line_id AS id,l.po_number AS po,l.color,l.formal_style_no AS "formalStyleNo",l.temporary_style_no AS "temporaryStyleNo",coalesce(sum(s.quantity),0)::int AS "orderedQuantity"
-      FROM digital_production_po_lines l LEFT JOIN digital_production_po_sizes s USING(line_id) WHERE l.production_order_id=$1 GROUP BY l.line_id ORDER BY l.position`,[oid])).rows:[];
-    const links:JourneyRecord[]=[];
-    const merchandisers:OrderJourney["merchandisers"]=[],orderNumbers:string[]=[];
-    const sourcingAllowed=!actor||actor.actorRoles.includes("root_superuser")||(actor.authorizationCapabilities??[]).includes("sourcing:view");
-    // Same authorized lookup supplies main and every secondary together. Do not
-    // add one extra per-order query to the legacy full-range reader.
-    if(fullOrder&&oid&&sourcingAllowed)merchandisers.push(...(this.merchandiserNames.get(db)?.get(oid)??await readOrderSecondaryMerchandisers(db,oid,true)));
-    else if(orderAccess&&order?.primary_merchandiser_id)merchandisers.push({id:order.primary_merchandiser_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[order.primary_merchandiser_id])).rows[0]?.display_name??null});
-    let styleName:string|null=null;
+    const commercial=prepared?.metadata.commercial??await readJourneyCommercialMetadata(db,actor,row,visibility,this.merchandiserNames.get(db));
+    const {lines,links,merchandisers,orderNumbers,styleName,children,sourcing,sourcingAllowed,sourcingFields}=commercial;
     if(fullOrder&&oid) {
-      const children=(await db.query("SELECT module,child_id FROM digital_production_child_links WHERE production_order_id=$1 ORDER BY module,child_id",[oid])).rows;
-      const sourcing=children.find(child=>child.module==="sourcing");
-      // The original detail flow hides logically deleted cases, including approval history and URLs.
-      const sourcingFields=sourcing&&sourcingAllowed?(await db.query("SELECT source.additional_merchandiser_user_id,source.style_name_snapshot,source.erp_order_no,current.status FROM sourcing_cases source JOIN current_sourcing_cases current USING(sourcing_case_id) WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL",[sourcing.child_id])).rows[0]:null;
-      const closureAllowed=!actor||actor.actorRoles.some(role=>["root_superuser","owner_group","production_management","pmc","order_merchandiser","warehouse_receiver", "warehouse_supervisor","quality_control"].includes(role));
-      const childLines=(await db.query("SELECT module,child_id,line_id FROM digital_production_child_lines WHERE production_order_id=$1 ORDER BY module,line_id,child_id",[oid])).rows;
-      for(const child of children) {
-        let url:string|null=null;
-        if(child.module==="sourcing"&&sourcingFields&&child.child_id===sourcing?.child_id)url=`/ui/sourcing/orders/${child.child_id}`;
-        if(child.module==="cutting"&&(!actor||actor.actorRoles.includes("root_superuser")||(actor.authorizationCapabilities??[]).includes("cutting:orders:view")))url=`/ui/cutting/orders/${child.child_id}`;
-        if(child.module==="production"&&(!actor||canReadProductionReporting(actor))) {
-          const allowed=!actor||(await db.query(`SELECT production.production_order_id FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id) WHERE production.production_order_id=$5 AND ${productionVisibilityFor(actor)}`,[...productionVisibilityArgs(actor),child.child_id])).rowCount;
-          if(allowed)url=`/ui/production-dashboard/${child.child_id}`;
-        }
-        if(child.module==="rework"&&closureAllowed)url=`/ui/tasks/${child.child_id}`;
-        if(child.module==="receiving"&&closureAllowed)url=`/ui/digital-production?closure=${oid}#receipt-${child.child_id}`;
-        // No generic module-home URL is substituted for unsupported exact-record routes.
-        if(url) {
-          const mapped=childLines.filter(line=>line.module===child.module&&line.child_id===child.child_id);
-          if(mapped.length)for(const line of mapped)links.push({...record(child.module,child.child_id,url),lineId:line.line_id});
-          else links.push(record(child.module,child.child_id,url));
-        }
-      }
-      // Search/owner facets still use the same authorized linking facts. Board
-      // cards do not consume budgets, closure detail or downstream domain gates.
-      if(sourcingFields){
-        styleName=sourcingFields.style_name_snapshot??null;if(sourcingFields.erp_order_no)orderNumbers.push(sourcingFields.erp_order_no);
-      }
       if(!patternKinds){
       const bulk=await journeyMeasure('bulk',async()=>actor?await new BulkPreparationService(this.database).read(actor,oid,db):await new BulkPreparationService(this.database).readJourneyFactsWithClient(oid,db,observed));
       const gates=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).gates(db,oid));
@@ -901,7 +881,7 @@ export class DigitalJourneyQuery {
       baseNodes.splice(first,0,...scopedCraft);
     }
     const stages=journeyStages(baseNodes);
-    const item:OrderJourney={observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:visibleCreation&&Date.parse(visibleCreation.at)<=Date.parse(asOf)?visibleCreation.at:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
+    const item:OrderJourney={observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:identity.id,sourceId:identity.sourceId,orderId:identity.orderId,designStyleNo:identity.designStyleNo,temporaryStyleNo:identity.temporaryStyleNo,customer:identity.customer,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:visibleCreation&&Date.parse(visibleCreation.at)<=Date.parse(asOf)?visibleCreation.at:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
     capture?.untimedNodes?.(baseNodes);
@@ -940,4 +920,4 @@ export class DigitalJourneyQuery {
     return item;
   }
 }
-import {readOrderSecondaryMerchandisers,readOrderMerchandisersByOrder} from './order-merchandisers.js';
+import {readOrderMerchandisersByOrder} from './order-merchandisers.js';
