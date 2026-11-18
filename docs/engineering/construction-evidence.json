@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "base": "be2cf05d41f24de364f764416820b65f437aad8a",
+  "base": "12091c895cf16f14e070bd367f7697318e465dcc",
   "risk": "full",
-  "sourceFingerprint": "925fa9cd0ddd1b08f6d1afac9a4222aee79c52db6e0161e71990471646648dfe",
+  "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
   "rules": [
     {
       "rule": "Restore original designer parent intent and raw child draft across genuine browser reload without creating or replaying business commands",
       "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Provisional exact predecessor stack be2cf05d41f24de364f764416820b65f437aad8a with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "initialization": "Provisional exact predecessor stack 12091c895cf16f14e070bd367f7697318e465dcc with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
       "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
       "writes": [
         "apps/web/src/digital-designer-workspace.tsx",
@@ -35,7 +35,7 @@
     {
       "rule": "Preserve raw instruction drafts and independent immutable save/decision envelopes through reload, conflicts and read failure",
       "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Provisional exact predecessor stack be2cf05d41f24de364f764416820b65f437aad8a with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "initialization": "Provisional exact predecessor stack 12091c895cf16f14e070bd367f7697318e465dcc with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
       "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
       "writes": [
         "apps/web/src/production-instruction-panel.tsx",
@@ -62,7 +62,7 @@
     {
       "rule": "Read minimal original actor command receipts with exact namespaces and current object read permission",
       "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Provisional exact predecessor stack be2cf05d41f24de364f764416820b65f437aad8a with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "initialization": "Provisional exact predecessor stack 12091c895cf16f14e070bd367f7697318e465dcc with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
       "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
       "writes": [
         "apps/api/src/production-platform/instruction-command-receipts.ts",
@@ -92,14 +92,15 @@
     {
       "rule": "Keep both original native recovery suites and reviewed contract in the canonical plan",
       "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
-      "initialization": "Provisional exact predecessor stack be2cf05d41f24de364f764416820b65f437aad8a with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "initialization": "Provisional exact predecessor stack 12091c895cf16f14e070bd367f7697318e465dcc with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
       "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
         "tests/unit/full-gate-risk-map.test.ts",
         "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "docs/engineering/native-draft-command-recovery-repair.md"
+        "docs/engineering/native-draft-command-recovery-repair.md",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
         "scripts/test-execution-config.mjs",
@@ -122,46 +123,46 @@
     {
       "id": "recovery-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/version-consumer-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/review-stack-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9aeb3ea4e8113088f868f9d89860a39941ed8dee",
-      "sourceFingerprint": "925fa9cd0ddd1b08f6d1afac9a4222aee79c52db6e0161e71990471646648dfe",
-      "startedAt": "2026-11-18T02:20:30.472326+00:00",
-      "endedAt": "2026-11-18T02:20:37.808076+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/version-consumer-unit/command.log",
-      "logSha256": "84f020c58a7117f51a3e127a891f8177db81c0102142f5616b6a77060a908a28",
-      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack be2cf05d including cancellation consumer de42e6f0. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
+      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
+      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
+      "startedAt": "2026-11-18T04:13:36.243394+00:00",
+      "endedAt": "2026-11-18T04:13:40.829547+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-unit/command.log",
+      "logSha256": "97a092c64475db04b12eae29f0df591a226c2fc56b6c3c2ad8b55fa935d2ce71",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack 12091c89, including both review repairs and the actual cancellation merge. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
       "passed": 162,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b3d7078833622115fb1ff76dc9dd40fba97174f3b19726fe24019f54d05161c4"
+          "sha256": "bb37dcdcb5ad30567166302c393040b92c7056f1731669a52e2716043c661fc7"
         }
       ]
     },
     {
       "id": "recovery-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/version-consumer-original-recovery/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/review-stack-original-recovery/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9aeb3ea4e8113088f868f9d89860a39941ed8dee",
-      "sourceFingerprint": "925fa9cd0ddd1b08f6d1afac9a4222aee79c52db6e0161e71990471646648dfe",
-      "startedAt": "2026-11-18T02:20:16.605330+00:00",
-      "endedAt": "2026-11-18T02:22:42.383736+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/pg/version-consumer-original-recovery/tests.log",
-      "logSha256": "2fbdf688834e70c913523333491fe784e59bf9cb6e19f1882c14b07f45f8afb2",
-      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack be2cf05d including cancellation consumer de42e6f0. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
+      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
+      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
+      "startedAt": "2026-11-18T04:13:24.066105+00:00",
+      "endedAt": "2026-11-18T04:15:34.862154+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/pg/review-stack-original-recovery/tests.log",
+      "logSha256": "802fd70bb11d894556d720fd24d76b12dc09cde56547f1431d2c9967e22adc4e",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack 12091c89, including both review repairs and the actual cancellation merge. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
       "passed": 15,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9f26ea7371221d321fdf3e9be52d17cadc3228af22371a33bf5796d050044847"
+          "sha256": "5229cbfe05c8cf01bd3ec1390663ea7afd082f417874cfd70ab25f5170a3a295"
         }
       ]
     },
@@ -171,13 +172,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9aeb3ea4e8113088f868f9d89860a39941ed8dee",
-      "sourceFingerprint": "925fa9cd0ddd1b08f6d1afac9a4222aee79c52db6e0161e71990471646648dfe",
-      "startedAt": "2026-11-18T02:20:38.298079+00:00",
-      "endedAt": "2026-11-18T02:21:06.161308+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/version-consumer-api-types/command.log",
+      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
+      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
+      "startedAt": "2026-11-18T04:13:41.150882+00:00",
+      "endedAt": "2026-11-18T04:13:59.970923+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack be2cf05d including cancellation consumer de42e6f0. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack 12091c89, including both review repairs and the actual cancellation merge. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
     },
     {
       "id": "recovery-web-types",
@@ -185,13 +186,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9aeb3ea4e8113088f868f9d89860a39941ed8dee",
-      "sourceFingerprint": "925fa9cd0ddd1b08f6d1afac9a4222aee79c52db6e0161e71990471646648dfe",
-      "startedAt": "2026-11-18T02:21:07.009256+00:00",
-      "endedAt": "2026-11-18T02:21:48.450282+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/version-consumer-web-types/command.log",
+      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
+      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
+      "startedAt": "2026-11-18T04:14:00.294833+00:00",
+      "endedAt": "2026-11-18T04:14:33.102722+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack be2cf05d including cancellation consumer de42e6f0. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack 12091c89, including both review repairs and the actual cancellation merge. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
     },
     {
       "id": "recovery-lint",
@@ -199,28 +200,28 @@
       "command": "python3 /workspace/sla-instruction-recovery-20261117/lint-current.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9aeb3ea4e8113088f868f9d89860a39941ed8dee",
-      "sourceFingerprint": "925fa9cd0ddd1b08f6d1afac9a4222aee79c52db6e0161e71990471646648dfe",
-      "startedAt": "2026-11-18T02:21:48.878439+00:00",
-      "endedAt": "2026-11-18T02:21:49.814956+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/version-consumer-lint/command.log",
-      "logSha256": "dfd830268173cf4b12fefff0668835ecb4308cd5774268457e9fc3cc1599b1ef",
-      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack be2cf05d including cancellation consumer de42e6f0. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
+      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
+      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
+      "startedAt": "2026-11-18T04:14:33.465107+00:00",
+      "endedAt": "2026-11-18T04:14:34.821365+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-lint/command.log",
+      "logSha256": "abf0e6e51b79f9ee36170ea1d125aa992aef3370a5770548630ba105eba26212",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack 12091c89, including both review repairs and the actual cancellation merge. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
     },
     {
       "id": "recovery-protocol",
       "kind": "tests",
-      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
+      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9aeb3ea4e8113088f868f9d89860a39941ed8dee",
-      "sourceFingerprint": "925fa9cd0ddd1b08f6d1afac9a4222aee79c52db6e0161e71990471646648dfe",
-      "startedAt": "2026-11-18T02:21:50.099384+00:00",
-      "endedAt": "2026-11-18T02:21:51.634136+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/version-consumer-protocol/command.log",
-      "logSha256": "71173b8c15f91ea363f507fb2003c9313f95c2a875075b612ab22c360aaa9028",
-      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack be2cf05d including cancellation consumer de42e6f0. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
-      "passed": 21,
+      "testedHead": "7082c8d707d65288e03156e40251169b3778a5e4",
+      "sourceFingerprint": "41b9527bbad9d8234df5c64e62a6256cdc77919ae2ff8e3bd6b30ba3c9eedd18",
+      "startedAt": "2026-11-18T04:14:35.171636+00:00",
+      "endedAt": "2026-11-18T04:14:42.211305+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/review-stack-protocol/command.log",
+      "logSha256": "f1028b330c1cff47db4c3d1e993bbdfc69ee5e81d26d60864022df43eed5ad95",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack 12091c89, including both review repairs and the actual cancellation merge. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
+      "passed": 284,
       "failed": 0,
       "skipped": 0
     }

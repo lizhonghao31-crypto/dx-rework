@@ -12,7 +12,13 @@ export function materialViewFromContext(key:string,context:CockpitContext):Mater
 export const materialViewPatch=(key:string,view:MaterialView):Partial<CockpitContext>=>({materialNode:key,materialView:view.open?'expanded':undefined,materialFilter:view.filter==='all'?undefined:view.filter,materialScroll:view.scroll||undefined,materialFocus:view.focus||undefined});
 const rememberedViews=new Map<string,MaterialView>();
 registerSessionInvalidator(()=>rememberedViews.clear());
-function rememberView(namespace:string,key:string,view:MaterialView){rememberedViews.delete(namespace+'|'+key);rememberedViews.set(namespace+'|'+key,{...view});if(rememberedViews.size>160)rememberedViews.delete(rememberedViews.keys().next().value!);}
+function rememberView(namespace:string,key:string,view:MaterialView){
+ // A washing window is an explicit navigation target. Only the current URL
+ // can restore it after remounting, while other material preferences persist.
+ rememberedViews.delete(namespace+'|'+key);
+ rememberedViews.set(namespace+'|'+key,{...view,focus:view.focus.startsWith('washing-window:')?'':view.focus});
+ if(rememberedViews.size>160)rememberedViews.delete(rememberedViews.keys().next().value!);
+}
 export function filterNodeMaterials(rows:NodeMaterial[],filter:MaterialView['filter']){
  return rows.filter(row=>filter==='all'||filter==='mine'&&row.mine||filter==='effective'&&row.state==='effective'||filter==='pending'&&row.applicability!=='not_applicable'&&row.state!=='effective'&&row.state!=='not_applicable');
 }
@@ -37,7 +43,16 @@ export function useNodeMaterialsView(order:OrderJourney,node:JourneyNode|null,co
   const next={...cache.current.views.get(key)!,...patch};cache.current.views.set(key,next);if(identity)rememberView(namespace,key,next);render(n=>n+1);if(publish)change.current(materialViewPatch(key,next));return {...base.current,...materialViewPatch(key,next)};
  };
  const capture=(focus:string)=>update({focus});
- const rememberScroll=(scroll:number)=>{const stamp=namespace+'|'+key,next={...cache.current.views.get(key)!,scroll};cache.current.views.set(key,next);if(identity)rememberView(namespace,key,next);clearTimeout(scrollTimer.current);scrollTimer.current=setTimeout(()=>{if(live.current===stamp)change.current(materialViewPatch(key,next));},80);};
+ const rememberScroll=(scroll:number)=>{
+  const stamp=namespace+'|'+key,next={...cache.current.views.get(key)!,scroll};
+  cache.current.views.set(key,next);
+  if(identity)rememberView(namespace,key,next);
+  clearTimeout(scrollTimer.current);
+  scrollTimer.current=setTimeout(()=>{
+   const current=cache.current.views.get(key);
+   if(live.current===stamp&&current)change.current(materialViewPatch(key,current));
+  },80);
+ };
  useEffect(()=>()=>clearTimeout(scrollTimer.current),[key,namespace]);
  const patch=materialViewPatch(key,view);
  useEffect(()=>{if(Object.entries(patch).some(([k,value])=>context[k as keyof CockpitContext]!==value))change.current(patch);},[key,view.open,view.filter,view.scroll,view.focus,context.materialNode,context.materialView,context.materialFilter,context.materialScroll,context.materialFocus]); // only UI URL state
