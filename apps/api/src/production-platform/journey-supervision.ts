@@ -13,6 +13,8 @@ import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import {SlaOrderService} from './sla-order-service.js';
 import {developmentSlaPlan} from './development-sla-enrollment.js';
 import {developmentEvaluationPlan,developmentNativeFacts,developmentSlaEvidence} from './development-sla-evidence.js';
+import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
+import {sourceCurrentSupervision} from './source-current-supervision.js';
 import {attachJourneyNativeTimes} from './journey-native-times.js';
 import {attachJourneyTerminalTiming} from './journey-terminal-timing.js';
 import {journeyTermination,type JourneyTermination} from './journey-termination.js';
@@ -105,6 +107,7 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
  const resource=item.orderId?{kind:'order' as const,id:item.orderId}:item.sourceId?{kind:'source' as const,id:item.sourceId}:null;
  const termination=resource?await journeyTermination(db,resource,time.now):null;
  let capturedInputs:JourneyTimingInputs|undefined,receiving:OrderClosureSheet|undefined;const originalCapture=capture;capture=value=>{value.termination=termination;capturedInputs=value;originalCapture?.(value);};
+ let attachSource:((basis:FixedScheduleBasis|null,effective:StoredOrderTimePlan|undefined)=>void)|undefined;
  if(item.orderId){const service=new SlaOrderService(database,{read:async()=>time}),read=actor?await service.readWithClient(actor,item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{}),...(item.selectedRound?{developmentRound:item.selectedRound}:{})}):await service.readFactsWithClient(item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{}),...(item.selectedRound?{developmentRound:item.selectedRound}:{})});
   const factoryInstances=read.factory&&'instances'in read.factory?read.factory.instances:undefined;
   receiving=read.receiving;capture?.({plan:read.status==='planned'?read.evaluationPlan:null,original:read.status==='planned'?read.original.plan:null,facts:read.facts,...(read.development?.instances?.length?{instances:read.development.instances}:{}),...(factoryInstances?.length?{factoryInstances}:{})});
@@ -121,14 +124,23 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
  }else if(item.sourceId){const saved=await developmentSlaPlan(db,item.sourceId);
   if(!saved){const facts=await developmentNativeFacts(db,item.sourceId,time,onFutureEvidence);capture?.({plan:null,original:null,facts});attachJourneySupervision(item,null,null,[],time,{original:null,current:null},false,{facts,termination},authorizedTaskIds);}
   else {
-  const evidence=await developmentSlaEvidence(db,item.sourceId,time,onFutureEvidence,item.selectedRound??undefined),plan=developmentEvaluationPlan(saved.plan_json,evidence?.facts??{});
-  capture?.({plan,original:saved.plan_json,facts:evidence?.facts??{},...(evidence?.instances?.length?{instances:evidence.instances}:{})});
-  attachJourneySupervision(item,plan,saved.plan_json,evaluateSlaPlan(plan,evidence?.facts??{},time,{mode:"read_projection"}),time,{original:1,current:saved.revision},false,{facts:evidence?.facts??{},termination,...(evidence?.instances?.length?{instances:evidence.instances}:{})},authorizedTaskIds);
+  const sourceId=item.sourceId,round=item.selectedRound??item.adoptedRound??1;
+  const evidence=await developmentSlaEvidence(db,sourceId,time,onFutureEvidence,item.selectedRound??undefined),facts=evidence?.facts??{},plan=developmentEvaluationPlan(saved.plan_json,facts);
+  capture?.({plan,original:saved.plan_json,facts,...(evidence?.instances?.length?{instances:evidence.instances}:{})});
+  attachSource=(basis,effective)=>{
+   const scope=basis?.scopes.find(scope=>scope.scopeRef===`source:${sourceId}:round:${round}`&&scope.lineId===null);
+   const evaluated=evaluateSlaPlan(plan,facts,time,{mode:'read_projection'});
+   const adopted=effective&&effective.revision>1&&scope?.targetRevision===`${effective.id}:${effective.revision}`?effective:null;
+   const nodes=adopted&&scope?sourceCurrentSupervision(adopted,scope,saved.plan_json,evaluated,facts,time):evaluated;
+   attachJourneySupervision(item,plan,saved.plan_json,nodes,time,{original:1,current:adopted?.revision??saved.revision},false,{facts,termination,...(evidence?.instances?.length?{instances:evidence.instances}:{})},authorizedTaskIds);
+  };
   }
  }
  if(capturedInputs){const resource=item.orderId?{kind:'order' as const,id:item.orderId}:item.sourceId?{kind:'source' as const,id:item.sourceId}:null;
   if(resource){
-   capturedInputs.fixedSchedule=await readFixedScheduleBasis(db,resource,item,capturedInputs.facts,time.now,receiving,time);
+   const sourcePlan:{value?:StoredOrderTimePlan}={};
+   capturedInputs.fixedSchedule=await readFixedScheduleBasis(db,resource,item,capturedInputs.facts,time.now,receiving,time,attachSource?saved=>{sourcePlan.value=saved;}:undefined);
+   attachSource?.(capturedInputs.fixedSchedule,sourcePlan.value);
    capturedInputs.termination=capturedInputs.fixedSchedule?.termination??termination;
    attachJourneyTerminalTiming(item,capturedInputs.facts,capturedInputs.termination,time.now);
   }

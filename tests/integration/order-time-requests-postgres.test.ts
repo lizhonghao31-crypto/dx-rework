@@ -42,10 +42,10 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 native first-effective order time and one request transaction',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,requests:OrderTimeRequestService,standardId:string,native:PatternRoomOrderService;
- const make=async(date:string|null,withMaterial=false)=>{
+ const make=async(date:string|null,withMaterial=false,washing:'免洗'|'内洗'|'外洗'='免洗')=>{
   const original=f.people['sample-designer']!,actor={...original,authorizationCapabilities:[...original.authorizationCapabilities!,'pattern_room:orders:view']},source=await identity.createSource(actor,{developmentType:'头版',designStyleNo:'TEST-R507-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
   const material=withMaterial?{materialId:randomUUID(),category:'主布',label:'TEST主布',supplier:'TEST',name:'TEST 已备主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}:null;
-  const photo=await f.image(actor),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:date,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original business source',craft:'无',washing:'免洗',materials:material?[material]:[],files:[{attachmentId:photo,kind:'款图'}]});
+  const photo=await f.image(actor),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:date,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original business source',craft:'无',washing,materials:material?[material]:[],files:[{attachmentId:photo,kind:'款图'}]});
   const sheet=await forms.save(actor,source.sourceId,{expectedVersion:0,document},randomUUID()),price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
   const operation:OrderTimeOperation={kind:'development_publish',sourceId:source.sourceId,input:{expectedVersion:sheet.version,patternOrder:{categoryId:price.price_id,priceVersion:price.version}}};
   return {sourceId:source.sourceId,photo,operation,actor,material};
@@ -61,6 +61,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query("SELECT current_setting('is_superuser') AS value")).rows[0].value).toBe('off');
  });
  afterAll(async()=>{await f?.dispose();});
+ it.each(['内洗','外洗'] as const)('reads the adopted source washing duration for %s without rewriting enrollment or native clocks',async washing=>{
+  const scene=await f.scene('2027-01-04T00:00:00.000Z');
+  const sourceId=await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2027-01-20',false,washing);if(row.operation.kind!=='development_publish')throw Error('TEST source operation');
+   await forms.publish(row.actor,row.sourceId,1,randomUUID(),row.operation.input.patternOrder);
+   const resource={kind:'source' as const,id:row.sourceId},operation={kind:'arrangement' as const,resource};
+   const journey=new DigitalJourneyQuery(f.db),repo=new OrderTimePlanRepository(f.db);
+   const read=()=>journey.read(f.root,row.sourceId,undefined,true);
+   const washingTiming=(item:Awaited<ReturnType<typeof read>>)=>item.supervision!.nodes.find(node=>node.id==='development_washing')!;
+   const taskService=new DigitalProductionTaskService(f.db);
+   const snapshot=async()=>({
+    enrollment:(await f.db.query('SELECT revision,plan_json FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision',[row.sourceId])).rows,
+    tasks:await Promise.all((await f.db.query('SELECT task_id FROM digital_production_task_access WHERE source_id=$1 ORDER BY task_id',[row.sourceId])).rows.map(async ({task_id})=>{
+     const {enteredAt,dueAt,completedAt}=await taskService.read(f.root,task_id);return {task_id,enteredAt,dueAt,completedAt};
+    })),
+   });
+   const first=(await repo.current(resource))!,before=await read(),original=washingTiming(before);
+   expect(first.input.work.find(work=>work.id===original.id)?.canonicalWorkRef).toBe(`source:${row.sourceId}:round:1:work:${original.id}`);
+   expect(original).toMatchObject({actualStart:null,actualEnd:null,forecastBasis:'plan'});
+   expect(original.current.at).toBe('2027-01-04T06:00:00.000Z');
+   expect(original.forecast.at).toBe('2027-01-04T06:00:00.000Z');
+   const frozen=await snapshot(),rule=first.input.plan.company.nodes.development_washing!;
+   if(rule.kind!=='work')throw Error('TEST washing work rule');
+   const overrides={development_washing:{...rule,minutes:rule.minutes+1440}};
+   const preview=await requests.check(f.root,operation,overrides);
+   await requests.arrange(f.root,{resource,overrides,fingerprint:preview.fingerprint,acceptLate:false},randomUUID());
+   const adopted=(await repo.current(resource))!,after=await read(),actual=washingTiming(after);
+   expect(adopted.revision).toBe(first.revision+1);
+   expect(adopted.input.work.find(work=>work.id==='development_washing_dispatch')?.includedIn).toBe(original.id);
+   expect(await snapshot()).toEqual(frozen);
+   expect(actual).toMatchObject({original:original.original,actualStart:null,actualEnd:null,target:original.target,forecastBasis:'plan'});
+   // Five predecessor hours, then 25 hours of wash time. The included
+   // 30 minute dispatch stays inside washing and never extends the route.
+   expect(actual.current.at).toBe('2027-01-05T06:00:00.000Z');
+   expect(actual.forecast.at).toBe('2027-01-05T06:00:00.000Z');
+   expect(after.supervision!.nodes.find(node=>node.id==='development_washing_dispatch')?.current.at).toBe('2027-01-04T05:30:00.000Z');
+   expect(after.supervision!.currentRevision).toBe(adopted.revision);
+   expect(after.stages.flatMap(stage=>stage.nodes).find(node=>node.current&&node.key==='development_washing')?.timing).toEqual(actual);
+   return row.sourceId;
+  });
+  await f.advance(scene,'2027-01-05T07:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const after=await new DigitalJourneyQuery(f.db).read(f.root,sourceId,undefined,true);
+   expect(after.supervision!.nodes.find(node=>node.id==='development_washing')).toMatchObject({
+    current:{at:'2027-01-05T06:00:00.000Z'},forecast:{at:null},forecastBasis:'unknown',actualStart:null,actualEnd:null,
+   });
+  });
+ });
  it('publishes an undated independent sample with real node quotas and no invented promise, while retaining required-input guards',async()=>{
   const scene=await f.scene('2027-01-08T00:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
    const row=await make(null),checked=await requests.check(row.actor,row.operation);
