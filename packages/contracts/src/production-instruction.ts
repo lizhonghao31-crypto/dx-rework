@@ -108,3 +108,17 @@ export type InstructionSheet = {
   customerPoDates?:Array<{lineId:string;poNumber:string|null;color:string;date:string|null;registeredDate:string|null;version:number;source:string|null;factoryDate:string|null}>;
   dateRequests: CustomerDateHistory[];
 };
+
+/** Own original command receipt only. No historical document/price/body. */
+export const InstructionReceiptKeySchema=z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/);
+const ownReceipt={orderId:z.string().uuid(),actorId:z.string().uuid(),key:InstructionReceiptKeySchema};
+export const InstructionSaveReceiptSchema=z.discriminatedUnion('status',[
+ z.object({...ownReceipt,status:z.literal('unconfirmed'),action:z.literal('save')}).strict(),
+ z.object({...ownReceipt,status:z.literal('completed'),action:z.literal('save'),payloadHash:z.string().regex(/^[a-f0-9]{64}$/),savedVersion:z.number().int().positive(),orderVersion:z.number().int().nonnegative(),sourceRound:z.number().int().positive().nullable()}).strict(),
+]);
+export const PoCustomerDecisionReceiptSchema=z.discriminatedUnion('status',[
+ z.object({...ownReceipt,status:z.literal('unconfirmed'),action:z.literal('po_customer_decision'),requestId:z.string().uuid(),approved:z.boolean()}).strict(),
+ z.object({...ownReceipt,status:z.literal('completed'),action:z.literal('po_customer_decision'),requestId:z.string().uuid(),approved:z.boolean(),payloadHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
+]);
+export type InstructionSaveReceipt=z.infer<typeof InstructionSaveReceiptSchema>;
+export type PoCustomerDecisionReceipt=z.infer<typeof PoCustomerDecisionReceiptSchema>;
