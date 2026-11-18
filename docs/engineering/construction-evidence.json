@@ -2,7 +2,7 @@
   "version": 1,
   "base": "8aac36a4164d7c80c47539b4d5716380f0b77ea0",
   "risk": "full",
-  "sourceFingerprint": "2b88c58ae1c6c9bab585538250e5146bc750527fc9590e2ae3cd9978ed01b93e",
+  "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
   "rules": [
     {
       "rule": "Share native factory and QC evidence across execution, notifications and dashboard without crossing factory scopes",
@@ -16,7 +16,8 @@
         "apps/api/src/production-platform/factory-production-qc-todos.ts",
         "apps/api/src/production-platform/sla-plan-repository.ts",
         "apps/api/src/sourcing/production-dashboard-service.ts",
-        "tests/integration/qc-progress-retirement-postgres.test.ts"
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
+        "tests/unit/todo-qc-lazy-clock.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/notification-service.ts",
@@ -27,9 +28,10 @@
         "tests/integration/qc-progress-retirement-postgres.test.ts",
         "tests/integration/production-reporting-clock-postgres.test.ts"
       ],
-      "expectation": "One SQL call per shared fact family for the exact native order set. A real transfer retains old and current factory decision identities, actual records, closure and original PO timing. Distinct observations reuse immutable data but compute independently.",
+      "expectation": "One SQL call per shared fact family for the exact native order set. A real transfer retains old and current factory decision identities, actual records, closure and original PO timing. Distinct observations reuse immutable data but compute independently. The final candidate aligns the old factory notification mock with its native batch repository and covers one call for all 31 authorized candidates, while display clocks remain deferred.",
       "checks": [
         "native-facts",
+        "qc-batch-unit",
         "types",
         "lint"
       ]
@@ -92,15 +94,15 @@
     {
       "id": "native-facts",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/budget-washing-fees-postgres.test.ts tests/integration/production-read-batches-postgres.test.ts tests/integration/production-reporting-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/qc-washing-aligned-native/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/budget-washing-fees-postgres.test.ts tests/integration/production-read-batches-postgres.test.ts tests/integration/production-reporting-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/qc-washing-after-light-review-repair/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8aac36a4164d7c80c47539b4d5716380f0b77ea0",
-      "sourceFingerprint": "2b88c58ae1c6c9bab585538250e5146bc750527fc9590e2ae3cd9978ed01b93e",
-      "startedAt": "2026-11-18T09:13:28.494033+00:00",
-      "endedAt": "2026-11-18T09:16:37.868716+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/qc-washing-aligned-native/tests.log",
-      "logSha256": "623c36277dbbbea59994b824a69d96e52b6de89ada2feea0359173c768bf398f",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:38.715756+00:00",
+      "endedAt": "2026-11-18T09:44:52.855726+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/qc-washing-after-light-review-repair/tests.log",
+      "logSha256": "8bbf27077e0acae0efd6d11a6058e17d80be992018b5b4688beb80d58830b181",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup.",
       "passed": 49,
       "failed": 0,
@@ -108,22 +110,22 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4d37e1e6a4651dea201ba3ddb07a4969d141535c98be0294bc055215d501b88c"
+          "sha256": "86cc7af2ea214193cd893ef0a1507b50aef6ab43ffa53f09d0839c9fd00e1ffd"
         }
       ]
     },
     {
       "id": "native-two-factories",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/production-analysis-aligned-two-factories/tests.json --testNamePattern 'retains style-color reported quantities at the old factory'",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/production-analysis-after-light-review-repair/tests.json --testNamePattern 'retains style-color reported quantities at the old factory'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8aac36a4164d7c80c47539b4d5716380f0b77ea0",
-      "sourceFingerprint": "2b88c58ae1c6c9bab585538250e5146bc750527fc9590e2ae3cd9978ed01b93e",
-      "startedAt": "2026-11-18T09:16:38.940956+00:00",
-      "endedAt": "2026-11-18T09:16:59.271499+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/production-analysis-aligned-two-factories/tests.log",
-      "logSha256": "aa12ad6a8ddbb269e908e862dce0706744f6343c933ed9e03dc36c53472a8176",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:44:53.029494+00:00",
+      "endedAt": "2026-11-18T09:45:11.022502+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/production-analysis-after-light-review-repair/tests.log",
+      "logSha256": "ac8ccd7220680a43b9fe8dfd37e485ef4088b4952a910e28bd4ead099fec312e",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup. The explicit test-name filter is the original two-factory production-analysis case. Other cases are outside this local target and retain normal GitHub CI coverage.",
       "passed": 1,
       "failed": 0,
@@ -131,21 +133,21 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f7d1b30992659fbcd3f51e668722817a90376400e71ee2cde54c6503d0bcf909"
+          "sha256": "e63476127aebded0a02026e0df2c1b7f4acd8de027ff2905e6be1eb6a7aa05aa"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-washing-service.ts apps/api/src/production-platform/bulk-washing-todos.ts apps/api/src/production-platform/factory-production-facts.ts apps/api/src/production-platform/factory-production-qc-todos.ts apps/api/src/production-platform/qc-progress-evidence.ts apps/api/src/production-platform/qc-progress-todos.ts apps/api/src/production-platform/sla-plan-repository.ts apps/api/src/sourcing/production-analysis.ts apps/api/src/sourcing/production-dashboard-service.ts scripts/ci/full-gate-risk-map.mjs tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-washing-service.ts apps/api/src/production-platform/bulk-washing-todos.ts apps/api/src/production-platform/factory-production-facts.ts apps/api/src/production-platform/factory-production-qc-todos.ts apps/api/src/production-platform/qc-progress-evidence.ts apps/api/src/production-platform/qc-progress-todos.ts apps/api/src/production-platform/sla-plan-repository.ts apps/api/src/sourcing/production-analysis.ts apps/api/src/sourcing/production-dashboard-service.ts scripts/ci/full-gate-risk-map.mjs tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts tests/unit/todo-qc-lazy-clock.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8aac36a4164d7c80c47539b4d5716380f0b77ea0",
-      "sourceFingerprint": "2b88c58ae1c6c9bab585538250e5146bc750527fc9590e2ae3cd9978ed01b93e",
-      "startedAt": "2026-11-18T09:13:59.559034+00:00",
-      "endedAt": "2026-11-18T09:14:03.217051+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/qc-aligned-lint/command.log",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:40.899759+00:00",
+      "endedAt": "2026-11-18T09:41:44.191812+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup."
     },
@@ -155,11 +157,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8aac36a4164d7c80c47539b4d5716380f0b77ea0",
-      "sourceFingerprint": "2b88c58ae1c6c9bab585538250e5146bc750527fc9590e2ae3cd9978ed01b93e",
-      "startedAt": "2026-11-18T09:14:03.621313+00:00",
-      "endedAt": "2026-11-18T09:15:05.661926+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/qc-aligned-types/command.log",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:44.541604+00:00",
+      "endedAt": "2026-11-18T09:42:49.540839+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup."
     },
@@ -169,16 +171,39 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8aac36a4164d7c80c47539b4d5716380f0b77ea0",
-      "sourceFingerprint": "2b88c58ae1c6c9bab585538250e5146bc750527fc9590e2ae3cd9978ed01b93e",
-      "startedAt": "2026-11-18T09:15:06.067832+00:00",
-      "endedAt": "2026-11-18T09:15:14.973844+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/qc-aligned-preflight/command.log",
-      "logSha256": "7364e54aadabb42eacf0e1202ae619650300adfac41189cfd816da70ba767a94",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:42:49.924250+00:00",
+      "endedAt": "2026-11-18T09:42:59.724647+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-preflight/command.log",
+      "logSha256": "d0216000c473b53f44d7625b2709fcb5b64dbdab0897a16c6e44ac87d71e78c8",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup.",
       "passed": 284,
       "failed": 0,
       "skipped": 0
+    },
+    {
+      "id": "qc-batch-unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/todo-qc-lazy-clock.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-factory-qc-mock-repair-unit-20261118.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:39.232207+00:00",
+      "endedAt": "2026-11-18T09:41:40.600199+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-unit/command.log",
+      "logSha256": "67480651a01da102a676ca2b7d1c11a12552be1dd6672bc87014364593c47c71",
+      "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup.",
+      "passed": 143,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "fe96799df6d3abb1e19aacbd09a3e055d3d2fe7e70d1f115577ececde86942bb"
+        }
+      ]
     }
   ]
 }
