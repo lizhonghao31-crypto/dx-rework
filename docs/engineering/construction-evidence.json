@@ -2,7 +2,7 @@
   "version": 1,
   "base": "84b979b0a099f53462c52e24c6b4770abb8c962c",
   "risk": "full",
-  "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
+  "sourceFingerprint": "208a365e4019cef0fddf6c55ab1bebd56f5f23c90fc1f166a3a73d198a1fcceb",
   "rules": [
     {
       "rule": "R1 exact original cancellation of a source task on an open linked order",
@@ -47,44 +47,69 @@
         "types",
         "preflight"
       ]
+    },
+    {
+      "rule": "Read persisted bulk special-craft price only after the original app receives the commit receipt",
+      "source": "Full 44361502819 job 135006660430 exposed the browser test reading the previous price before a successful native write was established.",
+      "writes": [
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "tests/acceptance/supplychain-settings-browser.ts"
+      ],
+      "oldTests": [
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "initialization": "The original root and worker sessions use the same isolated authenticated browser and PostgreSQL fixture. Each original action is submitted once.",
+      "dateAndPermission": "The administrator assignment and the original pattern-room worker update are confirmed with exact request and row identity. The current-session IE omission and post-revocation denial are retained.",
+      "expectation": "The native assignment and price mutations return HTTP 200 with the expected command and next version. The independently read bulk craft row persists unit price 8 and the original role can no longer read the quotation after revocation.",
+      "checks": [
+        "native",
+        "lint",
+        "types",
+        "preflight"
+      ]
     }
   ],
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/cancelled-linked-source-regression/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/cancelled-role-quotation-receipt-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
-      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
-      "startedAt": "2026-11-18T17:31:07.244392+00:00",
-      "endedAt": "2026-11-18T17:33:00.860049+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/cancelled-linked-source-regression/tests.log",
-      "logSha256": "2ff3a026ab3076f19b01bebddf5d7b5889c28ea558814f1b080a290b24e6c5b2",
+      "testedHead": "077412fbbc43d6ffb7deadb23a38ba441a9fcda1",
+      "sourceFingerprint": "208a365e4019cef0fddf6c55ab1bebd56f5f23c90fc1f166a3a73d198a1fcceb",
+      "startedAt": "2026-11-18T18:31:45.587323+00:00",
+      "endedAt": "2026-11-18T18:33:32.438285+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/cancelled-role-quotation-receipt-native/tests.log",
+      "logSha256": "86d5e89a6d2a0091616ddf89fe70f78433f3fe0a89f5708d0b661c8017fa9f9a",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 25,
+      "passed": 12,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "56697bfc8da649d182d6af0f5dfbc06b2f17731bc8c806b839ce2601c4dc5f63"
+          "sha256": "f3372bb4ec98ea8741c773303f2171d884b3e90c836e7ba2be9928af38fe1325"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/journey-termination.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-r1-checks-20261118/unit/tests.json",
+      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/journey-termination.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-r1-receipt-20261118/unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
-      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
-      "startedAt": "2026-11-18T17:31:07.517105+00:00",
-      "endedAt": "2026-11-18T17:31:14.546000+00:00",
-      "log": "/tmp/dx-sla-r1-checks-20261118/unit/command.log",
-      "logSha256": "60a63f06c562ab55e685241eb9761a72bf3e1b4288105a1dc4d0c71bb12a1b98",
+      "testedHead": "077412fbbc43d6ffb7deadb23a38ba441a9fcda1",
+      "sourceFingerprint": "208a365e4019cef0fddf6c55ab1bebd56f5f23c90fc1f166a3a73d198a1fcceb",
+      "startedAt": "2026-11-18T18:32:10.442864+00:00",
+      "endedAt": "2026-11-18T18:32:17.276602+00:00",
+      "log": "/tmp/dx-sla-r1-receipt-20261118/unit/command.log",
+      "logSha256": "abdbc5a4dcfafc48be9635004b62d99ca5eeae5511c5606a51f67ddf4fa0e8d2",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
       "passed": 131,
       "failed": 0,
@@ -92,21 +117,21 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0600e1418a04e31bd3956550189269abf0d4d645b25426ab471cd99585d2fb81"
+          "sha256": "3d4c1e02e3999b7a0c5e783f880b16b6c2658c227edc47d1059824936f00d142"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/cancelled-task-history.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/order-time-reading.ts tests/helpers/order-time-rewash-fixture.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-reading.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js tests/integration/special-craft-browser-postgres.test.ts apps/api/src/production-platform/cancelled-task-history.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/order-time-reading.ts tests/helpers/order-time-rewash-fixture.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-reading.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
-      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
-      "startedAt": "2026-11-18T17:31:07.517525+00:00",
-      "endedAt": "2026-11-18T17:31:09.917890+00:00",
-      "log": "/tmp/dx-sla-r1-checks-20261118/lint/command.log",
+      "testedHead": "077412fbbc43d6ffb7deadb23a38ba441a9fcda1",
+      "sourceFingerprint": "208a365e4019cef0fddf6c55ab1bebd56f5f23c90fc1f166a3a73d198a1fcceb",
+      "startedAt": "2026-11-18T18:32:07.831368+00:00",
+      "endedAt": "2026-11-18T18:32:10.112835+00:00",
+      "log": "/tmp/dx-sla-r1-receipt-20261118/lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -116,11 +141,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
-      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
-      "startedAt": "2026-11-18T17:31:10.302191+00:00",
-      "endedAt": "2026-11-18T17:32:20.300976+00:00",
-      "log": "/tmp/dx-sla-r1-checks-20261118/types/command.log",
+      "testedHead": "077412fbbc43d6ffb7deadb23a38ba441a9fcda1",
+      "sourceFingerprint": "208a365e4019cef0fddf6c55ab1bebd56f5f23c90fc1f166a3a73d198a1fcceb",
+      "startedAt": "2026-11-18T18:32:17.682611+00:00",
+      "endedAt": "2026-11-18T18:33:31.742266+00:00",
+      "log": "/tmp/dx-sla-r1-receipt-20261118/types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -130,12 +155,12 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
-      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
-      "startedAt": "2026-11-18T17:33:24.188284+00:00",
-      "endedAt": "2026-11-18T17:33:33.391886+00:00",
-      "log": "/tmp/dx-sla-r1-checks-20261118/preflight-final/command.log",
-      "logSha256": "3dfebe5a05c9f184852a4f6666886b5ea44235c9bb87e03bb0640eb466dbb631",
+      "testedHead": "077412fbbc43d6ffb7deadb23a38ba441a9fcda1",
+      "sourceFingerprint": "208a365e4019cef0fddf6c55ab1bebd56f5f23c90fc1f166a3a73d198a1fcceb",
+      "startedAt": "2026-11-18T18:33:32.065594+00:00",
+      "endedAt": "2026-11-18T18:33:42.947717+00:00",
+      "log": "/tmp/dx-sla-r1-receipt-20261118/preflight/command.log",
+      "logSha256": "0a815596857789dceb5f3b5d25eef6f7e7ff2031337481d45abd381af9bb5df0",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
       "passed": 284,
       "failed": 0,
