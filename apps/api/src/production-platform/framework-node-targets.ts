@@ -1,15 +1,32 @@
 import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {buildOrderTimeWork} from './order-time-schedule.js';
-import {fixedTimelineTargets,type FixedTimelineTarget} from './fixed-timeline-targets.js';
+import {fixedTimelineTargets,shiftFixedTimeline,type FixedTimelineTarget} from './fixed-timeline-targets.js';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
+import {orderTimeWorkDefinition} from './fixed-work-definition.js';
 
 /** Current arranged P used by both Journey and the exact native-task reader.
  * Completion/history assessment and milestone event constraints stay separate. */
-export function arrangedOrderTimeTarget(saved:Pick<StoredOrderTimePlan,'input'|'targets'>,scopeRef:string,workId:string){
+export function arrangedOrderTimeTarget(saved:StoredOrderTimePlan,scopeRef:string,workId:string,notStarted=false){
  const framework=saved.input.frameworkPlans?.[scopeRef];
- return framework?framework.arranged.find(target=>target.id===workId):saved.targets[scopeRef]?.[workId];
+ if(framework)return framework.arranged.find(target=>target.id===workId);
+ if(saved.input.formalTargets?.[scopeRef])return saved.input.formalTargets[scopeRef][workId];
+ const original=saved.targets[scopeRef]?.[workId];
+ if(notStarted&&saved.changeKind==='arrangement'&&original?.end.at){
+  const work=saved.input.work.find(row=>row.id===workId);
+  if(work&&!work.includedIn&&Object.hasOwn(saved.input.plan.overrides,work.parameterKey)){
+   const {minutes,calendar}=orderTimeWorkDefinition(saved.input.plan,work.parameterKey,work.craftStep);
+   if(minutes!==null&&calendar&&Date.parse(original.end.at)<Date.parse(shiftFixedTimeline(saved.time.now,minutes,calendar))){
+    // The old recorded target is proven too early for the approved duration.
+    // Without the historical predecessor/condition snapshot the floor is not
+    // a formal endpoint. The original arrangement action can adopt it again.
+    const unknown={at:null,exclusive:false,reasons:['原调整未保存剩余安排依据，请从本单时效重新核对并正式安排']};
+    return {id:workId,start:unknown,end:unknown};
+   }
+  }
+ }
+ return original;
 }
 
 /** An event contributes no extra work duration. Its scheduling position is not

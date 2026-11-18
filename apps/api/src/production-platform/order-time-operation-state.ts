@@ -154,10 +154,12 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   LEFT JOIN LATERAL(SELECT due_at,sla_basis FROM digital_production_deadline_revisions WHERE task_id=t.task_id AND entered_at IS NOT NULL ORDER BY revision_id LIMIT 1)d ON true
   WHERE ($1::uuid IS NOT NULL AND a.source_id=$1) OR ($2::uuid IS NOT NULL AND a.production_order_id=$2)`,[sourceId,order?.production_order_id??null])).rows:[];
  const ready=await nativeTaskReadiness(db,tasks.map(task=>task.task_id)),progress=new Map<string,OrderTimeNativeProgress>();
+ const pendingTasks=new Set(tasks.filter(task=>task.state==='pending'&&!task.returned).map(task=>task.task_id)),pendingWork=new Set<string>();
  for(const work of value.work){
   const reference=work.canonicalWorkRef??work.id,match=reference.match(/^source:([^:]+):round:(\d+):/),step=reference.match(/:step:([^:]+):/)?.[1],key=alias[work.parameterKey]??work.parameterKey;
   const matched=tasks.filter(task=>task.state!=='cancelled'&&task.task_kind===key&&(!match||task.source_id===match[1]&&task.route_version===Number(match[2]))&&(!step||task.step_id===step));
   if(matched.length!==1)continue;const task=matched[0]!,native=ready.get(task.task_id),complete=task.state==='completed'&&!task.returned;
+  if(pendingTasks.has(task.task_id))pendingWork.add(reference);
   progress.set(reference,{completed:complete,actualAt:complete&&['现场登记','已核实'].includes(task.completed_quality)&&task.completed_at?new Date(task.completed_at).toISOString():null,
    readyAt:native?.tracked?native.firstReadyAt:['现场登记','已核实'].includes(task.entered_quality)&&task.entered_at?new Date(task.entered_at).toISOString():null,
    deadline:task.due_at?new Date(task.due_at).toISOString():null,calendar:task.sla_basis?.calendarRef??'continuous'});
@@ -184,7 +186,9 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    const ready=fact.clockStart.precision==='instant'?fact.clockStart.at:null;
    const windows=fact.ownWindows??[],open=windows.filter(window=>!window.complete),deadlines=open.map(window=>window.deadline).filter((at):at is string=>Boolean(at));
    const deadline=open.length?deadlines.length===open.length?deadlines.sort().at(-1)!:null:ready&&node.responsibilityMinutes!==null&&node.responsibilityMinutes!==undefined&&node.responsibilityCalendar?(await import('./fixed-timeline-targets.js')).shiftFixedTimeline(ready,node.responsibilityMinutes,node.responsibilityCalendar):null;
-   progress.set(scope.scopeRef+'|'+(work.canonicalWorkRef??work.id),{completed:fact.businessCompleted,actualAt:fact.completed.precision==='instant'?fact.completed.at:null,actualDate:fact.completed.precision==='date'?fact.completed.date:null,readyAt:ready,deadline,calendar:node.responsibilityCalendar??null,
+   const scopedWork=scope.scopeRef+'|'+(work.canonicalWorkRef??work.id);
+   if(fact.ownTaskId&&pendingTasks.has(fact.ownTaskId))pendingWork.add(scopedWork);
+   progress.set(scopedWork,{completed:fact.businessCompleted,actualAt:fact.completed.precision==='instant'?fact.completed.at:null,actualDate:fact.completed.precision==='date'?fact.completed.date:null,readyAt:ready,deadline,calendar:node.responsibilityCalendar??null,
     unresolvedOverrun:open.some(window=>window.deadline&&Date.parse(window.deadline)<=Date.parse(time.now))});
   }
  }
@@ -266,5 +270,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);
  void database;
  const linkedApplicability={complete:Boolean(!sourceId||development)&&(!includesProduction||Boolean(production&&production.craftSteps!==null&&production.preshrink!==null)),parameterKeys:[...new Set([...value.work.map(work=>work.parameterKey),...extraSettings.keys()])]};
+ if(operation.kind==='arrangement'&&saved&&!value.frameworkContext)
+  value.formalInputs={version:'approved-remaining-v1',progress:Object.fromEntries(progress),notBefore,pendingWork:[...pendingWork].sort()};
  return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production,linkedApplicability};
 }
