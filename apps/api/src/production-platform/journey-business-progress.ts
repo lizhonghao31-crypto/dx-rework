@@ -1,7 +1,7 @@
 import {
   JOURNEY_NODES, JOURNEY_STAGES, isJourneyPlanningNode,
   type JourneyBusinessProgress, type JourneyBusinessRequirement, type JourneyBusinessQuantities,
-  type JourneyNode, type JourneyRequirementTarget, type OrderJourney,
+  type JourneyRequirementTarget, type OrderJourney,
 } from '@dx-rework/contracts/digital-production-journey';
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import {journeyCompletedAtObservation} from './journey-completion-evidence.js';

@@ -153,8 +153,8 @@ it.each([
   {name:'exact observation boundary',actualAt:asOf,actualQuality:'verified',completed:true},
   {name:'effective Beijing date without a fictitious instant',actualAt:null,actualDate:'2026-11-05',actualQuality:'unverified',completed:true},
   {name:'future Beijing date',actualAt:null,actualDate:'2026-11-06',actualQuality:'verified',completed:false},
-] satisfies Array<{name:string;actualAt:string|null;actualDate?:string;actualQuality:JourneyNode['actualQuality'];completed:boolean}>)('counts only effective material completion: $name',({name:_,completed,...occurrence})=>{
+] satisfies Array<{name:string;actualAt:string|null;actualDate?:string;actualQuality:JourneyNode['actualQuality'];completed:boolean}>)('counts only effective material completion: $name',({actualAt,actualDate,actualQuality,completed})=>{
   const order=fixture(),task=node(order,'development_materials');
-  Object.assign(task,{state:'completed',...occurrence});
+  Object.assign(task,{state:'completed',actualAt,actualDate,actualQuality});
   expect(journeyBusinessProgress(order,asOf).requirements.find(row=>row.key===task.key)).toMatchObject({applicability:'applicable',completed});
 });
