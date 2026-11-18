@@ -87,9 +87,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.advance(scene,'2026-11-10T10:00:00+08:00');await run(()=>pack(receipt.receivingBatchId,100,{mode:'instant',value:'2026-11-10T09:30:00+08:00'}));
   sheet=await run(()=>closure.read(f.root,made.id));expect(fact().completedAt).toBe('2026-11-10T01:30:00.000Z');expect(sheet.lines[0]!.packingRecordedAt).toBe('2026-11-10T02:00:00.000Z');
   const physical=await run(()=>new DigitalJourneyQuery(f.db).read(f.root,made.id,undefined,true));
-  expect(sheet.stage).toBe('等待回货与装箱');expect(physical.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='packing')).toMatchObject({state:'completed',actualAt:'2026-11-10T01:30:00.000Z',completesOrder:false});expect(physical.display?.mainState).not.toBe('completed');
+  expect(sheet.stage).toBe('等待回货与装箱');expect(physical.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='packing')).toMatchObject({state:'completed',actualAt:'2026-11-10T01:30:00.000Z',actualQuality:'unverified',completesOrder:false});expect(physical.display?.mainState).not.toBe('completed');
+  expect(physical.businessProgress?.requirements.find(row=>row.key==='packing')).toMatchObject({applicability:'applicable',completed:true});
   await run(()=>pack(receipt.receivingBatchId,100,{mode:'date',value:'2026-11-10'}));sheet=await run(()=>closure.read(f.root,made.id));expect(fact().completedAt).toBeUndefined();expect(fact().completedDate).toBe('2026-11-10');
   const dated=await run(()=>new DigitalJourneyQuery(f.db).read(f.root,made.id,undefined,true));expect(dated.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='packing')).toMatchObject({state:'completed',actualAt:null,actualDate:'2026-11-10',completesOrder:false});
+  expect(dated.businessProgress?.requirements.find(row=>row.key==='packing')).toMatchObject({applicability:'applicable',completed:true});
   const stored=await run(()=>new JourneyFactRepository(f.db).buildOne({kind:'order',id:made.id}));
   expect(stored.model.nodes.find(node=>node.key==='packing')).toMatchObject({state:'completed',actualAt:null,actualDate:'2026-11-10',completesOrder:false});
   const indexed=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'});
