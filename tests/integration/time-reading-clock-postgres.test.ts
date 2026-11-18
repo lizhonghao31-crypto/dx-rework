@@ -14,7 +14,10 @@ import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {DevelopmentWorkspaceQuery} from '../../apps/api/src/production-platform/development-workspace-query.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
@@ -28,10 +31,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  const sources:Array<{id:string;at:string;mode:string}>=[];
  beforeAll(async()=>{f=await businessAnchorFixture(url!);workerPerson=(await f.db.query('SELECT person_id FROM business_people WHERE app_user_id=$1 AND active',[f.people['pattern-room-worker']!.actorId])).rows[0].person_id;},120000);
  afterAll(async()=>{await f?.dispose();});
- const makeSource=async(prefix='TEST-READ')=>{
+ const makeSource=async(prefix='TEST-READ',materialId?:string)=>{
   const designer=f.people['sample-designer']!,identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true);
   const id=(await identity.createSource(designer,{developmentType:'头版',designStyleNo:`${prefix}-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID())).sourceId;
-  const file=await f.image(designer),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:file,kind:'款图'}]});
+  const materials=materialId?[{materialId,category:'主布',label:'主布',name:'棉',supplier:'TEST',width:'',weight:'',composition:'',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}]:[];
+  const file=await f.image(designer),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original',craft:'无',washing:'免洗',materials,files:[{attachmentId:file,kind:'款图'}]});
   const draft=await forms.save(designer,id,{expectedVersion:0,document},randomUUID());await forms.publish(designer,id,draft.version,randomUUID());return id;
  };
  for(const mode of ['past','current','future','ordinary'] as const)it(`${mode}: native historical fields and attachments use the original terminal audit event, not business cutoff`,async()=>{
@@ -189,4 +193,45 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await analysis.list(f.root,filters)).rows.find(r=>r.taskId===id)?.waitingSeconds).toBe(3600);
  },testExecutionConfig.correctnessTimeoutMs);
 
+ it('counts actual native material completion only at and after A in detail and authorized list',async()=>{
+  const scopeStart='2026-12-10T00:00:00.000Z',actual='2026-12-10T04:00:00.000Z',scene=await f.scene(scopeStart),materialId=randomUUID();
+  const id=await f.runtime.run(scene,f.root,()=>makeSource('TEST-OBSERVED-COMPLETION',materialId));
+  const execution=new DevelopmentExecutionService(f.db,true),clerk=f.people['development-clerk']!;
+  let taskId:string|undefined;
+  await f.advance(scene,actual);
+  await f.runtime.run(scene,f.root,async()=>{
+   const view=await execution.read(clerk,id),verification=view.materialVerification!,checks={materialId,physical:true,quantity:true,color:true,specification:true};
+   taskId=view.tasks.find(task=>task.taskKind==='development_materials')!.taskId;
+   await execution.saveMaterials(clerk,id,{taskId,expectedDocumentVersion:verification.documentVersion,expectedVersion:verification.version,entries:[{...checks,usage:'use',note:'',confirmedWith:''}]},randomUUID());
+   await execution.check(clerk,id,{taskId,expectedVerificationVersion:verification.version+1,result:'通过',note:'TEST 实物核配',items:[checks]},randomUUID());
+  });
+  const snapshot=async()=>JSON.stringify((await f.db.query('SELECT state,completed_at,completed_quality FROM digital_production_tasks WHERE task_id=$1',[taskId])).rows);
+  const original=await snapshot();expect(JSON.parse(original)).toEqual([{state:'completed',completed_at:actual,completed_quality:'现场登记'}]);
+  // Read the same persisted action at three observations. The isolated clock
+  // reader controls observations only, without rewinding the native scene.
+  const readPool={connect:f.db.connect.bind(f.db),query:f.db.query.bind(f.db)} as unknown as Pool;
+  let observed='';
+  installAcceptanceClockReader(readPool,{read:async scope=>scope.id===id?{now:observed,scenarioId:scene,revision:2}:null,nativeScenario:async()=>null});
+  const query=new DigitalJourneyQuery(readPool),repository=new JourneyFactRepository(readPool),resource={kind:'source' as const,id};
+  for(const [at,count] of [['2026-12-10T03:00:00.000Z',0],[actual,1],['2026-12-10T05:00:00.000Z',1]] as const){
+   observed=at;
+   const native=await query.read(f.root,id,undefined,true);
+   const task=native.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===taskId)!;
+   expect(task.state).toBe('completed');
+   expect(native.supervision!.nodes.find(timing=>timing.id===`development_materials:task:${taskId}`)).toMatchObject({actualEnd:count?actual:null});
+   const style=native.designStyleNo;
+   const indexed=(await repository.buildOne(resource)).model.requirements.find(row=>row.key==='development_materials');
+   expect(indexed?.completed).toBe(Boolean(count));
+   if(!count){const cached=(await f.db.query('SELECT selection_expires_at FROM digital_journey_fact_models WHERE resource_kind=\'source\' AND resource_id=$1',[id])).rows[0];expect(cached.selection_expires_at.toISOString()).toBe(actual);}
+   const items=await query.list(f.root,JourneyFilterSchema.parse({search:style,scope:'development'}),true);
+   expect(items.items.map(item=>item.sourceId)).toEqual([id]);
+   for(const view of [native,items.items[0]!]){
+    expect(view.asOf).toBe(at);
+    expect(view.businessProgress!.requirements.find(row=>row.id==='development_materials:whole')).toMatchObject({applicability:'applicable',completed:Boolean(count),instanceIds:[taskId]});
+    expect(view.visualProgress!.stages.find(row=>row.key==='development')?.completed).toBe(count*2);
+    expect(view.display!.stages.find(row=>row.key==='development')!.completed).toBe(count*2);
+   }
+  }
+  expect(await snapshot()).toBe(original);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

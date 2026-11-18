@@ -23,12 +23,13 @@ function fixture(keys = selected): OrderJourney {
 }
 const nodes = (order: OrderJourney) => order.stages.flatMap(stage => stage.nodes);
 const node = (order: OrderJourney, key: string) => nodes(order).find(value => value.key === key)!;
+const markDone = (node: JourneyNode) => Object.assign(node, {state: 'completed', actualAt: now, actualQuality: 'verified'} as const);
 const progress = (order: OrderJourney) => { order.businessProgress = journeyBusinessProgress(order, now); order.businessProgress.dates = journeyBusinessDates(order); return journeyVisualProgress(order, now); };
 const date = (at = end): JourneyBusinessDate => ({ at, precision: 'instant', quality: 'recorded', status: 'complete', covered: 1, total: 1, reasons: [] });
 
 it('R3 actual shares weight applicable stages equally before their effective small nodes, retaining independent n/m', () => {
   const order = fixture();
-  for (const key of ['order_information', 'development_materials', 'bulk_cutting', 'receipts']) node(order, key).state = 'completed';
+  for (const key of ['order_information', 'development_materials', 'bulk_cutting', 'receipts']) markDone(node(order, key));
   const result = progress(order);
   expect(order.businessProgress).toMatchObject({ applicable: 7, completed: 4, ratio: 4 / 7 });
   expect(result).toMatchObject({ applicableStages: 4, completedStages: 2, unknownStages: 0, actualRatio: (1 + 1 / 2 + 1 + 1 / 3) / 4 });
@@ -38,12 +39,12 @@ it('R3 actual shares weight applicable stages equally before their effective sma
 
 it('R3 all seven applicable stages keep seven shares rather than one flat node count', () => {
   const order = fixture(['order_information', 'development_pattern', 'bulk_pattern', 'bulk_cutting', 'warehouse_dispatch', 'production_reporting', 'packing']);
-  for (const key of ['order_information', 'development_pattern', 'bulk_pattern']) node(order, key).state = 'completed';
+  for (const key of ['order_information', 'development_pattern', 'bulk_pattern']) markDone(node(order, key));
   expect(progress(order)).toMatchObject({ applicableStages: 7, completedStages: 3, actualRatio: 3 / 7 });
 });
 
 it('R3 business closure does not force still-incomplete effective requirements to 100 percent', () => {
-  const order = fixture(['development_pattern', 'packing']); node(order, 'packing').state = 'completed';
+  const order = fixture(['development_pattern', 'packing']); markDone(node(order, 'packing'));
   order.display = journeyDisplay(order, now);
   expect(order.display.mainState).toBe('completed');
   expect(progress(order).actualRatio).toBe(0.5);
@@ -61,7 +62,7 @@ it('R3 an overdue stage retains its own risk without changing the existing whole
 
 it('R3 splitting a PO/batch obligation cannot add shares or hide an unfinished sibling', () => {
   const order = fixture(['process_logistics', 'bulk_qc']);
-  const first = node(order, 'process_logistics'); first.state = 'completed';
+  const first = markDone(node(order, 'process_logistics'));
   const stage = order.stages.find(stage => stage.key === 'post_cutting')!;
   expect(progress(order).actualRatio).toBe(0.5);
   for (let i = 0; i < 9; i++) stage.nodes.push({ ...first, instanceId: `scope-${i}` });
@@ -79,19 +80,21 @@ it('R3 unknown applicability and a missing catalog scope never disappear as not-
 });
 
 it('R3 source-only development cannot obtain completed shares from bulk stages', () => {
-  const order = fixture(); order.orderId = null; node(order, 'development_materials').state = 'completed';
+  const order = fixture(); order.orderId = null; markDone(node(order, 'development_materials'));
   expect(progress(order)).toMatchObject({ applicableStages: 1, actualRatio: 0.5 });
   expect(progress(order).stages.find(stage => stage.key === 'creation')?.actualRatio).toBeNull();
 });
 
-it('R3 inherited completion uses original effective evidence without inventing a current adoption date', () => {
+it('R3 records current inheritance in progress only after its own adoption, without borrowing the original actual time', () => {
   const order = fixture(['development_pattern']), current = node(order, 'development_pattern');
   current.state = 'inherited'; current.inheritedFrom = { taskId: 'original-result', round: 1 }; current.enteredAt = null;
   order.stages.find(stage => stage.key === 'development')!.nodes.push({ ...current, instanceId: 'original-result', current: false,
     state: 'completed', enteredAt: '2026-10-01T00:00:00.000Z', actualAt: '2026-10-02T00:00:00.000Z', actualQuality: 'verified', inheritedFrom: null });
   const result = progress(order);
-  expect(result.actualRatio).toBe(1);
+  expect(result.actualRatio).toBe(0);
   expect(result.startedAt).toBeNull(); expect(result.actual.at).toBeNull(); expect(result.timeRatio).toBeNull();
+  current.inheritedResult={actualAt:'2026-10-02T00:00:00.000Z',quality:'verified',adoptedAt:now,adoptedRound:1,adoptionSourceRef:'TEST-adopted-1',reason:'TEST current adoption'};
+  expect(progress(order).actualRatio).toBe(1);
 });
 
 it('R3 natural elapsed time includes Sunday and remains bounded before, within and after a reliable window', () => {

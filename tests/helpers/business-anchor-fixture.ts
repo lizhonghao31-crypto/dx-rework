@@ -124,8 +124,8 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    if(!options?.stopBeforeCompletion)for(const kind of ['纸样完成','唛架完成',...(options?.preshrink==='无需预缩'?[]:['预缩完成' as const])] as const)await completeBulkRangeFixture(db,kind==='预缩完成'?people.warehouse!:people['pattern-room-worker']!,id,sheet.preparationId!,kind);
    return {id,caseId,sourceId:source.sourceId,preparationId:sheet.preparationId!,input,key,cutting:new CuttingService(db),primary};
   };
-  const reworkReady=async()=>{
-   const ready=await bulkReady('无'),cut=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0];
+  const reworkReady=async(poCount=1)=>{
+   const ready=await bulkReady('无',undefined,poCount),cut=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows[0];
    const cutter={...people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
    await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await image(cutter)]},randomUUID());
    const warehouse={...people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};

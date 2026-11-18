@@ -4,10 +4,9 @@ import {
   type JourneyNode, type JourneyRequirementTarget, type OrderJourney,
 } from '@dx-rework/contracts/digital-production-journey';
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
+import {journeyCompletedAtObservation} from './journey-completion-evidence.js';
 
 const keyOf = (key: string) => key === 'development_material_recheck' ? 'development_materials' : key;
-const completed = (node: JourneyNode) => node.state === 'completed'
-  || node.state === 'inherited' && Boolean(node.inheritedFrom) && node.progressApplicability !== 'unknown';
 export type AdoptedRequirementPlan = {
   planId: string; revision: number;
   targets: ReadonlyMap<string, readonly JourneyRequirementTarget[]>;
@@ -47,9 +46,9 @@ export function journeyBusinessProgress(order: OrderJourney, asOf: string,
     const reasons = !instances.length ? [`尚未取得${definition.label}的适用要求及承接记录`]
       : unknown ? [`${definition.label}的适用范围或读取依据尚未齐全`] : [];
     reasons.push(...unresolvedRetired.map(node => `${node.subject ?? node.label}退役后的有效承接范围尚未核实`));
-    if (!unknown) reasons.push(...applicable.filter(node => !completed(node) && node.subject).map(node => `尚待${node.subject}完成`));
+    if (!unknown) reasons.push(...applicable.filter(node => !journeyCompletedAtObservation(node,asOf) && node.subject).map(node => `尚待${node.subject}完成`));
     const fact = evidence.get(key);
-    const isCompleted = applicability === 'applicable' && applicable.every(completed);
+    const isCompleted = applicability === 'applicable' && applicable.every(node=>journeyCompletedAtObservation(node,asOf));
     return {id: `${key}:whole`, key, label: definition.label, stage: definition.stage, scopeRef: 'whole',
       applicability: fact?.applicability ?? applicability, completed: fact ? fact.applicability === 'applicable' && fact.completed : isCompleted,
       instanceIds: fact?.instanceIds ?? applicable.map(node => node.instanceId).sort(), reasons: fact ? [fact.reason] : reasons,
