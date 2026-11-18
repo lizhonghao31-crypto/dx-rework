@@ -21,7 +21,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it.each([['development','无确定客户订单'],['certain_order','有确定客户订单'],['preorder','预下单备料']] as const)('restores %s parent intent, raw document/order input and original row identities with no command or writes',async(mode,label)=>{
   const before=Number((await h.db.query('SELECT count(*) FROM digital_production_sources')).rows[0].count),tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer');
   try{
-   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());
+   if(mode==='development'){
+    await page.addInitScript(()=>Object.defineProperty(globalThis.crypto,'randomUUID',{value:undefined,configurable:true}));
+    await page.reload();
+    expect(await page.evaluate(()=>typeof globalThis.crypto.randomUUID)).toBe('undefined');
+   }
+   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
    if(mode!=='development')await page.getByRole('button',{name:label,exact:true}).click();
    const style=page.locator('#development-create-style'),raw='  TEST pure '+mode+' raw  ';await style.fill(raw);
    const instructions=page.locator('#development-instructions');await instructions.waitFor({state:'attached'});const details=instructions.locator('xpath=ancestor::details[1]');if(await details.count()&&!await details.evaluate(node=>(node as HTMLDetailsElement).open))await details.locator('summary').first().click();

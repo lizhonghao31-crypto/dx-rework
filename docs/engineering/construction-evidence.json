@@ -2,7 +2,7 @@
   "version": 1,
   "base": "d64be1e79010c1bdea8a0215b181a3bd88f4b7cb",
   "risk": "full",
-  "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
+  "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
   "rules": [
     {
       "rule": "Restore original designer parent intent and raw child draft across genuine browser reload without creating or replaying business commands",
@@ -24,7 +24,7 @@
       "oldTests": [
         "tests/unit/development-creation-draft.test.ts"
       ],
-      "expectation": "Original development/certain-order/preorder parent intent and raw values/row identities survive actual page.reload with zero automatic writes beyond1200ms. Explicit original save alone creates, exact acknowledged source is reused. Unknown creation remains blocked; original publish/confirm each recover through exact original-key GET without another POST. Known source acknowledgement remains durable if following read fails. Unretained local file bytes require explicit reselection; legacy live C/D/E/F/PACKSTOP terminals are not inferred. In the same SPA tab, closing and reopening a bound draft verifies the authoritative source/version before editing, continues across multiple saves, and preserves the local draft without mutating a newer server version.",
+      "expectation": "Original development/certain-order/preorder parent intent and raw values/row identities survive actual page.reload with zero automatic writes beyond1200ms. Explicit original save alone creates, exact acknowledged source is reused. Unknown creation remains blocked; original publish/confirm each recover through exact original-key GET without another POST. Known source acknowledgement remains durable if following read fails. Unretained local file bytes require explicit reselection; legacy live C/D/E/F/PACKSTOP terminals are not inferred. In the same SPA tab, closing and reopening a bound draft verifies the authoritative source/version before editing, continues across multiple saves, and preserves the local draft without mutating a newer server version. The local-only view identity uses the browser compatibility provider; a missing native randomUUID neither prevents a raw draft from restoring nor generates a business key.",
       "checks": [
         "recovery-unit",
         "recovery-native",
@@ -54,7 +54,7 @@
       "expectation": "Original raw incomplete form restores after reload with no autosave. Server-committed but browser503 save and PO decision each use one original-key readonly GET, no duplicate PUT/POST. Confirm minimal success before optional latest-sheet read, preserve later draft and another unresolved envelope, keep known success on subsequent read failure. Future/corrupt/unwritable storage and changed version/round block replacement or implicit submission.",
       "checks": [
         "recovery-unit",
-        "recovery-instruction-native",
+        "recovery-native",
         "recovery-web-types",
         "recovery-lint"
       ]
@@ -84,7 +84,7 @@
       "expectation": "Save and decision namespaces never mix. Readonly RR transaction checks current access before original actor/key lookup; request/direction/hash mismatch stays unconfirmed and historical body never leaves API. Genuine approval revocation preserves receipt read in the same session, object-read revocation then denies; foreign object/actor/key denies. Business command/audit/plan state remains unchanged by GET. Original transaction refusal and post-commit sheet-read failure remain distinct.",
       "checks": [
         "recovery-unit",
-        "recovery-instruction-native",
+        "recovery-native",
         "recovery-api-types",
         "recovery-lint"
       ]
@@ -115,8 +115,7 @@
         "recovery-unit",
         "recovery-native",
         "recovery-protocol",
-        "recovery-lint",
-        "recovery-instruction-native"
+        "recovery-lint"
       ]
     }
   ],
@@ -124,69 +123,46 @@
     {
       "id": "recovery-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/same-tab-review-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/client-request-id.test.ts tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/uuid-final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
-      "startedAt": "2026-11-18T04:56:49.498428+00:00",
-      "endedAt": "2026-11-18T04:56:53.237764+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-unit/command.log",
-      "logSha256": "2a21566e42dbdaf40549516b7ca1dbed44d66d10beb04855a9228ce406fa8d4c",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
-      "passed": 162,
+      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
+      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
+      "startedAt": "2026-11-18T05:16:37.129705+00:00",
+      "endedAt": "2026-11-18T05:16:41.612171+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-unit/command.log",
+      "logSha256": "3f1e237bbcd7fc6d616cfc18ac71fb4010716cf39a7b7cb4528dcf684bc572c6",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation.",
+      "passed": 167,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9023b6434ba2e621393a6c787a57b8b9394dcb01fec7276a6137217cf5dd8e41"
+          "sha256": "06339af32a75b0e3ae2b4543385742ed349a125c9ae4697de10322b42705a1c9"
         }
       ]
     },
     {
       "id": "recovery-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-command-receipt-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/same-tab-review/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/UUID-compat-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
-      "startedAt": "2026-11-18T04:54:59.254148+00:00",
-      "endedAt": "2026-11-18T04:56:20.322185+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/pg/same-tab-review/tests.log",
-      "logSha256": "fff8d616ca054d91862d663a8ea908c96730b248a6250e3ee9db7844190cec64",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
-      "passed": 8,
+      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
+      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
+      "startedAt": "2026-11-18T05:16:15.243692+00:00",
+      "endedAt": "2026-11-18T05:18:19.712147+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/pg/UUID-compat-native/tests.log",
+      "logSha256": "0434cde9a4e930e140c6dbeef13aedac0b8401b36b40cdc714c6c27b5f7b15b0",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation.",
+      "passed": 15,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9080c11a570b6f3170c6c0ded952606d4a9f47d1eb7cdae8ee157ab7da7227e1"
-        }
-      ]
-    },
-    {
-      "id": "recovery-instruction-native",
-      "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/same-tab-review-companion/tests.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
-      "startedAt": "2026-11-18T04:57:48.880676+00:00",
-      "endedAt": "2026-11-18T04:59:27.242719+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/pg/same-tab-review-companion/tests.log",
-      "logSha256": "15852bb989c9511480e6d7c3d517d97a341af65549f5c80ac05f331bb41432c7",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
-      "passed": 7,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8c4f44544e8595297dbe06b8585458a1dbb36a109baebd75a7661036ca6e9e38"
+          "sha256": "abfb888a7111ed7e32088a1c57d5d199bf10c374587939f0685d1e343b3b9de8"
         }
       ]
     },
@@ -196,13 +172,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
-      "startedAt": "2026-11-18T04:57:01.318470+00:00",
-      "endedAt": "2026-11-18T04:57:18.806309+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-api-types/command.log",
+      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
+      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
+      "startedAt": "2026-11-18T05:16:50.525552+00:00",
+      "endedAt": "2026-11-18T05:17:09.923500+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay."
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation."
     },
     {
       "id": "recovery-web-types",
@@ -210,13 +186,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
-      "startedAt": "2026-11-18T04:57:19.106663+00:00",
-      "endedAt": "2026-11-18T04:57:48.612466+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-web-types/command.log",
+      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
+      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
+      "startedAt": "2026-11-18T05:17:10.300990+00:00",
+      "endedAt": "2026-11-18T05:17:44.804232+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay."
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation."
     },
     {
       "id": "recovery-lint",
@@ -224,13 +200,13 @@
       "command": "python3 /workspace/sla-instruction-recovery-20261117/lint-current.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
-      "startedAt": "2026-11-18T04:56:53.520873+00:00",
-      "endedAt": "2026-11-18T04:56:54.463006+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-lint/command.log",
-      "logSha256": "5834ccf365e50cd00d4aacf53afe1f6b6400c3cfd355f227333d2bc353831910",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay."
+      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
+      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
+      "startedAt": "2026-11-18T05:16:41.921448+00:00",
+      "endedAt": "2026-11-18T05:16:42.934564+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-lint/command.log",
+      "logSha256": "9b04384091d6ec027d5ea962148d09194a3498bb4200299c4886e9a3236a57cf",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation."
     },
     {
       "id": "recovery-protocol",
@@ -238,13 +214,13 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "76aba8dcea0048e584374a970b0cda6ed1342401bca7c6f3f384e47248acd912",
-      "startedAt": "2026-11-18T04:56:54.826969+00:00",
-      "endedAt": "2026-11-18T04:57:00.992961+00:00",
-      "log": "/workspace/sla-instruction-recovery-20261117/checks/same-tab-review-protocol/command.log",
-      "logSha256": "541fc00b1005274d1ba035d5ae590038a0562ae48a1143e41b35c7ba4f974c32",
-      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay.",
+      "testedHead": "067b94dd14f796ec61e77a25f0e1c6c265485cc5",
+      "sourceFingerprint": "72110670508c06a86c628a22ffc2a7ab87481ff8dd0842253ad3e9465f24b1c7",
+      "startedAt": "2026-11-18T05:16:43.354912+00:00",
+      "endedAt": "2026-11-18T05:16:50.222176+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/uuid-final-protocol/command.log",
+      "logSha256": "b2ba534dfaec7ce754f26c9bb04cdc0ca1046f15c02ac4fad273e8b8811e1486",
+      "context": "Exact repaired source against the actual release base. Original authentication and local isolated PG16, verified owned cleanup. Codex P2 fixed with pre-mount GET on same-tab reopen, with current identity/version and no business replay. Local view IDs use the existing WebView-compatible UUID provider, and pure drafts remain isolated from command generation.",
       "passed": 284,
       "failed": 0,
       "skipped": 0

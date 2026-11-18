@@ -1,6 +1,7 @@
 import {useRef,useState} from 'react';
 import type {DevelopmentSheet} from '@dx-rework/contracts/digital-development';
 import type {DigitalAccessOptions} from './digital-production-access-panel.js';
+import {createClientRequestId as createLocalViewId} from './client-request-id.js';
 import {digitalRequest} from './digital-production-api.js';
 import {recoverDevelopmentSubmission,type PendingDevelopmentSubmission} from './development-submit-recovery.js';
 import {readCreationDraft,writeCreationDraft,clearCreationDraft,type CreationDraftIdentity,type CreationDraftRecord,type CreationDraftSnapshot} from './development-creation-draft.js';
@@ -53,7 +54,7 @@ export function useDevelopmentCreationDraft(){
    return next.snapshot.intent;
   }
   // Local view identity only, never an idempotency key or source identifier.
-  view.current=crypto.randomUUID();setViewId(view.current);setRestored(null);setSourceSheet(undefined);setMode('editable');return 'development' as const;
+  view.current=createLocalViewId();setViewId(view.current);setRestored(null);setSourceSheet(undefined);setMode('editable');return 'development' as const;
  };
  const snapshot=(id:string,value:CreationDraftSnapshot)=>{
   if(id!==view.current||!owner.current)throw Error('当前创建视图或身份已变化，原资料保留');
