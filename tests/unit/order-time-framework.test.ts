@@ -53,6 +53,12 @@ it('separates a formally approved remaining schedule from old evaluation targets
  }
  const pending=formalRemainingTargets(input,{...snapshot,progress:{}},previous,time,'TEST independent pending paper variant');
  expect(pending[scopeRef]!.cut!.end.at).toBe('2026-12-08T12:00:00.000Z');
+ const active={completed:false,actualAt:null,readyAt:'2026-12-05T23:00:00.000Z',deadline:'2026-12-06T04:00:00.000Z'};
+ const started=formalRemainingTargets(input,{...snapshot,progress:{paper:active}},previous,time,'TEST native active paper');
+ expect(started[scopeRef]!.paper).toEqual(targetIndex.paper);
+ expect(started[scopeRef]!.cut).toMatchObject({start:{at:active.deadline},end:{at:'2026-12-08T04:00:00.000Z'}});
+ const missingDeadline=formalRemainingTargets(input,{...snapshot,progress:{paper:{...active,deadline:null}}},previous,time,'TEST no supported predecessor candidate');
+ expect(missingDeadline[scopeRef]!.cut!.end.at).toBeNull();
  const bounded=formalRemainingTargets(input,{...snapshot,notBefore:{cut:{precision:'instant',value:'2026-12-07T03:00:00Z',source:'TEST known independent condition'}}},previous,time,'TEST independent condition');
  expect(bounded[scopeRef]!.cut!.end.at).toBe('2026-12-09T03:00:00.000Z');
  const missing=formalRemainingTargets(input,{...snapshot,progress:{paper:{...snapshot.progress.paper!,actualAt:null}}},previous,time,'TEST unknown predecessor evidence');

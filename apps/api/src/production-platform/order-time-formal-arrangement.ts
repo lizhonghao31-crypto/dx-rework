@@ -40,8 +40,12 @@ export function formalRemainingTargets(input:OrderTimeInput,snapshot:FormalRemai
     if(observed.actualAt&&Date.parse(observed.actualAt)>now||observed.actualDate&&Date.parse(observed.actualDate+'T00:00:00+08:00')>now){
      completions[node.id]=missing('前序实际完成晚于本次安排生效');
     }else completions[node.id]=orderTimeCompletionBound(observed,time.now);
-   }else if(!target?.end.at||Date.parse(target.end.at)<now||observed.unresolvedOverrun||Date.parse(observed.readyAt!)>now){
-    completions[node.id]=missing('在办前序已超原安排或缺少可信候选完成时间');
+   }else{
+    const ready=Date.parse(observed.readyAt!),deadline=observed.deadline,finish=deadline?Date.parse(deadline):NaN;
+    // Preserve this work's original P. Its successor uses the trusted open
+    // responsibility window as a candidate handoff, separate from old P/B.
+    completions[node.id]=deadline&&ready<=now&&finish>=now&&!observed.unresolvedOverrun
+     ?{at:deadline,exclusive:false,reasons:[]}:missing('在办前序已超原责任窗口或缺少可信候选完成时间');
    }
   }
   const targets=fixedTimelineForward(applicable,minimumStart,snapshot.notBefore,{minimumStart,retained,completions});
