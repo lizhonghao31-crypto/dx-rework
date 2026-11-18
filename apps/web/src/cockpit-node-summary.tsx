@@ -7,7 +7,7 @@ import type {ScheduleRange} from '@dx-rework/contracts';
 /** Display only original server-frozen responsibility. Never add PO ranges,
  * recalculate against browser now or revive a historical overdue risk. */
 export function cockpitTerminationHistory(node:JourneyNode){
- if(!nodeIsTerminated(node))return null;
+ if(node.planningOnly||!nodeIsTerminated(node))return null;
  const fixed=node.fixedTargets?.filter(target=>!target.progress.businessCompleted)??[];
  const timings=[...(node.timings??[]),...(node.timing?[node.timing]:[])].filter(timing=>timing.termination);
  const valid=(range:ScheduleRange|null):ScheduleRange|null=>range&&Number.isFinite(range.minimum)&&Number.isFinite(range.maximum)&&range.minimum>=0&&range.maximum>=range.minimum?range:null;

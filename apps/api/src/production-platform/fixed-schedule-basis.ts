@@ -1,4 +1,4 @@
-import {cancelledTaskHistory} from './cancelled-task-history.js';
+import {cancelledTaskHistory,cancelledWorkTaskKind} from './cancelled-task-history.js';
 import {evaluateJourneyFramework,type JourneyFrameworkBasis} from './journey-time-framework.js';
 import {attachFrameworkEvents} from './journey-framework-events.js';
 import {attachJourneyWashing,journeyWashingInstanceId} from './journey-washing-projection.js';
@@ -96,13 +96,32 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
    const originalFact=inheritedWork?undefined:native[ownId]??native[definition.parameterKey??ownId];
    let fact=fromFact(originalFact);
    const candidates=owner?relevant(definition,owner):[];
-   const matches=candidates.filter(task=>task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,termination,definition.parameterKey??ownId,consumer.lineId,definition.canonicalWorkRef));
+   const matches=candidates.filter(task=>{
+    if(task.state!=='cancelled')return true;
+    const route=owner===inherited?owner?.input.route:routes.get(String(owner?.input.sourceVersions.routeRef));
+    const positions=(routes.get(task.route_ref)??route??[]).filter(position=>position.position===Number(task.route_position)&&position.nodeId===ownId);
+    if(task.adoption_id&&positions.length!==1)return false;
+    const kind=cancelledWorkTaskKind(definition.parameterKey??ownId,ownId,positions[0]?.kind);
+    return cancelledTaskHistory(task,resource,item,termination,kind,consumer.lineId,definition.canonicalWorkRef);
+   });
    if(matches.length!==1&&termination?.kind==='cancelled'&&candidates.some(task=>task.state==='cancelled'))fact=fromFact(undefined);
    if(matches.length===1){const task=matches[0]!,ready=readiness.get(task.task_id);
     const accepted=task.state==='completed'&&!task.returned&&!task.rejected;
     const completed=accepted&&['现场登记','已核实'].includes(task.completed_quality)?occurrence(task.completed_at):unknown;
     const first=ready?.tracked?occurrence(ready.firstReadyAt):task.state==='cancelled'?['现场登记','已核实'].includes(task.entered_quality)?occurrence(task.entered_at):unknown:fact.ready;
     fact={...fact,...(task.state==='cancelled'?{ownTaskId:task.task_id}:{}),ready:first,clockStart:first,completed,businessCompleted:accepted,evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...(task.cancel_events??[]).map((id:string)=>`digital_production_task_events:${id}`),...ready?.basis??[]]};
+    // Factory task entry can be empty while its real step/batch obligation
+    // has already begun. Retain only this original route's scoped windows;
+    // neither a kind aggregate nor another step may authenticate its R/D.
+    if(task.state==='cancelled'&&factory&&factory.preparationId===task.route_instance_id&&['process_logistics','bulk_qc','warehouse_dispatch'].includes(task.task_kind)){
+     const windows=factory.windows.filter(window=>window.kind===task.task_kind&&(task.step_id?window.stepRef===task.step_id:!window.stepRef)&&(!window.lineId||window.lineId===consumer.lineId));
+     if(windows.length){
+      const starts=windows.map(window=>window.enteredAt),first=starts.every((at):at is string=>Boolean(at))?occurrence([...starts].sort()[0]):unknown;
+      fact.ready=first;fact.clockStart=first;
+      fact.ownWindows=windows.map(window=>({sourceRef:window.evidence,started:occurrence(window.enteredAt),completed:occurrence(window.completedAt),complete:window.complete,deadline:window.dueAt,warningAt:window.warningAt,calendar:window.calendarRef??null}));
+      fact.evidenceRefs=[...fact.evidenceRefs,...windows.map(window=>window.evidence)];
+     }
+    }
    }
    if(definition.parameterKey==='bulk_cutting'&&consumer.lineId){const own=cuts.filter(cut=>cut.lineId===consumer.lineId);if(own.length===1){fact.ready=occurrence(own[0]!.firstReadyAt);fact.clockStart=fact.ready;fact.evidenceRefs=[...fact.evidenceRefs,...own[0]!.basis];const complete=cutCompletions.find(event=>event.payload.lineId===consumer.lineId&&event.payload.cuttingOrderId===own[0]!.cuttingOrderId);if(complete){fact.businessCompleted=true;fact.completed=['现场登记','已核实'].includes(complete.time_quality)?occurrence(complete.occurred_at):unknown;fact.evidenceRefs=[...fact.evidenceRefs,`digital_production_task_events:${complete.event_id}`];}}}
    if(ownId.startsWith('factory_work:')&&consumer.lineId){const rows=production.filter(row=>row.lineId===consumer.lineId),complete=rows.length>0&&rows.every(row=>row.completedDate);fact={...fact,ready:latest(rows.map(row=>occurrence(row.dispatchedAt))),clockStart:unknown,businessCompleted:complete,completed:complete?latest(rows.map(row=>({precision:'date',date:row.completedDate!}))):unknown,evidenceRefs:rows.flatMap(row=>[row.startTransitionRef,row.completionTransitionRef].filter((ref):ref is string=>Boolean(ref)))};}
@@ -160,7 +179,7 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
   for(const definition of definitions.filter(work=>targets.some(target=>target.id===work.id))){const target=targets.find(target=>target.id===definition.id)!;
    scope.work=[...scope.work,{...definition,dependsOn:definition.dependsOn.length?definition.dependsOn:previous,start:target.start.at,end:target.end.at,originalHandoffAt:row.goal_anchor.originalHandoff.start?.at??null}];
    let fact=fromFact(native[definition.id]??native[definition.parameterKey??definition.id]);
-   const routePosition=(routes.get(routeRef!)??[]).find(position=>position.nodeId===definition.id),ownTasks=tasks.filter(task=>task.adoption_id===saved.adoptionId&&task.route_ref===routeRef&&task.route_position===routePosition?.position&&(task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,termination,definition.parameterKey??definition.id,scope.lineId,definition.canonicalWorkRef)));
+   const routePosition=(routes.get(routeRef!)??[]).find(position=>position.nodeId===definition.id),ownTasks=tasks.filter(task=>task.adoption_id===saved.adoptionId&&task.route_ref===routeRef&&task.route_position===routePosition?.position&&(task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,termination,cancelledWorkTaskKind(definition.parameterKey??definition.id,definition.id,routePosition?.kind),scope.lineId,definition.canonicalWorkRef)));
    fact.evidenceRefs=[...fact.evidenceRefs,...ownTasks.map(task=>`task:${task.task_id}:round:${task.route_version}`)];
    if(definition.id.startsWith('bulk_qc:')){
     const windows=factory?.windows.filter(window=>window.kind==='bulk_qc'&&window.stepRef===definition.id.slice(8))??[];

@@ -28,7 +28,8 @@ import {nativeTaskReadiness,nativeCuttingReadiness,NATIVE_READINESS_KINDS} from 
 import {prepareFixedTaskPosition,insertFixedTaskPosition} from './fixed-task-route.js';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
-import {fixedTaskTargets} from './fixed-task-targets.js';
+import {fixedTaskTargets,type FixedTaskWorkBinding} from './fixed-task-targets.js';
+import {currentTaskPlanTargets} from './current-task-plan-targets.js';
 import {fixedCraftTiming,FIXED_DEVELOPMENT_CRAFT_TASKS} from './fixed-craft-timing.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
@@ -818,13 +819,15 @@ export class DigitalProductionTaskService {
       (SELECT count(*)::int FROM digital_timeline_craft_steps own WHERE own.route_ref=step.route_ref) AS count
       FROM digital_timeline_craft_steps step WHERE step.step_id=$1 AND (step.source_id=$2 AND step.round_number=$3 AND step.route_ref=$4 OR step.production_order_id=$5)`,[stepRef,task.source_id,task.route_version,task.route_instance_id,task.production_order_id])).rows[0]:null;
     const craftDisplay=taskCraftDisplay(task.task_kind,currentPolicy.label as string,effective?.sla_basis,frozenStep);
-    const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind});
+    let planBinding:FixedTaskWorkBinding|undefined;
+    const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind},binding=>{planBinding=binding;});
+    const currentPlanTargets=await currentTaskPlanTargets(db,{taskId:id,kind:task.task_kind,routeRef:task.route_instance_id,stepRef:craftDisplay.stepRef??null,resource,round:task.route_version,state:task.state,retired},observed,planBinding);
 
     await attachDevelopmentRegistrations(db,[task]);
     const responsibility=task.source_id?developmentResponsibilityWindow({...task,native_readiness:effective?.native_readiness},effective?.sla_basis?effective.entered_at:task.entered_at,effective?.sla_basis,effective?.responsibility_proof):null;
     const completion=task.source_id?await readTaskCompletionOccurrence(db,task,observed.now,completionContext):null;
     return { ...craftDisplay,...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:craftDisplay.label,
-      ...(plannedTargets?{plannedTargets}:{}),...(completion?{actualCompletion:completion}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
+      ...(plannedTargets?{plannedTargets}:{}),currentPlanTargets,...(completion?{actualCompletion:completion}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: responsibility?responsibility.at:iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
       dueAt: retired||responsibility&&!responsibility.at?null:iso(effective?.due_at ?? null), warningAt: retired||responsibility&&!responsibility.at?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,

@@ -1,3 +1,4 @@
+import {cockpitForecastRange,CockpitScopeForecast,CockpitNodeForecast} from '../../apps/web/src/cockpit-fixed-schedule.js';
 import {nodeOverdue,nodeStatus,nodeTerminationLabel,nodeIsInProgress,nodeIsTerminated,stageStatus,representativeCockpitNodes,matchingNodes} from '../../apps/web/src/digital-journey-cockpit-model.js';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -24,6 +25,11 @@ it('distinguishes known zero from unknown termination without calling either a n
  expect(cockpitTerminationHistory(zero)?.text).toBe('计时已终止；终止前未超时');
  const p=evaluateFixedScheduleScope(scope('B'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:null}).nodes[0]!,unknown=node('B',p);
  expect(originalNodeDeadlineLabel(unknown)).toContain('2026/11/10');expect(cockpitTerminationHistory(unknown)?.text).toContain('终止前责任超时待核');expect(cockpitTerminationHistory(unknown)?.text).not.toContain('按时完成');
+});
+it('keeps terminated planning-only work outside responsibility history and its original not-rated framework result',()=>{
+ const p=evaluateFixedScheduleScope(scope('A'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value={...node('A',p),planningOnly:true,state:'cancelled' as const};
+ expect(frameworkResponsibility(value,'2026-11-12T20:00:00.000Z')).toEqual({text:'不单独计责',tone:'neutral'});
+ expect(cockpitTerminationHistory(value)).toBeNull();expect(cockpitResponsibilityResult(value).text).not.toContain('终止前超时');
 });
 it('retains known, interval and unknown PO histories separately without adding or offsetting them',()=>{
  const a=evaluateFixedScheduleScope(scope('A'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value=node('A',a),b=node('B',structuredClone(a)).fixedTargets![0]!,c=node('C',structuredClone(a)).fixedTargets![0]!;
@@ -138,4 +144,36 @@ it('keeps predicted progress warnings independent from the actual customer deadl
  expect(cockpitScheduleReason(order)).toEqual({text:'预测进度落后 · PO TEST-PO',tone:'warning'});
  order.fixedSchedule!.scopes[0]!.customerDuePassed=true;
  expect(cockpitScheduleReason(order)).toEqual({text:'交期已过 · PO TEST-PO',tone:'danger'});
+});
+
+
+describe('credible finite forecast display independent of current P',()=>{
+ const L='2026-11-10T09:30:15.123Z',U='2026-11-10T12:00:00.456Z';
+ it('keeps the uncertain crossing-B state while rendering both original finite endpoints and conditions',()=>{
+  const result=evaluateFixedScheduleScope(scope('A'),'2026-11-10T10:00:00Z');result.completionEstimate={kind:'conditional',earliest:L,latest:U};result.lagMinutes={minimum:-30,maximum:120};result.coverage=['TEST original condition'];
+  expect(cockpitScopeProgress(result).text).toBe('待核');
+  const html=renderToStaticMarkup(createElement(CockpitScopeForecast,{scope:result}));expect(html).toContain('条件性预计完成范围：2026-11-10 17:30:15.123 至 2026-11-10 20:00:00.456');expect(html).toContain('TEST original condition');
+  for(const lag of [{minimum:-120,maximum:-60},{minimum:-60,maximum:0},{minimum:30,maximum:120}])expect(renderToStaticMarkup(createElement(CockpitScopeForecast,{scope:{...result,lagMinutes:lag}}))).toContain('条件性预计完成范围');
+ });
+ it('never turns lower_bound internal latest into an upper bound and does not fill invalid bounds from a target',()=>{
+  expect(cockpitForecastRange('lower_bound',{earliest:L,latest:U})!.text).toBe('预计完成下界：2026-11-10 17:30:15.123；上界待核（北京时间）');
+  expect(cockpitForecastRange('lower_bound',{earliest:L,latest:null})!.text).not.toContain('20:00');
+  for(const b of [{earliest:U,latest:L},{earliest:'bad',latest:U},{earliest:L,latest:null},{earliest:'2026-02-30T09:00:00Z',latest:U},{earliest:'2026-11-10T09:30:00',latest:U}])expect(cockpitForecastRange('conditional',b)!.text).toBe('预测区间待核');
+  expect(cockpitForecastRange('conditional',{earliest:'2026-11-10T17:30:15.123+08:00',latest:U})!.text).toContain('2026-11-10 17:30:15.123');
+  expect(cockpitForecastRange('unknown',{earliest:L,latest:U})!.text).toBe('预测区间待核');
+  expect(cockpitForecastRange('conditional',{earliest:L,latest:L,exclusive:true})!.text).toBe('条件性预计完成：2026-11-10 17:30:15.123（北京时间）；保留原排他边界（不含）');
+  expect(cockpitForecastRange('actual',{earliest:L,latest:U})).toBeNull();expect(cockpitForecastRange('terminated',{earliest:L,latest:U})).toBeNull();
+ });
+ it('renders only the node own exact scope bounds and never borrows the PO terminal or another selection',()=>{
+  const a=node('A');a.fixedTargets![0]!.progress.estimateKind='conditional';a.fixedTargets![0]!.progress.availabilityBound={earliest:L,latest:U};
+  const order={lines:[{id:'A',po:'TEST A',color:'RED'},{id:'B',po:'TEST B',color:'BLUE'}],fixedSchedule:{scopes:[{...evaluateFixedScheduleScope(scope('A'),'2026-11-10T10:00:00Z'),completionEstimate:{kind:'conditional',earliest:'2099-01-01T00:00:00Z',latest:'2099-02-01T00:00:00Z'}},evaluateFixedScheduleScope(scope('B'),'2026-11-10T10:00:00Z')]}} as OrderJourney;
+  const draw=(value=a)=>renderToStaticMarkup(createElement(CockpitNodeForecast,{node:value,order}));
+  expect(draw()).toContain('TEST A预测');expect(draw()).toContain('17:30:15.123');expect(draw()).not.toContain('2099');
+  const b=node('B',projected(scope('B')));b.fixedTargets![0]!.progress.estimateKind='unknown';expect(draw(b)).toContain('预测区间待核');expect(draw(b)).not.toContain('17:30:15');expect(draw(b)).not.toContain('TEST A');
+  for(const patch of [{lineId:'B'},{progress:{...a.fixedTargets![0]!.progress,id:'OTHER'}},{progress:{...a.fixedTargets![0]!.progress,canonicalWorkRef:'OTHER'}},{progress:{...a.fixedTargets![0]!.progress,targetRevision:'OTHER'}}]){
+   const wrong={...a,fixedTargets:[{...a.fixedTargets![0]!,...patch}]};expect(draw(wrong)).toContain('预测区间待核');expect(draw(wrong)).not.toContain('17:30:15');
+  }
+  a.fixedTargets![0]!.progress.scopeRef='po:B';expect(draw()).toContain('预测区间待核');expect(draw()).not.toContain('17:30:15');
+  a.fixedTargets![0]!.progress.state='terminated';expect(draw()).toBe('');
+ });
 });

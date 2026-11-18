@@ -1,4 +1,5 @@
 import {cockpitDifferenceDays} from './cockpit-difference-days.js';
+import {z} from 'zod';
 import {CockpitDate} from './cockpit-date.js';
 import {nodeTerminationLabel} from './digital-journey-cockpit-model.js';
 import {scopedDeadlineFallback} from './journey-sla-details.js';
@@ -82,6 +83,38 @@ export function cockpitScopeProgress(scope:ScheduleScopeProgress|undefined){
  if(lag.maximum>0)return {text:'待核',tone:'neutral'};
  if(forecast&&['lower_bound','unknown'].includes(forecast.kind))return {text:'进度待核',tone:'neutral'};
  return {text:'可用'+cockpitDurationRange({minimum:-lag.maximum,maximum:-lag.minimum}),tone:'success'};
+}
+
+/** Display server bounds only. A lower-bound node can retain an internal
+ * latest value; its kind, not that value, determines whether U is known. */
+const forecastInstant=z.iso.datetime({offset:true});
+export function cockpitForecastRange(kind:ScheduleNodeProgress['estimateKind'],bounds:{earliest:string|null;latest:string|null;exclusive?:boolean}|null|undefined,coverage:readonly string[]=[]){
+ if(kind==='actual'||kind==='terminated')return null;
+ const instant=(value:string|null|undefined)=>forecastInstant.safeParse(value).success&&Number.isFinite(Date.parse(value!));
+ const format=(value:string)=>new Date(Date.parse(value)+28800000).toISOString().replace('T',' ').replace(/\.000Z$/, '').replace(/Z$/, '');
+ let text='预测区间待核';
+ if(kind==='lower_bound'&&instant(bounds?.earliest))text='预计完成下界：'+format(bounds!.earliest!)+'；上界待核';
+ else if(kind==='conditional'&&instant(bounds?.earliest)&&instant(bounds?.latest)&&Date.parse(bounds!.earliest!)<=Date.parse(bounds!.latest!))text=(Date.parse(bounds!.earliest!)===Date.parse(bounds!.latest!)?'条件性预计完成：'+format(bounds!.earliest!):'条件性预计完成范围：'+format(bounds!.earliest!)+' 至 '+format(bounds!.latest!));
+ if(text!=='预测区间待核')text+='（北京时间）'+(bounds?.exclusive?'；保留原排他边界（不含）':'');
+ return {text,coverage:[...new Set(coverage.filter(Boolean))]};
+}
+export function CockpitScopeForecast({scope}:{scope:ScheduleScopeProgress|undefined}){
+ if(!scope||scope.state==='terminated')return null;
+ const estimate=scope.completionEstimate,value=cockpitForecastRange(estimate?.kind,estimate,scope.coverage);
+ return value?<small className="cockpit-forecast-range" data-forecast-scope={scope.scopeRef}>{value.text}{value.coverage.map(reason=><small key={reason}>{reason}</small>)}</small>:null;
+}
+export function CockpitNodeForecast({node,order}:{node:JourneyNode;order:OrderJourney}){
+ return <>{node.fixedTargets?.map(target=>{
+  if(target.progress.estimateKind===undefined||target.progress.businessCompleted||target.progress.state==='terminated')return null;
+  // A PO terminal forecast never supplies the selected node's bounds.
+  const scopes=order.fixedSchedule?.scopes.filter(scope=>scope.scopeRef===target.scopeRef&&scope.lineId===target.lineId)??[];
+  const exact=scopes.length===1&&target.progress.scopeRef===target.scopeRef&&(!target.lineId||order.lines.some(line=>line.id===target.lineId))
+   &&scopes[0]!.nodes.some(work=>work.id===target.progress.id&&work.canonicalWorkRef===target.progress.canonicalWorkRef&&work.targetRevision===target.progress.targetRevision);
+  const value=cockpitForecastRange(exact?target.progress.estimateKind:'unknown',exact?target.progress.availabilityBound:null,target.progress.coverage);
+  if(!value)return null;
+  const label=target.lineId?order.lines.find(line=>line.id===target.lineId)?.po??'对应PO待核':'本节点范围';
+  return <div key={target.scopeRef+'|'+target.progress.canonicalWorkRef} className="cockpit-node-forecast" data-forecast-scope={target.scopeRef}><dt>{label}预测：</dt><dd>{value.text}{value.coverage.map(reason=><small key={reason}>{reason}</small>)}</dd></div>;
+ })}</>;
 }
 export function cockpitScheduleReason(order:OrderJourney){
  if(!order.fixedSchedule||['completed','closed','cancelled'].includes(order.display?.mainState??''))return null;

@@ -431,9 +431,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await execution.route(f.root,made!.sourceId,{taskId:shipping.taskId,result:'通过',note:'TEST actual date-only shipping',craftExecution:null,nextAssigneeId:null,sentDate:date,trackingNo:'TEST-NATIVE-DATE'},randomUUID());
   const tasks=new DigitalProductionTaskService(f.db),original=(await tasks.history(f.root,shipping.taskId)).events.find(event=>event.kind==='completed')!;
   const context=await browser.newContext({viewport:{width:1165,height:1000}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);const page=await context.newPage();
-  const open=async(id=shipping.taskId)=>{await page.goto(base+`/ui/digital-production?task=${id}&taskView=read`);await page.locator('.task-workbench-sample header').waitFor();};
+  const open=async(id=shipping.taskId)=>{await page.goto(base+`/ui/digital-production?task=${id}&taskView=read`);await page.locator('.task-workbench-sample>header').waitFor();};
   try{
-   const actual=page.locator('.task-workbench-sample header small');
+   // The existing task's completion belongs to its own header; the separate
+   // current-plan section also has a header and plan-revision metadata.
+   const actual=page.locator('.task-workbench-sample>header small');
    const paper=current.tasks.find(task=>task.taskKind==='development_pattern')!,reported=current.tasks.find(task=>task.taskKind==='development_confirmation')!;
    await open(paper.taskId);expect((await tasks.read(f.root,paper.taskId)).actualCompletion?.quality).toBe('verified');expect(await actual.textContent()).not.toContain('待核');
    await open(reported.taskId);expect((await tasks.read(f.root,reported.taskId)).actualCompletion).toMatchObject({precision:'instant',quality:'unverified'});await expect.poll(()=>actual.textContent()).toContain('时间待核');

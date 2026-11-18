@@ -1,10 +1,10 @@
-import {cancelledTaskHistory} from './cancelled-task-history.js';
+import {cancelledTaskHistory,cancelledWorkTaskKind} from './cancelled-task-history.js';
 import {preparedStoredRewash} from './order-time-washing-rework.js';
 import {journeyWashingReworkFact,journeyUnplannedWashingRework} from './journey-washing-rework-facts.js';
 import {attachFactoryTaskCompletions} from './factory-task-completion.js';
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentReadyCorrectionSql,type ReadyCorrection} from './development-responsibility-window.js';
 import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
-import {frameworkNodeTargets,frameworkTargetPrecision} from './framework-node-targets.js';
+import {frameworkNodeTargets,frameworkTargetPrecision,arrangedOrderTimeTarget} from './framework-node-targets.js';
 import {journeyWashingFact} from './journey-washing-facts.js';
 import {readBulkWashing} from './bulk-washing-service.js';
 import {washingPlans} from './bulk-washing-repository.js';
@@ -32,13 +32,12 @@ import {journeyTermination,type JourneyTermination} from './journey-termination.
 import {orderTimeCreated} from './order-time-created.js';
 import {orderTimePolicyHistory} from './order-time-native-timing.js';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
+import {orderTimeWorkTaskKind as keyOf} from './order-time-work-task-kind.js';
 
 type DB=Pick<PoolClient,'query'>;
 const unknown:ScheduleOccurrence={precision:'unknown'};
 const instant=(value:unknown):ScheduleOccurrence=>value instanceof Date?{precision:'instant',at:value.toISOString()}:typeof value==='string'&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?{precision:'instant',at:new Date(value).toISOString()}:unknown;
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const aliases:Record<string,string>={production_sheet:'production_instruction',warehouse_accessories:'accessories_ready',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',external_pattern:'development_external_pattern',development_craft_return:'development_craft_confirmation',factory_production_work:'production_reporting',factory_production:'factory_production_qc',garment_inspection:'receiving_inspection',garment_packing:'packing',return_logistics:'receipts'};
-const keyOf=(work:OrderTimeWork)=>work.parameterKey.startsWith('development_special_')?'development_printing':aliases[work.parameterKey]??work.parameterKey;
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
 type NativeTask={cancel_events?:string[];ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;route_instance_id:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
 type Evidence={termination?:JourneyTermination|null;tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;unplannedRewashing?:ReturnType<typeof journeyUnplannedWashingRework>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
@@ -74,10 +73,11 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  // A stored source reference may never borrow another resource or latest round.
  if(declared&&declared[1]!==sourceId)return {fact:empty(),task:null};
  const step=work.canonicalWorkRef?.match(/:step:([^:]+):/)?.[1];
- const candidates=evidence.tasks.filter(task=>(task.task_kind===key||key==='bulk_cutting'&&task.task_kind==='bulk_cutting_external')
+ const cancelledKind=cancelledWorkTaskKind(key,raw);
+ const candidates=evidence.tasks.filter(task=>(task.task_kind===(task.state==='cancelled'?cancelledKind:key)||key==='bulk_cutting'&&task.task_kind==='bulk_cutting_external')
   &&(resource.kind==='source'||shared?task.source_id===sourceId&&round!==null&&task.route_version===round:task.production_order_id===resource.id)
   &&(!step||task.step_id===step));
- const tasks=candidates.filter(task=>task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,evidence.termination,key,scope.lineId,work.canonicalWorkRef));
+ const tasks=candidates.filter(task=>task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,evidence.termination,cancelledKind,scope.lineId,work.canonicalWorkRef));
  const task=tasks.length===1?tasks[0]!:null;
  // A cancelled task is readable only through its own original cancellation
  // and current identity. Kind-level native maps, node entry fields and old
@@ -141,7 +141,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   const framework=saved.input.frameworkPlans?.[scope.scopeRef],frameworkTargets=framework?frameworkNodeTargets(framework):null;
   const required=requiredFixedTimelineWork(definitions,scope.terminalIds),facts:Record<string,ScheduleFact>={};
   const work:ScheduleWork[]=required.map(definition=>{
-   const source=byId.get(definition.id)!,target=framework?framework.arranged.find(row=>row.id===source.id):saved.targets[scope.scopeRef]?.[source.id],policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
+   const source=byId.get(definition.id)!,target=arrangedOrderTimeTarget(saved,scope.scopeRef,source.id),policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
    const old=original?.work.find(value=>source.canonicalWorkRef?value.canonicalWorkRef===source.canonicalWorkRef:value.id===source.id);
    const own=nativeFor(source,scope,resource,item,native,evidence),previous=old&&original?.facts[old.id];
    // An empty legacy placeholder is not a conflicting historical event. It
@@ -153,11 +153,15 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    // this exact task's native facts, never a retired task's cached A/window.
    if(own.task?.state==='cancelled'){
     fact={...fact,...own.fact};
-    if(own.fact.ownWindows)fact.ownWindows=own.fact.ownWindows;else delete fact.ownWindows;
+    const factoryOriginal=previous?.ownTaskId===own.task.task_id&&['process_logistics','bulk_qc','warehouse_dispatch'].includes(own.task.task_kind)?previous:undefined;
+    if(own.fact.ownWindows)fact.ownWindows=own.fact.ownWindows;
+    else if(factoryOriginal?.ownWindows?.length){fact.ownWindows=factoryOriginal.ownWindows;fact.ready=factoryOriginal.ready;fact.clockStart=factoryOriginal.clockStart;}
+    else delete fact.ownWindows;
    }
    // Current exact-task R can invalidate a stale legacy clock. Keep the
    // existing completion/date mapping and original target history separate.
-   if(own.task&&(own.task.source_id||own.task.state==='cancelled'))fact={...fact,ready:own.fact.ready,clockStart:own.fact.clockStart,notYetReady:own.fact.notYetReady===true,ownTaskId:own.task.task_id,evidenceRefs:[...new Set([...fact.evidenceRefs,...own.fact.evidenceRefs])]};
+   const frozenFactory=own.task?.state==='cancelled'&&!own.task.source_id&&['process_logistics','bulk_qc','warehouse_dispatch'].includes(own.task.task_kind)&&Boolean(fact.ownWindows?.length);
+   if(own.task&&(own.task.source_id||own.task.state==='cancelled'))fact={...fact,...(frozenFactory?{}:{ready:own.fact.ready,clockStart:own.fact.clockStart}),notYetReady:own.fact.notYetReady===true,ownTaskId:own.task.task_id,evidenceRefs:[...new Set([...fact.evidenceRefs,...own.fact.evidenceRefs])]};
    if(evidence.washing?.[source.id])fact=structuredClone(evidence.washing[source.id]!);
    if(framework){
     const names:Record<string,string>={fabric_receipt_a:'fabric_receipt',fabric_receipt_b:'fabric_receipt',warehouse_accessories:'accessories_ready',warehouse_dispatch:'processing_dispatch'};

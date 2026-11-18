@@ -47,6 +47,8 @@
 .digital-journey-cockpit .cockpit-node-current dl {display:grid;gap:5px;margin:0;flex:1;min-width:0}
 .digital-journey-cockpit .cockpit-node-current dl>div {display:grid;grid-template-columns:7.2em minmax(0,1fr);gap:8px}
 .digital-journey-cockpit .cockpit-node-current dt {color:#7084a3;font-weight:400;white-space:nowrap;word-break:normal;overflow-wrap:normal}
+.digital-journey-cockpit[data-view="order"] .cockpit-node-current dl>.cockpit-node-forecast {grid-template-columns:minmax(0,1fr);gap:4px}
+.digital-journey-cockpit[data-view="order"] .cockpit-node-current .cockpit-node-forecast>dt {min-width:0;white-space:normal;overflow-wrap:anywhere}
 .digital-journey-cockpit .cockpit-node-current dd {margin:0;overflow-wrap:anywhere}
 .digital-journey-cockpit .cockpit-node-primary {max-width:45%;align-self:center}
 .digital-journey-cockpit .cockpit-node-primary>a {display:inline-flex;align-items:center;justify-content:center;padding:9px 12px;min-height:40px;background:#0065ff;color:white;text-decoration:none;border-radius:5px}

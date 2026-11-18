@@ -15,6 +15,10 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint} from '../../apps/api/src/production-platform/journey-fact-model.js';
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
+import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
+import {ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
@@ -156,18 +160,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await repo.current(resource())).toEqual(plan);
   });
  });
- it('retains the original cancelled two-PO responsibility with only the legacy frozen plan and persisted selection frames',async()=>{
+ it.each(['无','印花'] as const)('retains the original cancelled two-PO responsibility with only the legacy %s frozen plan and persisted selection frames',async craft=>{
   // Independent original TEST schema with no new-admission standard. Do not
   // force a historical fixture through the active framework's new-order gate.
   const legacy=await businessAnchorFixture(url!);
   try{
   const scene=await legacy.scene('2026-11-10T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>legacy.runtime.run(scene,legacy.root,action);
-  const ready=await run(async()=>{configureTimelineAdoption(legacy.db,'fixed_v2');try{return await legacy.bulkReady('无',undefined,2);}finally{configureTimelineAdoption(legacy.db,'legacy');}}),resource={kind:'order' as const,id:ready.id};
+  const ready=await run(async()=>{configureTimelineAdoption(legacy.db,'fixed_v2');try{return await legacy.bulkReady(craft,undefined,2);}finally{configureTimelineAdoption(legacy.db,'legacy');}}),resource={kind:'order' as const,id:ready.id};
+  if(craft==='印花')await run(async()=>{
+   const cuts=(await legacy.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows,cutter={...legacy.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   for(const cut of cuts)await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await legacy.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(legacy.db),state=await flow.read(legacy.root,ready.id);
+   await flow.logistics(legacy.root,ready.id,{expectedRevision:state.revision,kind:'工艺发出',stepRef:state.craftSteps![0]!.stepId,occurredAt:'2026-11-10T08:00:00.000Z',supplier:'TEST original print supplier',note:'TEST real start before cancellation',lines:state.lines.map(line=>({lineId:line.lineId,quantity:10}))},randomUUID());
+  });
   const original=await run(async()=>{
    expect(await new OrderTimePlanRepository(legacy.db).current(resource)).toBeNull();
    await new JourneyFactRepository(legacy.db).buildOne(resource);
-   const tasks=(await legacy.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN('bulk_cutting','bulk_cutting_external') AND t.state NOT IN('completed','cancelled')",[ready.id])).rows;
-   expect(tasks).toHaveLength(1);const task=await new DigitalProductionTaskService(legacy.db).read(legacy.root,tasks[0]!.task_id);
+   const tasks=(await legacy.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind=$2 AND t.state NOT IN('completed','cancelled')",[ready.id,craft==='印花'?'process_logistics':'bulk_cutting'])).rows;
+   expect(tasks).toHaveLength(1);const service=new DigitalProductionTaskService(legacy.db);
+   if(craft==='印花'){
+    const worker=Object.values(legacy.people).find(person=>person.actorRoles.includes('embroidery_washing_merchandiser'))!;
+    await service.reassign(legacy.root,tasks[0]!.task_id,worker.actorId,randomUUID());
+   }
+   const task=await service.read(legacy.root,tasks[0]!.task_id);
    expect(task.enteredAt).toBe('2026-11-10T08:00:00.000Z');expect(task.dueAt).not.toBeNull();return task;
   });
   const stopped=new Date(Date.parse(original.dueAt!)+4*3600000).toISOString();await legacy.advance(scene,stopped);
@@ -182,10 +197,51 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const frames=(await legacy.db.query('SELECT selection_json,selection_full_json FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2',['order',ready.id])).rows[0]!;
    expect(frames.selection_json.version).toBe('journey-selection-v2');expect(frames.selection_full_json.version).toBe('journey-selection-v2');
    for(const frame of frames.selection_json.frames)expect(frame.risks.filter((row:{id:string})=>row.id===original.taskId).every((row:{risks:string[]})=>!row.risks.includes('overdue')&&!row.risks.includes('due_soon'))).toBe(true);
-   await writeFile(join(h.evidence,'cancel-legacy-'+detail.asOf!.slice(0,10)+'.json'),JSON.stringify({task,scopes:detail.fixedSchedule!.scopes,frames},null,2));
+   await writeFile(join(h.evidence,'cancel-legacy-'+craft+'-'+detail.asOf!.slice(0,10)+'.json'),JSON.stringify({task,scopes:detail.fixedSchedule!.scopes,frames},null,2));
    return task.fixedTargets!.map(target=>({lineId:target.lineId,progress:target.progress.ownSla}));
   });
   const first=await snapshot();await legacy.advance(scene,new Date(Date.parse(stopped)+24*3600000).toISOString());expect(await snapshot()).toEqual(first);
+  }finally{await legacy.dispose();}
+ });
+ it('retains a cancelled original development craft-return window with its legacy duration alias',async()=>{
+  const legacy=await businessAnchorFixture(url!);
+  try{
+   const scene=await legacy.scene('2026-11-10T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>legacy.runtime.run(scene,legacy.root,action),stop=new Error('TEST native craft returned before original confirmation');let sourceId='';
+   await run(async()=>{
+    configureTimelineAdoption(legacy.db,'fixed_v2');
+    try{
+     await expect(exerciseDevelopmentSlaNative(legacy.db,new TodoProjectionService(new TodoService(legacy.db)),legacy.root,legacy.people['pattern-room-worker']!.actorId,new ContextBusinessClock(legacy.db),[['印花','免洗']],{
+      fixedCraftSteps:[{craftKind:'printing',sequence:1}],onRouteComplete:async(id,kind)=>{if(kind==='development_printing'){sourceId=id;throw stop;}},
+     })).rejects.toBe(stop);
+    }finally{configureTimelineAdoption(legacy.db,'legacy');}
+   });
+   expect(sourceId).not.toBe('');const resource={kind:'source' as const,id:sourceId};
+   const original=await run(async()=>{
+    expect(await new OrderTimePlanRepository(legacy.db).current(resource)).toBeNull();
+    const rows=(await legacy.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_craft_confirmation' AND t.route_version=1",[sourceId])).rows;
+    expect(rows).toHaveLength(1);const task=await new DigitalProductionTaskService(legacy.db).read(legacy.root,rows[0]!.task_id);
+    expect(task.enteredAt).toBe('2026-11-10T08:00:00.000Z');expect(task.dueAt).toBe('2026-11-10T08:30:00.000Z');return task;
+   });
+   await legacy.advance(scene,'2026-11-10T12:30:00.000Z');
+   await run(()=>new DigitalProductionTaskService(legacy.db).controlResource(legacy.root,resource,'cancel','TEST original craft confirmation cancelled after real processing',randomUUID()));
+   for(const [index,now] of ['2026-11-10T12:30:00.000Z','2026-11-11T12:30:00.000Z'].entries()){
+    if(index)await legacy.advance(scene,now);
+    await run(async()=>{
+     const stored=await new JourneyFactRepository(legacy.db).buildOne(resource);
+     const detail=await new DigitalJourneyQuery(legacy.db).read(legacy.root,sourceId,undefined,true),node=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===original.taskId)!;
+     await writeFile(join(h.evidence,'cancel-development-return-diagnostic.json'),JSON.stringify({original,node,detail,basis:stored.model.fixedSchedule},null,2));
+     // Rebuilt persisted facts expose the independently known responsibility;
+     // no requested finish date or completion is manufactured for this source.
+     expect(node.fixedTargets).toHaveLength(1);
+     expect(node.fixedTargets![0]!.progress).toMatchObject({businessCompleted:false,goalDelta:{actual:{precision:'unknown'}},ownSla:{state:'terminated',deadlineAt:original.dueAt,overdueMinutes:{minimum:240,maximum:240}}});
+     const scope=stored.model.fixedSchedule!.scopes[0]!,work=scope.work.find(work=>work.id.startsWith('development_craft_confirmation:'))!;
+     expect(work.responsibilityMinutes).toBe(30);
+     expect(scope.facts[work.id]).toMatchObject({ownTaskId:original.taskId,ready:{precision:'instant',at:original.enteredAt},clockStart:{precision:'instant',at:original.enteredAt},completed:{precision:'unknown'},businessCompleted:false});
+     expect(node.timing).toMatchObject({status:'terminated',actualStart:original.enteredAt,actualEnd:null,target:{at:original.dueAt},termination:{kind:'cancelled',overdueSeconds:14400}});
+     expect(node.actualAt).toBeNull();expect(node.risks).not.toContain('overdue');expect(node.risks).not.toContain('due_soon');
+     await writeFile(join(h.evidence,'cancel-development-return-'+now.slice(0,10)+'.json'),JSON.stringify({original,node,scopes:detail.fixedSchedule!.scopes},null,2));
+    });
+   }
   }finally{await legacy.dispose();}
  });
 });

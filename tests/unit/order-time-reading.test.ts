@@ -1,4 +1,4 @@
-import {cancelledTaskHistory} from '../../apps/api/src/production-platform/cancelled-task-history.js';
+import {cancelledTaskHistory,cancelledWorkTaskKind} from '../../apps/api/src/production-platform/cancelled-task-history.js';
 import {SERIES_MILESTONE_OFFSETS} from '@dx-rework/contracts/digital-series-plan';
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
@@ -389,6 +389,15 @@ it('selects each explicitly allocated packing window policy at its own R and nev
 
 
 describe('cancelled task original responsibility identity',()=>{
+ it('uses exact frozen route kinds and only known parameter aliases for original cancelled tasks',()=>{
+  expect(cancelledWorkTaskKind('development_materials','development_material_recheck')).toBe('development_material_recheck');
+  expect(cancelledWorkTaskKind('development_materials','source:development_material_recheck')).toBe('development_material_recheck');
+  expect(cancelledWorkTaskKind('development_craft_return','work')).toBe('development_craft_confirmation');
+  expect(cancelledWorkTaskKind('bulk_special_abcdef','work')).toBe('process_logistics');
+  expect(cancelledWorkTaskKind('development_special_abcdef','work')).toBe('development_printing');
+  expect(cancelledWorkTaskKind('development_materials','work','development_material_recheck')).toBe('development_material_recheck');
+  expect(cancelledWorkTaskKind('UNKNOWN','work')).toBe('UNKNOWN');
+ });
  const original=()=>{
   const row=item(),task={task_id:'TEST cancel original',task_kind:'a',state:'cancelled',source_id:resource.id,production_order_id:null,route_version:1,route_instance_id:'TEST route',cancel_events:['TEST exact task cancel']};
   const own=node('a','cancelled',at(0));own.instanceId=task.task_id;own.records=[{domain:'task',id:task.task_id,version:1,lineId:null,url:null,mode:'read'}];row.stages[1]!.nodes=[own];
@@ -404,6 +413,7 @@ describe('cancelled task original responsibility identity',()=>{
   expect(cancelledTaskHistory(task,resource,row,{...termination,scopeRef:'source:OTHER'},'a')).toBe(false);
   expect(cancelledTaskHistory(task,resource,row,termination,'a',null,'source:'+resource.id+':route:OTHER:work:a')).toBe(false);
   expect(cancelledTaskHistory(task,resource,row,termination,'a',null,'source:OTHER:round:1:node:a')).toBe(false);expect(cancelledTaskHistory(task,resource,row,termination,'a',null,'source:'+resource.id+':round:2:node:a')).toBe(false);
+  expect(cancelledTaskHistory({...task,step_id:'OWN'},resource,row,termination,'a',null,'source:'+resource.id+':round:1:step:OTHER:work')).toBe(false);
   const old=structuredClone(row);old.stages[1]!.nodes[0]!.current=false;expect(cancelledTaskHistory(task,resource,old,termination,'a')).toBe(false);
   const duplicate=structuredClone(row);duplicate.stages[1]!.nodes.push(structuredClone(duplicate.stages[1]!.nodes[0]!));expect(cancelledTaskHistory(task,resource,duplicate,termination,'a')).toBe(false);
   row.stages[1]!.nodes[0]!.records.push({domain:'cutting',id:'TEST cut',version:null,lineId:'TEST PO',url:null,mode:'read'});
@@ -456,6 +466,39 @@ describe('cancelled task original responsibility identity',()=>{
   row.stages[1]!.nodes.push({...structuredClone(row.stages[1]!.nodes[0]!),instanceId:second.task_id,records:[{domain:'task',id:second.task_id,version:1,lineId:null,url:null,mode:'read'}]});
   const read=orderTimeReadingBasis(saved,resource,row,{a:{startedAt:at(0),standardMinutes:300,evidence:'TEST aggregate cannot distinguish originals'}},{...evidence(),termination,tasks:[first,second]},null);
   expect(read.scopes[0]!.facts.a).toMatchObject({ready:unknown,clockStart:unknown});expect(read.scopes[0]!.facts.a!.ownTaskId).toBeUndefined();
+ });
+ it.each(['bulk_printing','bulk_embroidery'] as const)('matches cancelled %s to its original logistics task without borrowing the peer step',parameter=>{
+  const {row,task,termination}=original(),saved=stored(),order={kind:'order' as const,id:'TEST order'};
+  row.orderId=order.id;row.stages[1]!.nodes[0]!.key='process_logistics';
+  const native={...nativeTask(task),task_kind:'process_logistics',source_id:null,production_order_id:order.id,step_id:'TEST own step'};
+  saved.resource=order;saved.input.plan.company.nodes[parameter]=duration(5);saved.input.work[0]!.parameterKey=parameter;saved.input.work[0]!.canonicalWorkRef='order:TEST order:step:TEST own step:work';
+  const proof={...evidence(),termination:{...termination,scopeRef:'order:'+order.id},tasks:[native,{...native,task_id:'TEST other craft',step_id:'TEST other step',cancel_events:['TEST other cancel']}]};
+  const read=orderTimeReadingBasis(saved,order,row,{},proof,null);
+  expect(read.scopes[0]!.facts.a).toMatchObject({ownTaskId:task.task_id,ready:point(0),completed:unknown,businessCompleted:false});
+  expect(evaluateFixedJourneyBasis(read,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({deadlineAt:at(5),overdueMinutes:{minimum:240,maximum:240}});
+ });
+ it('retains cancelled development craft-return responsibility under its native confirmation identity',()=>{
+  const {row,task,termination}=original(),saved=stored(),native={...nativeTask(task),task_kind:'development_craft_confirmation',step_id:'TEST own step'};
+  row.stages[1]!.nodes[0]!.key=native.task_kind;
+  saved.input.plan.company.nodes.development_craft_return=duration(5);saved.input.work[0]!.parameterKey='development_craft_return';saved.input.work[0]!.canonicalWorkRef='source:'+resource.id+':round:1:step:TEST own step:confirmation';
+  expect(orderTimeReadingBasis(saved,resource,row,{}, {...evidence(),termination,tasks:[native]},null).scopes[0]!.facts.a).toMatchObject({ownTaskId:task.task_id,ready:point(0),completed:unknown});
+ });
+ it('retains scoped original factory windows only for the independently proven cancelled task',()=>{
+  const {row,task,termination}=original(),saved=stored(),order={kind:'order' as const,id:'TEST order'};
+  row.orderId=order.id;row.stages[1]!.nodes[0]!.key='process_logistics';saved.resource=order;saved.input.plan.company.nodes.bulk_printing=duration(5);saved.input.work[0]!.parameterKey='bulk_printing';
+  const native={...nativeTask(task),task_kind:'process_logistics',source_id:null,production_order_id:order.id,entered_at:null,native_entered_at:null};
+  const prior=build(saved,row);prior.scopes[0]!.facts.a={...prior.scopes[0]!.facts.a!,ownTaskId:task.task_id,ready:point(0),clockStart:point(0),ownWindows:[{sourceRef:'TEST exact original factory step',started:point(0),completed:unknown,complete:false,deadline:at(5),warningAt:null,calendar:'continuous'}]};
+  const proof={...evidence(),termination:{...termination,scopeRef:'order:'+order.id},tasks:[native]};
+  const read=orderTimeReadingBasis(saved,order,row,{},proof,prior);
+  expect(evaluateFixedJourneyBasis(read,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({deadlineAt:at(5),overdueMinutes:{minimum:240,maximum:240}});
+  prior.scopes[0]!.facts.a!.ownTaskId='TEST another original';
+  const rejected=orderTimeReadingBasis(saved,order,row,{},proof,prior).scopes[0]!.facts.a!;
+  expect(rejected.clockStart).toEqual(unknown);expect(rejected.ownWindows).toBeUndefined();
+ });
+ it('still refreshes exact source readiness when an older source snapshot contains windows',()=>{
+  const {row,task}=original(),saved=stored(),native={...nativeTask(task),state:'ready'};row.stages[1]!.nodes[0]!.state='active';
+  const prior=build(saved,row);prior.scopes[0]!.facts.a={...prior.scopes[0]!.facts.a!,clockStart:point(2),ready:point(2),ownWindows:[{sourceRef:'TEST prior source window',started:point(2),completed:unknown,complete:false,deadline:at(7),warningAt:null,calendar:'continuous'}]};
+  expect(orderTimeReadingBasis(saved,resource,row,{}, {...evidence(),tasks:[native]},prior).scopes[0]!.facts.a).toMatchObject({ready:point(0),clockStart:point(0)});
  });
  it('preserves true completion before cancellation and does not manufacture an unstarted window',()=>{
   const {row,task,termination}=original(),saved=stored(),native=nativeTask(task);
