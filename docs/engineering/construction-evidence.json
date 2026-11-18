@@ -1,31 +1,42 @@
 {
   "version": 1,
-  "base": "a8fb3d625a5cdc31a8402b89be5d4c143bb3f702",
+  "base": "24c259984b2242b226ee1ce4a9c9ebbe2f81e02c",
   "risk": "full",
-  "sourceFingerprint": "c00a4a0fc467b1fed646090883c6527845bcc2b67b5101a5234107773c826ab1",
+  "sourceFingerprint": "eb4144f3bd5c5f87e4fa5b340beff68b8c478c2f62df8e23445b88d5080a9030",
   "rules": [
     {
-      "rule": "Use the frozen first source serial craft graph for current and forecast supervision",
-      "source": "Approved Remaining Allocation v8 PR-03 and Unified Repair v10 C1 (first adopted four crafts).",
+      "rule": "Solve the formally adopted remaining work independently from historical evaluation targets and forecasts",
+      "source": "Approved Remaining Allocation v8 PR-04 and Unified Repair v10 C3 including the independent completed-predecessor oracle and original pending example with a lower bound only.",
       "reads": [
-        "apps/api/src/production-platform/fixed-development-work.ts",
-        "apps/api/src/production-platform/fixed-work-definition.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-selection-clock.ts"
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/order-time-schedule.ts",
+        "apps/api/src/production-platform/fixed-timeline-targets.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/framework-node-targets.ts",
+        "apps/api/src/production-platform/current-task-plan-targets.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts"
       ],
       "oldTests": [
+        "tests/integration/order-time-plan-postgres.test.ts",
         "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/journey-sla-supervision.test.ts",
-        "tests/unit/journey-time-framework.test.ts"
+        "tests/unit/order-time-framework.test.ts"
       ],
-      "initialization": "An original rev1 published source with known customer M, exact serial work steps and distinct 96 / 96 / 24 / 12 hour durations; an independent no-M source and already-adopted internal/external washing remain controls.",
-      "dateAndPermission": "Use source round and canonical work identity, exact frozen inclusion/dependency and the original publication floor, with authorized scope. Revision 1 forecast does not add included dispatch and receipt, invent work, or change M and original responsibility.",
-      "expectation": "All four frozen steps remain distinct. Sewing current and forecast include the full 228h craft chain plus the independently checked eligible upstream work. A no-M source and later adoption retain their own semantics.",
+      "initialization": "An isolated known-calendar 48-hour completed-predecessor oracle, retained versus removed prior targets, and an actual legacy version with pending native work adopted through the original authorized arrangement action.",
+      "dateAndPermission": "Use the formal activation time, matching currently pending task identity, known predecessors and not-before evidence. Preserve started targets and historical B, M, A, R and D. Native review fingerprints include pending-to-started changes.",
+      "expectation": "A legitimate re-adoption writes an independent stable current P that reads identically in Journey and the original task. Old snapshots are unchanged; legacy P that conflicts with known inputs is unknown until authorized re-adoption. Forecast or lower bounds cannot become P.",
       "writes": [
-        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/current-task-plan-targets.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/framework-node-targets.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/order-time-formal-arrangement.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
         "apps/api/src/production-platform/source-current-supervision.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/unit/order-time-framework.test.ts"
       ],
       "checks": [
         "native",
@@ -40,15 +51,15 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/craft-after-observed-review-native/tests.json --testNamePattern 'projects the complete first adopted serial craft route|reads the adopted source washing duration'",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-plan-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/arrangement-after-observed-review-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f961ba7fc17ba1e1233432272bd3e129fc5ccda9",
-      "sourceFingerprint": "07c4753f9fb05158fd2f8383b88fd0db1842158fd697a52abdff7385237e4224",
-      "startedAt": "2026-11-18T21:15:48.126902+00:00",
-      "endedAt": "2026-11-18T21:16:08.754249+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/craft-after-observed-review-native/tests.log",
-      "logSha256": "d18ae7e890add0e40b1471a73c212cc35073111ae4706ac5378eee0dc7106c26",
+      "testedHead": "c7ea4f444bc2ab0c713c8523978c8b09b838b976",
+      "sourceFingerprint": "ac0ea7af5ea50804212089eb76d592dc035e178c97230c45f89ed42e39e0e270",
+      "startedAt": "2026-11-18T21:17:36.899308+00:00",
+      "endedAt": "2026-11-18T21:18:40.680073+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/arrangement-after-observed-review-native/tests.log",
+      "logSha256": "a2b17533159f658d787726c158cb91a4c97e6e0f16e0f902f51964f8f85c5b8f",
       "context": "Retained original isolated execution. Complete recorded input scope matches the candidate byte for byte; the later recorded source difference lies outside those inputs.",
       "inputPaths": [
         ".env.example",
@@ -79,29 +90,29 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "9f9e82cb8479159e709f6dec218dbc7e5a725e088426872e853ec8eb6940802c",
-      "passed": 3,
+      "inputFingerprint": "6f579de7e096f2fd30198ce9cc28a9acaa039b8ce2e31d5cc867a240cf82b7c5",
+      "passed": 43,
       "failed": 0,
-      "skipped": 29,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "92a7c9f9d8ca7362584e3eb27d5d12a4c6eb5b3fa1f1eb8f4c5e3f6447e2168c"
+          "sha256": "1cda9758654ffd4d971557d311b63f846d484883c03047e493de84f434b7c353"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/journey-sla-supervision.test.ts tests/unit/journey-time-framework.test.ts tests/unit/order-time-framework.test.ts tests/unit/order-time-framework-submission.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-craft-after-observed-20261118/unit/tests.json",
+      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/order-time-framework.test.ts tests/unit/order-time-framework-submission.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-reading.test.ts tests/unit/journey-fact-model.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-arrangement-after-observed-20261118/unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f961ba7fc17ba1e1233432272bd3e129fc5ccda9",
-      "sourceFingerprint": "07c4753f9fb05158fd2f8383b88fd0db1842158fd697a52abdff7385237e4224",
-      "startedAt": "2026-11-18T21:16:10.966945+00:00",
-      "endedAt": "2026-11-18T21:16:15.903716+00:00",
-      "log": "/tmp/dx-sla-craft-after-observed-20261118/unit/command.log",
-      "logSha256": "6f9e0457852b72bae5d25375bee06360121903579e7ab7213807da70995eb092",
+      "testedHead": "c7ea4f444bc2ab0c713c8523978c8b09b838b976",
+      "sourceFingerprint": "ac0ea7af5ea50804212089eb76d592dc035e178c97230c45f89ed42e39e0e270",
+      "startedAt": "2026-11-18T21:18:43.608314+00:00",
+      "endedAt": "2026-11-18T21:18:49.816055+00:00",
+      "log": "/tmp/dx-sla-arrangement-after-observed-20261118/unit/command.log",
+      "logSha256": "95d77a2fedc9d720210a5899d7949ec5b41e585024f0a962b4f7ad5b13ba384d",
       "context": "Retained original isolated execution. Complete recorded input scope matches the candidate byte for byte; the later recorded source difference lies outside those inputs.",
       "inputPaths": [
         ".env.example",
@@ -127,37 +138,38 @@
         "tests/helpers",
         "tests/inspection-report-fixture.ts",
         "tests/integration",
-        "tests/unit/journey-sla-supervision.test.ts",
-        "tests/unit/journey-time-framework.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/journey-fact-model.test.ts",
         "tests/unit/order-time-framework-submission.test.ts",
         "tests/unit/order-time-framework.test.ts",
+        "tests/unit/order-time-reading.test.ts",
         "tsconfig.base.json",
         "vitest.business-chain.config.ts",
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "d05dcdc0d3c716cd095c0147157002c2663ee1e3e3e08c0416c46242f98e05c6",
-      "passed": 71,
+      "inputFingerprint": "d022edbf955b53be35dbb89343c5a47b480f4b190b288b3d39b53d5e45e6c8e3",
+      "passed": 128,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b7937e12cdce12555293bda3c44af754e0621ec97e8f2362c04f407080c46df4"
+          "sha256": "a0ea65b7f73abd52f851de4cba66aad27972d90486a2a1749735e723365b9031"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/source-current-supervision.ts tests/integration/order-time-requests-postgres.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/current-task-plan-targets.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/framework-node-targets.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/order-time-formal-arrangement.ts apps/api/src/production-platform/order-time-operation-state.ts apps/api/src/production-platform/order-time-plan-repository.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/source-current-supervision.ts tests/integration/order-time-requests-postgres.test.ts tests/unit/order-time-framework.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f961ba7fc17ba1e1233432272bd3e129fc5ccda9",
-      "sourceFingerprint": "07c4753f9fb05158fd2f8383b88fd0db1842158fd697a52abdff7385237e4224",
-      "startedAt": "2026-11-18T21:16:09.051912+00:00",
-      "endedAt": "2026-11-18T21:16:10.509312+00:00",
-      "log": "/tmp/dx-sla-craft-after-observed-20261118/lint/command.log",
+      "testedHead": "c7ea4f444bc2ab0c713c8523978c8b09b838b976",
+      "sourceFingerprint": "ac0ea7af5ea50804212089eb76d592dc035e178c97230c45f89ed42e39e0e270",
+      "startedAt": "2026-11-18T21:18:40.974670+00:00",
+      "endedAt": "2026-11-18T21:18:43.257636+00:00",
+      "log": "/tmp/dx-sla-arrangement-after-observed-20261118/lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Retained original isolated execution. Complete recorded input scope matches the candidate byte for byte; the later recorded source difference lies outside those inputs.",
       "inputPaths": [
@@ -184,12 +196,13 @@
         "tests/helpers",
         "tests/inspection-report-fixture.ts",
         "tests/integration",
+        "tests/unit/order-time-framework.test.ts",
         "tsconfig.base.json",
         "vitest.business-chain.config.ts",
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "9f9e82cb8479159e709f6dec218dbc7e5a725e088426872e853ec8eb6940802c"
+      "inputFingerprint": "890924e534e8399efc0c94dbb676cf9d0c674502cc4fcaf2cf42eab4301fe3ff"
     },
     {
       "id": "types",
@@ -197,11 +210,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f961ba7fc17ba1e1233432272bd3e129fc5ccda9",
-      "sourceFingerprint": "07c4753f9fb05158fd2f8383b88fd0db1842158fd697a52abdff7385237e4224",
-      "startedAt": "2026-11-18T21:16:16.239962+00:00",
-      "endedAt": "2026-11-18T21:17:21.025748+00:00",
-      "log": "/tmp/dx-sla-craft-after-observed-20261118/types/command.log",
+      "testedHead": "c7ea4f444bc2ab0c713c8523978c8b09b838b976",
+      "sourceFingerprint": "ac0ea7af5ea50804212089eb76d592dc035e178c97230c45f89ed42e39e0e270",
+      "startedAt": "2026-11-18T21:18:50.139298+00:00",
+      "endedAt": "2026-11-18T21:19:55.731555+00:00",
+      "log": "/tmp/dx-sla-arrangement-after-observed-20261118/types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Retained original isolated execution. Complete recorded input scope matches the candidate byte for byte; the later recorded source difference lies outside those inputs.",
       "inputPaths": [
@@ -233,7 +246,7 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "9f9e82cb8479159e709f6dec218dbc7e5a725e088426872e853ec8eb6940802c"
+      "inputFingerprint": "6f579de7e096f2fd30198ce9cc28a9acaa039b8ce2e31d5cc867a240cf82b7c5"
     },
     {
       "id": "preflight",
@@ -241,12 +254,12 @@
       "command": "taskset -c 0,1 npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a02da6259a720b6a2610ecc5f5955988ab80cbcc",
-      "sourceFingerprint": "c00a4a0fc467b1fed646090883c6527845bcc2b67b5101a5234107773c826ab1",
-      "startedAt": "2026-11-18T21:38:01.434994+00:00",
-      "endedAt": "2026-11-18T21:38:11.815331+00:00",
-      "log": "/tmp/dx-sla-craft-after-fixtures-20261118/preflight/command.log",
-      "logSha256": "0fb0a54bb46e297b548f4d4b0a765f10798a0b68baac3d4f85e50d6c71db1a78",
+      "testedHead": "1160a4790ee9e3e379a6b1edb8b8b99a3dad9972",
+      "sourceFingerprint": "eb4144f3bd5c5f87e4fa5b340beff68b8c478c2f62df8e23445b88d5080a9030",
+      "startedAt": "2026-11-18T21:38:12.726190+00:00",
+      "endedAt": "2026-11-18T21:38:22.821674+00:00",
+      "log": "/tmp/dx-sla-arrangement-after-fixtures-20261118/preflight/command.log",
+      "logSha256": "2c95fc0cfa2dd0886f53b93c03fc582c4bfa9234a33353a154d90c6e87f39360",
       "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable.",
       "passed": 284,
       "failed": 0,
