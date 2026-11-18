@@ -64,6 +64,7 @@ import { readFile,writeFile } from "node:fs/promises";
 import sharp from "sharp";
 
 import pg from "pg";
+import type { PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
@@ -3904,6 +3905,31 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const analysis=new DigitalAnalysisQuery(database),filters=DigitalAnalysisFilterSchema.parse({from:'2020-01-01',to:'2030-12-31',customer:'PD',designer:fixture.designer.actorId,category:'上衣'});
     const result=await analysis.list(fixture.designer,filters);
     expect(result.total).toBeGreaterThan(0);expect(result.summary.newStyles).toBe(1);expect(result.rows.every(row=>row.styleNo===fixture.order.designStyleNo)).toBe(true);
+    const connect=database.connect.bind(database) as (...args:unknown[])=>unknown;
+    const detailScopes:string[][]=[];
+    const trace=vi.spyOn(database,'connect').mockImplementation(((...args:unknown[])=>{
+      const opened=connect(...args);
+      if(args.length)return opened;
+      return (opened as Promise<PoolClient>).then(client=>new Proxy(client,{get(target,key){
+        if(key==='query')return (...query:unknown[])=>{
+          const [sql,params]=query;
+          if(typeof sql==='string'&&(sql.includes('AS "actorName",corrects_event_id')||sql.includes("a.action='digital_task_reassigned'")||sql.includes("d.purpose='execute'")))detailScopes.push((params as [string[]])[0]);
+          return Reflect.apply(target.query,target,query);
+        };
+        const value=Reflect.get(target,key,target);
+        return typeof value==='function'?value.bind(target):value;
+      }}));
+    }) as typeof database.connect);
+    try{
+      const first=await analysis.list(fixture.designer,filters);
+      expect(detailScopes).toEqual(Array.from({length:3},()=>first.rows.map(row=>row.taskId)));
+      const beyond=await analysis.list(fixture.designer,{...filters,page:100});
+      expect(beyond.rows).toEqual([]);
+      expect(beyond.total).toBe(first.total);
+      expect(beyond.summary).toEqual(first.summary);
+      expect(beyond.people).toEqual(first.people);
+      expect(detailScopes).toHaveLength(3);
+    }finally{trace.mockRestore();}
     expect(result.canExport).toBe(false);expect(result.canRecord).toBe(false);
     await expect(analysis.export(fixture.designer,filters)).rejects.toMatchObject({statusCode:403});
     const stranger=await budgetDesignerFixture();expect((await analysis.list(stranger.designer,filters)).total).toBe(0);
