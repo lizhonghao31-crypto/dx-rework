@@ -2,7 +2,7 @@
   "version": 1,
   "base": "48e3a9e522e840b77d143af03b6d2c7465593568",
   "risk": "full",
-  "sourceFingerprint": "18e6041248a603279aeefa38cea7e2287fe2bb0a31b99174f35bbd03d94aafb0",
+  "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
   "rules": [
     {
       "rule": "Project only authorized quotation directory summary on the native list",
@@ -42,6 +42,7 @@
         "apps/web/src/digital-designer-workspace.tsx",
         "apps/web/src/digital-development-panel.tsx",
         "apps/web/src/order-document-container.tsx",
+        "apps/web/src/development-document-facts.tsx",
         "tests/integration/order-time-requests-browser-postgres.test.ts",
         "tests/integration/workspace-page-native-browser-postgres.test.ts"
       ],
@@ -55,7 +56,7 @@
         "tests/integration/order-time-requests-browser-postgres.test.ts",
         "tests/integration/workspace-page-native-browser-postgres.test.ts"
       ],
-      "expectation": "Original designer page flips to the next authorized result without rereading global options, shares the opened exact sheet and explicitly rereads before customer confirmation. Pure draft and committed-but-unknown recovery remain native, with no replay or unexpected write.",
+      "expectation": "Original designer page flips to the next authorized result without rereading global options, reuses native development facts across customer and materials categories, preserves an exact authorized fallback for categories with no sheet, and explicitly rereads before confirmation. Pure draft and committed-but-unknown recovery remain native, with no replay or unexpected write.",
       "checks": [
         "native-quotation-and-editor",
         "existing-quotation-permissions-and-gate-map",
@@ -69,15 +70,15 @@
     {
       "id": "native-quotation-and-editor",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/customer-quotation-postgres.test.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/quotation-editor-final-actual-release/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/customer-quotation-postgres.test.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/quotation-editor-reviewed-final/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48e3a9e522e840b77d143af03b6d2c7465593568",
-      "sourceFingerprint": "18e6041248a603279aeefa38cea7e2287fe2bb0a31b99174f35bbd03d94aafb0",
-      "startedAt": "2026-11-18T10:11:08.430762+00:00",
-      "endedAt": "2026-11-18T10:15:03.071883+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/quotation-editor-final-actual-release/tests.log",
-      "logSha256": "17aae421c25bbcb1d22bac93d4ef462ae65e1fad89fbbdf7f5dfa97155e425a3",
+      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
+      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
+      "startedAt": "2026-11-18T10:23:42.091955+00:00",
+      "endedAt": "2026-11-18T10:27:33.758001+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/quotation-editor-reviewed-final/tests.log",
+      "logSha256": "2d8303108a6277426b8131d4a7e1ab345682a0b62223cf95ee093790ba812fa5",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup.",
       "passed": 40,
       "failed": 0,
@@ -85,22 +86,22 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "59620478dafaea59d493e8c18a066bffa5e4e1b89ab1ca700b1afafc22f85fb7"
+          "sha256": "243f7e992ed94e09d8431fca7ba6d5dee362e1192baf69c3c0f5c015d7417983"
         }
       ]
     },
     {
       "id": "existing-quotation-permissions-and-gate-map",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/quotation-actual-unit/tests.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/quotation-review-unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48e3a9e522e840b77d143af03b6d2c7465593568",
-      "sourceFingerprint": "18e6041248a603279aeefa38cea7e2287fe2bb0a31b99174f35bbd03d94aafb0",
-      "startedAt": "2026-11-18T10:11:11.309007+00:00",
-      "endedAt": "2026-11-18T10:11:15.795132+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-actual-unit/command.log",
-      "logSha256": "4c90741c7d0ce78349585b1ab840089766e9e0812966ea45ebc9427336f4aabb",
+      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
+      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
+      "startedAt": "2026-11-18T10:23:42.280821+00:00",
+      "endedAt": "2026-11-18T10:23:47.984709+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/quotation-review-unit/command.log",
+      "logSha256": "f559427255c16877eb0c63fe3e714b3832318129e9b5c797dd90d8859175dc8a",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup.",
       "passed": 181,
       "failed": 0,
@@ -108,7 +109,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ce27393a425ed30981ee5bf659ec9224509985fe4f1cf351654945e92c5ddeb8"
+          "sha256": "2df13b47458dd8562280ae2008107577a99b15f0915f22977bc68dc2b31d8824"
         }
       ]
     },
@@ -118,25 +119,25 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48e3a9e522e840b77d143af03b6d2c7465593568",
-      "sourceFingerprint": "18e6041248a603279aeefa38cea7e2287fe2bb0a31b99174f35bbd03d94aafb0",
-      "startedAt": "2026-11-18T10:11:16.083437+00:00",
-      "endedAt": "2026-11-18T10:12:23.487726+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-actual-types/command.log",
+      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
+      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
+      "startedAt": "2026-11-18T10:22:46.662414+00:00",
+      "endedAt": "2026-11-18T10:23:58.024459+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/quotation-review-types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup."
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/quotation-service.ts apps/web/src/digital-designer-workspace.tsx apps/web/src/digital-development-panel.tsx apps/web/src/order-document-container.tsx tests/integration/customer-quotation-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts tests/unit/digital-pmc-readonly-access.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/quotation-service.ts apps/web/src/development-document-facts.tsx apps/web/src/digital-designer-workspace.tsx apps/web/src/digital-development-panel.tsx apps/web/src/order-document-container.tsx tests/integration/customer-quotation-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts tests/unit/digital-pmc-readonly-access.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48e3a9e522e840b77d143af03b6d2c7465593568",
-      "sourceFingerprint": "18e6041248a603279aeefa38cea7e2287fe2bb0a31b99174f35bbd03d94aafb0",
-      "startedAt": "2026-11-18T10:11:08.683727+00:00",
-      "endedAt": "2026-11-18T10:11:10.988094+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-actual-lint/command.log",
+      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
+      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
+      "startedAt": "2026-11-18T10:22:43.709884+00:00",
+      "endedAt": "2026-11-18T10:22:46.351073+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/quotation-review-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup."
     },
@@ -146,12 +147,12 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48e3a9e522e840b77d143af03b6d2c7465593568",
-      "sourceFingerprint": "18e6041248a603279aeefa38cea7e2287fe2bb0a31b99174f35bbd03d94aafb0",
-      "startedAt": "2026-11-18T10:12:23.846979+00:00",
-      "endedAt": "2026-11-18T10:12:34.802125+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-actual-preflight/command.log",
-      "logSha256": "18c30d24b0db359c46d2c0e67beb4ff5b5c99ac7c3a9e10137ca1ad704a81765",
+      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
+      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
+      "startedAt": "2026-11-18T10:23:48.280362+00:00",
+      "endedAt": "2026-11-18T10:23:58.752388+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/quotation-review-preflight/command.log",
+      "logSha256": "1de40067b10cbbbb4c0127be5ef25a31cc8429b4221c22da5681c69a649d0566",
       "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup.",
       "passed": 284,
       "failed": 0,
