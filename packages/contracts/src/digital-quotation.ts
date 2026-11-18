@@ -29,7 +29,7 @@ export const QuotationConfirmationSchema=z.object({
 }).strict().refine(v=>v.amountScope==='order_total'?v.quantity!==null:v.quantity===null,'整单金额须填确认件数；单件金额不填整单件数');
 export type QuotationConfirmation=z.infer<typeof QuotationConfirmationSchema>;
 export type QuotationConsumptionSource={kind:'technical_manual'|'technical_artifact';actorId:string;version:number;recordedAt:string;artifactRef?:{id:string;version:number;materialId?:string}};
-export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null};
+export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null;technicalConsumptionIssue?:'unit_mismatch'};
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;

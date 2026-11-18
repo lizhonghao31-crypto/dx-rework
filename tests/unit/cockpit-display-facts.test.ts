@@ -5,10 +5,11 @@ import {journeyStages,selectJourneys} from "../../apps/api/src/production-platfo
 import {parseJourneyLogCursor} from "../../apps/api/src/production-platform/journey-log.js";
 const asOf="2026-10-19T16:00:00.000Z"; // Shanghai October 20
 function order(id="A"):OrderJourney{
-  const nodes:JourneyNode[]=JOURNEY_NODES.map(def=>({...def,instanceId:def.key,state:def.key==="order_information"?"completed":"uncreated",current:true,round:null,occurrence:null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:"unset",expectedPrecision:"missing",actualAt:null,actualQuality:"missing",enteredAt:null,sla:"not_started",completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:false,unavailableReason:null,progressApplicability:"applicable"}));
+  const nodes:JourneyNode[]=JOURNEY_NODES.map(def=>({...def,instanceId:def.key,state:def.key==="order_information"?"completed":"uncreated",current:true,round:null,occurrence:null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:"unset",expectedPrecision:"missing",actualAt:def.key==='order_information'?asOf:null,actualQuality:def.key==='order_information'?'verified':'missing',enteredAt:null,sla:"not_started",completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:false,unavailableReason:null,progressApplicability:"applicable"}));
   return {id,sourceId:null,orderId:id,designStyleNo:id,temporaryStyleNo:null,customer:"PD",category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:asOf,deliveryDate:null,selectedRound:null,adoptedRound:null,sourceVersion:null,instructionVersion:null,lines:[],links:[],stages:journeyStages(nodes),progress:{development:null,bulk:null},hitReasons:[]};
 }
 const nodes=(o:OrderJourney)=>o.stages.flatMap(stage=>stage.nodes);
+const markDone=(node:JourneyNode)=>{node.state='completed';node.actualAt=asOf;node.actualQuality='verified';};
 it('keeps read-only series plan rows out of original execution shares, activation and stage state',()=>{
   const o=order(),before=journeyDisplay(o,asOf),beforeStages=o.stages.map(s=>s.state);
   for(const n of nodes(o).filter(n=>n.key.startsWith('series_'))){n.state='active';n.enteredAt=asOf;n.progressApplicability='unknown';n.risks=['overdue'];n.records=[{domain:'series-plan',id:'TEST',url:null,mode:'read',version:1,lineId:null}];}
@@ -22,7 +23,7 @@ it("keeps the unique creation share at 1/7 even before workflow activation; time
 });
 it("counts business nodes once across POs and requires every applicable instance, ignoring legacy count",()=>{
   const o=order(),cut=nodes(o).find(node=>node.key==="bulk_cutting")!;
-  cut.state="completed";const parallel={...cut,instanceId:"PO2",state:"active" as const};o.stages.find(stage=>stage.key==="cutting")!.nodes.push(parallel);
+  markDone(cut);const parallel={...cut,instanceId:"PO2",state:"active" as JourneyNode['state']};o.stages.find(stage=>stage.key==="cutting")!.nodes.push(parallel);
   expect(journeyDisplay(o,asOf).stages.find(stage=>stage.key==="cutting")).toMatchObject({applicable:1,completed:0,ratio:0});
   parallel.state="completed";expect(journeyDisplay(o,asOf).stages.find(stage=>stage.key==="cutting")?.ratio).toBe(1);
   parallel.state="active";expect(journeyDisplay(o,asOf).stages.find(stage=>stage.key==="cutting")?.ratio).toBe(0);
@@ -39,7 +40,7 @@ it("distinguishes declared non-applicability, missing future nodes and unavailab
 });
 it("does not round unfinished progress to 100 or equate progress with business closure",()=>{
   expect(progressLabel(.99999)).toBe("99.9%");expect(progressLabel(1)).toBe("100.0%");
-  const o=order();nodes(o).forEach(node=>node.state="completed");
+  const o=order();nodes(o).forEach(markDone);
   nodes(o).find(node=>node.key==="packing")!.state="not_applicable";nodes(o).find(node=>node.key==="special_closure")!.state="not_applicable";
   expect(journeyDisplay(o,asOf)).toMatchObject({actualRatio:1,awaitingClosure:true});
 });
@@ -47,7 +48,7 @@ it("does not turn unused production stages into progress for an unstarted develo
   const o=order();o.orderId=null;o.sourceId=o.id;
   nodes(o).forEach(node=>{node.state=node.stage==="development"?"uncreated":node.stage==="creation"?"completed":"not_applicable";});
   expect(journeyDisplay(o,asOf)).toMatchObject({mainState:"not_started",actualRatio:0,actualLabel:"0.0%",awaitingClosure:false});
-  nodes(o).filter(node=>node.stage==="development").forEach(node=>node.state="completed");
+  nodes(o).filter(node=>node.stage==="development").forEach(markDone);
   expect(journeyDisplay(o,asOf)).toMatchObject({actualRatio:1,actualLabel:"100.0%",awaitingClosure:false});
 });
 it("retains unknown production progress and identifies its stages even after authoritative closure",()=>{

@@ -71,6 +71,7 @@ export const OrderTimeCalculationSchema=SettingsCalculationSchema.omit({values:t
 }).strict();
 export type OrderTimeCalculation=z.infer<typeof OrderTimeCalculationSchema>;
 export type OrderTimeCalculationResult={lines:Array<{milestones?:Array<z.infer<typeof FrameworkMilestoneResultSchema>>;id:string;customerDate:string|null;totalSpanMinutes:number|null;expectedEnd:string|null;marginMinutes:number|null;
+ deliveryStatus?:'sufficient'|'insufficient'|'unknown';
  stages:Array<{stage:number;spanMinutes:number|null}>;rows:Array<{id:string;parameterKey:string;label:string;stage:number;minutes:number|null;calendar:string|null;startAt:string|null;startExclusive:boolean;endAt:string|null;endExclusive:boolean;includedIn:string|null;missing:string[]}>}>};
 
 /** An explicit import for the new standard, never a reinterpretation of any

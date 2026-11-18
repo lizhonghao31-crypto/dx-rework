@@ -4,6 +4,10 @@ import {TimeFrameworkInputSchema,readTimeFrameworkPlan,type TimeFrameworkInput,t
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate,initialFrameworkMilestoneStandard,evaluateFrameworkResponsibility} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {fixedTimelineForward} from '../../apps/api/src/production-platform/fixed-timeline-targets.js';
 import {overlayFrameworkCompletion,retainedFrameworkWork} from '../../apps/api/src/production-platform/order-time-framework-route.js';
+import {formalRemainingTargets,type FormalRemainingInputs} from '../../apps/api/src/production-platform/order-time-formal-arrangement.js';
+import type {OrderTimeInput,StoredOrderTimePlan} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {evaluateOrderTimeScenario} from '../../apps/api/src/production-platform/order-time-schedule.js';
+import {arrangedOrderTimeTarget} from '../../apps/api/src/production-platform/framework-node-targets.js';
 
 const at=(day:number,hour=8)=>`2026-11-${String(day).padStart(2,'0')}T${String(hour).padStart(2,'0')}:00:00+08:00`;
 const iso=(day:number,hour=8)=>new Date(at(day,hour)).toISOString();
@@ -24,6 +28,38 @@ function fixture():TimeFrameworkInput{
   milestoneStandard:standard,work,bindings:Object.entries(standard.offsets).filter(([,offset])=>offset!==null).map(([key])=>({key,workIds:[key==='processing_dispatch'?'dispatch':'pack']})),notBefore:{}});
 }
 const version={reference:'TEST plan1',revision:1,previousReference:null,eventRef:'TEST native approval'};
+
+it('separates a formally approved remaining schedule from old evaluation targets and the customer goal',()=>{
+ const time={now:'2026-12-06T00:00:00.000Z',scenarioId:null,revision:0}; // 08:00 Beijing
+ const source={kind:'source' as const,id:'TEST original source'},scopeRef=`source:${source.id}:round:1`;
+ const B={precision:'instant' as const,value:'2026-12-05T00:00:00.000Z',source:'TEST originally adopted B'};
+ const M={precision:'date' as const,value:'2026-12-20',source:'TEST original customer M'};
+ const input:OrderTimeInput={version:'order-time-input-v1',plan:{...fixture().plan,revision:3,
+  company:{...fixture().plan.company,nodes:{paper:rule(.5),cut:rule(1)}},overrides:{cut:rule(2)}},
+  route:{complete:true,missing:[]},work:[{id:'paper',parameterKey:'paper',stage:2,dependsOn:[]},{id:'cut',parameterKey:'cut',stage:2,dependsOn:['paper']}],
+  scopes:[{scopeRef,lineId:null,terminalIds:['cut'],customerGoalIds:[],goals:{cut:B},customerGoal:M}]};
+ const baseline=evaluateOrderTimeScenario({...input,start:{precision:'instant',value:time.now,source:'TEST observed'}})[0]!.targets;
+ const targetIndex=Object.fromEntries(baseline.map(row=>[row.id,row]));
+ const previous:StoredOrderTimePlan={id:'TEST legacy revision 3',resource:source,revision:3,input,targets:{[scopeRef]:targetIndex},identityHash:'TEST legacy hash',time,actorId:'TEST approver',eventRef:'TEST native confirmation',changeKind:'arrangement'};
+ expect(evaluateOrderTimeScenario({...input,start:{precision:'instant',value:time.now,source:'TEST observed'},fixedTargets:targetIndex})[0]!.targets.find(row=>row.id==='cut')?.end.at).toBe(B.value);
+ expect(targetIndex.cut!.end.at).toBe(B.value);
+ expect(arrangedOrderTimeTarget(previous,scopeRef,'cut',true)?.end.at).toBeNull();
+ expect(arrangedOrderTimeTarget({...previous,changeKind:'initial'},scopeRef,'cut',true)?.end.at).toBe(B.value);
+ const snapshot:FormalRemainingInputs={version:'approved-remaining-v1',notBefore:{},progress:{paper:{completed:true,actualAt:'2026-12-05T23:00:00.000Z',readyAt:null,deadline:null}}};
+ const completeAt='2026-12-08T00:00:00.000Z'; // 48 continuous hours after approval
+ for(const withOldTargets of [previous,{...previous,targets:{}}]){
+  const targets=formalRemainingTargets(input,snapshot,withOldTargets,time,'TEST supported subsequent approval');
+  expect(targets[scopeRef]!.cut).toMatchObject({start:{at:time.now},end:{at:completeAt}});
+ }
+ const pending=formalRemainingTargets(input,{...snapshot,progress:{}},previous,time,'TEST independent pending paper variant');
+ expect(pending[scopeRef]!.cut!.end.at).toBe('2026-12-08T12:00:00.000Z');
+ const bounded=formalRemainingTargets(input,{...snapshot,notBefore:{cut:{precision:'instant',value:'2026-12-07T03:00:00Z',source:'TEST known independent condition'}}},previous,time,'TEST independent condition');
+ expect(bounded[scopeRef]!.cut!.end.at).toBe('2026-12-09T03:00:00.000Z');
+ const missing=formalRemainingTargets(input,{...snapshot,progress:{paper:{...snapshot.progress.paper!,actualAt:null}}},previous,time,'TEST unknown predecessor evidence');
+ expect(missing[scopeRef]!.cut!.end.at).toBeNull();
+ expect(input.scopes[0]).toMatchObject({goals:{cut:B},customerGoal:M});
+ expect(previous.targets[scopeRef]!.cut!.end.at).toBe(B.value);
+});
 
 describe('three-layer time foundation, no live adoption',()=>{
  it('retains started native windows and arrangements when a milestone is only partly complete',()=>{
@@ -162,11 +198,11 @@ describe('three-layer time foundation, no live adoption',()=>{
   expect(result.arranged.find(row=>row.id==='pack')!.end.at).toBe(iso(9));
   expect(result.milestones.find(row=>row.key==='processing_dispatch')!.date).toBe('2026-11-05');
  });
- it('treats exact next-day Beijing midnight as beyond a date-only delivery deadline',()=>{
-  const input=fixture();input.acceptedAt=anchor(2,0);input.customerDelivery.date='2026-11-07';
-  const result=evaluateTimeFrameworkCandidate(input,{purpose:'order_proposal',observedAt:at(2,0)});
-  expect(result.arranged.find(row=>row.id==='pack')!.end.at).toBe(iso(8,0));
-  expect(result.milestones.find(row=>row.key==='planned_shipment')).toMatchObject({status:'insufficient',lateMinutes:1/60000});
+ it.each([[-1,'sufficient',1/60000,0],[0,'insufficient',0,0],[1,'insufficient',-1/60000,1/60000]] as const)('keeps the true difference at %i ms from the exclusive Beijing date deadline', (offset,status,marginMinutes,lateMinutes)=>{
+  const input=fixture(),start=new Date(Date.parse(at(2,0))+offset).toISOString();input.acceptedAt={...anchor(2,0),value:start};input.customerDelivery.date='2026-11-07';
+  const result=evaluateTimeFrameworkCandidate(input,{purpose:'order_proposal',observedAt:start});
+  expect(result.arranged.find(row=>row.id==='pack')!.end.at).toBe(new Date(Date.parse(iso(8,0))+offset).toISOString());
+  expect(result.milestones.find(row=>row.key==='planned_shipment')).toMatchObject({status,marginMinutes,lateMinutes});
  });
  it('keeps an exact-boundary late branch when another completion shares its exclusive upper bound',()=>{
   const input=fixture();input.bindings.find(row=>row.key==='fabric_receipt')!.workIds=['fabric','pattern'];
@@ -174,7 +210,7 @@ describe('three-layer time foundation, no live adoption',()=>{
   for(const ordered of [['fabric','pattern'],['pattern','fabric']]){
    input.bindings.find(row=>row.key==='fabric_receipt')!.workIds=ordered;
    const result=evaluateTimeFrameworkCandidate(input,{...context(),retained:{fabric:{target:target('fabric',true),sourceRef:'TEST retained date bound'},pattern:{target:target('pattern',false),sourceRef:'TEST retained exact plan'}}});
-   expect(result.milestones.find(row=>row.key==='fabric_receipt')).toMatchObject({status:'insufficient',planned:{exclusive:false},lateMinutes:1/60000,blockingWorkIds:['pattern']});
+   expect(result.milestones.find(row=>row.key==='fabric_receipt')).toMatchObject({status:'insufficient',planned:{exclusive:false},marginMinutes:0,lateMinutes:0,blockingWorkIds:['pattern']});
   }
  });
  it('rejects retained wrong identities, backwards time, dependency cycles and duplicate work',()=>{

@@ -34,7 +34,24 @@ export async function admittedFrameworkProductionFixture(f:Awaited<ReturnType<ty
 }
 /** The same original admission supports both stored arrangement formats. */
 export async function admittedProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,framework:boolean,options?:{poCount?:number;cuttingProcess?:'in_house'|'outsourced';preshrink?:'需要预缩'|'无需预缩'}){
- const scene=await f.scene('2026-11-17T08:00:00.000Z');
+ const admitted=await admittedOrderFixture(f,options),{scene,orderId,sourceId,resource,repo}=admitted;
+ return f.runtime.run(scene,f.root,async()=>{
+   expect(Boolean((await repo.current(resource()))!.input.frameworkPlans)).toBe(framework);
+   const ready=await f.bulkReady('无',undefined,options?.poCount??1,undefined,{quantity:2,designerActor:f.root,existingOrder:{orderId,sourceId},...(options?.cuttingProcess?{cuttingProcess:options.cuttingProcess}:{}),...(options?.preshrink?{preshrink:options.preshrink}:{})});
+   const lineId=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[orderId])).rows[0].line_id;
+   // This original fixture explicitly created a customer approval without a
+   // time. Complete only that known fixture precondition via the supported
+   // audited supplement; do not manufacture a replacement approval/review.
+   const technical=new DevelopmentTechnicalService(f.db,true),sheet=await technical.read(f.root,ready.sourceId);
+   const comment=sheet.comments.find(row=>row.isFinal&&row.decision==='approved')!;
+   if(comment&&!comment.occurredAt)await technical.supplementCommentTime(f.root,ready.sourceId,{commentId:comment.commentId,commentVersion:comment.version,
+    actualTime:{precision:'instant',at:'2026-11-17T08:00:00.000Z'},note:'TEST known original fixture approval occurrence'},randomUUID());
+   return {...admitted,lineId,ready};
+ });
+}
+/** Real admission with the original development work still waiting for material verification. */
+export async function admittedOrderFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:{poCount?:number;startAt?:string}){
+ const scene=await f.scene(options?.startAt??'2026-11-17T08:00:00.000Z');
  const native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
  const requests=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,native)),washing=new BulkWashingService(f.db),repo=new OrderTimePlanRepository(f.db);
  return f.runtime.run(scene,f.root,async()=>{
@@ -58,17 +75,7 @@ export async function admittedProductionFixture(f:Awaited<ReturnType<typeof busi
    const orderId=applied.result!.orderId!;expect(orderId).toBeTruthy();
    const resource=()=>({kind:'order' as const,id:orderId});
    const command=async()=>{const scope=(await washing.read(f.root,orderId)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:'2026-11-17T08:00:00.000Z',note:'TEST exact native washing scope'};};
-   expect(Boolean((await repo.current(resource()))!.input.frameworkPlans)).toBe(framework);
-   const ready=await f.bulkReady('无',undefined,options?.poCount??1,undefined,{quantity:2,designerActor:f.root,existingOrder:{orderId,sourceId:source.sourceId},...(options?.cuttingProcess?{cuttingProcess:options.cuttingProcess}:{}),...(options?.preshrink?{preshrink:options.preshrink}:{})});
-   const lineId=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[orderId])).rows[0].line_id;
-   // This original fixture explicitly created a customer approval without a
-   // time. Complete only that known fixture precondition via the supported
-   // audited supplement; do not manufacture a replacement approval/review.
-   const technical=new DevelopmentTechnicalService(f.db,true),sheet=await technical.read(f.root,ready.sourceId);
-   const comment=sheet.comments.find(row=>row.isFinal&&row.decision==='approved')!;
-   if(comment&&!comment.occurredAt)await technical.supplementCommentTime(f.root,ready.sourceId,{commentId:comment.commentId,commentVersion:comment.version,
-    actualTime:{precision:'instant',at:'2026-11-17T08:00:00.000Z'},note:'TEST known original fixture approval occurrence'},randomUUID());
-   return {scene,orderId,lineId,sourceId:source.sourceId,ready,requests,washing,repo,resource,command};
+   return {scene,orderId,sourceId:source.sourceId,requests,washing,repo,resource,command};
  });
 }
 export async function failedFrameworkWashingFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,mode:'factory'|'after_receipt'){

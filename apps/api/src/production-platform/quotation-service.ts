@@ -77,17 +77,23 @@ export class DigitalQuotationService{
     canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&(isRootActor(actor)||price),canEditPricingUnit:version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
   });
   const technicalConsumptionOptions:NonNullable<QuotationSheet['technicalConsumptionOptions']>=[];
-  if(version===undefined&&c.sourceId&&rows.some(r=>r.canEditConsumption)){
-   const source=await developmentDocumentRow(db,c.sourceId),artifact=source?await publishedTechnicalArtifact(db,c.sourceId,source.round_number??1):null;
+  const canReadOptions=rows.some(row=>row.canEditConsumption);
+  const checkUnits=new Map(rows.filter(row=>assembly?.rows[row.rowId]?.kind==='material'&&(c.structure||row.canEditConsumption)&&Boolean(row.unit)&&row.consumption===''&&row.consumptionSource===null).map(row=>[row.rowId,row.unit]));
+  const unitMismatches=new Set<string>(),matchingUnits=new Set<string>();
+  if(version===undefined&&c.sourceId&&(canReadOptions||checkUnits.size)){
+   const source=c.sourceDocument??await developmentDocumentRow(db,c.sourceId),artifact=source?await publishedTechnicalArtifact(db,c.sourceId,source.round_number??1):null;
    if(source?.document&&artifact&&artifact.row.document_fingerprint===technicalDocumentFingerprint(source.document))for(const r of artifact.artifact.body.consumptionRows){
     const material=source.document.materials.find((m:DevelopmentMaterial)=>m.materialId===r.materialId);
-    if(material&&r.unit&&r.consumption!=='')technicalConsumptionOptions.push({artifactSetId:artifact.artifact.artifactSetId,artifactVersion:artifact.artifact.version,materialId:r.materialId,name:material.name,unit:r.unit,consumption:r.consumption});
+    if(!material||!r.unit||r.consumption==='')continue;
+    if(canReadOptions)technicalConsumptionOptions.push({artifactSetId:artifact.artifact.artifactSetId,artifactVersion:artifact.artifact.version,materialId:r.materialId,name:material.name,unit:r.unit,consumption:r.consumption});
+    const quoteUnit=checkUnits.get(r.materialId);
+    if(quoteUnit)(r.unit===quoteUnit?matchingUnits:unitMismatches).add(r.materialId);
    }
   }
   return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...(q?.assembly?{automatic:true,complete:quotationComplete({...q,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q.price_sources,assembly:snapshot?.assembly??q.assembly})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
-   document:c.full?doc??null:null,rows,assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation??null:null,
+   document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation??null:null,
    canStructure:version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&c.confirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
    budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null}};
  }

@@ -10,6 +10,18 @@ const instant=(at:string):SlaTime=>({at,exclusive:false,reasons:[]});
 const washingIds=new Set(['development_washing','development_washing_dispatch']);
 type Forecast=Pick<SlaNodeEvaluation,'forecast'|'forecastBasis'>;
 
+/** Source revision 1 can already carry a frozen serial craft route. The
+ * legacy enrollment represents printing/embroidery as one combined node.
+ * Only adopt the exact first-round graph for an established customer goal. */
+export function initialSourceCraftGraph(saved:StoredOrderTimePlan,scope:ScheduleScopeInput):boolean{
+ const adopted=saved.input.scopes.find(value=>value.scopeRef===scope.scopeRef&&value.lineId===null);
+ if(saved.resource.kind!=='source'||!adopted||adopted.customerGoal.precision==='unknown'||scope.targetRevision!==`${saved.id}:${saved.revision}`)return false;
+ const prefix=`${scope.scopeRef}:step:`;
+ const workRefs=new Set(scope.work.map(work=>work.canonicalWorkRef));
+ const steps=saved.input.work.filter(work=>!work.includedIn&&work.canonicalWorkRef?.startsWith(prefix)&&work.canonicalWorkRef.endsWith(':work')&&workRefs.has(work.canonicalWorkRef));
+ return new Set(steps.map(work=>work.canonicalWorkRef)).size>1;
+}
+
 function observedForecast(at:string,work:ScheduleWork|undefined,fact:ScheduleFact|undefined,original:SlaNodeEvaluation|undefined,native:SlaNodeFact|undefined):Forecast|null{
  const unknown=(reason:string):Forecast=>({forecast:missing(reason),forecastBasis:'unknown'});
  if(original?.assessmentIssue)return {forecast:original.forecast,forecastBasis:'unknown'};
@@ -64,7 +76,11 @@ export function sourceCurrentSupervision(saved:StoredOrderTimePlan,scope:Schedul
  }});
  return nodes.map<SlaNodeEvaluation>(node=>{
   const work=current.get(node.id),forecast=forecasts.get(node.id);
-  if(exactLegacyId(node.id)&&work&&forecast)return {...node,start:work.start,end:work.end,...forecast};
+  if(exactLegacyId(node.id)&&work&&forecast){
+   const formal=scope.work.find(value=>value.id===node.id)?.approvedCurrentTarget;
+   const approved=saved.input.formalTargets?.[scope.scopeRef]?.[node.id];
+   return {...node,start:approved?.start??work.start,end:approved?.end??(formal?missing('原调整未保存剩余安排依据，请从本单时效重新核对并正式安排'):work.end),...forecast};
+  }
   if(!washingIds.has(node.id))return node;
   const unknown=missing('现行安排缺少本轮洗水工作依据');
   return {...node,start:unknown,end:unknown,forecast:unknown,forecastBasis:'unknown'};

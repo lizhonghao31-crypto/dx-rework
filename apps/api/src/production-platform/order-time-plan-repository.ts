@@ -15,9 +15,12 @@ import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {SlaVersionConflict,SlaIdempotencyConflict} from './sla-configuration-repository.js';
 import {evaluateOrderTimeScenario,type OrderTimeScope,type OrderTimeWork} from './order-time-schedule.js';
 import type {FixedTimelineTarget} from './fixed-timeline-targets.js';
+import {formalRemainingTargets,type FormalRemainingInputs} from './order-time-formal-arrangement.js';
 
 type DB=Pick<PoolClient,'query'>;
 export type OrderTimeInput={version:'order-time-input-v1'|'order-time-input-rewash-v1';plan:FrozenOrderTimePlan;work:OrderTimeWork[];
+ formalInputs?:FormalRemainingInputs;
+ formalTargets?:Targets;
  rewashing?:OrderTimeWashingReworkPlan[];
  frameworkContext?:{route:SeriesRoute;acceptedAt:SlaAnchor;notBefore:Record<string,SlaAnchor>;progress:Record<string,OrderTimeNativeProgress>};
  frameworkPlans?:Record<string,FrozenTimeFramework>;
@@ -121,7 +124,7 @@ export class OrderTimePlanRepository{
      row.introducedAt=stored.introducedAt;row.introducedEventRef=stored.introducedEventRef;
     }
    }
-   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity({...result.input,frameworkPlans:undefined})!==fixedTimelineIdentity({...replayed,frameworkPlans:undefined}))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
+   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity({...result.input,frameworkPlans:undefined,formalTargets:undefined})!==fixedTimelineIdentity({...replayed,frameworkPlans:undefined,formalTargets:undefined}))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
    return result;
   }
   const previous=await this.current(resource);
@@ -183,6 +186,8 @@ export class OrderTimePlanRepository{
    const evaluated=evaluateOrderTimeScenario({...value,start:{precision:'instant',value:time.now,source:input.eventRef},scopes:[scope],...(kept?{fixedTargets:kept}:{})})[0]!;
    targets[scope.scopeRef]={...targets[scope.scopeRef],...Object.fromEntries(evaluated.targets.map(target=>[target.id,target]))};
   }
+  if(previous&&kind==='arrangement'&&value.formalInputs&&!value.frameworkContext)
+   value.formalTargets=formalRemainingTargets(value,value.formalInputs,previous,time,input.eventRef);
   if(value.frameworkContext){
    const context=value.frameworkContext,progress=new Map(Object.entries(context.progress));
    const plans:Record<string,FrozenTimeFramework>={};

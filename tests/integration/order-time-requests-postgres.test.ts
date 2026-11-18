@@ -6,6 +6,7 @@ import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderInput} from '@dx-rework/contracts/digital-production';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import type {OrderTimeOperation} from '@dx-rework/contracts/order-time-requests';
@@ -37,6 +38,7 @@ import {ProductionInstructionService} from '../../apps/api/src/production-platfo
 import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-customer-date-service.js';
 import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
+import {ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -646,6 +648,102 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     await expect(identity.createOrder(row.actor,formal,randomUUID(),row.sourceId)).rejects.toMatchObject({code:'ORDER_TIME_INPUT_REQUIRED'});
     expect((await f.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
    }
+  });
+ });
+
+ it('projects the complete first adopted serial craft route before starting the sample sewing forecast',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,true),standard=await settings.read(f.root);
+  const values=prepareTimeFrameworkConfiguration(r5OneHourConfiguration());
+  const work=(minutes:number)=>({kind:'work' as const,minutes,calendar:'continuous' as const,reminder:{enabled:false,percent:70}});
+  await settings.save(f.root,{expectedVersion:standard.version,values:{...values,stageBufferMinutes:0,nodes:{...values.nodes,development_positioning:work(60),development_printing:work(96*60),development_embroidery:work(96*60)}}},randomUUID());
+  const library=new SpecialCraftLibraryService(f.db),steps:CraftStepChoice[]=[{craftKind:'printing',sequence:1},{craftKind:'embroidery',sequence:2}];
+  for(const [i,hours] of [24,12].entries()){
+   const rule={minutes:hours*60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
+   const snapshot=await library.save(f.root,{id:null,expectedVersion:0,definition:{name:`TEST serial craft ${i}`,enabled:true,development:rule,bulk:rule}},randomUUID());
+   steps.push({craftKind:'special',sequence:steps.length+1,specialCraft:snapshot});
+  }
+  const scene=await f.scene('2027-09-01T00:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   for(const date of ['2027-10-15',null]){
+   const row=await make(date),before=await forms.read(row.actor,row.sourceId);
+    const draft=await forms.save(row.actor,row.sourceId,{expectedVersion:before.version,document:{...before.document!,craft:'特殊工艺',craftSteps:steps}},randomUUID());
+    if(row.operation.kind!=='development_publish')throw Error('TEST original source publication required');
+    await forms.publish(row.actor,row.sourceId,draft.version,randomUUID(),row.operation.input.patternOrder);
+    const resource={kind:'source' as const,id:row.sourceId},repo=new OrderTimePlanRepository(f.db),saved=(await repo.current(resource))!;
+    expect(saved.revision).toBe(1);
+    const scope=saved.input.scopes[0]!,crafts=saved.input.work.filter(node=>node.canonicalWorkRef?.endsWith(':work')&&node.canonicalWorkRef.includes(':step:'));
+    expect(new Set(crafts.map(node=>node.canonicalWorkRef)).size).toBe(4);
+    expect(crafts.slice(1).every((node,i)=>node.dependsOn.includes(crafts[i]!.id))).toBe(true);
+    expect(saved.input.work.filter(node=>node.canonicalWorkRef?.includes(':step:')&&node.includedIn).map(node=>node.includedIn).sort()).toEqual(crafts.flatMap(node=>[node.id,node.id]).sort());
+    const detail=await new DigitalJourneyQuery(f.db).read(f.root,row.sourceId,undefined,true),current=detail.supervision!.nodes.find(node=>node.id==='development_sewing')!;
+    expect(detail.orderId).toBeNull();expect(detail.supervision!.currentRevision).toBe(1);
+    if(!date){expect(scope.customerGoal.precision).toBe('unknown');continue;}
+    expect(scope.customerGoal).toMatchObject({precision:'date',value:date});
+    // Material and pattern each take one hour; cutting and positioning run
+    // in parallel for one hour. Four serial crafts then add 228 hours, and
+    // the sewing work adds one. Included dispatch/receipt add nothing.
+    const expected=new Date(Date.parse('2027-09-01T00:00:00.000Z')+(1+1+1+96+96+24+12+1)*3600000).toISOString();
+    expect(current.current.at).toBe(expected);
+    expect(current).toMatchObject({actualStart:null,actualEnd:null,forecast:current.current,forecastBasis:'plan'});
+    expect((await repo.current(resource))!.identityHash).toBe(saved.identityHash);
+   }
+  });
+ });
+
+ it('re-adopts an older source arrangement with genuine remaining work while preserving the old B and history',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,false),standard=await settings.read(f.root);
+  await settings.save(f.root,{expectedVersion:standard.version,values:r5OneHourConfiguration()},randomUUID());
+  const scene=await f.scene('2026-12-01T00:00:00.000Z'),execution=new DevelopmentExecutionService(f.db,true),clerk=f.people['development-clerk']!;
+  const row=await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2026-12-05',true);if(row.operation.kind!=='development_publish')throw Error('TEST original publication required');
+   const published=await forms.publish(row.actor,row.sourceId,row.operation.input.expectedVersion,randomUUID(),row.operation.input.patternOrder);
+   const view=await execution.read(clerk,row.sourceId),verification=view.materialVerification!,items=[{materialId:row.material!.materialId,physical:true,quantity:true,color:true,specification:true}];
+   await execution.saveMaterials(clerk,row.sourceId,{taskId:published.taskId!,expectedDocumentVersion:verification.documentVersion,expectedVersion:verification.version,entries:items.map(item=>({...item,usage:'use',note:'',confirmedWith:''}))},randomUUID());
+   await execution.check(clerk,row.sourceId,{taskId:published.taskId!,expectedVerificationVersion:verification.version+1,result:'通过',note:'TEST genuine material completion',items},randomUUID());
+   return row;
+  });
+  await f.advance(scene,'2026-12-06T00:00:00.000Z');
+  const verified=await f.runtime.run(scene,f.root,async()=>{
+   const resource={kind:'source' as const,id:row.sourceId},operation={kind:'arrangement' as const,resource},repo=new OrderTimePlanRepository(f.db),original=(await repo.current(resource))!;
+   const cutRule=original.input.plan.company.nodes.development_cutting!;
+   expect(cutRule.kind).toBe('work');
+   const old=structuredClone(original.input),changed=structuredClone(old);
+   changed.plan={...old.plan,revision:old.plan.revision+1,overrides:{development_cutting:{...cutRule,minutes:48*60,calendar:'continuous'}}};
+   const client=await f.db.connect();
+   try{
+    await client.query('BEGIN');
+    const time=await new ContextBusinessClock(f.db,client).read(resource),store=new OrderTimePlanRepository(client);
+    // Persist the old supported storage shape through its original write,
+    // without the newly captured inputs. No historical rows are rewritten.
+    for(const [i,value] of [old,changed].entries())await store.confirm({resource,expectedRevision:1+i,value,actorId:f.root.actorId,eventRef:`TEST legacy approved revision ${i+2}`,time,requestKey:randomUUID()});
+    await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   const history=async()=>((await f.db.query('SELECT * FROM digital_order_time_plan_versions WHERE source_id=$1 AND revision<4 ORDER BY revision',[row.sourceId])).rows);
+   const retained=await history(),legacy=(await repo.current(resource))!,work=legacy.input.work.find(node=>node.id==='development_cutting')!,scope=legacy.input.scopes[0]!;
+   expect(retained).toHaveLength(3);expect(legacy.input.formalTargets).toBeUndefined();
+   const baseline=legacy.targets[scope.scopeRef]![work.id]!.end.at;
+   expect(baseline).toBe(original.targets[scope.scopeRef]![work.id]!.end.at);
+   const taskService=new DigitalProductionTaskService(f.db),source=await execution.read(f.root,row.sourceId),cut=source.tasks.find(task=>task.taskKind==='development_cutting')!,paper=source.tasks.find(task=>task.taskKind==='development_pattern')!;
+   expect(cut).toMatchObject({state:'pending',enteredAt:null,completedAt:null});expect(paper.state).toBe('pending');
+   const paperWindow=await taskService.read(f.root,paper.taskId);
+   expect((await taskService.read(f.root,cut.taskId)).currentPlanTargets).toMatchObject({state:'unknown',planRevision:3,targets:[{endAt:null}]});
+   const preview=await requests.check(f.root,operation);
+   await requests.arrange(f.root,{resource,fingerprint:preview.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   const adopted=(await repo.current(resource))!,arranged=adopted.input.formalTargets![scope.scopeRef]!,planned=arranged[work.id]!.end.at;
+   expect(adopted.revision).toBe(4);
+   expect(planned,JSON.stringify({cut:arranged[work.id],paper:arranged.development_pattern,progress:Object.fromEntries(Object.entries(adopted.input.formalInputs!.progress).map(([key,fact])=>[key.split(':').at(-1),fact]))})).not.toBeNull();
+   expect(Date.parse(planned!)).toBeGreaterThan(Date.parse('2026-12-08T00:00:00.000Z'));
+   const query=new DigitalJourneyQuery(f.db),journey=await query.read(f.root,row.sourceId,undefined,true),fixed=journey.fixedSchedule!.scopes[0]!.nodes.find(node=>node.canonicalWorkRef===work.canonicalWorkRef)!;
+   expect(fixed).toMatchObject({currentTarget:{at:planned},goalDelta:{targetAt:baseline,actual:{precision:'unknown'}},ownSla:{deadlineAt:null}});
+   expect(await taskService.read(f.root,cut.taskId)).toMatchObject({enteredAt:null,completedAt:null,currentPlanTargets:{state:'ready',targets:[{endAt:planned}]}});
+   expect(await taskService.read(f.root,paper.taskId)).toMatchObject({enteredAt:paperWindow.enteredAt,dueAt:paperWindow.dueAt,completedAt:paperWindow.completedAt});
+   expect(adopted.input.scopes[0]!.customerGoal).toEqual(scope.customerGoal);expect(await history()).toEqual(retained);
+   return {cutId:cut.taskId,planned,planId:adopted.id};
+  });
+  await f.advance(scene,'2026-12-07T00:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const task=await new DigitalProductionTaskService(f.db).read(f.root,verified.cutId);
+   expect(task.currentPlanTargets).toMatchObject({planVersionId:verified.planId,targets:[{endAt:verified.planned}]});
   });
  });
 

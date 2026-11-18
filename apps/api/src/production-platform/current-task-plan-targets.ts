@@ -35,12 +35,12 @@ function taskPlanScope(saved:StoredOrderTimePlan,task:Task,binding:FixedTaskWork
  }
  return {kind:'available' as const,work,scopes,workRef:reference};
 }
-function scopedTargets(saved:StoredOrderTimePlan,selected:ReturnType<typeof taskPlanScope>,labels:Labels):DigitalTaskCurrentPlan{
+function scopedTargets(saved:StoredOrderTimePlan,selected:ReturnType<typeof taskPlanScope>,labels:Labels,notStarted:boolean):DigitalTaskCurrentPlan{
  if(selected.kind==='unavailable')return selected.value;
  const {work,scopes,workRef}=selected,targets:DigitalTaskCurrentPlan['targets']=[];
  for(const scope of scopes){
   if(scope.lineId&&!labels.has(scope.lineId))return unavailable('当前计划的PO范围尚未核实',saved);
-  const target=arrangedOrderTimeTarget(saved,scope.scopeRef,work.id),precision=frameworkTargetPrecision(target);
+  const target=arrangedOrderTimeTarget(saved,scope.scopeRef,work.id,notStarted),precision=frameworkTargetPrecision(target);
   targets.push({scopeRef:scope.scopeRef,lineId:scope.lineId,scopeLabel:scope.lineId?labels.get(scope.lineId)!:saved.resource.kind==='source'?'本开发单':'本订单',workRef,
    startAt:target?.start.at??null,endAt:target?.end.at??null,precision:precision.targetPrecision,date:precision.targetDate});
  }
@@ -48,7 +48,7 @@ function scopedTargets(saved:StoredOrderTimePlan,selected:ReturnType<typeof task
  return {state:ready?'ready':'unknown',reason:ready?null:'本任务当前计划仍有缺少依据的时间或范围',planVersionId:saved.id,planRevision:saved.revision,targets};
 }
 export function selectCurrentTaskPlan(saved:StoredOrderTimePlan,task:Task,binding:FixedTaskWorkBinding,labels:Labels=new Map()):DigitalTaskCurrentPlan{
- return scopedTargets(saved,taskPlanScope(saved,task,binding),labels);
+ return scopedTargets(saved,taskPlanScope(saved,task,binding),labels,task.state==='pending');
 }
 
 /** Framework-native rounds can predate legacy position rows. Their actual
@@ -107,5 +107,5 @@ export async function currentTaskPlanTargets(db:Pick<Pool|PoolClient,'query'>,ta
  const selected=taskPlanScope(saved,task,exact);if(selected.kind==='unavailable')return selected.value;
  const ids=[...new Set(selected.scopes.flatMap(scope=>scope.lineId?[scope.lineId]:[]))],labels=new Map<string,string>();
  if(ids.length&&resource.kind==='order')for(const row of (await db.query(`SELECT line_id,COALESCE(formal_style_no,po_number) AS po,color FROM digital_production_po_lines WHERE production_order_id=$1 AND line_id=ANY($2::uuid[])`,[resource.id,ids])).rows)labels.set(row.line_id,`PO ${row.po??'号码尚未取得'} · ${row.color}`);
- return scopedTargets(saved,selected,labels);
+ return scopedTargets(saved,selected,labels,task.state==='pending');
 }
