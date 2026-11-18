@@ -108,25 +108,36 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   for(const frame of frames)expect(frame.risks.filter((node:{id:string})=>instanceIds.has(node.id)).every((node:{risks:string[]})=>!node.risks.includes('overdue')&&!node.risks.includes('due_soon'))).toBe(true);
  });
  it('keeps a real 48-hour rework window finished at 50 hours through later 74-hour quantity review without closing its administration',async()=>{
-  const ownScene=await f.scene('2026-11-21T08:00:00.000Z'),ownRun=<T,>(action:()=>Promise<T>)=>f.runtime.run(ownScene,f.root,action);
-  const repair=await ownRun(async()=>{configureTimelineAdoption(f.db,'fixed_v2');try{return await f.reworkReady();}finally{configureTimelineAdoption(f.db,'legacy');}});
+  const ownScene=await f.scene('2026-12-01T00:00:00.000Z'),ownRun=<T,>(action:()=>Promise<T>)=>f.runtime.run(ownScene,f.root,action);
+  const repair=await ownRun(async()=>{configureTimelineAdoption(f.db,'fixed_v2');try{return await f.reworkReady(2);}finally{configureTimelineAdoption(f.db,'legacy');}});
   const windows=(await reworkSlaEvidence(f.db,repair.ready.id)).windows,original=windows.find(window=>window.reworkId===repair.id)!;
-  expect(original.startedAt).toBe('2026-11-21T08:00:00.000Z');expect(original.deadline).toBe('2026-11-23T08:00:00.000Z');
-  const completedAt='2026-11-23T10:00:00.000Z';await f.advance(ownScene,completedAt);
+  expect(original.startedAt).toBe('2026-12-01T00:00:00.000Z');expect(original.deadline).toBe('2026-12-03T00:00:00.000Z');
+  const completedAt='2026-12-03T02:00:00.000Z';await f.advance(ownScene,completedAt);
   await ownRun(async()=>{
-   for(const task of repair.state.tasks){const current=await repair.work.list(f.root,repair.id);await repair.work.submitReport({...f.root,authorizationCapability:'work:report_for_worker',authorizationCapabilities:['work:report_for_worker']},task.workTaskId,{expectedOrderVersion:current.orderVersion,actualQuantity:5,completedAt},randomUUID());}
+   expect(repair.state.tasks).toHaveLength(2);
+   for(const [i,task] of repair.state.tasks.entries()){
+    const current=await repair.work.list(f.root,repair.id);await repair.work.submitReport({...f.root,authorizationCapability:'work:report_for_worker',authorizationCapabilities:['work:report_for_worker']},task.workTaskId,{expectedOrderVersion:current.orderVersion,actualQuantity:5,completedAt},randomUUID());
+    if(i===0){const partial=(await reworkSlaEvidence(f.db,repair.ready.id)).windows.find(window=>window.reworkId===repair.id)!;expect(partial).toMatchObject({complete:false,completedAt:null,assignmentId:original.assignmentId});}
+   }
    const item=await new DigitalJourneyQuery(f.db).read(f.root,repair.ready.id,undefined,true),node=item.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='rework'&&node.instanceId===repair.id)!;
-   expect(node).toMatchObject({state:'active',sla:'finished',enteredAt:original.startedAt,actualAt:completedAt});
+   expect(node).toMatchObject({state:'active',sla:'finished',enteredAt:original.startedAt,actualAt:completedAt,completionResult:'late',overdueSeconds:7200,
+    nativeWindows:[{evidence:original.evidence,startedAt:original.startedAt,deadline:original.deadline,completedAt,complete:true}]});
    const timing=item.supervision!.nodes.find(node=>node.id==='garment_rework:'+original.lineId)!;
    expect(timing).toMatchObject({status:'completed_late',actualEnd:completedAt});
    expect(timing.windows).toEqual([expect.objectContaining({evidence:original.evidence,startedAt:original.startedAt,deadline:original.deadline,completedAt,complete:true})]);
+   expect(item.lines).toHaveLength(2);expect(item.lines.some(line=>line.id!==original.lineId)).toBe(true);
+   expect(item.businessProgress!.requirements.find(row=>row.key==='rework')?.completed).toBe(false);
   });
-  await f.advance(ownScene,'2026-11-24T10:00:00.000Z');
+  for(const at of ['2026-12-04T02:00:00.000Z','2026-12-05T02:00:00.000Z']){
+   await f.advance(ownScene,at);
+   await ownRun(async()=>{const item=await new DigitalJourneyQuery(f.db).read(f.root,repair.ready.id,undefined,true);expect(item.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='rework'&&node.instanceId===repair.id)).toMatchObject({actualAt:completedAt,overdueSeconds:7200});});
+  }
+  await f.advance(ownScene,'2026-12-06T02:00:00.000Z');
   await ownRun(async()=>{
    const review=new WholeOrderReviewService(f.db),actor={...f.root,authorizationCapability:'submission:audit'},before=await review.get(actor,repair.id);
    await review.approve(actor,repair.id,{expectedOrderVersion:before.orderVersion,temporaryCoefficients:before.temporaryWorkers.map(worker=>({configurationItemId:worker.configurationItemId,personId:worker.personId,multiplier:1}))},randomUUID());
    const item=await new DigitalJourneyQuery(f.db).read(f.root,repair.ready.id,undefined,true),node=item.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='rework'&&node.instanceId===repair.id)!;
-   expect(node).toMatchObject({state:'active',sla:'finished',actualAt:completedAt});
+   expect(node).toMatchObject({state:'active',sla:'finished',actualAt:completedAt,completionResult:'late',overdueSeconds:7200});
    expect((await reworkSlaEvidence(f.db,repair.ready.id)).windows.find(window=>window.reworkId===repair.id)).toMatchObject({completedAt,deadline:original.deadline});
   });
  });

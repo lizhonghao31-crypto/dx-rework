@@ -1,4 +1,4 @@
-import {cancelledTaskHistory,cancelledWorkTaskKind} from './cancelled-task-history.js';
+import {cancelledTaskHistory,cancelledWorkTaskKind,linkedSourceTaskCancellation,sourceTaskCancellationEventsSql} from './cancelled-task-history.js';
 import {evaluateJourneyFramework,type JourneyFrameworkBasis} from './journey-time-framework.js';
 import {attachFrameworkEvents} from './journey-framework-events.js';
 import {attachJourneyWashing,journeyWashingInstanceId} from './journey-washing-projection.js';
@@ -58,6 +58,7 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
  const tasks=(await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,t.route_version,t.route_instance_id,a.task_kind,a.source_id,a.production_order_id,
   position.adoption_id,position.route_position,position.route_ref,position.step_id,position.phase,
   ARRAY(SELECT e.event_id::text FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.resource_kind=$3 AND e.resource_id=$4 AND e.event_kind='cancel' ORDER BY e.event_id LIMIT 2) AS cancel_events,
+  ${sourceTaskCancellationEventsSql} AS source_cancel_events,
   EXISTS(SELECT 1 FROM digital_production_task_events returned WHERE returned.task_id=t.task_id AND returned.event_kind='material_returned') AS returned,
   EXISTS(SELECT 1 FROM digital_development_route_facts rejected WHERE rejected.task_id=t.task_id AND rejected.kind='尾查退回') AS rejected
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
@@ -97,20 +98,23 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
    const originalFact=inheritedWork?undefined:native[ownId]??native[definition.parameterKey??ownId];
    let fact=fromFact(originalFact);
    const candidates=owner?relevant(definition,owner):[];
+   const cancellations=new Map<string,JourneyTermination>();
    const matches=candidates.filter(task=>{
     if(task.state!=='cancelled')return true;
     const route=owner===inherited?owner?.input.route:routes.get(String(owner?.input.sourceVersions.routeRef));
     const positions=(routes.get(task.route_ref)??route??[]).filter(position=>position.position===Number(task.route_position)&&position.nodeId===ownId);
     if(task.adoption_id&&positions.length!==1)return false;
     const kind=cancelledWorkTaskKind(definition.parameterKey??ownId,ownId,positions[0]?.kind);
+    const stop=linkedSourceTaskCancellation(task,resource,item,kind,asOf,consumer.lineId,definition.canonicalWorkRef);
+    if(stop){cancellations.set(task.task_id,stop);return true;}
     return cancelledTaskHistory(task,resource,item,termination,kind,consumer.lineId,definition.canonicalWorkRef);
    });
    if(matches.length!==1&&termination?.kind==='cancelled'&&candidates.some(task=>task.state==='cancelled'))fact=fromFact(undefined);
-   if(matches.length===1){const task=matches[0]!,ready=readiness.get(task.task_id);
+   if(matches.length===1){const task=matches[0]!,ready=readiness.get(task.task_id),stop=cancellations.get(task.task_id);
     const accepted=task.state==='completed'&&!task.returned&&!task.rejected;
     const completed=accepted&&['现场登记','已核实'].includes(task.completed_quality)?occurrence(task.completed_at):unknown;
     const first=ready?.tracked?occurrence(ready.firstReadyAt):task.state==='cancelled'?['现场登记','已核实'].includes(task.entered_quality)?occurrence(task.entered_at):unknown:fact.ready;
-    fact={...fact,...(task.state==='cancelled'?{ownTaskId:task.task_id}:{}),ready:first,clockStart:first,completed,businessCompleted:accepted,evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...(task.cancel_events??[]).map((id:string)=>`digital_production_task_events:${id}`),...ready?.basis??[]]};
+    fact={...fact,...(task.state==='cancelled'?{ownTaskId:task.task_id}:{}),ready:first,clockStart:first,completed,businessCompleted:accepted,...(stop?{terminated:true,terminationAt:stop.at}:{}),evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...(task.cancel_events??[]).map((id:string)=>`digital_production_task_events:${id}`),...(stop?.originEventRef?[stop.originEventRef]:[]),...ready?.basis??[]]};
     // Factory task entry can be empty while its real step/batch obligation
     // has already begun. Retain only this original route's scoped windows;
     // neither a kind aggregate nor another step may authenticate its R/D.
@@ -289,6 +293,11 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
   if(!targets.length)continue;
   if(node.expectedKind==='sla'&&node.expectedAt&&node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)&&['instant','date'].includes(node.expectedPrecision))node.nativeTaskDeadline={at:node.expectedAt,precision:node.expectedPrecision as 'instant'|'date',mode:node.deadlineMode,exclusive:node.deadlineExclusive};
   node.fixedTargets=targets;
+  if(node.state==='cancelled'&&exactTask&&targets.every(({progress})=>progress.state==='terminated')){
+   const durations=targets.map(({progress})=>progress.ownSla.overdueMinutes);
+   node.overdueSeconds=durations.every(duration=>duration&&duration.minimum===duration.maximum)?Math.max(...durations.map(duration=>duration!.maximum))*60:null;
+   node.risks=node.risks.filter(risk=>risk!=='overdue'&&risk!=='due_soon');
+  }
   if(basis.policyVersion==='order-time-plan-v1'&&!['completed','inherited','cancelled','not_applicable'].includes(node.state)){
    // Unknown siblings cannot erase a proven own-window risk. Neither can a
    // legacy aggregate deadline replace the current per-PO responsibility.

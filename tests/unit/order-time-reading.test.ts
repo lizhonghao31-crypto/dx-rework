@@ -1,4 +1,4 @@
-import {cancelledTaskHistory,cancelledWorkTaskKind} from '../../apps/api/src/production-platform/cancelled-task-history.js';
+import {cancelledTaskHistory,cancelledWorkTaskKind,linkedSourceTaskCancellation} from '../../apps/api/src/production-platform/cancelled-task-history.js';
 import {SERIES_MILESTONE_OFFSETS} from '@dx-rework/contracts/digital-series-plan';
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
@@ -418,6 +418,21 @@ describe('cancelled task original responsibility identity',()=>{
   const duplicate=structuredClone(row);duplicate.stages[1]!.nodes.push(structuredClone(duplicate.stages[1]!.nodes[0]!));expect(cancelledTaskHistory(task,resource,duplicate,termination,'a')).toBe(false);
   row.stages[1]!.nodes[0]!.records.push({domain:'cutting',id:'TEST cut',version:null,lineId:'TEST PO',url:null,mode:'read'});
   expect(cancelledTaskHistory(task,resource,row,termination,'a','OTHER PO')).toBe(false);expect(cancelledTaskHistory(task,resource,row,termination,'a','TEST PO')).toBe(true);
+ });
+ it('matches only the linked original source, current route, round, step and PO of the selected task',()=>{
+  const {row,task}=original(),order={kind:'order' as const,id:'TEST order'};
+  row.orderId=order.id;
+  row.stages[1]!.nodes[0]!.records[0]!.lineId='TEST PO';
+  const event={id:'TEST source cancellation',at:at(9),quality:'已核实'},native={...task,step_id:'own-step',source_cancel_events:[event]};
+  const ref=`source:${resource.id}:round:1:route:${task.route_instance_id}:step:own-step:work:a`;
+  const read=(value= native,scope='TEST PO',work=ref,asOf=at(10))=>linkedSourceTaskCancellation(value,order,row,'a',asOf,scope,work);
+  expect(read()).toMatchObject({kind:'cancelled',at:at(9),precision:'instant',originEventRef:`digital_production_task_events:${event.id}`,scopeRef:`source:${resource.id}`});
+  expect(read(native,'TEST PO',ref,at(8))).toMatchObject({at:null,precision:'unknown'});
+  expect(read({...native,source_cancel_events:[{...event,quality:'补报未核实'}]})).toMatchObject({at:null,precision:'unknown'});
+  expect(read(native,'OTHER PO')).toBeNull();
+  for(const work of [ref.replace(':round:1:',':round:2:'),ref.replace(':own-step:',':other-step:'),ref.replace(task.route_instance_id,'OTHER route'),`order:${order.id}:work:a`])expect(read(native,'TEST PO',work)).toBeNull();
+  for(const unproven of [{...native,source_id:'OTHER source'},{...native,source_cancel_events:[]},{...native,source_cancel_events:[event,{...event,id:'ambiguous'}]}])expect(read(unproven)).toBeNull();
+  row.stages[1]!.nodes[0]!.current=false;expect(read()).toBeNull();
  });
  it('restores the original task policy and R without admitting a retired same-kind task or inventing A',()=>{
   const {row,task,termination}=original(),saved=stored();row.asOf=at(20);

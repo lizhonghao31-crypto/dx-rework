@@ -17,11 +17,12 @@ function fixture():OrderJourney {
 }
 const nodes=(order:OrderJourney)=>order.stages.flatMap(stage=>stage.nodes);
 const node=(order:OrderJourney,key:string)=>nodes(order).find(value=>value.key===key)!;
+const markDone = (node:JourneyNode):JourneyNode => Object.assign(node,{state:'completed',actualAt:asOf,actualQuality:'verified'} as const);
 const target=(key:string,revision=1):JourneyRequirementTarget=>({source:'series_plan',planId:`plan-${revision}`,revision,scopeRef:'whole',at:selected.indexOf(key)<4?'2026-11-04':'2026-11-06',precision:'date',retainedFromRevision:null});
 function plan(keys=selected,revision=1):AdoptedRequirementPlan{return {planId:`plan-${revision}`,revision,targets:new Map(keys.map(key=>[key,[target(key,revision)]]))};}
 
 it('P01-02/03: splitting a single obligation into two or ten batches never increases its weight; every scope must finish',()=>{
-  const order=fixture();node(order,'process_logistics').state='completed';const original=journeyBusinessProgress(order,asOf);
+  const order=fixture();markDone(node(order,'process_logistics'));const original=journeyBusinessProgress(order,asOf);
   const stage=order.stages.find(stage=>stage.key==='post_cutting')!;
   for(let i=0;i<9;i++)stage.nodes.push({...node(order,'process_logistics'),instanceId:`batch-${i}`});
   expect(journeyBusinessProgress(order,asOf)).toMatchObject({applicable:9,completed:original.completed,ratio:original.ratio});
@@ -34,19 +35,20 @@ it('P01-04: a retired execution without a current replacement leaves the require
   expect(result.requirements.find(row=>row.key==='bulk_cutting')?.reasons[0]).toContain('承接记录');
 });
 it('P01-03: a completed sibling cannot hide the specific PO and factory that still must finish',()=>{
-  const order=fixture(),first=node(order,'process_logistics');first.state='completed';first.subject='黑PO · 甲厂';
+  const order=fixture(),first=markDone(node(order,'process_logistics'));first.subject='黑PO · 甲厂';
   order.stages.find(stage=>stage.key==='post_cutting')!.nodes.push({...first,instanceId:'white-factory',subject:'白PO · 乙厂',state:'active'});
   const requirement=journeyBusinessProgress(order,asOf).requirements.find(row=>row.key==='process_logistics')!;
   expect(requirement.completed).toBe(false);expect(requirement.reasons).toContain('尚待白PO · 乙厂完成');
 });
 it('P01-04: retiring one same-round scope cannot disappear behind a completed sibling without explicit inheritance',()=>{
-  const order=fixture(),first=node(order,'process_logistics');first.state='completed';first.round=1;
+  const order=fixture(),first=markDone(node(order,'process_logistics'));first.round=1;
   const stage=order.stages.find(stage=>stage.key==='post_cutting')!;
   stage.nodes.push({...first,instanceId:'retired-white',subject:'白PO · 乙厂',current:false,state:'active'});
   const requirement=()=>journeyBusinessProgress(order,asOf).requirements.find(row=>row.key==='process_logistics')!;
   expect(requirement()).toMatchObject({applicability:'unknown',completed:false});
   expect(requirement().reasons).toContain('白PO · 乙厂退役后的有效承接范围尚未核实');
   first.state='inherited';first.inheritedFrom={taskId:'retired-white',round:1};
+  first.inheritedResult={actualAt:null,quality:'missing',adoptedAt:asOf,adoptedRound:1,adoptionSourceRef:'TEST-current-adoption',reason:'TEST original adoption'};
   expect(requirement()).toMatchObject({applicability:'applicable',completed:true});
   first.state='not_applicable';first.progressApplicability='not_applicable';first.inheritedFrom=null;
   expect(requirement()).toMatchObject({applicability:'not_applicable',completed:false});
@@ -58,7 +60,7 @@ it('P01-08: unavailable scope never becomes completed or zero missing requiremen
 it('native material return chains reach the current same-kind recheck without cross-round inheritance',()=>{
   const order=fixture(),first=node(order,'development_materials');first.current=false;first.round=1;
   const middle={...first,instanceId:'returned-recheck',key:'development_material_recheck'};
-  const current={...middle,instanceId:'current-recheck',current:true,state:'completed' as const};
+  const current=markDone({...middle,instanceId:'current-recheck',current:true});
   order.stages.find(stage=>stage.key==='development')!.nodes.push(middle,current);
   const read=(links:Array<{retiredId:string;successorId:string}>)=>journeyBusinessProgress(order,asOf,null,undefined,new Map(),links).requirements.find(row=>row.key==='development_materials')!;
   expect(read([])).toMatchObject({applicability:'unknown',completed:false});
@@ -68,7 +70,7 @@ it('native material return chains reach the current same-kind recheck without cr
   expect(current.inheritedFrom).toBeNull();
 });
 it('P01-09/11: actual and adopted plan use the same nine requirements and compare identities, not just equal totals',()=>{
-  const order=fixture();for(const key of [selected[0]!,selected[1]!,selected[5]!])node(order,key).state='completed';
+  const order=fixture();for(const key of [selected[0]!,selected[1]!,selected[5]!])markDone(node(order,key));
   const result=journeyBusinessProgress(order,asOf,plan());
   expect(result).toMatchObject({applicable:9,completed:3,ratio:1/3,plan:{status:'complete',covered:9,due:4}});
   expect(result.plan.outstandingDue).toEqual(['development_pattern:whole','bulk_pattern:whole']);
@@ -78,7 +80,7 @@ it('P01-09/11: actual and adopted plan use the same nine requirements and compar
   expect(html).toContain('已有计划的6项中');expect(html).toContain('另3项尚无完整对应计划日期');expect(html).not.toContain('4/9');
 });
 it('P01-10: an unadopted preview does not replace V1; explicit V2 adoption changes targets without changing actual facts',()=>{
-  const order=fixture(),adopted=plan();node(order,'bulk_cutting').state='completed';
+  const order=fixture(),adopted=plan();markDone(node(order,'bulk_cutting'));
   const before=journeyBusinessProgress(order,asOf,adopted),preview=plan(selected,2);
   expect(journeyBusinessProgress(order,asOf,adopted)).toEqual(before);expect(preview.revision).toBe(2);
   const after=journeyBusinessProgress(order,asOf,preview);expect(after.plan.revision).toBe(2);expect(after.completed).toBe(before.completed);
@@ -142,4 +144,17 @@ it('P01-05: native sample evidence replaces a virtual progress obligation withou
 it('keeps a recorded packing count distinct from qualified delivery and its unknown remaining shipment',()=>{
  const value=closure(4,4,4);value.quality![0]!.qualifiedQuantity=3;value.lines[0]!.effectivePackingQuantity=null;
  expect(journeyBusinessQuantities(value).lines[0]).toMatchObject({packed:4,effectivePacked:null,remainingShipment:null,qualityGap:0});
+});
+
+it.each([
+  {name:'state without A',actualAt:null,actualQuality:'missing',completed:false},
+  {name:'unverified instant',actualAt:asOf,actualQuality:'unverified',completed:false},
+  {name:'one millisecond in the future',actualAt:'2026-11-05T00:00:00.001Z',actualQuality:'verified',completed:false},
+  {name:'exact observation boundary',actualAt:asOf,actualQuality:'verified',completed:true},
+  {name:'effective Beijing date without a fictitious instant',actualAt:null,actualDate:'2026-11-05',actualQuality:'unverified',completed:true},
+  {name:'future Beijing date',actualAt:null,actualDate:'2026-11-06',actualQuality:'verified',completed:false},
+] satisfies Array<{name:string;actualAt:string|null;actualDate?:string;actualQuality:JourneyNode['actualQuality'];completed:boolean}>)('counts only effective material completion: $name',({actualAt,actualDate,actualQuality,completed})=>{
+  const order=fixture(),task=node(order,'development_materials');
+  Object.assign(task,{state:'completed',actualAt,actualDate,actualQuality});
+  expect(journeyBusinessProgress(order,asOf).requirements.find(row=>row.key===task.key)).toMatchObject({applicability:'applicable',completed});
 });

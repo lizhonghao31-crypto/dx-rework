@@ -51,11 +51,10 @@ export function evaluateTimeFrameworkCandidate(value:TimeFrameworkInput,context:
   // A missing branch cannot hide a separately proved late branch.
   const late=known.filter(row=>Date.parse(row.end.at!)>Date.parse(target.at!)||Date.parse(row.end.at!)===Date.parse(target.at!)&&!row.end.exclusive);
   const comparable=planned.at??(late.length?latest(late.map(row=>row.end)).at:null);
-  const boundary=comparable!==null&&Date.parse(comparable)===Date.parse(target.at!)&&(planned.at?!planned.exclusive:true);
-  const delta=comparable===null?null:(Date.parse(comparable)-Date.parse(target.at!)+(boundary?1:0))/minute;
+  const delta=comparable===null?null:(Date.parse(comparable)-Date.parse(target.at!))/minute;
   return {key:binding.key,date,target,planned,workIds:[...binding.workIds],
    status:late.length?'insufficient' as const:planned.at?'sufficient' as const:'unknown' as const,
-   lateMinutes:delta===null?null:Math.max(0,delta),marginMinutes:planned.at&&delta!==null?-delta:null,
+   lateMinutes:delta===null?null:Math.max(0,delta),marginMinutes:planned.at&&delta!==null?delta===0?0:-delta:null,
    blockingWorkIds:selected.filter(row=>!row.end.at||late.includes(row)).map(row=>row.id)};
  });
  const coverage=arranged.filter(row=>!row.start.at||!row.end.at).map(row=>row.id);

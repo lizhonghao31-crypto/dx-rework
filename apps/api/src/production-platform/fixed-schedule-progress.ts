@@ -147,7 +147,7 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
   const strictEnd=work.eventTarget?.exclusive??work.endExclusive;
   const boundaryLag=(at:number)=>scheduleElapsed(end!,at,calendar!)+(strictEnd&&!boundary?.exclusive&&at===end?1/MINUTE:0);
   const lag=boundary&&end!==null&&calendar?range(boundaryLag(boundary.available[0]),boundaryLag(boundary.available[1])):null;
-  const stop=terminated?timestamp(fact?.terminated?fact.terminationAt??termination?.at:termination?.at):null;
+  const stop=terminated?timestamp(fact?.terminated&&fact.terminationAt!==undefined?fact.terminationAt:termination?.at):null;
   const ownCalendar=work.responsibilityCalendar,ownStart=fact?scheduleOccurrenceBounds(fact.clockStart,asOf):null,ownEnd=completed?actual:terminated?stop!==null&&stop<=now?[stop,stop] as const:null:[now,now] as const;
   const ownKnown=Boolean(work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownEnd&&ownEnd[1]>=ownStart[0]);
   const own=ownKnown?range(Math.max(0,scheduleElapsed(ownStart![1],ownEnd![0],ownCalendar!)-work.responsibilityMinutes!),Math.max(0,scheduleElapsed(ownStart![0],ownEnd![1],ownCalendar!)-work.responsibilityMinutes!)):null;
