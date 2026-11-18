@@ -18,11 +18,12 @@ const missing=(reason:string):SlaTime=>({at:null,exclusive:false,reasons:[reason
  * existing promises and evaluation targets; they are not remaining-work start
  * constraints. The immutable approval time is the floor for work not begun.
  */
-export function formalRemainingTargets(input:OrderTimeInput,snapshot:FormalRemainingInputs,previous:StoredOrderTimePlan,time:BusinessTime,eventRef:string):Record<string,Record<string,FixedTimelineTarget>>{
+export function formalRemainingSchedule(input:OrderTimeInput,snapshot:FormalRemainingInputs,previous:StoredOrderTimePlan,time:BusinessTime,eventRef:string){
  const graph=buildOrderTimeWork(input.plan,input.work),workById=new Map(input.work.map(work=>[work.id,work]));
  const priorWork=new Map(previous.input.work.map(work=>[work.canonicalWorkRef??work.id,work]));
  const now=Date.parse(time.now),pending=new Set(snapshot.pendingWork??[]),minimumStart:SlaAnchor={precision:'instant',value:time.now,source:eventRef};
- return Object.fromEntries(input.scopes.map(scope=>{
+ const targets:Record<string,Record<string,FixedTimelineTarget>>={},terminalEnds:Record<string,SlaTime[]>={};
+ for(const scope of input.scopes){
   const required=requiredFixedTimelineWork(graph,scope.terminalIds),ids=new Set(required.map(work=>work.id));
   const applicable=graph.filter(work=>ids.has(work.id)||work.includedIn&&ids.has(work.includedIn));
   const retained:Record<string,FixedTimelineTarget>={},completions:Record<string,SlaTime>={};
@@ -48,7 +49,12 @@ export function formalRemainingTargets(input:OrderTimeInput,snapshot:FormalRemai
      ?{at:deadline,exclusive:false,reasons:[]}:missing('在办前序已超原责任窗口或缺少可信候选完成时间');
    }
   }
-  const targets=fixedTimelineForward(applicable,minimumStart,snapshot.notBefore,{minimumStart,retained,completions});
-  return [scope.scopeRef,Object.fromEntries(targets.map(row=>[row.id,row]))];
- }));
+  const schedule=fixedTimelineForward(applicable,minimumStart,snapshot.notBefore,{minimumStart,retained,completions});
+  const byId=Object.fromEntries(schedule.map(row=>[row.id,row]));
+  targets[scope.scopeRef]=byId;
+  // A retained target is history. Compare a terminal's true completion or
+  // current handoff when it has begun, and the formal scheduled end otherwise.
+  terminalEnds[scope.scopeRef]=scope.terminalIds.map(id=>completions[id]??byId[id]!.end);
+ }
+ return {targets,terminalEnds};
 }

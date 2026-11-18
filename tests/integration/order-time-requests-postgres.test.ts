@@ -747,6 +747,43 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
  });
 
+ it('requires late approval when an entered but pending predecessor still needs its full duration',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,false),standard=await settings.read(f.root);
+  const values=r5OneHourConfiguration(),work=(hours:number)=>({kind:'work' as const,minutes:hours*60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}});
+  await settings.save(f.root,{expectedVersion:standard.version,values:{...values,nodes:{...values.nodes,development_pattern:work(12)}}},randomUUID());
+  const start='2026-12-05T23:00:00.000Z',now='2026-12-06T10:00:00.000Z';
+  const scene=await f.scene(start),execution=new DevelopmentExecutionService(f.db,true),clerk=f.people['development-clerk']!;
+  const row=await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2026-12-08',true);if(row.operation.kind!=='development_publish')throw Error('TEST original source publication required');
+   const published=await forms.publish(row.actor,row.sourceId,row.operation.input.expectedVersion,randomUUID(),row.operation.input.patternOrder);
+   const view=await execution.read(clerk,row.sourceId),verification=view.materialVerification!,items=[{materialId:row.material!.materialId,physical:true,quantity:true,color:true,specification:true}];
+   await execution.saveMaterials(clerk,row.sourceId,{taskId:published.taskId!,expectedDocumentVersion:verification.documentVersion,expectedVersion:verification.version,entries:items.map(item=>({...item,usage:'use',note:'',confirmedWith:''}))},randomUUID());
+   await execution.check(clerk,row.sourceId,{taskId:published.taskId!,expectedVerificationVersion:verification.version+1,result:'通过',note:'TEST genuine material completion',items},randomUUID());
+   return row;
+  });
+  await f.advance(scene,now);
+  await f.runtime.run(scene,f.root,async()=>{
+   const resource={kind:'source' as const,id:row.sourceId},operation={kind:'arrangement' as const,resource};
+   const repo=new OrderTimePlanRepository(f.db),before=(await repo.current(resource))!,overrides={development_cutting:work(48)};
+   const paper=(await execution.read(f.root,row.sourceId)).tasks.find(task=>task.taskKind==='development_pattern')!;
+   const tasks=new DigitalProductionTaskService(f.db);
+   expect(await tasks.read(f.root,paper.taskId)).toMatchObject({state:'pending',enteredAt:start,dueAt:'2026-12-06T11:00:00.000Z'});
+   const preview=await requests.check(f.root,operation,overrides);
+   expect(preview).toMatchObject({feasibility:'insufficient',availableMinutes:54*60,forecastQuality:'conditional'});
+   expect(preview.lateMinutes).toBeGreaterThanOrEqual(6*60);
+   const body={resource,fingerprint:preview.fingerprint,overrides};
+   await expect(requests.arrange(f.root,{...body,acceptLate:false},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_LATE_CONFIRMATION'});
+   expect((await repo.current(resource))?.id).toBe(before.id);
+   await requests.arrange(f.root,{...body,acceptLate:true},randomUUID());
+   const adopted=(await repo.current(resource))!,scope=adopted.input.scopes[0]!,targets=adopted.input.formalTargets![scope.scopeRef]!;
+   expect(adopted.revision).toBe(before.revision+1);
+   expect(targets.development_pattern).toMatchObject({start:{at:now},end:{at:'2026-12-06T22:00:00.000Z'}});
+   expect(Date.parse(targets.development_cutting!.end.at!)).toBeGreaterThanOrEqual(Date.parse(now)+60*3600000);
+   expect(scope.terminalIds.map(id=>targets[id]!.end.at!).sort().at(-1)).toBe(preview.expectedEnd);
+   expect(await tasks.read(f.root,paper.taskId)).toMatchObject({state:'pending',enteredAt:start,dueAt:'2026-12-06T11:00:00.000Z'});
+  });
+ });
+
  it('adopts an expressly approved new factory duration without altering the existing development freeze',async()=>{
   const settings=new OrderTimeSettingsService(f.db,true,true),standard=await settings.read(f.root);
   await settings.save(f.root,{expectedVersion:standard.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
