@@ -555,3 +555,12 @@ it('restores the four indirectly loaded suites and retains only independent hist
  const retained=POSTGRES_CHAIN_TESTS.filter(path=>!path.includes('own-tail-responsibility-history'));
  expect(plan.plan.map(row=>row.path)).toEqual([...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...retained])].sort());
 });
+
+
+it('retains the original authenticated finite forecast consumer for each exact UI field path without changing full fallback',()=>{
+ for(const file of ['apps/web/src/cockpit-detail.css','apps/web/src/cockpit-fixed-schedule.tsx','apps/web/src/cockpit-node-dates.tsx','apps/web/src/po-delivery-dates.tsx','tests/integration/bounded-forecast-native-browser-postgres.test.ts']){
+  const plan=amendmentPlan([file]);
+  const path='tests/integration/bounded-forecast-native-browser-postgres.test.ts';
+  expect(plan.plan.filter(row=>row.path===path)).toEqual([{path,config:'vitest.business-chain.config.ts',memberships:['mapped']}]);
+ }
+});

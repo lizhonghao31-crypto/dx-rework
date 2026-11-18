@@ -1,115 +1,137 @@
 {
   "version": 1,
-  "base": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
+  "base": "64d24368ae3b98266a5ea978d67d6788ab220e19",
   "risk": "full",
-  "sourceFingerprint": "581274620c321bff11cb54a0b1224d94e3953d4bbe190998f92d9728304bae93",
+  "sourceFingerprint": "e0d8559b593fe3cd66a879d71214bde94eaaaeec2e5000cbaacf21fd4785ab45",
   "rules": [
     {
-      "rule": "Classify detail in-progress from original state and complete node-level termination evidence, retaining open or unknown sibling scopes",
-      "source": "Reviewed Pro special-closure detail-filter plan and coordinator explicit mixed-PO/timing plus no-handling fallback constraints; original Root instance package absent, no presumed5→1 count.",
-      "initialization": "Local source base 32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda; final dependency base must be updated after intervening approved repairs. No new state, schema, clock, counter or fact version.",
-      "dateAndPermission": "Original R/D/A, frozen240 minutes, original state/risks/denominator unchanged. Completed or unknown time is distinct from a trustworthy stop; explicit historical focus remains, original service permission controls unchanged.",
+      "rule": "Display trusted finite forecast bounds separately from fixed targets and crossing-B uncertainty, preserving exact PO/node identity and honest lower/unknown bounds",
+      "source": "Independently reviewed Pro finite interval UI plan libfile_fde3_f-d44c0639961881918738b41521806246_c8d3bf5d609c8191bce6411a30e94d44 and coordinator explicit scope/no-upper/no-P-borrowing/real-App constraints.",
+      "initialization": "Actual independent release base64d24368; old readers without typed forecast retain native fallback. No new schema, calculation version, API write, plan adoption or current-company lookup. Original frozen-v2 twoPO TEST fixture creates real identities before forecast-only transport adaptation.",
+      "dateAndPermission": "Keep server P/R/D/A, all original deadlines and current progress/risk classification. Validate offset-qualified calendar-real ordered bounds; lower_bound never gains U even when an internal latest exists. Scope/PO/work/canonical/revision match exactly, switching selected nodes removes old values. Original authentication and object/field authority remain, no new business writes or homepage layout.",
       "writes": [
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-node-dates.tsx",
+        "apps/web/src/po-delivery-dates.tsx",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/test-suite-plan.mjs",
         "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
-        "docs/engineering/terminal-detail-filter-repair.md"
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/bounded-forecast-native-browser-postgres.test.ts",
+        "docs/engineering/bounded-forecast-display-repair.md"
       ],
       "reads": [
-        "apps/web/src/cockpit-node-summary.tsx",
-        "apps/web/src/cockpit-framework-nodes.tsx",
-        "apps/api/src/production-platform/journey-terminal-timing.ts"
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-current-summary.tsx",
+        "packages/contracts/src/index.ts",
+        "tests/acceptance/supplychain-settings-browser.ts"
       ],
       "oldTests": [
         "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "expectation": "Preserve existing termination-label semantics but never exclude a whole node when another unfinished timing/fixed scope is open or unknown. One shared predicate drives detail counts/list/expanded list and legacy/framework default working selection. Explicit or fallback fully stopped nodes cannot show a handling link. Actual original App fixture retains historical rows/completed count/missing A/frozen240 minutes at two existing observations; mixed DTO units are engineering inputs, not the unprovided Root response.",
+      "expectation": "161 existing/new units,21 execution contract cases and original authenticated App pass. Real UI at1165/390 distinguishes PO endpoint from node bounds, keeps uncertain crossing status, lower/unknown and exclusive precision, switches without stale values and verifies wrapped long labels never overlap. Preserve all original mappings/configuration and include the new file in the canonical plan; no assertion removal or runner/timeout increase. UI transport fixtures do not prove Root onsite or engine-generated finite intervals.",
       "checks": [
-        "filter-unit",
-        "filter-native",
-        "filter-lint",
-        "filter-types"
+        "forecast-unit",
+        "forecast-native",
+        "forecast-protocol",
+        "forecast-types",
+        "forecast-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "filter-unit",
+      "id": "forecast-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-detail.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-terminal-filter-20261117/release-current-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-fixed-schedule.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-bounded-forecast-20261117/wrapped-current-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "581274620c321bff11cb54a0b1224d94e3953d4bbe190998f92d9728304bae93",
-      "startedAt": "2026-11-17T23:46:23.478829+00:00",
-      "endedAt": "2026-11-17T23:46:26.584404+00:00",
-      "log": "/workspace/sla-terminal-filter-20261117/checks/release-current-unit/command.log",
-      "logSha256": "1475477a0cde1190df57b39d2cd4d7d6006b16a51fb157bdccbc1b0c494fecc4",
-      "context": "Local current release base, not yet the final post-C dependency baseline; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
-      "passed": 45,
+      "testedHead": "22e6b9840d0dfc70380eec4e1d9f604f9c07e8fb",
+      "sourceFingerprint": "e0d8559b593fe3cd66a879d71214bde94eaaaeec2e5000cbaacf21fd4785ab45",
+      "startedAt": "2026-11-18T00:20:37.047584+00:00",
+      "endedAt": "2026-11-18T00:20:39.860448+00:00",
+      "log": "/workspace/sla-bounded-forecast-20261117/checks/wrapped-current-unit/command.log",
+      "logSha256": "8864a213ba50d3d5ca9b2d748757ffafa89ef07cec38f0e3f15e756068dfdf65",
+      "context": "Exact source fingerprint unchanged after actual terminal merge64d24368, whose base tree equals tested22e6b984. Node22.22.2/npm10.9.9; marked disposable low-privilege PostgreSQL16, original finite workers and authenticated App. Native original twoPO frozen-v2 fixture adapts forecast fields only, explicitly UI consumer evidence and not a Root/forecast-engine reproduction. No business writes from navigation; owned cleanup verified. Earlier B-helper/new-admission fixture failures and narrow screenshot overlap retained; no pending B source or mapping copied. No Acceptance/production/deployment, extra CI or performance experiment.",
+      "passed": 161,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "812513d4acdf660176d2a9151e99545a1196947825521bb135c78f01cea87279"
+          "sha256": "c39470488a1bf422428c66454d9bc3839370b6479c82df7af7105769739f039a"
         }
       ]
     },
     {
-      "id": "filter-native",
+      "id": "forecast-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/terminal-quality-projections-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-terminal-filter-20261117/pg/release-current-native/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/bounded-forecast-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-bounded-forecast-20261117/pg/wrapped-original-app/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "581274620c321bff11cb54a0b1224d94e3953d4bbe190998f92d9728304bae93",
-      "startedAt": "2026-11-17T23:46:24.119303+00:00",
-      "endedAt": "2026-11-17T23:46:57.536552+00:00",
-      "log": "/workspace/sla-terminal-filter-20261117/pg/release-current-native/tests.log",
-      "logSha256": "5eadd31335fefb63d87c119684336b6e37122a055bc0458bb519140eccdb30b6",
-      "context": "Local current release base, not yet the final post-C dependency baseline; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks.",
+      "testedHead": "22e6b9840d0dfc70380eec4e1d9f604f9c07e8fb",
+      "sourceFingerprint": "e0d8559b593fe3cd66a879d71214bde94eaaaeec2e5000cbaacf21fd4785ab45",
+      "startedAt": "2026-11-18T00:20:09.227062+00:00",
+      "endedAt": "2026-11-18T00:20:43.855210+00:00",
+      "log": "/workspace/sla-bounded-forecast-20261117/pg/wrapped-original-app/tests.log",
+      "logSha256": "f6f35c03f4f8847b7204f930a0a42be6873925538e7dd741d4d5bfe580e4c707",
+      "context": "Exact source fingerprint unchanged after actual terminal merge64d24368, whose base tree equals tested22e6b984. Node22.22.2/npm10.9.9; marked disposable low-privilege PostgreSQL16, original finite workers and authenticated App. Native original twoPO frozen-v2 fixture adapts forecast fields only, explicitly UI consumer evidence and not a Root/forecast-engine reproduction. No business writes from navigation; owned cleanup verified. Earlier B-helper/new-admission fixture failures and narrow screenshot overlap retained; no pending B source or mapping copied. No Acceptance/production/deployment, extra CI or performance experiment.",
       "passed": 1,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9a10b06a393622b38bfed4e2b88984cd4bd7ecc2aa6f9762f2ba1859ffb35228"
+          "sha256": "527b0cec4078d115484441b06792ff01553e95875cb3bdcbfe01a48c80b721fb"
         }
       ]
     },
     {
-      "id": "filter-lint",
-      "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/web/src/cockpit-detail.tsx apps/web/src/digital-journey-cockpit-model.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts",
+      "id": "forecast-protocol",
+      "kind": "tests",
+      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "581274620c321bff11cb54a0b1224d94e3953d4bbe190998f92d9728304bae93",
-      "startedAt": "2026-11-17T23:47:16.827881+00:00",
-      "endedAt": "2026-11-17T23:47:18.517971+00:00",
-      "log": "/workspace/sla-terminal-filter-20261117/checks/release-current-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Local current release base, not yet the final post-C dependency baseline; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
+      "testedHead": "22e6b9840d0dfc70380eec4e1d9f604f9c07e8fb",
+      "sourceFingerprint": "e0d8559b593fe3cd66a879d71214bde94eaaaeec2e5000cbaacf21fd4785ab45",
+      "startedAt": "2026-11-18T00:22:07.859877+00:00",
+      "endedAt": "2026-11-18T00:22:08.542699+00:00",
+      "log": "/workspace/sla-bounded-forecast-20261117/checks/wrapped-execution-contract/command.log",
+      "logSha256": "96cf7c6643ef0a9c5d652baa4a16471beb0b68de6bab842de5872b3468d99c84",
+      "context": "Exact source fingerprint unchanged after actual terminal merge64d24368, whose base tree equals tested22e6b984. Node22.22.2/npm10.9.9; marked disposable low-privilege PostgreSQL16, original finite workers and authenticated App. Native original twoPO frozen-v2 fixture adapts forecast fields only, explicitly UI consumer evidence and not a Root/forecast-engine reproduction. No business writes from navigation; owned cleanup verified. Earlier B-helper/new-admission fixture failures and narrow screenshot overlap retained; no pending B source or mapping copied. No Acceptance/production/deployment, extra CI or performance experiment.",
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
     },
     {
-      "id": "filter-types",
+      "id": "forecast-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda",
-      "sourceFingerprint": "581274620c321bff11cb54a0b1224d94e3953d4bbe190998f92d9728304bae93",
-      "startedAt": "2026-11-17T23:47:16.798174+00:00",
-      "endedAt": "2026-11-17T23:47:48.761223+00:00",
-      "log": "/workspace/sla-terminal-filter-20261117/checks/release-web-types/command.log",
+      "testedHead": "22e6b9840d0dfc70380eec4e1d9f604f9c07e8fb",
+      "sourceFingerprint": "e0d8559b593fe3cd66a879d71214bde94eaaaeec2e5000cbaacf21fd4785ab45",
+      "startedAt": "2026-11-18T00:20:36.956378+00:00",
+      "endedAt": "2026-11-18T00:21:14.669863+00:00",
+      "log": "/workspace/sla-bounded-forecast-20261117/checks/wrapped-current-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Local current release base, not yet the final post-C dependency baseline; original Node22/npm10/PG16 low-privilege marked disposable databases, original finite worker/correctness rules and signed App. No Acceptance/production. Filtered legacy cases, if present, are local targeted selection only and remaining cases explicitly pending; final canonical plan retains full suites. Owned container cleanup verified. Earlier original36/24 diagnosis and fixture/UI setup failures retained, not counted as successful current checks."
+      "context": "Exact source fingerprint unchanged after actual terminal merge64d24368, whose base tree equals tested22e6b984. Node22.22.2/npm10.9.9; marked disposable low-privilege PostgreSQL16, original finite workers and authenticated App. Native original twoPO frozen-v2 fixture adapts forecast fields only, explicitly UI consumer evidence and not a Root/forecast-engine reproduction. No business writes from navigation; owned cleanup verified. Earlier B-helper/new-admission fixture failures and narrow screenshot overlap retained; no pending B source or mapping copied. No Acceptance/production/deployment, extra CI or performance experiment."
+    },
+    {
+      "id": "forecast-lint",
+      "kind": "command",
+      "command": "node node_modules/eslint/bin/eslint.js apps/web/src/cockpit-fixed-schedule.tsx apps/web/src/cockpit-node-dates.tsx apps/web/src/po-delivery-dates.tsx tests/unit/cockpit-fixed-schedule.test.ts tests/unit/full-gate-risk-map.test.ts tests/integration/bounded-forecast-native-browser-postgres.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "22e6b9840d0dfc70380eec4e1d9f604f9c07e8fb",
+      "sourceFingerprint": "e0d8559b593fe3cd66a879d71214bde94eaaaeec2e5000cbaacf21fd4785ab45",
+      "startedAt": "2026-11-18T00:20:36.956359+00:00",
+      "endedAt": "2026-11-18T00:20:39.204514+00:00",
+      "log": "/workspace/sla-bounded-forecast-20261117/checks/wrapped-current-lint/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Exact source fingerprint unchanged after actual terminal merge64d24368, whose base tree equals tested22e6b984. Node22.22.2/npm10.9.9; marked disposable low-privilege PostgreSQL16, original finite workers and authenticated App. Native original twoPO frozen-v2 fixture adapts forecast fields only, explicitly UI consumer evidence and not a Root/forecast-engine reproduction. No business writes from navigation; owned cleanup verified. Earlier B-helper/new-admission fixture failures and narrow screenshot overlap retained; no pending B source or mapping copied. No Acceptance/production/deployment, extra CI or performance experiment."
     }
   ]
 }
