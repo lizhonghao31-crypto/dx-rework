@@ -1,3 +1,4 @@
+import {cancelledTaskHistory} from '../../apps/api/src/production-platform/cancelled-task-history.js';
 import {SERIES_MILESTONE_OFFSETS} from '@dx-rework/contracts/digital-series-plan';
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
@@ -384,4 +385,86 @@ it('selects each explicitly allocated packing window policy at its own R and nev
  const basis=orderTimeReadingBasis(saved,resource,row,native,{...evidence(),policies:[{id:'TEST later',at:at(3),plan:saved.input.plan},{id:'TEST first',at:at(0),plan:earlier}]},null);
  expect(basis.scopes[0]!.facts.a!.ownWindows!.map(window=>window.deadline)).toEqual([at(4),at(5)]);
  expect(basis.scopes[0]!.facts.a!.ownWindows!.map(window=>window.warningAt)).toEqual([at(3.4),at(4.7)]);
+});
+
+
+describe('cancelled task original responsibility identity',()=>{
+ const original=()=>{
+  const row=item(),task={task_id:'TEST cancel original',task_kind:'a',state:'cancelled',source_id:resource.id,production_order_id:null,route_version:1,route_instance_id:'TEST route',cancel_events:['TEST exact task cancel']};
+  const own=node('a','cancelled',at(0));own.instanceId=task.task_id;own.records=[{domain:'task',id:task.task_id,version:1,lineId:null,url:null,mode:'read'}];row.stages[1]!.nodes=[own];
+  const termination={kind:'cancelled' as const,at:at(9),precision:'instant' as const,originEventRef:'TEST resource cancel',scopeRef:'source:'+resource.id};
+  return {row,task,termination};
+ };
+ const nativeTask=(task:ReturnType<typeof original>['task'])=>({...task,entered_at:new Date(at(0)),entered_quality:'已核实',completed_at:null,completed_quality:'未登记',step_id:null as string|null,returned:false,rejected:false,sla_basis:{seconds:5*3600,calendarRef:'continuous' as const},native_entered_at:new Date(at(0)),warning_at:null});
+ it('requires the exact current original task and its own resource cancel event, while retaining an unknown stop',()=>{
+  const {row,task,termination}=original();expect(cancelledTaskHistory(task,resource,row,termination,'a')).toBe(true);
+  expect(cancelledTaskHistory(task,resource,row,{...termination,at:null,precision:'unknown'},'a')).toBe(true);
+  for(const invalid of [{...task,cancel_events:[]},{...task,cancel_events:['a','b']},{...task,source_id:'OTHER'},{...task,route_version:2},{...task,task_kind:'b'},{...task,task_id:'OTHER'}])expect(cancelledTaskHistory(invalid,resource,row,termination,'a')).toBe(false);
+  expect(cancelledTaskHistory(task,resource,row,{...termination,kind:'special_closure'},'a')).toBe(false);
+  expect(cancelledTaskHistory(task,resource,row,{...termination,scopeRef:'source:OTHER'},'a')).toBe(false);
+  expect(cancelledTaskHistory(task,resource,row,termination,'a',null,'source:'+resource.id+':route:OTHER:work:a')).toBe(false);
+  expect(cancelledTaskHistory(task,resource,row,termination,'a',null,'source:OTHER:round:1:node:a')).toBe(false);expect(cancelledTaskHistory(task,resource,row,termination,'a',null,'source:'+resource.id+':round:2:node:a')).toBe(false);
+  const old=structuredClone(row);old.stages[1]!.nodes[0]!.current=false;expect(cancelledTaskHistory(task,resource,old,termination,'a')).toBe(false);
+  const duplicate=structuredClone(row);duplicate.stages[1]!.nodes.push(structuredClone(duplicate.stages[1]!.nodes[0]!));expect(cancelledTaskHistory(task,resource,duplicate,termination,'a')).toBe(false);
+  row.stages[1]!.nodes[0]!.records.push({domain:'cutting',id:'TEST cut',version:null,lineId:'TEST PO',url:null,mode:'read'});
+  expect(cancelledTaskHistory(task,resource,row,termination,'a','OTHER PO')).toBe(false);expect(cancelledTaskHistory(task,resource,row,termination,'a','TEST PO')).toBe(true);
+ });
+ it('restores the original task policy and R without admitting a retired same-kind task or inventing A',()=>{
+  const {row,task,termination}=original(),saved=stored();row.asOf=at(20);
+  const native={...task,entered_at:new Date(at(0)),entered_quality:'已核实',completed_at:null,completed_quality:'未登记',step_id:null,returned:false,rejected:false,sla_basis:{seconds:5*3600,calendarRef:'continuous' as const},native_entered_at:new Date(at(0)),warning_at:null};
+  const proof={...evidence(),termination,tasks:[native,{...native,task_id:'TEST retired',route_version:2,cancel_events:[]}]};
+  const read=orderTimeReadingBasis(saved,resource,row,{},proof,null),a=read.scopes[0]!.facts.a!;
+  expect(a).toMatchObject({ownTaskId:task.task_id,ready:point(0),clockStart:point(0),businessCompleted:false,completed:unknown});
+  const first=evaluateFixedJourneyBasis(read,at(10),false).scopes[0]!.nodes.find(n=>n.id==='a')!,later=evaluateFixedJourneyBasis(fixedScheduleBasisSnapshot(read),at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!;
+  expect(first.ownSla).toMatchObject({state:'terminated',deadlineAt:at(5),overdueMinutes:{minimum:240,maximum:240}});expect(later.ownSla).toEqual(first.ownSla);
+  expect(saved).toEqual(stored());
+  const unknownStop=orderTimeReadingBasis(saved,resource,row,{}, {...proof,termination:{...termination,at:null,precision:'unknown'}},null);
+  expect(evaluateFixedJourneyBasis(unknownStop,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({deadlineAt:at(5),overdueMinutes:null});
+  const early=orderTimeReadingBasis(saved,resource,row,{}, {...proof,termination:{...termination,at:at(4)}},null);
+  expect(evaluateFixedJourneyBasis(early,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({state:'terminated',deadlineAt:at(5),overdueMinutes:{minimum:0,maximum:0}});
+  const wrongNative={a:{evidence:'task:TEST retired:round:1',standardMinutes:99*60,batchWindows:[{evidence:'TEST other original window',startedAt:at(0),completedAt:null,complete:false,deadline:at(99),warningAt:null}]}};
+  const exact=orderTimeReadingBasis(saved,resource,row,wrongNative,proof,null);
+  expect(evaluateFixedJourneyBasis(exact,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({deadlineAt:at(5),overdueMinutes:{minimum:240,maximum:240}});
+  const old=build(saved,row);old.scopes[0]!.facts.a={...old.scopes[0]!.facts.a!,completed:point(4),businessCompleted:true,ownTaskId:'TEST retired',evidenceRefs:['task:TEST retired:round:1']};
+  expect(orderTimeReadingBasis(saved,resource,row,{},proof,old).scopes[0]!.facts.a).toMatchObject({ownTaskId:task.task_id,completed:unknown,businessCompleted:false});
+ });
+ it('keeps distinct cancelled PO windows and rejects another PO or a different craft step',()=>{
+  const {row,task,termination}=original(),saved=stored(),order={kind:'order' as const,id:'TEST order'};
+  row.orderId=order.id;
+  const tasks=['PO A','PO B'].map((line,index)=>({...nativeTask(task),task_id:'TEST task '+line,source_id:null,production_order_id:order.id,step_id:'TEST step',entered_at:new Date(at(index)),native_entered_at:new Date(at(index)),sla_basis:{seconds:(5+index)*3600,calendarRef:'continuous' as const}}));
+  row.stages[1]!.nodes=tasks.map((task,index)=>({...node('a','cancelled',at(index)),instanceId:task.task_id,records:[{domain:'task' as const,id:task.task_id,version:1,lineId:['PO A','PO B'][index]!,url:null,mode:'read' as const}]}));
+  saved.resource=order;saved.input.work[0]!.canonicalWorkRef='order:TEST order:step:TEST step:work:a';
+  saved.input.scopes=['PO A','PO B'].map(line=>({...structuredClone(saved.input.scopes[0]!),scopeRef:line,lineId:line}));
+  saved.targets=Object.fromEntries(saved.input.scopes.map(scope=>[scope.scopeRef,structuredClone(stored().targets['TEST scope']!)]));
+  const proof={...evidence(),termination:{...termination,scopeRef:'order:'+order.id},tasks};
+  const read=orderTimeReadingBasis(saved,order,row,{},proof,null),own=evaluateFixedJourneyBasis(read,at(20),false).scopes.map(scope=>scope.nodes.find(n=>n.id==='a')!.ownSla);
+  expect(read.scopes.map(scope=>scope.facts.a!.ownTaskId)).toEqual(tasks.map(task=>task.task_id));
+  expect(own.map(sla=>sla.deadlineAt)).toEqual([at(5),at(7)]);expect(own.map(sla=>sla.overdueMinutes)).toEqual([{minimum:240,maximum:240},{minimum:120,maximum:120}]);
+  tasks[1]!.step_id='OTHER step';
+  const unmatched=orderTimeReadingBasis(saved,order,row,{},proof,null).scopes[1]!.facts.a!;
+  expect(unmatched).toMatchObject({ready:unknown,clockStart:unknown});expect(unmatched.ownTaskId).toBeUndefined();
+ });
+ it('does not restore a cancelled clock from a same-kind node, aggregate map or old snapshot without its exact cancel proof',()=>{
+  const {row,task,termination}=original(),saved=stored(),native=nativeTask({...task,cancel_events:[]});
+  const stale={a:{startedAt:at(0),standardMinutes:300,evidence:'task:TEST retired:round:1'}},legacy=build(saved,row);
+  const read=orderTimeReadingBasis(saved,resource,row,stale,{...evidence(),termination,tasks:[native]},legacy);
+  expect(read.scopes[0]!.facts.a).toMatchObject({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false});
+  expect(evaluateFixedJourneyBasis(read,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({deadlineAt:null,overdueMinutes:null});
+ });
+ it('keeps ambiguous original cancelled tasks unknown instead of falling back to their shared kind',()=>{
+  const {row,task,termination}=original(),saved=stored(),first=nativeTask(task),second={...first,task_id:'TEST ambiguous original',cancel_events:['TEST second exact cancel']};
+  row.stages[1]!.nodes.push({...structuredClone(row.stages[1]!.nodes[0]!),instanceId:second.task_id,records:[{domain:'task',id:second.task_id,version:1,lineId:null,url:null,mode:'read'}]});
+  const read=orderTimeReadingBasis(saved,resource,row,{a:{startedAt:at(0),standardMinutes:300,evidence:'TEST aggregate cannot distinguish originals'}},{...evidence(),termination,tasks:[first,second]},null);
+  expect(read.scopes[0]!.facts.a).toMatchObject({ready:unknown,clockStart:unknown});expect(read.scopes[0]!.facts.a!.ownTaskId).toBeUndefined();
+ });
+ it('preserves true completion before cancellation and does not manufacture an unstarted window',()=>{
+  const {row,task,termination}=original(),saved=stored(),native=nativeTask(task);
+  const never=orderTimeReadingBasis(saved,resource,row,{}, {...evidence(),termination,tasks:[{...native,entered_at:null,native_entered_at:null,entered_quality:'未登记'}]},null);
+  expect(evaluateFixedJourneyBasis(never,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({deadlineAt:null,overdueMinutes:null});
+  const completed={...native,state:'completed',completed_at:new Date(at(4)),completed_quality:'已核实'};
+  row.stages[1]!.nodes[0]!.state='completed';row.stages[1]!.nodes[0]!.actualAt=at(4);
+  const read=orderTimeReadingBasis(saved,resource,row,{}, {...evidence(),termination,tasks:[completed]},null);
+  expect(read.scopes[0]!.facts.a).toMatchObject({completed:point(4),businessCompleted:true});
+  expect(evaluateFixedJourneyBasis(read,at(20),false).scopes[0]!.nodes.find(n=>n.id==='a')!.ownSla).toMatchObject({state:'within',deadlineAt:at(5),overdueMinutes:{minimum:0,maximum:0}});
+ });
 });

@@ -1,3 +1,4 @@
+import {cancelledTaskHistory} from './cancelled-task-history.js';
 import {evaluateJourneyFramework,type JourneyFrameworkBasis} from './journey-time-framework.js';
 import {attachFrameworkEvents} from './journey-framework-events.js';
 import {attachJourneyWashing,journeyWashingInstanceId} from './journey-washing-projection.js';
@@ -43,23 +44,25 @@ const latest=(values:ScheduleOccurrence[]):ScheduleOccurrence=>{
  * transaction, Root actor, current settings or GET target reconstruction. */
 export async function readFixedScheduleBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,closure?:OrderClosureSheet,time?:BusinessTime):Promise<FixedScheduleBasis|null>{
  const legacy=await readLegacyFixedScheduleBasis(db,resource,item,native,asOf,closure);
- return readOrderTimeBasis(db,resource,item,native,asOf,legacy,time);
+ return readOrderTimeBasis(db,resource,item,native,asOf,legacy,time,legacy?legacy.termination:undefined);
 }
 async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,closure?:OrderClosureSheet):Promise<FixedScheduleBasis|null>{
  const repository=new FixedTimelineAdoptionRepository(db),current=await repository.currentTargets(resource,resource.kind==='source'?item.adoptedRound??item.selectedRound??undefined:undefined);
  if(!current)return null;
+ const termination=await journeyTermination(db,resource,asOf);
  const saved=current.adoption,sourceId=resource.kind==='source'?resource.id:typeof saved.input.sourceVersions.sourceId==='string'?saved.input.sourceVersions.sourceId:null;
  const sourceOrigin=resource.kind==='source'&&saved.input.round>1?await repository.currentTargets(resource,1):null;
  const inherited=resource.kind==='order'&&sourceId?await repository.existing({kind:'source',id:sourceId},Number(saved.input.sourceVersions.sourceRound)):null;
  const inheritedTargets=inherited?await repository.currentTargets(inherited.input.resource,inherited.input.round):null;
  const tasks=(await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,t.route_version,t.route_instance_id,a.task_kind,a.source_id,a.production_order_id,
   position.adoption_id,position.route_position,position.route_ref,position.step_id,position.phase,
+  ARRAY(SELECT e.event_id::text FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.resource_kind=$3 AND e.resource_id=$4 AND e.event_kind='cancel' ORDER BY e.event_id LIMIT 2) AS cancel_events,
   EXISTS(SELECT 1 FROM digital_production_task_events returned WHERE returned.task_id=t.task_id AND returned.event_kind='material_returned') AS returned,
   EXISTS(SELECT 1 FROM digital_development_route_facts rejected WHERE rejected.task_id=t.task_id AND rejected.kind='尾查退回') AS rejected
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   LEFT JOIN digital_timeline_task_positions position USING(task_id)
   WHERE ($1::uuid IS NOT NULL AND a.production_order_id=$1) OR ($2::uuid IS NOT NULL AND a.source_id=$2)
-  ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,sourceId])).rows;
+  ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,sourceId,resource.kind,resource.id])).rows;
  const readiness=await nativeTaskReadiness(db,tasks.map(task=>task.task_id)),cuts=resource.kind==='order'?await nativeCuttingReadiness(db,tasks.map(task=>task.task_id)):[],production=resource.kind==='order'?await nativeFactoryTimeline(db,resource.id):[];
  const cutCompletions=resource.kind==='order'?await nativeCuttingCompletions(db,resource.id):[];
  const factory=resource.kind==='order'?await factoryBatchTiming(db,resource.id):null;
@@ -73,7 +76,7 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
  const relevant=(definition:FixedTimelineInput['work'][number],owner:FixedTimelineAdoption)=>{
   const route=owner===inherited?owner.input.route:routes.get(String(owner.input.sourceVersions.routeRef));
   const ownId=definition.id.startsWith('source:')?definition.id.slice(7):definition.id;
-  return tasks.filter(task=>task.state!=='cancelled'&&(owner.input.resource.kind==='source'?task.source_id===owner.input.resource.id&&task.route_version===owner.input.round:task.production_order_id===resource.id))
+  return tasks.filter(task=>(owner.input.resource.kind==='source'?task.source_id===owner.input.resource.id&&task.route_version===owner.input.round:task.production_order_id===resource.id))
    .filter(task=>task.adoption_id?task.adoption_id===owner.adoptionId&&(routes.get(task.route_ref)??route??[]).some(position=>position.position===Number(task.route_position)&&position.nodeId===ownId)
     :task.task_kind===(definition.parameterKey??ownId)||definition.parameterKey==='bulk_cutting'&&task.task_kind==='bulk_cutting_external');
  };
@@ -92,19 +95,21 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
    // A shared source fact must be the adopted source round, not today's new round.
    const originalFact=inheritedWork?undefined:native[ownId]??native[definition.parameterKey??ownId];
    let fact=fromFact(originalFact);
-   const matches=owner?relevant(definition,owner):[];
+   const candidates=owner?relevant(definition,owner):[];
+   const matches=candidates.filter(task=>task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,termination,definition.parameterKey??ownId,consumer.lineId,definition.canonicalWorkRef));
+   if(matches.length!==1&&termination?.kind==='cancelled'&&candidates.some(task=>task.state==='cancelled'))fact=fromFact(undefined);
    if(matches.length===1){const task=matches[0]!,ready=readiness.get(task.task_id);
     const accepted=task.state==='completed'&&!task.returned&&!task.rejected;
     const completed=accepted&&['现场登记','已核实'].includes(task.completed_quality)?occurrence(task.completed_at):unknown;
-    const first=ready?.tracked?occurrence(ready.firstReadyAt):fact.ready;
-    fact={...fact,ready:first,clockStart:first,completed,businessCompleted:accepted,evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...ready?.basis??[]]};
+    const first=ready?.tracked?occurrence(ready.firstReadyAt):task.state==='cancelled'?['现场登记','已核实'].includes(task.entered_quality)?occurrence(task.entered_at):unknown:fact.ready;
+    fact={...fact,...(task.state==='cancelled'?{ownTaskId:task.task_id}:{}),ready:first,clockStart:first,completed,businessCompleted:accepted,evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...(task.cancel_events??[]).map((id:string)=>`digital_production_task_events:${id}`),...ready?.basis??[]]};
    }
    if(definition.parameterKey==='bulk_cutting'&&consumer.lineId){const own=cuts.filter(cut=>cut.lineId===consumer.lineId);if(own.length===1){fact.ready=occurrence(own[0]!.firstReadyAt);fact.clockStart=fact.ready;fact.evidenceRefs=[...fact.evidenceRefs,...own[0]!.basis];const complete=cutCompletions.find(event=>event.payload.lineId===consumer.lineId&&event.payload.cuttingOrderId===own[0]!.cuttingOrderId);if(complete){fact.businessCompleted=true;fact.completed=['现场登记','已核实'].includes(complete.time_quality)?occurrence(complete.occurred_at):unknown;fact.evidenceRefs=[...fact.evidenceRefs,`digital_production_task_events:${complete.event_id}`];}}}
    if(ownId.startsWith('factory_work:')&&consumer.lineId){const rows=production.filter(row=>row.lineId===consumer.lineId),complete=rows.length>0&&rows.every(row=>row.completedDate);fact={...fact,ready:latest(rows.map(row=>occurrence(row.dispatchedAt))),clockStart:unknown,businessCompleted:complete,completed:complete?latest(rows.map(row=>({precision:'date',date:row.completedDate!}))):unknown,evidenceRefs:rows.flatMap(row=>[row.startTransitionRef,row.completionTransitionRef].filter((ref):ref is string=>Boolean(ref)))};}
    if(ownId.startsWith('factory_production:')&&consumer.lineId){
     // The QC task has its own native entry. Production business completion is
     // another fact and must not be fabricated into QC's start (QC can be early).
-    const rows=tasks.filter(task=>task.production_order_id===resource.id&&task.task_kind==='factory_production_qc'&&task.state!=='cancelled'),task=rows.length===1?rows[0]:null;
+    const rows=tasks.filter(task=>task.production_order_id===resource.id&&task.task_kind==='factory_production_qc'&&(task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,termination,'factory_production_qc',consumer.lineId,definition.canonicalWorkRef))),task=rows.length===1?rows[0]:null;
     const ready=task&&['现场登记','已核实'].includes(task.entered_quality)?occurrence(task.entered_at):unknown;
     fact={...fact,ready,clockStart:ready,evidenceRefs:[...fact.evidenceRefs,...(task?[`task:${task.task_id}:native-entry`]:[])]};
    }
@@ -155,7 +160,7 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
   for(const definition of definitions.filter(work=>targets.some(target=>target.id===work.id))){const target=targets.find(target=>target.id===definition.id)!;
    scope.work=[...scope.work,{...definition,dependsOn:definition.dependsOn.length?definition.dependsOn:previous,start:target.start.at,end:target.end.at,originalHandoffAt:row.goal_anchor.originalHandoff.start?.at??null}];
    let fact=fromFact(native[definition.id]??native[definition.parameterKey??definition.id]);
-   const routePosition=(routes.get(routeRef!)??[]).find(position=>position.nodeId===definition.id),ownTasks=tasks.filter(task=>task.adoption_id===saved.adoptionId&&task.route_ref===routeRef&&task.route_position===routePosition?.position&&task.state!=='cancelled');
+   const routePosition=(routes.get(routeRef!)??[]).find(position=>position.nodeId===definition.id),ownTasks=tasks.filter(task=>task.adoption_id===saved.adoptionId&&task.route_ref===routeRef&&task.route_position===routePosition?.position&&(task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,termination,definition.parameterKey??definition.id,scope.lineId,definition.canonicalWorkRef)));
    fact.evidenceRefs=[...fact.evidenceRefs,...ownTasks.map(task=>`task:${task.task_id}:round:${task.route_version}`)];
    if(definition.id.startsWith('bulk_qc:')){
     const windows=factory?.windows.filter(window=>window.kind==='bulk_qc'&&window.stepRef===definition.id.slice(8))??[];
@@ -177,7 +182,6 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
   }
   if(required.length)handoff.dependsOn=[...predecessors,...required];
  }
- const termination=await journeyTermination(db,resource,asOf);
  return {version:'fixed-schedule-basis-v1',scopeRevision:hash([current.scopes.map(row=>[row.scope_ref,row.revision,row.source_event_ref]),inheritedTargets?.scopes.map(row=>[row.scope_ref,row.revision,row.source_event_ref])??[]]),factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination,pending:scopes.length!==saved.input.consumers.length||Boolean(inherited&&!inheritedTargets?.scopes.length)};
 }
 
