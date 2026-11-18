@@ -354,12 +354,54 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('keeps a late decision in the same confirmation dialog, permits cancellation and retains its real risk on confirmation',async()=>{
   const row=await requestFromOriginalPage('late'),tab=await h.open(undefined,1586,{},'/ui/digital-production?timeRequest='+row.requestId);
   try{
+   // Keep the real pending request and auth. Place its read response exactly
+   // on the exclusive boundary to exercise both native UI consumers.
+   const path=`**/api/digital-production/order-time/requests/${row.requestId}`,boundary='2027-01-07T16:00:00.000Z';
+   await tab.page.route(path,async route=>{
+    const response=await route.fetch(),request=await response.json();
+    await route.fulfill({response,json:{...request,check:{...request.check,lateMinutes:0,framework:{riskAccepted:false,milestones:[{
+     scopeRef:`source:${row.sourceId}:round:1`,key:'planned_shipment',date:'2027-01-07',status:'insufficient',marginMinutes:0,lateMinutes:0,
+     target:{at:boundary,exclusive:true,reasons:[]},planned:{at:boundary,exclusive:false,reasons:[]},workIds:['development_confirmation'],blockingWorkIds:['development_confirmation'],
+    }]}}}});
+   });
+   await tab.page.reload();await applyPage(tab.page);
+   const warning=await tab.page.locator('.r5-time-risk').innerText();
+   expect(warning).toContain('最终交期时间不足');expect(warning).not.toContain('最终交期仍可满足');
+   await tab.page.getByRole('button',{name:'提交',exact:true}).click();
+   const exact=tab.page.getByRole('dialog',{name:'提交本单时效',exact:true});
+   expect(await exact.innerText()).toContain('最终交期时间不足');expect(await exact.innerText()).not.toContain('晚0天');
+   await exact.getByRole('button',{name:'取消',exact:true}).click();
+   expect(h.requests.filter(call=>call.session===tab.session&&call.path.endsWith('/apply'))).toEqual([]);
+   await tab.page.unroute(path);await tab.page.reload();
    await applyPage(tab.page);await tab.page.getByRole('button',{name:'提交',exact:true}).click();const dialog=tab.page.getByRole('dialog',{name:'提交本单时效',exact:true});await dialog.waitFor();
    expect(await dialog.innerText()).toContain('0.17天');await tab.page.screenshot({path:join(h.evidence,'r507-late-confirmation-1586.png'),fullPage:false});
    await dialog.getByRole('button',{name:'取消',exact:true}).click();expect((await h.db.query('SELECT state FROM digital_order_time_requests WHERE request_id=$1',[row.requestId])).rows[0].state).toBe('pending');
    await tab.page.getByRole('button',{name:'提交',exact:true}).click();await dialog.getByRole('button',{name:'确认',exact:true}).click();await tab.page.getByText('本单安排已生效，设计师无需再次确认。',{exact:true}).waitFor();
    expect((await h.db.query('SELECT result_late_minutes FROM digital_order_time_requests WHERE request_id=$1',[row.requestId])).rows[0].result_late_minutes).toBe('240');
   }finally{await tab.context.close();}
+ });
+ it('requires explicit acceptance for a genuine legacy application with zero delay at the exclusive cutoff',async()=>{
+  const previous=scene;
+  scene=await h.f.scene('2027-01-07T11:00:00.000Z');h.setCollectionScene(scene);
+  try{
+   const row=await requestFromOriginalPage('legacy-zero');
+   const tab=await h.open(undefined,1165,{},'/ui/digital-production?timeRequest='+row.requestId);
+   try{
+    await applyPage(tab.page);
+    const path='/api/digital-production/order-time/requests/'+row.requestId,response=await tab.page.request.get(h.base+path);
+    expect(response.status()).toBe(200);
+    const receipt=await response.json();
+    expect(receipt).toMatchObject({state:'pending',check:{feasibility:'insufficient',lateMinutes:0,expectedEnd:'2027-01-07T16:00:00.000Z'}});
+    expect(receipt.check.framework).toBeUndefined();
+    expect(await tab.page.locator('.r5-time-risk').innerText()).toBe('本单时间不足');
+    await tab.page.getByRole('button',{name:'提交',exact:true}).click();
+    const dialog=tab.page.getByRole('dialog',{name:'提交本单时效',exact:true});
+    expect(await dialog.innerText()).toContain('本单时间不足');
+    await dialog.getByRole('button',{name:'取消',exact:true}).click();
+    expect(h.requests.filter(call=>call.session===tab.session&&call.path===path+'/apply')).toEqual([]);
+    expect(await (await tab.page.request.get(h.base+path)).json()).toMatchObject({state:'pending'});
+   }finally{await tab.context.close();}
+  }finally{scene=previous;h.setCollectionScene(scene);}
  });
  it('R5-09 follows one new order from actual saved company time through native work, qualified packing and the original cockpit/calendar',async()=>{
   const standards=new OrderTimeSettingsService(h.db,true,false),original=await standards.read(h.f.root),priorScene=scene;

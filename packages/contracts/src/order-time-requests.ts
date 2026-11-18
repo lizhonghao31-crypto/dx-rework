@@ -55,7 +55,10 @@ export function orderTimeGapText(check:Pick<OrderTimeCheckResult,'framework'|'la
  const days=(minutes:number)=>(Math.ceil(minutes/1440*100)/100).toLocaleString('zh-CN',{maximumFractionDigits:2});
  const gaps=check.framework?.milestones.filter(row=>row.status==='insufficient')??[];
  const factoryGaps=(check.factoryCommitments??[]).filter(row=>row.status==='insufficient');
- if(!gaps.length&&!factoryGaps.length)return check.lateMinutes===null?'完成时间尚待核实':`按目前安排预计晚交${days(check.lateMinutes)}天，是否继续？`;
- const detail=[...factoryGaps.map(row=>`${row.label}工厂交货晚${days(row.lateMinutes!)}天`),...gaps.map(row=>`${SERIES_MILESTONES.find(item=>item.key===row.key)!.label}晚${days(row.lateMinutes!)}天`)].join('、');
- return `${detail}；${check.lateMinutes===null?'最终交期尚待核实':check.lateMinutes>0?`最终交期晚${days(check.lateMinutes)}天`:'最终交期仍可满足'}，是否继续？`;
+ const gap=(label:string,minutes:number|null)=>minutes===null?`${label}缺口尚待核实`:minutes===0?`${label}时间不足`:`${label}晚${days(minutes)}天`;
+ if(!gaps.length&&!factoryGaps.length)return check.lateMinutes===null?'完成时间尚待核实':check.lateMinutes===0?'本单时间不足，是否继续？':`按目前安排预计晚交${days(check.lateMinutes)}天，是否继续？`;
+ const detail=[...factoryGaps.map(row=>gap(`${row.label}工厂交货`,row.lateMinutes)),...gaps.map(row=>gap(SERIES_MILESTONES.find(item=>item.key===row.key)!.label,row.lateMinutes))].join('、');
+ const shipmentGap=gaps.some(row=>row.key==='planned_shipment');
+ const final=check.lateMinutes!==null&&check.lateMinutes>0?gap('最终交期',check.lateMinutes):shipmentGap?'最终交期时间不足':check.lateMinutes===null?'最终交期尚待核实':'最终交期仍可满足';
+ return `${detail}；${final}，是否继续？`;
 }
