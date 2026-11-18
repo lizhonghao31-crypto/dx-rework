@@ -2,7 +2,7 @@
   "version": 1,
   "base": "738b3cf9f0595609afab53a6d1b05b5babf3d062",
   "risk": "full",
-  "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
+  "sourceFingerprint": "a8655b01e83f5aed6371888d9ff66aa849f9c8d222096c82f781d32f8323ac7e",
   "rules": [
     {
       "rule": "Retain cancelled responsibility only from its exact original task/cancel event and scope, without borrowing old rounds, routes, steps, PO or aggregate clocks/completions",
@@ -16,6 +16,7 @@
         "apps/api/src/production-platform/journey-fact-model.ts",
         "tests/unit/order-time-reading.test.ts",
         "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
         "docs/engineering/cancelled-responsibility-history-repair.md"
       ],
       "reads": [
@@ -31,7 +32,7 @@
         "tests/unit/digital-task-read-boundary.test.ts",
         "tests/unit/fixed-schedule-progress.test.ts"
       ],
-      "expectation": "Current unit/old-reader cases and5 unfiltered original App/PG cases pass, including original legacy printing and development craft confirmation alias cancellation. Planning-only work remains non-rated. Real R08/D09 cancellation13 freezes240 at13:30/20, missing A remains empty; legacy twoPO exact D and frozen240 survive24h and persisted frames. Actual previous v13 payload with missing R and selectors are obsolete then rebuilt without changing immutable plan/task/cancel event. All scopes remain present; no current overdue/due-soon risk reappears. No onsite Root DTO is claimed.",
+      "expectation": "Current unit/old-reader cases and9 unfiltered original App/PG cases pass, including original legacy printing and development craft confirmation alias cancellation. Planning-only work remains non-rated. Real R08/D09 cancellation13 freezes240 at13:30/20, missing A remains empty; legacy twoPO exact D and frozen240 survive24h and persisted frames. Actual previous v13 payload with missing R and selectors are obsolete then rebuilt without changing immutable plan/task/cancel event. All scopes remain present; no current overdue/due-soon risk reappears. Original special-craft native consumer additionally checks the actual repository-persisted calculation version against its single current authority, retaining all original business assertions; the intentionally obsolete v13 cache fixture is retained. Failed Full44216448550 is preserved and not called successful. No onsite Root DTO is claimed.",
       "checks": [
         "cancel-unit",
         "cancel-native",
@@ -74,15 +75,15 @@
     {
       "id": "cancel-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-detail.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/journey-fact-model.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/sla-native-window-projection.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/current-task-plan.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-cancelled-responsibility-20261117/release738-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-detail.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/journey-fact-model.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/sla-native-window-projection.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/current-task-plan.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-cancelled-responsibility-20261117/version-consumer-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:19.578835+00:00",
-      "endedAt": "2026-11-18T01:26:37.313755+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-unit/command.log",
-      "logSha256": "c7b2e64a5a92bcdab0b26308155f3aabef33c4fdc3c5fa755511d31759b8725d",
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "a8655b01e83f5aed6371888d9ff66aa849f9c8d222096c82f781d32f8323ac7e",
+      "startedAt": "2026-11-18T02:13:40.784687+00:00",
+      "endedAt": "2026-11-18T02:13:50.090398+00:00",
+      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/version-consumer-unit/command.log",
+      "logSha256": "1987f31a9b7de8463ee85a8f2715098a4ca2593094b214220e83b64b4820e924",
       "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified.",
       "passed": 334,
       "failed": 0,
@@ -90,30 +91,30 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "33f45163d9616573d329f548ea93a4c723458ea4fbf3a42ad950bf82f812e391"
+          "sha256": "19aa7cd89038d3d7716317ced159ea1d688309a30e98457bac7b55b39f438057"
         }
       ]
     },
     {
       "id": "cancel-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/terminal-quality-projections-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-cancelled-responsibility-20261117/pg/release738-original-app/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-cancelled-responsibility-20261117/pg/version-consumer-original-app/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:18.308407+00:00",
-      "endedAt": "2026-11-18T01:27:48.094239+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/pg/release738-original-app/tests.log",
-      "logSha256": "e36b79a5b60050c51c5e4b998942c61192d290f9ae58bf6440b2e1f6ae55bd73",
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "a8655b01e83f5aed6371888d9ff66aa849f9c8d222096c82f781d32f8323ac7e",
+      "startedAt": "2026-11-18T02:13:25.214582+00:00",
+      "endedAt": "2026-11-18T02:14:57.092570+00:00",
+      "log": "/workspace/sla-cancelled-responsibility-20261117/pg/version-consumer-original-app/tests.log",
+      "logSha256": "b7024b806e89260374fdbe7331609c952f17982a8942091cd9ef413c50d5c970",
       "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified.",
-      "passed": 5,
+      "passed": 9,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4e781784e82c60879b9f0e5b18119c063e651c579ac4a488cdfae2213205dfd5"
+          "sha256": "713d8caaad1ee055f2dcbd095b1fad584b030e63d5b3ca85a48ccf6fe4da88b9"
         }
       ]
     },
@@ -123,11 +124,11 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:20.960755+00:00",
-      "endedAt": "2026-11-18T01:26:47.451119+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-api-types/command.log",
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "a8655b01e83f5aed6371888d9ff66aa849f9c8d222096c82f781d32f8323ac7e",
+      "startedAt": "2026-11-18T02:13:50.513472+00:00",
+      "endedAt": "2026-11-18T02:14:10.591238+00:00",
+      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/version-consumer-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified."
     },
@@ -137,25 +138,25 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:22.349337+00:00",
-      "endedAt": "2026-11-18T01:27:06.030442+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-web-types/command.log",
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "a8655b01e83f5aed6371888d9ff66aa849f9c8d222096c82f781d32f8323ac7e",
+      "startedAt": "2026-11-18T02:14:10.996443+00:00",
+      "endedAt": "2026-11-18T02:14:47.934150+00:00",
+      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/version-consumer-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified."
     },
     {
       "id": "cancel-lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/cancelled-task-history.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/journey-fact-model.ts apps/web/src/cockpit-node-summary.tsx apps/web/src/cockpit-framework-nodes.tsx tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/order-time-reading.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/cancelled-task-history.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/journey-fact-model.ts apps/web/src/cockpit-node-summary.tsx apps/web/src/cockpit-framework-nodes.tsx tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/order-time-reading.test.ts tests/integration/special-craft-native-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:23.739821+00:00",
-      "endedAt": "2026-11-18T01:26:27.875609+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-lint/command.log",
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "a8655b01e83f5aed6371888d9ff66aa849f9c8d222096c82f781d32f8323ac7e",
+      "startedAt": "2026-11-18T02:14:48.770109+00:00",
+      "endedAt": "2026-11-18T02:14:50.845866+00:00",
+      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/version-consumer-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified."
     }
