@@ -26,8 +26,13 @@ export function mayReadProductionQuality(actor: TrustedActorContext) {
 const iso = (value: Date|string|null) => value === null ? null : new Date(value).toISOString();
 type Execution = {production_order_id:string;factory_decision_id:string|null};
 const executionKey = (id:string,factory:string|null|undefined) => `${id}:${factory??"original"}`;
-const sameExecution = (row:Execution,order:SourcingProductionOrder) => executionKey(row.production_order_id,row.factory_decision_id)===executionKey(order.productionOrderId,order.factoryDecisionId);
+function byExecution<T extends Execution>(rows:readonly T[]){
+  const result=new Map<string,T[]>();
+  for(const row of rows){const key=executionKey(row.production_order_id,row.factory_decision_id),group=result.get(key);if(group)group.push(row);else result.set(key,[row]);}
+  return result;
+}
 type Receipt = Execution & {receipt_id:string;receiving_batch_id:string;actual_quantity:string;received_at:Date;correction_id:string|null;archived:boolean;excluded:boolean};
+type ReceiptSummary = Execution & {quantity:string;first_at:Date|null;archived_count:number;batch_ids:string[]|null};
 type Batch = {receiving_batch_id:string;unallocated:string;order_count:number;unlinked_count:number};
 type Quality = Execution & {rework_order_id:string;rework_no:string|null;rework_quantity:string|null;status:string};
 type Timing = Execution & {completed_on:string|null;completed_at:Date|null;shipped_on:string|null;shipped_at:Date|null;shipped_quantity:string|null};
@@ -39,9 +44,19 @@ export async function readProductionAnalysis(client: PoolClient, allVisibleOrder
   const day = new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
   const orders = selectProductionAnalysisOrders(allVisibleOrders,filters,day), ids = orders.map(order=>order.productionOrderId);
   const factories = orders.map(order=>order.factoryDecisionId??null);
-  const linked = await client.query<Receipt>(`WITH links AS (${RECEIVING_ANALYSIS_LINKS_SQL}) SELECT * FROM links
-    WHERE production_order_id=ANY($1::uuid[]) AND NOT excluded ORDER BY received_at,receipt_id`,[ids]);
-  const receipts = linked.rows;
+  const page=orders.slice((filters.page-1)*15,filters.page*15),pageIds=page.map(order=>order.productionOrderId),pageFactories=page.map(order=>order.factoryDecisionId??null);
+  const receiptSummaries=(await client.query<ReceiptSummary>(`WITH links AS (${RECEIVING_ANALYSIS_LINKS_SQL})
+    SELECT links.production_order_id,links.factory_decision_id,coalesce(sum(links.actual_quantity) FILTER(WHERE NOT links.archived),0)::text AS quantity,
+      min(links.received_at) FILTER(WHERE NOT links.archived) AS first_at,count(*) FILTER(WHERE links.archived)::int AS archived_count,
+      array_agg(DISTINCT links.receiving_batch_id) FILTER(WHERE NOT links.archived) AS batch_ids
+    FROM links JOIN (SELECT DISTINCT * FROM unnest($1::uuid[],$2::uuid[]) AS requested(production_order_id,factory_decision_id)) selected
+      ON selected.production_order_id=links.production_order_id AND selected.factory_decision_id IS NOT DISTINCT FROM links.factory_decision_id
+    WHERE NOT links.excluded GROUP BY links.production_order_id,links.factory_decision_id`,[ids,factories])).rows;
+  const receiptByExecution=new Map(receiptSummaries.map(row=>[executionKey(row.production_order_id,row.factory_decision_id),row]));
+  const pageReceipts=byExecution((await client.query<Receipt>(`WITH links AS (${RECEIVING_ANALYSIS_LINKS_SQL}) SELECT links.* FROM links
+    JOIN (SELECT DISTINCT * FROM unnest($1::uuid[],$2::uuid[]) AS requested(production_order_id,factory_decision_id)) selected
+      ON selected.production_order_id=links.production_order_id AND selected.factory_decision_id IS NOT DISTINCT FROM links.factory_decision_id
+    WHERE NOT links.excluded ORDER BY links.received_at,links.receipt_id`,[pageIds,pageFactories])).rows);
   const batches = await client.query<Batch>(`WITH links AS (${RECEIVING_ANALYSIS_LINKS_SQL}), selected_batches AS (
     SELECT DISTINCT receiving_batch_id FROM links WHERE production_order_id=ANY($1::uuid[]) AND NOT archived AND NOT excluded)
     SELECT batch.receiving_batch_id,
@@ -57,7 +72,7 @@ export async function readProductionAnalysis(client: PoolClient, allVisibleOrder
     FROM unnest($1::uuid[],$2::uuid[]) production(production_order_id,factory_decision_id)
     LEFT JOIN LATERAL (SELECT max(business_date) AS business_date,max(created_at) AS created_at FROM sourcing_production_transitions
       WHERE production_order_id=production.production_order_id AND factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id AND status='production_completed') completed ON true
-    LEFT JOIN LATERAL (SELECT sum(recorded_quantity) AS recorded_quantity,max(shipped_on) AS shipped_on,max(created_at) AS created_at FROM sourcing_production_shipments WHERE production_order_id=production.production_order_id AND factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id) shipment ON true`,[ids,factories]);
+    LEFT JOIN LATERAL (SELECT sum(recorded_quantity) AS recorded_quantity,max(shipped_on) AS shipped_on,max(created_at) AS created_at FROM sourcing_production_shipments WHERE production_order_id=production.production_order_id AND factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id) shipment ON true`,[pageIds,pageFactories]);
   const byTiming = new Map(timings.rows.map(row=>[executionKey(row.production_order_id,row.factory_decision_id),row]));
   // Alerts are original order-level facts; only the following report is factory-specific.
   const alertRows = await client.query<Alert>(`SELECT alert.production_order_id,selected.factory_decision_id,alert.alert_id,alert.kind,alert.opened_at,alert.resolved_at,
@@ -68,54 +83,61 @@ export async function readProductionAnalysis(client: PoolClient, allVisibleOrder
     LEFT JOIN LATERAL (SELECT report.created_at,report.business_date FROM sourcing_production_reports report
       WHERE report.production_order_id=alert.production_order_id AND report.factory_decision_id IS NOT DISTINCT FROM selected.factory_decision_id AND report.created_at> alert.opened_at
       ORDER BY report.created_at,report.report_id LIMIT 1) next_report ON true
-    ORDER BY alert.opened_at,alert.alert_id`,[ids,actor.actorId,factories]);
+    ORDER BY alert.opened_at,alert.alert_id`,[pageIds,actor.actorId,pageFactories]);
+  const alertsByExecution=byExecution(alertRows.rows);
+  const alertCount=(await client.query<{count:number}>(`SELECT count(*)::int AS count FROM sourcing_production_alerts WHERE production_order_id=ANY($1::uuid[])`,[ids])).rows[0]!.count;
   const qualityAllowed = mayReadProductionQuality(actor);
-  let qualityRows: Quality[] = [];
+  let qualityCount:number|null=null,qualityByExecution=new Map<string,Quality[]>();
   if (qualityAllowed) {
     if (!actor.actorRoles.includes("root_superuser")) await client.query("SELECT access_authorized_actor_roles($1,$2)",[actor.actorId,"dashboard:management:read"]);
     const unambiguous = batches.rows.filter(batch=>batch.order_count===1 && batch.unlinked_count===0).map(batch=>batch.receiving_batch_id);
-    const result = await client.query<Quality>(`SELECT DISTINCT link.production_order_id,(to_jsonb(link)->>'factory_decision_id')::uuid AS factory_decision_id,rework.rework_order_id,rework.rework_no,
-      rework.rework_quantity::text,rework.status
-      FROM rework_orders rework JOIN receiving_receipts receipt ON receipt.receiving_batch_id=rework.source_receiving_batch_id
+    const qualityScope=`FROM rework_orders rework JOIN receiving_receipts receipt ON receipt.receiving_batch_id=rework.source_receiving_batch_id
       JOIN sourcing_production_receipt_links link USING(receipt_id)
-      WHERE rework.source_receiving_batch_id=ANY($1::uuid[]) AND link.production_order_id=ANY($2::uuid[])
-        AND rework.status NOT IN ('draft','cancelled','deleted') ORDER BY rework.rework_order_id`,[unambiguous,ids]);
-    qualityRows = result.rows;
+      JOIN unnest($2::uuid[],$3::uuid[]) selected(production_order_id,factory_decision_id)
+        ON selected.production_order_id=link.production_order_id AND selected.factory_decision_id IS NOT DISTINCT FROM (to_jsonb(link)->>'factory_decision_id')::uuid
+      WHERE rework.source_receiving_batch_id=ANY($1::uuid[]) AND rework.status NOT IN ('draft','cancelled','deleted')`;
+    qualityCount=(await client.query<{count:number}>(`SELECT count(DISTINCT rework.rework_order_id)::int AS count ${qualityScope}`,[unambiguous,ids,factories])).rows[0]!.count;
+    const result=await client.query<Quality>(`SELECT DISTINCT link.production_order_id,selected.factory_decision_id,rework.rework_order_id,rework.rework_no,rework.rework_quantity::text,rework.status
+      ${qualityScope} ORDER BY rework.rework_order_id`,[unambiguous,pageIds,pageFactories]);
+    qualityByExecution=byExecution(result.rows);
   }
-  const items = orders.map(order=>{
-    const rows = receipts.filter(row=>sameExecution(row,order)), effective = rows.filter(row=>!row.archived);
-    const batchIds = [...new Set(effective.map(row=>row.receiving_batch_id))];
+  const summaries=orders.map(order=>{
+    const key=executionKey(order.productionOrderId,order.factoryDecisionId),receipt=receiptByExecution.get(key);
+    const batchIds=receipt?.batch_ids??[];
     const unallocatedBatchCount = batchIds.filter(id=>BigInt(byBatch.get(id)?.unallocated??"0")!==0n).length;
-    const timing = byTiming.get(executionKey(order.productionOrderId,order.factoryDecisionId));
-    const receivedQuantity = effective.reduce((sum,row)=>sum+BigInt(row.actual_quantity),0n);
+    const remainingQuantity=order.status==='in_production'?String(Math.max(0,order.quantity-order.completedQuantity)):'0';
+    return {key,order,batchIds,unallocatedBatchCount,dueBucket:productionDueBucket(order,day),remainingQuantity,firstReceivedAt:iso(receipt?.first_at??null)};
+  });
+  const items=summaries.slice((filters.page-1)*15,filters.page*15).map(({key,order,batchIds,unallocatedBatchCount,dueBucket,remainingQuantity,firstReceivedAt})=>{
+    const receipt=receiptByExecution.get(key),rows=pageReceipts.get(key)??[],timing=byTiming.get(key);
+    const receivedQuantity=BigInt(receipt?.quantity??'0');
     const shippedQuantity = timing?.shipped_quantity??null;
-    const remainingQuantity = order.status === "in_production" ? String(Math.max(0,order.quantity-order.completedQuantity)) : "0";
-    const orderQuality = qualityRows.filter(row=>sameExecution(row,order));
-    return {order,dueBucket:productionDueBucket(order,day),remainingQuantity,
+    const orderQuality=qualityByExecution.get(key)??[];
+    return {order,dueBucket,remainingQuantity,
       completedOn:timing?.completed_on??null,completedRecordedAt:iso(timing?.completed_at??null),
       shippedOn:timing?.shipped_on??null,shipmentRecordedAt:iso(timing?.shipped_at??null),shippedQuantity,
-      firstReceivedAt:iso(effective[0]?.received_at??null),receivedQuantity:receivedQuantity.toString(),
-      receivingState:unallocatedBatchCount ? "unverified" as const : !effective.length ? "none" as const
+      firstReceivedAt,receivedQuantity:receivedQuantity.toString(),
+      receivingState:unallocatedBatchCount ? "unverified" as const : !firstReceivedAt ? "none" as const
         : shippedQuantity!==null && BigInt(shippedQuantity)>0n && receivedQuantity>=BigInt(shippedQuantity) ? "quantity_met" as const : "partial" as const,
-      archivedReceiptCount:rows.length-effective.length,unallocatedBatchCount,
+      archivedReceiptCount:receipt?.archived_count??0,unallocatedBatchCount,
       receipts:rows.map(row=>({receiptId:row.receipt_id,receivingBatchId:row.receiving_batch_id,actualQuantity:String(row.actual_quantity),receivedAt:iso(row.received_at)!,correctionId:row.correction_id,archived:row.archived})),
       quality:qualityAllowed ? {reworkOrderCount:orderQuality.length,orders:orderQuality.map(row=>({reworkOrderId:row.rework_order_id,reworkNo:row.rework_no,quantity:row.rework_quantity,status:row.status})),
         ambiguousBatchCount:batchIds.filter(id=>{const batch=byBatch.get(id);return !!batch && (batch.order_count!==1 || batch.unlinked_count!==0);}).length} : null,
-      alerts:alertRows.rows.filter(row=>sameExecution(row,order)).map(row=>({alertId:row.alert_id,kind:row.kind,firstObservedAt:iso(row.opened_at)!,closedAt:iso(row.resolved_at),readAt:iso(row.read_at),nextReportAt:iso(row.next_report_at),nextReportBusinessDate:row.next_report_on})),
+      alerts:(alertsByExecution.get(key)??[]).map(row=>({alertId:row.alert_id,kind:row.kind,firstObservedAt:iso(row.opened_at)!,closedAt:iso(row.resolved_at),readAt:iso(row.read_at),nextReportAt:iso(row.next_report_at),nextReportBusinessDate:row.next_report_on})),
     };
   });
   const groups = new Map<string,{supplierId:string;supplierName:string;orderCount:number;openCount:number;remainingQuantity:bigint;overdueCount:number}>();
-  for (const item of [...items].sort((a,b)=>b.order.dispatchedAt.localeCompare(a.order.dispatchedAt))) {
+  for (const item of [...summaries].sort((a,b)=>b.order.dispatchedAt.localeCompare(a.order.dispatchedAt))) {
     const group=groups.get(item.order.supplierId)??{supplierId:item.order.supplierId,supplierName:item.order.supplierName,orderCount:0,openCount:0,remainingQuantity:0n,overdueCount:0};
     group.orderCount++; if(item.order.status==="in_production")group.openCount++;group.remainingQuantity+=BigInt(item.remainingQuantity);if(item.dueBucket==="overdue")group.overdueCount++;groups.set(group.supplierId,group);
   }
   const sortedGroups=[...groups.values()].sort((a,b)=>a.remainingQuantity===b.remainingQuantity?a.supplierId.localeCompare(b.supplierId):a.remainingQuantity>b.remainingQuantity?-1:1);
   return ProductionAnalysisResponseSchema.parse({asOf,filters,
-    summary:{totalCount:items.length,openCount:items.filter(item=>item.order.status==="in_production").length,
-      remainingQuantity:items.reduce((sum,item)=>sum+BigInt(item.remainingQuantity),0n).toString(),
-      overdueCount:items.filter(item=>item.dueBucket==="overdue").length,soonCount:items.filter(item=>item.dueBucket==="soon").length,missingDueCount:items.filter(item=>item.dueBucket==="missing").length,
-      ordersWithoutReceipts:items.filter(item=>!item.firstReceivedAt).length,ordersWithUnallocatedAdjustments:items.filter(item=>item.unallocatedBatchCount>0).length,
-      alertCount:new Set(alertRows.rows.map(row=>row.alert_id)).size,qualityOrderCount:qualityAllowed?new Set(items.flatMap(item=>item.quality?.orders.map(row=>row.reworkOrderId)??[])).size:null},
+    summary:{totalCount:summaries.length,openCount:summaries.filter(item=>item.order.status==="in_production").length,
+      remainingQuantity:summaries.reduce((sum,item)=>sum+BigInt(item.remainingQuantity),0n).toString(),
+      overdueCount:summaries.filter(item=>item.dueBucket==="overdue").length,soonCount:summaries.filter(item=>item.dueBucket==="soon").length,missingDueCount:summaries.filter(item=>item.dueBucket==="missing").length,
+      ordersWithoutReceipts:summaries.filter(item=>!item.firstReceivedAt).length,ordersWithUnallocatedAdjustments:summaries.filter(item=>item.unallocatedBatchCount>0).length,
+      alertCount,qualityOrderCount:qualityCount},
     groupTotal:groups.size,groups:sortedGroups.slice((filters.groupPage-1)*15,filters.groupPage*15).map(group=>({...group,remainingQuantity:group.remainingQuantity.toString()})),
-    items:items.slice((filters.page-1)*15,filters.page*15)});
+    items});
 }

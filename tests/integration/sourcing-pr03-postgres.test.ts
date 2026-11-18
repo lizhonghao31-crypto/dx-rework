@@ -2432,6 +2432,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const receivedAnalysis=await dashboard.analysis(rootActor(),{q:serial});
     expect(receivedAnalysis.items.find(item=>!item.order.factoryDecisionId)?.receipts.map(row=>row.receiptId)).toEqual([oldReceipt.value.receiptId]);
     expect(receivedAnalysis.items.find(item=>item.order.factoryDecisionId===factoryDecisionId)?.receipts.map(row=>row.receiptId)).toEqual([newReceipt.value.receiptId]);
+    const beyond=await dashboard.analysis(rootActor(),{q:serial,page:2});
+    expect(beyond.items).toEqual([]);
+    expect(beyond.summary).toEqual(receivedAnalysis.summary);
+    expect(beyond.groups).toEqual(receivedAnalysis.groups);
     expect(receivedAnalysis.items.find(item=>!item.order.factoryDecisionId)?.receivedQuantity).toBe('5');
     expect(receivedAnalysis.items.find(item=>item.order.factoryDecisionId===factoryDecisionId)?.receivedQuantity).toBe('15');
     const receiptCount=(await database.query('SELECT count(*)::int AS count FROM receiving_receipts WHERE cutting_order_id=$1',[cut])).rows[0].count;

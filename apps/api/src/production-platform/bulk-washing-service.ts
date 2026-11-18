@@ -20,10 +20,25 @@ async function capabilities(db:WashingDB,actor:TrustedActorContext,plan:WashingP
  return {canLogistics:isRoot||await role(plan.document.staff?.logisticsId??'','embroidery_washing_merchandiser'),
   canInspect:isRoot||await role(plan.document.staff?.inspectorId??'','quality_control'),canCorrect:isRoot};
 }
+async function washingReadAuthorization(db:WashingDB,actor:TrustedActorContext|null,orderId:string,plans:readonly WashingPlan[],includeFees=true){
+ if(!actor)return {canReadAll:true,canReadFees:false,permissions:()=>({canLogistics:false,canInspect:false,canCorrect:false})};
+ const policy=new DigitalProductionAccessPolicy(db),isRoot=await root(db,actor);
+ const canOperate=plans.some(plan=>plan.document.staff?.logisticsId===actor.actorId)&&await policy.activeRole(actor.actorId,'embroidery_washing_merchandiser');
+ const canCheck=plans.some(plan=>plan.document.staff?.inspectorId===actor.actorId)&&await policy.activeRole(actor.actorId,'quality_control');
+ const canReadAll=await policy.allowed(actor,'order',orderId,'technical'),canReadFees=includeFees&&await policy.allowed(actor,'order',orderId,'budget');
+ return {canReadAll,canReadFees,permissions:(plan:WashingPlan)=>({canLogistics:isRoot||canOperate&&plan.document.staff?.logisticsId===actor.actorId,
+  canInspect:isRoot||canCheck&&plan.document.staff?.inspectorId===actor.actorId,canCorrect:isRoot})};
+}
 /** Same client for native quantities, adopted plan, facts and permission checks. */
-export async function readBulkWashing(db:WashingDB,orderId:string,actor:TrustedActorContext|null,observationAt?:string):Promise<BulkWashingSheet>{
+export async function readBulkWashing(db:WashingDB,orderId:string,actor:TrustedActorContext|null,observationAt?:string,options:{includeFees?:boolean}={}):Promise<BulkWashingSheet>{
  const plans=await washingPlans(db,orderId);if(!plans.length)return {orderId,scopes:[]};
+ return assembleWashingSheet(db,orderId,plans,await washingReadAuthorization(db,actor,orderId,plans,options.includeFees),observationAt);
+}
+async function assembleWashingSheet(db:WashingDB,orderId:string,plans:WashingPlan[],access:Awaited<ReturnType<typeof washingReadAuthorization>>,observationAt?:string):Promise<BulkWashingSheet>{
+ if(!plans.length)return {orderId,scopes:[]};
  const events=await washingEvents(db,orderId),latest=new Map(plans.map(p=>[p.lineId,p]));
+ const plansById=new Map(plans.map(plan=>[plan.id,plan])),eventsByScope=new Map<string,typeof events>();
+ for(const event of events){const own=eventsByScope.get(event.scopeId);if(own)own.push(event);else eventsByScope.set(event.scopeId,[event]);}
  const receipts=await garmentQuality(db,orderId),factories=await factoryProductionScopes(db,orderId);
  const receiptLinks=(await db.query(`SELECT l.receipt_id,l.production_order_id,l.factory_decision_id FROM sourcing_production_receipt_links l
   JOIN digital_production_child_links c ON c.module='production' AND c.child_id=l.production_order_id WHERE c.production_order_id=$1`,[orderId])).rows;
@@ -33,27 +48,30 @@ export async function readBulkWashing(db:WashingDB,orderId:string,actor:TrustedA
   allowedSend:r.inspected?r.qualifiedQuantity:0})),...factories.map(r=>({scopeId:`factory:${r.production_order_id}:${r.factory_decision_id??'original'}:${r.line_id}`,
   lineId:r.line_id as string,factoryDecisionId:r.factory_decision_id as string|null,quantity:Number(r.quantity),quantityVersion:washingHash([r.production_order_id,r.factory_decision_id,r.sourcing_decision_id,r.line_id,Number(r.quantity)]),
   label:`${r.supplier_name_snapshot} · ${r.po_number??r.color}`,receivedAt:null,availableAt:r.dispatched_at?new Date(r.dispatched_at).toISOString():null,mode:'factory' as const,allowedSend:0}))];
- const policy=new DigitalProductionAccessPolicy(db);
- const canReadAll=!actor||await policy.allowed(actor,'order',orderId,'technical');
- const canReadFees=Boolean(actor&&await policy.allowed(actor,'order',orderId,'budget'));
- const scopes:BulkWashingScopeView[]=[];
+ const selected=[];
  for(const input of inputs){
-  const own=events.filter(e=>e.scopeId===input.scopeId);
+  const own=eventsByScope.get(input.scopeId)??[];
   // Once real work exists, later arrangements cannot reset its allowance.
-  const first=own.find(e=>e.kind!=='void'),plan=first?plans.find(p=>p.id===first.planId):latest.get(input.lineId);
+  const first=own.find(e=>e.kind!=='void'),current=latest.get(input.lineId),plan=first?plansById.get(first.planId):current;
   if(!plan||plan.document.arrangement.mode!==input.mode)continue;
-  const permissions=actor?await capabilities(db,actor,latest.get(input.lineId)?.document.staff?latest.get(input.lineId)!:plan):{canLogistics:false,canInspect:false,canCorrect:false};
-  if(!canReadAll&&!permissions.canLogistics&&!permissions.canInspect)continue;
+  const permissions=access.permissions(current?.document.staff?current:plan);
+  if(!access.canReadAll&&!permissions.canLogistics&&!permissions.canInspect)continue;
+  selected.push({input,own,plan,permissions,feeSource:(current??plan).document.fee});
+ }
+ const versions=access.canReadFees?[...new Set(selected.flatMap(({feeSource})=>feeSource.kind==='budget_row'?[feeSource.version]:[]))]:[];
+ const budgets=versions.length?(await db.query('SELECT version,document FROM digital_budget_versions WHERE production_order_id=$1 AND version=ANY($2::integer[])',[orderId,versions])).rows:[];
+ const budgetByVersion=new Map(budgets.map(budget=>[Number(budget.version),budget.document]));
+ const scopes:BulkWashingScopeView[]=[];
+ for(const {input,own,plan,permissions,feeSource:source} of selected){
   const voids=new Set(own.filter(e=>e.kind==='void').map(e=>String(e.payload.factId)));
   const facts=own.filter(e=>e.kind!=='void'),effective=facts.filter(e=>!voids.has(e.id)).map(washingFact);
   const ledger=bulkWashingLedger(input,input.mode,effective);
   if(input.mode==='after_receipt')ledger.sendable=Math.max(0,Math.min(ledger.sendable,input.allowedSend-ledger.sent));
   let fee:BulkWashingScopeView['fee'];
-  if(canReadFees){
-   const source=(latest.get(input.lineId)??plan).document.fee;fee={state:'pending'};
+  if(access.canReadFees){
+   fee={state:'pending'};
    if(source.kind==='budget_row'){
-    const budget=(await db.query('SELECT document FROM digital_budget_versions WHERE production_order_id=$1 AND version=$2',[orderId,source.version])).rows[0];
-    const row=budget?.document.rows.find((r:{rowId:string})=>r.rowId===source.rowId);
+    const row=budgetByVersion.get(source.version)?.rows.find((r:{rowId:string})=>r.rowId===source.rowId);
     if(row)fee={state:'referenced',version:source.version,rowId:source.rowId,name:row.name,unitPrice:row.unitPrice,consumption:row.consumption};
    }
   }
@@ -67,15 +85,14 @@ export async function readBulkWashing(db:WashingDB,orderId:string,actor:TrustedA
 }
 export class BulkWashingService{
  constructor(private readonly pool:Pool){}
- private async authorizeRead(db:WashingDB,actor:TrustedActorContext,orderId:string){
-  await washingOrderActive(db,orderId);
-  if(await new DigitalProductionAccessPolicy(db).allowed(actor,'order',orderId,'technical'))return;
-  for(const plan of new Map((await washingPlans(db,orderId)).filter(p=>p.document.staff).map(p=>[p.lineId,p])).values()){const caps=await capabilities(db,actor,plan);if(caps.canLogistics||caps.canInspect)return;}
-  digitalForbidden();
- }
  async read(actor:TrustedActorContext,orderId:string){
-  const db=await this.pool.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.authorizeRead(db,actor,orderId);
-   const result=await readBulkWashing(db,orderId,actor);if(!await washingOrderActive(db,orderId))for(const scope of result.scopes)scope.canLogistics=scope.canInspect=scope.canCorrect=false;
+  const db=await this.pool.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const active=await washingOrderActive(db,orderId),plans=await washingPlans(db,orderId),access=await washingReadAuthorization(db,actor,orderId,plans);
+   if(!access.canReadAll){
+    const currentStaff=new Map(plans.filter(plan=>plan.document.staff).map(plan=>[plan.lineId,plan]));
+    if(![...currentStaff.values()].some(plan=>{const permissions=access.permissions(plan);return permissions.canLogistics||permissions.canInspect;}))digitalForbidden();
+   }
+   const result=await assembleWashingSheet(db,orderId,plans,access);if(!active)for(const scope of result.scopes)scope.canLogistics=scope.canInspect=scope.canCorrect=false;
    if(result.scopes.some(scope=>(scope.ledger.rework?.available.length??0)>0||(scope.ledger.rework?.sent??0)>0)){const {OrderTimePlanRepository}=await import('./order-time-plan-repository.js');attachWashingReworkPlans(result,await new OrderTimePlanRepository(db).current({kind:'order',id:orderId}));}
    await db.query('COMMIT');return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}

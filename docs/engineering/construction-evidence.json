@@ -1,132 +1,89 @@
 {
   "version": 1,
-  "base": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
+  "base": "8aac36a4164d7c80c47539b4d5716380f0b77ea0",
   "risk": "full",
-  "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
+  "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
   "rules": [
     {
-      "rule": "Batch final-page task facts without projecting tasks outside the selected original IDs",
-      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
-      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
-      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
+      "rule": "Share native factory and QC evidence across execution, notifications and dashboard without crossing factory scopes",
+      "source": "User-approved system read performance groups, unified plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44; PF-P and PF-N2.",
+      "initialization": "The actual #1031 release merge 8aac36a4164d7c80c47539b4d5716380f0b77ea0 with native independent and retired factory executions and authentic warehouse receipts.",
+      "dateAndPermission": "Each previously authorized native order and exact factory decision remains bound to its own PO, time basis, and permission. Budget and work identities remain independently checked.",
       "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-selection-access.ts",
-        "apps/api/src/production-platform/task-page-read-context.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/development-task-blockers.ts",
-        "apps/api/src/production-platform/fixed-task-targets.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "tests/integration/journey-fact-model-postgres.test.ts"
+        "apps/api/src/production-platform/factory-production-facts.ts",
+        "apps/api/src/production-platform/qc-progress-evidence.ts",
+        "apps/api/src/production-platform/qc-progress-todos.ts",
+        "apps/api/src/production-platform/factory-production-qc-todos.ts",
+        "apps/api/src/production-platform/sla-plan-repository.ts",
+        "apps/api/src/sourcing/production-dashboard-service.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
+        "tests/unit/todo-qc-lazy-clock.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/journey-selection-query.ts",
-        "apps/api/src/production-platform/development-responsibility-window.ts"
-      ],
-      "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/workspace-page-facts-postgres.test.ts"
-      ],
-      "expectation": "Nine database families remain bounded for 1, 15 and 50 distinct task IDs. Registered legacy GET uses only the final selected page task IDs and still preserves totals, search, export, and role revocation. Exact direct task DTO parity in a shared snapshot includes historical and fixed-plan fields.",
-      "checks": [
-        "native-pages",
-        "native-consumers",
-        "targeted-unit",
-        "types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "Share authorized facts with standalone cockpit, development execution, and factory task collections",
-      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
-      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
-      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
-      "writes": [
-        "apps/api/src/production-platform/cockpit-query.ts",
-        "apps/api/src/production-platform/development-execution-read.ts",
-        "apps/api/src/production-platform/development-execution-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/notification-service.ts",
         "apps/api/src/production-platform/factory-flow-service.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/development-occurrence.ts",
-        "apps/api/src/production-platform/factory-task-completion.ts",
         "apps/api/src/production-platform/order-time-reading.ts"
       ],
       "oldTests": [
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts"
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
+        "tests/integration/production-reporting-clock-postgres.test.ts"
       ],
-      "expectation": "Maintain original business identity and current-plan targets; retain command reads on their original client and never consume shared facts across actors or writes.",
+      "expectation": "One SQL call per shared fact family for the exact native order set. A real transfer retains old and current factory decision identities, actual records, closure and original PO timing. Distinct observations reuse immutable data but compute independently. The final candidate aligns the old factory notification mock with its native batch repository and covers one call for all 31 authorized candidates, while display clocks remain deferred.",
       "checks": [
-        "native-consumers",
-        "targeted-unit",
+        "native-facts",
+        "qc-batch-unit",
         "types",
         "lint"
       ]
     },
     {
-      "rule": "Batch native ready recipients and analysis technical permission without changing aggregation or fallback semantics",
-      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
-      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
-      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
+      "rule": "Reuse the authorized native washing ledger and the exact fee and plan basis",
+      "source": "User-approved system read performance groups, unified plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44; PF-P and PF-N2.",
+      "initialization": "The actual #1031 release merge 8aac36a4164d7c80c47539b4d5716380f0b77ea0 with native independent and retired factory executions and authentic warehouse receipts.",
+      "dateAndPermission": "Each previously authorized native order and exact factory decision remains bound to its own PO, time basis, and permission. Budget and work identities remain independently checked.",
       "writes": [
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/production-platform/production-statistics-query.ts",
-        "apps/api/src/production-platform/reporting-query.ts",
-        "apps/api/src/production-platform/delivery-calendar-query.ts",
-        "tests/integration/digital-my-todo-context-postgres.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts"
+        "apps/api/src/production-platform/bulk-washing-service.ts",
+        "apps/api/src/production-platform/bulk-washing-todos.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/analysis-result-store.ts",
-        "apps/api/src/production-platform/notification-policy.ts"
+        "apps/api/src/production-platform/bulk-washing-repository.ts",
+        "apps/api/src/production-platform/notification-service.ts"
       ],
       "oldTests": [
-        "tests/integration/digital-production-notifications-postgres.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts"
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/integration/budget-washing-fees-postgres.test.ts"
       ],
-      "expectation": "Selected recipient and task technical access remain exact. Production quantity and warehouse QC remain separate. The old fixture that corrected a receipt already inspected failed equally on the exact release tree; a separate native arrival retains the actual partial-QC scenario without bypassing correct invalidation after corrections.",
+      "expectation": "Only ordinary per-scope action authorization grants access, with rewash and plan identity retained. Financial reads still require their original independent permission. No writer or saved-clock semantics change.",
       "checks": [
-        "native-pages",
-        "native-consumers",
+        "native-facts",
         "types",
         "lint"
       ]
     },
     {
-      "rule": "Reuse the opened task and map size, authorization and browser regression guards to CI",
-      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
-      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
-      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
+      "rule": "Read rich evidence from the final page while retaining actual all-filter result totals",
+      "source": "User-approved system read performance groups, unified plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44; PF-P and PF-N2.",
+      "initialization": "The actual #1031 release merge 8aac36a4164d7c80c47539b4d5716380f0b77ea0 with native independent and retired factory executions and authentic warehouse receipts.",
+      "dateAndPermission": "Each previously authorized native order and exact factory decision remains bound to its own PO, time basis, and permission. Budget and work identities remain independently checked.",
       "writes": [
-        "apps/web/src/digital-production-page.tsx",
+        "apps/api/src/sourcing/production-analysis.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
-        "AGENTS.md",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/current-task-plan-browser-postgres.test.ts",
-        "tests/integration/workspace-page-native-browser-postgres.test.ts"
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/web/src/digital-production-tasks-panel.tsx",
+        "apps/api/src/sourcing/production-dashboard-service.ts",
+        "apps/api/src/production-platform/qc-progress-evidence.ts",
         "scripts/test-suite-plan.mjs"
       ],
       "oldTests": [
-        "tests/integration/journey-page-native-browser-postgres.test.ts",
-        "tests/integration/current-task-plan-browser-postgres.test.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/production-read-batches-postgres.test.ts"
       ],
-      "expectation": "Initial task detail enters the fallback once. In the original signed workspace App loading, page 2 and the pattern workspace each issue one distinct GET. Native checks run under the existing CI matrix for applicable paths.",
+      "expectation": "Events, old snapshot comparison, counts, facets and groups retain their original authorized full range. An empty beyond-end page leaves groups and quantities unchanged; each original factory projects only its own native receipt. Existing gated native checks follow each shared reader.",
       "checks": [
-        "native-pages",
-        "targeted-unit",
+        "native-facts",
+        "native-two-factories",
         "types",
         "lint",
         "protocol"
@@ -135,87 +92,64 @@
   ],
   "checks": [
     {
-      "id": "native-pages",
+      "id": "native-facts",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/m01-journey-performance-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts tests/integration/current-task-plan-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/bounded-batches-and-original-browser/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/budget-washing-fees-postgres.test.ts tests/integration/production-read-batches-postgres.test.ts tests/integration/production-reporting-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/qc-washing-after-light-review-repair/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
-      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
-      "startedAt": "2026-11-18T08:17:03.216427+00:00",
-      "endedAt": "2026-11-18T08:20:02.961416+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/bounded-batches-and-original-browser/tests.log",
-      "logSha256": "41e535b4574d1ff22902f09b648033fe8d30e3925da12b8a980bc19d81a89e75",
-      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
-      "passed": 23,
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:38.715756+00:00",
+      "endedAt": "2026-11-18T09:44:52.855726+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/qc-washing-after-light-review-repair/tests.log",
+      "logSha256": "8bbf27077e0acae0efd6d11a6058e17d80be992018b5b4688beb80d58830b181",
+      "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup.",
+      "passed": 49,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1b66d2724205f6151ca339dc546a8f2045202496f9de8f1ea7fb99158a05d089"
+          "sha256": "86cc7af2ea214193cd893ef0a1507b50aef6ab43ffa53f09d0839c9fd00e1ffd"
         }
       ]
     },
     {
-      "id": "native-consumers",
+      "id": "native-two-factories",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts tests/integration/workspace-page-facts-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/final-permission-consumers/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/production-analysis-after-light-review-repair/tests.json --testNamePattern 'retains style-color reported quantities at the old factory'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
-      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
-      "startedAt": "2026-11-18T08:20:47.201374+00:00",
-      "endedAt": "2026-11-18T08:23:39.081353+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/final-permission-consumers/tests.log",
-      "logSha256": "02b99d2e418345a564f144bd9f855ec2fee3b5d5a1e5e989c5f20b4aa42f37ef",
-      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
-      "passed": 103,
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:44:53.029494+00:00",
+      "endedAt": "2026-11-18T09:45:11.022502+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/production-analysis-after-light-review-repair/tests.log",
+      "logSha256": "ac8ccd7220680a43b9fe8dfd37e485ef4088b4952a910e28bd4ead099fec312e",
+      "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup. The explicit test-name filter is the original two-factory production-analysis case. Other cases are outside this local target and retain normal GitHub CI coverage.",
+      "passed": 1,
       "failed": 0,
-      "skipped": 0,
+      "skipped": 141,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "771f357adb6c831aa0ace24e4fc3e3549277822b611dea5cff848417cf9938e5"
-        }
-      ]
-    },
-    {
-      "id": "targeted-unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-task-read-boundary.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/final-unit.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
-      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
-      "startedAt": "2026-11-18T08:23:56.986939+00:00",
-      "endedAt": "2026-11-18T08:24:01.186603+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-unit/command.log",
-      "logSha256": "9108511666a10300d3738dc3ff54ac159d66a920ef5072632c9e30444f4b7502",
-      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
-      "passed": 167,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "d2d03519b15e067a9ded39ec070b50464d8d2e088764b0a17df1c3a9fa2cfbe5"
+          "sha256": "e63476127aebded0a02026e0df2c1b7f4acd8de027ff2905e6be1eb6a7aa05aa"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/cockpit-query.ts apps/api/src/production-platform/delivery-calendar-query.ts apps/api/src/production-platform/development-execution-read.ts apps/api/src/production-platform/development-execution-service.ts apps/api/src/production-platform/development-service.ts apps/api/src/production-platform/development-task-blockers.ts apps/api/src/production-platform/factory-flow-service.ts apps/api/src/production-platform/fixed-task-targets.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-selection-access.ts apps/api/src/production-platform/notification-service.ts apps/api/src/production-platform/production-statistics-query.ts apps/api/src/production-platform/reporting-query.ts apps/api/src/production-platform/task-service.ts apps/web/src/digital-production-page.tsx scripts/ci/full-gate-risk-map.mjs tests/integration/current-task-plan-browser-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/full-gate-risk-map.test.ts apps/api/src/production-platform/task-page-read-context.ts",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-washing-service.ts apps/api/src/production-platform/bulk-washing-todos.ts apps/api/src/production-platform/factory-production-facts.ts apps/api/src/production-platform/factory-production-qc-todos.ts apps/api/src/production-platform/qc-progress-evidence.ts apps/api/src/production-platform/qc-progress-todos.ts apps/api/src/production-platform/sla-plan-repository.ts apps/api/src/sourcing/production-analysis.ts apps/api/src/sourcing/production-dashboard-service.ts scripts/ci/full-gate-risk-map.mjs tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts tests/unit/todo-qc-lazy-clock.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
-      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
-      "startedAt": "2026-11-18T08:24:01.516983+00:00",
-      "endedAt": "2026-11-18T08:24:04.919327+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-lint/command.log",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:40.899759+00:00",
+      "endedAt": "2026-11-18T09:41:44.191812+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution."
+      "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup."
     },
     {
       "id": "types",
@@ -223,13 +157,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
-      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
-      "startedAt": "2026-11-18T08:24:05.283517+00:00",
-      "endedAt": "2026-11-18T08:25:03.387522+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-types/command.log",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:44.541604+00:00",
+      "endedAt": "2026-11-18T09:42:49.540839+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution."
+      "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup."
     },
     {
       "id": "protocol",
@@ -237,16 +171,39 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
-      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
-      "startedAt": "2026-11-18T08:23:47.266359+00:00",
-      "endedAt": "2026-11-18T08:23:56.689818+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-preflight/command.log",
-      "logSha256": "42a61f1fd211486c909dcb9da8335325e3d16afdd8c04f8f1759362fecff9e4b",
-      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:42:49.924250+00:00",
+      "endedAt": "2026-11-18T09:42:59.724647+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-preflight/command.log",
+      "logSha256": "d0216000c473b53f44d7625b2709fcb5b64dbdab0897a16c6e44ac87d71e78c8",
+      "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup.",
       "passed": 284,
       "failed": 0,
       "skipped": 0
+    },
+    {
+      "id": "qc-batch-unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/todo-qc-lazy-clock.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-factory-qc-mock-repair-unit-20261118.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c4954a1b3306690c21545b4fc0841e0f1d5a0e30",
+      "sourceFingerprint": "9dfc60a695376884dceb401d00bbd12e009e3eb236416343c44e9104aaee4430",
+      "startedAt": "2026-11-18T09:41:39.232207+00:00",
+      "endedAt": "2026-11-18T09:41:40.600199+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/qc-repair-unit/command.log",
+      "logSha256": "67480651a01da102a676ca2b7d1c11a12552be1dd6672bc87014364593c47c71",
+      "context": "Exact release base and working-tree fingerprint. PostgreSQL 16 tests use an owned native low-privilege test database with verified cleanup.",
+      "passed": 143,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "fe96799df6d3abb1e19aacbd09a3e055d3d2fe7e70d1f115577ececde86942bb"
+        }
+      ]
     }
   ]
 }
