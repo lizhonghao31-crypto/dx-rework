@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "base": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+  "base": "de42e6f07ad3d7aa35318aee8f4f3e4c1e055054",
   "risk": "full",
-  "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+  "sourceFingerprint": "94cbe33f5d3653fee27c1d6228f204bfdaf659964bacd6c0a153d49569783c8a",
   "rules": [
     {
       "rule": "Project exact original native washing-window references without changing business facts",
       "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
-      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
+      "initialization": "Approved provisional stack on cancellation1025 candidate de42e6f07ad3d7aa35318aee8f4f3e4c1e055054; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
       "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
       "writes": [
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
@@ -41,7 +41,7 @@
     {
       "rule": "Original cockpit and factory washing UI enter and return from the exact window",
       "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
-      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
+      "initialization": "Approved provisional stack on cancellation1025 candidate de42e6f07ad3d7aa35318aee8f4f3e4c1e055054; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
       "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
       "writes": [
         "apps/web/src/bulk-washing-panel.tsx",
@@ -76,7 +76,7 @@
     {
       "rule": "Keep new native App consumer and exact identity units in the full canonical plan",
       "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
-      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
+      "initialization": "Approved provisional stack on cancellation1025 candidate de42e6f07ad3d7aa35318aee8f4f3e4c1e055054; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
       "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
@@ -107,46 +107,46 @@
     {
       "id": "c-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/washing-window-target.test.ts tests/unit/factory-task-target.test.ts tests/unit/digital-detail-route.test.ts tests/unit/journey-washing-facts.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/journey-fact-model.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/order-time-reading.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/stack1025-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/washing-window-target.test.ts tests/unit/factory-task-target.test.ts tests/unit/digital-detail-route.test.ts tests/unit/journey-washing-facts.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/journey-fact-model.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/order-time-reading.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/version-consumer-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:34.926416+00:00",
-      "endedAt": "2026-11-18T01:34:53.192704+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-unit/command.log",
-      "logSha256": "3ec7fb27d5d927c7954fbf0858a9be8529a3b0885e5fed3bc24dc05ceb671ebf",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "94cbe33f5d3653fee27c1d6228f204bfdaf659964bacd6c0a153d49569783c8a",
+      "startedAt": "2026-11-18T02:16:49.860145+00:00",
+      "endedAt": "2026-11-18T02:16:59.693466+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/version-consumer-unit/command.log",
+      "logSha256": "90155e6dfde1a1343200f496f617e87f2d462abd1e074fae592da3beb0fca537",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basede42e6f0 contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before publication/final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
       "passed": 307,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "02effe616e4c672a9664da70d3544386aa77205114c880332cafecaf9065bf32"
+          "sha256": "5fc8a183ab164b31333c388d730d4a64f3bad7b0849819cbff5b38f8efe6fa7e"
         }
       ]
     },
     {
       "id": "c-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/washing-window-navigation-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/pg/stack1025-original-app/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/washing-window-navigation-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/pg/version-consumer-original-app/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:33.434828+00:00",
-      "endedAt": "2026-11-18T01:37:07.817759+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/pg/stack1025-original-app/tests.log",
-      "logSha256": "333806dd5fc891160013338a09b97aa45f7782b849d69ff31f970fecaa7df7be",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "94cbe33f5d3653fee27c1d6228f204bfdaf659964bacd6c0a153d49569783c8a",
+      "startedAt": "2026-11-18T02:16:05.022634+00:00",
+      "endedAt": "2026-11-18T02:18:37.567710+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/pg/version-consumer-original-app/tests.log",
+      "logSha256": "80e47a033b48902fc81c6dbce2b496eb4d2afbb6b7b9ca94cf146a14761ef0ea",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basede42e6f0 contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before publication/final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
       "passed": 4,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "27bf04a820bad8b622a992d60f9d8c0215aedec7e70001db78fa9c128d55c746"
+          "sha256": "0600b816d35509b41a1cf9fcb0627fcdcc8a706d394c12569ebab94e9fec010d"
         }
       ]
     },
@@ -156,13 +156,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:36.279830+00:00",
-      "endedAt": "2026-11-18T01:35:04.215757+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-api-types/command.log",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "94cbe33f5d3653fee27c1d6228f204bfdaf659964bacd6c0a153d49569783c8a",
+      "startedAt": "2026-11-18T02:17:00.174338+00:00",
+      "endedAt": "2026-11-18T02:17:21.347009+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/version-consumer-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basede42e6f0 contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before publication/final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
     },
     {
       "id": "c-web-types",
@@ -170,13 +170,13 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:37.651006+00:00",
-      "endedAt": "2026-11-18T01:35:21.454351+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-web-types/command.log",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "94cbe33f5d3653fee27c1d6228f204bfdaf659964bacd6c0a153d49569783c8a",
+      "startedAt": "2026-11-18T02:17:21.666909+00:00",
+      "endedAt": "2026-11-18T02:17:57.569222+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/version-consumer-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basede42e6f0 contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before publication/final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
     },
     {
       "id": "c-lint",
@@ -184,13 +184,13 @@
       "command": "python3 /workspace/sla-supplement-c-20261117/lint-current.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:38:10.401455+00:00",
-      "endedAt": "2026-11-18T01:38:12.875188+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-lint/command.log",
-      "logSha256": "a6215d8f13422b39046018c80ddf2e81304d771dfeca05bb67ae1607670084e7",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "94cbe33f5d3653fee27c1d6228f204bfdaf659964bacd6c0a153d49569783c8a",
+      "startedAt": "2026-11-18T02:17:57.885214+00:00",
+      "endedAt": "2026-11-18T02:17:58.785948+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/version-consumer-lint/command.log",
+      "logSha256": "dfd830268173cf4b12fefff0668835ecb4308cd5774268457e9fc3cc1599b1ef",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basede42e6f0 contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before publication/final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
     },
     {
       "id": "c-protocol",
@@ -198,13 +198,13 @@
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:38:11.568263+00:00",
-      "endedAt": "2026-11-18T01:38:12.236685+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-protocol/command.log",
-      "logSha256": "a123577589bc94f889b19ebabd684c962f4d24e505e9481d504abfb12572f776",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "94cbe33f5d3653fee27c1d6228f204bfdaf659964bacd6c0a153d49569783c8a",
+      "startedAt": "2026-11-18T02:17:59.070491+00:00",
+      "endedAt": "2026-11-18T02:17:59.664810+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/version-consumer-protocol/command.log",
+      "logSha256": "495ec6987f3bd7d6baee37a122b67a5cfc90dbac13330e02b3da1a0afc0caa89",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basede42e6f0 contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before publication/final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
       "passed": 21,
       "failed": 0,
       "skipped": 0

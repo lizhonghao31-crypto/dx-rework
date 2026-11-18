@@ -5,6 +5,7 @@ import {developmentSlaEvidence} from '../../apps/api/src/production-platform/dev
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {JOURNEY_FACT_CALCULATION_VERSION} from '../../apps/api/src/production-platform/journey-fact-model.js';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {arrangementInput} from '../helpers/development-arrangement-fixture.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
@@ -65,7 +66,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // calculation version; projection storage must never erase step identity.
   const client=await f.db.connect();try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const model=await journey.buildFactsWithClient(client,{kind:'source',id:sid},businessNow().toISOString());expect(model.sla.instances?.filter(instance=>instance.stepRef!==null).map(instance=>instance.taskId).sort()).toEqual(nativeRows.map(row=>row.task_id).sort());
    for(const instance of model.sla.instances??[])expect(model.tasks.some(task=>task.id===instance.taskId&&task.sourceId===instance.sourceId&&task.routeVersion===instance.round&&task.routeInstanceId===instance.routeRef)).toBe(true);
-   expect(JOURNEY_FACT_CALCULATION_VERSION).toBe('journey-facts-factory-instances-v13');await client.query('ROLLBACK');}finally{client.release();}
+   await client.query('ROLLBACK');}finally{client.release();}
+  await new JourneyFactRepository(f.db).buildOne({kind:'source',id:sid});
+  expect((await f.db.query('SELECT calculation_version FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2',['source',sid])).rows[0]?.calculation_version).toBe(JOURNEY_FACT_CALCULATION_VERSION);
   const quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:created[0]!.sourceId},worker=f.people['pattern-room-worker']!;
   let quote=await quotes.read(worker,resource);
   const own=quote.rows.filter(row=>row.name==='TEST 激光'||row.name==='TEST 烫钻');
