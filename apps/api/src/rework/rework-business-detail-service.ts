@@ -214,6 +214,8 @@ type DetailRow = Readonly<{
   cancel_reason: string | null;
 }>;
 
+type ReworkReadSubject = Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">;
+
 const broadBusinessReader = (actor: TrustedActorContext): boolean =>
   actor.actorRoles.some((role) => [
     "root_superuser",
@@ -888,108 +890,85 @@ export class ReworkBusinessDetailService {
     return false;
   }
 
-  async canViewExisting(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
+  async canViewExisting(actor: TrustedActorContext, row: ReworkReadSubject, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
     return this.canView(actor, row, true, database);
   }
 
-  async canViewExistingBusinessDetails(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
+  async canViewExistingBusinessDetails(actor: TrustedActorContext, row: ReworkReadSubject, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
     return this.canView(actor, row, false, database);
   }
 
-  private async canView(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, includeFinance = true, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
-    if(includeFinance) {
-      if (await canReadFinanceOrders(database,actor)) return true;
-      if (actorCapabilities(actor).includes("rework:finance_orders:read")) return false;
-    } else if(isScopedFinanceReader(actor)) return false;
-    if (broadBusinessReader(actor)) return true;
-    if (
-      row.created_by === actor.actorId
+  async existingReadAccess(actor: TrustedActorContext, rows: readonly ReworkReadSubject[], database: Pick<Pool | PoolClient, "query"> = this.database) {
+    const readable = await this.visibleReworks(actor, rows, true, database);
+    const business = await this.visibleReworks(actor, rows.filter(row => readable.has(row.rework_order_id)), false, database);
+    return { readable, business };
+  }
+
+  private async canView(actor: TrustedActorContext, row: ReworkReadSubject, includeFinance = true, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
+    return (await this.visibleReworks(actor, [row], includeFinance, database)).has(row.rework_order_id);
+  }
+
+  private async visibleReworks(
+    actor: TrustedActorContext,
+    rows: readonly ReworkReadSubject[],
+    includeFinance: boolean,
+    database: Pick<Pool | PoolClient, "query">,
+  ): Promise<Set<string>> {
+    if (!rows.length) return new Set();
+    if (includeFinance) {
+      if (await canReadFinanceOrders(database,actor)) return new Set(rows.map(row => row.rework_order_id));
+      if (actorCapabilities(actor).includes("rework:finance_orders:read")) return new Set();
+    } else if (isScopedFinanceReader(actor)) return new Set();
+    if (broadBusinessReader(actor)) return new Set(rows.map(row => row.rework_order_id));
+
+    const visible = new Set(rows.filter(row => row.created_by === actor.actorId
       || row.merchandiser_user_id === actor.actorId
-      || row.embroidery_merchandiser_user_id === actor.actorId
-    ) return true;
+      || row.embroidery_merchandiser_user_id === actor.actorId).map(row => row.rework_order_id));
+    const remaining = [...new Set(rows.map(row => row.rework_order_id))].filter(id => !visible.has(id));
+    if (!remaining.length) return visible;
 
+    const predicates: string[] = [];
     if (actorCapabilities(actor).includes("responsibility:determine")) {
-      const responsibility = await database.query<{ permitted: boolean }>(
-        "SELECT responsibility_can_determine($1,$2) permitted",
-        [actor.actorId, row.rework_order_id],
-      );
-      if (responsibility.rows[0]?.permitted === true) return true;
+      predicates.push("responsibility_can_determine($1,scoped.rework_order_id)");
     }
-
     if (actor.actorRoles.includes("ie_reviewer")) {
-      const configuration = await database.query(
-        "SELECT 1 FROM rework_process_configurations WHERE rework_order_id=$1 LIMIT 1",
-        [row.rework_order_id],
-      );
-      if (configuration.rows[0]) return true;
+      predicates.push(`EXISTS (SELECT 1 FROM rework_process_configurations configuration
+        WHERE configuration.rework_order_id=scoped.rework_order_id)`);
     }
-
     if (actor.actorRoles.includes("worker")) {
-      const assignment = await database.query(
-        `SELECT 1
-         FROM business_people person
-         JOIN rework_work_task_members member ON member.person_id=person.person_id
-         JOIN rework_work_tasks task ON task.work_task_id=member.work_task_id
-         WHERE person.app_user_id=$1 AND task.rework_order_id=$2
-         LIMIT 1`,
-        [actor.actorId, row.rework_order_id],
-      );
-      if (assignment.rows[0]) return true;
+      predicates.push(`EXISTS (SELECT 1 FROM business_people person
+        JOIN rework_work_task_members member ON member.person_id=person.person_id
+        JOIN rework_work_tasks task ON task.work_task_id=member.work_task_id
+        WHERE person.app_user_id=$1 AND task.rework_order_id=scoped.rework_order_id)`);
     }
-
-    if (
-      actor.actorRoles.includes("tail_inspector")
-      && actorCapabilities(actor).includes("tail_inspection:report")
-    ) {
-      const assignment = await database.query(
-        `SELECT 1
-         FROM rework_work_tasks task
-         JOIN rework_process_configuration_items item
-           ON item.configuration_item_id=task.configuration_item_id
-          AND item.execution_kind='tail_inspection'
-         JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
-         JOIN business_people person ON person.person_id=member.person_id
-         WHERE task.rework_order_id=$2 AND task.status='active' AND person.app_user_id=$1
-         UNION ALL
-         SELECT 1
-         FROM rework_tail_inspection_assignments assignment
-         WHERE assignment.rework_order_id=$2
-           AND assignment.tail_inspector_user_id=$1
-           AND assignment.revoked_at IS NULL
-         LIMIT 1`,
-        [actor.actorId, row.rework_order_id],
-      );
-      if (assignment.rows[0]) return true;
+    if (actor.actorRoles.includes("tail_inspector") && actorCapabilities(actor).includes("tail_inspection:report")) {
+      predicates.push(`EXISTS (SELECT 1 FROM rework_work_tasks task
+        JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id AND item.execution_kind='tail_inspection'
+        JOIN rework_work_task_members member ON member.work_task_id=task.work_task_id
+        JOIN business_people person ON person.person_id=member.person_id
+        WHERE task.rework_order_id=scoped.rework_order_id AND task.status='active' AND person.app_user_id=$1
+        UNION ALL SELECT 1 FROM rework_tail_inspection_assignments assignment
+        WHERE assignment.rework_order_id=scoped.rework_order_id AND assignment.tail_inspector_user_id=$1 AND assignment.revoked_at IS NULL)`);
     }
-
-    if (actor.actorRoles.some((role) => [
-      "embroidery_washing_merchandiser",
+    if (actor.actorRoles.some(role => ["embroidery_washing_merchandiser",
       ...(includeFinance ? ["factory_payables","embroidery_washing_payables","fabric_payables"] : []),
     ].includes(role))) {
-      const external = await database.query(
-        `SELECT 1
-         FROM rework_external_responsibility_cases target_case
-         WHERE target_case.rework_order_id=$2
-           AND external_responsibility_can_view_case(
-             $1,target_case.rework_order_id,target_case.responsibility_type
-           )
-         LIMIT 1`,
-        [actor.actorId, row.rework_order_id],
-      );
-      if (external.rows[0]) return true;
+      predicates.push(`EXISTS (SELECT 1 FROM rework_external_responsibility_cases target_case
+        WHERE target_case.rework_order_id=scoped.rework_order_id
+          AND external_responsibility_can_view_case($1,target_case.rework_order_id,target_case.responsibility_type))`);
     }
-
-    if (actor.actorRoles.some((role) => [
-      "administrative_clerk",
+    if (actor.actorRoles.some(role => ["administrative_clerk",
       ...(includeFinance ? ["wage_month_close_accountant","finance_read"] : []),
     ].includes(role))) {
-      const wage = await database.query(
-        "SELECT 1 FROM rework_wage_items WHERE rework_order_id=$1 LIMIT 1",
-        [row.rework_order_id],
-      );
-      if (wage.rows[0]) return true;
+      predicates.push(`EXISTS (SELECT 1 FROM rework_wage_items wage WHERE wage.rework_order_id=scoped.rework_order_id)`);
     }
-
-    return false;
+    if (!predicates.length) return visible;
+    const result = await database.query<{rework_order_id:string}>(
+      `SELECT scoped.rework_order_id FROM unnest($2::uuid[]) scoped(rework_order_id)
+       WHERE $1::uuid IS NOT NULL AND (${predicates.join(" OR ")})`,
+      [actor.actorId, remaining],
+    );
+    for (const row of result.rows) visible.add(row.rework_order_id);
+    return visible;
   }
 }

@@ -2,18 +2,21 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { ManagementReportingService } from "../../apps/api/src/reporting/management-reporting-service.js";
 import { ReportExportService } from "../../apps/api/src/reporting/report-export-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { testExecutionConfig } from "../../scripts/test-execution-config.mjs";
+import { createOwnedPostgresSchema, ownedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.TEST_DATABASE_URL;
+vi.setConfig({hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
 runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
-  const schema = `management_reporting_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("management_reporting");
   const admin = new pg.Pool({ connectionString: databaseUrl! });
   const database = new pg.Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const ids = { owner: randomUUID(), tail: randomUUID(), admin: randomUUID(), worker: randomUUID() };
@@ -37,7 +40,7 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
   const worker = () => actor(ids.worker, ["worker"], "work:report", ["work:report"]);
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string;checksum:string}[]};
     expect(manifest.migrations.some(item=>item.version==='0053_root_rework_order_logical_deletion')).toBe(true);
     await database.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
@@ -72,11 +75,11 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-    await admin.end();
+    try { await releaseOwnedPostgresSchema(admin,schema); }
+    finally { await admin.end(); }
   });
 
-  it("grants management reports only to management and finance roles", async () => {
+  it("grants management reports to the current approved management, finance and PMC roles", async () => {
     const capabilities = await database.query<{ role_code: string; capability: string }>(
       `SELECT role_code,capability FROM role_capabilities
        WHERE capability IN ('report:view','report:export') ORDER BY role_code,capability`,
@@ -87,6 +90,8 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
       { role_code: "finance_read", capability: "report:view" },
       { role_code: "owner_group", capability: "report:export" },
       { role_code: "owner_group", capability: "report:view" },
+      { role_code: "pmc", capability: "report:export" },
+      { role_code: "pmc", capability: "report:view" },
       { role_code: "production_management", capability: "report:export" },
       { role_code: "production_management", capability: "report:view" },
     ]);
@@ -123,6 +128,15 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
     expect(page).toMatchObject({ items: [], page: 1, pageSize: 25, totalCount: 0, totalPages: 1, canViewReports: false });
     await expect(service.listReworkOrders(worker(), { limit: 25, page: 1 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(service.listReworkOrders(worker(), { status: "pending_order_review", limit: 25, page: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const statuses = ["pending_task_assignment", "in_progress", "pending_order_review", "pending_final_quantity_ie_review", "pending_quantity_adjustment_ie_review"] as const;
+    const query = { status: "pending_order_review" as const, statuses: [...statuses], limit: 15, page: 2 };
+    const scoped = await service.listReworkQueue(worker(), query);
+    expect(scoped.selected).toBe("in_progress");
+    expect(scoped.statuses).toEqual([{ status: "in_progress", totalCount: 0 }]);
+    expect(scoped.page).toMatchObject({ items: [], page: 1, totalCount: 0, canViewReports: false });
+    const full = await service.listReworkQueue(owner(), query);
+    expect(full.statuses.map(state => state.status)).toEqual(statuses);
+    expect(full.page).toMatchObject({ items: [], page: 2, totalCount: 0, canViewReports: true });
   });
 
   it("keeps site users out of management reports and records every successful export", async () => {

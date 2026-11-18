@@ -5,6 +5,7 @@ import {
   WageSettlementPreviewSchema, WageSettlementResultSchema,
   ManagementDashboardResponseSchema,
   ManagementReworkPageSchema,
+  ManagementReworkQueueSchema,
   ReportPreviewResponseSchema,
   SiteDashboardResponseSchema,
   type ManagementDashboardResponse,
@@ -57,6 +58,9 @@ export const loadReworkOrders = (
   ManagementReworkPageSchema,
   signal,
 );
+
+export const loadReworkQueue = (filters: Record<string,string | undefined>, signal?: AbortSignal) =>
+  request(`management/rework-workflow-queue${queryString(filters)}`,ManagementReworkQueueSchema,signal);
 
 export const deleteReworkOrder = async (reworkOrderId: string): Promise<void> => {
   const response = await feedbackFetch(apiUrl(`rework-orders/${reworkOrderId}`), {

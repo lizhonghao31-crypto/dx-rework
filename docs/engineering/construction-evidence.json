@@ -1,162 +1,221 @@
 {
   "version": 1,
-  "base": "48e3a9e522e840b77d143af03b6d2c7465593568",
+  "base": "aeba4adcc76b608b59559fb244750b8fdc2af00b",
   "risk": "full",
-  "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
+  "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
   "rules": [
     {
-      "rule": "Project only authorized quotation directory summary on the native list",
-      "source": "User-approved DX system performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, PF-Q quotation and existing designer editor reads.",
-      "initialization": "Verified current release 48e3a9e522e840b77d143af03b6d2c7465593568 and independent original quote/source fixture data.",
-      "dateAndPermission": "Existing row participation, authorization changes, live exact source and original business command boundaries continue. A full document is never reused across an actor, source or round.",
+      "rule": "Bind rework reports, attachments and case detail families to the already authorized native set",
+      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), PF-R.",
+      "initialization": "Current release aeba4adcc76b608b59559fb244750b8fdc2af00b, native test orders, original actors and independently derived permission scopes.",
+      "dateAndPermission": "Use current authorized data with existing actor rights, recorded facts, historical meanings and financial redaction.",
       "writes": [
-        "apps/api/src/production-platform/quotation-service.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "apps/api/src/rework/service.ts",
+        "apps/api/src/rework/work-reporting-service.ts",
+        "apps/api/src/rework/external-responsibility-service.ts",
+        "apps/api/src/rework/fixed-external-responsibility-service.ts",
+        "apps/api/src/rework/final-external-responsibility-service.ts",
+        "apps/api/src/rework/production-external-responsibility-service.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/quotation-routes.ts",
-        "apps/api/src/production-platform/quotation-budget-basis.ts"
+        "apps/api/src/rework/routes.ts",
+        "apps/api/src/rework/rework-node-history.ts"
       ],
       "oldTests": [
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/unit/work-reporting-batch-performance.test.ts"
       ],
-      "expectation": "Keep the original candidate cap and order and current-role isolation. Authorised summary fields match original read; no historical quotation, full budget, development sheet or technical artifact is loaded by directory projection. Full detail and redaction remain independent.",
+      "expectation": "Read only returned authorized order, case, task and person identities. Preserve finance decisions, prior case revisions, own return reasons, lawfully delegated submission scope, existing entry ordering and original no-write reads.",
       "checks": [
-        "native-quotation-and-editor",
-        "existing-quotation-permissions-and-gate-map",
+        "native-rework-and-delegation",
+        "existing-authorization-and-ui-fetches",
+        "preflight",
         "types",
-        "lint",
-        "preflight"
+        "lint"
       ]
     },
     {
-      "rule": "Keep designer paging, document opening and existing draft recovery on exact read boundaries",
-      "source": "User-approved DX system performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, PF-Q quotation and existing designer editor reads.",
-      "initialization": "Verified current release 48e3a9e522e840b77d143af03b6d2c7465593568 and independent original quote/source fixture data.",
-      "dateAndPermission": "Existing row participation, authorization changes, live exact source and original business command boundaries continue. A full document is never reused across an actor, source or round.",
+      "rule": "Return one authorized workflow queue page and exact lightweight totals for all accessible statuses",
+      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), PF-R.",
+      "initialization": "Current release aeba4adcc76b608b59559fb244750b8fdc2af00b, native test orders, original actors and independently derived permission scopes.",
+      "dateAndPermission": "Use current authorized data with existing actor rights, recorded facts, historical meanings and financial redaction.",
       "writes": [
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/order-document-container.tsx",
-        "apps/web/src/development-document-facts.tsx",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/workspace-page-native-browser-postgres.test.ts"
+        "apps/api/src/reporting/management-reporting-orders.ts",
+        "apps/api/src/reporting/management-reporting-routes.ts",
+        "apps/api/src/reporting/management-reporting-service.ts",
+        "apps/web/src/reporting/reporting-client.ts",
+        "apps/web/src/reporting/workflow-queue-page.tsx",
+        "packages/contracts/src/reporting.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "tests/integration/management-reporting-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/workflow-queue-page-requests.test.ts"
       ],
       "reads": [
-        "apps/web/src/use-development-creation-draft.ts",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/digital-production-api.ts"
+        "apps/api/src/reporting/management-reporting-shared.ts",
+        "apps/web/src/list-pagination.tsx"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/workspace-page-native-browser-postgres.test.ts"
+        "tests/integration/management-reporting-postgres.test.ts",
+        "tests/unit/v1-prelaunch-performance-pr10.test.ts"
       ],
-      "expectation": "Original designer page flips to the next authorized result without rereading global options, reuses native development facts across customer and materials categories, preserves an exact authorized fallback for categories with no sheet, and explicitly rereads before confirmation. Pure draft and committed-but-unknown recovery remain native, with no replay or unexpected write.",
+      "expectation": "Preserve filtered status authorization and scope including only eligible current reporting roles. Other authorized tabs return counts without projecting rows and unauthorized tabs are omitted. Original page issues one read per navigation or explicit refresh and reuses an authorized server fallback.",
       "checks": [
-        "native-quotation-and-editor",
-        "existing-quotation-permissions-and-gate-map",
+        "native-queue-closure-and-statistics",
+        "existing-authorization-and-ui-fetches",
+        "preflight",
         "types",
-        "lint",
-        "preflight"
+        "lint"
+      ]
+    },
+    {
+      "rule": "Reuse the original independent rework authorization facts in digital closure and production statistics",
+      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), PF-R.",
+      "initialization": "Current release aeba4adcc76b608b59559fb244750b8fdc2af00b, native test orders, original actors and independently derived permission scopes.",
+      "dateAndPermission": "Use current authorized data with existing actor rights, recorded facts, historical meanings and financial redaction.",
+      "writes": [
+        "apps/api/src/rework/rework-business-detail-service.ts",
+        "apps/api/src/production-platform/closure-work-summary.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/production-statistics-query.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/rework-detail-responsibility-access.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/rework/finance-order-access.ts",
+        "apps/api/src/production-platform/access-policy.ts"
+      ],
+      "oldTests": [
+        "tests/integration/production-closure-postgres.test.ts",
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
+      ],
+      "expectation": "Keep business and finance rights distinct, preserve original delegated order rights, limit linked facts to admitted rework orders, and retain full closure quantities, report history and authorized financial presentation without borrowing digital task rights.",
+      "checks": [
+        "native-queue-closure-and-statistics",
+        "existing-authorization-and-ui-fetches",
+        "preflight",
+        "types",
+        "lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native-quotation-and-editor",
+      "id": "native-rework-and-delegation",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/customer-quotation-postgres.test.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/quotation-editor-reviewed-final/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
-      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
-      "startedAt": "2026-11-18T10:23:42.091955+00:00",
-      "endedAt": "2026-11-18T10:27:33.758001+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/quotation-editor-reviewed-final/tests.log",
-      "logSha256": "2d8303108a6277426b8131d4a7e1ab345682a0b62223cf95ee093790ba812fa5",
-      "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup.",
-      "passed": 40,
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/full-business-chain-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-chain/tests.json --testNamePattern 'carries one real order from N01|own returned-report context'",
+      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
+      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
+      "startedAt": "2026-11-18T10:38:27.287964+00:00",
+      "endedAt": "2026-11-18T10:39:09.521364+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-chain/tests.log",
+      "logSha256": "f3f4ff8d2b1e03f827630d01f5b8a95b0e38f19e9ae08493c29df71f765d6705",
+      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 55,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2867983ee85644bc85700042a3984f688ae6d9c6880f36755b0385a829b1da15"
+        }
+      ]
+    },
+    {
+      "id": "native-queue-closure-and-statistics",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/management-reporting-postgres.test.ts tests/integration/production-closure-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-reports/tests.json",
+      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
+      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
+      "startedAt": "2026-11-18T10:39:09.741092+00:00",
+      "endedAt": "2026-11-18T10:40:28.422125+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-reports/tests.log",
+      "logSha256": "232238ce3a586d1e56a2bbdd94c7fb1604c4139d7d4b91bd874d844dc3d501df",
+      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
+      "passed": 42,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "243f7e992ed94e09d8431fca7ba6d5dee362e1192baf69c3c0f5c015d7417983"
+          "sha256": "d41533c1823a05ccef421a33bdc6833cb4640064acc6c4b76cf37de21cf7dc28"
         }
       ]
     },
     {
-      "id": "existing-quotation-permissions-and-gate-map",
+      "id": "existing-authorization-and-ui-fetches",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/quotation-review-unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
-      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
-      "startedAt": "2026-11-18T10:23:42.280821+00:00",
-      "endedAt": "2026-11-18T10:23:47.984709+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-review-unit/command.log",
-      "logSha256": "f559427255c16877eb0c63fe3e714b3832318129e9b5c797dd90d8859175dc8a",
-      "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup.",
-      "passed": 181,
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/business-chain-ui-contract.test.ts tests/unit/business-facing-workflow-ui.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/existing-order-tail-inspection-waiver.test.ts tests/unit/external-case-state-guidance.test.ts tests/unit/external-deduction-ledger-guard.test.ts tests/unit/finance-director-rework-detail-access.test.ts tests/unit/finance-wage-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/historical-node-write-boundary.test.ts tests/unit/ie-precount.test.ts tests/unit/list-pagination.test.ts tests/unit/merchandiser-responsibility-deduction-access.test.ts tests/unit/mobile-image-consistency.test.ts tests/unit/n07-n11-responsibility-settlement-contract.test.ts tests/unit/optional-tail-inspection.test.ts tests/unit/order-detail-information-architecture.test.ts tests/unit/related-merchandiser-access-todos.test.ts tests/unit/reporting-contracts-workbook-and-web.test.ts tests/unit/responsibility-rounding-reconciliation.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts tests/unit/rework-detail-responsibility-access.test.ts tests/unit/rework-query-navigation.test.ts tests/unit/rework-v2-pr07-finance-closure.test.ts tests/unit/rework-v2-unified-execution.test.ts tests/unit/root-global-business-bypass.test.ts tests/unit/root-logical-deletion-review.test.ts tests/unit/system-business-number-presentation.test.ts tests/unit/tail-defective-quantity.test.ts tests/unit/tail-inspection-cost-bearer.test.ts tests/unit/tail-inspection-parallel-flow.test.ts tests/unit/uat-16-closure.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/v1-prelaunch-default-candidates-frontline.test.ts tests/unit/v1-prelaunch-frontline-minimal.test.ts tests/unit/v1-prelaunch-mobile-filter-order-detail.test.ts tests/unit/v1-prelaunch-performance-pr10.test.ts tests/unit/v1-prelaunch-performance-pr11.test.ts tests/unit/v1-prelaunch-receiving-rework-contract.test.ts tests/unit/v1-tail-assignment-parity.test.ts tests/unit/work-reporting-assignees.test.ts tests/unit/work-reporting-batch-performance.test.ts tests/unit/work-reporting.test.ts tests/unit/workflow-queue-page-requests.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/rework-managed-unit/tests.json",
+      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
+      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
+      "startedAt": "2026-11-18T10:38:30.724354+00:00",
+      "endedAt": "2026-11-18T10:38:49.889786+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/rework-managed-unit/command.log",
+      "logSha256": "4dbc3cb25118f80d459c989118cf588a6801f19656f05bb0a268622e8c331faf",
+      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
+      "passed": 414,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2df13b47458dd8562280ae2008107577a99b15f0915f22977bc68dc2b31d8824"
+          "sha256": "d3a8b22b41436dbfee921e9b7d18ec7d8f1900fd6591886783a0a604be9e11e4"
         }
       ]
-    },
-    {
-      "id": "types",
-      "kind": "command",
-      "command": "npm run typecheck",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
-      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
-      "startedAt": "2026-11-18T10:22:46.662414+00:00",
-      "endedAt": "2026-11-18T10:23:58.024459+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-review-types/command.log",
-      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup."
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/quotation-service.ts apps/web/src/development-document-facts.tsx apps/web/src/digital-designer-workspace.tsx apps/web/src/digital-development-panel.tsx apps/web/src/order-document-container.tsx tests/integration/customer-quotation-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts tests/unit/digital-pmc-readonly-access.test.ts --max-warnings=0",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
-      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
-      "startedAt": "2026-11-18T10:22:43.709884+00:00",
-      "endedAt": "2026-11-18T10:22:46.351073+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-review-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup."
     },
     {
       "id": "preflight",
       "kind": "tests",
-      "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a6fc4a96d1ee4460475725e54781e39f4b624373",
-      "sourceFingerprint": "e203f5d7968143b2dcef098ec3fc64dad2e30f2b6500227080474e8a5727eee1",
-      "startedAt": "2026-11-18T10:23:48.280362+00:00",
-      "endedAt": "2026-11-18T10:23:58.752388+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/quotation-review-preflight/command.log",
-      "logSha256": "1de40067b10cbbbb4c0127be5ef25a31cc8429b4221c22da5681c69a649d0566",
-      "context": "Exact release base and working-tree fingerprint. PostgreSQL and original signed-in App browser fixtures use owned low-privilege synthetic data and verified cleanup.",
+      "command": "npm run test:preflight",
+      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
+      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
+      "startedAt": "2026-11-18T10:38:08.803443+00:00",
+      "endedAt": "2026-11-18T10:38:17.363473+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/rework-managed-preflight/command.log",
+      "logSha256": "05b5b6b5b31021c36b7a4985482621d0ad1f01b0971473b4b3c37e47bfa89e7d",
+      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
       "passed": 284,
       "failed": 0,
       "skipped": 0
+    },
+    {
+      "id": "types",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "npm run typecheck",
+      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
+      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
+      "startedAt": "2026-11-18T10:38:50.226137+00:00",
+      "endedAt": "2026-11-18T10:39:57.193005+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/rework-managed-types/command.log",
+      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
+      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup."
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/closure-work-summary.ts apps/api/src/production-platform/order-closure-service.ts apps/api/src/production-platform/production-statistics-query.ts apps/api/src/reporting/management-reporting-orders.ts apps/api/src/reporting/management-reporting-routes.ts apps/api/src/reporting/management-reporting-service.ts apps/api/src/rework/external-responsibility-service.ts apps/api/src/rework/final-external-responsibility-service.ts apps/api/src/rework/fixed-external-responsibility-service.ts apps/api/src/rework/production-external-responsibility-service.ts apps/api/src/rework/rework-business-detail-service.ts apps/api/src/rework/service.ts apps/api/src/rework/work-reporting-service.ts apps/web/src/reporting/reporting-client.ts apps/web/src/reporting/workflow-queue-page.tsx packages/contracts/src/reporting.ts scripts/ci/full-gate-risk-map.mjs tests/integration/full-business-chain-postgres.test.ts tests/integration/management-reporting-postgres.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/rework-detail-responsibility-access.test.ts tests/unit/workflow-queue-page-requests.test.ts --max-warnings=0",
+      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
+      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
+      "startedAt": "2026-11-18T10:38:27.464689+00:00",
+      "endedAt": "2026-11-18T10:38:30.372448+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/rework-managed-lint/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup."
     }
   ]
 }

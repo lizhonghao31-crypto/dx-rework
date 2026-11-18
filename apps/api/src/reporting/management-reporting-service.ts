@@ -6,7 +6,7 @@ import { canDownloadBasicReworkAttachment, readBasicRework } from "./basic-rewor
 import type { BasicReworkQuery } from "@dx-rework/contracts/reporting";
 import { wageSelection, wageSelectionValues } from "./wage-report-selection.js";
 import {readWorkflowAnalysis} from "./workflow-analysis.js";
-import type { DashboardQuery, ManagementDashboardResponse, ManagementReworkPage, ManagementReworkQuery, ReportPreviewResponse, ReportQuery, ReportType, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
+import type { DashboardQuery, ManagementDashboardResponse, ManagementReworkPage, ManagementReworkQuery, ManagementReworkQueue, ManagementReworkQueueQuery, ReportPreviewResponse, ReportQuery, ReportType, SiteDashboardResponse, WorkflowQueueStatus } from "@dx-rework/contracts/reporting";
 import type { Pool } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
@@ -14,7 +14,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { capabilities, fail, nodeMeta, number, reportStatusValues, TIMEZONE, type CountRow, type Queryable, type Range, type ReportData } from "./management-reporting-shared.js";
 import { currentExceptionCount, financial as loadFinancial } from "./management-reporting-financial.js";
 import { exceptions as loadExceptions } from "./management-reporting-exceptions.js";
-import { fetchFacts } from "./management-reporting-orders.js";
+import { fetchFacts, fetchQueueCounts, type ReworkFactOptions } from "./management-reporting-orders.js";
 import { factDto } from "./management-reporting-dto.js";
 import { reportData } from "./management-reporting-report-core.js";
 import { recalculateDisplayedTotals } from "./management-reporting-report-exceptions.js";
@@ -30,6 +30,40 @@ const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> 
   pending_responsibility_determination: ["responsibility:determine", "responsibility:takeover"],
   pending_owner_signature: ["responsibility:owner_sign"],
 };
+
+function reworkListAccess(actor: TrustedActorContext) {
+  const currentCapabilities = capabilities(actor);
+  const broadCapability = ["dashboard:management:read", "dashboard:site:read", "report:view"].find(capability => currentCapabilities.includes(capability));
+  const relatedOrderScoped = !broadCapability && currentCapabilities.includes("rework:related_orders:view");
+  const capabilityForStatus = (status: string) => workflowCapabilitiesByStatus[status]?.find(capability => currentCapabilities.includes(capability));
+  return { currentCapabilities, broadCapability, relatedOrderScoped, capabilityForStatus };
+}
+
+function reworkListFacts(actor: TrustedActorContext, query: ManagementReworkQuery, access: ReturnType<typeof reworkListAccess>, queueStatuses?: readonly string[]): ReworkFactOptions {
+  const { broadCapability, currentCapabilities, relatedOrderScoped } = access;
+  const scopedWork = !broadCapability && !currentCapabilities.includes("work:assign")
+    && (queueStatuses?.includes("in_progress") ?? query.status === "in_progress");
+  const ownTask = scopedWork && ((actor.actorRoles.includes("worker") && currentCapabilities.includes("work:report"))
+    || (actor.actorRoles.includes("tail_inspector") && currentCapabilities.includes("tail_inspection:report")));
+  return {
+    ...(query.q ? { q: query.q } : {}),
+    ...(queueStatuses ? { queueStatuses } : query.status ? { status: query.status } : {}),
+    ...(query.reworkKind ? { reworkKind: query.reworkKind } : {}),
+    ...(query.responsibilityType ? { responsibilityType: query.responsibilityType } : {}),
+    ...(query.currentHandlerUserId ? { currentHandlerUserId: query.currentHandlerUserId } : {}),
+    ...(query.supplierId ? { supplierId: query.supplierId } : {}),
+    ...(query.overdue ? { overdue: query.overdue === "true" } : {}),
+    ...(query.exception ? { exception: query.exception === "true" } : {}),
+    ...(query.from ? { from: query.from } : {}),
+    ...(query.to ? { to: query.to } : {}),
+    ...(ownTask ? { workTaskActorUserId: actor.actorId } : {}),
+    ...(scopedWork && currentCapabilities.includes("work:report_for_worker") ? { includeTemporaryProxyTasks: true } : {}),
+    ...(relatedOrderScoped ? { relatedOrderActorUserId: actor.actorId } : {}),
+    openFirst: true,
+    limit: query.limit,
+    offset: (query.page - 1) * query.limit,
+  };
+}
 
 export class ManagementReportingService {
   constructor(private readonly db: Pool) {}
@@ -201,75 +235,93 @@ export class ManagementReportingService {
   }
 
   async listReworkOrders(actor: TrustedActorContext, query: ManagementReworkQuery): Promise<ManagementReworkPage> {
-    const currentCapabilities = capabilities(actor);
-    const broadCapability = currentCapabilities.includes("dashboard:management:read")
-      ? "dashboard:management:read"
-      : currentCapabilities.includes("dashboard:site:read")
-        ? "dashboard:site:read"
-        : currentCapabilities.includes("report:view")
-          ? "report:view"
-          : undefined;
-    const relatedOrderScoped = !broadCapability
-      && currentCapabilities.includes("rework:related_orders:view");
-    if (broadCapability) {
-      await this.require(actor, broadCapability);
-    } else if (relatedOrderScoped) {
-      await this.require(actor, "rework:related_orders:view");
+    const access = reworkListAccess(actor);
+    const sharedCapability = access.broadCapability ?? (access.relatedOrderScoped ? "rework:related_orders:view" : undefined);
+    if (sharedCapability) {
+      await this.require(actor, sharedCapability);
     } else {
-      const workflowStatus = query.status;
-      if (!workflowStatus) {
-        throw new ApplicationError("VALIDATION_ERROR", "节点工作台必须指定当前业务节点", 400);
-      }
-      const workflowCapability = workflowCapabilitiesByStatus[workflowStatus]
-        ?.find((capability: string) => currentCapabilities.includes(capability));
-      if (!workflowCapability) {
-        throw new ApplicationError("FORBIDDEN", "当前岗位无权查看这个业务节点", 403);
-      }
+      if (!query.status) throw new ApplicationError("VALIDATION_ERROR", "节点工作台必须指定当前业务节点", 400);
+      const workflowCapability = access.capabilityForStatus(query.status);
+      if (!workflowCapability) throw new ApplicationError("FORBIDDEN", "当前岗位无权查看这个业务节点", 403);
       await this.require(actor, workflowCapability);
     }
-
     const canReadWages = await this.mayReadWageFields(actor);
-    const overdue = query.overdue === "true" ? true : query.overdue === "false" ? false : undefined;
-    const exception = query.exception === "true" ? true : query.exception === "false" ? false : undefined;
-    const ownTaskScoped = !broadCapability
-      && query.status === "in_progress"
-      && (
-        (actor.actorRoles.includes("worker") && currentCapabilities.includes("work:report"))
-        || (actor.actorRoles.includes("tail_inspector") && currentCapabilities.includes("tail_inspection:report"))
-      )
-      && !currentCapabilities.includes("work:assign");
-    const proxyScoped = !broadCapability
-      && query.status === "in_progress"
-      && currentCapabilities.includes("work:report_for_worker")
-      && !currentCapabilities.includes("work:assign");
-    const [result, clock] = await Promise.all([fetchFacts(this.db, {
-      ...(query.q ? { q: query.q } : {}),
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.reworkKind ? { reworkKind: query.reworkKind } : {}),
-      ...(query.responsibilityType ? { responsibilityType: query.responsibilityType } : {}),
-      ...(query.currentHandlerUserId ? { currentHandlerUserId: query.currentHandlerUserId } : {}),
-      ...(query.supplierId ? { supplierId: query.supplierId } : {}),
-      ...(overdue === undefined ? {} : { overdue }),
-      ...(exception === undefined ? {} : { exception }),
-      ...(query.from ? { from: query.from } : {}),
-      ...(query.to ? { to: query.to } : {}),
-      ...(ownTaskScoped ? { workTaskActorUserId: actor.actorId } : {}),
-      ...(proxyScoped ? { includeTemporaryProxyTasks: true } : {}),
-      ...(relatedOrderScoped ? { relatedOrderActorUserId: actor.actorId } : {}),
-      openFirst: true,
-      limit: query.limit,
-      offset: (query.page - 1) * query.limit,
-    }), this.db.query<{ as_of: Date }>("SELECT CURRENT_TIMESTAMP as_of")]);
-    const rows = result.rows;
-    const totalCount = number(rows[0]?.total_count ?? "0");
+    return this.reworkPage(this.db, actor, query, access, canReadWages);
+  }
+
+  async listReworkQueue(actor: TrustedActorContext, query: ManagementReworkQueueQuery): Promise<ManagementReworkQueue> {
+    const access = reworkListAccess(actor);
+    const sharedCapability = access.broadCapability ?? (access.relatedOrderScoped ? "rework:related_orders:view" : undefined);
+    const requested = [...new Set(query.statuses)];
+    const canReadWages = await this.mayReadWageFields(actor);
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const available: WorkflowQueueStatus[] = [];
+      if (sharedCapability) {
+        await this.require(actor, sharedCapability, client);
+        available.push(...requested);
+      } else {
+        const checked = new Map<string, boolean>();
+        for (const status of requested) {
+          const needed = access.capabilityForStatus(status);
+          if (!needed) continue;
+          if (!checked.has(needed)) {
+            await client.query("SAVEPOINT rework_queue_authority");
+            try {
+              await this.require(actor, needed, client);
+              checked.set(needed, true);
+            } catch (error) {
+              if ((error as {code?:string}).code !== "42501") throw error;
+              await client.query("ROLLBACK TO SAVEPOINT rework_queue_authority");
+              checked.set(needed, false);
+            }
+            await client.query("RELEASE SAVEPOINT rework_queue_authority");
+          }
+          if (checked.get(needed)) available.push(status);
+        }
+      }
+      const selected = available.includes(query.status) ? query.status : available[0];
+      if (!selected) throw new ApplicationError("FORBIDDEN", "当前账号没有可进入的节点队列", 403);
+      const pageQuery = {...query, status: selected, page: selected === query.status ? query.page : 1};
+      const page = await this.reworkPage(client, actor, pageQuery, access, canReadWages);
+      const countByStatus = new Map<string,number>([[selected,page.totalCount]]);
+      if(available.length>1||(!page.items.length&&page.page>1)){
+        const counts = await fetchQueueCounts(client, reworkListFacts(actor, query, access, available));
+        for(const row of counts.rows)countByStatus.set(row.status,number(row.total_count));
+      }
+      const totalCount=countByStatus.get(selected)??0;
+      await client.query("COMMIT");
+      return {selected, page:{...page,totalCount,totalPages:Math.max(1,Math.ceil(totalCount/page.pageSize))},
+        statuses:available.map(status => ({status,totalCount:countByStatus.get(status) ?? 0}))};
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async reworkPage(
+    source: Queryable,
+    actor: TrustedActorContext,
+    query: ManagementReworkQuery,
+    access: ReturnType<typeof reworkListAccess>,
+    canReadWages: boolean,
+  ): Promise<ManagementReworkPage> {
+    const [result, clock] = await Promise.all([
+      fetchFacts(source, reworkListFacts(actor, query, access)),
+      source.query<{as_of:Date}>("SELECT CURRENT_TIMESTAMP as_of"),
+    ]);
+    const totalCount = number(result.rows[0]?.total_count ?? "0");
     return {
       asOf: (clock.rows[0]?.as_of ?? new Date(0)).toISOString(),
-      items: rows.map((row) => factDto(row, canReadWages)),
+      items: result.rows.map(row => factDto(row, canReadWages)),
       page: query.page,
       pageSize: query.limit,
       totalCount,
       totalPages: Math.max(1, Math.ceil(totalCount / query.limit)),
-      canViewReports: currentCapabilities.includes("report:view"),
+      canViewReports: access.currentCapabilities.includes("report:view"),
     };
   }
 
@@ -364,9 +416,9 @@ export class ManagementReportingService {
     }
   }
 
-  private async require(actor: TrustedActorContext, capability: string): Promise<void> {
+  private async require(actor: TrustedActorContext, capability: string, source: Queryable = this.db): Promise<void> {
     if (!capabilities(actor).includes(capability)) fail(`缺少 ${capability} 能力`);
-    await this.db.query("SELECT access_authorized_actor_roles($1,$2)", [actor.actorId, capability]);
+    await source.query("SELECT access_authorized_actor_roles($1,$2)", [actor.actorId, capability]);
   }
 
   private async range(query: DashboardQuery, source: Queryable = this.db): Promise<Range> {

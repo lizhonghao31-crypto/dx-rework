@@ -1,24 +1,13 @@
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
+import type { ManagementReworkQueue, ManagementReworkRow, WorkflowQueueStatus } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Header, Shell } from "../components.js";
 import { LIST_PAGE_SIZE, ListPagination } from "../list-pagination.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
-import { loadReworkOrders, reportingPageUrl } from "./reporting-client.js";
+import { loadReworkQueue, reportingPageUrl } from "./reporting-client.js";
 import "./reporting.css";
-
-type WorkflowStatus = Extract<
-  ManagementReworkRow["status"],
-  | "pending_process_configuration"
-  | "pending_ie_review"
-  | "pending_task_assignment"
-  | "in_progress"
-  | "pending_order_review"
-  | "pending_final_quantity_ie_review"
-  | "pending_quantity_adjustment_ie_review"
->;
 
 type QueueMeta = Readonly<{
   node: string;
@@ -28,7 +17,7 @@ type QueueMeta = Readonly<{
   next: string;
 }>;
 
-const queueMeta: Record<WorkflowStatus, QueueMeta> = {
+const queueMeta: Record<WorkflowQueueStatus, QueueMeta> = {
   pending_process_configuration: {
     node: "N02",
     label: "待配置工序",
@@ -95,7 +84,7 @@ const age = (seconds: number): string => {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "ready"; requestKey: string; pages: Partial<Record<WorkflowStatus, ManagementReworkPage>>; available: WorkflowStatus[] }
+  | { kind: "ready"; requestKey: string; queue: ManagementReworkQueue }
   | { kind: "unavailable"; message: string };
 
 export function WorkflowQueuePage({
@@ -105,11 +94,11 @@ export function WorkflowQueuePage({
 }: {
   active: string;
   title: string;
-  statuses: readonly WorkflowStatus[];
+  statuses: readonly WorkflowQueueStatus[];
 }) {
   const initial = useMemo(() => new URLSearchParams(window.location.search), []);
-  const requested = initial.get("queue") as WorkflowStatus | null;
-  const [selected, setSelected] = useState<WorkflowStatus>(
+  const requested = initial.get("queue") as WorkflowQueueStatus | null;
+  const [selected, setSelected] = useState<WorkflowQueueStatus>(
     requested && statuses.includes(requested) ? requested : statuses[0]!,
   );
   const [q, setQ] = useState("");
@@ -135,42 +124,34 @@ export function WorkflowQueuePage({
   if (paging.key !== scopeKey) setPaging({ key: scopeKey, page: 1 });
   const currentPage = paging.key === scopeKey ? paging.page : 1;
   const requestKey = JSON.stringify([scopeKey, currentPage, refresh]);
+  const statusFilter = statuses.join(",");
 
+  const servedFallback = useRef<string | null>(null);
   useEffect(() => {
+    const alreadyServed = servedFallback.current === requestKey;
+    servedFallback.current = null;
+    if (alreadyServed) return;
     const controller = new AbortController();
     setState(current => current.kind === "ready" ? current : { kind: "loading" });
-    void Promise.allSettled(
-      statuses.map(async (status) => [
-        status,
-        await loadReworkOrders({ ...baseFilters, status, page: String(status === selected ? currentPage : 1) }, controller.signal),
-      ] as const),
-    ).then((results) => {
-        if (controller.signal.aborted) return;
-        const pages: Partial<Record<WorkflowStatus, ManagementReworkPage>> = {};
-        const available: WorkflowStatus[] = [];
-        const errors: string[] = [];
-        for (const result of results) {
-          if (result.status === "fulfilled") {
-            const [status, page] = result.value;
-            pages[status] = page;
-            available.push(status);
-          } else {
-            errors.push(result.reason instanceof Error ? result.reason.message : "节点队列读取失败");
-          }
-        }
-        if (available.length === 0) {
-          setState({ kind: "unavailable", message: errors[0] ?? "当前账号没有可进入的节点队列" });
-          return;
-        }
-        setState({ kind: "ready", requestKey, pages, available });
-        setSelected((current) => available.includes(current) ? current : available[0]!);
+    void loadReworkQueue({
+      ...baseFilters, status: selected, statuses: statusFilter, page: String(currentPage),
+    }, controller.signal).then(queue => {
+      if (controller.signal.aborted) return;
+      const nextKey = JSON.stringify([JSON.stringify([queue.selected, baseFilters]), queue.page.page, refresh]);
+      setState({ kind: "ready", queue, requestKey: nextKey });
+      if (queue.selected !== selected) {
+        servedFallback.current = nextKey;
+        setSelected(queue.selected);
+      }
+    }).catch(error => {
+      if (!controller.signal.aborted) setState({
+        kind: "unavailable", message: error instanceof Error ? error.message : "节点队列读取失败",
+      });
     });
-    return () => {
-      controller.abort();
-    };
-  }, [baseFilters, currentPage, refresh, requestKey, selected, statuses]);
+    return () => controller.abort();
+  }, [baseFilters, currentPage, refresh, requestKey, selected, statusFilter]);
 
-  const selectStatus = (status: WorkflowStatus) => {
+  const selectStatus = (status: WorkflowQueueStatus) => {
     setSelected(status);
     const url = new URL(window.location.href);
     url.searchParams.set("queue", status);
@@ -178,7 +159,7 @@ export function WorkflowQueuePage({
   };
 
   const ready = state.kind === "ready" ? state : null;
-  const page = ready?.pages[selected];
+  const page = ready?.queue.page;
   const busy = ready?.requestKey !== requestKey;
   const items = busy ? [] : page?.items ?? [];
   const totalPages = Math.max(1, Math.ceil((page?.totalCount ?? 0) / LIST_PAGE_SIZE));
@@ -186,7 +167,7 @@ export function WorkflowQueuePage({
     if (ready && !busy && currentPage > totalPages) setPaging({ key: scopeKey, page: totalPages });
   }, [busy, currentPage, ready, scopeKey, totalPages]);
   const meta = queueMeta[selected];
-  const canUseUnifiedQuery = ready?.available.some((status) => ready.pages[status]?.canViewReports === true) === true;
+  const canUseUnifiedQuery = page?.canViewReports === true;
 
   return (
     <Shell active={active}>
@@ -202,18 +183,15 @@ export function WorkflowQueuePage({
       {ready && (
         <>
           <Surface className="workflow-queue-tabs">
-            {ready.available.map((status) => {
-              const statusPage = ready.pages[status];
-              return (
+            {ready.queue.statuses.map(({status,totalCount}) => (
                 <Button
                   key={status}
                   {...(selected === status ? { variant: "primary" as const } : {})}
                   onClick={() => selectStatus(status)}
                 >
-                  {queueMeta[status].node} · {queueMeta[status].label} · {formatBusinessDecimal(statusPage?.totalCount ?? 0)} 单
+                  {queueMeta[status].node} · {queueMeta[status].label} · {formatBusinessDecimal(totalCount)} 单
                 </Button>
-              );
-            })}
+            ))}
           </Surface>
 
           <Surface className="workflow-queue-guide">

@@ -268,11 +268,11 @@ function closureDatabase(roles: string[]) {
     }
     // The optional closure summary reads through the same original full-detail
     // permission. Model that SELECT without masking unexpected SQL or writes.
-    if (sql.startsWith('SELECT item.configuration_item_id,item.process_name,item.execution_kind,')) {
-      expect(values).toEqual([REWORK]);
+    if (sql.startsWith('SELECT configuration.rework_order_id,item.configuration_item_id,item.process_name,item.execution_kind,')) {
+      expect(values).toEqual([[REWORK]]);
       expect(sql).toContain('sum(rework_work_report_effective_quantity(report.work_report_id))');
       expect(sql).toContain("configuration.status='approved'");
-      return [{configuration_item_id: ROW, process_name: 'TEST修补', execution_kind: 'inhouse', reported_quantity: '1', report_ids: [RECEIPT]}];
+      return [{rework_order_id: REWORK, configuration_item_id: ROW, process_name: 'TEST修补', execution_kind: 'inhouse', reported_quantity: '1', report_ids: [RECEIPT]}];
     }
     if (sql.startsWith('SELECT l.line_id,r.receipt_id,r.receiving_batch_id')) return [{
       line_id: ROW, receipt_id: RECEIPT, receiving_batch_id: BATCH, cutting_order_id: TASK,

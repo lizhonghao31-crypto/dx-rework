@@ -58,7 +58,12 @@ export class ProductionStatisticsQuery{
   for(const id of orders)if(!resources.get(`order:${id}`)?.technical||!await acceptanceIncludesNative(this.database,id,db))digitalForbidden();
   const taskAccess=await readTaskAccessForPage(db,actor,tasks);
   if(tasks.some(id=>!taskAccess.get(id)?.technical))digitalForbidden();
-  const detail=new ReworkBusinessDetailService(this.database);for(const id of sorted(reworkIds)){const row=(await db.query("SELECT * FROM rework_orders WHERE rework_order_id=$1",[id])).rows[0];if(!row||!await detail.canViewExisting(actor,row,db)||!await detail.canViewExistingBusinessDetails(actor,row,db))digitalForbidden();}
+  const requested=sorted(reworkIds);
+  if(requested.length){
+   const rows=(await db.query('SELECT rework_order_id,created_by,merchandiser_user_id FROM rework_orders WHERE rework_order_id=ANY($1::uuid[])',[requested])).rows;
+   const access=await new ReworkBusinessDetailService(this.database).existingReadAccess(actor,rows,db);
+   if(requested.some(id=>!access.business.has(id)))digitalForbidden();
+  }
   return hash({actorId:actor.actorId,roles:sorted(actor.actorRoles),capabilities:sorted([...(actor.authorizationCapabilities??[]),actor.authorizationCapability??'']),orders:sorted(orderIds),tasks:sorted(taskIds),reworks:sorted(reworkIds),scene:acceptanceBusinessContext()?.scenarioId??null,canExport:this.exportAllowed(actor)});
  }
  private async read<T>(work:(db:PoolClient)=>Promise<T>){

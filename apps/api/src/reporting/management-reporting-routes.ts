@@ -8,6 +8,8 @@ import {
   ManagementDashboardResponseSchema,
   ManagementReworkPageSchema,
   ManagementReworkQuerySchema,
+  ManagementReworkQueueQuerySchema,
+  ManagementReworkQueueSchema,
   ReportPreviewResponseSchema,
   ReportQuerySchema,
   ReportTypeParamsSchema,
@@ -105,6 +107,13 @@ export function registerManagementReportingRoutes(
     await dependencies.service.listReworkOrders(
       await actor(request, "report:view"),
       parse(ManagementReworkQuerySchema, request.query),
+    ),
+  ));
+
+  app.get("/management/rework-workflow-queue", async (request) => ManagementReworkQueueSchema.parse(
+    await dependencies.service.listReworkQueue(
+      await actor(request, "report:view"),
+      parse(ManagementReworkQueueQuerySchema, request.query),
     ),
   ));
 

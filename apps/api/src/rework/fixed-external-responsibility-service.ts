@@ -1,14 +1,13 @@
 import { canReadFinanceOrders, scopedExternalSource } from "./finance-order-access.js";
 import type {
   ExternalResponsibilityBatchResponse,
-  ExternalResponsibilityCaseResponse,
 } from "@dx-rework/contracts/external-responsibility";
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
-import { ExternalResponsibilityService } from "./external-responsibility-service.js";
+import { EXTERNAL_CASE_READ_COLUMNS, ExternalResponsibilityService, type CaseRow } from "./external-responsibility-service.js";
 
 type Queryable = Pool | PoolClient;
 type ResponsibilityType =
@@ -120,12 +119,13 @@ export class FixedExternalResponsibilityService
        ORDER BY item.configuration_item_id,item.responsibility_type`,
       [head.batch_id, actor.actorId, orderId],
     );
-    const cases = await executor.query<{ case_id: string }>(
-      `SELECT target_case.case_id
+    const cases = await executor.query<CaseRow>(
+      `SELECT ${EXTERNAL_CASE_READ_COLUMNS}
        FROM rework_external_responsibility_cases target_case
        JOIN rework_external_responsibility_batches batch
          ON batch.batch_id=target_case.batch_id
-       WHERE (target_case.batch_id=$1 OR (batch.rework_order_id=$3 AND batch.status='superseded'))
+       JOIN rework_orders order_record ON order_record.rework_order_id=target_case.rework_order_id
+       WHERE order_record.status<>'deleted' AND (target_case.batch_id=$1 OR (batch.rework_order_id=$3 AND batch.status='superseded'))
          AND external_responsibility_can_view_case(
            $2,target_case.rework_order_id,
            target_case.responsibility_type
@@ -133,12 +133,7 @@ export class FixedExternalResponsibilityService
        ORDER BY target_case.created_at,target_case.case_id`,
       [head.batch_id, actor.actorId, orderId],
     );
-    const caseValues = await Promise.all(
-      cases.rows.map(async (item) => {
-        const value = await super.getCase(actor, item.case_id, executor);
-        return value as ExternalResponsibilityCaseResponse;
-      }),
-    );
+    const caseValues = await this.caseDtos(actor, cases.rows, executor);
     return {
       canAllocateSuppliers: head.status === "active" && items.rows.some(item => item.can_sign),
       batchId: head.batch_id,

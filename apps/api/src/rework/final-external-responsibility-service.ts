@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type {
   DecideExternalResponsibilityRevision,
-  ExternalResponsibilityBatchResponse,
   ExternalResponsibilityCaseResponse,
 } from "@dx-rework/contracts/external-responsibility";
 import type { Pool, PoolClient } from "pg";
@@ -108,34 +107,6 @@ export class FinalExternalResponsibilityService
     private readonly finalTodos?: TodoProjectionService,
   ) {
     super(finalDatabase, finalTodos);
-  }
-
-  override async get(
-    actor: TrustedActorContext,
-    orderId: string,
-    executor: Pool | PoolClient = this.finalDatabase,
-  ): Promise<ExternalResponsibilityBatchResponse> {
-    const value = await super.get(actor, orderId, executor);
-    if (!value) return null;
-    return {
-      ...value,
-      historicalCases: await Promise.all((value.historicalCases ?? []).map(item => this.enrichCase(item, executor))),
-      cases: await Promise.all(
-        value.cases.map((item) => this.enrichCase(item, executor)),
-      ),
-    };
-  }
-
-  override async getCase(
-    actor: TrustedActorContext,
-    caseId: string,
-    executor: Pool | PoolClient = this.finalDatabase,
-  ): Promise<ExternalResponsibilityCaseResponse> {
-    const baseValue = await super.getCase(actor, caseId, executor);
-    return this.enrichCase(
-      baseValue as ExternalResponsibilityCaseResponse,
-      executor,
-    );
   }
 
   approveRevision(
@@ -587,34 +558,5 @@ export class FinalExternalResponsibilityService
       dedupeKey: `responsibility:${reopenedOrder.rework_order_id}:revision:${draftId}`,
     });
     return draftId;
-  }
-
-  private async enrichCase(
-    value: ExternalResponsibilityCaseResponse,
-    executor: Pool | PoolClient,
-  ): Promise<ExternalResponsibilityCaseResponse> {
-    if (!value.revisionRequests.length) return value;
-    const linked = await executor.query<{
-      revision_request_id: string;
-      seeded_determination_id: string | null;
-    }>(
-      `SELECT revision_request_id,seeded_determination_id
-       FROM rework_external_responsibility_revision_requests
-       WHERE case_id=$1`,
-      [value.caseId],
-    );
-    const seeds = new Map(
-      linked.rows.map((item) => [
-        item.revision_request_id,
-        item.seeded_determination_id,
-      ]),
-    );
-    return {
-      ...value,
-      revisionRequests: value.revisionRequests.map((item) => ({
-        ...item,
-        seededDeterminationId: seeds.get(item.revisionRequestId) ?? null,
-      })),
-    };
   }
 }

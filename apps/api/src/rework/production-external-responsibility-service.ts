@@ -36,6 +36,11 @@ type SupplierOption = {
   supplierType: "factory" | "embroidery_washing" | "fabric";
   supplierName: string;
 };
+const deniedCasePermissions: PermissionRow = {
+  active: false, can_sign: false, can_payables_confirm: false,
+  can_payables_follow_up: false, can_record: false, can_close: false,
+};
+
 type ExternalItem = NonNullable<ExternalResponsibilityBatchResponse>["items"][number];
 type Result<T> = { value: T; reused: boolean };
 
@@ -240,14 +245,14 @@ export class ProductionExternalResponsibilityService
   ): Promise<ExternalResponsibilityBatchResponse> {
     const value = await super.get(...args);
     if (!value) return null;
-    const actor = args[0];
+    const historical = value.historicalCases ?? [];
+    const permission = await this.permissionsForCases(args[0].actorId, [...value.cases, ...historical].map(item => item.caseId));
+    const enrich = (item: ExternalResponsibilityCaseResponse) => this.enrichPermissions(item, permission.get(item.caseId));
     return {
       ...value,
-      items: value.items.map((item) => this.normalizeAmountLineSnapshot(item)),
-      historicalCases: await Promise.all((value.historicalCases ?? []).map(item => this.enrichPermissions(actor, item))),
-      cases: await Promise.all(
-        value.cases.map((item) => this.enrichPermissions(actor, item)),
-      ),
+      items: value.items.map(item => this.normalizeAmountLineSnapshot(item)),
+      historicalCases: historical.map(enrich),
+      cases: value.cases.map(enrich),
     };
   }
 
@@ -255,7 +260,7 @@ export class ProductionExternalResponsibilityService
     ...args: Parameters<FinalExternalResponsibilityService["getCase"]>
   ): Promise<ExternalResponsibilityCaseResponse> {
     const value = await super.getCase(...args);
-    return this.enrichPermissions(args[0], value);
+    return this.enrichPermissions(value, await this.casePermissions(args[0].actorId, value.caseId));
   }
 
   async listSupplierOptions(
@@ -456,12 +461,14 @@ export class ProductionExternalResponsibilityService
     }
   }
 
-  private async casePermissions(
-    actorId: string,
-    caseId: string,
-  ): Promise<PermissionRow> {
-    const result = await this.productionDatabase.query<PermissionRow>(
-      `SELECT
+  private async casePermissions(actorId: string, caseId: string): Promise<PermissionRow> {
+    return (await this.permissionsForCases(actorId, [caseId])).get(caseId) ?? deniedCasePermissions;
+  }
+
+  private async permissionsForCases(actorId: string, caseIds: readonly string[]): Promise<Map<string, PermissionRow>> {
+    if (!caseIds.length) return new Map();
+    const result = await this.productionDatabase.query<PermissionRow & {case_id:string}>(
+      `SELECT target_case.case_id,
          EXISTS(SELECT 1 FROM rework_external_responsibility_batches batch WHERE batch.batch_id=target_case.batch_id AND batch.status='active') active,
          external_responsibility_can_sign(
            $1,target_case.rework_order_id,target_case.responsibility_type
@@ -483,17 +490,10 @@ export class ProductionExternalResponsibilityService
            'external_deduction:close'
          ) can_close
        FROM rework_external_responsibility_cases target_case
-       WHERE target_case.case_id=$2`,
-      [actorId, caseId],
+       WHERE target_case.case_id=ANY($2::uuid[])`,
+      [actorId, caseIds],
     );
-    return result.rows[0] ?? {
-      active: false,
-      can_sign: false,
-      can_payables_confirm: false,
-      can_payables_follow_up: false,
-      can_record: false,
-      can_close: false,
-    };
+    return new Map(result.rows.map(row => [row.case_id, row]));
   }
 
   private normalizeAmountLineSnapshot(item: ExternalItem): ExternalItem {
@@ -502,11 +502,10 @@ export class ProductionExternalResponsibilityService
       : item;
   }
 
-  private async enrichPermissions(
-    actor: TrustedActorContext,
+  private enrichPermissions(
     value: ExternalResponsibilityCaseResponse,
-  ): Promise<ExternalResponsibilityCaseResponse> {
-    const permission = await this.casePermissions(actor.actorId, value.caseId);
+    permission: PermissionRow = deniedCasePermissions,
+  ): ExternalResponsibilityCaseResponse {
     const active = permission.active && value.status !== "superseded";
     const followUp = active && value.status === "deduction_follow_up";
     const recordable = active && [
