@@ -147,7 +147,7 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
   const saved=async(id:string)=>(await f.db.query('SELECT input_snapshot,fixed_targets FROM digital_order_time_plan_versions WHERE plan_version_id=$1',[id])).rows[0];
   const old=await saved(planned.id),siblingP=planned.input.formalTargets![sibling.scopeRef],siblingTerminal=sibling.terminalIds[0]!;
   await f.advance(own,'2027-02-03T00:00:00.000Z');
-  await inScene(async()=>{
+  const next=await inScene(async()=>{
    const repo=new OrderTimePlanRepository(f.db),proposal=structuredClone(planned.input);
    proposal.formalInputs!.notBefore={...proposal.formalInputs!.notBefore,['a:'+line]:{precision:'instant',value:'2027-02-08T00:00:00.000Z',source:'TEST one PO changed planning condition'}};
    const scoped=await confirm(order,proposal,planned.revision);
@@ -163,14 +163,28 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
    expect(approved.input.scopes.find(scope=>scope.scopeRef===sibling.scopeRef)?.customerGoal).toEqual(sibling.customerGoal);
    expect(approved.input.formalTargets).toEqual(scoped.input.formalTargets);
    expect(approved.targets[sibling.scopeRef]).toEqual(initial.targets[sibling.scopeRef]);
-   const next=structuredClone(approved.input);delete next.formalInputs;delete next.formalTargets;
-   next.work.push({id:'printing:'+line,parameterKey:'printing',stage:4,dependsOn:['a:'+line]});
-   next.work.find(work=>work.id==='b:'+line)!.dependsOn=['printing:'+line];
-   const key=randomUUID(),followup=await confirm(order,next,approved.revision,key);
+   const value=structuredClone(approved.input);delete value.formalInputs;delete value.formalTargets;
+   value.work.push({id:'printing:'+line,parameterKey:'printing',stage:4,dependsOn:['a:'+line]});
+   value.work.find(work=>work.id==='b:'+line)!.dependsOn=['printing:'+line];
+   const key=randomUUID(),followup=await confirm(order,value,approved.revision,key);
+   expect(followup.input.formalInputs).toBeUndefined();
    expect(arrangedOrderTimeTarget(followup,sibling.scopeRef,siblingTerminal)).toEqual(siblingP![siblingTerminal]);
    expect(arrangedOrderTimeTarget(followup,changed.scopeRef,changed.terminalIds[0]!)).toBeUndefined();
-   expect(await confirm(order,next,approved.revision,key)).toEqual(followup);
+   expect(await confirm(order,value,approved.revision,key)).toEqual(followup);
    expect(await saved(planned.id)).toEqual(old);
+   return {followup,notBefore:proposal.formalInputs!.notBefore};
+  });
+  await f.advance(own,'2027-02-04T00:00:00.000Z');
+  await inScene(async()=>{
+   const before=await saved(next.followup.id),proposal=structuredClone(next.followup.input);
+   proposal.formalInputs={version:'approved-remaining-v1',progress:{},notBefore:{...next.notBefore,
+    ['a:'+line]:{precision:'instant',value:'2027-02-09T00:00:00.000Z',source:'TEST changed condition for the original first PO only'}}};
+   const adopted=await confirm(order,proposal,next.followup.revision);
+   expect(arrangedOrderTimeTarget(adopted,changed.scopeRef,changed.terminalIds[0]!)?.end.at).toBe('2027-02-15T00:00:00.000Z');
+   expect(adopted.input.formalTargets?.[sibling.scopeRef]).toEqual(siblingP);
+   expect(arrangedOrderTimeTarget(adopted,sibling.scopeRef,siblingTerminal)?.end.at).toBe('2027-02-07T00:00:00.000Z');
+   expect(adopted.input.scopes.find(scope=>scope.scopeRef===sibling.scopeRef)?.customerGoal).toEqual(sibling.customerGoal);
+   expect(await saved(next.followup.id)).toEqual(before);
   });
  });
  it('rejects a stale competing confirmation without overwriting the winner',()=>run(async()=>{

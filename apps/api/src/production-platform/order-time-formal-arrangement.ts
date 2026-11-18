@@ -49,7 +49,7 @@ export function formalRemainingSchedule(input:OrderTimeInput,snapshot:FormalRema
  const priorWork=new Map(previous.input.work.map(work=>[work.canonicalWorkRef??work.id,work]));
  const now=Date.parse(time.now),pending=new Set(snapshot.pendingWork??[]),minimumStart:SlaAnchor={precision:'instant',value:time.now,source:eventRef};
  const targets:Targets={},terminalEnds:Record<string,SlaTime[]>={};
- const carried=retainFormalTargets(input,previous),priorSnapshot=previous.input.formalInputs;
+ const carried=retainFormalTargets(input,previous),priorSnapshot=previous.input.carriedFormalInputs??previous.input.formalInputs;
  const constraintIdentity=(scopeRef:string,work:readonly FixedTimelineWork[],facts:FormalRemainingInputs)=>{
   const pending=new Set(facts.pendingWork??[]);
   return fixedTimelineIdentity(work.map(node=>{
