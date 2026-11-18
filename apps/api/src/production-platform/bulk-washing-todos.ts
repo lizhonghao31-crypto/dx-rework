@@ -21,7 +21,7 @@ export async function bulkWashingTodos(db:WashingDB,actor:TrustedActorContext,pr
  const result:TodoResponse[]=[];
  for(const order of orders){
   if(!await acceptanceIncludesNative(db,order.production_order_id))continue;
-  const sheet=await readBulkWashing(db,order.production_order_id,actor);
+  const sheet=await readBulkWashing(db,order.production_order_id,actor,undefined,{includeFees:false});
   for(const scope of sheet.scopes){
    const live=scope.facts.filter(f=>!f.voided),pendingChecks=live.filter(f=>['return','factory_complete'].includes(f.kind)&&!live.some(q=>q.kind==='inspection'&&q.completionId===f.id));
    const candidates:Array<{key:string;label:string;due:string|null;role:string}>=[];

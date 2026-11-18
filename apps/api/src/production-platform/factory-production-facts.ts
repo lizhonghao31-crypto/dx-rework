@@ -1,16 +1,32 @@
 import type {Pool,PoolClient} from 'pg';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 type DB=Pick<Pool|PoolClient,'query'>;
-/** Original factory execution allocations define scope; inspections never add production or receipt quantity. */
-export async function factoryProductionScopes(db:DB,orderId:string,options:{includeZero?:boolean}={}){
- return (await db.query(`SELECT p.production_order_id,p.factory_decision_id,p.sourcing_decision_id,p.supplier_id,p.supplier_name_snapshot,p.dispatched_at,line.position,line.completed_quantity,
+const factoryScopeColumns=`p.production_order_id,p.factory_decision_id,p.sourcing_decision_id,p.supplier_id,p.supplier_name_snapshot,p.dispatched_at,line.position,line.completed_quantity,
   (SELECT status FROM sourcing_production_transitions state WHERE state.production_order_id=p.production_order_id AND state.factory_decision_id IS NOT DISTINCT FROM p.factory_decision_id ORDER BY sequence DESC LIMIT 1) AS execution_status,
-  map.line_id,line.quantity,po.po_number,po.color,po.factory_delivery_date::text AS target_date
-  FROM digital_production_child_links link JOIN sourcing_production_factory_orders p ON p.production_order_id=link.child_id
+  map.line_id,line.quantity,po.po_number,po.color,po.factory_delivery_date::text AS target_date`;
+const factoryScopeFrom=`FROM digital_production_child_links link JOIN sourcing_production_factory_orders p ON p.production_order_id=link.child_id
   CROSS JOIN LATERAL sourcing_factory_execution_lines(p.production_order_id,p.sourcing_decision_id) line
   JOIN digital_production_child_lines map ON map.module='production' AND map.child_id=p.production_order_id AND map.child_line_key=line.position::text
   JOIN digital_production_po_lines po ON po.line_id=map.line_id AND po.production_order_id=link.production_order_id
-  WHERE link.module='production' AND link.production_order_id=$1 ${options.includeZero?'':'AND line.quantity>0'} ORDER BY p.factory_decision_id NULLS FIRST,po.position`,[orderId])).rows;
+  WHERE link.module='production'`;
+/** Original factory execution allocations define scope; inspections never add production or receipt quantity. */
+export async function factoryProductionScopes(db:DB,orderId:string,options:{includeZero?:boolean}={}){
+ return (await db.query(`SELECT ${factoryScopeColumns}
+  ${factoryScopeFrom} AND link.production_order_id=$1 ${options.includeZero?'':'AND line.quantity>0'} ORDER BY p.factory_decision_id NULLS FIRST,po.position`,[orderId])).rows;
+}
+
+/** Read the same effective allocations for an already selected set of masters. */
+export async function factoryProductionScopesForOrders(db:DB,orderIds:readonly string[],options:{includeZero?:boolean}={}){
+ const scopes=new Map<string,Awaited<ReturnType<typeof factoryProductionScopes>>>();
+ if(!orderIds.length)return scopes;
+ const rows=(await db.query(`SELECT link.production_order_id AS master_order_id,${factoryScopeColumns}
+  ${factoryScopeFrom} AND link.production_order_id=ANY($1::uuid[]) ${options.includeZero?'':'AND line.quantity>0'}
+  ORDER BY link.production_order_id,p.factory_decision_id NULLS FIRST,po.position`,[orderIds])).rows;
+ for(const {master_order_id,...row} of rows){
+  const current=scopes.get(master_order_id);
+  if(current)current.push(row);else scopes.set(master_order_id,[row]);
+ }
+ return scopes;
 }
 /** Completion's business date belongs to its factory scope. A later shipment
  * or registration timestamp cannot replace that date. */
@@ -53,9 +69,27 @@ export async function nativeFactoryTimeline(db:DB,orderId:string):Promise<Native
 }
 export async function factoryProductionFacts(db:DB,orderId:string){
  const allScopes=await factoryProductionScopes(db,orderId,{includeZero:true});
- const scopes=allScopes.filter(scope=>Number(scope.quantity)>0);
  const events=(await db.query(`SELECT e.*,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
  WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='factory_garment_qc' ORDER BY e.recorded_at,e.event_id`,[orderId])).rows;
+ return projectFactoryProductionFacts(allScopes,events);
+}
+
+export async function factoryProductionFactsForOrders(db:DB,orderIds:readonly string[]){
+ const result=new Map<string,ReturnType<typeof projectFactoryProductionFacts>>(),ids=[...new Set(orderIds)];
+ if(!ids.length)return result;
+ const scopes=await factoryProductionScopesForOrders(db,ids,{includeZero:true});
+ const rows=(await db.query(`SELECT e.*,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
+  WHERE e.resource_kind='order' AND e.resource_id=ANY($1::uuid[]) AND e.event_kind='factory_garment_qc' ORDER BY e.resource_id,e.recorded_at,e.event_id`,[ids])).rows;
+ const history=new Map<string,typeof rows>();
+ for(const event of rows){const list=history.get(event.resource_id);if(list)list.push(event);else history.set(event.resource_id,[event]);}
+ for(const id of ids)result.set(id,projectFactoryProductionFacts(scopes.get(id)??[],history.get(id)??[]));
+ return result;
+}
+
+type FactoryQcEvent={event_id:string;actor_id:string;display_name:string|null;occurred_at:Date|null;time_quality:string;
+ payload:{productionId:string;factoryDecisionId:string|null;checks:Array<{lineId:string;allocationQuantity:number;result:'合格'|'需处理';problem:string}>}};
+function projectFactoryProductionFacts(allScopes:Awaited<ReturnType<typeof factoryProductionScopes>>,events:readonly FactoryQcEvent[]){
+ const scopes=allScopes.filter(scope=>Number(scope.quantity)>0);
  const checks=scopes.map(scope=>{
   const matches=events.filter(e=>e.payload.productionId===scope.production_order_id&&e.payload.factoryDecisionId===scope.factory_decision_id
    && e.payload.checks.some((c:{lineId:string;allocationQuantity:number})=>c.lineId===scope.line_id&&c.allocationQuantity>=scope.quantity));

@@ -511,6 +511,10 @@ export const classifyFullGatePaths = (inputPaths) => {
   if(paths.some(path=>/^apps\/web\/src\/delivery-calendar(?:-[^/]*)?\.(?:tsx?|css)$/.test(path)||/^apps\/api\/src\/production-platform\/delivery-calendar-(?:query|images|debt-summary)\.ts$/.test(path)||path==='packages/contracts/src/delivery-calendar.ts'||['apps/web/src/digital-cockpit-page.tsx','apps/web/src/digital-journey-cockpit-model.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts'].includes(path))){mappedTests.add('tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts');domains.add('delivery-calendar-browser');}
   if(paths.some(path=>/^(?:apps\/api\/src\/production-platform|packages\/(?:contracts|domain)\/src)\/delivery-calendar(?:-[^/]*)?\.ts$/.test(path)||path==='tests/integration/m01-delivery-calendar-postgres.test.ts')){mappedTests.add('tests/integration/m01-delivery-calendar-postgres.test.ts');domains.add('delivery-calendar');}
   if(paths.some(path=>/^(?:apps\/web\/src\/current-production|apps\/api\/src\/production-platform\/production-statistics-(?:groups|dimensions)|tests\/(?:acceptance|fixtures|integration)\/m01-current-production)/.test(path))){mappedTests.add('tests/integration/m01-current-production-native-browser-postgres.test.ts');domains.add('current-production-browser');}
+  if(paths.some(path=>/^apps\/api\/src\/(?:production-platform\/(?:qc-progress-evidence|qc-progress-todos|factory-production-facts|factory-production-qc-todos)|sourcing\/(?:production-analysis|production-dashboard-service))\.ts$/.test(path))){
+    addAll(mappedTests,['tests/integration/qc-progress-retirement-postgres.test.ts','tests/integration/production-read-batches-postgres.test.ts','tests/integration/sourcing-pr03-postgres.test.ts']);
+    domains.add('shared-factory-qc-facts');
+  }
 
 
   for (const path of paths) {

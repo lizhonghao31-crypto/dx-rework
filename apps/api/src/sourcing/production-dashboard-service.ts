@@ -1,4 +1,4 @@
-import {readQcExecutionEvidence} from '../production-platform/qc-progress-evidence.js';
+import {readQcExecutionEvidenceForOrders} from '../production-platform/qc-progress-evidence.js';
 import { addProductionChase, readProductionDays } from "./production-chase.js";
 import { ProductionAnalysisQuerySchema,poDeliveryRisks } from "@dx-rework/contracts";
 import { readProductionAnalysis } from "./production-analysis.js";
@@ -70,8 +70,9 @@ export async function readFactoryProductionProgressFacts(client:PoolClient,ids:s
   WHERE production.production_order_id=ANY($1::uuid[]) AND ${productionNotExcluded}`,[ids,asOf]);
  const qc=new Map<string,NonNullable<ProductionProgressFacts['qcObservation']>>();
  if(result.rows.length&&(await client.query("SELECT to_regclass('digital_qc_tracking_starts') AS relation")).rows[0]?.relation){
-  const masters=(await client.query("SELECT production_order_id,child_id FROM digital_production_child_links WHERE module='production' AND child_id=ANY($1::uuid[])",[ids])).rows;
-  for(const master of masters)for(const e of await readQcExecutionEvidence(client,master.production_order_id,asOf)){
+  const masters=(await client.query<{production_order_id:string}>("SELECT DISTINCT production_order_id FROM digital_production_child_links WHERE module='production' AND child_id=ANY($1::uuid[])",[ids])).rows;
+  const evidenceByMaster=await readQcExecutionEvidenceForOrders(client,masters.map(master=>({orderId:master.production_order_id,asOf})));
+  for(const evidence of evidenceByMaster)for(const e of evidence){
    if(!e.tracking)continue;const c=e.clock;qc.set(executionKey(e.group.rows[0].production_order_id,e.group.rows[0].factory_decision_id),{state:c.state,anchor:c.anchor,remindAt:c.remindAt,escalateAt:c.escalateAt});
   }
  }
@@ -108,8 +109,10 @@ export class ProductionDashboardService {
       const result=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibilityFor(actor)}`,productionVisibilityArgs(actor));
       const orders=result.rows.map(toOrder),ids=orders.map(o=>o.productionOrderId);
       const current=await readFactoryProductionProgressFacts(client,ids,asOf);
-      const items=addProductionChase(orders.filter(o=>current.has(executionKey(o.productionOrderId,o.factoryDecisionId))).map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),await readProductionDays(client,ids,asOf,true),asOf).map(item=>({...item,deliveryRisks:poDeliveryRisks(item.order.poDeliveryDates??[],shanghaiDay(asOf),{finished:Boolean(item.order.poDeliveryClosed),factoryFinished:item.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')}));
-      const selected=selectDashboardPage(items,input),selectedIds=selected.filtered.map(i=>i.order.productionOrderId);
+      const items=addProductionChase(orders.filter(o=>current.has(executionKey(o.productionOrderId,o.factoryDecisionId))).map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),await readProductionDays(client,ids,asOf,true),asOf);
+      const day=shanghaiDay(asOf),withDeliveryRisks=(item:ProductionDashboardItem)=>({...item,deliveryRisks:poDeliveryRisks(item.order.poDeliveryDates??[],day,{finished:Boolean(item.order.poDeliveryClosed),factoryFinished:item.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')});
+      const deliveryRiskFilter=input.risk==='po_deadline';
+      const selected=selectDashboardPage(deliveryRiskFilter?items.map(withDeliveryRisks):items,input),selectedIds=selected.filtered.map(i=>i.order.productionOrderId);
       const suppliers=[...new Map(orders.map(o=>[o.supplierId,{supplierId:o.supplierId,supplierName:o.supplierName}])).values()]
         .sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
       const events=await this.events(client,selected.filtered.map(item=>item.order));
@@ -124,7 +127,7 @@ export class ProductionDashboardService {
         }
       }
       events.sort((a,b)=>b.recordedAt.localeCompare(a.recordedAt)||a.id.localeCompare(b.id));
-      return ProductionDashboardSchema.parse({asOf,items:selected.items,page:selected.page,pageSize:15,totalCount:selected.totalCount,
+      return ProductionDashboardSchema.parse({asOf,items:deliveryRiskFilter?selected.items:selected.items.map(withDeliveryRisks),page:selected.page,pageSize:15,totalCount:selected.totalCount,
         counts:selected.counts,chaseCounts:selected.chaseCounts,suppliers,events:events.slice(0,20)});
     });
   }

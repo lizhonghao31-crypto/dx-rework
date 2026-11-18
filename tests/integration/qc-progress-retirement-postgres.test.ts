@@ -8,6 +8,8 @@ import {registerAuthRoutes} from '../../apps/api/src/auth/routes.js';
 import {AuthDeniedError,AuthService} from '../../apps/api/src/auth/service.js';
 import {DigitalCockpitQuery} from '../../apps/api/src/production-platform/cockpit-query.js';
 import {qcProgressNotices} from '../../apps/api/src/production-platform/qc-progress-todos.js';
+import {readQcExecutionEvidenceForOrders} from '../../apps/api/src/production-platform/qc-progress-evidence.js';
+import type {PoolClient} from 'pg';
 import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
 import {ProductionDashboardService} from '../../apps/api/src/sourcing/production-dashboard-service.js';
 import {registerProductionDashboardRoutes} from '../../apps/api/src/sourcing/production-dashboard-routes.js';
@@ -93,6 +95,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(originalQuantity.order.lines[0]!.completedQuantity).toBe(4);expect(incomingQuantity.order.lines[0]!.completedQuantity).toBe(2);
   all=(await service.read(f.root,ready.id)).executions;const result=await nodeMaterialsFixture(f.db,f.root,ready.id,'production_reporting'),rows=result.data.rows.filter(r=>r.id.startsWith('qc-'));
   expect(rows).toHaveLength(2);expect(new Set(rows.map(r=>r.id)).size).toBe(2);expect(rows.find(r=>r.id.includes(incoming.factoryDecisionId!))?.state).toBe('present');expect(rows.find(r=>r.id.includes('-original-'))?.state).toBe('missing');expect(new Set(rows.map(r=>r.scope)).size).toBe(2);expect(all.map(e=>e.productionId)).toEqual([initial.productionId,initial.productionId]);
+  const db=await f.db.connect(),originalQuery=db.query,queries:string[]=[];
+  db.query=function(this:PoolClient,...args:unknown[]){if(typeof args[0]==='string')queries.push(args[0]);return Reflect.apply(originalQuery,this,args);} as PoolClient['query'];
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const asOf=businessNow().toISOString();
+   const [open,closed,unrelated]=await readQcExecutionEvidenceForOrders(db,[{orderId:ready.id,asOf},{orderId:ready.id,asOf,closed:true},{orderId:randomUUID(),asOf}]);
+   expect(open!.map(e=>e.group.rows[0].factory_decision_id)).toEqual(all.map(e=>e.factoryDecisionId));
+   expect(closed!.every(e=>e.finished)).toBe(true);expect(unrelated).toEqual([]);
+   expect(open!.filter(e=>e.records.length).length).toBe(1);
+   for(const template of ['FROM digital_production_child_links link','DISTINCT ON(a.production_order_id)','FROM digital_qc_tracking_starts t','FROM digital_qc_progress_records WHERE tracking_id=ANY','FROM digital_factory_facts f JOIN digital_factory_routes'])expect(queries.filter(sql=>sql.includes(template)),template).toHaveLength(1);
+  }finally{await db.query('ROLLBACK');db.query=originalQuery;db.release();}
  });
  it('P03-03: preserves zero-share zero-record factories including an untracked intermediate transfer without reviving current duties',async()=>{
   const ready=await dispatch(),initial=(await service.read(qc,ready.id)).executions[0]!;

@@ -27,6 +27,14 @@ export class SlaPlanRepository {
     const rows = await this.client.query<PlanRow>("SELECT * FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision", [orderId]);
     return rows.rows.map(mapPlan);
   }
+  async latestPlans(orderIds: readonly string[]): Promise<Map<string,StoredSlaPlan>> {
+    const result=new Map<string,StoredSlaPlan>();
+    if(!orderIds.length||!await this.available())return result;
+    const rows=await this.client.query<PlanRow>('SELECT * FROM digital_sla_plans WHERE production_order_id=ANY($1::uuid[]) ORDER BY production_order_id,revision',[orderIds]);
+    // Validate existing history exactly as the original per-order read did.
+    for(const row of rows.rows)result.set(row.production_order_id,mapPlan(row));
+    return result;
+  }
   async facts(orderId: string): Promise<Record<string, SlaNodeFact>> {
     const rows = await this.client.query("SELECT DISTINCT ON(node_id) node_id,fact_json FROM digital_sla_node_facts WHERE production_order_id=$1 ORDER BY node_id,revision DESC", [orderId]);
     return Object.fromEntries(rows.rows.map(row => [row.node_id, row.fact_json]));

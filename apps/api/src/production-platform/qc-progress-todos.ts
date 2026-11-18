@@ -6,7 +6,7 @@ import type {TodoResponse,TodoRouteDescriptor} from '@dx-rework/contracts';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {acceptanceIncludesNative,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {DigitalProductionAccessPolicy} from './access-policy.js';
-import {readQcExecutionEvidence} from './qc-progress-evidence.js';
+import {readQcExecutionEvidenceForOrders} from './qc-progress-evidence.js';
 import {todoContentToken} from '../todos/content-reads.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 export const qcNoticeId=(key:string)=>{const h=createHash('sha256').update(key).digest('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;};
@@ -19,16 +19,24 @@ export async function qcProgressNotices(db:DB,people:TrustedActorContext[],onlyO
  JOIN digital_production_tasks t USING(task_id) WHERE t.state<>'cancelled' AND ($1::uuid IS NULL OR o.production_order_id=$1)
  AND NOT EXISTS(SELECT 1 FROM digital_order_closures c WHERE c.production_order_id=o.production_order_id)
  AND NOT EXISTS(SELECT 1 FROM digital_production_resource_lifecycle l WHERE (l.resource_kind='order' AND l.resource_id=o.production_order_id OR l.resource_kind='source' AND l.resource_id=o.source_id) AND l.state<>'active')`,[onlyOrder??null])).rows;
+ const scoped:typeof orders=[];
+ for(const order of orders)if(await acceptanceIncludesNative(database,order.task_id))scoped.push(order);
+ if(!scoped.length)return [];
+ const ids=[...new Set<string>(scoped.map(order=>order.production_order_id))];
+ const settings=(await db.query<{production_order_id:string;quality_lead_id:string|null}>(`SELECT DISTINCT ON(production_order_id) production_order_id,quality_lead_id
+  FROM digital_qc_supervision_settings WHERE production_order_id=ANY($1::uuid[]) ORDER BY production_order_id,version DESC`,[ids])).rows;
+ const leads=new Map(settings.map(setting=>[setting.production_order_id,setting.quality_lead_id]));
+ const clock=new ContextBusinessClock(database,db===database?undefined:db as PoolClient),observations=[];
+ for(const orderId of ids)observations.push({orderId,asOf:(await clock.read({kind:'order',id:orderId})).now});
+ const projected=await readQcExecutionEvidenceForOrders(db,observations);
+ const evidenceByOrder=new Map(ids.map((id,index)=>[id,projected[index]!]));
  const result:QcProgressNotice[]=[],policy=new DigitalProductionAccessPolicy(db);
- for(const order of orders){
-  if(!await acceptanceIncludesNative(database,order.task_id))continue;
-  const settings=(await db.query('SELECT quality_lead_id FROM digital_qc_supervision_settings WHERE production_order_id=$1 ORDER BY version DESC LIMIT 1',[order.production_order_id])).rows[0];
-  const time=await new ContextBusinessClock(database,db===database?undefined:db as PoolClient).read({kind:'order',id:order.production_order_id});
+ for(const order of scoped){
   const eligible=async(id:string|null,role:string)=>{const person=people.find(p=>p.actorId===id&&p.actorRoles.includes(role));return person&&await memberCanWriteModule(db,person.actorId,'sourcing')&&await policy.activeRole(person.actorId,role)&&await policy.allowed(person,'order',order.production_order_id,'technical')?person.actorId:null;};
-  const qc=await eligible(order.assignee_id,'quality_control'),lead=await eligible(settings?.quality_lead_id??null,'quality_control'),primary=await eligible(order.primary_merchandiser_id,'order_merchandiser');
+  const qc=await eligible(order.assignee_id,'quality_control'),lead=await eligible(leads.get(order.production_order_id)??null,'quality_control'),primary=await eligible(order.primary_merchandiser_id,'order_merchandiser');
   const managers:string[]=[];
   for(const p of people)if(p.actorRoles.some(r=>['production_management','owner_group'].includes(r))&&await memberCanWriteModule(db,p.actorId,'sourcing')&&await policy.allowed(p,'order',order.production_order_id,'technical'))managers.push(p.actorId);
-  for(const evidence of await readQcExecutionEvidence(db,order.production_order_id,time.now)){
+  for(const evidence of evidenceByOrder.get(order.production_order_id)??[]){
    if(evidence.finished)continue;
    for(const window of evidence.windows){const clock=window.clock;if(!clock.anchor||!clock.remindAt||!clock.escalateAt)continue;
     const add=(suffix:string,title:string,recipients:string[],due:string,blockedReason:string|null=null)=>{
