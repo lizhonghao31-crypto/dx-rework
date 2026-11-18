@@ -1,221 +1,133 @@
 {
   "version": 1,
-  "base": "aeba4adcc76b608b59559fb244750b8fdc2af00b",
+  "base": "7f26f795d5c85a0b551335c647570cfd86e27d82",
   "risk": "full",
-  "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
+  "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
   "rules": [
     {
-      "rule": "Bind rework reports, attachments and case detail families to the already authorized native set",
-      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), PF-R.",
-      "initialization": "Current release aeba4adcc76b608b59559fb244750b8fdc2af00b, native test orders, original actors and independently derived permission scopes.",
-      "dateAndPermission": "Use current authorized data with existing actor rights, recorded facts, historical meanings and financial redaction.",
+      "rule": "PF-SO exact page sourcing clocks and PO date facts",
+      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), sourcing.",
+      "initialization": "Current observed release parent 7f26f795d5c85a0b551335c647570cfd86e27d82; exact checked source and independent native fixtures.",
+      "dateAndPermission": "Maintain actual authorization, historical time and existing read-only or explicit retry boundaries.",
       "writes": [
-        "apps/api/src/rework/service.ts",
-        "apps/api/src/rework/work-reporting-service.ts",
-        "apps/api/src/rework/external-responsibility-service.ts",
-        "apps/api/src/rework/fixed-external-responsibility-service.ts",
-        "apps/api/src/rework/final-external-responsibility-service.ts",
-        "apps/api/src/rework/production-external-responsibility-service.ts",
-        "tests/integration/full-business-chain-postgres.test.ts"
+        "apps/api/src/production-platform/po-factory-date-adapter.ts",
+        "apps/api/src/sourcing/contract-return-clock.ts",
+        "apps/api/src/sourcing/sourcing-case-read.ts",
+        "tests/integration/sourcing-page-details-postgres.test.ts",
+        "tests/unit/sourcing-list-pagination.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/api/src/rework/routes.ts",
-        "apps/api/src/rework/rework-node-history.ts"
+        "apps/api/src/sourcing/contract-return-state.ts",
+        "apps/api/src/sourcing/sourcing-case-mapping.ts",
+        "apps/api/src/acceptance-clock/business-time.ts"
       ],
       "oldTests": [
-        "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/unit/work-reporting-batch-performance.test.ts"
+        "tests/integration/contract-return-cycles-postgres.test.ts",
+        "tests/integration/contract-return-routes-clock-postgres.test.ts",
+        "tests/integration/sourcing-page-details-postgres.test.ts"
       ],
-      "expectation": "Read only returned authorized order, case, task and person identities. Preserve finance decisions, prior case revisions, own return reasons, lawfully delegated submission scope, existing entry ordering and original no-write reads.",
+      "expectation": "Keep existing principal, total values, clock isolation and history. Resolve each current visible page in one bounded native clock scope and one native PO mapping, rejecting absent known digital PO links and leaving snapshot and historical reads independent.",
       "checks": [
-        "native-rework-and-delegation",
-        "existing-authorization-and-ui-fetches",
-        "preflight",
+        "native-sourcing-page",
+        "unit",
+        "lint",
         "types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "Return one authorized workflow queue page and exact lightweight totals for all accessible statuses",
-      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), PF-R.",
-      "initialization": "Current release aeba4adcc76b608b59559fb244750b8fdc2af00b, native test orders, original actors and independently derived permission scopes.",
-      "dateAndPermission": "Use current authorized data with existing actor rights, recorded facts, historical meanings and financial redaction.",
-      "writes": [
-        "apps/api/src/reporting/management-reporting-orders.ts",
-        "apps/api/src/reporting/management-reporting-routes.ts",
-        "apps/api/src/reporting/management-reporting-service.ts",
-        "apps/web/src/reporting/reporting-client.ts",
-        "apps/web/src/reporting/workflow-queue-page.tsx",
-        "packages/contracts/src/reporting.ts",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/management-reporting-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/workflow-queue-page-requests.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/reporting/management-reporting-shared.ts",
-        "apps/web/src/list-pagination.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/management-reporting-postgres.test.ts",
-        "tests/unit/v1-prelaunch-performance-pr10.test.ts"
-      ],
-      "expectation": "Preserve filtered status authorization and scope including only eligible current reporting roles. Other authorized tabs return counts without projecting rows and unauthorized tabs are omitted. Original page issues one read per navigation or explicit refresh and reuses an authorized server fallback.",
-      "checks": [
-        "native-queue-closure-and-statistics",
-        "existing-authorization-and-ui-fetches",
-        "preflight",
-        "types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "Reuse the original independent rework authorization facts in digital closure and production statistics",
-      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), PF-R.",
-      "initialization": "Current release aeba4adcc76b608b59559fb244750b8fdc2af00b, native test orders, original actors and independently derived permission scopes.",
-      "dateAndPermission": "Use current authorized data with existing actor rights, recorded facts, historical meanings and financial redaction.",
-      "writes": [
-        "apps/api/src/rework/rework-business-detail-service.ts",
-        "apps/api/src/production-platform/closure-work-summary.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/production-statistics-query.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/rework-detail-responsibility-access.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/rework/finance-order-access.ts",
-        "apps/api/src/production-platform/access-policy.ts"
-      ],
-      "oldTests": [
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
-      ],
-      "expectation": "Keep business and finance rights distinct, preserve original delegated order rights, limit linked facts to admitted rework orders, and retain full closure quantities, report history and authorized financial presentation without borrowing digital task rights.",
-      "checks": [
-        "native-queue-closure-and-statistics",
-        "existing-authorization-and-ui-fetches",
-        "preflight",
-        "types",
-        "lint"
+        "preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native-rework-and-delegation",
+      "id": "native-sourcing-page",
       "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-page-details-postgres.test.ts tests/integration/contract-return-clock-postgres.test.ts tests/integration/contract-return-routes-clock-postgres.test.ts tests/integration/contract-return-cycles-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/sourcing-ready-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/full-business-chain-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-chain/tests.json --testNamePattern 'carries one real order from N01|own returned-report context'",
-      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
-      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
-      "startedAt": "2026-11-18T10:38:27.287964+00:00",
-      "endedAt": "2026-11-18T10:39:09.521364+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-chain/tests.log",
-      "logSha256": "f3f4ff8d2b1e03f827630d01f5b8a95b0e38f19e9ae08493c29df71f765d6705",
-      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
-      "passed": 5,
-      "failed": 0,
-      "skipped": 55,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "2867983ee85644bc85700042a3984f688ae6d9c6880f36755b0385a829b1da15"
-        }
-      ]
-    },
-    {
-      "id": "native-queue-closure-and-statistics",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/management-reporting-postgres.test.ts tests/integration/production-closure-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-reports/tests.json",
-      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
-      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
-      "startedAt": "2026-11-18T10:39:09.741092+00:00",
-      "endedAt": "2026-11-18T10:40:28.422125+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/rework-managed-native-reports/tests.log",
-      "logSha256": "232238ce3a586d1e56a2bbdd94c7fb1604c4139d7d4b91bd874d844dc3d501df",
-      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
-      "passed": 42,
+      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
+      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
+      "startedAt": "2026-11-18T10:55:28.728151+00:00",
+      "endedAt": "2026-11-18T10:57:58.157631+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/sourcing-ready-native/tests.log",
+      "logSha256": "7b30648fd1a3dea6cd1e8c7df0d01dcc46dc454eca473028238f31510e5aa5ea",
+      "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
+      "passed": 33,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d41533c1823a05ccef421a33bdc6833cb4640064acc6c4b76cf37de21cf7dc28"
+          "sha256": "2790b540f90f40c8baf47410855d4124ebc54c859e724a04845b6ab09a8c53b3"
         }
       ]
     },
     {
-      "id": "existing-authorization-and-ui-fetches",
+      "id": "unit",
       "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-pc-form-approval-contract.test.ts tests/unit/craft-database-separation.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/sourcing-ready-unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/business-chain-ui-contract.test.ts tests/unit/business-facing-workflow-ui.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/existing-order-tail-inspection-waiver.test.ts tests/unit/external-case-state-guidance.test.ts tests/unit/external-deduction-ledger-guard.test.ts tests/unit/finance-director-rework-detail-access.test.ts tests/unit/finance-wage-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/historical-node-write-boundary.test.ts tests/unit/ie-precount.test.ts tests/unit/list-pagination.test.ts tests/unit/merchandiser-responsibility-deduction-access.test.ts tests/unit/mobile-image-consistency.test.ts tests/unit/n07-n11-responsibility-settlement-contract.test.ts tests/unit/optional-tail-inspection.test.ts tests/unit/order-detail-information-architecture.test.ts tests/unit/related-merchandiser-access-todos.test.ts tests/unit/reporting-contracts-workbook-and-web.test.ts tests/unit/responsibility-rounding-reconciliation.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts tests/unit/rework-detail-responsibility-access.test.ts tests/unit/rework-query-navigation.test.ts tests/unit/rework-v2-pr07-finance-closure.test.ts tests/unit/rework-v2-unified-execution.test.ts tests/unit/root-global-business-bypass.test.ts tests/unit/root-logical-deletion-review.test.ts tests/unit/system-business-number-presentation.test.ts tests/unit/tail-defective-quantity.test.ts tests/unit/tail-inspection-cost-bearer.test.ts tests/unit/tail-inspection-parallel-flow.test.ts tests/unit/uat-16-closure.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/v1-prelaunch-default-candidates-frontline.test.ts tests/unit/v1-prelaunch-frontline-minimal.test.ts tests/unit/v1-prelaunch-mobile-filter-order-detail.test.ts tests/unit/v1-prelaunch-performance-pr10.test.ts tests/unit/v1-prelaunch-performance-pr11.test.ts tests/unit/v1-prelaunch-receiving-rework-contract.test.ts tests/unit/v1-tail-assignment-parity.test.ts tests/unit/work-reporting-assignees.test.ts tests/unit/work-reporting-batch-performance.test.ts tests/unit/work-reporting.test.ts tests/unit/workflow-queue-page-requests.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/rework-managed-unit/tests.json",
-      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
-      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
-      "startedAt": "2026-11-18T10:38:30.724354+00:00",
-      "endedAt": "2026-11-18T10:38:49.889786+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/rework-managed-unit/command.log",
-      "logSha256": "4dbc3cb25118f80d459c989118cf588a6801f19656f05bb0a268622e8c331faf",
-      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
-      "passed": 414,
+      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
+      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
+      "startedAt": "2026-11-18T10:55:30.461566+00:00",
+      "endedAt": "2026-11-18T10:55:34.849479+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-unit/command.log",
+      "logSha256": "7b023bd762703b824cbede55282c0b12cc3e30c1af18bf8cee43951a3a41965c",
+      "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
+      "passed": 155,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d3a8b22b41436dbfee921e9b7d18ec7d8f1900fd6591886783a0a604be9e11e4"
+          "sha256": "927543671a46cf6802e3386467a467eabcb238f81f5eed657b694c0c189c623e"
         }
       ]
-    },
-    {
-      "id": "preflight",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "command": "npm run test:preflight",
-      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
-      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
-      "startedAt": "2026-11-18T10:38:08.803443+00:00",
-      "endedAt": "2026-11-18T10:38:17.363473+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/rework-managed-preflight/command.log",
-      "logSha256": "05b5b6b5b31021c36b7a4985482621d0ad1f01b0971473b4b3c37e47bfa89e7d",
-      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup.",
-      "passed": 284,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "types",
-      "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
-      "command": "npm run typecheck",
-      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
-      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
-      "startedAt": "2026-11-18T10:38:50.226137+00:00",
-      "endedAt": "2026-11-18T10:39:57.193005+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/rework-managed-types/command.log",
-      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup."
     },
     {
       "id": "lint",
       "kind": "command",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/po-factory-date-adapter.ts apps/api/src/sourcing/contract-return-clock.ts apps/api/src/sourcing/sourcing-case-read.ts tests/integration/sourcing-page-details-postgres.test.ts tests/unit/sourcing-list-pagination.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/closure-work-summary.ts apps/api/src/production-platform/order-closure-service.ts apps/api/src/production-platform/production-statistics-query.ts apps/api/src/reporting/management-reporting-orders.ts apps/api/src/reporting/management-reporting-routes.ts apps/api/src/reporting/management-reporting-service.ts apps/api/src/rework/external-responsibility-service.ts apps/api/src/rework/final-external-responsibility-service.ts apps/api/src/rework/fixed-external-responsibility-service.ts apps/api/src/rework/production-external-responsibility-service.ts apps/api/src/rework/rework-business-detail-service.ts apps/api/src/rework/service.ts apps/api/src/rework/work-reporting-service.ts apps/web/src/reporting/reporting-client.ts apps/web/src/reporting/workflow-queue-page.tsx packages/contracts/src/reporting.ts scripts/ci/full-gate-risk-map.mjs tests/integration/full-business-chain-postgres.test.ts tests/integration/management-reporting-postgres.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/rework-detail-responsibility-access.test.ts tests/unit/workflow-queue-page-requests.test.ts --max-warnings=0",
-      "testedHead": "a99dabe6fad9238849a773ac9ab4af80379791f4",
-      "sourceFingerprint": "b34381920111c0481b3bb1567f1fcac913ef4da77c7e0ee3dcb844d25f782f07",
-      "startedAt": "2026-11-18T10:38:27.464689+00:00",
-      "endedAt": "2026-11-18T10:38:30.372448+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/rework-managed-lint/command.log",
+      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
+      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
+      "startedAt": "2026-11-18T10:55:28.992506+00:00",
+      "endedAt": "2026-11-18T10:55:30.149380+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Ancestral checked Head with identical final source fingerprint and the current release parent. Native cases use an owned low-privilege isolated PostgreSQL fixture with verified cleanup."
+      "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
+    },
+    {
+      "id": "types",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
+      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
+      "startedAt": "2026-11-18T10:55:35.184516+00:00",
+      "endedAt": "2026-11-18T10:56:48.956842+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-types/command.log",
+      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
+      "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
+    },
+    {
+      "id": "preflight",
+      "kind": "tests",
+      "command": "npm run test:preflight",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
+      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
+      "startedAt": "2026-11-18T10:56:49.299345+00:00",
+      "endedAt": "2026-11-18T10:56:59.824514+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-preflight/command.log",
+      "logSha256": "cfc36a3e78170af813d7b17e96591da9b57fe2a3da4b5bb81214167f81d671ba",
+      "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
+      "passed": 284,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }

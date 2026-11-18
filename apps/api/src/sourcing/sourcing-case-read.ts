@@ -4,8 +4,8 @@ import type {TrustedActorContext} from "../tools/repositories.js";
 import {ApplicationError} from "../platform/errors.js";
 import {effectiveSourcingMerchandiser} from "./current-merchandiser.js";
 import {resolveDigitalChild} from "../production-platform/child-link-repository.js";
-import {factoryPoLines,factoryProposals} from "../production-platform/po-factory-date-adapter.js";
-import {assertContractReturnListClock,contractReturnClock} from "./contract-return-clock.js";
+import {currentFactoryPagePoLines,factoryPoLines,factoryProposals} from "../production-platform/po-factory-date-adapter.js";
+import {assertContractReturnCaseClocks,assertContractReturnListClock,contractReturnClock} from "./contract-return-clock.js";
 import type {ContractReturnFilter} from "./contract-return-state.js";
 import {mapSourcingCase as mapCase,toSourcingIso as toIso,type SourcingCaseRow} from "./sourcing-case-mapping.js";
 
@@ -539,15 +539,16 @@ export async function readSourcingCaseList(database:Pool,actor:TrustedActorConte
     );
     const pageRows = result.rows.filter(row => row.sourcing_case_id != null);
     const totalCount = Number(result.rows[0]?.total_count ?? "0");
-    for(const row of pageRows)await contractReturnClock(database,database,row.sourcing_case_id);
-    const items=pageRows.map(row=>mapCase(row,actor));
-    for(const [index,row] of pageRows.entries())if(row.workflow_generation==='digital_production_v1') {
-      const dates=(await factoryPoLines(database,row.sourcing_case_id))!;
-      items[index]!.lineItems=items[index]!.lineItems.map(line=>{
-        const po=dates.find(date=>date.position===line.position);
+    await assertContractReturnCaseClocks(database,pageRows.map(row=>row.sourcing_case_id));
+    const dates=await currentFactoryPagePoLines(database,pageRows.filter(row=>row.workflow_generation==='digital_production_v1').map(row=>row.sourcing_case_id));
+    const items=pageRows.map(row=>{
+      const item=mapCase(row,actor),positions=dates.get(row.sourcing_case_id);
+      if(!positions)return item;
+      return {...item,lineItems:item.lineItems.map(line=>{
+        const po=positions.get(line.position);
         return po?{...line,lineId:po.line_id,customerWarehouseArrivalDate:po.customer,factoryDeliveryDate:po.factory}:line;
-      });
-    }
+      })};
+    });
     return {
       items,
       page,

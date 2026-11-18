@@ -24,11 +24,28 @@ if(!Number.isInteger(caseCount)||caseCount<31||caseCount>1000)throw Error('Owned
  });
  afterAll(async()=>{await f?.dispose();});
  it('preserves full totals and actual role fields while rich native aggregates run only for the selected15',async()=>{
-  const original=f.db.query,queries:Array<{text:string;values:unknown[]}>=[];
-  const trace=vi.spyOn(f.db,'query').mockImplementation(function(...args:unknown[]){if(typeof args[0]==='string'&&args[0].startsWith('WITH filtered_cases'))queries.push({text:args[0],values:args[1] as unknown[]});return Reflect.apply(original,f.db,args);} as typeof f.db.query);
+  const original=f.db.query,queries:Array<{text:string;values:unknown[]}>=[],clockScopeCalls:string[][]=[],poCalls:string[][]=[];
+  const trace=vi.spyOn(f.db,'query').mockImplementation(function(...args:unknown[]){
+   const [sql,params]=args;
+   if(typeof sql==='string'){
+    if(sql.startsWith('WITH filtered_cases'))queries.push({text:sql,values:params as unknown[]});
+    if(sql.includes('sourcing_contract_return_clock_scope(cases.case_id)'))clockScopeCalls.push((params as [string[]])[0]);
+    if(sql.includes('line.factory_delivery_date::text AS factory')&&sql.includes('link.child_id=ANY'))poCalls.push((params as [string[]])[0]);
+   }
+   return Reflect.apply(original,f.db,args);
+  } as typeof f.db.query);
   try{
    const first=await service.listCases(reader()),second=await service.listCases(reader(),'','all',2),last=await service.listCases(reader(),'','all',3),totals=(await f.db.query('SELECT count(*)::int AS count,sum(order_quantity)::int AS quantity FROM current_sourcing_cases')).rows[0]!;
    expect(first.totalCount).toBe(caseCount+1);expect(first.totalCount).toBe(totals.count);expect(first.totalOrderQuantity).toBe(totals.quantity);expect(first.totalOrderQuantity).toBe(caseCount*16+10);expect([first.items.length,second.items.length,last.items.length]).toEqual([15,15,Math.min(15,caseCount-29)]);expect(new Set([...first.items,...second.items,...last.items].map(item=>item.sourcingCaseId)).size).toBe(Math.min(45,caseCount+1));
+   const selectedPages=[first,second,last];
+   for(const [index,selectedPage] of selectedPages.entries())expect(clockScopeCalls[index*2+1]).toEqual(selectedPage.items.map(item=>item.sourcingCaseId));
+   expect(clockScopeCalls).toHaveLength(6);
+   // Only the selected page which contains a digital case resolves native PO rows.
+   expect(poCalls).toHaveLength(1);
+   const digital=selectedPages.flatMap(result=>result.items).find(item=>item.sourcingCaseId===poCalls[0]![0])!;
+   expect(poCalls[0]).toEqual([digital.sourcingCaseId]);
+   expect(digital.lineItems.map(line=>[line.lineId,line.customerWarehouseArrivalDate,line.factoryDeliveryDate])).toEqual(
+    (await service.getCase(reader(),digital.sourcingCaseId)).lineItems.map(line=>[line.lineId,line.customerWarehouseArrivalDate,line.factoryDeliveryDate]));
    const approved=[...first.items,...second.items,...last.items].find(item=>item.styleNo==='TEST-PERF09-00-0')!;
    expect(approved.orderQuantity).toBe(16);expect(Number(approved.decision?.totalAmount)).toBe(52);expect(Number(approved.approvalSnapshot?.totalAmount)).toBe(52);
    const detail=await service.getCase(reader(),approved.sourcingCaseId);expect(detail.lineItems).toHaveLength(8);expect(Number(detail.decision?.totalAmount)).toBe(52);expect(Number(detail.approvalSnapshot?.totalAmount)).toBe(52);
