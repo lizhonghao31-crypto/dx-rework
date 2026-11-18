@@ -22,14 +22,17 @@ export async function patternExecutionBlockers(db:Pick<Pool,'query'>,task:{sourc
   return out;
 }
 
-export async function developmentTaskBlockers(db:Pick<Pool,'query'>,task:{task_id:string;source_id:string|null;route_version:number;task_kind:string;state:string;assignee_id:string|null;required_role:string},canManage:boolean,includeCompletion=false){
+type PreparedBlockers={conditions:readonly {condition_key:string;stage:string;satisfied:boolean}[];predecessors:readonly {state:string;required_role:string;label:string|null}[]};
+
+export async function developmentTaskBlockers(db:Pick<Pool,'query'>,task:{task_id:string;source_id:string|null;route_version:number;task_kind:string;state:string;assignee_id:string|null;required_role:string},canManage:boolean,includeCompletion=false,prepared?:PreparedBlockers){
   const out:DigitalTaskBlocker[]=[];
   if(['completed','cancelled'].includes(task.state))return out;
   const add=(condition:string,name:string,missing:string,responsibleRole:string,action:string|null=null,evidenceId:string|null=null,verified=false)=>out.push({condition,name,missing,responsibleRole,action,evidenceId,verified});
   const unified=Boolean((await db.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation);
   const planned=task.source_id&&unified&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind);
   if(!task.assignee_id||!await new DigitalProductionAccessPolicy(db).activeRole(task.assignee_id,task.required_role))out.push(taskAssigneeBlocker(task,Boolean(planned)));
-  const conditions=(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND (stage='activation' OR $2) AND NOT satisfied",[task.task_id,includeCompletion])).rows;
+  const conditions=prepared?prepared.conditions.filter(row=>!row.satisfied&&(row.stage==='activation'||includeCompletion))
+   :(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND (stage='activation' OR $2) AND NOT satisfied",[task.task_id,includeCompletion])).rows;
   for(const row of conditions){
     if(row.condition_key==='materials_ready'&&task.source_id&&['development_pattern','development_cutting','development_sewing'].includes(task.task_kind))continue;
     if(task.source_id&&unified&&row.condition_key==='pattern_assignment_ready'){
@@ -38,7 +41,7 @@ export async function developmentTaskBlockers(db:Pick<Pool,'query'>,task:{task_i
     }
     out.push({condition:row.condition_key,...digitalConditionGuidance(row.condition_key,task.required_role),evidenceId:null,verified:true});
   }
-  const predecessors=(await db.query(`SELECT p.task_id,p.state,a.task_kind,a.required_role,
+  const predecessors=prepared?.predecessors??(await db.query(`SELECT p.task_id,p.state,a.task_kind,a.required_role,
     (SELECT label FROM digital_production_deadline_policies WHERE node_key=p.node_key ORDER BY version DESC LIMIT 1) AS label
     FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id
     JOIN digital_production_task_access a ON a.task_id=p.task_id WHERE d.task_id=$1 AND p.state<>'completed' AND a.task_kind<>'factory_material_count'`,[task.task_id])).rows;

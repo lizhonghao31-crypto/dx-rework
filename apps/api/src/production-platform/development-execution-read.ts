@@ -56,7 +56,7 @@ export interface DevelopmentExecutionSnapshot{
 /** Narrow read capabilities only. Each call receives the caller's same snapshot proxy. */
 export interface DevelopmentExecutionReaders{
   readSheet:(actor:TrustedActorContext,sourceId:string,client:PoolClient)=>Promise<DevelopmentSheet>;
-  readTask:(actor:TrustedActorContext,taskId:string,client:PoolClient)=>Promise<DigitalTask>;
+  readTasks:(actor:TrustedActorContext,taskIds:readonly string[],client:PoolClient)=>Promise<DigitalTask[]>;
   readTechnical:(actor:TrustedActorContext,sourceId:string,round:number,scope:string,client:PoolClient)=>Promise<DevelopmentTechnicalState>;
   readFacts:(client:PoolClient,sourceId:string)=>Promise<DevelopmentExecutionFact[]>;
 }
@@ -67,8 +67,8 @@ export async function readDevelopmentExecutionSnapshot(
 ):Promise<DevelopmentExecutionSnapshot>{
     const sheet=await readers.readSheet(actor,sourceId,db);
     const dispatch=(await db.query<DevelopmentDispatchSnapshot>('SELECT version,pattern_worker_id AS "patternWorkerId",cutting_worker_id AS "cuttingWorkerId",sewing_worker_id AS "sewingWorkerId" FROM digital_development_dispatch WHERE source_id=$1',[sourceId])).rows[0]??null;
-    const ids=(await db.query("SELECT task_id FROM digital_production_task_access WHERE source_id=$1 ORDER BY created_at,task_id",[sourceId])).rows;
-    const tasks=[];for(const row of ids)if(await new DigitalProductionAccessPolicy(db).allowed(actor,"task",row.task_id,"technical"))tasks.push(await readers.readTask(actor,row.task_id,db));
+    const ids=(await db.query<{task_id:string}>("SELECT task_id FROM digital_production_task_access WHERE source_id=$1 ORDER BY created_at,task_id",[sourceId])).rows;
+    const tasks=await readers.readTasks(actor,ids.map(row=>row.task_id),db);
     const routeFacts=(await db.query<DevelopmentExecutionRouteFact>('SELECT fact_id AS "factId",task_id AS "taskId",route_version AS "routeVersion",kind,payload,recorded_at AS "recordedAt" FROM digital_development_route_facts WHERE source_id=$1 ORDER BY sequence',[sourceId])).rows;
     const patternOrder=(await db.query<{orderId:string}>('SELECT order_id AS "orderId" FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0]??null;
     const patternPreparation=patternOrder&&(await db.query("SELECT to_regclass('pattern_room_rounds') AS relation")).rows[0]?.relation?(await db.query<DevelopmentPatternPreparation>(`SELECT o.status,r.category_id IS NOT NULL AS "categorySaved",r.agreed_amount IS NOT NULL AS "priceSaved",

@@ -30,7 +30,20 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
   const rows = [own, foreign];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
-    if (["SELECT to_regclass('digital_timeline_adoptions') AS relation", "SELECT to_regclass('digital_preparation_responsibilities') AS relation", "SELECT to_regclass('digital_preparation_material_versions') AS relation", "SELECT to_regclass('digital_order_time_standards') AS relation", "SELECT to_regclass('digital_order_time_plan_versions') AS relation", "SELECT to_regclass('digital_whole_order_deleted_objects') AS relation"].includes(sql)) found = [{relation:null}];
+    if (['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY','COMMIT','ROLLBACK'].includes(sql)) found=[];
+    else if (sql.startsWith('SELECT a.task_id,a.task_kind,a.source_id,a.production_order_id,a.required_role,a.assignee_id')) found=rows.filter(row=>(params[0] as string[]).includes(row.task_id));
+    else if (sql.startsWith('SELECT DISTINCT a.role_code FROM app_users u')) found=(activeRoles.get(String(params[0]))??[]).map(role_code=>({role_code}));
+    else if (sql.startsWith("SELECT to_regclass('digital_preparation_responsibilities') IS NOT NULL AS preparation")) found=[{preparation:false,bulk:true,qc:false}];
+    else if (sql.startsWith('WITH requested AS (SELECT * FROM unnest')) {
+      expect(params[0]).toEqual(['order']);expect(params[1]).toEqual([orderId]);
+      found=[{kind:'order',id:orderId,source_id:sourceId,created_by:order.created_by,primary_merchandiser_id:order.primary_merchandiser_id,
+        linked_primary:false,dispatch_worker:null,warehouse_worker:null,color_worker:null,color_role:null,handover_recipient:null,handover_current:false,
+        quality_lead:null,bulk_roles:rows.filter(row=>row.assignee_id===params[2]).map(row=>row.required_role)}];
+    }
+    else if (sql.startsWith('SELECT DISTINCT ON(r.task_id) r.task_id,')) found=[];
+    else if (sql.startsWith('SELECT task_id,condition_key,stage,satisfied')) found=(params[0] as string[]).map(task_id=>({task_id,condition_key:'handover_received',stage:'activation',satisfied:true}));
+    else if (sql.startsWith('SELECT d.task_id AS downstream_task_id')||sql.startsWith('SELECT DISTINCT ON(task_id) task_id,payload')) found=[];
+    else if (["SELECT to_regclass('digital_timeline_adoptions') AS relation", "SELECT to_regclass('digital_preparation_responsibilities') AS relation", "SELECT to_regclass('digital_preparation_material_versions') AS relation", "SELECT to_regclass('digital_order_time_standards') AS relation", "SELECT to_regclass('digital_order_time_plan_versions') AS relation", "SELECT to_regclass('digital_whole_order_deleted_objects') AS relation"].includes(sql)) found = [{relation:null}];
     else if (sql === "SELECT to_regclass('digital_bulk_preshrink_corrections') AS relation") found = [{relation:'digital_bulk_preshrink_corrections'}];
     else if (sql === 'SELECT preshrink_task_id FROM digital_bulk_preshrink_corrections ORDER BY preshrink_task_id') found = [];
     else if (sql === "SELECT to_regclass('digital_sla_configurations') AS relation") found = [{relation:sla==='absent'?null:'digital_sla_configurations'}];
@@ -59,7 +72,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     else if (sql.includes("to_regclass('digital_bulk_preparations')")) found = [{ relation: "digital_bulk_preparations" }];
     else if (sql.includes("to_regclass('digital_development_documents')")) found = [{ relation: null }];
     else if (sql.startsWith("SELECT a.task_id,a.assignee_id,a.required_role")) found = rows.filter(row => row.production_order_id === params[0]);
-    else if (sql.startsWith("SELECT t.*,a.production_order_id")) found = rows.filter(row => row.task_id === params[0]);
+    else if (sql.startsWith("SELECT t.*,a.production_order_id")) found = rows.filter(row => Array.isArray(params[0])?params[0].includes(row.task_id):row.task_id===params[0]);
     else if (sql.startsWith("SELECT r.entered_at")) found = [];
     else if (sql.startsWith("SELECT * FROM digital_production_deadline_policies")) found = [{ label: "TEST task", version: 1, sla_seconds: 3600 }];
     else if (sql.startsWith("SELECT state FROM digital_production_resource_lifecycle")){expect(params).toEqual(params[0]==='source'?['source',sourceId]:['order',orderId]);found=[{state:eligibility.state}];}
@@ -86,7 +99,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     else throw new Error(`Unexpected isolated query: ${sql}`);
     return { rows: found, rowCount: found.length };
   });
-  const pool = { query } as unknown as Pool, policy = new DigitalProductionAccessPolicy(pool), service = new DigitalProductionTaskService(pool);
+  const pool = { query,connect:async()=>({query,release:vi.fn()}) } as unknown as Pool, policy = new DigitalProductionAccessPolicy(pool), service = new DigitalProductionTaskService(pool);
   return { orderId, sourceId, preparationId, workerId, warehouseId, designerId, primaryId, own, foreign, rows, actor, activeRoles, order, source, pool, query, policy, service,eligibility };
 }
 

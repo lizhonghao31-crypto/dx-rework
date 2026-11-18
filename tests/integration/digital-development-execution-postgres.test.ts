@@ -385,16 +385,17 @@ run("P06 development execution PostgreSQL", () => {
     }} as unknown as pg.Pool;
     const reuse=snapshotReads.reuseJourneySnapshotReads;
     const proxy=vi.spyOn(snapshotReads,'reuseJourneySnapshotReads').mockImplementation(client=>{const wrapped=reuse(client);clients.push(wrapped);return wrapped;});
-    const sheet=vi.spyOn(DigitalDevelopmentService.prototype,'read'),task=vi.spyOn(DigitalProductionTaskService.prototype,'read'),technical=vi.spyOn(DevelopmentTechnicalService.prototype,'read');
+    const sheet=vi.spyOn(DigitalDevelopmentService.prototype,'read'),task=vi.spyOn(DigitalProductionTaskService.prototype,'readPage'),technical=vi.spyOn(DevelopmentTechnicalService.prototype,'read');
     try{
       const state=await new DevelopmentExecutionService(measured,true).read(boss(),id);
       expect(state.sheet.sourceId).toBe(id);expect(state.sheet.status).toBe('published');
       expect(state.dispatch).toMatchObject({version:1,patternWorkerId:other,cuttingWorkerId:other,sewingWorkerId:other});
       expect(state.tasks.some(t=>t.taskKind==='development_materials')).toBe(true);
       expect(clients).toHaveLength(1);expect(releases).toHaveLength(1);
-      expect(sheet.mock.calls.length).toBeGreaterThan(0);expect(task.mock.calls.length).toBeGreaterThan(0);expect(technical.mock.calls).toHaveLength(1);
+      expect(sheet.mock.calls.length).toBeGreaterThan(0);expect(task.mock.calls).toHaveLength(1);expect(technical.mock.calls).toHaveLength(1);
       expect(sheet.mock.calls.every(call=>call[2]===clients[0])).toBe(true);
-      expect(task.mock.calls.every(call=>call[2]===clients[0])).toBe(true);
+      expect(task.mock.calls[0]![2]).toBe(clients[0]);
+      expect(task.mock.calls[0]![1]).toEqual(state.tasks.map(row=>row.taskId));
       expect(technical.mock.calls[0]![4]).toBe(clients[0]);
       expect(statements.filter(sql=>/^BEGIN|^COMMIT|^ROLLBACK/.test(sql))).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY','COMMIT']);
     }finally{proxy.mockRestore();sheet.mockRestore();task.mockRestore();technical.mockRestore();}

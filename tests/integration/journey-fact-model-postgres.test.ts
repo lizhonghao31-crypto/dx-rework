@@ -10,7 +10,7 @@ import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint,journeyValueFing
 import {businessScopeKey} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {evaluateSlaPlan} from '@dx-rework/domain/digital-sla-plan';
-import {readJourneySelectionAccess} from '../../apps/api/src/production-platform/journey-selection-access.js';
+import {readJourneySelectionAccess,readTaskAccessForPage} from '../../apps/api/src/production-platform/journey-selection-access.js';
 import {readJourneySelections} from '../../apps/api/src/production-platform/journey-selection-query.js';
 import {selectJourneySelections,selectJourneys} from '../../apps/api/src/production-platform/journey-projection.js';
 import {JOURNEY_NODES,JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
@@ -51,6 +51,31 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect((await readJourneySelectionAccess(client,primary,resources)).resources.get(key)?.timing).toBe(false);
    }finally{await f.access.assignRole(admin,{userId:primary.actorId,roleCode:'order_merchandiser',reason:'TEST restore fixture role through audited grant'});}
   }finally{client.release();}
+ }));
+ it('batch-loads only the requested active tasks and matches each original technical, parent and execute decision',()=>run(async()=>{
+  const order=await make(),sibling=await make(1);
+  const tasks=(await f.db.query<{task_id:string}>(`SELECT task_id FROM digital_production_task_access
+   WHERE production_order_id=$1 ORDER BY task_id`,[order.productionOrderId])).rows.map(row=>row.task_id);
+  const unrequested=(await f.db.query<{task_id:string}>(`SELECT task_id FROM digital_production_task_access
+   WHERE production_order_id=$1 ORDER BY task_id LIMIT 1`,[sibling.productionOrderId])).rows[0]!.task_id;
+  expect(tasks.length).toBeGreaterThan(0);
+  const missing=randomUUID(),client=await f.db.connect();
+  try{
+   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const policy=new DigitalProductionAccessPolicy(client),service=new DigitalProductionTaskService(f.db);
+   for(const actor of [f.root,...Object.values(f.people)]){
+    const page=await readTaskAccessForPage(client,actor,[...tasks,tasks[0]!,missing]);
+    expect([...page.keys()].sort()).toEqual([...tasks].sort());expect(page.has(unrequested)).toBe(false);
+    const parentTechnical=await policy.allowed(actor,'order',order.productionOrderId,'technical');
+    for(const taskId of tasks)expect(page.get(taskId)).toEqual({
+     technical:await policy.allowed(actor,'task',taskId,'technical'),execute:await policy.allowed(actor,'task',taskId,'execute'),parentTechnical,
+    });
+    const details=await service.readPage(actor,[...tasks,tasks[0]!,missing],client);
+    expect([...details.keys()]).toEqual(tasks.filter(taskId=>page.get(taskId)?.technical));
+    for(const [taskId,detailsFromPage] of details)expect(detailsFromPage).toEqual(await service.read(actor,taskId,client));
+   }
+   expect(await readTaskAccessForPage(client,f.root,[])).toEqual(new Map());
+  }finally{await client.query('ROLLBACK');client.release();}
  }));
  it('builds exactly one native mother, retains both PO, is stable and does not switch ordinary reads',()=>run(async()=>{
   const order=await make(),other=await make(1),query=new DigitalJourneyQuery(f.db);

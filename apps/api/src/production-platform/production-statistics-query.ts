@@ -29,6 +29,7 @@ import {productionGroups} from './production-statistics-groups.js';
 import {productionFacets} from './production-statistics-dimensions.js';
 import {productionResultProjection,scopedMotherCompletion} from './production-statistics-projection.js';
 import {reuseJourneySnapshotReads,prepareJourneySnapshotBatches} from './journey-snapshot-reads.js';
+import {readJourneySelectionAccess,readTaskAccessForPage} from './journey-selection-access.js';
 
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const none=():StatisticsTime=>({at:null,date:null,precision:'unknown',quality:'unknown',sourceRefs:[]});
@@ -53,8 +54,10 @@ export class ProductionStatisticsQuery{
  }
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isRootActor(actor)||(actor.authorizationCapabilities??[]).includes('report:view');}catch{return false;}}
  private async permission(db:PoolClient,actor:TrustedActorContext,orderIds:string[],taskIds:string[],reworkIds:string[]=[]){
-  const policy=new DigitalProductionAccessPolicy(db);for(const id of sorted(orderIds))if(!await acceptanceIncludesNative(this.database,id,db)||!await policy.allowed(actor,'order',id,'technical'))digitalForbidden();
-  for(const id of sorted(taskIds))if(!await policy.allowed(actor,'task',id,'technical'))digitalForbidden();
+  const orders=sorted(orderIds),tasks=sorted(taskIds),{resources}=await readJourneySelectionAccess(db,actor,orders.map(id=>({kind:'order',id})));
+  for(const id of orders)if(!resources.get(`order:${id}`)?.technical||!await acceptanceIncludesNative(this.database,id,db))digitalForbidden();
+  const taskAccess=await readTaskAccessForPage(db,actor,tasks);
+  if(tasks.some(id=>!taskAccess.get(id)?.technical))digitalForbidden();
   const detail=new ReworkBusinessDetailService(this.database);for(const id of sorted(reworkIds)){const row=(await db.query("SELECT * FROM rework_orders WHERE rework_order_id=$1",[id])).rows[0];if(!row||!await detail.canViewExisting(actor,row,db)||!await detail.canViewExistingBusinessDetails(actor,row,db))digitalForbidden();}
   return hash({actorId:actor.actorId,roles:sorted(actor.actorRoles),capabilities:sorted([...(actor.authorizationCapabilities??[]),actor.authorizationCapability??'']),orders:sorted(orderIds),tasks:sorted(taskIds),reworks:sorted(reworkIds),scene:acceptanceBusinessContext()?.scenarioId??null,canExport:this.exportAllowed(actor)});
  }
@@ -70,15 +73,16 @@ export class ProductionStatisticsQuery{
   }
   const observation=observedBusinessTime(),clock=new ContextBusinessClock(this.database),observed:Array<{id:string;time:Awaited<ReturnType<ContextBusinessClock['read']>>}>=[];
   const result=await this.read(async db=>{
-   const live=await this.liveActor(db,actor,applied.collaboration),policy=new DigitalProductionAccessPolicy(db),orders=[];
+   const live=await this.liveActor(db,actor,applied.collaboration),orders=[];
    if(applied.secondaryMerchandiserId&&!isRootActor(live)&&!(live.authorizationCapabilities??[]).includes('sourcing:view'))digitalForbidden();
    // No creation-period cut: old unfinished production stays in the current set.
    const candidates=(await db.query<StatisticsOrder>(`SELECT o.*,s.created_by AS source_creator,s.created_at AS source_created_at,
     CASE WHEN s.source_id IS NOT NULL AND NOT access_is_root_actor(s.created_by) AND EXISTS(SELECT 1 FROM user_role_assignments a
      WHERE a.user_id=s.created_by AND a.role_code='sample_designer' AND a.granted_at<=s.created_at AND(a.revoked_at IS NULL OR a.revoked_at>s.created_at)) THEN s.created_by END AS verified_designer
     FROM digital_production_orders o LEFT JOIN digital_production_sources s USING(source_id) ORDER BY o.production_order_id`)).rows;
-   for(const order of candidates)if(await acceptanceIncludesNative(this.database,order.production_order_id,db)&&await policy.allowed(live,'order',order.production_order_id,'technical')){
-    if(applied.customer&&order.customer_code!==applied.customer)continue;
+   const scoped=candidates.filter(order=>!applied.customer||order.customer_code===applied.customer);
+   const {resources}=await readJourneySelectionAccess(db,live,scoped.map(order=>({kind:'order',id:order.production_order_id})));
+   for(const order of scoped)if(resources.get(`order:${order.production_order_id}`)?.technical&&await acceptanceIncludesNative(this.database,order.production_order_id,db)){
     orders.push(order);
    }
    // Reuse only this actor's authorized orders inside this readonly snapshot.
@@ -127,7 +131,7 @@ export class ProductionStatisticsQuery{
   return {...publicValue,...collaborationSources?{collaboration:productionCollaborationProjection(collaborationSources,result.windows.map(value=>value.window.id),result.rows.map(row=>row.line),value.filters)}:{},...periodSources?{period:productionPeriodProjection(periodSources,value.filters,result.rows.map(row=>row.line),result.asOf)}:{},groups,facets,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
  }
  private async orderRows(db:PoolClient,actor:TrustedActorContext,order:StatisticsOrder):Promise<StatisticsPo[]>{
-  const id=order.production_order_id as string,policy=new DigitalProductionAccessPolicy(db),closure=await new OrderClosureService(this.database).read(actor,id,db),gates=await new BulkPreparationService(this.database).gates(db,id);
+  const id=order.production_order_id,closure=await new OrderClosureService(this.database).read(actor,id,db),gates=await new BulkPreparationService(this.database).gates(db,id);
   const scopeRows=await factoryProductionScopes(db,id,{includeZero:true}),sourceRefs=[`order:${id}:v${order.version}`,`effective-receiving-packing:${closure.revision}`];
   const lines=(await db.query('SELECT line_id,customer_warehouse_arrival_date::text AS customer_date,customer_date_version FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[id])).rows;
   const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE(resource_kind='order' AND resource_id=$1) OR(resource_kind='source' AND resource_id=$2)",[id,order.source_id])).rows;
@@ -138,7 +142,8 @@ export class ProductionStatisticsQuery{
    LEFT JOIN LATERAL(SELECT * FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true
    LEFT JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)policy ON true
    WHERE a.production_order_id=$1 AND a.task_kind<>'factory_material_count' AND NOT(t.task_id=ANY($2::uuid[])) ORDER BY t.task_id`,[id,retired])).rows;
-  const visible=[];for(const task of rawTasks)if(await policy.allowed(actor,'task',task.task_id,'technical'))visible.push(task);
+  const taskAccess=await readTaskAccessForPage(db,actor,rawTasks.map(task=>task.task_id));
+  const visible=rawTasks.filter(task=>taskAccess.get(task.task_id)?.technical);
   const events=(await db.query(`SELECT event_id AS id,task_id AS "taskId",event_kind AS kind,occurred_at AS at,recorded_at AS "recordedAt",time_quality AS quality,actor_id AS "actorId",corrects_event_id AS "correctsId",payload
    FROM digital_production_task_events WHERE task_id=ANY($1::uuid[]) ORDER BY recorded_at,event_id`,[visible.map(task=>task.task_id)])).rows.map(event=>({...event,at:event.at?new Date(event.at).toISOString():null,recordedAt:new Date(event.recordedAt).toISOString()}));
   const windows:StatisticsWindow[]=[],problems:StatisticsProblem[]=[];

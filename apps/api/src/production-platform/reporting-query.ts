@@ -6,7 +6,8 @@ import {randomUUID,createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {DigitalAnalysisFilters,DigitalAnalysisNote,DigitalAnalysisResult} from '@dx-rework/contracts/digital-production-analysis';
 import type {TrustedActorContext} from '../tools/repositories.js';
-import {DigitalProductionAccessPolicy,isDigitalLeader,isDigitalManagementReader,isDigitalTechnicalManager,digitalForbidden} from './access-policy.js';
+import {isDigitalLeader,isDigitalManagementReader,isDigitalTechnicalManager,digitalForbidden} from './access-policy.js';
+import {readJourneySelectionAccess,readTaskAccessForPage} from './journey-selection-access.js';
 import {assertIdentityActor} from './identity-service.js';
 import {assertBusinessExportAllowed} from '../access/export-authority.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -52,8 +53,8 @@ export class DigitalAnalysisQuery{
           AND period_round.published_at>=$5 AND period_round.published_at<$6)
       )))
     ORDER BY t.created_at DESC,t.task_id DESC`,[filters.customer,filters.category,filters.role,filters.designer??null,window.from,window.to,filters.scope??null])).rows;
-  const policy=new DigitalProductionAccessPolicy(db),authorized=[];
-  for(const row of candidates)if(await policy.allowed(actor,'task',row.taskId,'technical'))authorized.push(row);
+  const taskAccess=await readTaskAccessForPage(db,actor,candidates.map(row=>row.taskId));
+  const authorized=candidates.filter(row=>taskAccess.get(row.taskId)?.technical);
   const ids=authorized.map(row=>row.taskId);
   const supplyTasks=authorized.filter(row=>row.nodeKey==='development_material_supply'&&!['completed','cancelled'].includes(row.state));
   const missingSupplyRounds=new Set<string>();
@@ -80,25 +81,27 @@ export class DigitalAnalysisQuery{
   // Match original development reads: any technically visible source task grants
   // the read, including tasks outside the current analysis filters.
   const candidateSources=[...new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id)))];
-  const sourceTasks=(await db.query('SELECT task_id,source_id FROM digital_production_task_access WHERE source_id=ANY($1::uuid[])',[candidateSources])).rows;
-  const sourceIds:string[]=[];
-  for(const sourceId of candidateSources){
-    let readable=await policy.allowed(actor,'source',sourceId,'technical');
-    if(!readable)for(const task of sourceTasks)if(task.source_id===sourceId&&await policy.allowed(actor,'task',task.task_id,'technical')){readable=true;break;}
-    if(readable)sourceIds.push(sourceId);
+  const {resources:sourceAccess}=await readJourneySelectionAccess(db,actor,candidateSources.map(id=>({kind:'source',id})));
+  const readableSources=new Set(candidateSources.filter(id=>sourceAccess.get(`source:${id}`)?.technical));
+  const remainingSources=candidateSources.filter(id=>!readableSources.has(id));
+  if(remainingSources.length){
+   const sourceTasks=(await db.query<{task_id:string;source_id:string}>('SELECT task_id,source_id FROM digital_production_task_access WHERE source_id=ANY($1::uuid[])',[remainingSources])).rows;
+   const extraAccess=await readTaskAccessForPage(db,actor,sourceTasks.map(row=>row.task_id));
+   for(const task of sourceTasks)if(extraAccess.get(task.task_id)?.technical)readableSources.add(task.source_id);
   }
   const rawRounds=(await db.query(`SELECT source_id AS "sourceId",round_number AS round,origin,categories,affected_nodes AS "affectedNodes",customer_comment AS "customerComment",internal_problem AS "internalProblem",explanation,published_at AS "publishedAt" FROM digital_development_rounds
-    WHERE source_id=ANY($1::uuid[]) AND published_at>=$2 AND published_at<$3 ORDER BY published_at,source_id,round_number`,[sourceIds,window.from,window.to])).rows;
+    WHERE source_id=ANY($1::uuid[]) AND published_at>=$2 AND published_at<$3 ORDER BY published_at,source_id,round_number`,[[...readableSources],window.from,window.to])).rows;
   const rounds=rawRounds.map(row=>({...row,publishedAt:iso(row.publishedAt)!}));
-  const readableSources=new Set(sourceIds);
   const selectedRows=workspaceAnalysisRows(scopedRows,rounds,filters,window.from,window.to,asOf).map(row=>({
     ...row,canReadSourceRound:row.sourceRound!=null&&readableSources.has(row.sourceId??''),
   }));
   // Shared analysis is readable only when every referenced original task remains visible.
   const rawNotes=(await db.query(`SELECT a.id,u.display_name AS author,a.created_at AS "createdAt",a.after_state AS note FROM audit_events a JOIN app_users u ON u.id=a.actor_id
     WHERE a.action='digital.analysis.recorded' AND (a.actor_id=$1 OR $2::boolean) ORDER BY a.created_at DESC,a.id DESC LIMIT 100`,[actor.actorId,isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor)])).rows;
+  const noteTasks=new Set<string>(rawNotes.flatMap(record=>(record.note as DigitalAnalysisNote).taskIds));
+  const noteAccess=await readTaskAccessForPage(db,actor,[...noteTasks].filter(id=>!taskAccess.has(id)));
   const notes=[];
-  for(const record of rawNotes){const note=record.note as DigitalAnalysisNote&{ruleVersion:string};let allowed=true;for(const id of note.taskIds)if(!await policy.allowed(actor,'task',id,'technical')){allowed=false;break;}if(allowed)notes.push({id:record.id,author:record.author,createdAt:iso(record.createdAt)!,...note});}
+  for(const record of rawNotes){const note=record.note as DigitalAnalysisNote&{ruleVersion:string};if(note.taskIds.every(id=>(taskAccess.get(id)??noteAccess.get(id))?.technical))notes.push({id:record.id,author:record.author,createdAt:iso(record.createdAt)!,...note});}
   return {ruleVersion:filters.scope?WORKSPACE_ANALYSIS_RULE_VERSION:ANALYSIS_RULE_VERSION,asOf,filters,canExport:this.exportAllowed(actor),canRecord:isDigitalLeader(actor)||isDigitalTechnicalManager(actor),page:filters.page,total:selectedRows.length,
     summary:summarizeAnalysis(selectedRows,window.from,window.to),people,overview:analysisWorkspaceOverview(scopedRows,window.from,window.to,asOf),rounds,rows:selectedRows,notes};
  }

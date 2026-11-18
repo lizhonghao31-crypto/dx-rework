@@ -150,10 +150,14 @@ export class DigitalJourneyQuery {
       const result=selectJourneys(items,filter,asOf,!exportAll);
       endFilter();
       if(summaryOnly&&options.details!==false&&!filter.scope){
-        const details:OrderJourney[]=[];
-        for(const summary of selectPage?selectPage(result.items):result.items){
+        const details:OrderJourney[]=[],selected=selectPage?selectPage(result.items):result.items;
+        const nativeByCandidate=new Map(items.map(item=>[candidates.get(item.id)!,this.authorizedTasks.get(item)??[]]));
+        const taskIds=selected.flatMap(summary=>(nativeByCandidate.get(candidates.get(summary.id)!)??[])
+          .filter(task=>journeyDefinition(task.key)).map(task=>task.id));
+        const taskPage=await new DigitalProductionTaskService(this.database).prepareReadPage(actor,taskIds,db,true);
+        for(const summary of selected){
           const row=candidates.get(summary.id)!;
-          const detail=await journeyMeasure('detail_projection',()=>this.project(db,actor,row,asOf,undefined,false,null,false,false,undefined,prepared?.get(row)));
+          const detail=await journeyMeasure('detail_projection',()=>this.project(db,actor,row,asOf,undefined,false,null,false,false,undefined,prepared?.get(row),taskPage));
           if(detail)details.push({...detail,hitReasons:summary.hitReasons});
         }
         result.items=details;
@@ -202,11 +206,13 @@ export class DigitalJourneyQuery {
       const freshness=()=>pending||failed?{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}:undefined;
       const plan=await select(facts,asOf,freshness()),details=new Map<string,OrderJourney>(),detailFailures:string[]=[];
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,plan.ids.flatMap(id=>byId.get(id)?.order?[byId.get(id)!.order!.production_order_id]:[]));
+      const pagePlan=patternBusiness?undefined:await this.prepareWorkspaceTaskPage(db,transaction,actor,plan.ids,byId,detailFailures);
       for(const id of new Set(plan.ids)){
+        if(detailFailures.includes(id))continue;
         const candidate=byId.get(id);if(!candidate)throw new ApplicationError('INVALID_STATE_TRANSITION','当前筛选范围已变化，请刷新工作区',409);
         await transaction.query('SAVEPOINT workspace_page_object');
         try{
-          const item=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidate,asOf,undefined,Boolean(patternBusiness),patternKinds));
+          const item=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidate,asOf,undefined,Boolean(patternBusiness),patternKinds,false,false,undefined,undefined,pagePlan?.page,pagePlan?.scopes.get(id)));
           if(item)details.set(id,patternBusiness?item:{...item,hitReasons:selectJourneys([item],filter,asOf,false).items[0]?.hitReasons??[]});else detailFailures.push(id);
           await transaction.query('RELEASE SAVEPOINT workspace_page_object');
         }catch(error){
@@ -217,6 +223,33 @@ export class DigitalJourneyQuery {
       }
       return plan.finish(details,freshness(),detailFailures);
     });
+  }
+  private async prepareWorkspaceTaskPage(db:PoolClient,transaction:PoolClient,actor:TrustedActorContext,selected:readonly string[],byId:ReadonlyMap<string,Candidate>,failures:string[]){
+    const scopes=new Map<string,Awaited<ReturnType<DigitalJourneyQuery['nativeTaskSelection']>>>(),policy=new DigitalProductionAccessPolicy(db);
+    for(const id of new Set(selected)){
+      const candidate=byId.get(id);
+      if(!candidate)throw new ApplicationError('INVALID_STATE_TRANSITION','当前筛选范围已变化，请刷新工作区',409);
+      await transaction.query('SAVEPOINT workspace_task_range');
+      try{
+        scopes.set(id,await this.nativeTaskSelection(db,policy,actor,candidate,null));
+        await transaction.query('RELEASE SAVEPOINT workspace_task_range');
+      }catch(error){
+        await transaction.query('ROLLBACK TO SAVEPOINT workspace_task_range');await transaction.query('RELEASE SAVEPOINT workspace_task_range');
+        if(error&&typeof error==='object'&&'statusCode' in error&&error.statusCode===409)throw error;
+        failures.push(id);
+      }
+    }
+    const tasks=new Map([...scopes].map(([id,scope])=>[id,scope.tasks.filter(task=>journeyDefinition(task.task_kind)).map(task=>task.task_id)]));
+    await transaction.query('SAVEPOINT workspace_task_facts');
+    try{
+      const page=await new DigitalProductionTaskService(this.database).prepareReadPage(actor,[...tasks.values()].flat(),db,true);
+      await transaction.query('RELEASE SAVEPOINT workspace_task_facts');return {page,scopes};
+    }catch(error){
+      await transaction.query('ROLLBACK TO SAVEPOINT workspace_task_facts');await transaction.query('RELEASE SAVEPOINT workspace_task_facts');
+      if(error&&typeof error==='object'&&'statusCode' in error&&error.statusCode===409)throw error;
+      for(const [id,ids] of tasks)if(ids.length)failures.push(id);
+      return {page:undefined,scopes};
+    }
   }
   private async indexedList(db:PoolClient,actor:TrustedActorContext,filter:JourneyFilter,asOf:string,transaction:PoolClient):Promise<JourneyResult>{
     const candidates=await journeyMeasure('candidates',()=>this.candidates(db,actor));journeyCandidateCount(candidates.length);
@@ -396,7 +429,25 @@ export class DigitalJourneyQuery {
     if(!item)throw Error('本单原始时间事实暂时不可读取');
     return timing;
   }
-  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch):Promise<OrderJourney|null> {
+  private async visibleTaskRows(db:PoolClient,policy:DigitalProductionAccessPolicy,actor:TrustedActorContext|null,row:Candidate,visibility:Awaited<ReturnType<typeof readJourneyCandidateVisibility>>,patternKinds:string[]|null){
+    const {sourceAccess,fullOrder}=visibility,sid=row.source?.source_id??null,oid=row.order?.production_order_id??null;
+    const tasks=(await db.query(`SELECT a.task_id,a.task_kind,a.source_id,a.production_order_id,a.assignee_id,a.required_role,t.route_version,t.occurrence,t.completed_quality,t.route_instance_id,t.state AS original_state,
+      EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned
+      FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
+      WHERE a.task_kind<>'factory_material_count' AND (a.source_id=$1 OR a.production_order_id=$2) ORDER BY t.route_version,t.created_at,t.task_id`,[sid,oid])).rows;
+    const visibleTasks: typeof tasks=[];
+    for(const task of tasks) {
+      if(patternKinds&&!patternKinds.includes(task.task_kind))continue;
+      const direct=Boolean(actor&&task.assignee_id===actor.actorId&&await policy.activeRole(actor.actorId,task.required_role));
+      if((task.source_id?sourceAccess:fullOrder)||direct)visibleTasks.push(task);
+    }
+    return visibleTasks;
+  }
+  private async nativeTaskSelection(db:PoolClient,policy:DigitalProductionAccessPolicy,actor:TrustedActorContext|null,row:Candidate,patternKinds:string[]|null){
+    const visibility=await readJourneyCandidateVisibility(policy,actor,row);
+    return {visibility,tasks:await this.visibleTaskRows(db,policy,actor,row,visibility,patternKinds)};
+  }
+  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch,taskPage?:Awaited<ReturnType<DigitalProductionTaskService['prepareReadPage']>>,nativeSelection?:Awaited<ReturnType<DigitalJourneyQuery['nativeTaskSelection']>>):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
@@ -408,18 +459,9 @@ export class DigitalJourneyQuery {
     capture?.time?.(observed);
     if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     asOf=observed.now;
-    const visibility=prepared?.metadata.visibility??await readJourneyCandidateVisibility(policy,actor,row);
+    const visibility=nativeSelection?.visibility??prepared?.metadata.visibility??await readJourneyCandidateVisibility(policy,actor,row);
     const {sourceAccess,orderAccess,fullOrder}=visibility;
-    const tasks=(await db.query(`SELECT a.task_id,a.task_kind,a.source_id,a.production_order_id,a.assignee_id,a.required_role,t.route_version,t.occurrence,t.completed_quality,t.route_instance_id,t.state AS original_state,
-      EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned
-      FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-      WHERE a.task_kind<>'factory_material_count' AND (a.source_id=$1 OR a.production_order_id=$2) ORDER BY t.route_version,t.created_at,t.task_id`,[sid,oid])).rows;
-    const visibleTasks: typeof tasks=[];
-    for(const task of tasks) {
-      if(patternKinds&&!patternKinds.includes(task.task_kind))continue;
-      const direct=Boolean(actor&&task.assignee_id===actor.actorId&&await policy.activeRole(actor.actorId,task.required_role));
-      if((task.source_id?sourceAccess:fullOrder)||direct)visibleTasks.push(task);
-    }
+    const visibleTasks=nativeSelection?.tasks??await this.visibleTaskRows(db,policy,actor,row,visibility,patternKinds);
     if(!sourceAccess&&!orderAccess&&!visibleTasks.length)return null;
     if(selectedRound!==undefined&&!sourceAccess)digitalNotFound();
     capture?.tasks(visibleTasks.map(task=>({id:task.task_id,routeInstanceId:task.route_instance_id})));
@@ -508,10 +550,10 @@ export class DigitalJourneyQuery {
       const definition=journeyDefinition(raw.task_kind);if(!definition)continue;
       const routeTime=routeTimes.find(fact=>fact.task_id===raw.task_id&&fact.route_version===raw.route_version);
       // The same RR snapshot already loaded these exact completion records.
-      // Original task authorization still runs inside read(), before consuming
-      // a context bound to task/source/round; other callers keep native reads.
+      // This occurrence is bound to its task/source/round. Direct and
+      // final-page readers authorize the task before consuming it.
       const completionContext=raw.source_id&&raw.source_id===sid?{taskId:raw.task_id,sourceId:sid,routeVersion:raw.route_version,recorded:routeTime??null}:undefined;
-      const task=summaryOnly||!actor?summaries!.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db,completionContext);taskDtos.push(task);
+      const task=summaryOnly||!actor?summaries!.get(raw.task_id)!:taskPage?await taskPage.read(raw.task_id,completionContext):await taskService.read(actor,raw.task_id,db,completionContext);taskDtos.push(task);
       const state:JourneyState=task.paused&&!["completed","cancelled"].includes(task.state)?"blocked":task.state==="ready"?"active":task.state;
       const node=emptyNode(definition.key,state,task.routeVersion);node.instanceId=task.taskId;node.occurrence=task.occurrence;
       if(['development_craft_dispatch','development_printing','development_embroidery','development_print_embroidery','development_craft_confirmation'].includes(raw.task_kind))node.label=task.label;
@@ -536,12 +578,14 @@ export class DigitalJourneyQuery {
         if(actual.precision!=='unknown'){node.actualAt=actual.at;node.actualQuality=actual.quality;}
       }
       const completion=journeyCompletion(node.expectedAt,node.actualAt,node.actualQuality==="verified");node.completionResult=state==="completed"?completion.result:null;node.overdueSeconds=state==="completed"?completion.overdueSeconds:null;
-      const events=summaryOnly||compact?[]:(await db.query(`SELECT e.*,u.display_name AS actor_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
-        WHERE task_id=$1 AND event_kind='completed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1`,[task.taskId])).rows;
-      const assignments=summaryOnly||compact?[]:(await db.query("SELECT created_at,actor_id,before_state,after_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=$1 AND action='digital_task_reassigned' ORDER BY created_at,id",[task.taskId])).rows;
-      node.assignmentHistory=assignments.map(event=>({at:iso(event.created_at)!,actorId:event.actor_id,from:event.before_state?.assigneeId??null,to:event.after_state?.assigneeId??null}));
+      const history=taskPage?.history;
       const taskSummary=summaries?.get(task.taskId);
-      const done=summaryOnly||compact?taskSummary?.completion:events.filter(event=>event.event_kind==="completed").at(-1);
+      const done=summaryOnly||compact?taskSummary?.completion:history?history.completions.get(task.taskId)
+       :(await db.query(`SELECT e.actor_id,e.recorded_at,u.display_name AS actor_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
+         WHERE task_id=$1 AND event_kind='completed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1`,[task.taskId])).rows[0];
+      const assignments=summaryOnly||compact?[]:history?history.assignments.get(task.taskId)??[]
+       :(await db.query("SELECT created_at,actor_id,before_state,after_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=$1 AND action='digital_task_reassigned' ORDER BY created_at,id",[task.taskId])).rows;
+      node.assignmentHistory=assignments.map(event=>({at:iso(event.created_at)!,actorId:event.actor_id,from:event.before_state?.assigneeId??null,to:event.after_state?.assigneeId??null}));
       node.operator=done?{id:done.actor_id,name:done.actor_name}:null;
       let ownerId=task.assigneeId;
       if(done) { const later=summaryOnly||compact?taskSummary?.laterOwner?{before_state:taskSummary.laterOwner}:null:assignments.find(event=>new Date(event.created_at)>new Date(done.recorded_at));if(later)ownerId=later.before_state?.assigneeId??null; }
@@ -549,7 +593,8 @@ export class DigitalJourneyQuery {
       node.ownerStatus=ownerId?'assigned':'unassigned';
       node.records=[{...record("task",task.taskId,taskUrl(task.taskId),task.routeVersion),mode:task.canExecute&&!["completed","cancelled"].includes(task.state)?"handle":"read"}];
       node.blockers=(task.unmetConditions??[]).filter(detail=>!['paused','manual_block','fabric_quality','development_document'].includes(detail.condition)&&!detail.condition.startsWith('materials_ready:')).map(detail=>({key:detail.condition,label:`${detail.missing}；负责岗位：${businessRoleLabel(detail.responsibleRole)}${detail.action?`；${detail.action}`:''}`,ownerId:null,record:node.records[0]!}));
-      const completionKeys=summaryOnly?taskSummary?.completionKeys??[]:(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND stage='completion' AND NOT satisfied",[task.taskId])).rows.map(row=>row.condition_key as string);
+      const completionKeys=summaryOnly?taskSummary?.completionKeys??[]:taskPage?taskPage.completionKeys(task.taskId)
+       :(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND stage='completion' AND NOT satisfied",[task.taskId])).rows.map(row=>row.condition_key as string);
 
       if(raw.source_id&&['development_pattern','development_cutting','development_sewing'].includes(raw.task_kind)&&!['completed','cancelled'].includes(task.state)){
         const materialState=await materialsFor(raw.route_version),missing=raw.task_kind==='development_sewing'?materialState.sewingMissing:materialState.earlyMissing;

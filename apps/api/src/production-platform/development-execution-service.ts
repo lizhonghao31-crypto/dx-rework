@@ -48,7 +48,7 @@ export class DevelopmentExecutionService {
       await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const result=await readDevelopmentExecutionSnapshot(reuseJourneySnapshotReads(db),actor,sourceId,{
         readSheet:(readerActor,id,client)=>this.forms().read(readerActor,id,client),
-        readTask:(readerActor,id,client)=>this.tasks().read(readerActor,id,client),
+        readTasks:async(readerActor,ids,client)=>[...(await this.tasks().readPage(readerActor,ids,client)).values()],
         readTechnical:(readerActor,id,round,scope,client)=>new DevelopmentTechnicalService(this.database,this.enabled).read(readerActor,id,round,scope,client),
         readFacts:(client,id)=>this.facts(client,id),
       });

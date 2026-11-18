@@ -14,13 +14,17 @@ import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalManagementRead
 import { assertIdentityActor, digitalDateText } from "./identity-service.js";
 import { DigitalProductionTaskService } from "./task-service.js";
 import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
+import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 
 /** Read-only projection. Resource authorization is identical to original-page access. */
 export class DigitalCockpitQuery {
   constructor(private readonly database: Pool) {}
   async list(actor: TrustedActorContext, input: { page: number; search: string; stage: CockpitStage; workload?: "all"|"unassigned"|"blocked"|"urgent" }): Promise<CockpitResult> {
     assertIdentityActor(actor);
-    const db = this.database;
+    const client=await this.database.connect();
+    try{
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const db=reuseJourneySnapshotReads(client);
     const policy = new DigitalProductionAccessPolicy(db);
     // Match resource policy in one SQL scope; never authorize the full history row by row.
     const activeRole = (role: string) => `EXISTS(SELECT 1 FROM app_users au JOIN user_role_assignments ar ON ar.user_id=au.id JOIN business_roles br ON br.role_code=ar.role_code AND br.enabled WHERE au.id=$4 AND au.enabled AND coalesce((to_jsonb(au)->>'manual_access_disabled')::boolean,false)=false AND (ar.role_code=${role} OR (${role}='warehouse_receiver' AND ar.role_code='warehouse_supervisor')) AND ar.revoked_at IS NULL AND EXISTS(SELECT 1 FROM identity_mappings ai WHERE ai.user_id=au.id AND ai.active AND ai.employed))`;
@@ -67,7 +71,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
       WHERE EXISTS(SELECT 1 FROM visible v WHERE v."${visibleColumn}"=a.${column})
     ) SELECT totals.total,row_to_json(summary) AS summary,coalesce((SELECT json_agg(page) FROM page),'[]'::json) AS items FROM totals CROSS JOIN summary`,[input.stage,input.search,input.workload??"all",actor.actorId,actor.actorRoles,isDigitalManagementReader(actor),isDigitalTechnicalManager(actor),(input.page-1)*15])).rows[0];
     const summary=result.summary;
-    const service = new DigitalProductionTaskService(db);
+    const service = new DigitalProductionTaskService(this.database);
     const items: CockpitRow[] = [];
     const hasDocuments=Boolean((await db.query("SELECT to_regclass('digital_development_documents') AS relation")).rows[0]?.relation);
     // Fetch display metadata once for this authorized, bounded page.
@@ -77,12 +81,19 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
     const rounds = hasRounds
       ? (await db.query("SELECT source_id,round_number,route_nodes FROM digital_development_rounds WHERE source_id=ANY($1::uuid[])",[sourceIds])).rows : [];
     const labels = hasDocuments ? (await db.query("SELECT DISTINCT ON(node_key) node_key,label FROM digital_production_deadline_policies ORDER BY node_key,version DESC")).rows : [];
+    const resourceKey=input.stage==='development'?'sourceId':'orderId';
+    type ResourceTask={resource_id:string;task_id:string;returned:boolean};
+    const resources=result.items.map((row:{sourceId:string|null;orderId:string|null})=>row[resourceKey]);
+    const nativeTasks=resources.length?(await db.query<ResourceTask>(`SELECT a.${column} AS resource_id,t.task_id,
+     EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned
+     FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+     WHERE a.${column}=ANY($1::uuid[]) ORDER BY a.${column},t.route_version DESC,t.created_at,t.task_id`,[resources])).rows:[];
+    const tasksByResource=new Map<string,ResourceTask[]>();
+    for(const task of nativeTasks){const group=tasksByResource.get(task.resource_id);if(group)group.push(task);else tasksByResource.set(task.resource_id,[task]);}
+    const prepared=await service.readPage(actor,nativeTasks.map(task=>task.task_id),db);
     for (const row of result.items) {
-      const resourceId = input.stage === "development" ? row.sourceId : row.orderId;
-      const taskIds = (await db.query(`SELECT t.task_id,EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
-        WHERE a.${column}=$1 ORDER BY t.route_version DESC,t.created_at,t.task_id`,[resourceId])).rows;
-      const tasks: Awaited<ReturnType<DigitalProductionTaskService["read"]>>[] = [];
-      for (const task of taskIds) if (await policy.allowed(actor,"task",task.task_id,"technical")) tasks.push(await service.read(actor,task.task_id));
+      const resourceId=row[resourceKey],taskIds=tasksByResource.get(resourceId)??[];
+      const tasks=taskIds.flatMap(task=>{const detail=prepared.get(task.task_id);return detail?[detail]:[];});
       // P03 owns the declared development-route denominator, including not-yet-created nodes.
       const latest = tasks[0];
       let progress = input.stage === "development" && latest && latest.routeProgress.applicable > 0 ? latest.routeProgress : null;
@@ -101,9 +112,9 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
         if (preparation) {
           // Parallel technical preparation may predate its commercial approval.
           // Read the real current approval without inventing or backfilling its FK.
-          const cuttingProcess=preparation.cutting_process??(await new BulkPreparationService(db).gates(db,row.orderId)).approval?.cutting_process;
+          const cuttingProcess=preparation.cutting_process??(await new BulkPreparationService(this.database).gates(db,row.orderId)).approval?.cutting_process;
           const routeIds = new Set((await db.query("SELECT task_id FROM digital_production_tasks WHERE route_instance_id=$1 OR (route_instance_id=$2 AND node_key='bulk_ship_sample')",[preparation.preparation_id,row.orderId])).rows.map(t=>t.task_id));
-          const closure = await new OrderClosureService(db).read(actor,row.orderId);
+          const closure = await new OrderClosureService(this.database).read(actor,row.orderId,db);
           if(cuttingProcess)progress = bulkCockpitProgress({preshrink:(await readBulkPreshrinkRequirement(db,preparation)).requirement??'',secondaryCraft:preparation.document.secondaryCraft==='沿用开发'?preparation.source_document.craft:preparation.document.secondaryCraft,externalCutting:cuttingProcess==='outsourced',
             tasks:tasks.filter(t=>routeIds.has(t.taskId)),specialClosed:Boolean(closure.closed),packed:closure.stage==='本期装箱完成',
             received:closure.lines.length>0&&closure.lines.every(l=>l.receiptCount>0&&l.actualQuantity>=l.orderedQuantity&&(l.actualQuantity===l.documentQuantity||Boolean(l.receivingResolution)))});
@@ -125,12 +136,14 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
         }
         if(document?.template)row.category=document.template;
         const image=document?.files?.find((file:{kind:string})=>file.kind==='款图');
-        if(image&&await new DigitalDevelopmentService(db,false).canDownload(actor,row.sourceId,image.attachmentId))styleImageId=image.attachmentId;
+        if(image&&await new DigitalDevelopmentService(this.database,false).canDownload(actor,row.sourceId,image.attachmentId,db))styleImageId=image.attachmentId;
       }
       const poDeliveryDates=row.orderId?await readOrderPoDeliveryDates(db,row.orderId,lines.map(line=>line.id)):[];
       items.push({...row,styleImageId,flow,deliveryDate:digitalDateText(row.deliveryDate),poDeliveryDates,createdAt:new Date(row.createdAt).toISOString(),tasks,progress,lines});
     }
     const actorName = (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "当前用户";
+    await client.query('COMMIT');
     return {actorId:actor.actorId,actorName,canViewTodos:Boolean(actor.authorizationCapabilities?.includes("todo:view")),canManagePolicies:isDigitalLeader(actor),page:input.page,total:result.total,summary,items};
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }
 }

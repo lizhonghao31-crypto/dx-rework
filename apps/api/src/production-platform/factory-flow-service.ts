@@ -23,6 +23,7 @@ import {fixedCraftSteps} from './fixed-craft-steps.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {craftLegacyLabel} from '@dx-rework/contracts/digital-craft';
 import {readFixedOrderRoute} from './fixed-order-route.js';
+import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);};
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
@@ -111,11 +112,22 @@ export class FactoryFlowService{
   return false;
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<FactoryFlowSheet>{
+  if(db!==this.database)return this.readFlow(actor,id,db);
+  const client=await this.database.connect();
+  try{
+   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const snapshot=reuseJourneySnapshotReads(client);
+   const sheet=await this.readFlow(actor,id,snapshot,snapshot);
+   await client.query('COMMIT');return sheet;
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+ }
+ private async readFlow(actor:TrustedActorContext,id:string,db:DB,readOnlyClient?:PoolClient):Promise<FactoryFlowSheet>{
   await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');const s=await this.state(db,id);
   const sampleTargets=await shipSampleTargets(db,id,s.gate.order.order_time_managed===true),sampleTargetDate=sampleTargets.lines.map(l=>l.targetDate).filter((d):d is string=>d!==null).sort()[0]??null;
   const link=(await db.query("SELECT child_id FROM digital_production_child_links WHERE module='production' AND production_order_id=$1",[id])).rows[0];
   const currentProduction=link&&s.gate.approval?(await db.query('SELECT production_order_id,factory_decision_id FROM sourcing_production_factory_orders WHERE production_order_id=$1 AND sourcing_decision_id=sourcing_factory_execution_basis(sourcing_case_id,$2) AND quantity>0',[link.child_id,s.gate.approval.sourcing_decision_id])).rows[0]:null;
-  const tasks=await this.tasks().readAuthorized(actor,s.tasks.map(t=>t.task_id),db);
+  const taskIds=s.tasks.map(t=>t.task_id),tasks=readOnlyClient?[...(await this.tasks().readPage(actor,taskIds,readOnlyClient)).values()]
+   :await this.tasks().readAuthorized(actor,taskIds,db);
   // Only the assigned person's display name crosses into logistics. Quotation
   // prices and other rows remain behind the original quotation access policy.
   const craftOwnerRows=s.craftSteps.some(step=>step.craftKind==='special')?(await db.query(`SELECT ref.value->'craftRef'->>'libraryId' AS library_id,ref.value->'craftRef'->>'libraryVersion' AS library_version,u.display_name
@@ -125,7 +137,7 @@ export class FactoryFlowService{
    WHERE q.production_order_id=$1 AND ref.value->>'stage'='bulk'`,[id])).rows:[];
   const craftOwners=s.craftSteps.filter(step=>step.specialCraft).map(step=>({stepRef:step.stepId,name:craftOwnerRows.find(row=>row.library_id===step.specialCraft!.id&&Number(row.library_version)===step.specialCraft!.version)?.display_name??null}));
   const batchTiming=s.batch?await factoryBatchTiming(db,id):null;
-  const now=new Date((await new ContextBusinessClock(this.database).read({kind:'order',id})).now);
+  const now=new Date((await new ContextBusinessClock(this.database,readOnlyClient).read({kind:'order',id})).now);
   return {currentProduction:currentProduction?{productionId:currentProduction.production_order_id as string,factoryDecisionId:currentProduction.factory_decision_id as string|null}:null,...(s.route?.route_schema_version===2?{routeSchemaVersion:2 as const,craftSteps:s.craftSteps,craftOwners,craftSendable:s.stepLedger?.sendable??[]}:{}),returnLogistics:await factoryReturnLogistics(db,id,now),productionInspectionHistory:s.production.history,productionChecks:s.production.checks,canProductionQc:await this.authorized(db,actor,s,'factory_production_qc'),sampleAdvanceDays:sampleTargets.days,canRecordShipSample:actor.actorRoles.includes(ROOT)||s.gate.order.primary_merchandiser_id===actor.actorId&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'),shipSamples:await shipSampleFacts(db,id),...(batchTiming?{batchWindows:batchTiming.windows}:{}),batchMode:Boolean(s.batch),canPartialDispatch:s.batch?.canDispatch??s.allQc,...(s.batch?{batches:s.stepLedger?s.stepLedger.steps.flatMap(step=>step.batches):s.batch.batches,batchTotals:s.batch.totals,pendingSends:s.batch.pendingSends}:{}),currentReturn:s.returned?{factId:s.returned.fact_id,occurredAt:iso(s.returned.occurred_at),recordedAt:iso(s.returned.recorded_at)!}:null,orderId:id,preparationId:s.route?.preparation_id??null,revision:s.revision,secondaryCraft:s.route?.secondary_craft??null,reasons:[...s.gate.reasons,...(s.batch?.quantityConflict?['已发数量超过当前实裁，请核对原数量更正记录']:[]),...(!s.route?['全部PO实裁尚未完成']:[]),...(s.route&&!s.dispatched&&s.contract?.status!=='ready'?['当前原合同尚未生成，发厂前请在原合同页补齐资料']:[])],allCut:Boolean(s.route),allQc:s.allQc,inTransit:s.batch?s.batch.pendingSends.some(b=>b.rows.some(l=>l.remaining>0)):s.lastMovement?.kind==='工艺发出',dispatched:Boolean(s.dispatched),supplierId:s.gate.approval?.supplier_id??null,supplierName:s.gate.approval?.supplier_name_snapshot??null,productionId:link?.child_id??null,sampleTargetDate,canManage:isDigitalLeader(actor),canLogistics:await this.authorized(db,actor,s,'process_logistics'),canQc:await this.authorized(db,actor,s,'bulk_qc'),canWarehouse:await this.authorized(db,actor,s,'warehouse_dispatch'),canFollowup:false,tasks,lines:s.latest.map(({line,check})=>({lineId:line.line_id,poNumber:line.po_number,color:line.color,customerWarehouseArrivalDate:line.customer_date,sampleTargetDate:sampleTargets.lines.find(l=>l.lineId===line.line_id)?.targetDate??null,result:check?.result??null,problem:check?.problem??'',treatment:check?.treatment??''})),facts:s.facts.map(f=>({factId:f.fact_id,kind:f.kind,occurredAt:iso(f.occurred_at),recordedAt:iso(f.recorded_at)!,actorName:f.actor_name,payload:f.payload})),checks:s.checks.map(c=>({checkId:c.check_id,lineId:c.line_id,returnFactId:c.return_fact_id,result:c.result,problem:c.problem,treatment:c.treatment,attachmentIds:c.attachment_ids,checkedBy:c.checker,checkedAt:iso(c.checked_at)!}))};
  }
  private async command(actor:TrustedActorContext,id:string,action:string,input:{expectedRevision:number},key:string,work:(db:PoolClient,s:Awaited<ReturnType<FactoryFlowService['state']>>)=>Promise<void>){

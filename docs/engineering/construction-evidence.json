@@ -1,161 +1,249 @@
 {
   "version": 1,
-  "base": "95a2f5b9047966319458a8a6629688efc4190c23",
+  "base": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
   "risk": "full",
-  "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+  "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
   "rules": [
     {
-      "rule": "Resolve current inner- and outer-washing supervision from the adopted source plan",
-      "source": "Approved T2-014/T2-015 source washing supervision repair, Library libfile_fde3_f-e1a06556bfe4819186e5e9638db7e49d_c8d3bf5d609c8191bce6411a30e94d44.",
-      "initialization": "Actual PAGE25 search repair release merge 95a2f5b9047966319458a8a6629688efc4190c23. Reproduced both original-rule shapes in isolated PostgreSQL before patch.",
-      "dateAndPermission": "Use the existing authorized Journey snapshot, its selected source round, exact frozen work identity, original publication anchor and native observation. This is a read projection, with no recorded fact or business clock writes.",
+      "rule": "Batch final-page task facts without projecting tasks outside the selected original IDs",
+      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
+      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
+      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
       "writes": [
-        "apps/api/src/production-platform/journey-supervision.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/source-current-supervision.ts"
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-selection-access.ts",
+        "apps/api/src/production-platform/task-page-read-context.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/development-task-blockers.ts",
+        "apps/api/src/production-platform/fixed-task-targets.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-sla-enrollment.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-schedule.ts"
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/development-responsibility-window.ts"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/workspace-page-facts-postgres.test.ts"
       ],
-      "expectation": "The two actual native arrangement routes increase the frozen duration by 24h. Their exact current plan and rolling estimate are computed from the adopted graph, share the same supervisor and node value, and preserve the 30 minute included dispatch without duplicating it.",
+      "expectation": "Nine database families remain bounded for 1, 15 and 50 distinct task IDs. Registered legacy GET uses only the final selected page task IDs and still preserves totals, search, export, and role revocation. Exact direct task DTO parity in a shared snapshot includes historical and fixed-plan fields.",
       "checks": [
-        "source-washing-unit",
-        "source-washing-native",
-        "source-washing-lint",
-        "source-washing-protocol"
+        "native-pages",
+        "native-consumers",
+        "targeted-unit",
+        "types",
+        "lint"
       ]
     },
     {
-      "rule": "Keep native responsibility and actual completion independent from future plan and forecast",
-      "source": "Approved T2-014/T2-015 source washing supervision repair, Library libfile_fde3_f-e1a06556bfe4819186e5e9638db7e49d_c8d3bf5d609c8191bce6411a30e94d44.",
-      "initialization": "Actual PAGE25 search repair release merge 95a2f5b9047966319458a8a6629688efc4190c23. Reproduced both original-rule shapes in isolated PostgreSQL before patch.",
-      "dateAndPermission": "Use the existing authorized Journey snapshot, its selected source round, exact frozen work identity, original publication anchor and native observation. This is a read projection, with no recorded fact or business clock writes.",
+      "rule": "Share authorized facts with standalone cockpit, development execution, and factory task collections",
+      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
+      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
+      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
       "writes": [
-        "apps/api/src/production-platform/source-current-supervision.ts",
-        "apps/api/src/production-platform/fixed-timeline-targets.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "apps/api/src/production-platform/cockpit-query.ts",
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-sla-evidence.ts",
-        "apps/api/src/production-platform/fixed-schedule-progress.ts",
-        "apps/api/src/production-platform/journey-terminal-timing.ts"
+        "apps/api/src/production-platform/development-occurrence.ts",
+        "apps/api/src/production-platform/factory-task-completion.ts",
+        "apps/api/src/production-platform/order-time-reading.ts"
       ],
       "oldTests": [
-        "tests/unit/fixed-timeline-targets.test.ts",
-        "tests/unit/development-craft-instance-supervision.test.ts"
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts"
       ],
-      "expectation": "Read-only supervisor projections preserve the original enrollment and task R/D/A. When the unstarted historical forecast expires, it becomes unknown without moving the adopted planned finish or fabricating an actual event. The original fixed timeline and other routes still execute their existing cases.",
+      "expectation": "Maintain original business identity and current-plan targets; retain command reads on their original client and never consume shared facts across actors or writes.",
       "checks": [
-        "source-washing-unit",
-        "source-washing-native",
-        "source-washing-lint",
-        "source-washing-protocol"
+        "native-consumers",
+        "targeted-unit",
+        "types",
+        "lint"
       ]
     },
     {
-      "rule": "Check managed special-craft saves against the exact original PUT response",
-      "source": "Full 44258353869 / PostgreSQL job 134646839953 failed at special-craft-browser-postgres.test.ts:213 while polling for draft version 2; the isolated unchanged candidate passed the failed case once.",
-      "initialization": "Original authenticated settings browser on isolated PG16, with a managed draft still at version 1 before reordering.",
-      "dateAndPermission": "Keep the original designer save path, frozen craft definitions, ordering assertions, and rejection of a worker save.",
+      "rule": "Batch native ready recipients and analysis technical permission without changing aggregation or fallback semantics",
+      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
+      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
+      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
       "writes": [
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/production-statistics-query.ts",
+        "apps/api/src/production-platform/reporting-query.ts",
+        "apps/api/src/production-platform/delivery-calendar-query.ts",
+        "tests/integration/digital-my-todo-context-postgres.test.ts",
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/m01-delivery-calendar-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/digital-development-create-form.tsx"
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/analysis-result-store.ts",
+        "apps/api/src/production-platform/notification-policy.ts"
       ],
       "oldTests": [
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/digital-production-notifications-postgres.test.ts",
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/m01-delivery-calendar-postgres.test.ts",
+        "tests/integration/effective-packing-postgres.test.ts"
       ],
-      "expectation": "Wait for the matching PUT on the exact source, require its successful receipt for the original version 1, then independently read stored version 2 and verify ordered frozen steps. The reviewed product source and application deadlines do not change.",
+      "expectation": "Selected recipient and task technical access remain exact. Production quantity and warehouse QC remain separate. The old fixture that corrected a receipt already inspected failed equally on the exact release tree; a separate native arrival retains the actual partial-QC scenario without bypassing correct invalidation after corrections.",
       "checks": [
-        "source-washing-native",
-        "source-washing-lint",
-        "source-washing-protocol"
+        "native-pages",
+        "native-consumers",
+        "types",
+        "lint"
+      ]
+    },
+    {
+      "rule": "Reuse the opened task and map size, authorization and browser regression guards to CI",
+      "source": "Approved unified performance plan v2, Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44, SAFE06 / PF-T / PF-N1 / PF-A1 and PF-A3 authorization. User approved 1/15/50 checks and mapped CI prevention.",
+      "initialization": "Actual release after #1030, a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69. Native 88-candidate registered AuthService test and exact standalone/page context comparison.",
+      "dateAndPermission": "Only authorized records under the original decision and same read-only snapshot. Task execution, parent detail, receipt, snapshot reuse and reporting permissions stay independently checked.",
+      "writes": [
+        "apps/web/src/digital-production-page.tsx",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "AGENTS.md",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/current-task-plan-browser-postgres.test.ts",
+        "tests/integration/workspace-page-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-production-tasks-panel.tsx",
+        "scripts/test-suite-plan.mjs"
+      ],
+      "oldTests": [
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/current-task-plan-browser-postgres.test.ts"
+      ],
+      "expectation": "Initial task detail enters the fallback once. In the original signed workspace App loading, page 2 and the pattern workspace each issue one distinct GET. Native checks run under the existing CI matrix for applicable paths.",
+      "checks": [
+        "native-pages",
+        "targeted-unit",
+        "types",
+        "lint",
+        "protocol"
       ]
     }
   ],
   "checks": [
     {
-      "id": "source-washing-unit",
+      "id": "native-pages",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/journey-fact-model.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/digital-journey-projection.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/repair-unit.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/m01-journey-performance-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts tests/integration/current-task-plan-browser-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/bounded-batches-and-original-browser/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
-      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
-      "startedAt": "2026-11-18T08:00:03.182608+00:00",
-      "endedAt": "2026-11-18T08:00:07.083886+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-unit/command.log",
-      "logSha256": "d1e830ad7c90bb7c02a0a80a8b7d08cdcf89e7d85108acf1babeedbb535f6540",
-      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
-      "passed": 48,
+      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
+      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
+      "startedAt": "2026-11-18T08:17:03.216427+00:00",
+      "endedAt": "2026-11-18T08:20:02.961416+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/bounded-batches-and-original-browser/tests.log",
+      "logSha256": "41e535b4574d1ff22902f09b648033fe8d30e3925da12b8a980bc19d81a89e75",
+      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
+      "passed": 23,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0931089548ccbf33ae168cd72f446f295e8343d30f9ae36fbcf73974f796f5f9"
+          "sha256": "1b66d2724205f6151ca339dc546a8f2045202496f9de8f1ea7fb99158a05d089"
         }
       ]
     },
     {
-      "id": "source-washing-native",
+      "id": "native-consumers",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/special-craft-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/pg/craft-receipt-and-washing/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts tests/integration/workspace-page-facts-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/final-permission-consumers/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
-      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
-      "startedAt": "2026-11-18T07:54:04.689986+00:00",
-      "endedAt": "2026-11-18T07:55:15.244160+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/pg/craft-receipt-and-washing/tests.log",
-      "logSha256": "a2f2b114bb84c1fa1f21095f5af5de25f9a656d795021202dfea990b0791f5d9",
-      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
-      "passed": 37,
+      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
+      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
+      "startedAt": "2026-11-18T08:20:47.201374+00:00",
+      "endedAt": "2026-11-18T08:23:39.081353+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/final-permission-consumers/tests.log",
+      "logSha256": "02b99d2e418345a564f144bd9f855ec2fee3b5d5a1e5e989c5f20b4aa42f37ef",
+      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
+      "passed": 103,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cb947d230a78c362b730c25f4c7a20a779f5d1199ca45f09052149c544728862"
+          "sha256": "771f357adb6c831aa0ace24e4fc3e3549277822b611dea5cff848417cf9938e5"
         }
       ]
     },
     {
-      "id": "source-washing-lint",
+      "id": "targeted-unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-task-read-boundary.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/final-unit.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
+      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
+      "startedAt": "2026-11-18T08:23:56.986939+00:00",
+      "endedAt": "2026-11-18T08:24:01.186603+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-unit/command.log",
+      "logSha256": "9108511666a10300d3738dc3ff54ac159d66a920ef5072632c9e30444f4b7502",
+      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
+      "passed": 167,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d2d03519b15e067a9ded39ec070b50464d8d2e088764b0a17df1c3a9fa2cfbe5"
+        }
+      ]
+    },
+    {
+      "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-timeline-targets.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/source-current-supervision.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/cockpit-query.ts apps/api/src/production-platform/delivery-calendar-query.ts apps/api/src/production-platform/development-execution-read.ts apps/api/src/production-platform/development-execution-service.ts apps/api/src/production-platform/development-service.ts apps/api/src/production-platform/development-task-blockers.ts apps/api/src/production-platform/factory-flow-service.ts apps/api/src/production-platform/fixed-task-targets.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-selection-access.ts apps/api/src/production-platform/notification-service.ts apps/api/src/production-platform/production-statistics-query.ts apps/api/src/production-platform/reporting-query.ts apps/api/src/production-platform/task-service.ts apps/web/src/digital-production-page.tsx scripts/ci/full-gate-risk-map.mjs tests/integration/current-task-plan-browser-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/full-gate-risk-map.test.ts apps/api/src/production-platform/task-page-read-context.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
-      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
-      "startedAt": "2026-11-18T07:59:51.475281+00:00",
-      "endedAt": "2026-11-18T07:59:53.478434+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-lint/command.log",
+      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
+      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
+      "startedAt": "2026-11-18T08:24:01.516983+00:00",
+      "endedAt": "2026-11-18T08:24:04.919327+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed."
+      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution."
     },
     {
-      "id": "source-washing-protocol",
+      "id": "types",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
+      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
+      "startedAt": "2026-11-18T08:24:05.283517+00:00",
+      "endedAt": "2026-11-18T08:25:03.387522+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-types/command.log",
+      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
+      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution."
+    },
+    {
+      "id": "protocol",
       "kind": "tests",
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
-      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
-      "startedAt": "2026-11-18T07:59:54.048035+00:00",
-      "endedAt": "2026-11-18T08:00:02.894186+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-preflight/command.log",
-      "logSha256": "84f70193b5fc6a925cf8ba1f0fdcdf13c6ba298499d388c0c6ac09f502303154",
-      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
+      "testedHead": "a3aac8e481fdcc5e3cc7e31ddbb6f7d4c4543d69",
+      "sourceFingerprint": "a373af6bfaeeb5c53a1496917fed330cb767092bef4a26fda7af2258ade4c50a",
+      "startedAt": "2026-11-18T08:23:47.266359+00:00",
+      "endedAt": "2026-11-18T08:23:56.689818+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/checks/final-preflight/command.log",
+      "logSha256": "42a61f1fd211486c909dcb9da8335325e3d16afdd8c04f8f1759362fecff9e4b",
+      "context": "Exact release base and working-tree fingerprint. Native App tests use owned, low-privilege PostgreSQL 16 and delete their owned container after execution.",
       "passed": 284,
       "failed": 0,
       "skipped": 0

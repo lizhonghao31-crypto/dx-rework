@@ -37,6 +37,7 @@ import type { DigitalNotification } from "@dx-rework/contracts/digital-productio
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { digitalTodoTarget } from "./notification-policy.js";
+import {readTaskAccessForPage} from './journey-selection-access.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const iso = (value: Date | string) => new Date(value).toISOString();
@@ -54,6 +55,9 @@ const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production
 type Task = {entered_at:Date|null;sla_basis?:unknown;deadline_exclusive?:boolean;source_sla?:boolean;route_version:number;task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
 type NotificationTasks={tasks:Map<string,Task>;preferences:Map<string,SlaNotificationPreference>};
 const labels: Record<string,string> = {ready:"待办理",reassigned:"已改派给你",unblocked:"已解除阻断",blocked:"办理遇到阻断",completed:"已完成",warning:"即将超时",overdue:"已超时",created:"待分配主办"};
+const isTechnicalTask=(kind:string)=>kind.startsWith('development_')||['bulk_pattern','bulk_cutting','bulk_cutting_external','process_logistics'].includes(kind);
+const missingAssigneeRoles=(kind:string)=>kind.startsWith('development_')?['pattern_room_supervisor','development_clerk']:isTechnicalTask(kind)?['production_management','pattern_room_supervisor']:['production_management'];
+const fallbackAssignmentRoles=['production_management','owner_group'];
 
 export class DigitalProductionNotificationService {
   constructor(private readonly database: Pool) {}
@@ -93,7 +97,7 @@ export class DigitalProductionNotificationService {
     const policy=new DigitalProductionAccessPolicy(database);
     const assignee=people.find(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
     const development=task.task_kind.startsWith("development_");
-    const technical=development||["bulk_pattern","bulk_cutting","bulk_cutting_external","process_logistics"].includes(task.task_kind);
+    const technical=isTechnicalTask(task.task_kind),missingRoles=missingAssigneeRoles(task.task_kind);
     const missing=!assignee;
     const risk=["warning","overdue","blocked"].includes(kind);
     const result:TrustedActorContext[]=[];
@@ -104,7 +108,7 @@ export class DigitalProductionNotificationService {
       const primary=person.actorId===task.primary_merchandiser_id&&person.actorRoles.includes("order_merchandiser");
       let receive=false;
       if(kind==="completed") receive=designer&&["development_pattern","development_printing","development_embroidery","development_print_embroidery"].includes(task.task_kind);
-      else if(missing) receive=development ? tech||person.actorRoles.includes("development_clerk") : director||(technical&&tech);
+      else if(missing) receive=person.actorRoles.some(role=>missingRoles.includes(role));
       else {
         receive=person.actorId===assignee.actorId;
         if(risk) receive=receive||(development ? designer||(tech&&task.task_kind!=="development_washing") : primary||director||(technical&&tech));
@@ -112,7 +116,7 @@ export class DigitalProductionNotificationService {
       if(receive&&await policy.allowed(person,"task",task.task_id,"technical")) result.push(person);
     }
     if(missing&&kind!=="completed"&&!result.length) for(const person of people) {
-      if(person.actorRoles.some(role=>["production_management","owner_group"].includes(role))&&await policy.allowed(person,"task",task.task_id,"technical"))result.push(person);
+      if(person.actorRoles.some(role=>fallbackAssignmentRoles.includes(role))&&await policy.allowed(person,"task",task.task_id,"technical"))result.push(person);
     }
     return result;
   }
@@ -194,13 +198,38 @@ export class DigitalProductionNotificationService {
       }
     }
   }
+  private async readyTodoTasks(actor:TrustedActorContext,todoId?:string){
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const people=await this.people(db),byId=new Map(people.map(person=>[person.actorId,person])),viewer=byId.get(actor.actorId);
+      if(!viewer){await db.query('COMMIT');return null;}
+      const activeRoles=new Set(people.flatMap(person=>person.actorRoles));
+      const tasks=(await db.query<Task>(`${TASKS} WHERE ${ACTIVE}${todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`,todoId?[todoId]:[])).rows;
+      const unified=await arrangementsAvailable(db),visible:Array<{task:Task;missing:boolean}>=[];
+      for(const task of tasks){
+        const assignee=task.assignee_id?byId.get(task.assignee_id):undefined;
+        const missing=!assignee||!hasRequiredWarehouseRole(assignee.actorRoles,task.required_role);
+        if(!missing){if(task.state!=='pending'&&assignee.actorId===actor.actorId)visible.push({task,missing});continue;}
+        if(unified&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
+        // For this ready-assignment path, every preferred role is a technical
+        // reader for this task kind. Access to the exact task is checked below.
+        const preferred=missingAssigneeRoles(task.task_kind);
+        const eligible=preferred.some(role=>activeRoles.has(role))?preferred:fallbackAssignmentRoles;
+        if(viewer.actorRoles.some(role=>eligible.includes(role)))visible.push({task,missing});
+      }
+      const access=await readTaskAccessForPage(db,viewer,visible.map(row=>row.task.task_id));
+      const eligible=visible.filter(row=>access.get(row.task.task_id)?.technical);
+      await db.query('COMMIT');
+      return {people,unified,eligible};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
   async todos(actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]> {
     let targetSelected=false;
     if(projection?.todoId&&projection.select){const select=projection.select;projection={...projection,select:(key,load)=>{if(key.todoId===projection!.todoId)targetSelected=true;select(key,load);}};}
-    const people=await this.people(this.database);
-    if(!people.some(p=>p.actorId===actor.actorId))return [];
-    const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE}${projection?.todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`,...(projection?.todoId?[[projection.todoId]]:[]))).rows;
-    const unified=await arrangementsAvailable(this.database);
+    const ready=await this.readyTodoTasks(actor,projection?.todoId);
+    if(!ready)return [];
+    const {people,unified,eligible}=ready;
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor,projection),...await fabricDecisionTodos(this.database,actor,projection)]:[];
     result.push(...await bulkWashingTodos(this.database,actor,projection));
     result.push(...await specialCraftQuotationTodos(this.database,actor,projection));
@@ -208,11 +237,7 @@ export class DigitalProductionNotificationService {
     result.push(...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
 
     if(!projection?.todoId)result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor,projection));
-    for(const task of tasks){
-      const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
-      if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
-      if(task.state==="pending"&&!missing)continue;
-      if(!(await this.recipients(this.database,task,"ready",people)).some(p=>p.actorId===actor.actorId))continue;
+    for(const {task,missing} of eligible){
       const readContext=async()=>{
       const ownAction=!missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"execute");
       const styleNo=task.production_order_id?task.order_style_no:task.source_id?task.source_style_no:null;
