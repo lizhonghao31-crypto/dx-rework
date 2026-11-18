@@ -5,6 +5,7 @@ import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell } from "./components.js";
 import { verifySession } from "./auth.js";
+import { registerSessionInvalidator, verifiedSessionIdentity } from "./auth-session.js";
 import { canReadWorkAnalysis } from "./work-analysis-model.js";
 import { ListPagination } from "./list-pagination.js";
 import { reworkFlowNodes } from "./rework-flow-model.js";
@@ -19,7 +20,32 @@ const secondsText = (value:number|null) => value===null?"记录不足":value<360
 const nodeName = (status:string) => reworkFlowNodes[status]?.label ?? status;
 
 type Range = ReturnType<typeof initialRange>;
-type LoadState = {kind:"loading"}|{kind:"ready";a:WorkflowAnalysisResponse;b:WorkflowAnalysisResponse}|{kind:"error";message:string};
+type PeriodRead =
+  | { key:string; kind:"loading" }
+  | { key:string; kind:"ready"; data:WorkflowAnalysisResponse }
+  | { key:string; kind:"error"; message:string };
+
+function useWorkflowPeriod(viewer:string|null,from:string,to:string,q:string,node:string,page:number,refresh:string){
+  const key=JSON.stringify([viewer,from,to,q,node,page,refresh]);
+  const [state,setState]=useState<PeriodRead>({key,kind:"loading"});
+  useEffect(()=>{
+    if(!viewer)return;
+    const controller=new AbortController();
+    setState({key,kind:"loading"});
+    const params=new URLSearchParams({group:"rework",snapshot:"period_end",state:"waiting",from,to,q,node,page:String(page)});
+    void fetch(apiUrl(`management/workflow-analysis?${params}`),{
+      credentials:"include",cache:"no-store",signal:controller.signal,
+    }).then(async response=>{
+      if(!response.ok)throw new Error("数据沙盘读取失败");
+      const data=WorkflowAnalysisResponseSchema.parse(await response.json());
+      if(!controller.signal.aborted)setState({key,kind:"ready",data});
+    }).catch(error=>{
+      if(!controller.signal.aborted)setState({key,kind:"error",message:error instanceof Error?error.message:"数据沙盘读取失败"});
+    });
+    return()=>controller.abort();
+  },[viewer,from,to,q,node,page,key]);
+  return viewer&&state.key===key?state:{key,kind:"loading"} as const;
+}
 
 function Info({meaning,formula,use,caveat}:{meaning:string;formula:string;use:string;caveat:string}) {
   return <span className="data-sandbox-info" tabIndex={0} aria-label="指标说明"><span aria-hidden="true">ⓘ</span><span className="data-sandbox-info__popover" role="tooltip"><b>指标含义</b>{meaning}<b>计算公式</b>{formula}<b>管理用途</b>{use}<b>注意事项</b>{caveat}</span></span>;
@@ -37,25 +63,33 @@ function Metric({title,value,compare,children,info}:{title:string;value:string;c
 export function ReworkDataSandboxPage() {
   const initial=useMemo(()=>{const query=new URLSearchParams(window.location.search),defaults=initialRange();return {aFrom:query.get("aFrom")??defaults.aFrom,aTo:query.get("aTo")??defaults.aTo,bFrom:query.get("bFrom")??defaults.bFrom,bTo:query.get("bTo")??defaults.bTo};},[]);
   const [range,setRange]=useState<Range>(initial),[q,setQ]=useState(""),[node,setNode]=useState(""),[page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
-  const [allowed,setAllowed]=useState<boolean|null>(null),[state,setState]=useState<LoadState>({kind:"loading"});
-  useEffect(()=>{let live=true;void verifySession().then(session=>{if(live)setAllowed(session!=="denied"&&canReadWorkAnalysis("workflow",session.user));}).catch(()=>{if(live)setAllowed(false);});return()=>{live=false;};},[]);
-  useEffect(()=>{if(!allowed)return;const controller=new AbortController();setState({kind:"loading"});
-    const load=(from:string,to:string,nodeFilter:string,pageNo:number)=>{const params=new URLSearchParams({group:"rework",snapshot:"period_end",state:"waiting",from,to,q:q.trim(),node:nodeFilter,page:String(pageNo)});return fetch(apiUrl(`management/workflow-analysis?${params}`),{credentials:"include",cache:"no-store",signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error("数据沙盘读取失败");return WorkflowAnalysisResponseSchema.parse(await response.json());});};
-    void Promise.all([load(range.aFrom,range.aTo,node,page),load(range.bFrom,range.bTo,"",1)]).then(([a,b])=>{if(!controller.signal.aborted)setState({kind:"ready",a,b});}).catch(error=>{if(!controller.signal.aborted)setState({kind:"error",message:error instanceof Error?error.message:"数据沙盘读取失败"});});return()=>controller.abort();
-  },[allowed,range,q,node,page,refresh]);
+  const [aRetry,setARetry]=useState(0),[bRetry,setBRetry]=useState(0);
+  const [viewer,setViewer]=useState<string|null|false>(null),[sessionRevision,setSessionRevision]=useState(0);
+  useEffect(()=>registerSessionInvalidator(()=>{setViewer(null);setSessionRevision(value=>value+1);}),[]);
+  useEffect(()=>{
+    let live=true;
+    void verifySession().then(session=>{
+      if(live)setViewer(session!=="denied"&&canReadWorkAnalysis("workflow",session.user)?verifiedSessionIdentity(session):false);
+    }).catch(()=>{if(live)setViewer(false);});
+    return()=>{live=false;};
+  },[sessionRevision]);
+  const primary=useWorkflowPeriod(viewer||null,range.aFrom,range.aTo,q.trim(),node,page,`${refresh}:${aRetry}`);
+  const comparison=useWorkflowPeriod(viewer||null,range.bFrom,range.bTo,q.trim(),"",1,`${refresh}:${bRetry}`);
   useEffect(()=>{const url=new URL(window.location.href);url.searchParams.set("view","sandbox");for(const [key,value] of Object.entries(range))url.searchParams.set(key,value);window.history.replaceState(window.history.state,"",url);},[range]);
-  if(allowed===false)return <Shell active="返工单看板"><div className="data-sandbox"><Header title="返工数据沙盘" badge="无查看权限"/><ReworkModuleTabs active="sandbox"/><Surface>当前账号没有管理分析读取权限，返工办理权限不受影响。</Surface></div></Shell>;
-  const ready=state.kind==="ready"?state:null;
-  const a=ready?.a,b=ready?.b;
+  if(viewer===false)return <Shell active="返工单看板"><div className="data-sandbox"><Header title="返工数据沙盘" badge="无查看权限"/><ReworkModuleTabs active="sandbox"/><Surface>当前账号没有管理分析读取权限，返工办理权限不受影响。</Surface></div></Shell>;
+  const a=primary.kind==="ready"?primary.data:undefined,b=comparison.kind==="ready"?comparison.data:undefined;
   const slowA=a?.nodeMetrics.find(item=>item.averageFlowSeconds!==null)??null,slowB=b?.nodeMetrics.find(item=>item.status===slowA?.status)??null;
   const nodes=a?.nodeMetrics??[];
   return <Shell active="返工单看板"><div className="data-sandbox">
     <Header title="返工数据沙盘" subtitle="看流转、找积压、追到原单；等待时间完整计入流程，不等于实际作业工时。" badge={a?`数据截至 ${new Date(a.asOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}`:"读取中"}/>
     <ReworkModuleTabs active="sandbox"/>
-    <Surface className="data-sandbox-toolbar"><label>分析期间 A<span><input type="date" value={range.aFrom} onChange={e=>{setRange(value=>({...value,aFrom:e.target.value}));setPage(1);}}/>至<input type="date" value={range.aTo} onChange={e=>{setRange(value=>({...value,aTo:e.target.value}));setPage(1);}}/></span></label><label>对比期间 B<span><input type="date" value={range.bFrom} onChange={e=>setRange(value=>({...value,bFrom:e.target.value}))}/>至<input type="date" value={range.bTo} onChange={e=>setRange(value=>({...value,bTo:e.target.value}))}/></span></label><label>关键词<input value={q} placeholder="单号 / 款号" onChange={e=>{setQ(e.target.value);setPage(1);}}/></label><Button disabled={state.kind==="loading"} onClick={()=>setRefresh(value=>value+1)}>刷新</Button></Surface>
-    {state.kind==="error"?<Surface className="data-sandbox-error"><p role="alert">{state.message}</p><Button onClick={()=>setRefresh(value=>value+1)}>重试</Button></Surface>:null}
+    <Surface className="data-sandbox-toolbar"><label>分析期间 A<span><input type="date" value={range.aFrom} onChange={e=>{setRange(value=>({...value,aFrom:e.target.value}));setPage(1);}}/>至<input type="date" value={range.aTo} onChange={e=>{setRange(value=>({...value,aTo:e.target.value}));setPage(1);}}/></span></label><label>对比期间 B<span><input type="date" value={range.bFrom} onChange={e=>setRange(value=>({...value,bFrom:e.target.value}))}/>至<input type="date" value={range.bTo} onChange={e=>setRange(value=>({...value,bTo:e.target.value}))}/></span></label><label>关键词<input value={q} placeholder="单号 / 款号" onChange={e=>{setQ(e.target.value);setPage(1);}}/></label><Button disabled={primary.kind==="loading"||comparison.kind==="loading"} onClick={()=>setRefresh(value=>value+1)}>刷新</Button></Surface>
+    {primary.kind==="error"||comparison.kind==="error"?<Surface className="data-sandbox-error">
+      {primary.kind==="error"?<><p role="alert">分析期间 A · {primary.message}</p><Button onClick={()=>setARetry(value=>value+1)}>重试分析期间 A</Button></>:null}
+      {comparison.kind==="error"?<><p role="alert">对比期间 B · {comparison.message}</p><Button onClick={()=>setBRetry(value=>value+1)}>重试对比期间 B</Button></>:null}
+    </Surface>:null}
     <div className="data-sandbox-metrics">
-      <Metric title="本期流转" value={a?`进入 ${formatBusinessDecimal(a.enteredCount)} · 完成 ${formatBusinessDecimal(a.completedInRangeCount)}`:"—"} info={{meaning:"所选期间进入返工流程与首次完成返工业务的订单数量。",formula:"进入量按订单创建时间；完成量按首次进入 completed 的时间。",use:"判断业务流入与处理完成是否同步变化。",caveat:"两者不是同一批订单，不计算‘完成÷新增’完成率。"}}><span className="sandbox-pair">对比期：进入 {b?.enteredCount??"—"} · 完成 {b?.completedInRangeCount??"—"}</span></Metric>
+      <Metric title="本期流转" value={a?`进入 ${formatBusinessDecimal(a.enteredCount)} · 完成 ${formatBusinessDecimal(a.completedInRangeCount)}`:"—"} info={{meaning:"所选期间进入返工流程与首次完成返工业务的订单数量。",formula:"进入量按订单创建时间；完成量按首次进入 completed 的时间。",use:"判断业务流入与处理完成是否同步变化。",caveat:"两者不是同一批订单，不计算‘完成÷新增’完成率。"}}><span className="sandbox-pair">对比期：进入 {b?.enteredCount??"—"} · 完成 {b?.completedInRangeCount??"—"}{b?` · 截至 ${new Date(b.asOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}`:null}</span></Metric>
       <Metric title="期末未完成" value={a?`${formatBusinessDecimal(a.openAtEndCount)} 单`:"—"} compare={a&&b?<Delta a={a.openAtEndCount} b={b.openAtEndCount} lowerBetter/>:undefined} info={{meaning:"截至分析期间结束时仍未首次完成的有效返工订单。",formula:"期末已进入流程且尚未首次 completed、cancelled 的订单数。",use:"查看积压是在增加还是消化。",caveat:"历史期末按真实节点事件还原，不使用今天状态倒推；缺节点历史不会伪造成积压。"}}/>
       <Metric title="平均流转时长" value={a?secondsText(a.averageCycleSeconds):"—"} compare={a&&b?<Delta a={a.averageCycleSeconds} b={b.averageCycleSeconds} lowerBetter format={secondsText}/>:undefined} info={{meaning:"本期首次完成订单从创建返工单到首次业务完成的平均经过时间。",formula:"本期首次完成订单完整流转秒数之和 ÷ 有完整记录的完成订单数。",use:"观察整体流程是不是变慢。",caveat:"包含等待、夜间和排队时间，不等于实际劳动工时。"}}/>
       <Metric title="流转最久环节" value={slowA?nodeName(slowA.status):"记录不足"} compare={slowA?<small className="sandbox-pair">A {secondsText(slowA.averageFlowSeconds)} · B {secondsText(slowB?.averageFlowSeconds??null)}</small>:undefined} info={{meaning:"所选期间已离开节点的业务中，平均流转时长最长的环节。",formula:"各节点离开时间－进入时间取平均后比较。",use:"快速定位最可能拖慢后续推进的环节。",caveat:"环节性质不同，不能仅凭绝对时长认定人员责任；需结合积压与原单核查。"}}/>
@@ -65,7 +99,7 @@ export function ReworkDataSandboxPage() {
     </Surface>
     <Surface className="data-sandbox-section"><div className="data-sandbox-section__title"><div><h2>{node?`${nodeName(node)} · 期末未完成事项`:"期末未完成事项"}</h2><p>点击原单核查具体业务事实；历史快照只用于分析，不改变现在的办理状态。</p></div></div>
       {a?.items.length?<div className="data-sandbox-orders">{a.items.map(item=><a key={item.id} href={pageUrl(`ui/tasks/${item.id}`)}><strong>{item.styleNo||item.label}</strong><span>{item.label}{item.orderNo?` · ${item.orderNo}`:""}</span><b>{nodeName(item.status)}</b><small>已停留 {item.enteredAt?secondsText(Math.max(0,(Math.min(Date.parse(`${range.aTo}T00:00:00+08:00`)+86400000,Date.parse(a.asOf))-Date.parse(item.enteredAt))/1000)):"记录不足"}</small></a>)}</div>:<p>当前筛选没有期末未完成事项。</p>}
-      {a?<ListPagination page={a.filters.page} totalPages={Math.max(1,Math.ceil(a.total/15))} busy={state.kind==="loading"} ariaLabel="返工数据沙盘分页" onPageChange={setPage}/>:null}
+      {a?<ListPagination page={a.filters.page} totalPages={Math.max(1,Math.ceil(a.total/15))} busy={primary.kind==="loading"} ariaLabel="返工数据沙盘分页" onPageChange={setPage}/>:null}
     </Surface>
   </div></Shell>;
 }

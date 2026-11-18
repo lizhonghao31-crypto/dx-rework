@@ -2,7 +2,8 @@ import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
-import {afterAll,beforeAll,describe,expect,it} from 'vitest';
+import type {PoolClient} from 'pg';
+import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {readQuoteAnalysis,QUOTE_ANALYSIS_SQL} from '../../apps/api/src/sourcing/sourcing-analysis.js';
 import {readWorkflowAnalysis} from '../../apps/api/src/reporting/workflow-analysis.js';
 import {readOperationDiagnostics,recordOperationDiagnostic} from '../../apps/api/src/platform/operation-diagnostics.js';
@@ -100,6 +101,31 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await db.query("INSERT INTO operation_events(event_id,entity_id,entity_type,action,before_state,after_state,created_at,actor_id,reason) VALUES($1,$2,'rework_order','rework.work_report.reject','{\"status\":\"pending_order_review\"}','{\"status\":\"in_progress\"}','2026-09-04',$3,'重新核对数量')",[randomUUID(),order,handler]);
   const returned=(await readWorkflowAnalysis(db,{group:'rework',q:'RW-ACTOR',roundtrip:'yes'},false)).items[0]!;
   expect(returned.roundtripCount).toBe(1);expect(returned.history.at(-1)).toMatchObject({actorName:'处理人乙',reason:'重新核对数量',returned:true});
+  const connect=db.connect.bind(db) as (...args:unknown[])=>unknown;
+  const queries:Array<{sql:string;ids:string[]|null}>=[];
+  const spy=vi.spyOn(db,'connect').mockImplementation(((...args:unknown[])=>{
+   const opened=connect(...args);if(args.length)return opened;
+   return (opened as Promise<PoolClient>).then(client=>new Proxy(client,{get(target,key){
+    if(key==='query')return (...query:unknown[])=>{
+     const [sql,params]=query;
+     if(typeof sql==='string'&&sql.startsWith('WITH snapshots AS'))queries.push({sql,ids:(params as Array<string[]|null>)[4]??null});
+     return Reflect.apply(target.query,target,query);
+    };
+    const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+   }}));
+  }) as typeof db.connect);
+  try{
+   const filters={group:'rework',q:'RW-ACTOR',snapshot:'period_end',from:'2026-09-01',to:'2026-09-05'};
+   const historical=await readWorkflowAnalysis(db,filters,false);
+   expect(historical.items[0]).toMatchObject({id:order,submitterName:null,handlers:[],execution:[]});
+   expect(historical.items[0]!.history.at(-1)).toMatchObject({actorName:'处理人乙',reason:'重新核对数量',returned:true});
+   expect(queries.map(query=>query.ids)).toEqual([null,[order]]);
+   expect(queries[0]!.sql).not.toContain("'actorName',u.display_name");
+   expect(queries.every(query=>!query.sql.includes("'processName',i.process_name"))).toBe(true);
+   const empty=await readWorkflowAnalysis(db,{...filters,page:2},false);
+   expect(empty.items).toEqual([]);expect(empty.total).toBe(historical.total);expect(empty.nodeMetrics).toEqual(historical.nodeMetrics);
+   expect(queries.map(query=>query.ids)).toEqual([null,[order],null]);
+  }finally{spy.mockRestore();}
  });
  it('aggregates safe outcomes and only whitelisted changed field names, without sensitive values',async()=>{
   const result=await readOperationDiagnostics(db,{});expect(result.recordCount).toBe('4');expect(result.groups).toHaveLength(4);expect(result.groups.find(g=>g.outcome==='success')?.replayedCount).toBe('1');expect(result.groups.filter(g=>g.outcome!=='success').every(g=>g.replayedCount==='0')).toBe(true);expect(result.revisions).toEqual([{action:'master_data.supplier.revise',field:'active',count:'1'}]);expect(JSON.stringify(result)).not.toMatch(/private-person|secret|bankAccount|cookie/);
