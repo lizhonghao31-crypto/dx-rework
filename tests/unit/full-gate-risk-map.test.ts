@@ -507,7 +507,9 @@ describe('reviewed SLA/Journey production-source profile', () => {
   it('retains exact mapped readers plus every non-exempt chain bridge for the RP2 source family', () => {
     const input=[...SLA_JOURNEY_SOURCE_PATHS,...SLA_JOURNEY_SUPPORT_PATHS];
     const risk=classifyFullGatePaths(input),plan=amendmentPlan(input);
-    const expected=[...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...POSTGRES_CHAIN_TESTS.filter(path=>!SLA_JOURNEY_UNRELATED_CHAIN_TESTS.includes(path))])].sort();
+    // This profile includes the actual forecast UI source, so retain its
+    // newly registered native consumer in addition to every existing bridge.
+    const expected=[...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...POSTGRES_CHAIN_TESTS.filter(path=>!SLA_JOURNEY_UNRELATED_CHAIN_TESTS.includes(path)),'tests/integration/bounded-forecast-native-browser-postgres.test.ts'])].sort();
     expect(plan.plan.map(row=>row.path)).toEqual(expected);
     expect(risk.highRisk).toBe(true);expect(risk.dbRequired).toBe(true);
     expect(risk.journeyPg13Compat).toBe(true);
@@ -560,5 +562,14 @@ it('restores the four indirectly loaded suites and retains only independent hist
  const risk=classifyFullGatePaths(paths),plan=amendmentPlan(paths);
  expect(risk.chainProfile).toBe('sla-journey-engine-v1');
  const retained=POSTGRES_CHAIN_TESTS.filter(path=>!path.includes('own-tail-responsibility-history'));
- expect(plan.plan.map(row=>row.path)).toEqual([...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...retained])].sort());
+ expect(plan.plan.map(row=>row.path)).toEqual([...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...retained,'tests/integration/bounded-forecast-native-browser-postgres.test.ts'])].sort());
+});
+
+
+it('retains the original authenticated finite forecast consumer for each exact UI field path without changing full fallback',()=>{
+ for(const file of ['apps/web/src/cockpit-detail.css','apps/web/src/cockpit-fixed-schedule.tsx','apps/web/src/cockpit-node-dates.tsx','apps/web/src/po-delivery-dates.tsx','tests/integration/bounded-forecast-native-browser-postgres.test.ts']){
+  const plan=amendmentPlan([file]);
+  const path='tests/integration/bounded-forecast-native-browser-postgres.test.ts';
+  expect(plan.plan.filter(row=>row.path===path)).toEqual([{path,config:'vitest.business-chain.config.ts',memberships:['mapped']}]);
+ }
 });

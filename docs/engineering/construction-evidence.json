@@ -1,211 +1,96 @@
 {
   "version": 1,
-  "base": "64d24368ae3b98266a5ea978d67d6788ab220e19",
+  "base": "294ffdf58e132cf56af59eb9e853117324f007ce",
   "risk": "full",
-  "sourceFingerprint": "8eac9b61eed585587c262a48d62aa77932e006f31ef6c386512961b48b71c2be",
+  "sourceFingerprint": "bc5c2dc10dff1e5201b149add3670043a027cf6d1772c2265f2b0a1b4e80680b",
   "rules": [
     {
-      "rule": "Select current arranged task P by exact original canonical work and share the minimal Journey target selector",
-      "source": "User authorized approved Pro supplement A→D→B→C, B/BA112 exact native current plan display with actual original pages. Keep original fixed B, original R/D/A and all prior histories; Root original UUID/field comparison remains pending, never invent a corrected24.5h date.",
-      "initialization": "Actual integration base 64d24368ae3b98266a5ea978d67d6788ab220e19; only construction-evidence conflict, both source histories retained. Final preceding actual merge 32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda. Native task read after original authorization, same RR client/clock; exact current published preparation/version plus unique native instance for positionless bulk preparation tasks; original added-preshrink route B keeps its identity while its proven current plan uses fixedOrderWork canonical reference; exact captured adoption/route/round/step/phase or a genuine original publication-route and unique native instance. No current plan on old partial schemas is unknown, not an invented adoption.",
-      "dateAndPermission": "Read-only current effective P, original mixed/date precision and PO scopes. Original fixed B and R/D/A unchanged. No historical/latest-kind lookup, foreign counterpart, manufactured P, status write, new role or current company adoption. Original unknown/ambiguity/future/scenario mismatch remains explicit; included handoffs without separate arranged P are not applicable to an independent target.",
+      "rule": "Display trusted finite forecast bounds separately from fixed targets and crossing-B uncertainty, preserving exact PO/node identity and honest lower/unknown bounds",
+      "source": "Independently reviewed Pro finite interval UI plan libfile_fde3_f-d44c0639961881918738b41521806246_c8d3bf5d609c8191bce6411a30e94d44 and coordinator explicit scope/no-upper/no-P-borrowing/real-App constraints.",
+      "initialization": "Conflict-only integration onto actual release294ffdf5. Forecast business source unchanged from6998; incoming1022 business source unchanged from294f. Retain both additive mappings and both original evidence records in immutable parent commits/private copies. No schema, formula, permission or business change.",
+      "dateAndPermission": "Keep server P/R/D/A, all original deadlines and current progress/risk classification. Validate offset-qualified calendar-real ordered bounds; lower_bound never gains U even when an internal latest exists. Scope/PO/work/canonical/revision match exactly, switching selected nodes removes old values. Original authentication and object/field authority remain, no new business writes or homepage layout.",
       "writes": [
-        "apps/api/src/production-platform/current-task-plan-targets.ts",
-        "apps/api/src/production-platform/fixed-task-targets.ts",
-        "apps/api/src/production-platform/framework-node-targets.ts",
-        "apps/api/src/production-platform/order-time-work-task-kind.ts",
-        "apps/api/src/production-platform/order-time-reading.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/fixed-timeline-targets.ts",
-        "apps/api/src/production-platform/whole-order-visibility.ts"
-      ],
-      "oldTests": [
-        "tests/unit/order-time-reading.test.ts",
-        "tests/unit/fixed-schedule-progress.test.ts"
-      ],
-      "expectation": "Fresh integrated-source related unit/native App/type/lint/protocol checks pass; previous exact1022 Full business lanes passed but aggregate/Final failed, no new Full is claimed. Choose linked mother only when it actually contains the exact work; current source new round may retain its own exact effective P without searching history. Keep completed previous tasks and Fixed B/R/D/A unchanged, and preserve pure-development versus forward-framework semantics. PO labels use one bounded query, no full Journey per native task or per-PO N+1. Missing identity or scope stays unknown; duplicate/cross-round/cross-step targets never borrowed.",
-      "checks": [
-        "b-unit",
-        "b-native",
-        "b-api-types",
-        "b-lint"
-      ]
-    },
-    {
-      "rule": "Expose a separate optional current-plan read contract and render it in the three original task surfaces",
-      "source": "User authorized approved Pro supplement A→D→B→C, B/BA112 exact native current plan display with actual original pages. Keep original fixed B, original R/D/A and all prior histories; Root original UUID/field comparison remains pending, never invent a corrected24.5h date.",
-      "initialization": "Actual integration base 64d24368ae3b98266a5ea978d67d6788ab220e19; only construction-evidence conflict, both source histories retained. Final preceding actual merge 32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda. Native task read after original authorization, same RR client/clock; exact current published preparation/version plus unique native instance for positionless bulk preparation tasks; original added-preshrink route B keeps its identity while its proven current plan uses fixedOrderWork canonical reference; exact captured adoption/route/round/step/phase or a genuine original publication-route and unique native instance. No current plan on old partial schemas is unknown, not an invented adoption.",
-      "dateAndPermission": "Read-only current effective P, original mixed/date precision and PO scopes. Original fixed B and R/D/A unchanged. No historical/latest-kind lookup, foreign counterpart, manufactured P, status write, new role or current company adoption. Original unknown/ambiguity/future/scenario mismatch remains explicit; included handoffs without separate arranged P are not applicable to an independent target.",
-      "writes": [
-        "packages/contracts/src/digital-production-tasks.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/web/src/task-plan-targets.tsx",
-        "apps/web/src/task-plan-targets.css",
-        "apps/web/src/task-workbench-sample.tsx",
-        "apps/web/src/bulk-task-workbench.tsx",
-        "apps/web/src/bulk-preparation-panel.tsx",
-        "apps/web/src/digital-production-tasks-panel.tsx"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/web/src/digital-production-api.ts"
-      ],
-      "oldTests": [
-        "tests/integration/digital-production-tasks-postgres.test.ts",
-        "tests/unit/task-completion-display.test.ts"
-      ],
-      "expectation": "Fresh integrated-source related unit/native App/type/lint/protocol checks pass; previous exact1022 Full business lanes passed but aggregate/Final failed, no new Full is claimed. Original signed worker page at1165/390, pure new-round page and direct original bulk page for internal/external cutting in both plan formats with true multi-PO distinct targets show the same exact P/version as original Journey, distinct from native D, with original role denial and no business writes. Multi-PO targets/date precision/unknown/zero are retained, no PO average or completion substitution; the legitimate bodyless notification claim is distinct from task/plan mutation. No claim about unprovided original Root page or all old historical samples.",
-      "checks": [
-        "b-native",
-        "b-unit",
-        "b-api-types",
-        "b-web-types",
-        "b-lint"
-      ]
-    },
-    {
-      "rule": "Keep exact identity and original page regressions in the complete canonical plan",
-      "source": "User authorized approved Pro supplement A→D→B→C, B/BA112 exact native current plan display with actual original pages. Keep original fixed B, original R/D/A and all prior histories; Root original UUID/field comparison remains pending, never invent a corrected24.5h date.",
-      "initialization": "Actual integration base 64d24368ae3b98266a5ea978d67d6788ab220e19; only construction-evidence conflict, both source histories retained. Final preceding actual merge 32c4a55b6d3b0ee3bcc2e9da3d06f940c065bbda. Native task read after original authorization, same RR client/clock; exact current published preparation/version plus unique native instance for positionless bulk preparation tasks; original added-preshrink route B keeps its identity while its proven current plan uses fixedOrderWork canonical reference; exact captured adoption/route/round/step/phase or a genuine original publication-route and unique native instance. No current plan on old partial schemas is unknown, not an invented adoption.",
-      "dateAndPermission": "Read-only current effective P, original mixed/date precision and PO scopes. Original fixed B and R/D/A unchanged. No historical/latest-kind lookup, foreign counterpart, manufactured P, status write, new role or current company adoption. Original unknown/ambiguity/future/scenario mismatch remains explicit; included handoffs without separate arranged P are not applicable to an independent target.",
-      "writes": [
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-node-dates.tsx",
+        "apps/web/src/po-delivery-dates.tsx",
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/current-task-plan.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/helpers/order-time-rewash-fixture.ts",
-        "tests/helpers/current-task-plan-fixture.ts",
-        "tests/integration/current-task-plan-postgres.test.ts",
-        "tests/integration/current-task-plan-browser-postgres.test.ts",
-        "docs/engineering/current-task-plan-repair.md"
+        "tests/integration/bounded-forecast-native-browser-postgres.test.ts",
+        "docs/engineering/bounded-forecast-display-repair.md"
       ],
       "reads": [
-        "tests/helpers/order-time-rewash-fixture.ts",
-        "scripts/test-execution-config.mjs"
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-current-summary.tsx",
+        "packages/contracts/src/index.ts",
+        "tests/acceptance/supplychain-settings-browser.ts"
       ],
       "oldTests": [
-        "scripts/ci/test-execution-contract.test.mjs",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
         "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "expectation": "Fresh integrated-source related unit/native App/type/lint/protocol checks pass; previous exact1022 Full business lanes passed but aggregate/Final failed, no new Full is claimed. Real original publish/material verification/arrangement creates genuine paper tasks, not downstream synthetic prerequisites. Real second-round publication preserves old completed history for pure and linked sources; later same-scope and added-scope instructions retain adopted warehouse work through exact captured route binding. Exact printing and included handoff boundaries remain covered. All affected API/contract/UI/helper consumers select both new native/App suites under existing finite config. No test removal, final name filter, new runner or global timeout.",
+      "expectation": "Original6998/base64d Light, Review and Full44210330365 all passed, including original authenticated App. Current conflict-only local unit and execution-contract checks pass on the exact combined source; no new CI or native-App result is claimed. Two exact plan-set assertions now include the newly mapped forecast consumer while retaining every previous test.",
       "checks": [
-        "b-unit",
-        "b-native",
-        "b-protocol",
-        "b-lint"
+        "forecast-unit",
+        "forecast-protocol"
       ]
     }
   ],
   "checks": [
     {
-      "id": "b-unit",
+      "id": "forecast-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/current-task-plan.test.ts tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/task-completion-display.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-terminal-filter.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/integration1023-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-fixed-schedule.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-bounded-forecast-20261117/integrated-registry-closed-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d0cf21cb488a9dcc7f811ee27d62ea4a65c39b13",
-      "sourceFingerprint": "8eac9b61eed585587c262a48d62aa77932e006f31ef6c386512961b48b71c2be",
-      "startedAt": "2026-11-18T01:14:08.051700+00:00",
-      "endedAt": "2026-11-18T01:14:21.915521+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/integration1023-unit/command.log",
-      "logSha256": "642cad7828db4781544c1c7fab8f54a8a59480f5dc650632c7aa1a4b14997916",
-      "context": "User explicitly authorized1022 merge with known previous aggregate timeout and later instructed resolution of construction-evidence conflict only. Integrates actual release64d24368 with original1022 source byte-for-byte, no business conflict or new logic. Current related unit/native App/types/lint/protocol are actual integrated-source checks, not rerun Full. Original1022 and1023 complete evidence retained separately under private/evidence-before-integration-1022.json and1023.json and immutable Git parents. Current Node22/npm10 and marked low-privilege PG16; no production, deployment or1024 CI rerun.",
-      "passed": 269,
+      "testedHead": "6998e9de72477f1e0ef09de98042187967a1d16d",
+      "sourceFingerprint": "bc5c2dc10dff1e5201b149add3670043a027cf6d1772c2265f2b0a1b4e80680b",
+      "startedAt": "2026-11-18T01:21:56.835387+00:00",
+      "endedAt": "2026-11-18T01:21:58.518611+00:00",
+      "log": "/workspace/sla-bounded-forecast-20261117/checks/integrated-registry-closed-unit/command.log",
+      "logSha256": "bb4a1d9a762660a1e74e5f5ce1a8586c60a5051990f6696b094a63bef0622d73",
+      "context": "Local conflict-resolution check only: union both additive canonical registrations and keep all independent assertions. User explicitly prohibited1024 CI reruns and then directly confirmed merge. Original full44210330365 was approved on6998/base64d; it is not a new-head or new-base receipt. No Actions/Light/Review/Full rerun or DB execution. All forecast and incoming1022 business-source bytes match their tested parents; only additive test registries, precise expected unions and evidence are reconciled.",
+      "passed": 162,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1189879f18621f47ee9906138521982136f08b6615e901ad582a24e6726e84e7"
+          "sha256": "002b1a1781ef86f34c50dfeaacdd4bed994d97ebed709d60dcd130a2a460c08d"
         }
       ]
     },
     {
-      "id": "b-native",
-      "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/current-task-plan-postgres.test.ts tests/integration/current-task-plan-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-b-20261117/pg/integration1023-native/tests.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d0cf21cb488a9dcc7f811ee27d62ea4a65c39b13",
-      "sourceFingerprint": "8eac9b61eed585587c262a48d62aa77932e006f31ef6c386512961b48b71c2be",
-      "startedAt": "2026-11-18T01:14:31.772544+00:00",
-      "endedAt": "2026-11-18T01:16:32.636428+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/pg/integration1023-native/tests.log",
-      "logSha256": "19da9264dff5484deb07c5ae47365c42dbcf3becc62bbe3c21d1338e48074fae",
-      "context": "User explicitly authorized1022 merge with known previous aggregate timeout and later instructed resolution of construction-evidence conflict only. Integrates actual release64d24368 with original1022 source byte-for-byte, no business conflict or new logic. Current related unit/native App/types/lint/protocol are actual integrated-source checks, not rerun Full. Original1022 and1023 complete evidence retained separately under private/evidence-before-integration-1022.json and1023.json and immutable Git parents. Current Node22/npm10 and marked low-privilege PG16; no production, deployment or1024 CI rerun.",
-      "passed": 15,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "e9b227e37b6e10c990f5791d856eab91c2bbe3370ed61f8b2ebf128c915e834b"
-        }
-      ]
-    },
-    {
-      "id": "b-web-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d0cf21cb488a9dcc7f811ee27d62ea4a65c39b13",
-      "sourceFingerprint": "8eac9b61eed585587c262a48d62aa77932e006f31ef6c386512961b48b71c2be",
-      "startedAt": "2026-11-18T01:14:10.208415+00:00",
-      "endedAt": "2026-11-18T01:14:48.219719+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/integration1023-web-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "User explicitly authorized1022 merge with known previous aggregate timeout and later instructed resolution of construction-evidence conflict only. Integrates actual release64d24368 with original1022 source byte-for-byte, no business conflict or new logic. Current related unit/native App/types/lint/protocol are actual integrated-source checks, not rerun Full. Original1022 and1023 complete evidence retained separately under private/evidence-before-integration-1022.json and1023.json and immutable Git parents. Current Node22/npm10 and marked low-privilege PG16; no production, deployment or1024 CI rerun."
-    },
-    {
-      "id": "b-lint",
-      "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/current-task-plan-targets.ts apps/api/src/production-platform/fixed-task-targets.ts apps/api/src/production-platform/framework-node-targets.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/order-time-work-task-kind.ts apps/api/src/production-platform/task-service.ts apps/web/src/bulk-task-workbench.tsx apps/web/src/digital-production-tasks-panel.tsx apps/web/src/task-plan-targets.tsx apps/web/src/task-workbench-sample.tsx packages/contracts/src/digital-production-tasks.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/helpers/current-task-plan-fixture.ts tests/integration/current-task-plan-browser-postgres.test.ts tests/integration/current-task-plan-postgres.test.ts tests/unit/current-task-plan.test.ts tests/unit/full-gate-risk-map.test.ts apps/web/src/bulk-preparation-panel.tsx tests/helpers/order-time-rewash-fixture.ts tests/unit/digital-task-read-boundary.test.ts tests/acceptance/supplychain-settings-browser.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --max-warnings=0",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d0cf21cb488a9dcc7f811ee27d62ea4a65c39b13",
-      "sourceFingerprint": "8eac9b61eed585587c262a48d62aa77932e006f31ef6c386512961b48b71c2be",
-      "startedAt": "2026-11-18T01:14:34.599508+00:00",
-      "endedAt": "2026-11-18T01:14:37.549774+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/integration1023-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "User explicitly authorized1022 merge with known previous aggregate timeout and later instructed resolution of construction-evidence conflict only. Integrates actual release64d24368 with original1022 source byte-for-byte, no business conflict or new logic. Current related unit/native App/types/lint/protocol are actual integrated-source checks, not rerun Full. Original1022 and1023 complete evidence retained separately under private/evidence-before-integration-1022.json and1023.json and immutable Git parents. Current Node22/npm10 and marked low-privilege PG16; no production, deployment or1024 CI rerun."
-    },
-    {
-      "id": "b-api-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d0cf21cb488a9dcc7f811ee27d62ea4a65c39b13",
-      "sourceFingerprint": "8eac9b61eed585587c262a48d62aa77932e006f31ef6c386512961b48b71c2be",
-      "startedAt": "2026-11-18T01:14:08.842791+00:00",
-      "endedAt": "2026-11-18T01:14:29.669978+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/integration1023-api-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "User explicitly authorized1022 merge with known previous aggregate timeout and later instructed resolution of construction-evidence conflict only. Integrates actual release64d24368 with original1022 source byte-for-byte, no business conflict or new logic. Current related unit/native App/types/lint/protocol are actual integrated-source checks, not rerun Full. Original1022 and1023 complete evidence retained separately under private/evidence-before-integration-1022.json and1023.json and immutable Git parents. Current Node22/npm10 and marked low-privilege PG16; no production, deployment or1024 CI rerun."
-    },
-    {
-      "id": "b-protocol",
+      "id": "forecast-protocol",
       "kind": "tests",
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d0cf21cb488a9dcc7f811ee27d62ea4a65c39b13",
-      "sourceFingerprint": "8eac9b61eed585587c262a48d62aa77932e006f31ef6c386512961b48b71c2be",
-      "startedAt": "2026-11-18T01:14:33.567454+00:00",
-      "endedAt": "2026-11-18T01:14:34.109386+00:00",
-      "log": "/workspace/sla-supplement-b-20261117/checks/integration1023-protocol/command.log",
-      "logSha256": "b614895cde77babf5a1566025a6f3152cc9866489af84ec9d1b0959e09b19066",
-      "context": "User explicitly authorized1022 merge with known previous aggregate timeout and later instructed resolution of construction-evidence conflict only. Integrates actual release64d24368 with original1022 source byte-for-byte, no business conflict or new logic. Current related unit/native App/types/lint/protocol are actual integrated-source checks, not rerun Full. Original1022 and1023 complete evidence retained separately under private/evidence-before-integration-1022.json and1023.json and immutable Git parents. Current Node22/npm10 and marked low-privilege PG16; no production, deployment or1024 CI rerun.",
+      "testedHead": "6998e9de72477f1e0ef09de98042187967a1d16d",
+      "sourceFingerprint": "bc5c2dc10dff1e5201b149add3670043a027cf6d1772c2265f2b0a1b4e80680b",
+      "startedAt": "2026-11-18T01:21:58.024821+00:00",
+      "endedAt": "2026-11-18T01:21:58.701021+00:00",
+      "log": "/workspace/sla-bounded-forecast-20261117/checks/integrated-registry-closed-protocol/command.log",
+      "logSha256": "0173d38b4c30c7eab080a4185671250a9c9284a56c1d6ebf4140e6dd1ef54c47",
+      "context": "Local conflict-resolution check only: union both additive canonical registrations and keep all independent assertions. User explicitly prohibited1024 CI reruns and then directly confirmed merge. Original full44210330365 was approved on6998/base64d; it is not a new-head or new-base receipt. No Actions/Light/Review/Full rerun or DB execution. All forecast and incoming1022 business-source bytes match their tested parents; only additive test registries, precise expected unions and evidence are reconciled.",
       "passed": 21,
       "failed": 0,
       "skipped": 0
     }
-  ]
+  ],
+  "retainedOriginalEvidence": {
+    "forecast": {
+      "commit": "6998e9de72477f1e0ef09de98042187967a1d16d",
+      "path": "docs/engineering/construction-evidence.json",
+      "fullRun": 44210330365,
+      "base": "64d24368ae3b98266a5ea978d67d6788ab220e19"
+    },
+    "release": {
+      "commit": "294ffdf58e132cf56af59eb9e853117324f007ce",
+      "path": "docs/engineering/construction-evidence.json"
+    },
+    "decision": "User direct confirmation after disclosure; do not rerun1024 CI, no new full receipt claimed"
+  }
 }
