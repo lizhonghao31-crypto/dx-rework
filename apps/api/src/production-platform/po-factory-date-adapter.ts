@@ -25,6 +25,29 @@ export async function factoryPoLines(db:Db,caseId:string,at:string|null=null,sna
   if(!rows.length)conflict("数字外发缺少原 PO 关联，请核对来源");
   return rows;
 }
+
+type FactoryPagePo = {line_id:string;position:number;customer:string|null;factory:string|null};
+
+/** The source list has already selected current digital cases. Historical and
+ * approval-snapshot readers continue to use factoryPoLines. */
+export async function currentFactoryPagePoLines(db:Db,digitalCaseIds:readonly string[]) {
+  const grouped=new Map<string,Map<number,FactoryPagePo>>();
+  if(!digitalCaseIds.length)return grouped;
+  const rows=(await db.query<FactoryPagePo & {sourcing_case_id:string}>(`SELECT link.child_id AS sourcing_case_id,
+    line.line_id,child.child_line_key::integer AS position,line.customer_warehouse_arrival_date::text AS customer,
+    line.factory_delivery_date::text AS factory
+    FROM digital_production_child_links link JOIN digital_production_child_lines child
+      ON child.module=link.module AND child.child_id=link.child_id AND child.production_order_id=link.production_order_id
+    JOIN digital_production_po_lines line ON line.production_order_id=child.production_order_id AND line.line_id=child.line_id
+    WHERE link.module='sourcing' AND link.child_id=ANY($1::uuid[]) ORDER BY link.child_id,child.child_line_key::integer`,[digitalCaseIds])).rows;
+  for(const row of rows){
+    const positions=grouped.get(row.sourcing_case_id)??new Map<number,FactoryPagePo>();
+    if(!positions.has(row.position))positions.set(row.position,row);
+    grouped.set(row.sourcing_case_id,positions);
+  }
+  if(digitalCaseIds.some(id=>!grouped.has(id)))conflict("数字外发缺少原 PO 关联，请核对来源");
+  return grouped;
+}
 export async function factoryProposals(db:Db,caseId:string,at:string|null=null):Promise<Array<{factoryDeliveryDate?:string}>> {
   const row=(await db.query(`SELECT COALESCE((SELECT correction.lines FROM sourcing_case_corrections correction
       WHERE correction.sourcing_case_id=source.sourcing_case_id AND ($2::timestamptz IS NULL OR correction.corrected_at<=$2)

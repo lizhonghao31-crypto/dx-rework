@@ -63,7 +63,10 @@ const row = (index: number, totalCount = 16) => ({
 // exercised against actual native links/scene ledgers in the PostgreSQL suite.
 const ordinaryPool=(query:ReturnType<typeof vi.fn>)=>({query:(sql:string,...args:unknown[])=>{
   if(sql.includes('SELECT DISTINCT ON (r.scenario_id)'))return Promise.resolve({rows:[]});
-  if(sql.includes('sourcing_contract_return_clock_scope'))return Promise.resolve({rows:[{native_order_id:null,scenario_id:null}]});
+  if(sql.includes('sourcing_contract_return_clock_scope')){
+    const [caseIds]=args[0] as [string[]];
+    return Promise.resolve({rows:caseIds.map(()=>({native_order_id:null,scenario_id:null}))});
+  }
   return query(sql,...args);
 }} as unknown as Pool);
 
