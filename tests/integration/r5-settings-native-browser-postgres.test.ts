@@ -59,6 +59,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const before=(await standards.read(h.f.root)).version,{page,context}=await h.open();try{
    await ready(page);await page.getByRole('tab',{name:'时效演算',exact:true}).click();await page.getByLabel('演算参考时间',{exact:true}).fill('2026-11-02T08:00');await page.getByLabel('演算客户交期1',{exact:true}).fill('2026-11-02');
    await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('31天11小时');await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('差30天19小时');
+   const boundary=page.waitForResponse(response=>response.url().endsWith('/order-time-settings/calculate')&&response.request().postDataJSON()?.startAt==='2026-11-02T05:00:00.000Z'&&response.request().postDataJSON()?.lines?.[0]?.customerDate==='2026-12-03');
+   await page.getByLabel('演算参考时间',{exact:true}).fill('2026-11-02T13:00');await page.getByLabel('演算客户交期1',{exact:true}).fill('2026-12-03');
+   const response=await boundary;expect(response.ok()).toBe(true);
+   const atBoundary=(await response.json()).lines[0];
+   expect(atBoundary).toMatchObject({expectedEnd:'2026-12-03T16:00:00.000Z',marginMinutes:0,deliveryStatus:'insufficient'});
+   expect(atBoundary.milestones.find((row:{key:string})=>row.key==='planned_shipment')).toMatchObject({marginMinutes:0,lateMinutes:0,status:'insufficient'});
+   await expect.poll(()=>page.locator('.r5-calculation-outcome').innerText()).toBe('本单时间不足');
+   expect(await page.locator('.r5-calculation-kpis .is-late').innerText()).toContain('0小时');
+   await page.getByLabel('演算参考时间',{exact:true}).fill('2026-11-02T08:00');await page.getByLabel('演算客户交期1',{exact:true}).fill('2026-11-02');
    const calculation=page.getByRole('tabpanel',{name:'时效演算',exact:true});await calculation.locator('summary').filter({hasText:'适用工艺：'}).click();const craft=calculation.getByRole('group',{name:'大货工艺',exact:true});await craft.getByLabel('绣花',{exact:true}).check();await craft.getByLabel('印花',{exact:true}).check();
    await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('31天15小时');await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('差30天23小时');
    await page.setViewportSize({width:1586,height:992});await page.screenshot({path:join(h.evidence,'r5-calculator-1586.png'),fullPage:true});

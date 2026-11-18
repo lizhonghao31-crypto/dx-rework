@@ -49,6 +49,11 @@ describe('R5 single-time settings and temporary original-graph calculation',()=>
   const value={...input(),lines:[{id:'PO1',customerDate:'2026-11-01'},{id:'PO2',customerDate:'2026-11-02'}]},result=orderTimeSettingsCalculation(value).lines;
   expect(result[0]?.marginMinutes).toBe(-21*60);expect(result[1]?.marginMinutes).toBe(3*60);
  });
+ it.each([[-1,'sufficient',1/60000],[0,'insufficient',0],[1,'insufficient',-1/60000]] as const)('reports true %i ms around the exclusive date end without inferring status from zero', (offset,deliveryStatus,marginMinutes)=>{
+  const startAt=new Date(Date.parse('2026-11-02T03:00:00Z')+offset).toISOString();
+  const result=orderTimeSettingsCalculation({...input(),startAt}).lines[0]!;
+  expect(result).toMatchObject({deliveryStatus,marginMinutes,expectedEnd:new Date(Date.parse('2026-11-02T16:00:00Z')+offset).toISOString()});
+ });
  it('rejects duplicate PO identities and invalid dates',()=>{
   expect(()=>orderTimeSettingsCalculation({...input(),lines:[{id:'PO1',customerDate:'2026-02-30'}]})).toThrow('有效客户交期');
   expect(()=>orderTimeSettingsCalculation({...input(),lines:[{id:'PO1',customerDate:null},{id:'PO1',customerDate:null}]})).toThrow('不同的PO');
