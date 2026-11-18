@@ -130,7 +130,12 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
   const own=await f.scene('2027-02-01T00:00:00.000Z');
   const inScene=<T,>(action:()=>Promise<T>)=>f.runtime.run(own,f.root,action);
   const {order,initial,planned,sibling,changed,line}=await inScene(async()=>{
-   const order=await make(),input=value(order),initial=await confirm(order,input);
+   const order=await make('2027-04-01'),input=value(order);
+   for(const scope of input.scopes){
+    scope.customerGoal={precision:'date',value:'2027-04-01',source:'TEST original customer date'};
+    scope.goals[scope.customerGoalIds[0]!]=scope.customerGoal;
+   }
+   const initial=await confirm(order,input);
    const [changed,sibling]=initial.input.scopes,line=order.lines[0]!.lineId;
    const proposal:OrderTimeInput={...input,formalInputs:{version:'approved-remaining-v1',progress:{},notBefore:{
     ['b:'+sibling!.lineId]:{precision:'instant',value:'2027-02-04T00:00:00.000Z',source:'TEST true independent sibling condition'}}}};
@@ -151,10 +156,10 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
    expect(scoped.targets).toEqual(initial.targets);
    const dates=new PoCustomerDateService(f.db),sheet=await dates.read(f.root,order.productionOrderId);
    const version=(await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[order.productionOrderId])).rows[0].version;
-   const request=await dates.request(f.root,order.productionOrderId,{orderVersion:version,changes:[{lineId:line,date:'2027-03-02',expectedVersion:sheet.customerPoDates.find(po=>po.lineId===line)!.version}],reason:'TEST approve only one customer PO'},randomUUID()) as {requestId:string};
+   const request=await dates.request(f.root,order.productionOrderId,{orderVersion:version,changes:[{lineId:line,date:'2027-04-02',expectedVersion:sheet.customerPoDates.find(po=>po.lineId===line)!.version}],reason:'TEST approve only one customer PO'},randomUUID()) as {requestId:string};
    await dates.decide(f.root,order.productionOrderId,request.requestId,true,randomUUID());
    const approved=(await repo.current(initial.resource))!;
-   expect(approved.input.scopes.find(scope=>scope.scopeRef===changed.scopeRef)?.customerGoal).toMatchObject({value:'2027-03-02'});
+   expect(approved.input.scopes.find(scope=>scope.scopeRef===changed.scopeRef)?.customerGoal).toMatchObject({value:'2027-04-02'});
    expect(approved.input.scopes.find(scope=>scope.scopeRef===sibling.scopeRef)?.customerGoal).toEqual(sibling.customerGoal);
    expect(approved.input.formalTargets).toEqual(scoped.input.formalTargets);
    expect(approved.targets[sibling.scopeRef]).toEqual(initial.targets[sibling.scopeRef]);

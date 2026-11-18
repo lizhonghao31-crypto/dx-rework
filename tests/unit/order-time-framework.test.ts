@@ -68,6 +68,10 @@ it('separates a formally approved remaining schedule from old evaluation targets
  const finished=formalRemainingSchedule(input,{...snapshot,progress:{...snapshot.progress,cut:{...snapshot.progress.paper!,actualAt:completed}}},previous,time,'TEST already completed terminal');
  expect(finished.targets[scopeRef]!.cut?.end.at).toBeNull();
  expect(finished.terminalEnds[scopeRef]?.[0]?.at).toBe(completed);
+ const verified={...previous,input:{...input,formalTargets:{[scopeRef]:targetIndex}}};
+ const retained=formalRemainingSchedule(input,{...snapshot,progress:{...snapshot.progress,cut:{...snapshot.progress.paper!,actualAt:completed}}},verified,time,'TEST preserve the recorded prior target');
+ expect(retained.targets[scopeRef]!.cut).toEqual(targetIndex.cut);
+ expect(retained.terminalEnds[scopeRef]?.[0]?.at).toBe(completed);
  expect(input.scopes[0]).toMatchObject({goals:{cut:B},customerGoal:M});
  expect(previous.targets[scopeRef]!.cut!.end.at).toBe(B.value);
 });
