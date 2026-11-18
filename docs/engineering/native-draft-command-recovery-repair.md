@@ -1,6 +1,6 @@
 # Native drafts and original command receipts
 
-Approved BA100/PR-E and the independently reviewed PO customer-decision supplement (Library55db9bd20f8481919bb984a22b3d0027). This candidate is explicitly stacked on the washing-navigation candidate 12091c89, including its two Review repairs and the actual cancellation merge. Its final comparison base must become the predecessors' actual merge before publication/Gate; earlier reports keep their real source identities. No deployment or live order repair is authorized here.
+Approved BA100/PR-E and the independently reviewed PO customer-decision supplement (Library55db9bd20f8481919bb984a22b3d0027). The release base is the actual merged washing-navigation PR1026 at d64be1e79010c1bdea8a0215b181a3bd88f4b7cb. Its tree equals tested12091c89, and this repair retains the exact protected source and valid local results. No deployment or live order repair is authorized here.
 
 The original designer workspace preserves its parent intent and the raw creation form/document in the same browser tab, separated by freshly authenticated actor and environment. Incomplete values and local row/attachment identities survive a real reload. A pure draft gains no source ID, idempotency key, receipt lookup, automatic save or submit. File contents that the browser cannot retain are explicitly reselected. An acknowledged original source is reused only after that exact acknowledgement; an unknown source creation keeps its original identity and blocks duplicate creation because no supported terminal-read API exists for that step.
 
