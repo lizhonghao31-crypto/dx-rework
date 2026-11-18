@@ -19,12 +19,24 @@ import {ProductionStatisticsQuery} from './production-statistics-query.js';
 import {productionEvidenceSheets} from './production-statistics-export.js';
 const iso=(value:Date|string|null)=>value===null?null:new Date(value).toISOString();
 const range=(filters:DigitalAnalysisFilters)=>({from:new Date(`${filters.from}T00:00:00+08:00`).toISOString(),to:new Date(Date.parse(`${filters.to}T00:00:00+08:00`)+86400000).toISOString()});
+function byAnalysisTask<T extends {taskId:string}>(rows:readonly T[]){
+ const groups=new Map<string,T[]>();
+ for(const row of rows){
+  const group=groups.get(row.taskId);
+  if(group)group.push(row);
+  else groups.set(row.taskId,[row]);
+ }
+ return groups;
+}
+
+type AnalysisDetailScope='page'|'all'|'none';
+
 export class DigitalAnalysisQuery{
  private readonly observations=new WeakMap<PoolClient,Map<string,{scope:BusinessTimeScope;time:BusinessTime}>>();
  constructor(private readonly database:Pool){}
  async production(actor:TrustedActorContext,filters:DigitalAnalysisFilters){return new ProductionStatisticsQuery(this.database).list(actor,filters);}
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isDigitalLeader(actor)&&actor.actorRoles.includes('root_superuser')||Boolean(actor.authorizationCapabilities?.includes('report:view'));}catch{return false;}}
- private async snapshot(db:PoolClient,actor:TrustedActorContext,filters:DigitalAnalysisFilters){
+ private async snapshot(db:PoolClient,actor:TrustedActorContext,filters:DigitalAnalysisFilters,details:AnalysisDetailScope){
   assertIdentityActor(actor);const window=range(filters),asOf=new Date().toISOString();
   const candidates=(await db.query(`SELECT t.task_id AS "taskId",coalesce(a.source_id,bp.source_id,o.source_id) AS "sourceId",a.production_order_id AS "orderId",
     coalesce(o.design_style_no,s.design_style_no) AS "styleNo",coalesce(o.customer_code,s.customer_code,'') AS customer,coalesce(d.document->>'template','') AS category,
@@ -60,13 +72,12 @@ export class DigitalAnalysisQuery{
   const missingSupplyRounds=new Set<string>();
   const supplyRounds=new Map(supplyTasks.map(row=>[`${row.sourceId}:${row.round}`,row]));
   for(const [key,row]of supplyRounds)if((await materialReadiness(db,row.sourceId,row.round)).supplyMissing.length)missingSupplyRounds.add(key);
-  const events=(await db.query(`SELECT event_id AS id,task_id AS "taskId",event_kind AS kind,occurred_at AS at,recorded_at AS "recordedAt",time_quality AS quality,actor_id AS "actorId",u.display_name AS "actorName",corrects_event_id AS "correctsId",payload
-    FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE task_id=ANY($1::uuid[]) ORDER BY recorded_at,event_id`,[ids])).rows;
-  const assignments=(await db.query(`SELECT a.entity_id AS "taskId",a.created_at AS at,u.display_name AS "actorName",previous_user.display_name AS "beforeName",next_user.display_name AS "afterName"
-    FROM audit_events a JOIN app_users u ON u.id=a.actor_id LEFT JOIN app_users previous_user ON previous_user.id=(a.before_state->>'assigneeId')::uuid LEFT JOIN app_users next_user ON next_user.id=(a.after_state->>'assigneeId')::uuid
-    WHERE a.action='digital_task_reassigned' AND a.entity_id=ANY($1::text[]) ORDER BY a.created_at,a.id`,[ids])).rows;
-  const delegations=(await db.query(`SELECT d.task_id AS "taskId",u.display_name AS name,d.created_at AS "from",d.expires_at AS "expiresAt",d.revoked_at AS "revokedAt"
-    FROM digital_production_delegations d JOIN app_users u ON u.id=d.delegate_id WHERE d.task_id=ANY($1::uuid[]) AND d.purpose='execute' ORDER BY d.created_at,d.delegation_id`,[ids])).rows;
+  // Global metrics need the ordered event facts, including corrected and
+  // unknown waits. Operator names and full payloads are display data.
+  const events=byAnalysisTask((await db.query(`SELECT event_id AS id,task_id AS "taskId",event_kind AS kind,
+    occurred_at AS at,recorded_at AS "recordedAt",time_quality AS quality,actor_id AS "actorId",corrects_event_id AS "correctsId",
+    CASE WHEN event_kind='condition' THEN jsonb_build_object('satisfied',payload->'satisfied') ELSE '{}'::jsonb END AS payload
+    FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE task_id=ANY($1::uuid[]) ORDER BY recorded_at,event_id`,[ids])).rows);
   const times=new Map<string,BusinessTime>(),clock=new ContextBusinessClock(this.database,db);
   for(const row of authorized){
    const scope:BusinessTimeScope|null=row.orderId?{kind:'order',id:row.orderId}:row.sourceId?{kind:'source',id:row.sourceId}:null;
@@ -74,10 +85,9 @@ export class DigitalAnalysisQuery{
    const key=`${scope.kind}:${scope.id}`;
    if(!times.has(key)){const time=validateBusinessTime(await clock.read(scope));times.set(key,time);if(time.scenarioId)this.observations.get(db)?.set(key,{scope,time});}
   }
-  const rows=authorized.map(row=>taskAnalysis({...row,businessTime:times.get(`${row.orderId?'order':'source'}:${row.orderId??row.sourceId}`)!,materialSupplyPending:row.nodeKey==='development_material_supply'&&missingSupplyRounds.has(`${row.sourceId}:${row.round}`),createdAt:iso(row.createdAt)!,enteredAt:iso(row.enteredAt),completedAt:iso(row.completedAt),dueAt:iso(row.dueAt),sourceCreatedAt:iso(row.sourceCreatedAt),sourcePublishedAt:iso(row.sourcePublishedAt),events:events.filter(e=>e.taskId===row.taskId).map(e=>({...e,at:iso(e.at),recordedAt:iso(e.recordedAt)!}))} as AnalysisTask,asOf));
-  const attributedRows=rows.map(row=>({...row,assignmentHistory:assignments.filter(a=>a.taskId===row.taskId).map(a=>({...a,at:iso(a.at)!})),delegations:delegations.filter(d=>d.taskId===row.taskId).map(d=>({...d,from:iso(d.from)!,expiresAt:iso(d.expiresAt)!,revokedAt:iso(d.revokedAt)}))}));
-  const people=[...new Map(attributedRows.filter(row=>row.assigneeId).map(row=>[row.assigneeId!,{id:row.assigneeId!,name:row.assigneeName}])).values()];
-  const scopedRows=filters.assigneeId?attributedRows.filter(row=>row.assigneeId===filters.assigneeId):attributedRows;
+  const rows=authorized.map(row=>taskAnalysis({...row,businessTime:times.get(`${row.orderId?'order':'source'}:${row.orderId??row.sourceId}`)!,materialSupplyPending:row.nodeKey==='development_material_supply'&&missingSupplyRounds.has(`${row.sourceId}:${row.round}`),createdAt:iso(row.createdAt)!,enteredAt:iso(row.enteredAt),completedAt:iso(row.completedAt),dueAt:iso(row.dueAt),sourceCreatedAt:iso(row.sourceCreatedAt),sourcePublishedAt:iso(row.sourcePublishedAt),events:(events.get(row.taskId)??[]).map(e=>({...e,at:iso(e.at),recordedAt:iso(e.recordedAt)!}))} as AnalysisTask,asOf));
+  const people=[...new Map(rows.filter(row=>row.assigneeId).map(row=>[row.assigneeId!,{id:row.assigneeId!,name:row.assigneeName}])).values()];
+  const scopedRows=filters.assigneeId?rows.filter(row=>row.assigneeId===filters.assigneeId):rows;
   // Match original development reads: any technically visible source task grants
   // the read, including tasks outside the current analysis filters.
   const candidateSources=[...new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id)))];
@@ -102,8 +112,26 @@ export class DigitalAnalysisQuery{
   const noteAccess=await readTaskAccessForPage(db,actor,[...noteTasks].filter(id=>!taskAccess.has(id)));
   const notes=[];
   for(const record of rawNotes){const note=record.note as DigitalAnalysisNote&{ruleVersion:string};if(note.taskIds.every(id=>(taskAccess.get(id)??noteAccess.get(id))?.technical))notes.push({id:record.id,author:record.author,createdAt:iso(record.createdAt)!,...note});}
+  const visible=details==='page'?selectedRows.slice((filters.page-1)*15,filters.page*15):selectedRows;
+  const display=await this.analysisDetails(db,visible,details!=='none');
   return {ruleVersion:filters.scope?WORKSPACE_ANALYSIS_RULE_VERSION:ANALYSIS_RULE_VERSION,asOf,filters,canExport:this.exportAllowed(actor),canRecord:isDigitalLeader(actor)||isDigitalTechnicalManager(actor),page:filters.page,total:selectedRows.length,
-    summary:summarizeAnalysis(selectedRows,window.from,window.to),people,overview:analysisWorkspaceOverview(scopedRows,window.from,window.to,asOf),rounds,rows:selectedRows,notes};
+    summary:summarizeAnalysis(selectedRows,window.from,window.to),people,overview:analysisWorkspaceOverview(scopedRows,window.from,window.to,asOf),rounds,rows:display,notes};
+ }
+ private async analysisDetails<T extends {taskId:string;events:AnalysisTask['events']}>(db:PoolClient,rows:T[],includeDetails:boolean){
+  if(!includeDetails||!rows.length)return rows.map(row=>({...row,assignmentHistory:[],delegations:[]}));
+  const ids=rows.map(row=>row.taskId);
+  const events=byAnalysisTask((await db.query(`SELECT event_id AS id,task_id AS "taskId",event_kind AS kind,occurred_at AS at,recorded_at AS "recordedAt",time_quality AS quality,actor_id AS "actorId",u.display_name AS "actorName",corrects_event_id AS "correctsId",payload
+    FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE task_id=ANY($1::uuid[]) ORDER BY recorded_at,event_id`,[ids])).rows);
+  const assignments=byAnalysisTask((await db.query(`SELECT a.entity_id AS "taskId",a.created_at AS at,u.display_name AS "actorName",previous_user.display_name AS "beforeName",next_user.display_name AS "afterName"
+    FROM audit_events a JOIN app_users u ON u.id=a.actor_id LEFT JOIN app_users previous_user ON previous_user.id=(a.before_state->>'assigneeId')::uuid LEFT JOIN app_users next_user ON next_user.id=(a.after_state->>'assigneeId')::uuid
+    WHERE a.action='digital_task_reassigned' AND a.entity_id=ANY($1::text[]) ORDER BY a.created_at,a.id`,[ids])).rows);
+  const delegations=byAnalysisTask((await db.query(`SELECT d.task_id AS "taskId",u.display_name AS name,d.created_at AS "from",d.expires_at AS "expiresAt",d.revoked_at AS "revokedAt"
+    FROM digital_production_delegations d JOIN app_users u ON u.id=d.delegate_id WHERE d.task_id=ANY($1::uuid[]) AND d.purpose='execute' ORDER BY d.created_at,d.delegation_id`,[ids])).rows);
+  return rows.map(row=>({...row,
+   events:(events.get(row.taskId)??[]).map(event=>({...event,at:iso(event.at),recordedAt:iso(event.recordedAt)!})),
+   assignmentHistory:(assignments.get(row.taskId)??[]).map(assignment=>({...assignment,at:iso(assignment.at)!})),
+   delegations:(delegations.get(row.taskId)??[]).map(delegation=>({...delegation,from:iso(delegation.from)!,expiresAt:iso(delegation.expiresAt)!,revokedAt:iso(delegation.revokedAt)})),
+  }));
  }
  private async read<T>(action:(db:PoolClient)=>Promise<T>){
   const db=await this.database.connect(),observations=new Map<string,{scope:BusinessTimeScope;time:BusinessTime}>();this.observations.set(db,observations);let result:T;
@@ -112,7 +140,7 @@ export class DigitalAnalysisQuery{
   return result;
  }
 
- async list(actor:TrustedActorContext,filters:DigitalAnalysisFilters):Promise<DigitalAnalysisResult>{return this.read(async db=>{const all=await this.snapshot(db,actor,filters);return {...all,rows:all.rows.slice((filters.page-1)*15,filters.page*15)};});}
+ async list(actor:TrustedActorContext,filters:DigitalAnalysisFilters):Promise<DigitalAnalysisResult>{return this.read(db=>this.snapshot(db,actor,filters,'page'));}
  async export(actor:TrustedActorContext,filters:DigitalAnalysisFilters){
   if(!this.exportAllowed(actor))digitalForbidden();
   if(filters.view==='production'){
@@ -133,7 +161,7 @@ export class DigitalAnalysisQuery{
     {name:'未知归厂池',rows:[['母单','PO实体','指标','数量（全局一次）','说明'],...result.result.unattributed.map(pool=>[pool.orderId,pool.lineId,kindLabels[pool.kind],value(pool.quantity),pool.reason])]}]);
    await this.database.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1::uuid,$2,$3,'digital.analysis.exported','digital_analysis',$1::text,$4)",[randomUUID(),actor.requestId,actor.actorId,JSON.stringify({snapshotId:result.snapshotId,filters:result.filters,ruleVersion:result.result.ruleVersion,rowCount:result.total,watermark:result.watermark})]);return content;
   }
-  const result=await this.read(db=>this.snapshot(db,actor,filters));
+  const result=await this.read(db=>this.snapshot(db,actor,filters,'all'));
   const rows:WorkbookCell[][]=[['任务','来源','母单','款号','客户','品类','岗位','当前主办','开发轮次','制单版本','节点','状态','进入','完成','时间质量','期限','SLA版本','按期纳入','排除原因','办理秒数','已知等待秒数','等待缺失数','业务观察时刻'],
     ...result.rows.map(r=>[r.taskId,r.sourceId??'',r.orderId??'',r.styleNo,r.customer,r.category,r.requiredRole,r.assigneeName??'',r.sourceRound??'',r.instructionVersion??'',r.label,r.state,r.enteredAt??'',r.completedAt??'',`${r.enteredQuality}/${r.completedQuality}`,r.dueAt??'',r.policyVersion??'',r.slaIncluded?'是':'否',r.exclusion??'',r.handlingSeconds??'',r.waitingSeconds,r.unknownWaiting,r.businessTime?.now??''])];
   const content=await buildWorkbook([{name:'范围与口径',rows:[['规则版本',result.ruleVersion],['生成时间',result.asOf],['统计窗口',filters.scope==='snapshot'?'当前积压快照（不按创建日期排除）':filters.scope==='completed'?'任务原完成日期（北京时间）':filters.scope==='published'?'来源首次原发布日期（北京时间）':filters.scope==='revisions'?'复版原发布日期（北京时间）':'任务创建日期（北京时间）'],['筛选',JSON.stringify(filters)],['说明','无SLA不入按期分母；未核实不计算精确周期；办理周期不是净工时；并行等待按每来源区间并集；任务时效按逐单业务观察时刻，生成时间为真实时间；场景业务时间不与真实登记时间计算登记延迟']]},{name:'节点明细',rows},{name:'办理及更正事实',rows:[['任务','事件','操作者','发生','登记','质量','更正原事件','原因'],...result.rows.flatMap(r=>r.events.map(e=>[r.taskId,e.kind,e.actorName??e.actorId,e.at??'',e.recordedAt,e.quality,e.correctsId??'',String(e.payload.reason??e.payload.note??'')]))]},{name:'主办接续及代理',rows:[['任务','类型','时间','原主办','接续/代理','记录人/结束'],...result.rows.flatMap(r=>[...r.assignmentHistory.map(a=>[r.taskId,'改派',a.at,a.beforeName??'',a.afterName??'',a.actorName]),...r.delegations.map(d=>[r.taskId,'代理',d.from,'',d.name,d.revokedAt??d.expiresAt])])]}]);
@@ -144,7 +172,7 @@ export class DigitalAnalysisQuery{
   if(note.filters.view==='production')throw new ApplicationError('VALIDATION_ERROR','当前生产查询结果只读；原任务分析记录请在原任务分析范围办理',400);
   if(!isDigitalLeader(actor)&&!isDigitalTechnicalManager(actor))digitalForbidden();
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))throw new ApplicationError('VALIDATION_ERROR','缺少操作标识',400);
-  const snapshot=await this.read(db=>this.snapshot(db,actor,note.filters));
+  const snapshot=await this.read(db=>this.snapshot(db,actor,note.filters,'none'));
   if(note.taskIds.some(id=>!snapshot.rows.some(row=>row.taskId===id)))throw new ApplicationError('NOT_FOUND','所引用任务不在当前授权筛选范围',404);
   const db=await this.database.connect();try{await db.query('BEGIN');await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`digital-analysis:${actor.actorId}:${key}`]);
    const hash=createHash('sha256').update(JSON.stringify(note)).digest('hex');

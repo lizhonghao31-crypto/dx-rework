@@ -1,35 +1,33 @@
 {
   "version": 1,
-  "base": "7f26f795d5c85a0b551335c647570cfd86e27d82",
+  "base": "f4410babeb8e5ca2d0dcce12592884cc34164895",
   "risk": "full",
-  "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
+  "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
   "rules": [
     {
-      "rule": "PF-SO exact page sourcing clocks and PO date facts",
-      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), sourcing.",
-      "initialization": "Current observed release parent 7f26f795d5c85a0b551335c647570cfd86e27d82; exact checked source and independent native fixtures.",
+      "rule": "PF-A1 original digital analysis metrics and final display history",
+      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), digital-analysis.",
+      "initialization": "Current observed release parent f4410babeb8e5ca2d0dcce12592884cc34164895; exact checked source and independent native fixtures.",
       "dateAndPermission": "Maintain actual authorization, historical time and existing read-only or explicit retry boundaries.",
       "writes": [
-        "apps/api/src/production-platform/po-factory-date-adapter.ts",
-        "apps/api/src/sourcing/contract-return-clock.ts",
-        "apps/api/src/sourcing/sourcing-case-read.ts",
-        "tests/integration/sourcing-page-details-postgres.test.ts",
-        "tests/unit/sourcing-list-pagination.test.ts",
+        "apps/api/src/production-platform/reporting-query.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/api/src/sourcing/contract-return-state.ts",
-        "apps/api/src/sourcing/sourcing-case-mapping.ts",
-        "apps/api/src/acceptance-clock/business-time.ts"
+        "apps/api/src/production-platform/reporting-metrics.ts",
+        "apps/api/src/production-platform/reporting-routes.ts",
+        "packages/contracts/src/digital-production-analysis.ts"
       ],
       "oldTests": [
-        "tests/integration/contract-return-cycles-postgres.test.ts",
-        "tests/integration/contract-return-routes-clock-postgres.test.ts",
-        "tests/integration/sourcing-page-details-postgres.test.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/time-reading-clock-postgres.test.ts",
+        "tests/unit/digital-analysis-metrics.test.ts"
       ],
-      "expectation": "Keep existing principal, total values, clock isolation and history. Resolve each current visible page in one bounded native clock scope and one native PO mapping, rejecting absent known digital PO links and leaving snapshot and historical reads independent.",
+      "expectation": "Reuse the original authorized task set, keep all original event facts needed for period, metrics, waits, current people and notes. Bind history actor names, full event data and reassignment/delegation records to the final authorized page. Preserve original full authorized export.",
       "checks": [
-        "native-sourcing-page",
+        "native-p16-page",
+        "native-analysis-clock",
         "unit",
         "lint",
         "types",
@@ -39,62 +37,85 @@
   ],
   "checks": [
     {
-      "id": "native-sourcing-page",
+      "id": "native-p16-page",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-page-details-postgres.test.ts tests/integration/contract-return-clock-postgres.test.ts tests/integration/contract-return-routes-clock-postgres.test.ts tests/integration/contract-return-cycles-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/sourcing-ready-native/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-page/tests.json --testNamePattern P16",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
-      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
-      "startedAt": "2026-11-18T10:55:28.728151+00:00",
-      "endedAt": "2026-11-18T10:57:58.157631+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/sourcing-ready-native/tests.log",
-      "logSha256": "7b30648fd1a3dea6cd1e8c7df0d01dcc46dc454eca473028238f31510e5aa5ea",
+      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
+      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
+      "startedAt": "2026-11-18T11:20:45.177435+00:00",
+      "endedAt": "2026-11-18T11:21:13.423850+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-page/tests.log",
+      "logSha256": "0a24461209a1a63509d4988d462599c40323ed48cf0e3a0761dfa3ac0a594d1b",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 33,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 141,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "25c3f156ce6e7362f71f8f32c986cbc94c178bfdcf10b3e2cbfa820804cb6b2f"
+        }
+      ]
+    },
+    {
+      "id": "native-analysis-clock",
+      "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/time-reading-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-clock/tests.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
+      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
+      "startedAt": "2026-11-18T11:21:13.625021+00:00",
+      "endedAt": "2026-11-18T11:21:40.132134+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-clock/tests.log",
+      "logSha256": "bb7f72988ebbe7b4134dd763c13921b2dcc7dd66996a254af7bc1763af9a3743",
+      "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
+      "passed": 14,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2790b540f90f40c8baf47410855d4124ebc54c859e724a04845b6ab09a8c53b3"
+          "sha256": "edec8be28e4c3bc6a1b36ac5a0c9fc08591e38b8f6a45ab2f5d31117abed8d67"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-pc-form-approval-contract.test.ts tests/unit/craft-database-separation.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/sourcing-ready-unit/tests.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-analysis-metrics.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/m01-production-period.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/digital-analysis-actual-unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
-      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
-      "startedAt": "2026-11-18T10:55:30.461566+00:00",
-      "endedAt": "2026-11-18T10:55:34.849479+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-unit/command.log",
-      "logSha256": "7b023bd762703b824cbede55282c0b12cc3e30c1af18bf8cee43951a3a41965c",
+      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
+      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
+      "startedAt": "2026-11-18T11:20:49.170766+00:00",
+      "endedAt": "2026-11-18T11:20:52.488688+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-unit/command.log",
+      "logSha256": "171f1f43bd2aaa84c6cbd7b6caab1d74224e963bce47181a50e0407acad22bc6",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 155,
+      "passed": 191,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "927543671a46cf6802e3386467a467eabcb238f81f5eed657b694c0c189c623e"
+          "sha256": "f1f1dbc7a660995af310d8653723af8e1ef6b2a263911c16ea0fb1667c3afb65"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/po-factory-date-adapter.ts apps/api/src/sourcing/contract-return-clock.ts apps/api/src/sourcing/sourcing-case-read.ts tests/integration/sourcing-page-details-postgres.test.ts tests/unit/sourcing-list-pagination.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/reporting-query.ts tests/integration/sourcing-pr03-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
-      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
-      "startedAt": "2026-11-18T10:55:28.992506+00:00",
-      "endedAt": "2026-11-18T10:55:30.149380+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-lint/command.log",
+      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
+      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
+      "startedAt": "2026-11-18T11:20:45.521886+00:00",
+      "endedAt": "2026-11-18T11:20:48.777183+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -104,11 +125,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
-      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
-      "startedAt": "2026-11-18T10:55:35.184516+00:00",
-      "endedAt": "2026-11-18T10:56:48.956842+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-types/command.log",
+      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
+      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
+      "startedAt": "2026-11-18T11:20:52.777605+00:00",
+      "endedAt": "2026-11-18T11:21:59.372498+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -118,12 +139,12 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b3578c6b45a8714de6cbfd8b7dbc95db0b2bb85a",
-      "sourceFingerprint": "fb9c8e69d16e3c9f36ce45e70ad45bcc77d6f8303b61971534b01df930395ce8",
-      "startedAt": "2026-11-18T10:56:49.299345+00:00",
-      "endedAt": "2026-11-18T10:56:59.824514+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/sourcing-ready-preflight/command.log",
-      "logSha256": "cfc36a3e78170af813d7b17e96591da9b57fe2a3da4b5bb81214167f81d671ba",
+      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
+      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
+      "startedAt": "2026-11-18T11:21:59.763460+00:00",
+      "endedAt": "2026-11-18T11:22:10.187157+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-preflight/command.log",
+      "logSha256": "28588153ad8988a3e8c1102f1b9170afb9b0e0fd00c360a8622cfee86191ee0c",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
       "passed": 284,
       "failed": 0,
