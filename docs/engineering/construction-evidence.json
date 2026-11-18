@@ -2,7 +2,7 @@
   "version": 1,
   "base": "95a2f5b9047966319458a8a6629688efc4190c23",
   "risk": "full",
-  "sourceFingerprint": "5b9138cd26f7e1c2afc418ad320fece0ce064dca1abbe166f4a8b1ca6e61ab3f",
+  "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
   "rules": [
     {
       "rule": "Resolve current inner- and outer-washing supervision from the adopted source plan",
@@ -29,7 +29,6 @@
         "source-washing-unit",
         "source-washing-native",
         "source-washing-lint",
-        "source-washing-types",
         "source-washing-protocol"
       ]
     },
@@ -58,7 +57,27 @@
         "source-washing-unit",
         "source-washing-native",
         "source-washing-lint",
-        "source-washing-types",
+        "source-washing-protocol"
+      ]
+    },
+    {
+      "rule": "Check managed special-craft saves against the exact original PUT response",
+      "source": "Full 44258353869 / PostgreSQL job 134646839953 failed at special-craft-browser-postgres.test.ts:213 while polling for draft version 2; the isolated unchanged candidate passed the failed case once.",
+      "initialization": "Original authenticated settings browser on isolated PG16, with a managed draft still at version 1 before reordering.",
+      "dateAndPermission": "Keep the original designer save path, frozen craft definitions, ordering assertions, and rejection of a worker save.",
+      "writes": [
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-development-create-form.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "expectation": "Wait for the matching PUT on the exact source, require its successful receipt for the original version 1, then independently read stored version 2 and verify ordered frozen steps. The reviewed product source and application deadlines do not change.",
+      "checks": [
+        "source-washing-native",
+        "source-washing-lint",
         "source-washing-protocol"
       ]
     }
@@ -67,15 +86,15 @@
     {
       "id": "source-washing-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/journey-fact-model.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/digital-journey-projection.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/release-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/journey-fact-model.test.ts tests/unit/development-craft-instance-supervision.test.ts tests/unit/digital-journey-projection.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/repair-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95a2f5b9047966319458a8a6629688efc4190c23",
-      "sourceFingerprint": "5b9138cd26f7e1c2afc418ad320fece0ce064dca1abbe166f4a8b1ca6e61ab3f",
-      "startedAt": "2026-11-18T07:11:57.702465+00:00",
-      "endedAt": "2026-11-18T07:12:02.076164+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/checks/release-unit/command.log",
-      "logSha256": "cf3f572089ef7526780735fbbb05e6fa698aed522d256caa1822fec3ef7a4af0",
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T08:00:03.182608+00:00",
+      "endedAt": "2026-11-18T08:00:07.083886+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-unit/command.log",
+      "logSha256": "d1e830ad7c90bb7c02a0a80a8b7d08cdcf89e7d85108acf1babeedbb535f6540",
       "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
       "passed": 48,
       "failed": 0,
@@ -83,73 +102,59 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "33ca53de86595798ccafe4973841765cf607307df1599c376bddb8a2b2e12b33"
+          "sha256": "0931089548ccbf33ae168cd72f446f295e8343d30f9ae36fbcf73974f796f5f9"
         }
       ]
     },
     {
       "id": "source-washing-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/pg/final-release-native/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/special-craft-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-source-washing-supervision-20261118/pg/craft-receipt-and-washing/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95a2f5b9047966319458a8a6629688efc4190c23",
-      "sourceFingerprint": "5b9138cd26f7e1c2afc418ad320fece0ce064dca1abbe166f4a8b1ca6e61ab3f",
-      "startedAt": "2026-11-18T07:11:54.566833+00:00",
-      "endedAt": "2026-11-18T07:13:29.587973+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/pg/final-release-native/tests.log",
-      "logSha256": "2e1edaf1d5649895fd741cfcf2a6610b1eec3f9bd836cb302d791ce44ed72fa6",
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T07:54:04.689986+00:00",
+      "endedAt": "2026-11-18T07:55:15.244160+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/pg/craft-receipt-and-washing/tests.log",
+      "logSha256": "a2f2b114bb84c1fa1f21095f5af5de25f9a656d795021202dfea990b0791f5d9",
       "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
-      "passed": 68,
+      "passed": 37,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "55b5e292eb218f81c7a802a8835249502d454773eff3b3aabe7f66022bddc899"
+          "sha256": "cb947d230a78c362b730c25f4c7a20a779f5d1199ca45f09052149c544728862"
         }
       ]
     },
     {
       "id": "source-washing-lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-timeline-targets.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/source-current-supervision.ts tests/integration/order-time-requests-postgres.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-timeline-targets.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/source-current-supervision.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95a2f5b9047966319458a8a6629688efc4190c23",
-      "sourceFingerprint": "5b9138cd26f7e1c2afc418ad320fece0ce064dca1abbe166f4a8b1ca6e61ab3f",
-      "startedAt": "2026-11-18T07:11:55.175882+00:00",
-      "endedAt": "2026-11-18T07:11:57.155857+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/checks/release-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed."
-    },
-    {
-      "id": "source-washing-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "95a2f5b9047966319458a8a6629688efc4190c23",
-      "sourceFingerprint": "5b9138cd26f7e1c2afc418ad320fece0ce064dca1abbe166f4a8b1ca6e61ab3f",
-      "startedAt": "2026-11-18T07:13:49.351439+00:00",
-      "endedAt": "2026-11-18T07:14:08.789446+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/checks/release-types/command.log",
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T07:59:51.475281+00:00",
+      "endedAt": "2026-11-18T07:59:53.478434+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed."
     },
     {
       "id": "source-washing-protocol",
       "kind": "tests",
-      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
+      "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f8385605e1bac43ff24bcc295440080fc39098a8",
-      "sourceFingerprint": "5b9138cd26f7e1c2afc418ad320fece0ce064dca1abbe166f4a8b1ca6e61ab3f",
-      "startedAt": "2026-11-18T07:20:31.110058+00:00",
-      "endedAt": "2026-11-18T07:20:38.018048+00:00",
-      "log": "/workspace/sla-source-washing-supervision-20261118/checks/release-protocol/command.log",
-      "logSha256": "7e43c762fbbeaf0cd912c329ebb88705e71dba945d66c5922461872ef7940135",
+      "testedHead": "eb2ea4d50c6439d69eeef4c908a498d7ab17d0f3",
+      "sourceFingerprint": "1357e02db45dfa05d28161890037e1c309ce808398e3f0136ece485cf4ee2dd7",
+      "startedAt": "2026-11-18T07:59:54.048035+00:00",
+      "endedAt": "2026-11-18T08:00:02.894186+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/checks/repair-preflight/command.log",
+      "logSha256": "84f70193b5fc6a925cf8ba1f0fdcdf13c6ba298499d388c0c6ac09f502303154",
       "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
       "passed": 284,
       "failed": 0,

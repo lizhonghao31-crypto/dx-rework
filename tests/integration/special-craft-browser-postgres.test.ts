@@ -21,9 +21,23 @@ import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import type {Page} from 'playwright-core';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+
+async function saveDraftAndReadReceipt(page:Page,sourceId:string,expectedVersion:number){
+ const path=`/api/digital-production/sources/${sourceId}/development`;
+ const [receipt]=await Promise.all([
+  page.waitForResponse(response=>response.request().method()==='PUT'&&new URL(response.url()).pathname===path),
+  page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click(),
+ ]);
+ const result=await receipt.json();
+ expect(receipt.status(),result.error?.code).toBe(200);
+ expect(receipt.request().postDataJSON()).toMatchObject({expectedVersion});
+ expect(result).toMatchObject({sourceId,version:expectedVersion+1});
+}
+
 (url?describe:describe.skip)('special craft library original App settings',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'special-craft-ui-'+randomUUID()),{fullApp:true,orderTimeModel:true});});
@@ -71,9 +85,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await selector.selectOption(items[0]!.id);await selector.selectOption(items[1]!.id);
    const group=page.getByRole('group',{name:'工艺',exact:true});await group.getByLabel('印花',{exact:true}).check();
    await page.getByRole('button',{name:'TEST UI烫钻前移',exact:true}).click();
-   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
-   await expect.poll(async()=>(await forms.read(designer,source.sourceId)).version).toBe(2);
-   const saved=(await forms.read(designer,source.sourceId)).document!.craftSteps!;
+   await saveDraftAndReadReceipt(page,source.sourceId,1);
+   const reopened=await forms.read(designer,source.sourceId);
+   expect(reopened.version).toBe(2);
+   const saved=reopened.document!.craftSteps!;
    expect(saved.map(step=>step.specialCraft?.definition.name??step.craftKind)).toEqual(['TEST UI烫钻','TEST UI激光','printing']);
    expect(saved.map(step=>step.sequence)).toEqual([1,2,3]);
    await page.screenshot({path:join(h.evidence,'special-craft-source-order-1165.png'),fullPage:true});
@@ -209,9 +224,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByLabel('工艺特殊工艺',{exact:true}).waitFor();
    expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
    await page.getByRole('button',{name:craft.definition.name+'前移',exact:true}).click();
-   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
-   await expect.poll(async()=>(await forms.read(designer,id)).version).toBe(2);
+   await saveDraftAndReadReceipt(page,id,1);
    const reopened=await forms.read(designer,id);
+   expect(reopened.version).toBe(2);
    expect(reopened.document!.craftSteps!.map(s=>s.craftKind)).toEqual(['special','printing']);
    expect(reopened.document!.craftSteps![0]!.specialCraft).toEqual(craft);
    // Copying specifications creates a new source; it does not inherit an old editor/version.
