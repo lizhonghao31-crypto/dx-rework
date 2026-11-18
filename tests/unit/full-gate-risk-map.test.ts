@@ -424,6 +424,13 @@ it('executes the linked-applicability App and transactional regression for every
  }
 });
 
+it('keeps exact task current-P readers, original B and native UI in canonical database coverage',()=>{
+ for(const file of ['apps/api/src/production-platform/current-task-plan-targets.ts','apps/api/src/production-platform/fixed-task-targets.ts','apps/api/src/production-platform/framework-node-targets.ts','apps/api/src/production-platform/order-time-work-task-kind.ts','apps/api/src/production-platform/order-time-reading.ts','apps/api/src/production-platform/task-service.ts','apps/web/src/task-plan-targets.tsx','apps/web/src/task-plan-targets.css','apps/web/src/task-workbench-sample.tsx','apps/web/src/bulk-task-workbench.tsx','apps/web/src/bulk-preparation-panel.tsx','apps/web/src/digital-production-tasks-panel.tsx','packages/contracts/src/digital-production-tasks.ts','tests/helpers/current-task-plan-fixture.ts','tests/helpers/order-time-rewash-fixture.ts']){
+  const plan=amendmentPlan([file]);
+  for(const path of ['tests/integration/current-task-plan-postgres.test.ts','tests/integration/current-task-plan-browser-postgres.test.ts'])expect(plan.plan.filter(row=>row.path===path)).toEqual([{path,config:'vitest.business-chain.config.ts',memberships:['mapped']}]);
+ }
+});
+
 it('keeps incomplete-publication and exact native craft choices in original request and App regressions',()=>{
  for(const file of ['order-time-publication-intent','fixed-development-work','fixed-order-work','fixed-work-definition']){
   const risk=classifyFullGatePaths([`apps/api/src/production-platform/${file}.ts`]);
@@ -500,7 +507,9 @@ describe('reviewed SLA/Journey production-source profile', () => {
   it('retains exact mapped readers plus every non-exempt chain bridge for the RP2 source family', () => {
     const input=[...SLA_JOURNEY_SOURCE_PATHS,...SLA_JOURNEY_SUPPORT_PATHS];
     const risk=classifyFullGatePaths(input),plan=amendmentPlan(input);
-    const expected=[...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...POSTGRES_CHAIN_TESTS.filter(path=>!SLA_JOURNEY_UNRELATED_CHAIN_TESTS.includes(path))])].sort();
+    // This profile includes the actual forecast UI source, so retain its
+    // newly registered native consumer in addition to every existing bridge.
+    const expected=[...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...POSTGRES_CHAIN_TESTS.filter(path=>!SLA_JOURNEY_UNRELATED_CHAIN_TESTS.includes(path)),'tests/integration/bounded-forecast-native-browser-postgres.test.ts'])].sort();
     expect(plan.plan.map(row=>row.path)).toEqual(expected);
     expect(risk.highRisk).toBe(true);expect(risk.dbRequired).toBe(true);
     expect(risk.journeyPg13Compat).toBe(true);
@@ -553,7 +562,7 @@ it('restores the four indirectly loaded suites and retains only independent hist
  const risk=classifyFullGatePaths(paths),plan=amendmentPlan(paths);
  expect(risk.chainProfile).toBe('sla-journey-engine-v1');
  const retained=POSTGRES_CHAIN_TESTS.filter(path=>!path.includes('own-tail-responsibility-history'));
- expect(plan.plan.map(row=>row.path)).toEqual([...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...retained])].sort());
+ expect(plan.plan.map(row=>row.path)).toEqual([...new Set([...SLA_JOURNEY_REQUIRED_TESTS,...retained,'tests/integration/bounded-forecast-native-browser-postgres.test.ts'])].sort());
 });
 
 
