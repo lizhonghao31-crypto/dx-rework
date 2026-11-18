@@ -7,6 +7,8 @@ import {describe,it,expect} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {journeyDefinition} from '../../apps/api/src/production-platform/journey-catalog.js';
 import {registerDigitalIdentityRoutes} from '../../apps/api/src/production-platform/identity-routes.js';
 import {AuthService} from '../../apps/api/src/auth/service.js';
 import {PostgresAuthStore} from '../../apps/api/src/auth/postgres-store.js';
@@ -28,8 +30,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
   phase('fixture-ready');
   let baselineApp:ReturnType<typeof Fastify>|undefined,scene:string|undefined,execute=<T,>(action:()=>Promise<T>)=>action();
   const normalize=(value:unknown):unknown=>Array.isArray(value)?value.map(normalize):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([key])=>key!=='asOf').map(([key,v])=>[key,normalize(v)])):value;
-  const queries=new Map<string,{calls:number;ms:number}>();let tracing=false;const seen=new WeakSet<PoolClient>(),originalConnect=db.connect;
-  const instrument=(client:PoolClient)=>{if(seen.has(client))return;seen.add(client);const original=client.query;client.query=function(this:PoolClient,...args:unknown[]){const text=typeof args[0]==='string'?args[0]:(args[0] as {text?:string}|null)?.text;if(!tracing||!text)return Reflect.apply(original,this,args);const started=performance.now(),finish=()=>{const entry=queries.get(text)??{calls:0,ms:0};entry.calls++;entry.ms+=performance.now()-started;queries.set(text,entry);};const callback=args.at(-1);if(typeof callback==='function')args[args.length-1]=function(this:unknown,...values:unknown[]){finish();return Reflect.apply(callback,this,values);};try{const result=Reflect.apply(original,this,args);if(typeof callback==='function')return result;if(result&&typeof result.then==='function')return result.then((value:unknown)=>{finish();return value;},(error:unknown)=>{finish();throw error;});finish();return result;}catch(error){finish();throw error;}} as PoolClient['query'];};
+  const queries=new Map<string,{calls:number;ms:number}>(),pageTaskArguments:string[][]=[];let tracing=false;const seen=new WeakSet<PoolClient>(),originalConnect=db.connect;
+  const instrument=(client:PoolClient)=>{if(seen.has(client))return;seen.add(client);const original=client.query;client.query=function(this:PoolClient,...args:unknown[]){const text=typeof args[0]==='string'?args[0]:(args[0] as {text?:string}|null)?.text;if(!tracing||!text)return Reflect.apply(original,this,args);if(text.includes('FROM digital_production_task_access a WHERE a.task_id=ANY($1::uuid[])')){
+   const values=args[1] as unknown[]|undefined;if(Array.isArray(values?.[0]))pageTaskArguments.push([...values[0]] as string[]);
+  }const started=performance.now(),finish=()=>{const entry=queries.get(text)??{calls:0,ms:0};entry.calls++;entry.ms+=performance.now()-started;queries.set(text,entry);};const callback=args.at(-1);if(typeof callback==='function')args[args.length-1]=function(this:unknown,...values:unknown[]){finish();return Reflect.apply(callback,this,values);};try{const result=Reflect.apply(original,this,args);if(typeof callback==='function')return result;if(result&&typeof result.then==='function')return result.then((value:unknown)=>{finish();return value;},(error:unknown)=>{finish();throw error;});finish();return result;}catch(error){finish();throw error;}} as PoolClient['query'];};
   db.connect=function(this:typeof db,callback?: (...args:unknown[])=>unknown){if(callback)return Reflect.apply(originalConnect,this,[function(this:unknown,error:unknown,client:PoolClient|undefined,release:unknown){if(client)instrument(client);return Reflect.apply(callback,this,[error,client,release]);}]);return Reflect.apply(originalConnect,this,[]).then((client:PoolClient)=>{instrument(client);return client;});} as typeof db.connect;
   try{
    const day=beijingCalendarDate(new Date()),orders:string[]=[];if(process.env.M01_JOURNEY_BASELINE_MODULE){scene=await f.scene(new Date().toISOString());execute=action=>f.runtime.run(scene!,f.root,action);}
@@ -43,11 +47,45 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
    phase('measurements-start');
    const times:number[]=[],bodies:unknown[]=[];
    const currentDriverSqlCalls:number[]=[];
-   for(let index=0;index<10;index++){queries.clear();tracing=true;const start=performance.now(),response=await execute(()=>app.inject({url:'/digital-production/journeys',headers:{cookie}}));const elapsed=performance.now()-start;tracing=false;phase('native-request',{sample:index,requestMs:Math.round(elapsed),physicalSqlCalls:[...queries.values()].reduce((sum,row)=>sum+row.calls,0)});expect(response.statusCode,response.body).toBe(200);bodies.push(response.json());if(index>=3){times.push(elapsed);currentDriverSqlCalls.push([...queries.values()].reduce((n,row)=>n+row.calls,0));}}
+   for(let index=0;index<10;index++){queries.clear();pageTaskArguments.length=0;tracing=true;const start=performance.now(),response=await execute(()=>app.inject({url:'/digital-production/journeys',headers:{cookie}}));const elapsed=performance.now()-start;tracing=false;phase('native-request',{sample:index,requestMs:Math.round(elapsed),physicalSqlCalls:[...queries.values()].reduce((sum,row)=>sum+row.calls,0)});expect(response.statusCode,response.body).toBe(200);bodies.push(response.json());if(index>=3){times.push(elapsed);currentDriverSqlCalls.push([...queries.values()].reduce((n,row)=>n+row.calls,0));}}
    phase('measurements-ready');
    const records=samples.map(line=>JSON.parse(line.slice('JOURNEY_DIAGNOSTIC '.length)));expect(records).toHaveLength(10);expect(records.every(row=>row.candidates===88&&row.calls.summary_projection===88)).toBe(true);
-   const last=bodies.at(-1) as {total:number;items:{id:string}[]};expect(last.total).toBe(88);expect(last.items.length).toBeGreaterThan(0);expect(last.items.length).toBeLessThan(88);
+   const last=bodies.at(-1) as {total:number;items:{id:string;sourceId:string|null;orderId:string|null}[]};expect(last.total).toBe(88);expect(last.items.length).toBeGreaterThan(0);expect(last.items.length).toBeLessThan(88);
    const physicalTemplates=[...queries.entries()].map(([sql,entry])=>({sql,...entry})).sort((a,b)=>b.calls-a.calls||b.ms-a.ms);
+   // The original registered legacy GET must batch the task facts of its
+   // final page, independent of the other 88 candidates' summary work.
+   const expectedTasks=(await db.query<{task_id:string;task_kind:string}>(`SELECT task_id,task_kind FROM digital_production_task_access
+    WHERE task_kind<>'factory_material_count' AND (production_order_id=ANY($1::uuid[]) OR source_id=ANY($2::uuid[]))`,
+   [last.items.flatMap(item=>item.orderId?[item.orderId]:[]),last.items.flatMap(item=>item.sourceId?[item.sourceId]:[])])).rows
+   .filter(task=>journeyDefinition(task.task_kind)).map(row=>row.task_id);
+   expect(pageTaskArguments).toHaveLength(1);
+   expect([...new Set(pageTaskArguments[0])].sort()).toEqual(expectedTasks.sort());
+   const factTemplates=[
+    /SELECT t\.\*,a\.production_order_id,[\s\S]*WHERE t\.task_id=ANY/,
+    /SELECT DISTINCT ON\(r\.task_id\) r\.task_id,[\s\S]*ORDER BY r\.task_id,r\.revision_id DESC/,
+    /SELECT task_id,condition_key,stage,satisfied FROM digital_production_task_conditions/,
+    /SELECT d\.task_id AS downstream_task_id/,
+    /SELECT DISTINCT ON\(task_id\) task_id,payload->>'priority'/,
+    /SELECT task_id,adoption_id,route_ref,route_version,route_position,step_id,phase/,
+    /SELECT DISTINCT ON\(e\.task_id\) e\.task_id,e\.actor_id/,
+    /SELECT entity_id,created_at,actor_id,before_state,after_state FROM audit_events/,
+   ];
+   for(const template of factTemplates)expect(physicalTemplates.filter(row=>template.test(row.sql)).map(row=>row.calls),String(template)).toEqual([1]);
+   const taskSample=(await db.query<{task_id:string}>(`SELECT task_id FROM digital_production_task_access
+     WHERE production_order_id=ANY($1::uuid[]) AND task_kind<>'factory_material_count' ORDER BY task_id LIMIT 51`,[orders])).rows.map(row=>row.task_id);
+   expect(taskSample).toHaveLength(51);
+   const taskService=new DigitalProductionTaskService(db),client=await db.connect();
+   try{
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    for(const size of [1,15,50]){
+     const requested=taskSample.slice(0,size);queries.clear();pageTaskArguments.length=0;tracing=true;
+     const prepared=await execute(()=>taskService.prepareReadPage(f.root,requested,client,true));tracing=false;
+     expect(pageTaskArguments).toEqual([requested]);
+     expect(requested.every(id=>prepared.allowed(id))).toBe(true);
+     expect(prepared.allowed(taskSample[50]!)).toBe(false);
+     for(const template of factTemplates)expect([...queries].filter(([sql])=>template.test(sql)).map(([,row])=>row.calls),`${size} tasks: ${template}`).toEqual([1]);
+    }
+   }finally{tracing=false;await client.query('ROLLBACK');client.release();}
    let baselineResult:unknown;
    if(process.env.M01_JOURNEY_BASELINE_MODULE){
     const module=await import(process.env.M01_JOURNEY_BASELINE_MODULE),before=new module.DigitalJourneyQuery(db);baselineApp=Fastify();registerDigitalIdentityRoutes(baselineApp,{service:identity,journeys:before,root,creationEnabled:true,authenticate:token=>auth.authenticate(token)});await baselineApp.ready();

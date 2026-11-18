@@ -366,6 +366,12 @@ describe('M01 measured Journey batches stay on the original native gate',()=>{
   for(const path of ['apps/api/src/production-platform/journey-query.ts','apps/api/src/production-platform/journey-snapshot-reads.ts','apps/api/src/production-platform/journey-snapshot-batches.ts','apps/api/src/production-platform/journey-batch-templates.ts','apps/api/src/production-platform/journey-task-summary.ts',suite]){const scope=classifyFullGatePaths([path]);expect(scope.dbRequired).toBe(true);expect(scope.mappedPostgresTests).toContain(suite);}
   expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
  });
+ it('runs page argument, authorization and browser read regression suites when the shared task reader changes',()=>{
+  for(const path of ['apps/api/src/production-platform/task-page-read-context.ts','apps/api/src/production-platform/task-service.ts','apps/api/src/production-platform/journey-selection-access.ts','apps/web/src/digital-production-page.tsx']){
+   const scope=classifyFullGatePaths([path]);expect(scope.dbRequired).toBe(true);
+   for(const suite of ['m01-journey-performance','journey-fact-model','workspace-page-facts','workspace-page-native-browser','current-task-plan-browser'])expect(scope.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
+  }
+ });
 });
 
 it('R3-04 relative standard calculator remains in the original native settings and original SLA PostgreSQL plan',()=>{

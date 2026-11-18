@@ -95,6 +95,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const panel=tab.page.getByRole('region',{name:'本单当前计划'}).first();await panel.waitFor();
    await expect.poll(()=>panel.innerText()).toContain(new Date(task.currentPlanTargets!.targets[0]!.endAt!).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));
    expect(await panel.getAttribute('data-plan-version')).toBe(task.currentPlanTargets!.planVersionId);
+   const taskPath='/api/digital-production/tasks/'+fixture.dispatchId;
+   expect(h.requests.filter(call=>call.session===tab.session&&call.method==='GET'&&call.path===taskPath)).toHaveLength(1);
    const response=await tab.page.request.get(h.base+'/api/digital-production/tasks/'+fixture.dispatchId);expect(response.status()).toBe(200);expect((await response.json()).currentPlanTargets).toEqual(task.currentPlanTargets);
    await tab.page.screenshot({path:join(h.evidence,'later-instruction-current-P-390.png'),fullPage:true});
    expect(h.requests.filter(call=>call.session===tab.session&&call.path.startsWith('/api/digital-production/')&&!['GET','HEAD'].includes(call.method)&&!call.path.startsWith('/api/digital-production/notifications/claim'))).toEqual([]);

@@ -12,15 +12,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  afterAll(async()=>{await h?.dispose();});
  it('shows15 current native designer rows with the original complete app and correct later page',async()=>{
   const {context,page}=await h.open();try{
-   const response=page.waitForResponse(value=>value.url().includes('/workspaces/designer?')&&value.request().method()==='GET');await page.goto(h.base+'/ui/digital-production?workspace=designer&view=ordered');expect((await response).status()).toBe(200);
+   const workspaceReads:string[]=[];
+   page.on('request',request=>{const url=new URL(request.url());if(request.method()!=='GET')return;
+    if(url.pathname.endsWith('/workspaces/designer'))workspaceReads.push('designer:'+Number(url.searchParams.get('page')??'1'));
+    if(url.pathname.endsWith('/workspaces/pattern'))workspaceReads.push('pattern:'+Number(url.searchParams.get('page')??'1'));
+   });
+   const response=page.waitForResponse(value=>value.url().includes('/workspaces/designer?')&&value.request().method()==='GET');await page.goto(h.base+'/ui/digital-production?workspace=designer&view=ordered');const first=await response;expect(first.status()).toBe(200);
+   const firstPage=await first.json();
    await expect.poll(()=>page.locator('.development-list-panel tbody tr').count(),{timeout:12000}).toBe(15);
    expect(await page.getByRole('alert').count()).toBe(0);
    const next=page.getByRole('button',{name:'下一页',exact:true});
+   const nextResponse=page.waitForResponse(value=>value.url().includes('/workspaces/designer?')&&value.request().method()==='GET'&&new URL(value.url()).searchParams.get('page')==='2');
    for(let attempt=0;attempt<8;attempt++){try{await next.click({timeout:1500});break;}catch(error){const notice=page.locator('[aria-label="站内提醒"]');if(!await notice.isVisible()||attempt===7)throw error;await notice.getByRole('button',{name:'我知道了',exact:true}).click();}}
    await expect.poll(()=>new URL(page.url()).searchParams.get('page')).toBe('2');
+   const later=await nextResponse;expect(later.status()).toBe(200);expect(await later.json()).toMatchObject({page:2,total:firstPage.total,counts:firstPage.counts});
    await expect.poll(()=>page.locator('.development-list-panel tbody tr').count(),{timeout:12000}).toBe(15);
    await page.screenshot({path:join(h.evidence,'designer-page2.png'),fullPage:true});
    const patternResponse=page.waitForResponse(value=>value.url().includes('/workspaces/pattern?'));await page.goto(h.base+'/ui/digital-pattern-room?scope=all&state=all');const patternReply=await patternResponse;expect(patternReply.status()).toBe(200);const pattern=await patternReply.json();await page.locator('.pattern-board-columns').waitFor();await expect.poll(()=>page.locator('.pattern-task-card').count(),{timeout:12000}).toBe((pattern.boardPreview??[]).length);
+   expect(workspaceReads).toEqual(['designer:1','designer:2','pattern:1']);
    await page.screenshot({path:join(h.evidence,'pattern-current-board.png'),fullPage:true});
   }finally{await context.close();}
  });

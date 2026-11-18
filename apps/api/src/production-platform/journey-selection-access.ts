@@ -4,6 +4,9 @@ import type {BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {acceptanceBusinessContext,businessScopeKey} from '../acceptance-clock/business-time.js';
 import {isDigitalManagementReader,isDigitalTechnicalManager} from './access-policy.js';
 import {isRootActor} from '../access/business-authority.js';
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
+
+const activeRole=(roles:ReadonlySet<string>,role:string)=>roles.has(role)||role==='warehouse_receiver'&&roles.has('warehouse_supervisor');
 
 /** Native, request-local inputs to the existing technical read policy. These
  * are not saved in the shared model. Batch loading avoids per-mother policy
@@ -15,12 +18,13 @@ export async function readJourneySelectionAccess(db:PoolClient,actor:TrustedActo
   JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
   WHERE u.id=$1 AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
   AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)`,[actor.actorId])).rows.map(row=>row.role_code):[]);
- const active=(role:string)=>liveRoles.has(role)||role==='warehouse_receiver'&&liveRoles.has('warehouse_supervisor');
- const result=new Map<string,{technical:boolean;fullOrder:boolean;timing:boolean;budget:boolean}>();
+ const active=(role:string)=>activeRole(liveRoles,role);
+ const result=new Map<string,{technical:boolean;taskParentTechnical:boolean;fullOrder:boolean;timing:boolean;budget:boolean}>();
  if(!resources.length)return {resources:result,liveRoles};
  const relations=(await db.query(`SELECT to_regclass('digital_preparation_responsibilities') IS NOT NULL AS preparation,
   to_regclass('digital_bulk_preparations') IS NOT NULL AS bulk,
   to_regclass('digital_qc_supervision_settings') IS NOT NULL AS qc`)).rows[0] as {preparation:boolean;bulk:boolean;qc:boolean};
+ const activeSources=await wholeOrderActiveSql(db,'source','s.source_id'),activeOrders=await wholeOrderActiveSql(db,'order','o.production_order_id');
  type NativeScope={kind:'source'|'order';id:string;source_id:string|null;created_by:string;primary_merchandiser_id:string|null;
   linked_primary:boolean;dispatch_worker:string|null;warehouse_worker:string|null;color_worker:string|null;color_role:string|null;
   handover_recipient:string|null;handover_current:boolean;quality_lead:string|null;bulk_roles:string[]};
@@ -28,8 +32,8 @@ export async function readJourneySelectionAccess(db:PoolClient,actor:TrustedActo
  // Every inserted SQL fragment below is static; no user-controlled SQL text.
  const rows=(await db.query<NativeScope>(`WITH requested AS (SELECT * FROM unnest($1::text[],$2::uuid[]) AS r(kind,id)),
   resources AS (
-   SELECT r.kind,r.id,s.source_id,s.created_by,NULL::uuid AS primary_merchandiser_id FROM requested r JOIN digital_production_sources s ON r.kind='source' AND r.id=s.source_id
-   UNION ALL SELECT r.kind,r.id,o.source_id,o.created_by,o.primary_merchandiser_id FROM requested r JOIN digital_production_orders o ON r.kind='order' AND r.id=o.production_order_id
+   SELECT r.kind,r.id,s.source_id,s.created_by,NULL::uuid AS primary_merchandiser_id FROM requested r JOIN digital_production_sources s ON r.kind='source' AND r.id=s.source_id WHERE ${activeSources}
+   UNION ALL SELECT r.kind,r.id,o.source_id,o.created_by,o.primary_merchandiser_id FROM requested r JOIN digital_production_orders o ON r.kind='order' AND r.id=o.production_order_id WHERE ${activeOrders}
   ) SELECT r.*,EXISTS(SELECT 1 FROM digital_production_orders o WHERE r.kind='source' AND o.source_id=r.id AND o.primary_merchandiser_id=$3) AS linked_primary,
   ${relations.preparation?`dispatch.warehouse_worker_id AS dispatch_worker,preparation.warehouse_worker_id AS warehouse_worker,
    preparation.color_confirmation_worker_id AS color_worker,preparation.color_confirmation_role AS color_role,
@@ -63,11 +67,47 @@ export async function readJourneySelectionAccess(db:PoolClient,actor:TrustedActo
   const handover=row.kind==='source'&&has('order_merchandiser')&&active('order_merchandiser')&&row.handover_current&&row.handover_recipient===actor.actorId;
   const quality=row.kind==='order'&&has('quality_control')&&active('quality_control')&&row.quality_lead===actor.actorId;
   const clerk=row.kind==='order'&&has('development_clerk')&&active('development_clerk')&&Boolean(row.source_id);
-  const technical=management||technicalManager||own||primary||preparation||sourcePrimary||handover||quality||clerk||row.bulk_roles.some(active);
+  // Scoped participation can authorize a parent's documents without granting
+  // permission over a sibling's task. Expose both existing policy decisions.
+  const taskParentTechnical=management||technicalManager||own||primary||sourcePrimary||clerk;
+  const technical=taskParentTechnical||preparation||handover||quality||row.bulk_roles.some(active);
   const fullOrder=row.kind==='order'&&technical&&(management||technicalManager||own||has('order_merchandiser')&&row.primary_merchandiser_id===actor.actorId||has('development_clerk'));
-  result.set(businessScopeKey(row),{technical,fullOrder,
+  result.set(businessScopeKey(row),{technical,taskParentTechnical,fullOrder,
    timing:timingAuthority||own&&active('sample_designer')||primary,
    budget:management||own||primary});
  }
  return {resources:result,liveRoles};
+}
+
+type NativeTaskAccess={task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;required_role:string;assignee_id:string|null};
+const TASK_READ_BATCH_SIZE=256;
+export function* taskReadBatches(taskIds:readonly string[]){
+ const unique=[...new Set(taskIds)];
+ for(let offset=0;offset<unique.length;offset+=TASK_READ_BATCH_SIZE)yield unique.slice(offset,offset+TASK_READ_BATCH_SIZE);
+}
+
+/** Scope to final-page IDs on the caller's repeatable-read client. Native
+ * technical access and execution assignment stay separate from parent access. */
+export async function readTaskAccessForPage(db:PoolClient,actor:TrustedActorContext,taskIds:readonly string[]){
+ const result=new Map<string,{technical:boolean;execute:boolean;parentTechnical:boolean}>();
+ for(const ids of taskReadBatches(taskIds))await authorizeTaskBatch(db,actor,ids,result);
+ return result;
+}
+
+async function authorizeTaskBatch(db:PoolClient,actor:TrustedActorContext,taskIds:readonly string[],result:Map<string,{technical:boolean;execute:boolean;parentTechnical:boolean}>){
+ const active=await wholeOrderActiveSql(db,'task','a.task_id');
+ const rows=(await db.query<NativeTaskAccess>(`SELECT a.task_id,a.task_kind,a.source_id,a.production_order_id,a.required_role,a.assignee_id
+  FROM digital_production_task_access a WHERE a.task_id=ANY($1::uuid[]) AND ${active}`,[taskIds])).rows;
+ if(!rows.length)return;
+ const parent=(row:NativeTaskAccess):BusinessTimeScope|null=>row.production_order_id?{kind:'order',id:row.production_order_id}:row.source_id?{kind:'source',id:row.source_id}:null;
+ const scopes=new Map<string,BusinessTimeScope>();
+ for(const row of rows){const scope=parent(row);if(scope)scopes.set(businessScopeKey(scope),scope);}
+ const {resources,liveRoles}=await readJourneySelectionAccess(db,actor,[...scopes.values()]);
+ const root=isRootActor(actor),global=isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor),clerk=actor.actorRoles.includes('development_clerk');
+ for(const row of rows){
+  const scope=parent(row),policy=scope?resources.get(businessScopeKey(scope)):undefined;
+  const assigned=row.assignee_id===actor.actorId&&activeRole(liveRoles,row.required_role);
+  const technical=global||clerk&&row.task_kind.startsWith('development_')||assigned||policy?.taskParentTechnical===true;
+  result.set(row.task_id,{technical,execute:root||assigned,parentTechnical:policy?.technical??false});
+ }
 }

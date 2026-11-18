@@ -15,6 +15,7 @@ import {AnalysisResultStore} from './analysis-result-store.js';
 import {deliveryCalendarFacts} from './delivery-calendar-facts.js';
 import {deliveryDebtSummary} from './delivery-calendar-debt-summary.js';
 import {deliveryCalendarImages} from './delivery-calendar-images.js';
+import {readJourneySelectionAccess} from './journey-selection-access.js';
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 // Exact original order technical-read grants. Current roles are revalidated by
 // live() first; task/preparation/QC exceptions still use the original policy.
@@ -23,6 +24,7 @@ const basicReadParameters=(actor:TrustedActorContext)=>[isDigitalManagementReade
 const excluded=(row:DeliverySnapshot['rows'][number])=>['cancelled','special_closed'].includes(row.scopeStatus);
 const monthRange=(month:string)=>{const start=month+'-01',year=Number(month.slice(0,4)),m=Number(month.slice(5)),next=m===12?`${year+1}-01-01`:`${year}-${String(m+1).padStart(2,'0')}-01`;return {start,end:addCalendarDays(next,-1)};};
 type BasisSnapshot=DeliverySnapshot&{snapshotId:string;createdAt:string;expiresAt:string;freshness:'current'|'query-snapshot'};
+type CalendarCandidate={production_order_id:string;direct:boolean};
 /** Lightweight current PO facts. No full per-order Journey, progress or SLA
  * projection occurs before paging; aggregate dates only after original scope.
  */
@@ -38,17 +40,23 @@ export class DeliveryCalendarQuery{
  }
  private async allowed(db:PoolClient,actor:TrustedActorContext,ids:string[]){
   if(!ids.length)return true;
-  const rows=(await db.query<{production_order_id:string;direct:boolean}>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND o.production_order_id=ANY($6::uuid[])`,[...basicReadParameters(actor),ids])).rows;
+  const rows=(await db.query<CalendarCandidate>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND o.production_order_id=ANY($6::uuid[])`,[...basicReadParameters(actor),ids])).rows;
   if(rows.length!==ids.length)return false;
-  const policy=new DigitalProductionAccessPolicy(db);
-  for(const row of rows)if(!await acceptanceIncludesNative(this.database,row.production_order_id,db)||!row.direct&&!await policy.allowed(actor,'order',row.production_order_id,'technical'))return false;
-  return true;
+  return (await this.visibleCandidates(db,actor,rows)).length===ids.length;
+ }
+ private async visibleCandidates(db:PoolClient,actor:TrustedActorContext,rows:readonly CalendarCandidate[]){
+  const needsPolicy=rows.filter(row=>!row.direct);
+  const scopes=needsPolicy.map(row=>({kind:'order' as const,id:row.production_order_id}));
+  const access=scopes.length?(await readJourneySelectionAccess(db,actor,scopes)).resources:null;
+  const ids:string[]=[];
+  for(const row of rows)if((row.direct||access?.get(`order:${row.production_order_id}`)?.technical)&&await acceptanceIncludesNative(this.database,row.production_order_id,db))ids.push(row.production_order_id);
+  return ids;
  }
  private async permission(db:PoolClient,actor:TrustedActorContext,ids:string[]){const live=await this.live(db,actor);if(!await this.allowed(db,live,ids))digitalForbidden();return hash({actor:live.actorId,roles:[...live.actorRoles].sort(),capabilities:[...(live.authorizationCapabilities??[])].sort(),orders:[...ids].sort(),scene:acceptanceBusinessContext()?.scenarioId??null});}
  private async candidates(db:PoolClient,actor:TrustedActorContext,range:{from:string;to:string}){
   // Direct grants are the original technical-read predicates after live role
   // validation; the original policy rechecks task/preparation/QC exceptions.
-  return (await db.query<{production_order_id:string;direct:boolean}>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND (${basicReadSql}
+  return (await db.query<CalendarCandidate>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND (${basicReadSql}
    OR EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.production_order_id=o.production_order_id AND a.assignee_id=$2)
    OR EXISTS(SELECT 1 FROM digital_bulk_dispatch d WHERE d.production_order_id=o.production_order_id AND d.warehouse_worker_id=$2)
    OR EXISTS(SELECT 1 FROM digital_preparation_responsibilities r WHERE ((r.resource_kind='order' AND r.resource_id=o.production_order_id) OR (r.resource_kind='source' AND r.resource_id=o.source_id)) AND (r.warehouse_worker_id=$2 OR r.color_confirmation_worker_id=$2))
@@ -61,9 +69,9 @@ export class DeliveryCalendarQuery{
   if(snapshotId){const stored=await this.store.load(snapshotId,actor.actorId,key,payload=>this.read(db=>this.permission(db,actor,payload.permissionOrderIds)));if(stored.result.ruleVersion!==DELIVERY_CALENDAR_VERSION)throw new ApplicationError('DELIVERY_RESULT_EXPIRED','交付查询已失效，请刷新',409);const previous=stored.coverage;if(!previous||previous.kind!==coverage.kind||(coverage.kind==='day'?previous.kind!=='day'||previous.date!==coverage.date:previous.kind!=='period'||previous.from>coverage.from||previous.to<coverage.to)||selectedDate&&stored.relatedDay?.date!==selectedDate)throw new ApplicationError('DELIVERY_RESULT_SCOPE','原查询未包含本次完整日期范围，请重新读取',409);const context=acceptanceBusinessContext();if(context&&(context.scenarioId!==stored.scenarioId||context.time.revision!==stored.clockRevision||context.time.now!==stored.asOf))throw new ApplicationError('DELIVERY_CONTEXT_CHANGED','业务观察时点已更新，请刷新交付查询',409);return {...stored,freshness:'query-snapshot'};}
   const observations:Array<{id:string;time:Awaited<ReturnType<ContextBusinessClock['read']>>}>=[];
   const value=await this.read(async db=>{
-   const live=await this.live(db,actor),policy=new DigitalProductionAccessPolicy(db),ids:string[]=[];
+   const live=await this.live(db,actor);
    const candidateRange=coverage.kind==='period'?coverage:{from:'2000-01-01',to:'2199-12-31'};
-   for(const row of await this.candidates(db,live,candidateRange))if(await acceptanceIncludesNative(this.database,row.production_order_id,db)&&(row.direct||await policy.allowed(live,'order',row.production_order_id,'technical')))ids.push(row.production_order_id);
+   const ids=await this.visibleCandidates(db,live,await this.candidates(db,live,candidateRange));
    const wall=(await db.query<{at:Date}>('SELECT CURRENT_TIMESTAMP AS at')).rows[0]!.at;
    let observation=observedBusinessTime(()=>wall);
    if(acceptanceClockReaderEnabled(this.database)||acceptanceBusinessContext())for(const id of ids){const time=await new ContextBusinessClock(this.database,db).read({kind:'order',id},()=>wall);if(observations.length&&(time.scenarioId!==observation.scenarioId||time.now!==observation.now))throw new ApplicationError('DELIVERY_CONTEXT_CHANGED','不同业务时点不能合并为一份交付查询，请刷新',409);observation=time;observations.push({id,time});}
@@ -72,10 +80,12 @@ export class DeliveryCalendarQuery{
    const relatedOrderIds:string[]=[];let relatedDay:DeliverySnapshot['relatedDay'];
    if(selectedDate){
     const known=new Set(ids);
-    for(const row of await this.candidates(db,live,{from:'2000-01-01',to:selectedDate>today?selectedDate:today})){
-     if(!known.has(row.production_order_id)&&(!await acceptanceIncludesNative(this.database,row.production_order_id,db)||!row.direct&&!await policy.allowed(live,'order',row.production_order_id,'technical')))continue;
-     if(!known.has(row.production_order_id)&&(acceptanceClockReaderEnabled(this.database)||acceptanceBusinessContext())){const time=await new ContextBusinessClock(this.database,db).read({kind:'order',id:row.production_order_id},()=>wall);if(time.scenarioId!==observation.scenarioId||time.now!==observation.now)throw new ApplicationError('DELIVERY_CONTEXT_CHANGED','不同业务时点不能合并为一份交付查询，请刷新',409);observations.push({id:row.production_order_id,time});}
-     relatedOrderIds.push(row.production_order_id);
+    const candidates=await this.candidates(db,live,{from:'2000-01-01',to:selectedDate>today?selectedDate:today});
+    const extra=new Set(await this.visibleCandidates(db,live,candidates.filter(row=>!known.has(row.production_order_id))));
+    for(const {production_order_id:id} of candidates){
+     if(!known.has(id)&&!extra.has(id))continue;
+     if(!known.has(id)&&(acceptanceClockReaderEnabled(this.database)||acceptanceBusinessContext())){const time=await new ContextBusinessClock(this.database,db).read({kind:'order',id},()=>wall);if(time.scenarioId!==observation.scenarioId||time.now!==observation.now)throw new ApplicationError('DELIVERY_CONTEXT_CHANGED','不同业务时点不能合并为一份交付查询，请刷新',409);observations.push({id,time});}
+     relatedOrderIds.push(id);
     }
     relatedDay={date:selectedDate,...await deliveryDebtSummary(db,relatedOrderIds,filters,today,selectedDate,isRootActor(live)||(live.authorizationCapabilities??[]).includes('sourcing:view'))};
    }

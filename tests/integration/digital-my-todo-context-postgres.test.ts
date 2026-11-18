@@ -145,12 +145,24 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   it("does not invent a style when the exact resource identity is unavailable", async () => {
     const f = await sourceTask();
     const unavailable = new Proxy(db, { get(target, key) {
-      if (key !== "query") return Reflect.get(target, key);
-      return async (text: string, values?: unknown[]) => {
-        const result = await target.query(text, values);
-        // Simulate an unavailable joined identity, preserving all real access/state checks.
-        if (text.includes("AS source_style_no")) result.rows = result.rows.map(row => row.task_id === f.taskId ? { ...row, source_style_no: null } : row);
-        return result;
+      if (key !== "connect") {
+        const value=Reflect.get(target,key);
+        return typeof value==='function'?value.bind(target):value;
+      }
+      return async () => {
+        const client = await target.connect();
+        return new Proxy(client, { get(current, property) {
+          if (property !== "query") {
+            const value=Reflect.get(current,property);
+            return typeof value==='function'?value.bind(current):value;
+          }
+          return async (text: string, values?: unknown[]) => {
+            const result = await current.query(text, values);
+            // Only the joined identity is unavailable. Access and state remain native.
+            if (text.includes("AS source_style_no")) result.rows = result.rows.map(row => row.task_id === f.taskId ? { ...row, source_style_no: null } : row);
+            return result;
+          };
+        } });
       };
     } });
     const projected = (await new DigitalProductionNotificationService(unavailable).todos(actors.clerk!)).find(t => t.todoId === f.taskId)!;

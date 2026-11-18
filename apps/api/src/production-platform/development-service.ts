@@ -48,9 +48,9 @@ export class DigitalDevelopmentService {
   }
   async authorizeUpload(actor: TrustedActorContext, sourceId: string) { await this.source(this.database, actor, sourceId, true); }
   async authorizeAttachmentRead(actor:TrustedActorContext,sourceId:string){await this.source(this.database,actor,sourceId);}
-  async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string): Promise<boolean> {
-    await this.source(this.database, actor, sourceId);
-    return Boolean((await this.database.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount)||await inheritedDevelopmentFile(this.database,sourceId,attachmentId);
+  async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string,db:Database=this.database): Promise<boolean> {
+    await this.source(db, actor, sourceId);
+    return Boolean((await db.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount)||await inheritedDevelopmentFile(db,sourceId,attachmentId);
   }
   async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number): Promise<DevelopmentSheet> {
     const source = await this.source(db, actor, sourceId);

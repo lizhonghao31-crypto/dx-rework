@@ -1,4 +1,6 @@
-import {attachDevelopmentRegistrations,developmentResponsibilityWindow,developmentResponsibilityProofSql,developmentReadyCorrectionSql,developmentNativeReadySql} from './development-responsibility-window.js';
+import {attachDevelopmentRegistrations,developmentResponsibilityWindow} from './development-responsibility-window.js';
+import {readTaskPageFacts,readTaskPageHistory,taskWithParentsSql,effectiveTaskDeadlineSql} from './task-page-read-context.js';
+import {taskReadBatches} from './journey-selection-access.js';
 import {readTaskCompletionOccurrence,type TaskCompletionReadContext} from './task-completion-occurrence.js';
 import {taskCraftDisplay} from './task-craft-display.js';
 import {attachFactoryTaskCompletions,factoryCompletionSource} from './factory-task-completion.js';
@@ -104,10 +106,7 @@ export class DigitalProductionTaskService {
     return result;
   }
   private async task(client: PoolClient | Pick<Pool, "query">, id: string, lock = false) {
-    const task=(await client.query(`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,
-      coalesce((to_jsonb(o)->>'order_time_managed')::boolean,(to_jsonb(s)->>'order_time_managed')::boolean,false) AS order_time_managed FROM digital_production_tasks t
-      JOIN digital_production_task_access a USING(task_id) LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
-      LEFT JOIN digital_production_sources s ON s.source_id=a.source_id WHERE t.task_id=$1 ${lock ? "FOR UPDATE OF t,a" : ""}`, [id])).rows[0] ?? digitalNotFound();
+    const task=(await client.query(`${taskWithParentsSql} WHERE t.task_id=$1 ${lock ? "FOR UPDATE OF t,a" : ""}`, [id])).rows[0] ?? digitalNotFound();
     if(lock)assertCurrentFactoryTask(task.task_kind);
     return task;
   }
@@ -766,22 +765,64 @@ export class DigitalProductionTaskService {
     });
   }
   async read(actor: TrustedActorContext, id: string, db: Pick<Pool, "query"> = this.database,completionContext?:TaskCompletionReadContext) {
+    return this.readTaskDetail(actor,id,db,completionContext);
+  }
+  /** Read the final page of task details on a caller-owned read snapshot. */
+  async readPage(actor:TrustedActorContext,ids:readonly string[],db:PoolClient,completions?:ReadonlyMap<string,TaskCompletionReadContext>){
+    const page=await this.prepareReadPage(actor,ids,db),results=new Map<string,Awaited<ReturnType<DigitalProductionTaskService['read']>>>();
+    for(const id of new Set(ids))if(page.allowed(id))results.set(id,await page.read(id,completions?.get(id)));
+    return results;
+  }
+  async prepareReadPage(actor:TrustedActorContext,ids:readonly string[],db:PoolClient,includeHistory=false){
+    const byTask=new Map<string,Awaited<ReturnType<typeof readTaskPageFacts>>>();
+    const history=includeHistory?await readTaskPageHistory(db,[]):null;
+    type ScopedTask=Parameters<typeof attachFactoryTaskCompletions>[1][number]&{source_id:string|null};
+    const scopedTasks=new Map<string,ScopedTask[]>(),loaded=new Set<string>();
+    const key=(task:{production_order_id:string|null;source_id:string|null})=>{
+      const scope=this.resource(task);return `${scope.kind}:${scope.id}`;
+    };
+    for(const batch of taskReadBatches(ids)){
+      const facts=await readTaskPageFacts(db,actor,batch);
+      for(const [id,task] of facts.tasks){
+        byTask.set(id,facts);
+        const group=key(task),rows=scopedTasks.get(group);if(rows)rows.push(task);else scopedTasks.set(group,[task]);
+      }
+      if(history){
+        const part=await readTaskPageHistory(db,[...facts.tasks.keys()]);
+        for(const [id,completion] of part.completions)history.completions.set(id,completion);
+        for(const [id,assignments] of part.assignments)history.assignments.set(id,assignments);
+      }
+    }
+    return {allowed:(id:string)=>byTask.has(id),
+      read:async(id:string,completionContext?:TaskCompletionReadContext)=>{
+        const facts=byTask.get(id)??digitalNotFound(),task=facts.tasks.get(id)??digitalNotFound();
+        const group=key(task);
+        if(!loaded.has(group)){
+          const rows=scopedTasks.get(group)!;
+          // Keep native derivation inside the caller's per-object savepoint.
+          await attachFactoryTaskCompletions(db,rows);await attachDevelopmentRegistrations(db,rows);
+          loaded.add(group);
+        }
+        return this.readTaskDetail(actor,id,db,completionContext,facts);
+      },
+      completionKeys:(id:string)=>(byTask.get(id)?.conditions.get(id)??[]).filter(row=>row.stage==='completion'&&!row.satisfied).map(row=>row.condition_key),history};
+  }
+  private async readTaskDetail(actor:TrustedActorContext,id:string,db:Pick<Pool,'query'>,completionContext?:TaskCompletionReadContext,prepared?:Awaited<ReturnType<typeof readTaskPageFacts>>){
     const policy = new DigitalProductionAccessPolicy(db);
-    await policy.assert(actor, "task", id, "technical");
-    const task = await this.task(db, id);
-    await attachFactoryTaskCompletions(db,[task]);
+    const capabilities=prepared?.authorization.get(id);
+    if(prepared){if(!capabilities?.technical)digitalNotFound();}
+    else await policy.assert(actor,"task",id,"technical");
+    const task=prepared?prepared.tasks.get(id)??digitalNotFound():await this.task(db,id);
+    if(!prepared)await attachFactoryTaskCompletions(db,[task]);
     const retired=isRetiredFactoryTask(task.task_kind);
-    const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,
-      CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,
-      to_jsonb(r)->'sla_basis' AS sla_basis,to_jsonb(r)->>'deadline_kind' AS timing_mode,p.label,${developmentResponsibilityProofSql('a',"to_jsonb(r)->'sla_basis'")} AS responsibility_proof,${developmentNativeReadySql('r.task_id',"to_jsonb(r)->'sla_basis'")} AS native_readiness FROM digital_production_deadline_revisions r
-      JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by JOIN digital_production_task_access a ON a.task_id=r.task_id WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
+    const effective=prepared?prepared.deadlines.get(id):(await db.query(`SELECT ${effectiveTaskDeadlineSql} WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`,[id])).rows[0];
     const currentPolicy = effective ?? await this.policy(db, task.task_kind, task.task_id);
     const resource = this.resource(task);
     const paused = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
     const parent = (await db.query(resource.kind === "order" ? "SELECT created_by,primary_merchandiser_id,design_style_no,customer_code FROM digital_production_orders WHERE production_order_id=$1" : "SELECT created_by,design_style_no,customer_code FROM digital_production_sources WHERE source_id=$1", [resource.id])).rows[0];
     // Exact source-task authorization also permits its basic identity, matching
     // the development sheet's readable-task fallback without granting source browse access.
-    const identity = resource.kind === "source" || await policy.allowed(actor, resource.kind, resource.id, "technical")
+    const identity = resource.kind === "source" || (capabilities?capabilities.parentTechnical:await policy.allowed(actor,resource.kind,resource.id,"technical"))
       ? { designStyleNo: parent.design_style_no as string, customerCode: parent.customer_code as string | null } : null;
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);
@@ -807,9 +848,12 @@ export class DigitalProductionTaskService {
         }
       }
     }
-    const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
-    const priority = (await db.query("SELECT payload->>'priority' AS priority FROM digital_production_task_events WHERE task_id=$1 AND event_kind='priority_changed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1",[id])).rows[0]?.priority === "urgent" ? "urgent" as const : "normal" as const;
-    const unmetConditions=retired?[]:await developmentTaskBlockers(db,task,canManage);
+    const taskConditions=prepared?.conditions.get(id)??[];
+    const hasHandover=prepared?taskConditions.some(row=>row.condition_key==='handover_received')
+     :Boolean((await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'",[id])).rowCount);
+    const recordedPriority=prepared?prepared.priorities.get(id):(await db.query("SELECT payload->>'priority' AS priority FROM digital_production_task_events WHERE task_id=$1 AND event_kind='priority_changed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1",[id])).rows[0]?.priority;
+    const priority=recordedPriority==='urgent'?'urgent' as const:'normal' as const;
+    const unmetConditions=retired?[]:await developmentTaskBlockers(db,task,canManage,false,prepared?{conditions:taskConditions,predecessors:prepared.predecessors.get(id)??[]}:undefined);
     if(paused)unmetConditions.push({condition:'paused',name:'业务暂停',missing:'当前业务已暂停，须先由有权人员恢复',responsibleRole:'业务负责人',action:canControl?'恢复业务':null,evidenceId:null,verified:true});
     if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
     const factoryQc=task.task_kind==='factory_production_qc'&&task.production_order_id?await factoryProductionFacts(db,task.production_order_id):null;
@@ -820,19 +864,19 @@ export class DigitalProductionTaskService {
       FROM digital_timeline_craft_steps step WHERE step.step_id=$1 AND (step.source_id=$2 AND step.round_number=$3 AND step.route_ref=$4 OR step.production_order_id=$5)`,[stepRef,task.source_id,task.route_version,task.route_instance_id,task.production_order_id])).rows[0]:null;
     const craftDisplay=taskCraftDisplay(task.task_kind,currentPolicy.label as string,effective?.sla_basis,frozenStep);
     let planBinding:FixedTaskWorkBinding|undefined;
-    const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind},binding=>{planBinding=binding;});
+    const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind},binding=>{planBinding=binding;},prepared?{position:prepared.positions.get(id)??null}:undefined);
     const currentPlanTargets=await currentTaskPlanTargets(db,{taskId:id,kind:task.task_kind,routeRef:task.route_instance_id,stepRef:craftDisplay.stepRef??null,resource,round:task.route_version,state:task.state,retired},observed,planBinding);
 
-    await attachDevelopmentRegistrations(db,[task]);
+    if(!prepared)await attachDevelopmentRegistrations(db,[task]);
     const responsibility=task.source_id?developmentResponsibilityWindow({...task,native_readiness:effective?.native_readiness},effective?.sla_basis?effective.entered_at:task.entered_at,effective?.sla_basis,effective?.responsibility_proof):null;
     const completion=task.source_id?await readTaskCompletionOccurrence(db,task,observed.now,completionContext):null;
     return { ...craftDisplay,...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:craftDisplay.label,
-      ...(plannedTargets?{plannedTargets}:{}),currentPlanTargets,...(completion?{actualCompletion:completion}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
+      ...(plannedTargets?{plannedTargets}:{}),currentPlanTargets,...(completion?{actualCompletion:completion}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover, canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: responsibility?responsibility.at:iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
       dueAt: retired||responsibility&&!responsibility.at?null:iso(effective?.due_at ?? null), warningAt: retired||responsibility&&!responsibility.at?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
       policyVersion: currentPolicy.version as number, timeQuality: (responsibility?.quality??(effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality)) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as DigitalTimeQuality,
-      blockedReason: task.blocked_reason as string | null, canExecute: !retired && !paused && !await this.executionBlock(db,resource) && await policy.allowed(actor, "task", id, "execute") };
+      blockedReason: task.blocked_reason as string | null, canExecute: !retired && !paused && !await this.executionBlock(db,resource) && (capabilities?capabilities.execute:await policy.allowed(actor,"task",id,"execute")) };
   }
   async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){
     if(!(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 AND closed_by=$2',[orderId,actor.actorId])).rowCount)digitalForbidden();
@@ -907,14 +951,17 @@ export class DigitalProductionTaskService {
     return tasks;
   }
   async list(actor: TrustedActorContext, page: number) {
+    const db=await this.database.connect();
+    try{
+    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const global = isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor);
-    const result = await this.database.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+    const result = await db.query<{task_id:string}>(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
       LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
       WHERE t.node_key<>'factory_material_count' AND ($1::boolean OR a.assignee_id=$2 OR ($3::boolean AND (o.created_by=$2 OR s.created_by=$2)) OR ($4::boolean AND o.primary_merchandiser_id=$2)
       OR ($5::boolean AND a.task_kind LIKE 'development_%')) ORDER BY t.created_at DESC,t.task_id DESC LIMIT 15 OFFSET $6`, [global, actor.actorId, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk"), (page-1)*15]);
-    const policy = new DigitalProductionAccessPolicy(this.database); const items = [];
-    for (const row of result.rows) if (await policy.allowed(actor, "task", row.task_id, "technical")) items.push(await this.read(actor, row.task_id));
-    return { items, page };
+    const items=[...(await this.readPage(actor,result.rows.map(row=>row.task_id),db)).values()];
+    await db.query('COMMIT');return {items,page};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   /** Internal fixed-route audit only; never records receipt, approval or completion. */
   async recordSystemRouteWithClient(client:PoolClient,actor:TrustedActorContext,id:string,fromId:string){
