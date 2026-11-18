@@ -11,7 +11,7 @@ import {evaluateFrameworkSubmission} from './order-time-framework-submission.js'
 import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
-import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
+import type {SlaAnchor,SlaTime} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {CraftStepChoicesSchema,craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {OrderTimeOperationSchema,type OrderTimeOperation,type OrderTimeProductionRoute,type OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
@@ -31,6 +31,7 @@ import type {FixedWorkInputs} from './fixed-work-definition.js';
 import {OrderTimePlanRepository,type OrderTimeInput} from './order-time-plan-repository.js';
 import {currentOrderTimeCompany,historicalOrderTimeCompany,orderTimeAdmission} from './order-time-admission.js';
 import {orderTimeInputFromRoute,orderTimeCheck,orderTimeBegunStates,type OrderTimeNativeProgress} from './order-time-request-plan.js';
+import {formalRemainingSchedule} from './order-time-formal-arrangement.js';
 import {nativeTaskReadiness} from './task-readiness-facts.js';
 import {orderTimeBulkSteps,orderTimeStoredBulkSteps} from './order-time-route-identities.js';
 import {materialReadiness} from './development-material-readiness.js';
@@ -222,12 +223,14 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(rewashing)sourceVersion.rewashing=rewashing.sourceVersion;
  sourceVersion.customerDates=dates;sourceVersion.workFacts=[...progress];sourceVersion.materialBounds=notBefore;
  const datedScopes=value.scopes.filter(scope=>scope.customerGoal.precision==='date');
+ let formalEnds:Record<string,SlaTime[]>|undefined;
  if(operation.kind==='arrangement'&&saved&&!(plan.company.framework&&frameworkRoute&&datedScopes.length)){
   const pending=[...pendingWork].sort();
   sourceVersion.formalPendingWork=pending;
   value.formalInputs={version:'approved-remaining-v1',progress:Object.fromEntries(progress),notBefore,pendingWork:pending};
+  formalEnds=formalRemainingSchedule(value,value.formalInputs,saved,time,'本次拟采用安排').terminalEnds;
  }
- const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal});
+ const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal,formalEnds});
  if(plan.company.framework&&frameworkRoute&&datedScopes.length){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
   const created=resource?await orderTimeCreated(db,resource):null;

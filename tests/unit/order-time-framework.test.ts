@@ -4,7 +4,7 @@ import {TimeFrameworkInputSchema,readTimeFrameworkPlan,type TimeFrameworkInput,t
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate,initialFrameworkMilestoneStandard,evaluateFrameworkResponsibility} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {fixedTimelineForward} from '../../apps/api/src/production-platform/fixed-timeline-targets.js';
 import {overlayFrameworkCompletion,retainedFrameworkWork} from '../../apps/api/src/production-platform/order-time-framework-route.js';
-import {formalRemainingTargets,type FormalRemainingInputs} from '../../apps/api/src/production-platform/order-time-formal-arrangement.js';
+import {formalRemainingSchedule,type FormalRemainingInputs} from '../../apps/api/src/production-platform/order-time-formal-arrangement.js';
 import type {OrderTimeInput,StoredOrderTimePlan} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {evaluateOrderTimeScenario} from '../../apps/api/src/production-platform/order-time-schedule.js';
 import {arrangedOrderTimeTarget} from '../../apps/api/src/production-platform/framework-node-targets.js';
@@ -48,21 +48,26 @@ it('separates a formally approved remaining schedule from old evaluation targets
  const snapshot:FormalRemainingInputs={version:'approved-remaining-v1',notBefore:{},progress:{paper:{completed:true,actualAt:'2026-12-05T23:00:00.000Z',readyAt:null,deadline:null}}};
  const completeAt='2026-12-08T00:00:00.000Z'; // 48 continuous hours after approval
  for(const withOldTargets of [previous,{...previous,targets:{}}]){
-  const targets=formalRemainingTargets(input,snapshot,withOldTargets,time,'TEST supported subsequent approval');
+  const {targets,terminalEnds}=formalRemainingSchedule(input,snapshot,withOldTargets,time,'TEST supported subsequent approval');
   expect(targets[scopeRef]!.cut).toMatchObject({start:{at:time.now},end:{at:completeAt}});
+  expect(terminalEnds[scopeRef]).toEqual([targets[scopeRef]!.cut!.end]);
  }
- const pending=formalRemainingTargets(input,{...snapshot,progress:{}},previous,time,'TEST independent pending paper variant');
+ const pending=formalRemainingSchedule(input,{...snapshot,progress:{}},previous,time,'TEST independent pending paper variant').targets;
  expect(pending[scopeRef]!.cut!.end.at).toBe('2026-12-08T12:00:00.000Z');
  const active={completed:false,actualAt:null,readyAt:'2026-12-05T23:00:00.000Z',deadline:'2026-12-06T04:00:00.000Z'};
- const started=formalRemainingTargets(input,{...snapshot,progress:{paper:active}},previous,time,'TEST native active paper');
+ const started=formalRemainingSchedule(input,{...snapshot,progress:{paper:active}},previous,time,'TEST native active paper').targets;
  expect(started[scopeRef]!.paper).toEqual(targetIndex.paper);
  expect(started[scopeRef]!.cut).toMatchObject({start:{at:active.deadline},end:{at:'2026-12-08T04:00:00.000Z'}});
- const missingDeadline=formalRemainingTargets(input,{...snapshot,progress:{paper:{...active,deadline:null}}},previous,time,'TEST no supported predecessor candidate');
+ const missingDeadline=formalRemainingSchedule(input,{...snapshot,progress:{paper:{...active,deadline:null}}},previous,time,'TEST no supported predecessor candidate').targets;
  expect(missingDeadline[scopeRef]!.cut!.end.at).toBeNull();
- const bounded=formalRemainingTargets(input,{...snapshot,notBefore:{cut:{precision:'instant',value:'2026-12-07T03:00:00Z',source:'TEST known independent condition'}}},previous,time,'TEST independent condition');
+ const bounded=formalRemainingSchedule(input,{...snapshot,notBefore:{cut:{precision:'instant',value:'2026-12-07T03:00:00Z',source:'TEST known independent condition'}}},previous,time,'TEST independent condition').targets;
  expect(bounded[scopeRef]!.cut!.end.at).toBe('2026-12-09T03:00:00.000Z');
- const missing=formalRemainingTargets(input,{...snapshot,progress:{paper:{...snapshot.progress.paper!,actualAt:null}}},previous,time,'TEST unknown predecessor evidence');
+ const missing=formalRemainingSchedule(input,{...snapshot,progress:{paper:{...snapshot.progress.paper!,actualAt:null}}},previous,time,'TEST unknown predecessor evidence').targets;
  expect(missing[scopeRef]!.cut!.end.at).toBeNull();
+ const completed='2026-12-05T23:30:00.000Z';
+ const finished=formalRemainingSchedule(input,{...snapshot,progress:{...snapshot.progress,cut:{...snapshot.progress.paper!,actualAt:completed}}},previous,time,'TEST already completed terminal');
+ expect(finished.targets[scopeRef]!.cut).toEqual(targetIndex.cut);
+ expect(finished.terminalEnds[scopeRef]?.[0]?.at).toBe(completed);
  expect(input.scopes[0]).toMatchObject({goals:{cut:B},customerGoal:M});
  expect(previous.targets[scopeRef]!.cut!.end.at).toBe(B.value);
 });
