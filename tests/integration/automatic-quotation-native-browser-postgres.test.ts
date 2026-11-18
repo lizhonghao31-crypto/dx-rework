@@ -8,12 +8,55 @@ import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-bro
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
+import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
+import {publishedTechnicalFixture} from '../helpers/development-technical-fixture.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR03 automatic quotation through original authenticated App and real PG',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true});});
  afterAll(async()=>{await h?.writeEvidence();await h?.dispose();});
+ it('explains a current published unit mismatch on only the authorized material row without adopting or rounding its quantity',async()=>{
+  const designer=h.f.people['sample-designer']!,worker=h.f.people['pattern-room-worker']!,manager=h.f.people['production-management']!;
+  const forms=new DigitalDevelopmentService(h.db,true),quotes=new DigitalQuotationService(h.db,true),technical=new DevelopmentTechnicalService(h.db,true);
+  const source=await new DigitalProductionIdentityService(h.db,true).createSource(designer,{developmentType:'头版',designStyleNo:'TEST-UNIT-MISMATCH-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const resource={kind:'source' as const,id:source.sourceId},path='/ui/digital-quotation?kind=source&id='+source.sourceId;
+  const materialId=randomUUID(),otherId=randomUUID(),draft=initialDevelopmentDocument();
+  draft.quantity=1;draft.sizes=['M'];draft.sampleSize='M';draft.sizeQuantities=[1];draft.measurements=[{name:'胸围',values:['50']}];
+  const main={...draft.materials[0]!,materialId,category:'主布' as const,label:'主布',name:'TEST冲突主料',supplier:'TEST',specification:'40支',width:'150',weight:'200',composition:'棉',color:'黑',requiredThisRound:true,available:true,pricingUnit:'米',unitPrice:'20'};
+  draft.materials=[main,{...main,materialId:otherId,category:'辅料',label:'辅料',name:'TEST匹配辅料',unitPrice:'19.75'}];
+  draft.files=[{attachmentId:await h.f.image(designer),kind:'款图'}];
+  const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document:DevelopmentDocumentSchema.parse(draft)},randomUUID());
+  await forms.publish(designer,source.sourceId,saved.version,randomUUID());
+  const publish=await forms.read(designer,source.sourceId);
+  const blank=await quotes.read(designer,resource);expect(blank.rows.find(row=>row.rowId===materialId)?.technicalConsumptionIssue).toBeUndefined();
+  const initial=await publishedTechnicalFixture(h.db,h.f.root,source.sourceId,publish.document!,publish.version,worker.actorId);
+  const artifact=(await technical.read(h.f.root,source.sourceId)).artifacts.find(row=>row.artifactSetId===initial?.artifactSetId&&row.version===initial?.version)!;
+  const write=(version:number,consumptionRows:typeof artifact.body.consumptionRows)=>technical.saveArtifact(h.f.root,source.sourceId,{taskId:artifact.taskId,expectedDocumentVersion:publish.version,expectedVersion:version,scopeRef:'整款',action:'publish',body:{...artifact.body,consumptionRows}},randomUUID());
+  const mismatch=await write(artifact.version,[{materialId,unit:'码',consumption:'1.5'},{materialId:otherId,unit:'米',consumption:'1'}]);
+  const current=await quotes.read(designer,resource);
+  expect(current.rows.find(row=>row.rowId===materialId)).toMatchObject({unit:'米',unitPrice:'20',consumption:'',consumptionSource:null,technicalConsumptionIssue:'unit_mismatch'});
+  expect(current.rows.find(row=>row.rowId===otherId)).toMatchObject({unit:'米',unitPrice:'19.75',consumption:'1',consumptionSource:{kind:'technical_artifact'}});
+  expect(current.rows.filter(row=>row.technicalConsumptionIssue).map(row=>row.rowId)).toEqual([materialId]);
+  expect(current.technicalConsumptionOptions).toEqual([]);
+  const technicalChoices=(await quotes.read(h.f.root,resource)).technicalConsumptionOptions;
+  expect(technicalChoices).toEqual(expect.arrayContaining([expect.objectContaining({materialId:otherId,unit:'米',consumption:'1'})]));
+  const neutral=await quotes.read(manager,resource);expect(neutral.rows).toHaveLength(current.rows.length);
+  expect(neutral.rows.every(row=>row.technicalConsumptionIssue===undefined)).toBe(true);expect(neutral.technicalConsumptionOptions).toEqual([]);
+  expect(current).toMatchObject({complete:false,confirmedVersion:null,budget:{state:'waiting_formal_order'}});
+  const tab=await h.open(designer.actorId,1165,{},path),hint='已发布技术用量单位与本行计价单位不符，请核对。';
+  try{
+   const mainRow=tab.page.getByRole('row').filter({hasText:'TEST冲突主料'}),otherRow=tab.page.getByRole('row').filter({hasText:'TEST匹配辅料'});
+   await mainRow.getByText(hint,{exact:true}).waitFor();expect(await mainRow.getByRole('cell',{name:'—',exact:true}).count()).toBe(1);
+   expect(await otherRow.getByText(hint,{exact:true}).count()).toBe(0);
+   expect(await tab.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).isDisabled()).toBe(true);
+   expect(await tab.page.locator('#quote-cost-reference').innerText()).toContain('19.75');
+   await write(mismatch.version,[{materialId:otherId,unit:'米',consumption:'1'}]);
+   await tab.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
+   await mainRow.waitFor();await expect.poll(()=>mainRow.getByText(hint,{exact:true}).count()).toBe(0);
+   expect((await quotes.read(designer,resource)).rows.find(row=>row.rowId===materialId)).toMatchObject({consumption:'',unitPrice:'20',consumptionSource:null});
+  }finally{await tab.context.close();}
+ });
  it('edits original source prices, assigns existing roles, fills only own rows, freezes confirmation and rejects revoked session',async()=>{
   const designer=h.f.people['sample-designer']!,worker=h.f.people['pattern-room-worker']!,ie=h.f.people['ie']!;
   const source=await new DigitalProductionIdentityService(h.db,true).createSource(designer,{developmentType:'头版',designStyleNo:'TEST-PR03-UI-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
