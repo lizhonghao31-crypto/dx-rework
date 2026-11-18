@@ -260,7 +260,7 @@ function closureDatabase(roles: string[]) {
     // Original packing readiness also reads the exact linked physical work.
     // This populated fixture is inhouse (below), so the worker-only execution
     // query has no matching worker configuration; do not invent a completion.
-    if (sql === "SELECT child_id,line_id FROM digital_production_child_lines WHERE module='rework' AND production_order_id=$1") {
+    if (sql === "SELECT child_id,min(line_id::text) AS line_id FROM digital_production_child_lines WHERE module='rework' AND production_order_id=$1 GROUP BY child_id HAVING count(DISTINCT line_id)=1") {
       expect(values).toEqual([ORDER]);return [{child_id: REWORK, line_id: ROW}];
     }
     if (sql.startsWith('SELECT r.rework_order_id,r.status,r.special_process_type,')) {
