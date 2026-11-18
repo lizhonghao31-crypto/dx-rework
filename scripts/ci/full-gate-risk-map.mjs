@@ -408,6 +408,10 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
+  if(paths.some(path=>/instruction-command-receipts|instruction-recovery|po-customer-date-service|production-instruction|development-creation-draft|digital-designer-workspace|digital-development-create-form/.test(path))){
+    addAll(mappedTests,['tests/integration/instruction-recovery-native-browser-postgres.test.ts','tests/integration/development-creation-draft-native-browser-postgres.test.ts','tests/integration/order-time-requests-browser-postgres.test.ts','tests/integration/workspace-page-native-browser-postgres.test.ts']);
+    domains.add('durable-original-draft-and-command-receipts');
+  }
   if(paths.some(path=>/digital-production-read-requests|digital-production-api|digital-development-create-form|public-error-message|platform-method-error-feedback/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-requests-browser-postgres.test.ts','tests/integration/m01-short-lead-native-browser-postgres.test.ts','tests/integration/request-identity-postgres.test.ts']);
     domains.add('native-read-check-and-command-outcome');

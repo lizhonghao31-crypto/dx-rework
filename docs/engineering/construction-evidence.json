@@ -1,210 +1,225 @@
 {
   "version": 1,
-  "base": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+  "base": "a558598cacf0c6b29fc161be1f2f7d390f343026",
   "risk": "full",
-  "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+  "sourceFingerprint": "18d5d6fef7bbd25f7b381bb226365b45648eb9ece0a76b55e2a4c088351a9a9d",
   "rules": [
     {
-      "rule": "Project exact original native washing-window references without changing business facts",
-      "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
-      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
-      "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
+      "rule": "Restore original designer parent intent and raw child draft across genuine browser reload without creating or replaying business commands",
+      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
+      "initialization": "Provisional exact predecessor stack a558598cacf0c6b29fc161be1f2f7d390f343026 with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
       "writes": [
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/fixed-schedule-progress.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-washing-facts.ts",
-        "apps/api/src/production-platform/journey-washing-projection.ts",
-        "apps/api/src/production-platform/journey-washing-rework-facts.ts",
-        "apps/api/src/production-platform/journey-washing-window-record.ts",
-        "packages/contracts/src/bulk-washing.ts",
-        "packages/contracts/src/digital-production-journey.ts"
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/development-creation-draft.ts",
+        "apps/web/src/use-development-creation-draft.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/bulk-washing-service.ts",
-        "apps/api/src/production-platform/bulk-washing-ledger.ts"
+        "apps/web/src/digital-production-api.ts",
+        "apps/api/src/production-platform/development-service.ts"
       ],
       "oldTests": [
-        "tests/unit/journey-washing-facts.test.ts",
-        "tests/unit/journey-washing-projection.test.ts",
-        "tests/unit/journey-washing-rework.test.ts",
-        "tests/unit/journey-fact-model.test.ts"
+        "tests/unit/development-creation-draft.test.ts"
       ],
-      "expectation": "Each original per-batch scope/window is retained in facts and whitelisted snapshot, then receives an exact read record in authorized presentation. Actual previousv14 derived payload lacking new native-window IDs and selectors are rejected then rebuilt asv15 by the original repository, preserving original fixed schedule and SLA facts; schema and readers retain additive compatibility. No URL/auth conclusion in shared facts and no new execution node, task, plan or progress denominator.",
+      "expectation": "Original development/certain-order/preorder parent intent and raw values/row identities survive actual page.reload with zero automatic writes beyond1200ms. Explicit original save alone creates, exact acknowledged source is reused. Unknown creation remains blocked; original publish/confirm each recover through exact original-key GET without another POST. Known source acknowledgement remains durable if following read fails. Unretained local file bytes require explicit reselection; legacy live C/D/E/F/PACKSTOP terminals are not inferred.",
       "checks": [
-        "c-unit",
-        "c-native",
-        "c-api-types",
-        "c-lint"
+        "recovery-unit",
+        "recovery-native",
+        "recovery-web-types",
+        "recovery-lint"
       ]
     },
     {
-      "rule": "Original cockpit and factory washing UI enter and return from the exact window",
-      "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
-      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
-      "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
+      "rule": "Preserve raw instruction drafts and independent immutable save/decision envelopes through reload, conflicts and read failure",
+      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
+      "initialization": "Provisional exact predecessor stack a558598cacf0c6b29fc161be1f2f7d390f343026 with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
       "writes": [
-        "apps/web/src/bulk-washing-panel.tsx",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-node-dates.tsx",
-        "apps/web/src/cockpit-node-rows.tsx",
-        "apps/web/src/cockpit-record-link.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/factory-flow-panel.tsx",
-        "apps/web/src/factory-task-target.ts",
-        "apps/web/src/journey-sla-details.tsx",
-        "apps/web/src/node-materials-panel.tsx",
-        "apps/web/src/washing-window-target.ts",
-        "apps/web/src/washing-window-target.css"
+        "apps/web/src/production-instruction-panel.tsx",
+        "apps/web/src/instruction-recovery-state.ts",
+        "apps/web/src/use-instruction-recovery.ts",
+        "tests/unit/instruction-recovery-state.test.ts",
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/use-digital-detail-navigation-guard.ts"
+        "apps/web/src/digital-production-api.ts",
+        "apps/web/src/digital-production-access-panel.tsx"
       ],
       "oldTests": [
-        "tests/unit/factory-task-target.test.ts",
-        "tests/unit/digital-detail-route.test.ts"
+        "tests/unit/instruction-recovery-state.test.ts"
       ],
-      "expectation": "Factory and after-receipt routes each preserve four original windows; a genuine failed inspection and formally arranged rewash additionally prove four work nodes/eight projections/six unique native identities, all separately selectable and returnable. Scope selection compares complete evidence sets, not a template count; explicit invalid targets do not fall back, while deliberate user range selection clears prior focus. Real App clicks every window, exact native event/date matching and budget second-hop/return preserve original node/scope/filter/material focus. Read views hide/disable forms and refuse submit without gaining capabilities; foreign/ambiguous/unavailable refs stay explicit. Same mounted original draft/pending immutable key/body survive same-order failed read or cancelled navigation. True browser reload durability belongs to approved E and is not claimed.",
+      "expectation": "Original raw incomplete form restores after reload with no autosave. Server-committed but browser503 save and PO decision each use one original-key readonly GET, no duplicate PUT/POST. Confirm minimal success before optional latest-sheet read, preserve later draft and another unresolved envelope, keep known success on subsequent read failure. Future/corrupt/unwritable storage and changed version/round block replacement or implicit submission.",
       "checks": [
-        "c-unit",
-        "c-native",
-        "c-web-types",
-        "c-lint"
+        "recovery-unit",
+        "recovery-native",
+        "recovery-web-types",
+        "recovery-lint"
       ]
     },
     {
-      "rule": "Keep new native App consumer and exact identity units in the full canonical plan",
-      "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
-      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
-      "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
+      "rule": "Read minimal original actor command receipts with exact namespaces and current object read permission",
+      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
+      "initialization": "Provisional exact predecessor stack a558598cacf0c6b29fc161be1f2f7d390f343026 with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
+      "writes": [
+        "apps/api/src/production-platform/instruction-command-receipts.ts",
+        "apps/api/src/production-platform/production-instruction-routes.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/po-customer-date-service.ts",
+        "packages/contracts/src/production-instruction.ts",
+        "tests/unit/instruction-command-receipts.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/development-service.ts"
+      ],
+      "oldTests": [
+        "tests/unit/instruction-command-receipts.test.ts",
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
+      ],
+      "expectation": "Save and decision namespaces never mix. Readonly RR transaction checks current access before original actor/key lookup; request/direction/hash mismatch stays unconfirmed and historical body never leaves API. Genuine approval revocation preserves receipt read in the same session, object-read revocation then denies; foreign object/actor/key denies. Business command/audit/plan state remains unchanged by GET. Original transaction refusal and post-commit sheet-read failure remain distinct.",
+      "checks": [
+        "recovery-unit",
+        "recovery-native",
+        "recovery-api-types",
+        "recovery-lint"
+      ]
+    },
+    {
+      "rule": "Keep both original native recovery suites and reviewed contract in the canonical plan",
+      "source": "Approved BA100/PR-E true browser reload parent/child draft and unknown-command recovery; independently reviewed PO customer decision supplement Library55db9bd20f8481919bb984a22b3d0027; coordinator explicitly requires actor/order/request/direction/key/hash, current read rights only, no POST replay and newer-draft protection.",
+      "initialization": "Provisional exact predecessor stack a558598cacf0c6b29fc161be1f2f7d390f343026 with original service/role/schema and browser state. Same-tab actor/environment/object-scoped storage; current authorization rechecked before restore and server read. No new schema or migration, production data change, implicit business creation, plan adoption or timing recalculation. Current cancellation and washing navigation/forecast source remains intact; final actual merged base must be recorded before publication/Gate.",
+      "dateAndPermission": "Raw draft, normalized immutable sent command and minimal confirmed receipt are distinct. Never invent key/source/version for a pure draft; never replace or replay an unknown original. GET receipt requires current authorized object read plus original actor/namespace/order/request/direction/key/hash, not retained write/approval power. No historical body/credentials/roles returned. Later draft or independent unknown cannot be cleared; absent or failed read is not proof of failure.",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/washing-window-target.test.ts",
-        "tests/integration/washing-window-navigation-browser-postgres.test.ts",
-        "docs/engineering/washing-window-navigation-repair.md"
+        "docs/requirements/sourcing-supplier-production-v1.0.md",
+        "docs/engineering/native-draft-command-recovery-repair.md"
       ],
       "reads": [
         "scripts/test-execution-config.mjs",
         "tests/acceptance/supplychain-settings-browser.ts"
       ],
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "scripts/ci/test-execution-contract.test.mjs",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "expectation": "New suite is selected for affected native identity/projection/UI paths under the existing long correctness config. Both routes, authorization rejection, exact return context, mounted draft/unknown response safety and original facts remain covered. No new worker/global timeout, final name filter, test removal or extra benchmark.",
+      "expectation": "Add both real native/App suites for affected parent/form/service/contract/helper paths while preserving all prior canonical registrations and conservative full fallback. Original finite configuration and roles remain; no new worker, global timeout, skipped assertions or extra benchmark. Current complete source validation and fresh committed checkout do not claim final Gate or onsite live unknown-request closure.",
       "checks": [
-        "c-unit",
-        "c-native",
-        "c-protocol",
-        "c-lint"
+        "recovery-unit",
+        "recovery-native",
+        "recovery-protocol",
+        "recovery-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "c-unit",
+      "id": "recovery-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/washing-window-target.test.ts tests/unit/factory-task-target.test.ts tests/unit/digital-detail-route.test.ts tests/unit/journey-washing-facts.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/journey-fact-model.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/order-time-reading.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/stack1025-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/instruction-command-receipts.test.ts tests/unit/instruction-recovery-state.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/nav-stack-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:34.926416+00:00",
-      "endedAt": "2026-11-18T01:34:53.192704+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-unit/command.log",
-      "logSha256": "3ec7fb27d5d927c7954fbf0858a9be8529a3b0885e5fed3bc24dc05ceb671ebf",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
-      "passed": 307,
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "18d5d6fef7bbd25f7b381bb226365b45648eb9ece0a76b55e2a4c088351a9a9d",
+      "startedAt": "2026-11-18T01:42:18.621013+00:00",
+      "endedAt": "2026-11-18T01:42:27.976941+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/nav-stack-unit/command.log",
+      "logSha256": "03311f366382287be458637489c569d602b359e098ca9d238682543031dcffa2",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack a558598c. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
+      "passed": 162,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "02effe616e4c672a9664da70d3544386aa77205114c880332cafecaf9065bf32"
+          "sha256": "820c2ddabb458665a353c14b41de8537079386dbd4c92dada884b01badf1f2cd"
         }
       ]
     },
     {
-      "id": "c-native",
+      "id": "recovery-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/washing-window-navigation-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/pg/stack1025-original-app/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/instruction-recovery-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-instruction-recovery-20261117/pg/nav-stack-original-recovery/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:33.434828+00:00",
-      "endedAt": "2026-11-18T01:37:07.817759+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/pg/stack1025-original-app/tests.log",
-      "logSha256": "333806dd5fc891160013338a09b97aa45f7782b849d69ff31f970fecaa7df7be",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
-      "passed": 4,
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "18d5d6fef7bbd25f7b381bb226365b45648eb9ece0a76b55e2a4c088351a9a9d",
+      "startedAt": "2026-11-18T01:42:17.177208+00:00",
+      "endedAt": "2026-11-18T01:44:33.021751+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/pg/nav-stack-original-recovery/tests.log",
+      "logSha256": "6089f3523ab58a64cb9d34b6c0bd28152b3468d510e768a2ecdf0750f4fff587",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack a558598c. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
+      "passed": 15,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "27bf04a820bad8b622a992d60f9d8c0215aedec7e70001db78fa9c128d55c746"
+          "sha256": "7869ecb7ad858445b25463c7a993231fd7f7e55becd10e0ba473a0cabeae322f"
         }
       ]
     },
     {
-      "id": "c-api-types",
+      "id": "recovery-api-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:36.279830+00:00",
-      "endedAt": "2026-11-18T01:35:04.215757+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-api-types/command.log",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "18d5d6fef7bbd25f7b381bb226365b45648eb9ece0a76b55e2a4c088351a9a9d",
+      "startedAt": "2026-11-18T01:42:19.947556+00:00",
+      "endedAt": "2026-11-18T01:42:51.979215+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/nav-stack-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack a558598c. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
     },
     {
-      "id": "c-web-types",
+      "id": "recovery-web-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:34:37.651006+00:00",
-      "endedAt": "2026-11-18T01:35:21.454351+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-web-types/command.log",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "18d5d6fef7bbd25f7b381bb226365b45648eb9ece0a76b55e2a4c088351a9a9d",
+      "startedAt": "2026-11-18T01:42:21.281137+00:00",
+      "endedAt": "2026-11-18T01:43:08.327276+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/nav-stack-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack a558598c. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
     },
     {
-      "id": "c-lint",
+      "id": "recovery-lint",
       "kind": "command",
-      "command": "python3 /workspace/sla-supplement-c-20261117/lint-current.py",
+      "command": "python3 /workspace/sla-instruction-recovery-20261117/lint-current.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:38:10.401455+00:00",
-      "endedAt": "2026-11-18T01:38:12.875188+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-lint/command.log",
-      "logSha256": "a6215d8f13422b39046018c80ddf2e81304d771dfeca05bb67ae1607670084e7",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "18d5d6fef7bbd25f7b381bb226365b45648eb9ece0a76b55e2a4c088351a9a9d",
+      "startedAt": "2026-11-18T01:42:23.115846+00:00",
+      "endedAt": "2026-11-18T01:42:29.321269+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/nav-stack-lint/command.log",
+      "logSha256": "a072cd6af5c15faab005593ec465f3431fa80c5aca7d181e423fb18d7dc0b5d2",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack a558598c. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results."
     },
     {
-      "id": "c-protocol",
+      "id": "recovery-protocol",
       "kind": "tests",
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
-      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
-      "startedAt": "2026-11-18T01:38:11.568263+00:00",
-      "endedAt": "2026-11-18T01:38:12.236685+00:00",
-      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-protocol/command.log",
-      "logSha256": "a123577589bc94f889b19ebabd684c962f4d24e505e9481d504abfb12572f776",
-      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
+      "testedHead": "a558598cacf0c6b29fc161be1f2f7d390f343026",
+      "sourceFingerprint": "18d5d6fef7bbd25f7b381bb226365b45648eb9ece0a76b55e2a4c088351a9a9d",
+      "startedAt": "2026-11-18T01:42:24.516328+00:00",
+      "endedAt": "2026-11-18T01:42:26.776884+00:00",
+      "log": "/workspace/sla-instruction-recovery-20261117/checks/nav-stack-protocol/command.log",
+      "logSha256": "eb17e3022a8ef03da6edcd1b5242091ad6225f316291d168a9d1702da06c7161",
+      "context": "Approved BA100/PR-E and PO decision recovery, explicit provisional washing-navigation stack a558598c. Current source includes cancellation1025 and actual1022/1024; actual predecessor merge alignment required before own final Gate. Node22/npm10/Chromium1194, original finite workers/config/budgets, only marked lowpriv isolated PG16 and exact owned cleanup. Real App reload and original authenticated business transactions, no dropped assertions or test-name filtering. No production/Acceptance, deployment, unknown historical command replay,1024 CI rerun or performance experiment. Earlier source reports remain separately retained; these are current exact-stack results.",
       "passed": 21,
       "failed": 0,
       "skipped": 0

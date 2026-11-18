@@ -1,3 +1,4 @@
+import {poCustomerDecisionReceipt} from './instruction-command-receipts.js';
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { InstructionDateRequestSchema, type InstructionDateRequest, type CustomerDateHistory } from "@dx-rework/contracts/production-instruction";
@@ -15,6 +16,7 @@ type Request = {request_id:string;order_version:number;requested_by:string;reaso
 const fail:(message:string)=>never=(message)=>{throw new ApplicationError("INSTRUCTION_CONFLICT",message,409);};
 export class PoCustomerDateService {
   constructor(private readonly database:Pool){}
+  async decisionReceipt(actor:TrustedActorContext,id:string,requestId:string,approved:boolean,key:string){return poCustomerDecisionReceipt(this.database,actor,id,requestId,approved,key);}
   private async lines(db:DB,id:string):Promise<Line[]>{return (await db.query(`SELECT line_id,po_number,color,customer_warehouse_arrival_date::text AS registered,
     coalesce(customer_warehouse_arrival_date,delivery_date)::text AS effective,factory_delivery_date::text AS factory,
     customer_date_version,customer_date_source FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position`,[id])).rows;}

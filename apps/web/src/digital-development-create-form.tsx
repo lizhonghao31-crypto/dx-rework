@@ -1,4 +1,6 @@
 import {developmentSubmissionResult,recoverDevelopmentSubmission,type PendingDevelopmentSubmission} from './development-submit-recovery.js';
+import type {CreationDraftSnapshot} from './development-creation-draft.js';
+import type {CreationOutgoing} from './use-development-creation-draft.js';
 import {IndependentCraftField} from './independent-craft-field.js';
 import {useOrderTimeApplication} from './order-time-application.js';
 import {OrderTimeProductionRoute} from './order-time-production-route.js';
@@ -14,9 +16,9 @@ import { customerOrderDateError, initialCustomerDateErrors, digitalPoKey, initia
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development.css";
 import { SearchableSelect } from "./search-select.js";
-import { useCallback, useContext, useEffect, useRef, useState, useId } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useId } from "react";
 import { Button, Surface } from "@dx-rework/ui";
-import { DigitalOrderCreateSchema, DigitalSourceCreateSchema, type DigitalCustomer, type DigitalOrder, type DigitalOrderInput, type DigitalSource, type CustomerOrderCalendar } from "@dx-rework/contracts/digital-production";
+import { DigitalIdSchema,DigitalOrderCreateSchema, DigitalSourceCreateSchema, type DigitalCustomer, type DigitalOrder, type DigitalOrderInput, type DigitalSource, type CustomerOrderCalendar } from "@dx-rework/contracts/digital-production";
 import type { OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { digitalRequest, DigitalRequestError } from "./digital-production-api.js";
 import { initialDigitalProductGroup } from "./digital-production-defaults.js";
@@ -47,28 +49,31 @@ export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: O
 }
 
 /** A facade over the existing source and order commands; no sample approval or route writes. */
-export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, existingDraft, independentCraftsEnabled=false, orderTimeEnabled=false, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表"}: {
+export type DevelopmentCreationBridge={viewId:string;actorId:string;snapshot?:CreationDraftSnapshot|undefined;onSnapshot:(id:string,value:CreationDraftSnapshot)=>void;started:(id:string,outgoing:CreationOutgoing)=>void;acknowledged:(id:string,outgoing:CreationOutgoing,sourceId:string,version:number|null)=>void;refused:(id:string,outgoing:CreationOutgoing)=>void};
+export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, existingDraft, independentCraftsEnabled=false, orderTimeEnabled=false, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表",creation}: {
   independentCraftsEnabled?:boolean|undefined;orderTimeEnabled?:boolean|undefined;contained?:boolean; intent: DevelopmentCreateIntent; source?: OrderJourney; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; calendarSourceId?:string|null; customers: DigitalCustomer[];
   onCancel: () => void; onCreated: (sourceId: string, orderId: string | null) => void; cancelLabel?:string;
   onIntentChange?: (intent: "development" | "certain_order") => void;
+  creation?:DevelopmentCreationBridge|undefined;
 }) {
   const formId=useId();
-  const [form, setForm] = useState(() => existingDraft?.document?.customerOrderDraft?.order ?? {...initialDevelopmentOrder(customers, source),...(serverToday?{orderDate:serverToday}:{}),...(existingDraft?{customerCode:existingDraft.customerCode??"",designStyleNo:existingDraft.designStyleNo,temporaryStyleNo:existingDraft.temporaryStyleNo}:{} )});
-  const [fixedCraft,setFixedCraft]=useState(existingDraft?existingDraft.timelineSchemaVersion===2:independentCraftsEnabled);
-  const [document,setDocument]=useState<DevelopmentDocument>(()=>existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.developmentCreatedDate??null}):{...initialDevelopmentDocument(),orderDate:serverToday??null});
-  const [sizeQuantityInputs,setSizeQuantityInputs]=useState(()=>developmentSizeQuantityInputs(document));
-  const [quantityInput,setQuantityInput]=useState(()=>document.quantity===null?"":String(document.quantity));
+  const creationRef=useRef(creation);creationRef.current=creation;
+  const [form, setForm] = useState(() => creation?.snapshot?.form??existingDraft?.document?.customerOrderDraft?.order ?? {...initialDevelopmentOrder(customers, source),...(serverToday?{orderDate:serverToday}:{}),...(existingDraft?{customerCode:existingDraft.customerCode??"",designStyleNo:existingDraft.designStyleNo,temporaryStyleNo:existingDraft.temporaryStyleNo}:{} )});
+  const [fixedCraft,setFixedCraft]=useState(creation?.snapshot?.fixedCraft??(existingDraft?existingDraft.timelineSchemaVersion===2:independentCraftsEnabled));
+  const [document,setDocument]=useState<DevelopmentDocument>(()=>creation?.snapshot?.document??(existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.developmentCreatedDate??null}):{...initialDevelopmentDocument(),orderDate:serverToday??null}));
+  const [sizeQuantityInputs,setSizeQuantityInputs]=useState(()=>creation?.snapshot?.sizeQuantityInputs??developmentSizeQuantityInputs(document));
+  const [quantityInput,setQuantityInput]=useState(()=>creation?.snapshot?.quantityInput??(document.quantity===null?"":String(document.quantity)));
   const [validationMode,setValidationMode]=useState<"save"|"publish"|null>(null);
-  const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(null);
-  const [preorder,setPreorder]=useState(existingDraft?.document?.customerOrderDraft?.stage==='preorder');
+  const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(creation?.snapshot?.patternChoice??null);
+  const [preorder,setPreorder]=useState(creation?.snapshot?.preorder??existingDraft?.document?.customerOrderDraft?.stage==='preorder');
   const [published,setPublished]=useState(existingDraft?.status==="published");
   const [publishedOrder,setPublishedOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
   const loadedVersion=useRef<number|null>(existingDraft?.version??null);
-  const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
-  const measurementIds=useRef(document.measurements.map(()=>createClientRequestId()));
-  const sharedPoColumns=useRef(form.lines.every(row=>row.sizes.length===form.lines[0]!.sizes.length&&row.sizes.every((size,index)=>size.size===form.lines[0]!.sizes[index]!.size))).current;
+  const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>(creation?.snapshot?.fileKind??"款图");
+  const measurementIds=useRef(creation?.snapshot?.measurementIds??document.measurements.map(()=>createClientRequestId()));
+  const sharedPoColumns=useRef(creation?.snapshot?.sharedPoColumns??form.lines.every(row=>row.sizes.length===form.lines[0]!.sizes.length&&row.sizes.every((size,index)=>size.size===form.lines[0]!.sizes[index]!.size))).current;
   const maxPoSizeCount=Math.max(...form.lines.map(row=>row.sizes.length));
-  const poSizeIds=useRef(Array.from({length:maxPoSizeCount},()=>createClientRequestId()));
+  const poSizeIds=useRef(creation?.snapshot?.poSizeIds??Array.from({length:maxPoSizeCount},()=>createClientRequestId()));
   const successfulUploads=useRef(new Map<string,string>()),publishKey=useRef<{payload:string;key:string}|null>(null);
   const edit=(patch:Partial<DevelopmentDocument>)=>setDocument(current=>({...current,...patch}));
   const validationDocument:DevelopmentDocument=document.customerOrderDraft?{...document,customerOrderDraft:{...document.customerOrderDraft,stage:preorder?'preorder':'formal'}}:document;
@@ -84,8 +89,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const picturesRef = useRef<CreatePicture[]>([]), previews = useRef<string[]>([]);
   const draftSaveKey = useRef<{payload: string; key: string} | null>(null);
   useEffect(() => () => {for (const url of previews.current) URL.revokeObjectURL(url);}, []);
-  const customerDateOverrides = useRef(new Set<number>(form.lines.flatMap((line,index)=>index>0&&line.customerWarehouseArrivalDate!==form.lines[0]?.customerWarehouseArrivalDate?[index]:[])));
-  const [developmentType, setDevelopmentType] = useState<"头版" | "开发板">(existingDraft?.developmentType==="开发板"?"开发板":"头版");
+  const customerDateOverrides = useRef(new Set<number>(creation?.snapshot?.dateOverrides??form.lines.flatMap((line,index)=>index>0&&line.customerWarehouseArrivalDate!==form.lines[0]?.customerWarehouseArrivalDate?[index]:[])));
+  const [developmentType, setDevelopmentType] = useState<"头版" | "开发板">(creation?.snapshot?.developmentType??(existingDraft?.developmentType==="开发板"?"开发板":"头版"));
   const [createdSource, setCreatedSource] = useState<string | null>(existingDraft?.sourceId ?? source?.sourceId ?? null);
   const [fixedCustomer, setFixedCustomer] = useState<string | null>(existingDraft?.customerCode ?? source?.customer ?? null);
   const [busy, setBusy] = useState(false), [error, setErrorState] = useState("");
@@ -128,14 +133,20 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   const draftSnapshot = (items: CreatePicture[], value=document, order=form, quantity=quantityInput) => JSON.stringify({intent, preorder, form:order, developmentType, document:value, quantityInput:quantity, sizeQuantityInputs, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
   const currentSnapshot = draftSnapshot(pictures);
-  const initial = useRef(currentSnapshot), dirty = useRef(false), completed = useRef(false);
+  const initial = useRef(creation?.snapshot?.baseline??currentSnapshot), dirty = useRef(false), completed = useRef(false);
+  const lostLocalFiles=useRef(creation?.snapshot?.localFiles??[]).current.filter(file=>document.files.some(row=>row.attachmentId===file.id));
+  useLayoutEffect(()=>{
+    const bridge=creationRef.current;if(!bridge||intent==='confirm_order')return;
+    const snapshot:CreationDraftSnapshot={intent,form,document,quantityInput,sizeQuantityInputs,developmentType,preorder,fixedCraft,measurementIds:measurementIds.current,poSizeIds:poSizeIds.current,sharedPoColumns,dateOverrides:[...customerDateOverrides.current],fileKind,patternChoice,baseline:initial.current,localFiles:[...lostLocalFiles,...picturesRef.current.filter(file=>!file.attachmentId&&document.files.some(row=>row.attachmentId===file.id)).map(file=>({id:file.id,name:file.file.name,type:file.file.type,size:file.file.size,kind:file.kind}))]};
+    try{bridge.onSnapshot(bridge.viewId,snapshot);}catch(reason){setError(reason instanceof Error?reason.message:'本页草稿未能保留，当前输入仍在，尚未提交');}
+  },[creation?.viewId,currentSnapshot,patternChoice,fileKind,fixedCraft]);
   const timeApplication=useOrderTimeApplication(()=>{completed.current=true;dirty.current=false;});
   type Calendar={sourceId:string|null;serverToday:string;minimumInitialCustomerDate:string;orderTimeEnabled?:boolean};
   const preloadedCalendar=Boolean(serverToday&&minimumDate&&(createdSource===null||calendarSourceId===createdSource));
   const [calendar,setCalendar]=useState<Calendar|null>(()=>preloadedCalendar?{sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!,orderTimeEnabled:existingDraft?.orderTimeEnabled??orderTimeEnabled}:null);
   const [calendarError,setCalendarError]=useState(''),[calendarRefresh,setCalendarRefresh]=useState(0);
   const preloadedCalendarConsumed=useRef(false);
-  const initialCalendarSource=useRef(createdSource),calendarInitialized=useRef<{sourceId:string|null}|null>(preloadedCalendar?{sourceId:createdSource}:null);
+  const initialCalendarSource=useRef(createdSource),calendarInitialized=useRef<{sourceId:string|null}|null>(preloadedCalendar||creation?.snapshot?{sourceId:createdSource}:null);
   const calendarReady=calendar?.sourceId===createdSource;
   const calendarToday=calendarReady?calendar!.serverToday:undefined;
   const dateMinimum=calendarReady?calendar!.minimumInitialCustomerDate:undefined;
@@ -217,6 +228,16 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   const save = async (draftOnly = false):Promise<boolean> => {
     if (writing.current || pendingSubmission.current) return false;
+    if(lostLocalFiles.length){setError('本页原本地附件尚未上传，刷新后须重新选择或移除这些本地项；未开始提交，其他资料仍保留。');return false;}
+    const creationScope=creationRef.current;
+    const requestCreation=async<T,>(path:string,method:'POST'|'PUT',body:unknown,key:string,sourceId:string|null,beforeVersion:number|null,proof:(value:T)=>{sourceId:string;version:number|null},native?:PendingDevelopmentSubmission):Promise<T>=>{
+      const outgoing:CreationOutgoing={path,method,key,body:JSON.stringify(body),sourceId,beforeVersion,...(native?{native}:{})};creationScope?.started(creationScope.viewId,outgoing);
+      try{
+        const value=await digitalRequest<T>(path,method,body,key);
+        if(creationScope){let result:{sourceId:string;version:number|null};try{result=proof(value);}catch{throw new DigitalRequestError('原创建操作回执尚未匹配，原资料和标识已保留；请勿另提',200,'INVALID_RESPONSE');}creationScope.acknowledged(creationScope.viewId,outgoing,result.sourceId,result.version);}
+        return value;
+      }catch(reason){if(reason instanceof DigitalRequestError&&!reason.resultUnknown)creationScope?.refused(creationScope.viewId,outgoing);throw reason;}
+    };
     writing.current = true; setBusy(true); setError("");setErrorField(null);
     let phase:SubmissionPhase='preparing';
     try {
@@ -246,7 +267,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       if (!id) {
         const payload = JSON.stringify(sourceInput);
         if (sourceKey.current?.payload !== payload) sourceKey.current = {payload, key: createClientRequestId()};
-        const next = await digitalRequest<Pick<DigitalSource,"sourceId">>("sources", "POST", sourceInput, sourceKey.current.key);
+        // The original creation acknowledgement intentionally contains only
+        // sourceId. Retain that known identity before the separate sheet read;
+        // a failed read must never authorize creating another source.
+        const next = await requestCreation<Pick<DigitalSource,'sourceId'>>("sources", "POST", sourceInput, sourceKey.current.key,null,null,value=>{
+          if(!DigitalIdSchema.safeParse(value?.sourceId).success)throw Error('SOURCE_RESPONSE_MISMATCH');
+          setCreatedSource(value.sourceId);setFixedCustomer(sourceInput.customerCode);return {sourceId:value.sourceId,version:null};
+        });
         id = next.sourceId; setCreatedSource(id); setFixedCustomer(sourceInput.customerCode);
       }
       let persistedDocument=document;
@@ -273,7 +300,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           if(!sameDevelopmentDocument(sheet.document,persistedDocument)){
             const body={expectedVersion:sheet.version,document:persistedDocument},payload=JSON.stringify(body);
             if(draftSaveKey.current?.payload!==payload)draftSaveKey.current={payload,key:createClientRequestId()};
-            sheet=await digitalRequest<DevelopmentSheet>(base,"PUT",body,draftSaveKey.current.key);
+            sheet=await requestCreation<DevelopmentSheet>(base,"PUT",body,draftSaveKey.current.key,id!,sheet.version,value=>{
+              if(value.sourceId!==id||value.version!==body.expectedVersion+1||!sameDevelopmentDocument(value.document,persistedDocument))throw Error('DEVELOPMENT_SAVE_RESPONSE_MISMATCH');return {sourceId:id!,version:value.version};
+            });
           }
           loadedVersion.current=sheet.version;
           if(sheet.document){
@@ -292,7 +321,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             phase='publish';
             const command:PendingDevelopmentSubmission={operation:'publish',sourceId:id,key:publishKey.current.key,body:structuredClone(body)};
             let publishedSheet:DevelopmentSheet;
-            try{publishedSheet=await digitalRequest<DevelopmentSheet>(`${base}/publish`,"POST",command.body,command.key);developmentSubmissionResult(command,publishedSheet);}
+            try{publishedSheet=await requestCreation<DevelopmentSheet>(`${base}/publish`,"POST",command.body,command.key,id!,sheet.version,value=>{developmentSubmissionResult(command,value);return {sourceId:id!,version:value.version};},command);if(!creationScope)developmentSubmissionResult(command,publishedSheet);}
             catch(reason){if(reason instanceof DigitalRequestError&&reason.resultUnknown){pendingSubmission.current=command;setSubmissionUnknown(true);}throw reason;}
             setPublished(true);
             if(publishedSheet.document?.customerOrderDraft?.withOrder){const draft=publishedSheet.document.customerOrderDraft.order;setPublishedOrder(draft);setForm(draft);}
@@ -308,7 +337,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         let order:DigitalOrder;
         const command:PendingDevelopmentSubmission={operation:'confirm',sourceId:id,body:structuredClone(orderInput),key:orderKey.current.key};
         phase='confirm';
-        try{order=await digitalRequest<DigitalOrder>(`sources/${id}/confirm`, "POST", command.body,command.key);developmentSubmissionResult(command,order);}
+        try{order=await requestCreation<DigitalOrder>(`sources/${id}/confirm`, "POST", command.body,command.key,id!,loadedVersion.current,value=>{developmentSubmissionResult(command,value);return {sourceId:id!,version:loadedVersion.current};},command);if(!creationScope)developmentSubmissionResult(command,order);}
         catch(reason){if(reason instanceof DigitalRequestError&&reason.resultUnknown){pendingSubmission.current=command;setSubmissionUnknown(true);}throw reason;}
         orderId = order.productionOrderId;
       }
@@ -336,6 +365,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     if ((!dirty.current || await confirmInApp("有未保存开发资料或订购信息，确定离开？")) && !writing.current) onCancel();
   };
   return <Surface className="development-create development-create-reference dx-doc-development"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save(preorder&&!published);}}>
+    {creation?.snapshot&&<p role="status">已恢复本页开发资料和订购草稿；未创建新档案、未自动提交。</p>}
+    {lostLocalFiles.length>0&&<p role="alert">原本地附件尚未上传，浏览器刷新未保留文件内容：{lostLocalFiles.map(file=>file.name).join('、')}。请重新选择，或沿附件列表明确移除原本地项后再办理；其他输入仍保留。</p>}
     <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</Button>}{!source&&!published&&!preorder&&<Button type="button" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)||(!source&&!published&&!preorder&&existingDraft?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>
     {preorder?<p className="dx-doc-hint">先记录已知的面料及备料信息，其余客户、PO和配码资料在正式下单时补齐。</p>:withOrder&&!published&&!initialCustomerOrderIsReady(form,confirmationCalendar)&&<p className="dx-doc-hint">订购信息待核实，可先发布开发资料；正式确认订单时再核对PO、颜色、尺码数量及客户约定出货日期。</p>}
 
@@ -391,7 +422,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {!source&&<div className="development-editor dx-doc-development">
       <DocumentErrors issues={issues}/>
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
-      <DevelopmentDocumentFields fixedCraft={fixedCraft} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
+      <DevelopmentDocumentFields fixedCraft={fixedCraft} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);const missing=lostLocalFiles.find(file=>file.id===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:missing?{filename:missing.name,mimeType:missing.type,sizeBytes:missing.size}:undefined;}} metadataPath={id=>createdSource&&!lostLocalFiles.some(file=>file.id===id)&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>lostLocalFiles.some(file=>file.id===id)?'':picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
     </div>}
     </fieldset>
     {calendar?.orderTimeEnabled&&withOrder&&!preorder&&<OrderTimeProductionRoute value={document.productionPlanning} disabled={busy} onChange={productionPlanning=>edit({productionPlanning})}/>}

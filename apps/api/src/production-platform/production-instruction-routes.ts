@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { SaveInstructionSchema, ReviewInstructionSourceSchema, PublishInstructionSchema, InstructionDateRequestSchema } from "@dx-rework/contracts/production-instruction";
+import { SaveInstructionSchema, ReviewInstructionSourceSchema, PublishInstructionSchema, InstructionDateRequestSchema,InstructionReceiptKeySchema } from "@dx-rework/contracts/production-instruction";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -14,6 +14,8 @@ export function registerInstructionRoutes(app: FastifyInstance, dependencies: Di
   const key=(request:FastifyRequest)=>typeof request.headers["idempotency-key"]==="string"?request.headers["idempotency-key"]:"";
   const base="/digital-production/orders/:orderId/instruction";
   app.get(base,async request=>{const query=parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),id(request,"orderId"),undefined,query.version);});
+  app.get(`${base}/save-receipt`,async request=>{const query=parse(z.object({key:InstructionReceiptKeySchema}).strict(),request.query);return service.saveReceipt(await actor(request),id(request,'orderId'),query.key);});
+  app.get(`${base}/date-requests/:requestId/decision-receipt`,async request=>{const query=parse(z.object({key:InstructionReceiptKeySchema,approved:z.enum(['true','false']).transform(value=>value==='true')}).strict(),request.query);return service.decisionReceipt(await actor(request),id(request,'orderId'),id(request,'requestId'),query.approved,query.key);});
   app.put(base,async request=>service.save(await actor(request),id(request,"orderId"),parse(SaveInstructionSchema,request.body),key(request)));
   app.post(`${base}/source-review`,async request=>service.reviewSource(await actor(request),id(request,"orderId"),parse(ReviewInstructionSourceSchema,request.body),key(request)));
   app.post(`${base}/publish`,async request=>service.publish(await actor(request),id(request,"orderId"),parse(PublishInstructionSchema,request.body),key(request)));

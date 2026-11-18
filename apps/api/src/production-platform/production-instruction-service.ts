@@ -1,3 +1,4 @@
+import {instructionSaveReceipt} from './instruction-command-receipts.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {validateSpecialCraftChoices} from './special-craft-library.js';
 import {readInitialTimelineInput} from './fixed-timeline-initial-input.js';
@@ -182,9 +183,14 @@ export class ProductionInstructionService {
     await new PoCustomerDateService(this.database).request(actor,id,input,key);
     return this.read(actor,id);
   }
+  async decisionReceipt(actor:TrustedActorContext,id:string,requestId:string,approved:boolean,key:string){return new PoCustomerDateService(this.database).decisionReceipt(actor,id,requestId,approved,key);}
+  async saveReceipt(actor:TrustedActorContext,id:string,key:string){return instructionSaveReceipt(this.database,actor,id,key);}
   async decideDate(actor:TrustedActorContext,id:string,requestId:string,approved:boolean,key:string){
     await new PoCustomerDateService(this.database).decide(actor,id,requestId,approved,key);
-    return this.read(actor,id);
+    try{return await this.read(actor,id);}catch(cause){
+      const error=new ApplicationError('PO_CUSTOMER_DECISION_READ_UNAVAILABLE','原改期决定已返回，当前制单资料读取失败；请只读核对原决定回执',503);
+      Object.defineProperty(error,'cause',{value:cause});throw error;
+    }
   }
   async legacyDateGuard(db: PoolClient, id: string) {
     if (!(await db.query("SELECT to_regclass('digital_instruction_documents') AS relation")).rows[0]?.relation) return false;
