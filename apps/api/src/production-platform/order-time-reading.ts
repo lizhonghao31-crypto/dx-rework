@@ -1,3 +1,4 @@
+import {cancelledTaskHistory,cancelledWorkTaskKind} from './cancelled-task-history.js';
 import {preparedStoredRewash} from './order-time-washing-rework.js';
 import {journeyWashingReworkFact,journeyUnplannedWashingRework} from './journey-washing-rework-facts.js';
 import {attachFactoryTaskCompletions} from './factory-task-completion.js';
@@ -27,7 +28,7 @@ import {nativeTaskReadiness,nativeCuttingReadiness,type NativeCuttingReadiness} 
 import {nativeCuttingCompletions,type NativeCuttingCompletion} from './cutting-completion-facts.js';
 import type {FixedScheduleBasis} from './fixed-schedule-basis.js';
 import type {ScheduleFact,ScheduleWork} from './fixed-schedule-progress.js';
-import {journeyTermination} from './journey-termination.js';
+import {journeyTermination,type JourneyTermination} from './journey-termination.js';
 import {orderTimeCreated} from './order-time-created.js';
 import {orderTimePolicyHistory} from './order-time-native-timing.js';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
@@ -38,13 +39,14 @@ const unknown:ScheduleOccurrence={precision:'unknown'};
 const instant=(value:unknown):ScheduleOccurrence=>value instanceof Date?{precision:'instant',at:value.toISOString()}:typeof value==='string'&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?{precision:'instant',at:new Date(value).toISOString()}:unknown;
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
-type NativeTask={ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;route_instance_id:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
-type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;unplannedRewashing?:ReturnType<typeof journeyUnplannedWashingRework>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
+type NativeTask={cancel_events?:string[];ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;route_instance_id:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
+type Evidence={termination?:JourneyTermination|null;tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;unplannedRewashing?:ReturnType<typeof journeyUnplannedWashingRework>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
 async function taskEvidence(db:DB,resource:BusinessTimeScope,item:OrderJourney):Promise<Evidence>{
  const tasks=(await db.query<NativeTask>(`SELECT t.task_id,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,a.task_kind,a.source_id,a.production_order_id,t.route_version,t.route_instance_id,t.state,
+  ARRAY(SELECT e.event_id::text FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.resource_kind=$3 AND e.resource_id=$4 AND e.event_kind='cancel' ORDER BY e.event_id LIMIT 2) AS cancel_events,
   t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,position.step_id,d.sla_basis,d.entered_at AS native_entered_at,d.warning_at,
   EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned,
   EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id AND f.kind='尾查退回') AS rejected
@@ -53,14 +55,14 @@ async function taskEvidence(db:DB,resource:BusinessTimeScope,item:OrderJourney):
   LEFT JOIN LATERAL(SELECT r.sla_basis,r.entered_at,r.warning_at FROM digital_production_deadline_revisions r WHERE r.task_id=t.task_id
    ORDER BY CASE WHEN a.source_id IS NULL AND t.state='completed' AND r.reason='completion' THEN 0 ELSE 1 END,r.revision_id DESC LIMIT 1) d ON true
   WHERE ($1::uuid IS NOT NULL AND a.production_order_id=$1) OR ($2::uuid IS NOT NULL AND a.source_id=$2)
-  ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,resource.kind==='source'?resource.id:item.sourceId])).rows;
+  ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,resource.kind==='source'?resource.id:item.sourceId,resource.kind,resource.id])).rows;
  await attachDevelopmentRegistrations(db,tasks);
  await attachFactoryTaskCompletions(db,tasks);
  const ids=tasks.map(task=>task.task_id),readiness=await nativeTaskReadiness(db,ids);
  return {tasks,readiness,cutting:resource.kind==='order'?await nativeCuttingReadiness(db,ids):[],cutCompletions:resource.kind==='order'?await nativeCuttingCompletions(db,resource.id):[]};
 }
 
-function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,evidence:Evidence):{fact:ScheduleFact;task:NativeTask|null;native?:SlaNodeFact}{
+function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,evidence:Evidence):{fact:ScheduleFact;task:NativeTask|null;native?:SlaNodeFact;unprovenCancelledTask?:true}{
  if(work.canonicalWorkRef?.startsWith('creation:')){
   const created=evidence.created?.reference===work.canonicalWorkRef?evidence.created:null,at=created?instant(created.at):unknown;
   return {fact:{...empty(),ready:at,clockStart:at,completed:at,businessCompleted:Boolean(created),evidenceRefs:created?[created.evidence]:[]},task:null};
@@ -71,10 +73,16 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  // A stored source reference may never borrow another resource or latest round.
  if(declared&&declared[1]!==sourceId)return {fact:empty(),task:null};
  const step=work.canonicalWorkRef?.match(/:step:([^:]+):/)?.[1];
- const tasks=evidence.tasks.filter(task=>task.state!=='cancelled'&&(task.task_kind===key||key==='bulk_cutting'&&task.task_kind==='bulk_cutting_external')
+ const cancelledKind=cancelledWorkTaskKind(key,raw);
+ const candidates=evidence.tasks.filter(task=>(task.task_kind===(task.state==='cancelled'?cancelledKind:key)||key==='bulk_cutting'&&task.task_kind==='bulk_cutting_external')
   &&(resource.kind==='source'||shared?task.source_id===sourceId&&round!==null&&task.route_version===round:task.production_order_id===resource.id)
   &&(!step||task.step_id===step));
+ const tasks=candidates.filter(task=>task.state!=='cancelled'||cancelledTaskHistory(task,resource,item,evidence.termination,cancelledKind,scope.lineId,work.canonicalWorkRef));
  const task=tasks.length===1?tasks[0]!:null;
+ // A cancelled task is readable only through its own original cancellation
+ // and current identity. Kind-level native maps, node entry fields and old
+ // snapshots cannot supply the missing proof or resolve multiple originals.
+ if(!task&&evidence.termination?.kind==='cancelled'&&candidates.some(candidate=>candidate.state==='cancelled'))return {fact:empty(),task:null,unprovenCancelledTask:true};
  const perPo=scope.lineId!==null&&work.id.endsWith(':'+scope.lineId);
  const nodes=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.state!=='unavailable'&&node.key===key
   &&(!scope.lineId||!node.records.some(record=>record.lineId)||node.records.some(record=>record.lineId===scope.lineId))
@@ -86,7 +94,7 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  const direct=matchesReadRound?(native[work.id]??native[raw]??(!shared&&resource.kind==='order'&&!scope.lineId?native[work.parameterKey]:undefined)):undefined;
  // Task-based native evidence is exact even when its map key includes task ID.
  const facts=task?Object.values(native).filter(fact=>fact.evidence.includes(`task:${task.task_id}`)):[];
- const value=facts.length===1?facts[0]:direct;
+ const value=facts.length===1?facts[0]:task?.state==='cancelled'?undefined:direct;
  let fact:ScheduleFact=value?{...empty(),ready:instant(value.startedAt),clockStart:instant(value.startedAt),completed:value.completedDate?{precision:'date',date:value.completedDate}:instant(value.completedAt),businessCompleted:value.businessCompleted===true||Boolean(value.completedAt||value.completedDate),evidenceRefs:[value.evidence]}:empty();
  if(task){
   const readiness=evidence.readiness.get(task.task_id),accepted=task.state==='completed'&&!task.returned&&!task.rejected;
@@ -94,7 +102,7 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
   const ready=readiness?.tracked?instant(readiness.firstReadyAt):responsibility?instant(responsibility.at):['现场登记','已核实'].includes(task.entered_quality)?instant(task.entered_at):unknown;
   fact={...fact,ownTaskId:task.task_id,ready,clockStart:ready,completed:accepted&&['现场登记','已核实'].includes(task.completed_quality)?instant(task.completed_at):unknown,businessCompleted:accepted,
    notYetReady:readiness?.tracked===true&&readiness.eventId===null&&!accepted,
-   evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...readiness?.basis??[]]};
+   evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...(task.cancel_events??[]).map(id=>`digital_production_task_events:${id}`),...readiness?.basis??[]]};
  }else if(node&&!value){
   const actual=node.state==='inherited'?node.inheritedResult?.adoptedAt:node.actualAt;
   const trusted=node.state==='inherited'?Boolean(node.inheritedResult?.adoptionSourceRef&&node.inheritedResult.adoptedRound===node.round):node.actualQuality!=='missing'&&node.actualQuality!=='unavailable';
@@ -140,9 +148,20 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    // cannot hide this exact scope's already verified native completion.
    const emptyPrevious=previous&&!previous.businessCompleted&&!previous.evidenceRefs.length&&[previous.ready,previous.clockStart,previous.completed].every(value=>value.precision==='unknown');
    let fact=previous&&!(emptyPrevious&&own.fact.businessCompleted&&own.fact.completed.precision!=='unknown')?structuredClone(previous):own.fact;
+   if(own.unprovenCancelledTask)fact=own.fact;
+   // Cancellation is not completion. Keep any real per-PO completion from
+   // this exact task's native facts, never a retired task's cached A/window.
+   if(own.task?.state==='cancelled'){
+    fact={...fact,...own.fact};
+    const factoryOriginal=previous?.ownTaskId===own.task.task_id&&['process_logistics','bulk_qc','warehouse_dispatch'].includes(own.task.task_kind)?previous:undefined;
+    if(own.fact.ownWindows)fact.ownWindows=own.fact.ownWindows;
+    else if(factoryOriginal?.ownWindows?.length){fact.ownWindows=factoryOriginal.ownWindows;fact.ready=factoryOriginal.ready;fact.clockStart=factoryOriginal.clockStart;}
+    else delete fact.ownWindows;
+   }
    // Current exact-task R can invalidate a stale legacy clock. Keep the
    // existing completion/date mapping and original target history separate.
-   if(own.task&&own.task.source_id)fact={...fact,ready:own.fact.ready,clockStart:own.fact.clockStart,notYetReady:own.fact.notYetReady===true,ownTaskId:own.task.task_id,evidenceRefs:[...new Set([...fact.evidenceRefs,...own.fact.evidenceRefs])]};
+   const frozenFactory=own.task?.state==='cancelled'&&!own.task.source_id&&['process_logistics','bulk_qc','warehouse_dispatch'].includes(own.task.task_kind)&&Boolean(fact.ownWindows?.length);
+   if(own.task&&(own.task.source_id||own.task.state==='cancelled'))fact={...fact,...(frozenFactory?{}:{ready:own.fact.ready,clockStart:own.fact.clockStart}),notYetReady:own.fact.notYetReady===true,ownTaskId:own.task.task_id,evidenceRefs:[...new Set([...fact.evidenceRefs,...own.fact.evidenceRefs])]};
    if(evidence.washing?.[source.id])fact=structuredClone(evidence.washing[source.id]!);
    if(framework){
     const names:Record<string,string>={fabric_receipt_a:'fabric_receipt',fabric_receipt_b:'fabric_receipt',warehouse_accessories:'accessories_ready',warehouse_dispatch:'processing_dispatch'};
@@ -235,14 +254,15 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
  // before a formal instruction exists. Missing targets alone prove nothing.
  const framework=frameworkJourneyBasis(saved,scopes,evidence.policies??[],item.asOf??saved.time.now);
  const noSecondary=resource.kind==='order'&&saved.input.route.complete&&!saved.input.work.some(work=>(['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_qc'].includes(work.parameterKey)||work.parameterKey.startsWith('bulk_special_')));
- return {...(framework?{framework}:{}),version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',...(noSecondary?{notApplicableNodes:['process_logistics','bulk_qc'] as Array<'process_logistics'|'bulk_qc'>}:{}),scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:legacy?.termination??null,
+ return {...(framework?{framework}:{}),version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',...(noSecondary?{notApplicableNodes:['process_logistics','bulk_qc'] as Array<'process_logistics'|'bulk_qc'>}:{}),scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:evidence.termination??legacy?.termination??null,
   pending:!saved.input.route.complete||scopes.some(scope=>{const required=new Set(requiredFixedTimelineWork(scope.work,scope.terminalIds).map(work=>work.id));return scope.work.some(work=>required.has(work.id)&&(!work.start||!work.end));})};
 }
 
-export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,legacy:FixedScheduleBasis|null,time?:BusinessTime):Promise<FixedScheduleBasis|null>{
+export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,legacy:FixedScheduleBasis|null,time?:BusinessTime,termination?:JourneyTermination|null):Promise<FixedScheduleBasis|null>{
  const saved=await new OrderTimePlanRepository(db).current(resource);if(!saved)return legacy;
  if(time&&saved.time.scenarioId!==time.scenarioId)throw Error('本单时间方案与当前业务时钟范围不一致');
- const evidence=await taskEvidence(db,resource,item),root=saved.input.work.find(work=>work.canonicalWorkRef?.startsWith('creation:'))?.canonicalWorkRef?.match(/^creation:(source|order):([0-9a-f-]{36})$/);
+ const evidence=await taskEvidence(db,resource,item);evidence.termination=termination===undefined?await journeyTermination(db,resource,asOf):termination;
+ const root=saved.input.work.find(work=>work.canonicalWorkRef?.startsWith('creation:'))?.canonicalWorkRef?.match(/^creation:(source|order):([0-9a-f-]{36})$/);
  evidence.policies=await orderTimePolicyHistory(db,resource);
  // item.sourceId was resolved under the caller's original order authorization.
  // Read once on that same RR proxy, not per PO/work and not via a new connection.
@@ -284,7 +304,7 @@ export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:O
 
  }
  const result=orderTimeReadingBasis(saved,resource,item,currentNative,evidence,legacy);
- result.termination=await journeyTermination(db,resource,asOf);return result;
+ result.termination=evidence.termination;return result;
 }
 
 /** Existing authorized missing-time KPI, from this exact policy/fact scope.

@@ -4,9 +4,10 @@ import {StatusBadge} from '@dx-rework/ui';
 import {CockpitDate} from './cockpit-date.js';
 import {CockpitActualDates,CockpitTargetDifference,observedTargetDelta} from './cockpit-fixed-schedule.js';
 import {cockpitNodeStatus,cockpitNodeTone} from './cockpit-node-rows.js';
-import {cockpitResponsibilityResult} from './cockpit-node-summary.js';
+import {cockpitResponsibilityResult,cockpitTerminationHistory} from './cockpit-node-summary.js';
 
 export function frameworkResponsibility(node:JourneyNode,asOf:string|undefined){
+ const stopped=cockpitTerminationHistory(node);if(stopped)return stopped;
  const targets=node.fixedTargets??[];if(!targets.length)return cockpitResponsibilityResult(node);
  if(node.planningOnly)return {text:'不单独计责',tone:'neutral'} as const;
  const late=targets.some(target=>observedTargetDelta(target.progress,asOf).kind==='late');

@@ -7,12 +7,41 @@ import {describe,it,expect} from 'vitest';
 import type {JourneyNode,JourneyTiming,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {evaluateFixedScheduleScope,type ScheduleScopeInput} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
 import {CockpitActualDates,CockpitFixedTargetDates,cockpitTargetDifference,cockpitOwnStatus,cockpitDuration,cockpitDurationRange,observedTargetDelta,cockpitScopeProgress,cockpitScheduleReason} from '../../apps/web/src/cockpit-fixed-schedule.js';
-import {CockpitNodeSummary} from '../../apps/web/src/cockpit-node-summary.js';
+import {CockpitNodeSummary,cockpitTerminationHistory,cockpitResponsibilityResult} from '../../apps/web/src/cockpit-node-summary.js';
+import {frameworkResponsibility} from '../../apps/web/src/cockpit-framework-nodes.js';
 import {cockpitNodeStatus} from '../../apps/web/src/cockpit-node-rows.js';
 const scope=(id:string,end='2026-11-10T10:00:00.000Z'):ScheduleScopeInput=>({scopeRef:'po:'+id,lineId:id,targetRevision:'TEST1',work:[{id:'work',canonicalWorkRef:'work:'+id,dependsOn:[],start:'2026-11-10T08:00:00.000Z',end,minutes:120,calendar:'continuous',responsibilitySlaRef:'TEST original adopted',responsibilityMinutes:120,responsibilityCalendar:'continuous'}],facts:{work:{ready:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},clockStart:{precision:'instant',at:'2026-11-10T08:00:00.000Z'},completed:{precision:'unknown'},businessCompleted:false,waitingForPredecessors:false,evidenceRefs:['TEST original readiness']}},terminalIds:['work'],customerGoal:end});
 const projected=(input=scope('A'),now='2026-11-10T10:00:00.000Z')=>evaluateFixedScheduleScope(input,now).nodes[0]!;
 const node=(id:string,p=projected()):JourneyNode=>({key:'bulk_cutting',instanceId:id,label:'开裁',stage:'cutting',state:'active',current:true,round:1,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'running',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,fixedTargets:[{scopeRef:p.scopeRef,lineId:id,progress:p}]});
 const responsibility=(id:string,stopped=false):JourneyTiming=>({id,label:'TEST original PO '+id,stage:'cutting',kind:'duration',status:stopped?'terminated':'running',actualStart:'2026-11-10T08:00:00.000Z',actualEnd:null,target:{at:'2026-11-10T10:00:00.000Z',reasons:[]},original:{at:'2026-11-10T10:00:00.000Z',reasons:[]},current:{at:'2026-11-10T10:00:00.000Z',reasons:[]},forecast:{at:null,reasons:[]},forecastBasis:'unknown',...(stopped?{termination:{kind:'special_closure',at:'2026-11-10T14:00:00.000Z',sourceRef:'TEST exact original closure',elapsedSeconds:21600,overdueSeconds:14400}}:{})});
+it('shows the same frozen four-hour history in current and framework responsibility without an active risk or invented completion',()=>{
+ const progress=evaluateFixedScheduleScope(scope('A'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value={...node('A',progress),state:'cancelled' as const},before=structuredClone(value);
+ const expected={text:'已取消 · 计时已终止；终止前超时4小时',tone:'neutral'};
+ expect(cockpitTerminationHistory(value)).toEqual(expected);expect(cockpitResponsibilityResult(value)).toEqual(expected);expect(frameworkResponsibility(value,'2026-11-12T20:00:00.000Z')).toEqual(expected);
+ expect(originalNodeDeadlineLabel(value)).toContain('2026/11/10');expect(value).toEqual(before);expect(value.actualAt).toBeNull();expect(value.risks).toEqual([]);
+});
+it('distinguishes known zero from unknown termination without calling either a normal completed result',()=>{
+ const early=evaluateFixedScheduleScope(scope('A'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:'2026-11-10T09:00:00.000Z'}).nodes[0]!,zero=node('A',early);
+ expect(cockpitTerminationHistory(zero)?.text).toBe('计时已终止；终止前未超时');
+ const p=evaluateFixedScheduleScope(scope('B'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:null}).nodes[0]!,unknown=node('B',p);
+ expect(originalNodeDeadlineLabel(unknown)).toContain('2026/11/10');expect(cockpitTerminationHistory(unknown)?.text).toContain('终止前责任超时待核');expect(cockpitTerminationHistory(unknown)?.text).not.toContain('按时完成');
+});
+it('keeps terminated planning-only work outside responsibility history and its original not-rated framework result',()=>{
+ const p=evaluateFixedScheduleScope(scope('A'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value={...node('A',p),planningOnly:true,state:'cancelled' as const};
+ expect(frameworkResponsibility(value,'2026-11-12T20:00:00.000Z')).toEqual({text:'不单独计责',tone:'neutral'});
+ expect(cockpitTerminationHistory(value)).toBeNull();expect(cockpitResponsibilityResult(value).text).not.toContain('终止前超时');
+});
+it('retains known, interval and unknown PO histories separately without adding or offsetting them',()=>{
+ const a=evaluateFixedScheduleScope(scope('A'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value=node('A',a),b=node('B',structuredClone(a)).fixedTargets![0]!,c=node('C',structuredClone(a)).fixedTargets![0]!;
+ b.progress.ownSla.overdueMinutes={minimum:60,maximum:120};c.progress.ownSla.overdueMinutes=null;c.progress.ownSla.state='unknown';value.fixedTargets!.push(b,c);const before=structuredClone(value),text=cockpitTerminationHistory(value)!.text;
+ expect(text).toContain('终止前超时4小时');expect(text).toContain('终止前超时1小时～2小时');expect(text).toContain('另有范围');expect(text).toContain('逐范围查看');expect(text).not.toContain('6小时');expect(value).toEqual(before);
+});
+it('uses exact legacy termination values only when scoped fixed proofs are absent and never fills an unknown PO from another native D',()=>{
+ const value=node('A');delete value.fixedTargets;value.timing=responsibility('po:A',true);value.timings=[structuredClone(value.timing)];expect(cockpitTerminationHistory(value)?.text).toBe('计时已终止；终止前超时4小时');
+ const p=evaluateFixedScheduleScope(scope('A'),'2026-11-11T20:00:00.000Z',{kind:'cancelled',at:null}).nodes[0]!;value.fixedTargets=[node('A',p).fixedTargets![0]!];expect(cockpitTerminationHistory(value)?.text).not.toContain('4小时');expect(cockpitTerminationHistory(value)?.text).toContain('待核');
+ value.timings!.push(responsibility('po:B'));expect(cockpitTerminationHistory(value)).toBeNull();expect(cockpitTerminationHistory(node('B'))).toBeNull();
+ value.state='completed';expect(cockpitTerminationHistory(value)).toBeNull();
+});
 it.each(['active','blocked'] as const)('excludes a stopped %s from detail progress but preserves state, missing A and frozen240 minutes',state=>{
  const p=evaluateFixedScheduleScope(scope('A'),'2026-11-11T14:00:00.000Z',{kind:'special_closure',at:'2026-11-10T14:00:00.000Z'}).nodes[0]!,value={...node('A',p),state},before=structuredClone(value);
  expect(nodeIsInProgress(value)).toBe(false);expect(nodeIsTerminated(value)).toBe(true);expect(value.fixedTargets![0]!.progress.ownSla.overdueMinutes).toEqual({minimum:240,maximum:240});expect(value).toEqual(before);
