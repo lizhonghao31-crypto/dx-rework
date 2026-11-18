@@ -230,7 +230,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   value.formalInputs={version:'approved-remaining-v1',progress:Object.fromEntries(progress),notBefore,pendingWork:pending};
   formalEnds=formalRemainingSchedule(value,value.formalInputs,saved,time,'本次拟采用安排').terminalEnds;
  }
- const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal,formalEnds});
+ const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal,...(formalEnds?{formalEnds}:{})});
  if(plan.company.framework&&frameworkRoute&&datedScopes.length){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
   const created=resource?await orderTimeCreated(db,resource):null;
