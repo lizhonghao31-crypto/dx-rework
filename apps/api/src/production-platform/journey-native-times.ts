@@ -3,6 +3,7 @@ import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import type {reworkSlaEvidence} from './rework-sla-evidence.js';
 import type {NativeCuttingReadiness} from './task-readiness-facts.js';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
+import {journeyCompletion} from './journey-projection.js';
 
 /** A logical all-PO join has no invented duration or task-entry timestamp. Its
  * completion is the latest first-ready fact of the exact current cut scopes. */
@@ -31,17 +32,27 @@ export function attachJourneyNativeTimes(item:OrderJourney,native:Native,asOf:st
    node.enteredAt=instant(first,asOf)?first:null;
   }
   if(node.key!=='rework'||!['active','completed'].includes(node.state))continue;
-  const scopes=node.records.filter(record=>record.domain==='rework'&&record.id===node.instanceId&&record.lineId);
-  const windows=native.rework.filter(window=>window.reworkId===node.instanceId&&scopes.some(record=>record.lineId===window.lineId));
+  // The native rework order is bound to one original receiving/PO line.
+  // Neither another PO nor a partial/duplicate set can provide this window.
+  const scopes=new Set(node.records.flatMap(record=>record.domain==='rework'&&record.id===node.instanceId&&record.lineId?[record.lineId]:[]));
+  const windows=native.rework.filter(window=>window.reworkId===node.instanceId&&scopes.has(window.lineId));
   node.actualAt=null;node.actualDate=null;node.actualQuality='missing';node.completionResult=node.state==='completed'?'unknown':null;node.overdueSeconds=null;
-  if(!windows.length){node.enteredAt=null;node.sla='not_started';continue;}
-  node.enteredAt=windows.every(window=>instant(window.startedAt,asOf))?new Date(Math.min(...windows.map(window=>Date.parse(window.startedAt!)))).toISOString():null;
+  delete node.nativeWindows;
+  const window=scopes.size===1&&windows.length===1?windows[0]:undefined;
+  if(!window?.assignmentId||window.windowKey!==`rework:${node.instanceId}:${window.assignmentId}`||!instant(window.startedAt,asOf)){
+   node.enteredAt=null;node.sla='not_started';continue;
+  }
+  node.enteredAt=window.startedAt;
   // Worker completion and the later quantity/finance workflow have different
   // owners. Preserve the business state while projecting this exact work A.
-  const complete=windows.every(window=>window.complete&&instant(window.completedAt,asOf)&&(!window.startedAt||Date.parse(window.completedAt)>=Date.parse(window.startedAt)));
-  node.actualAt=complete?new Date(Math.max(...windows.map(window=>Date.parse(window.completedAt!)))).toISOString():null;
-  node.actualDate=null;node.actualQuality=complete?'unverified':'missing';node.completionResult=complete||node.state==='completed'?'unknown':null;node.overdueSeconds=null;
-  node.sla=complete?'finished':node.enteredAt?'running':'not_started';
+  const complete=window.complete&&instant(window.completedAt,asOf)&&Date.parse(window.completedAt)>=Date.parse(window.startedAt);
+  node.actualAt=complete?window.completedAt:null;
+  node.actualQuality=complete?'verified':'missing';node.sla=complete?'finished':'running';
+  const deadline=window.snapshotId&&window.deadline&&Number.isFinite(Date.parse(window.deadline))&&Date.parse(window.deadline)>=Date.parse(window.startedAt)?window.deadline:null;
+  const line=item.lines?.find(row=>row.id===window.lineId);
+  node.nativeWindows=[{evidence:window.evidence,scopeLabel:line?`PO ${line.po??'号码尚未取得'} · ${line.color}`:'原返工范围',startedAt:node.enteredAt,deadline,warningAt:deadline?window.warningAt:null,
+   completedAt:node.actualAt,complete,snapshotId:window.snapshotId}];
+  if(complete){const result=journeyCompletion(deadline,node.actualAt,true);node.completionResult=result.result;node.overdueSeconds=result.overdueSeconds;}
  }
 }
 

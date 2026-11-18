@@ -103,6 +103,8 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
   input.facts={a:fact(0,null,{terminated:true})};expect(evaluate(input,30).nodes[0]!.ownSla.overdueMinutes).toBeNull();
   input.facts={a:fact(0,null,{terminated:true,terminationAt:at(8)})};
   for(const now of [8,20,30])expect(evaluate(input,now).nodes[0]!.ownSla.overdueMinutes).toEqual({minimum:240,maximum:240});
+  input.facts={a:fact(0,null,{terminated:true,terminationAt:null})};
+  expect(evaluateFixedScheduleScope(input,at(20),{at:at(12),kind:'cancelled'}).nodes[0]!.ownSla).toMatchObject({deadlineAt:at(4),state:'unknown',overdueMinutes:null});
  });
 
 });

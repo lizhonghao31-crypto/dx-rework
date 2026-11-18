@@ -1,5 +1,6 @@
 import { JOURNEY_NODES, JOURNEY_STAGES, isJourneyPlanningNode, type JourneyDisplay, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import {journeyObservedDay} from './journey-risk-clock.js';
+import {journeyCompletedAtObservation} from './journey-completion-evidence.js';
 
 /** The same whole-order state for the full DTO and lightweight SQL reductions.
  * Node lateness does not redefine the customer's whole-order delivery state. */
@@ -10,7 +11,6 @@ export function journeyOrderState(input:{cancelled:boolean;closed:boolean;specia
 
 /** Canonical business shares, independent of legacy count flags and PO/task multiplicity. */
 const businessKey=(key:string)=>key==="development_material_recheck"?"development_materials":key;
-const finished=(node:JourneyNode)=>node.state==="completed"||node.state==="inherited"&&Boolean(node.inheritedFrom);
 export function journeyActivated(order:Pick<OrderJourney,'stages'>):boolean{
  const nodes=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!isJourneyPlanningNode(node));
  return nodes.some(node=>node.stage!=="creation"&&Boolean(node.enteredAt))
@@ -36,7 +36,7 @@ export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelle
     // A missing catalog definition/permission/applicability cannot disappear from the denominator.
     const unknown=[...expectedKeys].some(key=>!groups.has(key))||candidates.some(node=>node.state==="unavailable"||node.progressApplicability==="unknown");
     const applicable=[...groups.values()].filter(group=>!group.every(node=>node.state==="not_applicable"||node.progressApplicability==="not_applicable"));
-    const completed=applicable.filter(group=>group.filter(node=>node.state!=="not_applicable"&&node.progressApplicability!=="not_applicable").every(finished)).length;
+    const completed=applicable.filter(group=>group.filter(node=>node.state!=="not_applicable"&&node.progressApplicability!=="not_applicable").every(node=>journeyCompletedAtObservation(node,asOf))).length;
     const current= candidates.filter(node=>!["completed","inherited","not_applicable","cancelled"].includes(node.state));
     const risk=current.some(node=>node.risks.includes("overdue"))?"overdue" as const:current.some(node=>node.risks.includes("due_soon"))?"due_soon" as const:unknown||current.some(node=>node.risks.includes("unknown"))?"unknown" as const:"normal" as const;
     return {key:definition.key,ratio:unknown?null:applicable.length?completed/applicable.length:1,applicable:unknown?null:applicable.length,completed:unknown?null:completed,notApplicable:!unknown&&!applicable.length,risk};
