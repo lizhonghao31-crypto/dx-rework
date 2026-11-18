@@ -43,8 +43,8 @@ it('separates a formally approved remaining schedule from old evaluation targets
  const previous:StoredOrderTimePlan={id:'TEST legacy revision 3',resource:source,revision:3,input,targets:{[scopeRef]:targetIndex},identityHash:'TEST legacy hash',time,actorId:'TEST approver',eventRef:'TEST native confirmation',changeKind:'arrangement'};
  expect(evaluateOrderTimeScenario({...input,start:{precision:'instant',value:time.now,source:'TEST observed'},fixedTargets:targetIndex})[0]!.targets.find(row=>row.id==='cut')?.end.at).toBe(B.value);
  expect(targetIndex.cut!.end.at).toBe(B.value);
- expect(arrangedOrderTimeTarget(previous,scopeRef,'cut',true)?.end.at).toBeNull();
- expect(arrangedOrderTimeTarget({...previous,changeKind:'initial'},scopeRef,'cut',true)?.end.at).toBe(B.value);
+ expect(arrangedOrderTimeTarget(previous,scopeRef,'cut')?.end.at).toBeNull();
+ expect(arrangedOrderTimeTarget({...previous,changeKind:'initial'},scopeRef,'cut')?.end.at).toBe(B.value);
  const snapshot:FormalRemainingInputs={version:'approved-remaining-v1',notBefore:{},progress:{paper:{completed:true,actualAt:'2026-12-05T23:00:00.000Z',readyAt:null,deadline:null}}};
  const completeAt='2026-12-08T00:00:00.000Z'; // 48 continuous hours after approval
  for(const withOldTargets of [previous,{...previous,targets:{}}]){
@@ -66,7 +66,7 @@ it('separates a formally approved remaining schedule from old evaluation targets
  expect(missing[scopeRef]!.cut!.end.at).toBeNull();
  const completed='2026-12-05T23:30:00.000Z';
  const finished=formalRemainingSchedule(input,{...snapshot,progress:{...snapshot.progress,cut:{...snapshot.progress.paper!,actualAt:completed}}},previous,time,'TEST already completed terminal');
- expect(finished.targets[scopeRef]!.cut).toEqual(targetIndex.cut);
+ expect(finished.targets[scopeRef]!.cut?.end.at).toBeNull();
  expect(finished.terminalEnds[scopeRef]?.[0]?.at).toBe(completed);
  expect(input.scopes[0]).toMatchObject({goals:{cut:B},customerGoal:M});
  expect(previous.targets[scopeRef]!.cut!.end.at).toBe(B.value);

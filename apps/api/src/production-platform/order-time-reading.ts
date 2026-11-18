@@ -149,7 +149,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const source=byId.get(definition.id)!,originalTarget=saved.targets[scope.scopeRef]?.[source.id],target=framework?arrangedOrderTimeTarget(saved,scope.scopeRef,source.id):originalTarget,policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
    const old=original?.work.find(value=>source.canonicalWorkRef?value.canonicalWorkRef===source.canonicalWorkRef:value.id===source.id);
    const own=nativeFor(source,scope,resource,item,native,evidence),previous=old&&original?.facts[old.id];
-   const arrangement=framework?undefined:arrangedOrderTimeTarget(saved,scope.scopeRef,source.id,own.task?.state==='pending');
+   const arrangement=framework?undefined:arrangedOrderTimeTarget(saved,scope.scopeRef,source.id);
    const currentPrecision=frameworkTargetPrecision(arrangement);
    const approvedCurrentTarget=!framework&&(saved.input.formalTargets?.[scope.scopeRef]||arrangement!==originalTarget)
     ?{at:arrangement?.end.at??null,date:currentPrecision.targetDate,precision:currentPrecision.targetPrecision}:undefined;
