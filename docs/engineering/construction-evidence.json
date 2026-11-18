@@ -2,7 +2,7 @@
   "version": 1,
   "base": "24c259984b2242b226ee1ce4a9c9ebbe2f81e02c",
   "risk": "full",
-  "sourceFingerprint": "cf73ef91c77bbdf0cb0e09565e7c84da9fa1fc71b90d362fcc0e6eb3f6ba901f",
+  "sourceFingerprint": "0ce8bac0143dc53f7f0fdfc6bbe44b2d4f7ba6f82deb7675d051543e006fc95f",
   "rules": [
     {
       "rule": "Solve the formally adopted remaining work independently from historical evaluation targets and forecasts",
@@ -54,15 +54,15 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-plan-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/arrangement-scope-complete-native/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-plan-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/arrangement-chained-complete-native/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "925f2162ca40e2f4c51b450c83bf31cbdbce0321",
-      "sourceFingerprint": "cf73ef91c77bbdf0cb0e09565e7c84da9fa1fc71b90d362fcc0e6eb3f6ba901f",
-      "startedAt": "2026-11-18T23:25:31.335039+00:00",
-      "endedAt": "2026-11-18T23:26:48.306281+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/arrangement-scope-complete-native/tests.log",
-      "logSha256": "6b0cec7f238789c3daf2020d67acec4092684e27081150c95a5e52654d7d26d6",
+      "testedHead": "b63b2d2ff5010701b98a86e603bea4855519627b",
+      "sourceFingerprint": "0ce8bac0143dc53f7f0fdfc6bbe44b2d4f7ba6f82deb7675d051543e006fc95f",
+      "startedAt": "2026-11-18T23:37:01.229338+00:00",
+      "endedAt": "2026-11-18T23:38:05.868689+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/arrangement-chained-complete-native/tests.log",
+      "logSha256": "2e2222c47b9aa6f75b438d9d4e2053a6337a3a304d797abbc4b2ad61ffae516d",
       "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable.",
       "passed": 46,
       "failed": 0,
@@ -70,22 +70,22 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "90a583591119e778686acded39e13bdb6cfb9af39bbae4065d5233b355b0e1fc"
+          "sha256": "9da3ddaf1cd22a4badf8a2655bceb62586edbc4dafe519eeab02390b77664122"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/order-time-framework.test.ts tests/unit/order-time-framework-submission.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-reading.test.ts tests/unit/journey-fact-model.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-settings.test.ts tests/unit/order-time-framework-settings.test.ts tests/unit/order-time-craft-contract.test.ts tests/unit/special-craft-steps.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/customer-comment-time.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-arrangement-scope-complete-20261118/unit/tests.json",
+      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/order-time-framework.test.ts tests/unit/order-time-framework-submission.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-reading.test.ts tests/unit/journey-fact-model.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-settings.test.ts tests/unit/order-time-framework-settings.test.ts tests/unit/order-time-craft-contract.test.ts tests/unit/special-craft-steps.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/customer-comment-time.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-arrangement-chained-20261118/unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "925f2162ca40e2f4c51b450c83bf31cbdbce0321",
-      "sourceFingerprint": "cf73ef91c77bbdf0cb0e09565e7c84da9fa1fc71b90d362fcc0e6eb3f6ba901f",
-      "startedAt": "2026-11-18T23:25:48.785575+00:00",
-      "endedAt": "2026-11-18T23:25:58.699948+00:00",
-      "log": "/tmp/dx-sla-arrangement-scope-complete-20261118/unit/command.log",
-      "logSha256": "60d38c8eb0f1dfb007430e95d3cd65db7e7ff99cb7c6fcf7300f0166979debf0",
+      "testedHead": "b63b2d2ff5010701b98a86e603bea4855519627b",
+      "sourceFingerprint": "0ce8bac0143dc53f7f0fdfc6bbe44b2d4f7ba6f82deb7675d051543e006fc95f",
+      "startedAt": "2026-11-18T23:37:26.847045+00:00",
+      "endedAt": "2026-11-18T23:37:40.756777+00:00",
+      "log": "/tmp/dx-sla-arrangement-chained-20261118/unit/command.log",
+      "logSha256": "2c8179ffe2710c6a9641d92c82b5c84a3984c95b0e7d6b5ef85a9cf20f70c6c2",
       "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable.",
       "passed": 193,
       "failed": 0,
@@ -93,7 +93,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "59ad3bff0aaf504abe8aae70d0bf05e5422fd8a52dd6bffe0bcfa619dc34449c"
+          "sha256": "22c81611fda8934124b45c65434dcb6c144b0772db16afc18a765e65e8aea010"
         }
       ]
     },
@@ -103,11 +103,11 @@
       "command": "taskset -c 2,3 node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/current-task-plan-targets.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/framework-node-targets.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/order-time-formal-arrangement.ts apps/api/src/production-platform/order-time-operation-state.ts apps/api/src/production-platform/order-time-plan-repository.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/source-current-supervision.ts tests/integration/order-time-requests-postgres.test.ts tests/unit/order-time-framework.test.ts apps/api/src/production-platform/order-time-request-plan.ts tests/integration/order-time-plan-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "925f2162ca40e2f4c51b450c83bf31cbdbce0321",
-      "sourceFingerprint": "cf73ef91c77bbdf0cb0e09565e7c84da9fa1fc71b90d362fcc0e6eb3f6ba901f",
-      "startedAt": "2026-11-18T23:25:45.065715+00:00",
-      "endedAt": "2026-11-18T23:25:48.414065+00:00",
-      "log": "/tmp/dx-sla-arrangement-scope-complete-20261118/lint/command.log",
+      "testedHead": "b63b2d2ff5010701b98a86e603bea4855519627b",
+      "sourceFingerprint": "0ce8bac0143dc53f7f0fdfc6bbe44b2d4f7ba6f82deb7675d051543e006fc95f",
+      "startedAt": "2026-11-18T23:37:21.226152+00:00",
+      "endedAt": "2026-11-18T23:37:26.465087+00:00",
+      "log": "/tmp/dx-sla-arrangement-chained-20261118/lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable."
     },
@@ -117,11 +117,11 @@
       "command": "taskset -c 2,3 npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "925f2162ca40e2f4c51b450c83bf31cbdbce0321",
-      "sourceFingerprint": "cf73ef91c77bbdf0cb0e09565e7c84da9fa1fc71b90d362fcc0e6eb3f6ba901f",
-      "startedAt": "2026-11-18T23:26:11.848268+00:00",
-      "endedAt": "2026-11-18T23:27:33.198742+00:00",
-      "log": "/tmp/dx-sla-arrangement-scope-complete-20261118/types/command.log",
+      "testedHead": "b63b2d2ff5010701b98a86e603bea4855519627b",
+      "sourceFingerprint": "0ce8bac0143dc53f7f0fdfc6bbe44b2d4f7ba6f82deb7675d051543e006fc95f",
+      "startedAt": "2026-11-18T23:37:21.203740+00:00",
+      "endedAt": "2026-11-18T23:38:49.453874+00:00",
+      "log": "/tmp/dx-sla-arrangement-chained-20261118/types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable."
     },
@@ -131,12 +131,12 @@
       "command": "taskset -c 2,3 npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "925f2162ca40e2f4c51b450c83bf31cbdbce0321",
-      "sourceFingerprint": "cf73ef91c77bbdf0cb0e09565e7c84da9fa1fc71b90d362fcc0e6eb3f6ba901f",
-      "startedAt": "2026-11-18T23:25:59.092745+00:00",
-      "endedAt": "2026-11-18T23:26:11.097118+00:00",
-      "log": "/tmp/dx-sla-arrangement-scope-complete-20261118/preflight/command.log",
-      "logSha256": "28fe571d7143062b2c2623607bde0fc1e268b6772d1c36bc1f6529c792cfc42f",
+      "testedHead": "b63b2d2ff5010701b98a86e603bea4855519627b",
+      "sourceFingerprint": "0ce8bac0143dc53f7f0fdfc6bbe44b2d4f7ba6f82deb7675d051543e006fc95f",
+      "startedAt": "2026-11-18T23:37:41.384842+00:00",
+      "endedAt": "2026-11-18T23:37:59.205920+00:00",
+      "log": "/tmp/dx-sla-arrangement-chained-20261118/preflight/command.log",
+      "logSha256": "87a3d3a6c711cc9ef647eee56a796df09cf359fbf872fecb85755e3e57a1d8f6",
       "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable.",
       "passed": 284,
       "failed": 0,
