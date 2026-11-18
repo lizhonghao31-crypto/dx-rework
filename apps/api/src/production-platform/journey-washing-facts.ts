@@ -11,7 +11,7 @@ export function journeyWashingFact(scopes:readonly BulkWashingScopeView[],plans:
  const windows:ScheduleResponsibilityWindow[]=own.flatMap(scope=>{
   const arrangement=plans.find(p=>p.id===scope.planId)?.document.arrangement;
   return scope.windows.filter(w=>w.kind===(inspection?'inspection':'washing')&&w.state!=='voided').map(w=>({
-   sourceRef:`washing:${scope.scopeId}:${w.id}`,started:actual(w.startedAt,asOf),completed:actual(w.completedAt,asOf),complete:w.state==='completed',deadline:w.dueAt,warningAt:null,
+   sourceRef:`washing:${scope.scopeId}:${w.id}`,nativeWashingWindow:{scopeId:scope.scopeId,windowId:w.id},started:actual(w.startedAt,asOf),completed:actual(w.completedAt,asOf),complete:w.state==='completed',deadline:w.dueAt,warningAt:null,
    calendar:arrangement&&arrangement.mode!=='none'?(inspection?arrangement.inspection.calendar:arrangement.washing.calendar):null,
   }));
  });

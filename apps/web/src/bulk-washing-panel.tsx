@@ -1,36 +1,48 @@
 import {useEffect,useRef,useState} from 'react';
 import {Button} from '@dx-rework/ui';
-import {BulkWashingCommandSchema,bulkWashingLabels,type BulkWashingSheet,type BulkWashingScopeView,type BulkWashingCommand} from '@dx-rework/contracts/bulk-washing';
+import {BulkWashingCommandSchema,bulkWashingLabels,bulkWashingWindowReference,type BulkWashingSheet,type BulkWashingScopeView,type BulkWashingCommand} from '@dx-rework/contracts/bulk-washing';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {createClientRequestId} from './client-request-id.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {washingActionRecords,washingFactLabel,type WashingAction} from './bulk-washing-actions.js';
 import {createWebUrls} from '../url-contract.js';
 import {productionWorkspaceDomainHref} from './digital-detail-route.js';
+import {selectWashingWindow,washingWindowDomId,washingWindowFacts,type WashingWindowTarget} from './washing-window-target.js';
+import './washing-window-target.css';
 const display=(at:string|null)=>at?new Date(at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'时间待核';
 const time=(value:FormDataEntryValue|null)=>value?new Date(`${String(value)}+08:00`).toISOString():null;
-export function BulkWashingPanel({orderId,initialOpen=false}:{orderId:string;initialOpen?:boolean}){
+export function BulkWashingPanel({orderId,initialOpen=false,target}:{orderId:string;initialOpen?:boolean;target?:WashingWindowTarget}){
  const [open,setOpen]=useState(initialOpen),[sheet,setSheet]=useState<BulkWashingSheet|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
  const readSequence=useRef(0);
  const visible=sheet?.orderId===orderId?sheet:null;
+ const root=useRef<HTMLElement>(null),focused=useRef<HTMLElement|null>(null);
+ const selection=visible&&target?selectWashingWindow(visible,orderId,target):null;
  const reload=async()=>{const sequence=++readSequence.current;setLoading(true);setError('');try{const value=await digitalRequest<BulkWashingSheet>(`orders/${orderId}/bulk-washing`);
   if(value.orderId!==orderId||!Array.isArray(value.scopes))throw Error('洗水资料回执不完整');if(sequence===readSequence.current)setSheet(value);
  }catch(e){if(sequence===readSequence.current){if(e instanceof DigitalRequestError&&[401,403,404].includes(e.status??0))setSheet(null);setError(e instanceof Error?e.message:'洗水资料读取失败');}throw e;}finally{if(sequence===readSequence.current)setLoading(false);}};
  useEffect(()=>{setSheet(null);setOpen(initialOpen);setError('');setLoading(false);if(initialOpen)void reload().catch(()=>undefined);return()=>{readSequence.current++;};},[orderId,initialOpen]);
- return <section id="factory-washing"><Button aria-expanded={open} onClick={()=>{setOpen(!open);if(!open&&!visible)void reload().catch(()=>undefined);}}>大货洗水</Button>
+ useEffect(()=>{
+  if(!open||!selection?.window||selection.error||!target?.reference){if(!target?.reference)focused.current=null;return;}
+  const reference=target.reference,element=[...(root.current?.querySelectorAll<HTMLElement>('[data-washing-window]')??[])].find(node=>node.dataset.washingWindow===reference);
+  if(!element||focused.current===element)return;
+  for(let parent=element.parentElement;parent&&parent!==root.current;parent=parent.parentElement)if(parent instanceof HTMLDetailsElement)parent.open=true;
+  const frame=requestAnimationFrame(()=>{element.scrollIntoView({block:'nearest'});element.focus({preventScroll:true});focused.current=element;});return()=>cancelAnimationFrame(frame);
+ },[open,visible,selection?.error,selection?.window?.id,target?.reference]);
+ return <section id="factory-washing" ref={root}><Button aria-expanded={open} onClick={()=>{setOpen(!open);if(!open&&!visible)void reload().catch(()=>undefined);}}>大货洗水</Button>
  {open&&<>{error&&<p role="alert">{error}</p>}{loading&&<p role="status">正在读取洗水记录…</p>}
+ {selection?.error&&<p role="alert">{selection.error}</p>}
  {!loading&&<Button onClick={()=>void reload().catch(()=>undefined)}>刷新洗水记录</Button>}
  {visible?.scopes.length===0&&<p>本单当前没有可办理的洗水批次。</p>}
- {visible?.scopes.map(scope=><WashingScope key={`${orderId}:${scope.scopeId}`} orderId={orderId} scope={scope} reload={reload}/>)}</>}</section>;
+ {visible?.scopes.map(scope=><div key={`${orderId}:${scope.scopeId}`} hidden={Boolean(selection?.error||target?.lineId&&scope.lineId!==target.lineId||selection?.scope&&scope.scopeId!==selection.scope.scopeId)}><WashingScope orderId={orderId} scope={scope} reload={reload} selectedWindow={selection?.error?null:target?.reference??null} readOnly={Boolean(target?.reference)}/></div>)}</>}</section>;
 }
-function WashingScope({orderId,scope,reload}:{orderId:string;scope:BulkWashingScopeView;reload:()=>Promise<void>}){
+function WashingScope({orderId,scope,reload,selectedWindow=null,readOnly=false}:{orderId:string;scope:BulkWashingScopeView;reload:()=>Promise<void>;selectedWindow?:string|null;readOnly?:boolean}){
  const [kind,setKind]=useState<WashingAction>(scope.canLogistics?scope.mode==='factory'?'factory_start':'send':scope.canInspect?'inspection':'void');
  const [parentId,setParentId]=useState('');
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[uncertain,setUncertain]=useState(false),[dirty,setDirty]=useState(false);
  const writing=useRef(false),pending=useRef<{body:BulkWashingCommand;key:string}|null>(null);
  useDigitalDetailNavigationGuard(uncertain||dirty,busy,writing,'洗水记录尚未保存或回执未确认，离开不会撤销已发送内容。仍要离开？');
  const send=async(body?:BulkWashingCommand)=>{
-  if(writing.current||uncertain&&body)return;
+  if(readOnly||writing.current||uncertain&&body)return;
   if(body)pending.current={body,key:createClientRequestId()};const attempt=pending.current;if(!attempt)return;
   writing.current=true;setBusy(true);setError('');let confirmed=false;
   try{const result=await digitalRequest<{eventId:string;scopeId:string;revision:number}>(`orders/${orderId}/bulk-washing`,'POST',attempt.body,attempt.key);
@@ -48,16 +60,16 @@ function WashingScope({orderId,scope,reload}:{orderId:string;scope:BulkWashingSc
  <p>送洗 {scope.ledger.sent} · 洗回／洗好 {scope.ledger.washed} · 合格 {scope.ledger.qualified??'待核'} · 剩余 {scope.ledger.remaining??'待核'}</p>
  {scope.ledger.rework&&scope.ledger.rework.sent>0&&<p>返洗发出／开始 {scope.ledger.rework.sent} · 返洗洗回／洗好 {scope.ledger.rework.washed} · 复检合格 {scope.ledger.rework.qualified}（不增加原收货数量）</p>}
  {scope.facts.some(fact=>!fact.voided&&(fact.kind==='send'||fact.kind==='factory_start')&&fact.reworkOfInspectionId&&!fact.rewashWorkId)&&<p role="status">历史返洗已保留真实办理记录；当时未登记独立计划，计划时间待核。</p>}
- {scope.windows.map(w=><p key={w.id}>{round(w.id)?`返洗第${round(w.id)}轮 · `:''}{w.kind==='washing'?'洗水':'洗后检查'}：{display(w.startedAt)} — {display(w.dueAt)} · {w.state==='voided'?'原记录已撤销':w.state==='completed'?`已完成 · ${display(w.completedAt)}`:'尚未完成'}</p>)}
+ {scope.windows.map(w=>{const reference=bulkWashingWindowReference(scope.scopeId,w.id),facts=washingWindowFacts(scope,w);return <article key={w.id} id={washingWindowDomId(reference)} data-washing-window={reference} tabIndex={-1} aria-current={selectedWindow===reference?'location':undefined} className="washing-window-record"><p>{round(w.id)?`返洗第${round(w.id)}轮 · `:''}{w.kind==='washing'?'洗水':'洗后检查'}：{display(w.startedAt)} — {display(w.dueAt)} · {w.state==='voided'?'原记录已撤销':w.state==='completed'?`已完成 · ${display(w.completedAt)}`:'尚未完成'}</p><details><summary>本窗口原记录</summary>{facts.length?facts.map(f=><p key={f.id}>{washingFactLabel(f)} · {display(f.occurredAt)} · {f.operator} · {f.quantity}件{f.kind==='inspection'?` · 合格${f.qualifiedQuantity} · 不合格${f.quantity-f.qualifiedQuantity}`:''}{f.voided?' · 已撤销':''} · {f.note}</p>):<p>本窗口原记录依据待核，未借用其他批次。</p>}</details></article>;})}
  {scope.fee&&<p>洗水费用：{scope.fee.state==='referenced'?`${scope.fee.name} · 预算第${scope.fee.version}版 · 单价${scope.fee.unitPrice||'待补'} · 用量${scope.fee.consumption||'待补'}`:'沿原预算补齐费用依据'} <a href={productionWorkspaceDomainHref(`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-production')}?budget=${orderId}&documentChapter=budget-washing-fees`,window.location.search)}>本单预算费用补充</a></p>}
  {error&&<p role="alert">{error}</p>}
- {uncertain?<><p role="status">提交结果未确认，请用原内容核对，勿重复登记。</p><Button disabled={busy} onClick={()=>void send()}>核对原提交</Button></>:(scope.canLogistics||scope.canInspect||scope.canCorrect)&&<form onChange={()=>setDirty(true)} onSubmit={event=>{
-  event.preventDefault();const form=event.currentTarget;try{const data=new FormData(form),base={planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:time(data.get('occurredAt')),note:String(data.get('note')??'')};
+ {uncertain?<><p role="status">提交结果未确认，请用原内容核对，勿重复登记。</p><Button hidden={readOnly} disabled={busy} onClick={()=>void send()}>核对原提交</Button></>:(scope.canLogistics||scope.canInspect||scope.canCorrect)&&<form hidden={readOnly} onChange={()=>setDirty(true)} onSubmit={event=>{
+  event.preventDefault();if(readOnly)return;const form=event.currentTarget;try{const data=new FormData(form),base={planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:time(data.get('occurredAt')),note:String(data.get('note')??'')};
    const value=kind==='rework'?{...base,kind:scope.mode==='factory'?'factory_start':'send',quantity:Number(data.get('quantity')),reworkOfInspectionId:data.get('parentId'),...(data.get('rewashWorkId')?{rewashWorkId:String(data.get('rewashWorkId'))}:{})}:kind==='void'?{...base,kind,factId:data.get('parentId'),reason:data.get('reason')}
     :{...base,kind,quantity:Number(data.get('quantity')),...(kind==='return'?{sendId:data.get('parentId')}:kind==='inspection'?{completionId:data.get('parentId'),qualifiedQuantity:Number(data.get('qualifiedQuantity'))}:kind==='receipt_link'?{completionId:data.get('parentId'),receiptId:data.get('receiptId'),receiptQuantityVersion:scope.receipts?.find(r=>r.receiptId===data.get('receiptId'))?.quantityVersion}:kind==='factory_complete'?{startId:data.get('parentId')}:{})};
    void send(BulkWashingCommandSchema.parse(value)).then(saved=>{if(saved){form.reset();setParentId('');if(kind==='rework')setKind(scope.mode==='factory'?'factory_complete':'return');}});
   }catch(e){setError(e instanceof Error?e.message:'请核对填写内容');}
- }}><fieldset disabled={busy}><legend>登记本批洗水</legend><label>办理<select aria-label="办理" value={kind} onChange={e=>{setKind(e.target.value as WashingAction);setParentId('');}}>
+ }}><fieldset disabled={busy||readOnly}><legend>登记本批洗水</legend><label>办理<select aria-label="办理" value={kind} onChange={e=>{setKind(e.target.value as WashingAction);setParentId('');}}>
  {scope.canLogistics&&scope.mode==='after_receipt'&&<><option value="send">送洗</option><option value="return">洗回</option></>}
  {scope.canLogistics&&scope.mode==='factory'&&<><option value="factory_start">工厂开始洗水</option><option value="factory_complete">工厂洗好</option><option value="receipt_link">关联已收货批次</option></>}
  {scope.canLogistics&&(scope.ledger.rework?.available.length??0)>0&&<option value="rework">不合格返洗</option>}

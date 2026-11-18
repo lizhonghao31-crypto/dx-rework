@@ -1,163 +1,213 @@
 {
   "version": 1,
-  "base": "738b3cf9f0595609afab53a6d1b05b5babf3d062",
+  "base": "a336e51d557680f7a3729a0e0f651d2666914cfc",
   "risk": "full",
-  "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
+  "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
   "rules": [
     {
-      "rule": "Retain cancelled responsibility only from its exact original task/cancel event and scope, without borrowing old rounds, routes, steps, PO or aggregate clocks/completions",
-      "source": "Reviewed Pro SLA_Cancelled_Responsibility_History_Repair_Plan_20261118.md C1–C5, coordinator libfile_fde3_f-bf35cb9c86fc8191b28565b34270fdfa_c8d3bf5d609c8191bce6411a30e94d44; explicit no A fabrication/history risk/retired route and actual final-version constraints.",
-      "initialization": "Actual release738 base calculation v13, increment v14; old v13 payload/selectors with missing cancelled R are refused before rebuilding. Same authorized RR client/termination and existing original query paths. No migration/business SQL/write API/formula/role change. Legacy frozen-v2 and new plan formats remain supported; schema1 and selectorsv2 unchanged.",
-      "dateAndPermission": "Require original event_kind=cancel for exact task/resource plus current task/round/route/step/PO. Preserve known R/D with unknown stop and unknown overdue, early zero, real pre-cancel A and independently valid cut PO completion. Missing/duplicate/ambiguous proof stays unknown; rejected native/legacy fields cannot restore foreign R/D/A. Original access before shared reads remains unchanged.",
+      "rule": "Project exact original native washing-window references without changing business facts",
+      "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
+      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
+      "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
       "writes": [
-        "apps/api/src/production-platform/cancelled-task-history.ts",
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
-        "tests/unit/order-time-reading.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
-        "docs/engineering/cancelled-responsibility-history-repair.md"
+        "apps/api/src/production-platform/journey-washing-facts.ts",
+        "apps/api/src/production-platform/journey-washing-projection.ts",
+        "apps/api/src/production-platform/journey-washing-rework-facts.ts",
+        "apps/api/src/production-platform/journey-washing-window-record.ts",
+        "packages/contracts/src/bulk-washing.ts",
+        "packages/contracts/src/digital-production-journey.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-termination.ts",
-        "apps/api/src/production-platform/task-readiness-facts.ts",
-        "apps/api/src/production-platform/development-responsibility-window.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts",
-        "apps/api/src/production-platform/task-service.ts"
+        "apps/api/src/production-platform/bulk-washing-service.ts",
+        "apps/api/src/production-platform/bulk-washing-ledger.ts"
       ],
       "oldTests": [
-        "tests/unit/order-time-reading.test.ts",
-        "tests/unit/fixed-schedule-selection.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/fixed-schedule-progress.test.ts"
+        "tests/unit/journey-washing-facts.test.ts",
+        "tests/unit/journey-washing-projection.test.ts",
+        "tests/unit/journey-washing-rework.test.ts",
+        "tests/unit/journey-fact-model.test.ts"
       ],
-      "expectation": "Current unit/old-reader cases and5 unfiltered original App/PG cases pass, including original legacy printing and development craft confirmation alias cancellation. Planning-only work remains non-rated. Real R08/D09 cancellation13 freezes240 at13:30/20, missing A remains empty; legacy twoPO exact D and frozen240 survive24h and persisted frames. Actual previous v13 payload with missing R and selectors are obsolete then rebuilt without changing immutable plan/task/cancel event. All scopes remain present; no current overdue/due-soon risk reappears. No onsite Root DTO is claimed.",
+      "expectation": "Each original per-batch scope/window is retained in facts and whitelisted snapshot, then receives an exact read record in authorized presentation. Actual previousv14 derived payload lacking new native-window IDs and selectors are rejected then rebuilt asv15 by the original repository, preserving original fixed schedule and SLA facts; schema and readers retain additive compatibility. No URL/auth conclusion in shared facts and no new execution node, task, plan or progress denominator.",
       "checks": [
-        "cancel-unit",
-        "cancel-native",
-        "cancel-api-types",
-        "cancel-lint"
+        "c-unit",
+        "c-native",
+        "c-api-types",
+        "c-lint"
       ]
     },
     {
-      "rule": "Show only server-frozen per-scope termination responsibility in compact/current/framework views, retaining unknown sibling ranges without summing or offsetting",
-      "source": "Same reviewed cancellation-history plan C2–C5; original detail filtering merge1023 reused, no separate business termination classification invented.",
-      "initialization": "Reuse the existing whole-node termination predicate and original read-only record. Current/compact/framework presentation shares one pure history helper; no local clock, counter, schedule or permission changes.",
-      "dateAndPermission": "Known zero says no pre-stop overdue; positive and finite ranges show original server history. Mixed unknown remains separately pending, no crossPO credit or actual completion inference, no handling link for cancelled history. Original dates and workflow state stay intact.",
+      "rule": "Original cockpit and factory washing UI enter and return from the exact window",
+      "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
+      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
+      "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
       "writes": [
-        "apps/web/src/cockpit-framework-nodes.tsx",
-        "apps/web/src/cockpit-node-summary.tsx",
-        "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts"
+        "apps/web/src/bulk-washing-panel.tsx",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-node-dates.tsx",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "apps/web/src/cockpit-record-link.tsx",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/factory-flow-panel.tsx",
+        "apps/web/src/factory-task-target.ts",
+        "apps/web/src/journey-sla-details.tsx",
+        "apps/web/src/node-materials-panel.tsx",
+        "apps/web/src/washing-window-target.ts",
+        "apps/web/src/washing-window-target.css"
       ],
       "reads": [
-        "apps/web/src/cockpit-current-summary.tsx",
-        "apps/web/src/cockpit-detail.tsx",
         "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/cockpit-fixed-schedule.tsx"
+        "apps/web/src/use-digital-detail-navigation-guard.ts"
       ],
       "oldTests": [
-        "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts"
+        "tests/unit/factory-task-target.test.ts",
+        "tests/unit/digital-detail-route.test.ts"
       ],
-      "expectation": "Actual original App retains own deadline and frozen4h in current/compact/history after one cancellation, at both observations, and zero handling links. Engineering multi-scope DTO units retain separate known/unknown/range history rather than a total or normal/active status. Original special-closure regression is retained; unprovided onsite mixedPO sample is not claimed.",
+      "expectation": "Factory and after-receipt routes each preserve four original windows; a genuine failed inspection and formally arranged rewash additionally prove four work nodes/eight projections/six unique native identities, all separately selectable and returnable. Scope selection compares complete evidence sets, not a template count; explicit invalid targets do not fall back, while deliberate user range selection clears prior focus. Real App clicks every window, exact native event/date matching and budget second-hop/return preserve original node/scope/filter/material focus. Read views hide/disable forms and refuse submit without gaining capabilities; foreign/ambiguous/unavailable refs stay explicit. Same mounted original draft/pending immutable key/body survive same-order failed read or cancelled navigation. True browser reload durability belongs to approved E and is not claimed.",
       "checks": [
-        "cancel-unit",
-        "cancel-native",
-        "cancel-web-types",
-        "cancel-lint"
+        "c-unit",
+        "c-native",
+        "c-web-types",
+        "c-lint"
+      ]
+    },
+    {
+      "rule": "Keep new native App consumer and exact identity units in the full canonical plan",
+      "source": "Approved Pro supplement C/BA056, after actual A/D/B merges: each original washing/inspection responsibility window can be entered precisely and returned with identity retained. No new windows/work/progress denominator or plan/time/quantity rules. The supplied onsite four-work/eight-projection/six-identity mapping summary remains separate from local original-service fixtures; its UUID file is unavailable in this workspace and onsite closure is not claimed.",
+      "initialization": "Approved provisional stack on cancellation1025 candidate a336e51d557680f7a3729a0e0f651d2666914cfc; real original admitted order, cutting and factory/receipt/QC/washing/inspection events. Shared facts retain only raw native IDs and ordinary contract data; presentation URLs created after existing original resource authorization. Facts version advances above cancellation14 to navigation15, schema stays compatible; exact original cancelled R/ownTaskId and finite forecast/terminal filtering are preserved.",
+      "dateAndPermission": "Full raw scope/window identity stays opaque; no splitting colons, positional/latest/sibling fallback or role bypass. Exact authorized mother/order/PO membership required; stale/missing/duplicate/foreign remains explicit unavailable. Native event history, original P/R/D/A/calendars/quantities/counts and role powers remain unchanged.",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/test-suite-plan.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/washing-window-target.test.ts",
+        "tests/integration/washing-window-navigation-browser-postgres.test.ts",
+        "docs/engineering/washing-window-navigation-repair.md"
+      ],
+      "reads": [
+        "scripts/test-execution-config.mjs",
+        "tests/acceptance/supplychain-settings-browser.ts"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts",
+        "scripts/ci/test-execution-contract.test.mjs"
+      ],
+      "expectation": "New suite is selected for affected native identity/projection/UI paths under the existing long correctness config. Both routes, authorization rejection, exact return context, mounted draft/unknown response safety and original facts remain covered. No new worker/global timeout, final name filter, test removal or extra benchmark.",
+      "checks": [
+        "c-unit",
+        "c-native",
+        "c-protocol",
+        "c-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "cancel-unit",
+      "id": "c-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-detail.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/journey-fact-model.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/sla-native-window-projection.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/current-task-plan.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-cancelled-responsibility-20261117/release738-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/washing-window-target.test.ts tests/unit/factory-task-target.test.ts tests/unit/digital-detail-route.test.ts tests/unit/journey-washing-facts.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/journey-washing-rework.test.ts tests/unit/journey-fact-model.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/order-time-reading.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/stack1025-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:19.578835+00:00",
-      "endedAt": "2026-11-18T01:26:37.313755+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-unit/command.log",
-      "logSha256": "c7b2e64a5a92bcdab0b26308155f3aabef33c4fdc3c5fa755511d31759b8725d",
-      "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified.",
-      "passed": 334,
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+      "startedAt": "2026-11-18T01:34:34.926416+00:00",
+      "endedAt": "2026-11-18T01:34:53.192704+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-unit/command.log",
+      "logSha256": "3ec7fb27d5d927c7954fbf0858a9be8529a3b0885e5fed3bc24dc05ceb671ebf",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
+      "passed": 307,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "33f45163d9616573d329f548ea93a4c723458ea4fbf3a42ad950bf82f812e391"
+          "sha256": "02effe616e4c672a9664da70d3544386aa77205114c880332cafecaf9065bf32"
         }
       ]
     },
     {
-      "id": "cancel-native",
+      "id": "c-native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/terminal-quality-projections-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-cancelled-responsibility-20261117/pg/release738-original-app/tests.json",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/washing-window-navigation-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-supplement-c-20261117/pg/stack1025-original-app/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:18.308407+00:00",
-      "endedAt": "2026-11-18T01:27:48.094239+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/pg/release738-original-app/tests.log",
-      "logSha256": "e36b79a5b60050c51c5e4b998942c61192d290f9ae58bf6440b2e1f6ae55bd73",
-      "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified.",
-      "passed": 5,
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+      "startedAt": "2026-11-18T01:34:33.434828+00:00",
+      "endedAt": "2026-11-18T01:37:07.817759+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/pg/stack1025-original-app/tests.log",
+      "logSha256": "333806dd5fc891160013338a09b97aa45f7782b849d69ff31f970fecaa7df7be",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
+      "passed": 4,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4e781784e82c60879b9f0e5b18119c063e651c579ac4a488cdfae2213205dfd5"
+          "sha256": "27bf04a820bad8b622a992d60f9d8c0215aedec7e70001db78fa9c128d55c746"
         }
       ]
     },
     {
-      "id": "cancel-api-types",
+      "id": "c-api-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:20.960755+00:00",
-      "endedAt": "2026-11-18T01:26:47.451119+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-api-types/command.log",
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+      "startedAt": "2026-11-18T01:34:36.279830+00:00",
+      "endedAt": "2026-11-18T01:35:04.215757+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-api-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified."
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
     },
     {
-      "id": "cancel-web-types",
+      "id": "c-web-types",
       "kind": "command",
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:22.349337+00:00",
-      "endedAt": "2026-11-18T01:27:06.030442+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-web-types/command.log",
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+      "startedAt": "2026-11-18T01:34:37.651006+00:00",
+      "endedAt": "2026-11-18T01:35:21.454351+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-web-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified."
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
     },
     {
-      "id": "cancel-lint",
+      "id": "c-lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/cancelled-task-history.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/order-time-reading.ts apps/api/src/production-platform/journey-fact-model.ts apps/web/src/cockpit-node-summary.tsx apps/web/src/cockpit-framework-nodes.tsx tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/order-time-reading.test.ts",
+      "command": "python3 /workspace/sla-supplement-c-20261117/lint-current.py",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4bc1960c5153cd998bdf0d0609e270ecfe1b63a",
-      "sourceFingerprint": "bbe3393f7ddc75c09985ad701e473bbdbcffce5dc0d972789b0ca989186c1a5f",
-      "startedAt": "2026-11-18T01:26:23.739821+00:00",
-      "endedAt": "2026-11-18T01:26:27.875609+00:00",
-      "log": "/workspace/sla-cancelled-responsibility-20261117/checks/release738-lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Actual release738b3cf9 includes merged1022 current task plan and1024 bounded forecast; their source retained. No pending washing-navigation source. Current calculation v13→v14; any later calculation base requires reconciliation. Node22.22.2/npm10.9.9, marked disposable low-privilege PG16 and original authenticated App, finite workers/correctness budget. Original cancellation once, two later observations, new and legacy twoPO formats, known original route kind normalization and exact factory step/PO windows and actual v13 derived-cache missing-R refusal/rebuild. No Acceptance/production/business-clock change, deployment or unknown-command replay. Prior root-cause regressions and fixture/type failures retained with original fingerprints; owned cleanup verified."
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+      "startedAt": "2026-11-18T01:38:10.401455+00:00",
+      "endedAt": "2026-11-18T01:38:12.875188+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-lint/command.log",
+      "logSha256": "a6215d8f13422b39046018c80ddf2e81304d771dfeca05bb67ae1607670084e7",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here."
+    },
+    {
+      "id": "c-protocol",
+      "kind": "tests",
+      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a336e51d557680f7a3729a0e0f651d2666914cfc",
+      "sourceFingerprint": "3b1e7646aecfd558c859745e8a8ec5efdc83cbe36dc89d15ec7caf3bf18f69c5",
+      "startedAt": "2026-11-18T01:38:11.568263+00:00",
+      "endedAt": "2026-11-18T01:38:12.236685+00:00",
+      "log": "/workspace/sla-supplement-c-20261117/checks/stack1025-protocol/command.log",
+      "logSha256": "a123577589bc94f889b19ebabd684c962f4d24e505e9481d504abfb12572f776",
+      "context": "Approved C exact original washing-window navigation. Node22/npm10, original finite worker/config/timeouts, Chromium1194 and only marked lowpriv PG16 with owned stop/remove/absence verified. Explicit stack basea336e51d contains cancellation1025 and actual1022/1024 releases; these current reports bind this stack, actual1025 merge alignment remains required before final Gate. No live Acceptance/production, no replay of unknown live commands, no true reload claim. Original diagnostic failures retained; no filtered command here.",
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }

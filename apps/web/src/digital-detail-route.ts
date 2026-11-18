@@ -83,7 +83,7 @@ export function digitalDetailReturnUrl(value: string | null, base: string,depth=
   const presentVersionKeys=present.flatMap(domain=>versions[domain]?[versions[domain]!]:[]);
   if(presentVersionKeys.some(key=>query.has(key)&&(!/^[1-9]\d*$/.test(query.get(key)!)||!Number.isSafeInteger(Number(query.get(key))))))return null;
   const documentContext=hasTask||present.some(domain=>['development','budget','instruction'].includes(domain))&&readDocumentKind(url.search)!==undefined;
-  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...(documentContext?Object.values(documentVersionKeys):[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction'].includes(key)))return null;
+  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...(documentContext?Object.values(documentVersionKeys):[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction','washingWindow'].includes(key)))return null;
   if(documentContext&&Object.entries(documentVersionKeys).some(([document,key])=>query.has(key)&&readDocumentVersion(document as keyof typeof documentVersionKeys,url.search)===undefined&&!isCurrentDocumentVersion(document as keyof typeof documentVersionKeys,url.search)))return null;
   if(query.has('documentKind')&&!readDocumentKind(url.search))return null;
   if (query.has("taskView") && (!hasTask || !["read", "handle", "correct"].includes(query.get("taskView")!))) return null;
@@ -94,6 +94,7 @@ export function digitalDetailReturnUrl(value: string | null, base: string,depth=
   if(query.has('documentChapter')&&!(documentChapterIds as readonly string[]).includes(query.get('documentChapter')!))return null;
   if(query.has('line')&&(!present.some(domain=>['bulk','factory','order'].includes(domain))||!DigitalIdSchema.safeParse(query.get('line')).success))return null;
   if(query.has('factoryAction')&&(!present.includes('factory')||factoryTaskTarget(url.search).error))return null;
+  if(query.has('washingWindow')&&(!present.includes('factory')||factoryTaskTarget(url.search).error))return null;
   const nested = query.has("returnTo") ? digitalDetailReturnUrl(query.get("returnTo"), base,depth+1,[...visited,identity]) : null;
   if (query.has("returnTo") && !nested) return null;
   if(kind==='task'&&query.get('taskView')!=='read'&&nested&&new URL(nested,'https://local.invalid').searchParams.has('task'))return null;

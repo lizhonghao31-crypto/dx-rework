@@ -1,5 +1,7 @@
+import {washingWindowChoices} from './washing-window-target.js';
+import {CockpitRecordLink} from './cockpit-record-link.js';
 import type {JourneyNode,JourneyTiming,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
-import {journeyTime} from './digital-journey-cockpit-model.js';
+import {journeyTime,type CockpitContext} from './digital-journey-cockpit-model.js';
 export function slaTargetLabel(value:JourneyTiming['target']){
  if(!value.at)return '无可信目标时间';
  if(value.exclusive)return new Date(Date.parse(value.at)-1).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'})+' 当天结束';
@@ -31,8 +33,12 @@ function JourneyTimingTermination({timing}:{timing:Pick<JourneyTiming,'terminati
  const hours=(seconds:number|null)=>seconds===null?'待核':`${Number((seconds/3600).toFixed(4))}小时`;
  return <><small>{stop.kind==='special_closure'?'特殊结案':'取消'}：{journeyTime(stop.at,'instant','真实终止时间待核')}</small><small>终止前计时用时：{hours(stop.elapsedSeconds)} · 历史超时：{hours(stop.overdueSeconds)}</small></>;
 }
-export function JourneyTimingWindows({timing,showSnapshot=true}:{timing:Pick<JourneyTiming,'windows'>;showSnapshot?:boolean}){
- return <>{timing.windows?.map(window=><small key={window.evidence}>{window.scopeLabel} · 原开始 {journeyTime(window.startedAt,'instant','尚未取得')} · 原截止 {journeyTime(window.deadline,'instant','本批无可信截止')} · {window.complete?'已完成':'尚未完成'}{window.completedAt?` ${journeyTime(window.completedAt)}`:''}{showSnapshot&&window.snapshotId?` · 冻结规则 ${window.snapshotId}`:''}</small>)}</>;
+export function JourneyTimingWindows({timing,showSnapshot=true,context,disabled=false,onNavigate}:{timing:Pick<JourneyTiming,'windows'>;showSnapshot?:boolean;context?:CockpitContext|undefined;disabled?:boolean;onNavigate?:((focus:string)=>CockpitContext)|undefined}){
+ return <>{washingWindowChoices(timing.windows??[]).map(({evidence,window})=>{
+  if(!window)return <small key={evidence} role="alert">原窗口资料冲突，不能选取或借用其他窗口。</small>;
+  const focus='washing-window:'+evidence,selected=context?.materialFocus===focus;
+  return <small key={evidence} data-washing-choice={evidence} aria-current={selected?'true':undefined}>{window.scopeLabel} · 原开始 {journeyTime(window.startedAt,'instant','尚未取得')} · 原截止 {journeyTime(window.deadline,'instant','本批无可信截止')} · {window.complete?'已完成':'尚未完成'}{window.completedAt?` ${journeyTime(window.completedAt)}`:''}{showSnapshot&&window.snapshotId?` · 冻结规则 ${window.snapshotId}`:''}{window.record&&context&&<span data-material-focus={focus}> · <button type="button" aria-pressed={selected} disabled={disabled||!onNavigate} onClick={()=>onNavigate?.(focus)}>选中本窗口</button> · <CockpitRecordLink record={window.record} context={context} disabled={disabled} onNavigate={onNavigate?()=>onNavigate(focus):undefined}>查看本窗口记录</CockpitRecordLink><span className="journey-muted"> · 窗口参考 {evidence.slice(-12)}</span></span>}</small>;
+ })}</>;
 }
 const rangeBoundary=(at:string)=>new Date(Date.parse(at)+8*3600000).toISOString().replace('T',' ').replace(/\.000Z$/,'').replace(/Z$/,'');
 export function logisticsRangeLabel(range:{fromInclusive:string;toExclusive:string}){

@@ -27,7 +27,7 @@ function washingRoundFact(row:RoundFactBasis,scope:BulkWashingScopeView|undefine
  const windows:ScheduleResponsibilityWindow[]=scope.windows.filter(window=>window.state!=='voided'
   &&(inspection?window.kind==='inspection'&&completionIds.has(window.id.replace(/:qc$/,'')):window.kind==='washing'&&startIds.has(window.id)))
   .map(window=>{const policy=row.arrangement.mode==='none'?null:inspection?row.arrangement.inspection:row.arrangement.washing,started=instant(window.startedAt,asOf);
-   return {sourceRef:`washing:${scope.scopeId}:${window.id}`,started,completed:instant(window.completedAt,asOf),complete:window.state==='completed',
+   return {sourceRef:`washing:${scope.scopeId}:${window.id}`,nativeWashingWindow:{scopeId:scope.scopeId,windowId:window.id},started,completed:instant(window.completedAt,asOf),complete:window.state==='completed',
     deadline:window.dueAt,warningAt:policy?.reminder.enabled&&started.precision==='instant'?shiftFixedTimeline(started.at,policy.minutes*policy.reminder.percent/100,policy.calendar):null,calendar:policy?.calendar??null};});
  const started=starts.reduce((sum,fact)=>sum+fact.quantity,0),returned=completions.reduce((sum,fact)=>sum+fact.quantity,0);
  const checks=effective.filter(fact=>fact.kind==='inspection'&&completionIds.has(fact.completionId));

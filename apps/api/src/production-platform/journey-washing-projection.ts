@@ -3,6 +3,7 @@ import type {FixedScheduleProgress} from '@dx-rework/contracts';
 import type {JourneyNode,JourneyStageKey,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {FixedScheduleBasis} from './fixed-schedule-basis.js';
 import {stageState} from './journey-projection.js';
+import {journeyWashingWindowRecord} from './journey-washing-window-record.js';
 
 const prefix='washing-work:';
 export const journeyWashingInstanceId=(scopeRef:string,workId:string)=>`${prefix}${scopeRef}:${workId}`;
@@ -41,7 +42,7 @@ export function attachJourneyWashing(item:OrderJourney,basis:FixedScheduleBasis,
    actualAt:actual?.precision==='instant'?actual.at:null,...(actual?.precision==='date'?{actualDate:actual.date}:{}),actualQuality:actual&&actual.precision!=='unknown'?'verified':'missing',
    sla:complete||stopped?'finished':entered?'running':'not_started',completionResult:complete?target?.goalDelta.kind==='late'?'late':target?.goalDelta.kind==='early'?'early':target?.goalDelta.kind==='on_target'?'on_time':'unknown':null,overdueSeconds:null,
    ...(target?{fixedTargets:[{scopeRef:scope.scopeRef,lineId:scope.lineId,progress:target}]}:{}),
-   nativeWindows:windows.map(window=>({evidence:window.sourceRef,scopeLabel:`${label} · 原洗水批次`,startedAt:window.started.precision==='instant'?window.started.at:null,completedAt:window.completed.precision==='instant'?window.completed.at:null,deadline:window.deadline,warningAt:window.warningAt,complete:window.complete})),
+   nativeWindows:windows.map(window=>{const record=journeyWashingWindowRecord(item.orderId!,scope.lineId,window.sourceRef,window.nativeWashingWindow);return {evidence:window.sourceRef,scopeLabel:`${label} · 原洗水批次`,startedAt:window.started.precision==='instant'?window.started.at:null,completedAt:window.completed.precision==='instant'?window.completed.at:null,deadline:window.deadline,warningAt:window.warningAt,complete:window.complete,...(record?{record}:{})};}),
    risks,blockers:missingRewashPlan?[{key:'rewash_plan_missing',label:'本轮未登记正式计划P，保留真实办理记录，计划时间待核',ownerId:null,record:null}]:[],records:[{domain:'factory',id:item.orderId,url:`/ui/digital-production?factory=${item.orderId}`,mode:'read',version:null,lineId:scope.lineId}],inheritedFrom:null,unavailableReason:missingRewashPlan?'fact_not_recorded':null});
   changed.add(stage.key);
  }
