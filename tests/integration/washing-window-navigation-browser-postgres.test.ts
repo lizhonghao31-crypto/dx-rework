@@ -131,8 +131,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(h.evidence,'exact-four-windows-'+mode+'-'+width+'.png'),fullPage:true});
   }catch(error){await writeFile(join(h.evidence,'four-windows-failure-'+mode+'.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
- it('selects the exact six original/rewash windows, preserves default-instance links and respects deliberate filters without navigation writes',async()=>{
-  const f=h.f,logistics=f.people['embroidery-washing-merchandiser']!,fixture=await prepare('after_receipt',true,{failedFirst:true});h.setCollectionScene(fixture.scene);
+ const prepareSixWindows=async()=>{
+  const f=h.f,fixture=await prepare('after_receipt',true,{failedFirst:true});h.setCollectionScene(fixture.scene);
   const failed=fixture.sheet.scopes.flatMap(scope=>scope.facts).find(fact=>fact.kind==='inspection'&&fact.qualifiedQuantity===0)!;expect(failed).toBeTruthy();
   const tab=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+fixture.sourceId);
   try{
@@ -154,107 +154,130 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const nodes=after.stages.flatMap(stage=>stage.nodes).filter(node=>originalIds.has(node.instanceId));expect(nodes).toHaveLength(2);expect(nodes.flatMap(node=>node.nativeWindows!.map(window=>window.evidence)).sort()).toEqual(expected);
    const added=after.stages.flatMap(stage=>stage.nodes).filter(node=>!originalIds.has(node.instanceId)&&node.key.startsWith('bulk_return_washing'));expect(added).toHaveLength(2);expect(added.every(node=>node.planningOnly&&!node.countsInProgress)).toBe(true);
    const allProjections=[...nodes,...added].flatMap(node=>node.nativeWindows!.map(window=>window.evidence));expect(allProjections).toHaveLength(8);expect([...new Set(allProjections)].sort()).toEqual(expected);
-   const sessions=[tab.session];
-   for(const node of nodes){
-    const context={selected:fixture.sourceId,expanded:node.stage,focus:node.instanceId,row:node.instanceId},own=node.nativeWindows!;
-    await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams(context));await page.locator('[data-view=order][aria-busy=false]').waitFor();
-    const current=page.getByRole('region',{name:'当前节点详情'}),details=current.locator('.cockpit-current-additional');await details.locator('summary').first().click();
-    expect((await current.locator('[data-washing-choice]').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-washing-choice')!))).sort()).toEqual(own.map(window=>window.evidence).sort());
-    for(const window of own){
-     const row=current.locator('[data-washing-choice]'),matches=[];
-     for(let i=0;i<await row.count();i++)if(await row.nth(i).getAttribute('data-washing-choice')===window.evidence)matches.push(row.nth(i));
-     expect(matches).toHaveLength(1);const selectedRow=matches[0]!;
+   assertNoNavigationBusinessWrites([tab.session]);
+   return {fixture,nodes,added,after,sheet,expected};
+  }finally{await tab.context.close();}
+ };
+ const assertNoNavigationBusinessWrites=(sessions:string[])=>{
+  // Original notification acknowledgement is separate from business writes.
+  expect(h.requests.filter(call=>sessions.includes(call.session)&&!['GET','HEAD'].includes(call.method)&&!call.path.includes('/notifications/'))).toEqual([]);
+ };
+ describe('six original and rewash window identities',()=>{
+  let prepared:Awaited<ReturnType<typeof prepareSixWindows>>;
+  beforeAll(async()=>{prepared=await prepareSixWindows();});
+  it('selects each exact window, follows its original record and restores intentional node filters',async()=>{
+   const f=h.f,{fixture,nodes,after,sheet}=prepared;
+   const tab=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+fixture.sourceId);
+   try{
+    const page=tab.page;
+    for(const node of nodes){
+     const context={selected:fixture.sourceId,expanded:node.stage,focus:node.instanceId,row:node.instanceId},own=node.nativeWindows!;
+     await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams(context));await page.locator('[data-view=order][aria-busy=false]').waitFor();
+     const current=page.getByRole('region',{name:'当前节点详情'}),details=current.locator('.cockpit-current-additional');await details.locator('summary').first().click();
+     expect((await current.locator('[data-washing-choice]').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-washing-choice')!))).sort()).toEqual(own.map(window=>window.evidence).sort());
+     for(const window of own){
+      const selectedRow=current.locator('[data-washing-choice="'+window.evidence+'"]');
+      expect(await selectedRow.count()).toBe(1);
+      await selectedRow.getByRole('button',{name:'选中本窗口',exact:true}).click();
+      await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toBe('washing-window:'+window.evidence);expect(await selectedRow.getByRole('button',{name:'选中本窗口',exact:true}).getAttribute('aria-pressed')).toBe('true');expect(await current.locator('[data-washing-choice][aria-current=true]').count()).toBe(1);
+      await selectedRow.getByRole('link',{name:'查看本窗口记录',exact:true}).click();await page.locator('[data-washing-window][aria-current=location]').waitFor();
+      expect(await page.locator('[data-washing-window][aria-current=location]').getAttribute('data-washing-window')).toBe(window.evidence);expect(await page.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);
+      await page.getByRole('button',{name:'返回',exact:true}).first().click();await page.locator('[data-view=order][aria-busy=false]').waitFor();
+      expect(new URL(page.url()).searchParams.get('focus')).toBe(node.instanceId);expect(new URL(page.url()).searchParams.get('materialFocus')).toBe('washing-window:'+window.evidence);await current.locator('[data-washing-choice][aria-current=true]').waitFor();
+     }
+     // An incoming filter cannot erase the requested completed window and pick
+     // a default active sibling. Explicit user navigation may then leave it.
+     const target=own[0]!.evidence;
+     await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({...context,expanded:'development',milestone:'TEST-other-range',nodeView:'active',materialNode:`${after.id}|${after.selectedRound??0}|${node.instanceId}`,materialFocus:'washing-window:'+target}));
+     await page.locator('[data-view=order][aria-busy=false]').waitFor();await current.locator('[data-washing-choice][aria-current=true]').waitFor();expect(new URL(page.url()).searchParams.get('focus')).toBe(node.instanceId);expect(new URL(page.url()).searchParams.get('nodeView')).toBe('all');
+     const statusFilter=page.getByRole('combobox',{name:'节点状态筛选'});
+     await statusFilter.selectOption('completed');
+     await expect.poll(()=>new URL(page.url()).searchParams.get('nodeView')).toBe('completed');
+     await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toBeNull();
+     expect(await current.locator('[data-washing-choice][aria-current=true]').count()).toBe(0);
+     await current.locator('[data-washing-choice]').first().getByRole('button',{name:'选中本窗口',exact:true}).click();
+     await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toMatch(/^washing-window:/);
+     await statusFilter.selectOption('active');
+     await expect.poll(()=>new URL(page.url()).searchParams.get('nodeView')).toBe('active');
+     await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toBeNull();
+     expect(await current.locator('[data-washing-choice][aria-current=true]').count()).toBe(0);
+     expect(await statusFilter.inputValue()).toBe('active');
+     await page.getByRole('button',{name:'本单全部节点',exact:true}).click();
+    }
+    expect((await f.runtime.run(fixture.scene,f.root,()=>fixture.washing.read(f.root,fixture.orderId))).scopes).toEqual(sheet.scopes);
+    assertNoNavigationBusinessWrites([tab.session]);
+   }catch(error){await writeFile(join(h.evidence,'six-window-navigation-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
+  });
+  it('restores the implicit default and isolates authorized, mismatched and unavailable read-only windows',async()=>{
+   const f=h.f,logistics=f.people['embroidery-washing-merchandiser']!,{fixture,nodes,added,sheet,expected}=prepared;
+   const tab=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+fixture.sourceId);
+   try{
+    const page=tab.page,sessions=[tab.session];
+    // Restrict the view to these two genuine authorized DTO rows so their
+    // shared rewash window is reachable from a deterministic implicit default.
+    // Keep original record reads and return navigation on the real App.
+    const original=nodes[0]!,rewash=added.find(node=>node.nativeWindows?.some(window=>original.nativeWindows?.some(w=>w.evidence===window.evidence)))!;
+    const shared=rewash.nativeWindows!.find(window=>original.nativeWindows?.some(w=>w.evidence===window.evidence))!;
+    const route='/api/digital-production/journeys/'+fixture.sourceId;
+    const defaultFrame=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+fixture.sourceId);
+    sessions.push(defaultFrame.session);
+    try{
+     const implicit=defaultFrame.page;
+     await implicit.route('**'+route+'?*',async handler=>{
+      const response=await handler.fetch(),document=await response.json() as OrderJourney;
+      const instances=document.stages.flatMap(stage=>stage.nodes);
+      const pair=[original,rewash].map(({instanceId})=>instances.find(node=>node.instanceId===instanceId)!);
+      await handler.fulfill({response,json:{...document,stages:document.stages.map(stage=>stage.key===original.stage?{...stage,nodes:pair}:stage)}});
+     });
+     await implicit.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:fixture.sourceId,milestone:'',expanded:original.stage}));
+     await implicit.locator('[data-view=order][aria-busy=false]').waitFor();
+     const current=implicit.getByRole('region',{name:'当前节点详情'});
+     const rows=implicit.getByRole('region',{name:'节点列表'});
+     expect(await rows.locator('[aria-pressed=true]').getAttribute('data-cockpit-focus')).toBe('node:'+original.instanceId);
+     expect(new URL(implicit.url()).searchParams.has('focus')).toBe(false);
+     await current.locator('summary').filter({hasText:'节点详情'}).click();
+     const selectedRow=current.locator('[data-washing-choice="'+shared.evidence+'"]');
+     const link=selectedRow.getByRole('link',{name:'查看本窗口记录',exact:true});
+     const href=new URL((await link.getAttribute('href'))!,h.base);
+     const returnTo=new URL(href.searchParams.get('returnTo')!,h.base).searchParams;
+     expect(returnTo.get('focus')).toBe(original.instanceId);
+     expect(returnTo.get('materialFocus')).toBe('washing-window:'+shared.evidence);
      await selectedRow.getByRole('button',{name:'选中本窗口',exact:true}).click();
-     await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toBe('washing-window:'+window.evidence);expect(await selectedRow.getByRole('button',{name:'选中本窗口',exact:true}).getAttribute('aria-pressed')).toBe('true');expect(await current.locator('[data-washing-choice][aria-current=true]').count()).toBe(1);
-     await selectedRow.getByRole('link',{name:'查看本窗口记录',exact:true}).click();await page.locator('[data-washing-window][aria-current=location]').waitFor();
-     expect(await page.locator('[data-washing-window][aria-current=location]').getAttribute('data-washing-window')).toBe(window.evidence);expect(await page.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);
-     await page.getByRole('button',{name:'返回',exact:true}).first().click();await page.locator('[data-view=order][aria-busy=false]').waitFor();
-     expect(new URL(page.url()).searchParams.get('focus')).toBe(node.instanceId);expect(new URL(page.url()).searchParams.get('materialFocus')).toBe('washing-window:'+window.evidence);await current.locator('[data-washing-choice][aria-current=true]').waitFor();
-    }
-    // An incoming filter cannot erase the requested completed window and pick
-    // a default active sibling. Explicit user navigation may then leave it.
-    const target=own[0]!.evidence;
-    await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({...context,expanded:'development',milestone:'TEST-other-range',nodeView:'active',materialNode:`${after.id}|${after.selectedRound??0}|${node.instanceId}`,materialFocus:'washing-window:'+target}));
-    await page.locator('[data-view=order][aria-busy=false]').waitFor();await current.locator('[data-washing-choice][aria-current=true]').waitFor();expect(new URL(page.url()).searchParams.get('focus')).toBe(node.instanceId);expect(new URL(page.url()).searchParams.get('nodeView')).toBe('all');
-    const statusFilter=page.getByRole('combobox',{name:'节点状态筛选'});
-    await statusFilter.selectOption('completed');
-    await expect.poll(()=>new URL(page.url()).searchParams.get('nodeView')).toBe('completed');
-    await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toBeNull();
-    expect(await current.locator('[data-washing-choice][aria-current=true]').count()).toBe(0);
-    await current.locator('[data-washing-choice]').first().getByRole('button',{name:'选中本窗口',exact:true}).click();
-    await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toMatch(/^washing-window:/);
-    await statusFilter.selectOption('active');
-    await expect.poll(()=>new URL(page.url()).searchParams.get('nodeView')).toBe('active');
-    await expect.poll(()=>new URL(page.url()).searchParams.get('materialFocus')).toBeNull();
-    expect(await current.locator('[data-washing-choice][aria-current=true]').count()).toBe(0);
-    expect(await statusFilter.inputValue()).toBe('active');
-    await page.getByRole('button',{name:'本单全部节点',exact:true}).click();
-   }
-   // Restrict the view to these two genuine authorized DTO rows so their
-   // shared rewash window is reachable from a deterministic implicit default.
-   // Keep original record reads and return navigation on the real App.
-   const original=nodes[0]!,rewash=added.find(node=>node.nativeWindows?.some(window=>original.nativeWindows?.some(w=>w.evidence===window.evidence)))!;
-   const shared=rewash.nativeWindows!.find(window=>original.nativeWindows?.some(w=>w.evidence===window.evidence))!;
-   const route='/api/digital-production/journeys/'+fixture.sourceId;
-   const defaultFrame=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+fixture.sourceId);
-   sessions.push(defaultFrame.session);
-   try{
-    const implicit=defaultFrame.page;
-    await implicit.route('**'+route+'?*',async handler=>{
-     const response=await handler.fetch(),document=await response.json() as OrderJourney;
-     const instances=document.stages.flatMap(stage=>stage.nodes);
-     const pair=[original,rewash].map(({instanceId})=>instances.find(node=>node.instanceId===instanceId)!);
-     await handler.fulfill({response,json:{...document,stages:document.stages.map(stage=>stage.key===original.stage?{...stage,nodes:pair}:stage)}});
-    });
-    await implicit.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:fixture.sourceId,milestone:'',expanded:original.stage}));
-    await implicit.locator('[data-view=order][aria-busy=false]').waitFor();
-    const current=implicit.getByRole('region',{name:'当前节点详情'});
-    const rows=implicit.getByRole('region',{name:'节点列表'});
-    expect(await rows.locator('[aria-pressed=true]').getAttribute('data-cockpit-focus')).toBe('node:'+original.instanceId);
-    expect(new URL(implicit.url()).searchParams.has('focus')).toBe(false);
-    await current.locator('summary').filter({hasText:'节点详情'}).click();
-    const selectedRow=current.locator('[data-washing-choice="'+shared.evidence+'"]');
-    const link=selectedRow.getByRole('link',{name:'查看本窗口记录',exact:true});
-    const href=new URL((await link.getAttribute('href'))!,h.base);
-    const returnTo=new URL(href.searchParams.get('returnTo')!,h.base).searchParams;
-    expect(returnTo.get('focus')).toBe(original.instanceId);
-    expect(returnTo.get('materialFocus')).toBe('washing-window:'+shared.evidence);
-    await selectedRow.getByRole('button',{name:'选中本窗口',exact:true}).click();
-    await expect.poll(()=>new URL(implicit.url()).searchParams.get('focus')).toBe(original.instanceId);
-    await expect.poll(()=>new URL(implicit.url()).searchParams.get('materialFocus')).toBe('washing-window:'+shared.evidence);
-    await link.click();
-    const record=implicit.locator('[data-washing-window][aria-current=location]');
-    await record.waitFor();
-    expect(await record.getAttribute('data-washing-window')).toBe(shared.evidence);
-    await implicit.getByRole('button',{name:'返回',exact:true}).first().click();
-    await current.locator('[data-washing-choice][aria-current=true]').waitFor();
-    expect(new URL(implicit.url()).searchParams.get('focus')).toBe(original.instanceId);
-    expect(new URL(implicit.url()).searchParams.get('materialFocus')).toBe('washing-window:'+shared.evidence);
-   }finally{await defaultFrame.context.close();}
-   // A real different order/PO supplies adversarial references. The singleton
-   // logistics role is unchanged: even an otherwise readable second order must
-   // not leak into the first mother's mismatched window URL. The original cases
-   // above independently require403 for a role with no washing scope at all.
-   const foreign=await prepare('factory');h.setCollectionScene(fixture.scene);const deniedScope=foreign.sheet.scopes[0]!,foreignReference=bulkWashingWindowReference(deniedScope.scopeId,deniedScope.windows[0]!.id),allowed=nodes[0]!.nativeWindows![0]!;
-   const ordinary=await h.open(logistics.actorId,1165,{},allowed.record!.url!);sessions.push(ordinary.session);
-   try{
-    await ordinary.page.locator('[data-washing-window][aria-current=location]').waitFor();expect(await ordinary.page.getByText(/洗水费用：/).count()).toBe(0);
-    const readable=await ordinary.page.request.get(h.base+'/api/digital-production/orders/'+fixture.orderId+'/bulk-washing');expect(readable.status()).toBe(200);const visible=await readable.json();expect(visible.scopes.flatMap((scope:{windows:unknown[]})=>scope.windows)).toHaveLength(6);
-    for(const window of nodes.flatMap(node=>node.nativeWindows!)){
-     await ordinary.page.goto(h.base+window.record!.url!);await ordinary.page.locator('[data-washing-window][aria-current=location]').waitFor();expect(await ordinary.page.locator('[data-washing-window][aria-current=location]').getAttribute('data-washing-window')).toBe(window.evidence);expect(await ordinary.page.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);
-    }
-    for(const forged of [{line:foreign.lineId,washingWindow:foreignReference},{line:fixture.lineId,washingWindow:foreignReference}]){
-     await ordinary.page.goto(h.base+'/ui/digital-production?'+new URLSearchParams({factory:fixture.orderId,factoryAction:'washing',...forged}));await ordinary.page.getByRole('alert').filter({hasText:/没有指定PO范围|没有此可见洗水窗口/}).waitFor();
-     expect(new URL(ordinary.page.url()).searchParams.get('washingWindow')).toBe(foreignReference);expect(await ordinary.page.locator('[data-washing-window][aria-current=location]').count()).toBe(0);expect(await ordinary.page.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);expect(await ordinary.page.getByText(deniedScope.label,{exact:true}).count()).toBe(0);
-    }
-   }finally{await ordinary.context.close();}
-   const invalid='washing:receipt:UNAVAILABLE:missing',node=nodes[0]!;
-   await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:fixture.sourceId,focus:node.instanceId,row:node.instanceId,materialFocus:'washing-window:'+invalid}));await page.getByRole('region',{name:'当前节点详情'}).getByRole('alert').filter({hasText:'指定目标已保留'}).waitFor();expect(new URL(page.url()).searchParams.get('materialFocus')).toBe('washing-window:'+invalid);expect(await page.getByRole('region',{name:'当前节点详情'}).getByRole('link').count()).toBe(0);
-   expect((await f.runtime.run(fixture.scene,f.root,()=>fixture.washing.read(f.root,fixture.orderId))).scopes).toEqual(sheet.scopes);
-   // Original notification acknowledgement is separate from business writes.
-   expect(h.requests.filter(call=>sessions.includes(call.session)&&!['GET','HEAD'].includes(call.method)&&!call.path.includes('/notifications/'))).toEqual([]);
-   await writeFile(join(h.evidence,'six-window-identities.json'),JSON.stringify({source:'Genuine original manager plan, failed inspection and newly arranged rewash; original App/AuthService; no onsite UUID mapping claimed',expected,selected:nodes.map(node=>({instanceId:node.instanceId,windows:node.nativeWindows!.map(window=>window.evidence)})),navigationBusinessWrites:0},null,2));
-  }catch(error){await writeFile(join(h.evidence,'six-windows-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
+     await expect.poll(()=>new URL(implicit.url()).searchParams.get('focus')).toBe(original.instanceId);
+     await expect.poll(()=>new URL(implicit.url()).searchParams.get('materialFocus')).toBe('washing-window:'+shared.evidence);
+     await link.click();
+     const record=implicit.locator('[data-washing-window][aria-current=location]');
+     await record.waitFor();
+     expect(await record.getAttribute('data-washing-window')).toBe(shared.evidence);
+     await implicit.getByRole('button',{name:'返回',exact:true}).first().click();
+     await current.locator('[data-washing-choice][aria-current=true]').waitFor();
+     expect(new URL(implicit.url()).searchParams.get('focus')).toBe(original.instanceId);
+     expect(new URL(implicit.url()).searchParams.get('materialFocus')).toBe('washing-window:'+shared.evidence);
+    }finally{await defaultFrame.context.close();}
+    // A real different order/PO supplies adversarial references. The singleton
+    // logistics role is unchanged: even an otherwise readable second order must
+    // not leak into the first mother's mismatched window URL. The original cases
+    // above independently require403 for a role with no washing scope at all.
+    const foreign=await prepare('factory');h.setCollectionScene(fixture.scene);const deniedScope=foreign.sheet.scopes[0]!,foreignReference=bulkWashingWindowReference(deniedScope.scopeId,deniedScope.windows[0]!.id),allowed=nodes[0]!.nativeWindows![0]!;
+    const ordinary=await h.open(logistics.actorId,1165,{},allowed.record!.url!);sessions.push(ordinary.session);
+    try{
+     await ordinary.page.locator('[data-washing-window][aria-current=location]').waitFor();expect(await ordinary.page.getByText(/洗水费用：/).count()).toBe(0);
+     const readable=await ordinary.page.request.get(h.base+'/api/digital-production/orders/'+fixture.orderId+'/bulk-washing');expect(readable.status()).toBe(200);const visible=await readable.json();expect(visible.scopes.flatMap((scope:{windows:unknown[]})=>scope.windows)).toHaveLength(6);
+     for(const window of nodes.flatMap(node=>node.nativeWindows!)){
+      await ordinary.page.goto(h.base+window.record!.url!);await ordinary.page.locator('[data-washing-window][aria-current=location]').waitFor();expect(await ordinary.page.locator('[data-washing-window][aria-current=location]').getAttribute('data-washing-window')).toBe(window.evidence);expect(await ordinary.page.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);
+     }
+     for(const forged of [{line:foreign.lineId,washingWindow:foreignReference},{line:fixture.lineId,washingWindow:foreignReference}]){
+      await ordinary.page.goto(h.base+'/ui/digital-production?'+new URLSearchParams({factory:fixture.orderId,factoryAction:'washing',...forged}));await ordinary.page.getByRole('alert').filter({hasText:/没有指定PO范围|没有此可见洗水窗口/}).waitFor();
+      expect(new URL(ordinary.page.url()).searchParams.get('washingWindow')).toBe(foreignReference);expect(await ordinary.page.locator('[data-washing-window][aria-current=location]').count()).toBe(0);expect(await ordinary.page.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);expect(await ordinary.page.getByText(deniedScope.label,{exact:true}).count()).toBe(0);
+     }
+    }finally{await ordinary.context.close();}
+    const invalid='washing:receipt:UNAVAILABLE:missing',node=nodes[0]!;
+    await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:fixture.sourceId,focus:node.instanceId,row:node.instanceId,materialFocus:'washing-window:'+invalid}));await page.getByRole('region',{name:'当前节点详情'}).getByRole('alert').filter({hasText:'指定目标已保留'}).waitFor();expect(new URL(page.url()).searchParams.get('materialFocus')).toBe('washing-window:'+invalid);expect(await page.getByRole('region',{name:'当前节点详情'}).getByRole('link').count()).toBe(0);
+    expect((await f.runtime.run(fixture.scene,f.root,()=>fixture.washing.read(f.root,fixture.orderId))).scopes).toEqual(sheet.scopes);
+    assertNoNavigationBusinessWrites(sessions);
+    await writeFile(join(h.evidence,'six-window-identities.json'),JSON.stringify({source:'Genuine original manager plan, failed inspection and newly arranged rewash; original App/AuthService; no onsite UUID mapping claimed',expected,selected:nodes.map(node=>({instanceId:node.instanceId,windows:node.nativeWindows!.map(window=>window.evidence)})),navigationBusinessWrites:0},null,2));
+   }catch(error){await writeFile(join(h.evidence,'six-window-scope-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
+  });
  });
  it('preserves the original washing form and exact pending command across same-order reads and canceled navigation',async()=>{
   const f=h.f,fixture=await prepare('factory',false);await f.advance(fixture.scene,'2026-11-17T08:01:00.000Z');h.setCollectionScene(fixture.scene);
