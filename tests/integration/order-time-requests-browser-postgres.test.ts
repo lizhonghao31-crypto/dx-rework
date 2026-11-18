@@ -80,6 +80,47 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const saved=await forms.save(original.actor,original.sourceId,{expectedVersion:current.version,document:DevelopmentDocumentSchema.parse(document)},randomUUID()),price=await new PatternRoomPriceService(h.db).quote(h.f.root,'category',original.category.price_id);
    await forms.publish(original.actor,original.sourceId,saved.version,randomUUID(),{categoryId:original.category.price_id,priceVersion:price.version});
   });
+  if(operation==='confirm'){
+   const editor=await h.open(original.actor.actorId,1165,{},'/ui/digital-production?workspace=designer&development='+original.sourceId);
+   try{
+    const begin=editor.page.getByRole('button',{name:'客户确定订单',exact:true});
+    await begin.waitFor();
+    const reads=()=>h.requests.filter(request=>request.session===editor.session&&request.method==='GET').map(request=>new URL(request.path,'http://localhost'));
+    const sheets=()=>reads().filter(read=>read.pathname===`/api/digital-production/sources/${original.sourceId}/development`);
+    expect(sheets()).toHaveLength(1);
+    const directory=reads().filter(read=>read.pathname==='/api/digital-production/workspaces/designer');
+    expect(directory.map(read=>read.searchParams.get('search'))).toEqual([original.sourceId]);
+    const [fresh]=await Promise.all([
+     editor.page.waitForResponse(response=>response.request().method()==='GET'&&
+      new URL(response.url()).pathname===`/api/digital-production/sources/${original.sourceId}/development`),
+     begin.click(),
+    ]);
+    expect(fresh.status()).toBe(200);
+    await editor.page.locator('.development-breadcrumb').getByText('客户确定订单',{exact:true}).waitFor();
+    expect(sheets()).toHaveLength(2);
+    expect(h.requests.filter(request=>request.session===editor.session&&request.method==='POST'&&request.path.endsWith('/confirm'))).toEqual([]);
+   }finally{await editor.context.close();}
+   const documentTab=await h.open(original.actor.actorId,1165,{},`/ui/digital-production?workspace=designer&development=${original.sourceId}&round=1&documentCategory=customer`);
+   try{
+    const {page,session}=documentTab,confirm=page.getByRole('button',{name:'客户确定订单',exact:true});
+    const sheetReads=()=>h.requests.filter(request=>request.session===session&&request.method==='GET')
+     .map(request=>new URL(request.path,'http://localhost')).filter(read=>read.pathname===`/api/digital-production/sources/${original.sourceId}/development`);
+    await page.getByRole('heading',{name:'第 1 轮客户确认与寄样资料',exact:true}).waitFor();
+    await confirm.waitFor();
+    expect(sheetReads().map(read=>read.searchParams.get('round'))).toEqual(['1']);
+    await page.getByRole('button',{name:'面辅料与检测报告',exact:true}).click();
+    await page.getByRole('heading',{name:'面辅料与检测报告',exact:true}).waitFor();
+    await page.getByRole('button',{name:'其他关联单据',exact:true}).click();
+    await page.getByRole('heading',{name:'其他关联单据',exact:true}).waitFor();
+    await confirm.waitFor();
+    expect(sheetReads()).toHaveLength(1);
+    await page.reload();
+    await page.getByRole('heading',{name:'其他关联单据',exact:true}).waitFor();
+    await confirm.waitFor();
+    expect(sheetReads().map(read=>read.searchParams.get('round'))).toEqual(['1','1']);
+    expect(h.requests.filter(request=>request.session===session&&request.method==='POST'&&request.path.endsWith('/confirm'))).toEqual([]);
+   }finally{await documentTab.context.close();}
+  }
   const tab=await h.open(original.actor.actorId,operation==='publish'?1165:390,{},'/ui/digital-production?development='+original.sourceId),path=`/api/digital-production/sources/${original.sourceId}/${operation==='publish'?'development/publish':'confirm'}`;
   let checks=0;
   try{

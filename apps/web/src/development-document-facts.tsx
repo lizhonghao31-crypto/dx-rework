@@ -6,15 +6,16 @@ import type {DevelopmentSheet} from '@dx-rework/contracts/digital-development';
 import {digitalRequest} from './digital-production-api.js';
 import {createWebUrls} from '../url-contract.js';
 import type {DocumentCategory} from './order-document-container.js';
+import type {DevelopmentSheetRead} from './digital-development-panel.js';
 import type {useDevelopmentExecution} from './digital-development-execution-panel.js';
 type Execution=NonNullable<ReturnType<typeof useDevelopmentExecution>['state']>;
 const urls=createWebUrls(import.meta.env.BASE_URL);
 /** All identities come from source/task facts. A report's legacy binding kind is not its purpose. */
-export function DevelopmentDocumentFacts({sourceId,round,category}:{sourceId:string;round?:number|undefined;category:DocumentCategory}){
+export function DevelopmentDocumentFacts({sourceId,round,category,onRead}:{sourceId:string;round?:number|undefined;category:DocumentCategory;onRead?:DevelopmentSheetRead|undefined}){
  const [state,setState]=useState<Execution|null>(null),[sheet,setSheet]=useState<DevelopmentSheet|null>(null);
  const [executionError,setExecutionError]=useState<Error|null>(null),[sheetError,setSheetError]=useState<Error|null>(null),[executionRetry,setExecutionRetry]=useState(0),[sheetRetry,setSheetRetry]=useState(0);
  useEffect(()=>{let live=true;setState(null);setExecutionError(null);void digitalRequest<Execution>(`sources/${sourceId}/execution`).then(value=>{if(live)setState(value);}).catch(reason=>{if(live)setExecutionError(reason);});return()=>{live=false;};},[sourceId,round,executionRetry]);
- useEffect(()=>{let live=true;setSheet(null);setSheetError(null);void digitalRequest<DevelopmentSheet>(`sources/${sourceId}/development${round?`?round=${round}`:''}`).then(value=>{if(live)setSheet(value);}).catch(reason=>{if(live)setSheetError(reason);});return()=>{live=false;};},[sourceId,round,sheetRetry]);
+ useEffect(()=>{let live=true;setSheet(null);setSheetError(null);void digitalRequest<DevelopmentSheet>(`sources/${sourceId}/development${round?`?round=${round}`:''}`).then(value=>{if(live){setSheet(value);onRead?.(value,round);}}).catch(reason=>{if(live)setSheetError(reason);});return()=>{live=false;};},[sourceId,round,sheetRetry,onRead]);
  const readRef=useTodoContentRead({routeName:'digital_development',entityId:sourceId,developmentRound:round??sheet?.roundNumber??1,reportIds:category==='materials'?state?.facts.filter(fact=>fact.kind==='面料报告').map(fact=>fact.factId):[]},Boolean(state&&sheet&&!executionError&&!sheetError&&category==='materials'));
  if(executionError||sheetError)return <>{executionError&&<DigitalReadFailure error={executionError} onRetry={()=>setExecutionRetry(value=>value+1)} retryLabel="重试读取办理事实"/>}{sheetError&&<DigitalReadFailure error={sheetError} onRetry={()=>setSheetRetry(value=>value+1)} retryLabel="重试读取开发资料"/>}</>;
  if(!state||!sheet)return <p role="status">正在读取原资料事实…</p>;

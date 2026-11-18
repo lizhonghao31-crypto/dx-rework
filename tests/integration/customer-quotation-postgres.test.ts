@@ -79,7 +79,15 @@ const url=process.env.TEST_DATABASE_URL;
  it('requires real technical input and assigned prices, redacts full costs, and rejects cross-order and unauthorized fields',async()=>{
    const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource,true);
    const technical=await quotes.read(actor(tech,['pattern_room_worker']),resource);expect(technical.document).toBeNull();expect(technical.confirmation).toBeNull();expect(technical.rows[0]!.unitPrice).toBeNull();
-   expect((await quotes.list(actor(tech,['pattern_room_worker']))).items.some(item=>item.resource.id===id)).toBe(true);
+   const before=new Map<pg.PoolClient,pg.PoolClient['query']>(),queried:string[]=[];
+   const trace=(client:pg.PoolClient)=>{if(before.has(client))return;const query=client.query;before.set(client,query);client.query=function(this:pg.PoolClient,...args:unknown[]){if(typeof args[0]==='string')queried.push(args[0]);return Reflect.apply(query,this,args);} as pg.PoolClient['query'];};
+   database.on('acquire',trace);
+   try{
+    const directory=await quotes.list(actor(tech,['pattern_room_worker']));
+    expect(directory.items.find(item=>item.resource.id===id)).toEqual({resource,version:technical.version,status:technical.status,designStyleNo:technical.designStyleNo,customerCode:technical.customerCode});
+    expect(queried.filter(sql=>sql.includes('WITH candidates AS'))).toHaveLength(1);
+    expect(queried.some(sql=>/digital_budget_documents|digital_quotation_versions|digital_development_documents|technical_artifact/.test(sql))).toBe(false);
+   }finally{database.removeListener('acquire',trace);for(const [client,query] of before)client.query=query;}
    expect((await quotes.list(actor(other))).items.some(item=>item.resource.id===id)).toBe(false);
    const price=await quotes.read(actor(ie,['ie_reviewer']),resource);expect(price.rows).toHaveLength(1);expect(price.rows[0]!.unitPrice).toBe('10');expect(price.document).toBeNull();
    await expect(quotes.read(actor(other),resource)).rejects.toMatchObject({statusCode:404});
