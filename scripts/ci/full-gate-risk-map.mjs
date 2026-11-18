@@ -375,6 +375,9 @@ export const classifyFullGatePaths = (inputPaths) => {
   const independentTestOnly = independentTestOnlyChange(paths);
   let chainProfile = "full";
   const mappedTests = new Set();
+  if(paths.some(path=>/^apps\/api\/src\/reporting\/workflow-analysis(?:-model)?\.ts$/.test(path)||path==='apps/web/src/rework-data-sandbox-page.tsx')){
+    mappedTests.add('tests/integration/sourcing-pr03-postgres.test.ts');
+  }
   if(paths.some(path=>['apps/web/src/cockpit-detail.css','apps/web/src/cockpit-fixed-schedule.tsx','apps/web/src/cockpit-node-dates.tsx','apps/web/src/po-delivery-dates.tsx','tests/integration/bounded-forecast-native-browser-postgres.test.ts'].includes(path)))mappedTests.add('tests/integration/bounded-forecast-native-browser-postgres.test.ts');
   if(paths.some(path=>/current-task-plan|task-plan-targets|fixed-task-targets|framework-node-targets|order-time-work-task-kind/.test(path)||/^apps\/api\/src\/production-platform\/(?:task-service|order-time-reading)\.ts$/.test(path)||/^apps\/web\/src\/(?:task-workbench-sample|bulk-task-workbench|bulk-preparation-panel|digital-production-tasks-panel)\.tsx$/.test(path)||path==='packages/contracts/src/digital-production-tasks.ts'||path==='tests/helpers/order-time-rewash-fixture.ts'))addAll(mappedTests,['tests/integration/current-task-plan-postgres.test.ts','tests/integration/current-task-plan-browser-postgres.test.ts']);
   if(paths.some(path=>/washing-window|journey-washing|fixed-schedule-(?:basis|progress)|journey-fact-model|digital-production-journey|bulk-washing|factory-(?:task-target|flow-panel)|digital-detail-route|cockpit-(?:detail|node-dates|node-rows|record-link)|journey-sla-details|node-materials-panel|order-time-rewash-fixture/.test(path)))addAll(mappedTests,['tests/integration/washing-window-navigation-browser-postgres.test.ts']);

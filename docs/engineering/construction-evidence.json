@@ -1,33 +1,60 @@
 {
   "version": 1,
-  "base": "f4410babeb8e5ca2d0dcce12592884cc34164895",
+  "base": "16288ee72b3fb917329a8a5db77aa08735ba65e9",
   "risk": "full",
-  "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
+  "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
   "rules": [
     {
-      "rule": "PF-A1 original digital analysis metrics and final display history",
-      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), digital-analysis.",
-      "initialization": "Current observed release parent f4410babeb8e5ca2d0dcce12592884cc34164895; exact checked source and independent native fixtures.",
+      "rule": "PF-A2 original current and period-end workflow history",
+      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), workflow-analysis.",
+      "initialization": "Current observed release parent 16288ee72b3fb917329a8a5db77aa08735ba65e9; exact checked source and independent native fixtures.",
       "dateAndPermission": "Maintain actual authorization, historical time and existing read-only or explicit retry boundaries.",
       "writes": [
-        "apps/api/src/production-platform/reporting-query.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "apps/api/src/reporting/workflow-analysis.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/integration/work-analysis-postgres.cases.ts",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/api/src/production-platform/reporting-metrics.ts",
-        "apps/api/src/production-platform/reporting-routes.ts",
-        "packages/contracts/src/digital-production-analysis.ts"
+        "apps/api/src/reporting/workflow-analysis-model.ts",
+        "apps/api/src/reporting/management-reporting-routes.ts",
+        "packages/contracts/src/reporting.ts"
       ],
       "oldTests": [
         "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/time-reading-clock-postgres.test.ts",
-        "tests/unit/digital-analysis-metrics.test.ts"
+        "tests/unit/work-analysis.test.ts",
+        "tests/unit/workflow-analysis-model.test.ts"
       ],
-      "expectation": "Reuse the original authorized task set, keep all original event facts needed for period, metrics, waits, current people and notes. Bind history actor names, full event data and reassignment/delegation records to the final authorized page. Preserve original full authorized export.",
+      "expectation": "Use original authorized histories to compute current and period-end global metrics. Load complete display history and current handlers and execution only for exact current rework rows; retain original historical exclusion of current fields, chronological cutoff, returned reasons and global denominators.",
       "checks": [
-        "native-p16-page",
-        "native-analysis-clock",
+        "native-workflow-history",
+        "unit",
+        "lint",
+        "types",
+        "preflight"
+      ]
+    },
+    {
+      "rule": "PF-A2 independent original sandbox period requests",
+      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), workflow-analysis.",
+      "initialization": "Current observed release parent 16288ee72b3fb917329a8a5db77aa08735ba65e9; exact checked source and independent native fixtures.",
+      "dateAndPermission": "Maintain actual authorization, historical time and existing read-only or explicit retry boundaries.",
+      "writes": [
+        "apps/web/src/rework-data-sandbox-page.tsx",
+        "tests/unit/rework-sandbox-period-reads.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/auth-session.ts",
+        "apps/web/src/auth.tsx",
+        "apps/api/src/reporting/management-reporting-routes.ts"
+      ],
+      "oldTests": [
+        "tests/unit/work-analysis.test.ts",
+        "tests/unit/workflow-analysis-model.test.ts"
+      ],
+      "expectation": "Open periods A and B once each, change only A on its page or status updates and preserve B data and observation. Independent matching identity and permissions, invalidation, request cancellation and explicit retry or refresh remain available.",
+      "checks": [
+        "native-workflow-history",
         "unit",
         "lint",
         "types",
@@ -37,85 +64,62 @@
   ],
   "checks": [
     {
-      "id": "native-p16-page",
+      "id": "native-workflow-history",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-page/tests.json --testNamePattern P16",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/workflow-analysis-actual-native/tests.json --testNamePattern 'work analysis PostgreSQL facts'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
-      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
-      "startedAt": "2026-11-18T11:20:45.177435+00:00",
-      "endedAt": "2026-11-18T11:21:13.423850+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-page/tests.log",
-      "logSha256": "0a24461209a1a63509d4988d462599c40323ed48cf0e3a0761dfa3ac0a594d1b",
+      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
+      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
+      "startedAt": "2026-11-18T11:43:31.962457+00:00",
+      "endedAt": "2026-11-18T11:43:47.874588+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/workflow-analysis-actual-native/tests.log",
+      "logSha256": "98f9f39e845aaaeea2f3dbeaab4796b694b0bd6e09acc241618e8d4369312a0a",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 1,
+      "passed": 10,
       "failed": 0,
-      "skipped": 141,
+      "skipped": 132,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "25c3f156ce6e7362f71f8f32c986cbc94c178bfdcf10b3e2cbfa820804cb6b2f"
-        }
-      ]
-    },
-    {
-      "id": "native-analysis-clock",
-      "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/time-reading-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-clock/tests.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
-      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
-      "startedAt": "2026-11-18T11:21:13.625021+00:00",
-      "endedAt": "2026-11-18T11:21:40.132134+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/digital-analysis-actual-clock/tests.log",
-      "logSha256": "bb7f72988ebbe7b4134dd763c13921b2dcc7dd66996a254af7bc1763af9a3743",
-      "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 14,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "edec8be28e4c3bc6a1b36ac5a0c9fc08591e38b8f6a45ab2f5d31117abed8d67"
+          "sha256": "a9e896aa78107e19ee04da205ea5321426eca002c2d32e18839743f7ecbd18d7"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-analysis-metrics.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/m01-production-period.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/digital-analysis-actual-unit/tests.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/work-analysis.test.ts tests/unit/workflow-analysis-model.test.ts tests/unit/rework-sandbox-period-reads.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/workflow-analysis-actual-unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
-      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
-      "startedAt": "2026-11-18T11:20:49.170766+00:00",
-      "endedAt": "2026-11-18T11:20:52.488688+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-unit/command.log",
-      "logSha256": "171f1f43bd2aaa84c6cbd7b6caab1d74224e963bce47181a50e0407acad22bc6",
+      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
+      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
+      "startedAt": "2026-11-18T11:43:43.281719+00:00",
+      "endedAt": "2026-11-18T11:43:47.247361+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-unit/command.log",
+      "logSha256": "2469670548589783b98d027f41265308f007fd2d4719d5a6fa48171e0a66e240",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 191,
+      "passed": 157,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f1f1dbc7a660995af310d8653723af8e1ef6b2a263911c16ea0fb1667c3afb65"
+          "sha256": "23b1d8c06822b81b99bf54be4d37b54f8b1621021ed1b6e57fe38206af363dbb"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/reporting-query.ts tests/integration/sourcing-pr03-postgres.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/reporting/workflow-analysis.ts apps/web/src/rework-data-sandbox-page.tsx scripts/ci/full-gate-risk-map.mjs tests/integration/work-analysis-postgres.cases.ts tests/unit/rework-sandbox-period-reads.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
-      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
-      "startedAt": "2026-11-18T11:20:45.521886+00:00",
-      "endedAt": "2026-11-18T11:20:48.777183+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-lint/command.log",
+      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
+      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
+      "startedAt": "2026-11-18T11:43:41.519485+00:00",
+      "endedAt": "2026-11-18T11:43:42.862357+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -125,11 +129,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
-      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
-      "startedAt": "2026-11-18T11:20:52.777605+00:00",
-      "endedAt": "2026-11-18T11:21:59.372498+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-types/command.log",
+      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
+      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
+      "startedAt": "2026-11-18T11:43:47.550147+00:00",
+      "endedAt": "2026-11-18T11:44:50.558179+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -139,12 +143,12 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a735861180c4984b886f71166b781e469ef1105",
-      "sourceFingerprint": "3d3a25888b4f169d53abe044259a67e4a114199abd5daa5b76286bd08c5840fc",
-      "startedAt": "2026-11-18T11:21:59.763460+00:00",
-      "endedAt": "2026-11-18T11:22:10.187157+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/digital-analysis-actual-preflight/command.log",
-      "logSha256": "28588153ad8988a3e8c1102f1b9170afb9b0e0fd00c360a8622cfee86191ee0c",
+      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
+      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
+      "startedAt": "2026-11-18T11:44:51.003887+00:00",
+      "endedAt": "2026-11-18T11:45:00.851188+00:00",
+      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-preflight/command.log",
+      "logSha256": "37e21ce81471c38a85c2954c546c0489702273c437694a93a1b294d8ffff3d5a",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
       "passed": 284,
       "failed": 0,
