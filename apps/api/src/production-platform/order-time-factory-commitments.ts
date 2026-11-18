@@ -26,7 +26,8 @@ export function orderTimeFactoryCommitments(commitments:NonNullable<OrderTimeInp
   const work=candidate?.input.work.filter(row=>row.parameterKey==='return_logistics'&&row.id.endsWith(':'+commitment.lineId))??[];
   const end=work.length===1?candidate?.arranged.find(row=>row.id===work[0]!.id)?.end:null;
   const target=slaAnchorTime({precision:'date',value:commitment.date,source:commitment.source},'工厂交货日期');
-  const delta=end?.at&&target.at?(Date.parse(end.at)-Date.parse(target.at)+(end.at===target.at&&!end.exclusive?1:0))/60000:null;
-  return {...commitment,plannedReceipt:end?.at??null,lateMinutes:delta===null?null:Math.max(0,delta),status:delta===null?'unknown':delta>0?'insufficient':'sufficient'};
+  const delta=end?.at&&target.at?(Date.parse(end.at)-Date.parse(target.at))/60000:null;
+  const insufficient=delta!==null&&(delta>0||delta===0&&target.exclusive&&!end?.exclusive);
+  return {...commitment,plannedReceipt:end?.at??null,lateMinutes:delta===null?null:Math.max(0,delta),status:delta===null?'unknown':insufficient?'insufficient':'sufficient'};
  });
 }
