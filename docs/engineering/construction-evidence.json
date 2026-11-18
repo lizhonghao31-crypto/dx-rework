@@ -29,7 +29,8 @@
         "source-washing-unit",
         "source-washing-native",
         "source-washing-lint",
-        "source-washing-types"
+        "source-washing-types",
+        "source-washing-protocol"
       ]
     },
     {
@@ -40,7 +41,8 @@
       "writes": [
         "apps/api/src/production-platform/source-current-supervision.ts",
         "apps/api/src/production-platform/fixed-timeline-targets.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
         "apps/api/src/production-platform/development-sla-evidence.ts",
@@ -56,7 +58,8 @@
         "source-washing-unit",
         "source-washing-native",
         "source-washing-lint",
-        "source-washing-types"
+        "source-washing-types",
+        "source-washing-protocol"
       ]
     }
   ],
@@ -134,6 +137,23 @@
       "log": "/workspace/sla-source-washing-supervision-20261118/checks/release-types/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed."
+    },
+    {
+      "id": "source-washing-protocol",
+      "kind": "tests",
+      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "f8385605e1bac43ff24bcc295440080fc39098a8",
+      "sourceFingerprint": "5b9138cd26f7e1c2afc418ad320fece0ce064dca1abbe166f4a8b1ca6e61ab3f",
+      "startedAt": "2026-11-18T07:20:31.110058+00:00",
+      "endedAt": "2026-11-18T07:20:38.018048+00:00",
+      "log": "/workspace/sla-source-washing-supervision-20261118/checks/release-protocol/command.log",
+      "logSha256": "7e43c762fbbeaf0cd912c329ebb88705e71dba945d66c5922461872ef7940135",
+      "context": "Original Journey reader and native arrangement on isolated low-privilege PG16 with the exact merged release base. The original site cases were not replayed.",
+      "passed": 284,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }
