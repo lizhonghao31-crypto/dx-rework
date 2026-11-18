@@ -1,60 +1,47 @@
 {
   "version": 1,
-  "base": "16288ee72b3fb917329a8a5db77aa08735ba65e9",
+  "base": "84b979b0a099f53462c52e24c6b4770abb8c962c",
   "risk": "full",
-  "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
+  "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
   "rules": [
     {
-      "rule": "PF-A2 original current and period-end workflow history",
-      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), workflow-analysis.",
-      "initialization": "Current observed release parent 16288ee72b3fb917329a8a5db77aa08735ba65e9; exact checked source and independent native fixtures.",
-      "dateAndPermission": "Maintain actual authorization, historical time and existing read-only or explicit retry boundaries.",
+      "rule": "R1 exact original cancellation of a source task on an open linked order",
+      "source": "Approved SLA Remaining PR Allocation v8 §2 PR-01 and Unified Repair v10 §4A/4F. R1 acceptance observation at 84b979b0 and reproduced versioned linked source regression.",
       "writes": [
-        "apps/api/src/reporting/workflow-analysis.ts",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/integration/work-analysis-postgres.cases.ts",
+        "apps/api/src/production-platform/cancelled-task-history.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "tests/helpers/order-time-rewash-fixture.ts",
+        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/order-time-reading.test.ts",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/api/src/reporting/workflow-analysis-model.ts",
-        "apps/api/src/reporting/management-reporting-routes.ts",
-        "packages/contracts/src/reporting.ts"
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/journey-termination.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/web/src/cockpit-current-summary.tsx",
+        "apps/web/src/cockpit-node-summary.tsx",
+        "apps/web/src/cockpit-framework-nodes.tsx"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/work-analysis.test.ts",
-        "tests/unit/workflow-analysis-model.test.ts"
+        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/unit/order-time-reading.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts"
       ],
-      "expectation": "Use original authorized histories to compute current and period-end global metrics. Load complete display history and current handlers and execution only for exact current rework rows; retain original historical exclusion of current fields, chronological cutoff, returned reasons and global denominators.",
+      "initialization": "Exact release 84b979b0 with existing migrated schema. Schema v1 and selector v2 stay compatible. Derived fact calculation v16 rebuilds obsolete v15 using ordinary existing reader/worker paths.",
+      "dateAndPermission": "Same authorized repeatable-read snapshot and same exact task/source/round/route/work/PO. Original occurredAt and clock decide the historical minutes independently of recordedAt and the still-open parent order. No business writes.",
+      "expectation": "Task continues to show original R=18:40:27.622 and D=22:40:27.622; after own 02:40:27.622 cancellation the linked Journey and original App show the frozen 240 minutes with no A, no active risk, unchanged open order or plan. Unknown time or mismatched and ambiguous scoped evidence does not borrow an order stop or another original.",
       "checks": [
-        "native-workflow-history",
-        "unit",
-        "lint",
-        "types",
-        "preflight"
-      ]
-    },
-    {
-      "rule": "PF-A2 independent original sandbox period requests",
-      "source": "User-approved DX System Read Performance Scan and Repair Plan v2 (Library libfile_fde3_f-02042508e11c81918c444e60b2756446_c8d3bf5d609c8191bce6411a30e94d44), workflow-analysis.",
-      "initialization": "Current observed release parent 16288ee72b3fb917329a8a5db77aa08735ba65e9; exact checked source and independent native fixtures.",
-      "dateAndPermission": "Maintain actual authorization, historical time and existing read-only or explicit retry boundaries.",
-      "writes": [
-        "apps/web/src/rework-data-sandbox-page.tsx",
-        "tests/unit/rework-sandbox-period-reads.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/auth.tsx",
-        "apps/api/src/reporting/management-reporting-routes.ts"
-      ],
-      "oldTests": [
-        "tests/unit/work-analysis.test.ts",
-        "tests/unit/workflow-analysis-model.test.ts"
-      ],
-      "expectation": "Open periods A and B once each, change only A on its page or status updates and preserve B data and observation. Independent matching identity and permissions, invalidation, request cancellation and explicit retry or refresh remain available.",
-      "checks": [
-        "native-workflow-history",
+        "native",
         "unit",
         "lint",
         "types",
@@ -64,62 +51,62 @@
   ],
   "checks": [
     {
-      "id": "native-workflow-history",
+      "id": "native",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/workflow-analysis-actual-native/tests.json --testNamePattern 'work analysis PostgreSQL facts'",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/cancelled-linked-source-regression/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
-      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
-      "startedAt": "2026-11-18T11:43:31.962457+00:00",
-      "endedAt": "2026-11-18T11:43:47.874588+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/workflow-analysis-actual-native/tests.log",
-      "logSha256": "98f9f39e845aaaeea2f3dbeaab4796b694b0bd6e09acc241618e8d4369312a0a",
+      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
+      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
+      "startedAt": "2026-11-18T17:31:07.244392+00:00",
+      "endedAt": "2026-11-18T17:33:00.860049+00:00",
+      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/cancelled-linked-source-regression/tests.log",
+      "logSha256": "2ff3a026ab3076f19b01bebddf5d7b5889c28ea558814f1b080a290b24e6c5b2",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 10,
+      "passed": 25,
       "failed": 0,
-      "skipped": 132,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a9e896aa78107e19ee04da205ea5321426eca002c2d32e18839743f7ecbd18d7"
+          "sha256": "56697bfc8da649d182d6af0f5dfbc06b2f17731bc8c806b839ce2601c4dc5f63"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/work-analysis.test.ts tests/unit/workflow-analysis-model.test.ts tests/unit/rework-sandbox-period-reads.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-performance-checks-20261118/workflow-analysis-actual-unit/tests.json",
+      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/journey-termination.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-r1-checks-20261118/unit/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
-      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
-      "startedAt": "2026-11-18T11:43:43.281719+00:00",
-      "endedAt": "2026-11-18T11:43:47.247361+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-unit/command.log",
-      "logSha256": "2469670548589783b98d027f41265308f007fd2d4719d5a6fa48171e0a66e240",
+      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
+      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
+      "startedAt": "2026-11-18T17:31:07.517105+00:00",
+      "endedAt": "2026-11-18T17:31:14.546000+00:00",
+      "log": "/tmp/dx-sla-r1-checks-20261118/unit/command.log",
+      "logSha256": "60a63f06c562ab55e685241eb9761a72bf3e1b4288105a1dc4d0c71bb12a1b98",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
-      "passed": 157,
+      "passed": 131,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "23b1d8c06822b81b99bf54be4d37b54f8b1621021ed1b6e57fe38206af363dbb"
+          "sha256": "0600e1418a04e31bd3956550189269abf0d4d645b25426ab471cd99585d2fb81"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/reporting/workflow-analysis.ts apps/web/src/rework-data-sandbox-page.tsx scripts/ci/full-gate-risk-map.mjs tests/integration/work-analysis-postgres.cases.ts tests/unit/rework-sandbox-period-reads.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/cancelled-task-history.ts apps/api/src/production-platform/fixed-schedule-basis.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/order-time-reading.ts tests/helpers/order-time-rewash-fixture.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-reading.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
-      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
-      "startedAt": "2026-11-18T11:43:41.519485+00:00",
-      "endedAt": "2026-11-18T11:43:42.862357+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-lint/command.log",
+      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
+      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
+      "startedAt": "2026-11-18T17:31:07.517525+00:00",
+      "endedAt": "2026-11-18T17:31:09.917890+00:00",
+      "log": "/tmp/dx-sla-r1-checks-20261118/lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -129,11 +116,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
-      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
-      "startedAt": "2026-11-18T11:43:47.550147+00:00",
-      "endedAt": "2026-11-18T11:44:50.558179+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-types/command.log",
+      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
+      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
+      "startedAt": "2026-11-18T17:31:10.302191+00:00",
+      "endedAt": "2026-11-18T17:32:20.300976+00:00",
+      "log": "/tmp/dx-sla-r1-checks-20261118/types/command.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable."
     },
@@ -143,12 +130,12 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "11ffd4d8688f2bf5cfc8564c9f2f2542ae3cde84",
-      "sourceFingerprint": "269c73a339002854af002d744c647526c7b42eb15626c4535f1eb51cf1776f5a",
-      "startedAt": "2026-11-18T11:44:51.003887+00:00",
-      "endedAt": "2026-11-18T11:45:00.851188+00:00",
-      "log": "/tmp/dx-performance-checks-20261118/workflow-analysis-actual-preflight/command.log",
-      "logSha256": "37e21ce81471c38a85c2954c546c0489702273c437694a93a1b294d8ffff3d5a",
+      "testedHead": "84b979b0a099f53462c52e24c6b4770abb8c962c",
+      "sourceFingerprint": "4674824762fba41a30aa7d3e19795604e123540595c98edeaa36e7bce05fa634",
+      "startedAt": "2026-11-18T17:33:24.188284+00:00",
+      "endedAt": "2026-11-18T17:33:33.391886+00:00",
+      "log": "/tmp/dx-sla-r1-checks-20261118/preflight-final/command.log",
+      "logSha256": "3dfebe5a05c9f184852a4f6666886b5ea44235c9bb87e03bb0640eb466dbb631",
       "context": "Source fingerprint and retained actual test ancestor with isolated low-privilege PostgreSQL where applicable.",
       "passed": 284,
       "failed": 0,

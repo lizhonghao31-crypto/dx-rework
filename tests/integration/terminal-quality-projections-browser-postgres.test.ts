@@ -5,7 +5,10 @@ import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-bro
 import {randomUUID} from 'node:crypto';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
-import {admittedFrameworkProductionFixture,prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
+import {admittedFrameworkProductionFixture,admittedOrderFixture,prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
+import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
+import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
+import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
@@ -243,5 +246,69 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     });
    }
   }finally{await legacy.dispose();}
+ });
+ it('retains cancelled source material verification responsibility on its linked open order',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,true),standard=await settings.read(f.root),values=r5OneHourConfiguration();
+  values.nodes.development_materials={kind:'work',minutes:240,calendar:'continuous',reminder:{enabled:true,percent:70}};
+  await settings.save(f.root,{expectedVersion:standard.version,values:prepareTimeFrameworkConfiguration(values)},randomUUID());
+  const start='2026-11-17T18:40:27.622Z',deadline='2026-11-17T22:40:27.622Z',cancelledAt='2026-11-18T02:40:27.622Z';
+  const {scene,orderId,sourceId,repo,resource}=await admittedOrderFixture(f,{startAt:start,poCount:2});
+  const run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action),tasks=new DigitalProductionTaskService(f.db),journeys=new DigitalJourneyQuery(f.db);
+  const source={kind:'source' as const,id:sourceId};
+  const plan=await repo.current(resource());expect(plan?.input.scopes).toHaveLength(2);
+  const original=await run(async()=>{
+   const rows=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_materials' AND t.route_version=1",[sourceId])).rows;
+   expect(rows).toHaveLength(1);
+   const task=await tasks.read(f.root,rows[0]!.task_id);expect(task).toMatchObject({state:'ready',enteredAt:start,dueAt:deadline,completedAt:null});return task;
+  });
+  await f.advance(scene,cancelledAt);
+  await run(()=>tasks.controlResource(f.root,source,'cancel','TEST stops the linked source but leaves its customer order open',randomUUID()));
+  const eventQuery="SELECT event_id,occurred_at,recorded_at,time_quality FROM digital_production_task_events WHERE task_id=$1 AND resource_kind='source' AND resource_id=$2 AND event_kind='cancel'";
+  const [event]= (await f.db.query(eventQuery,[original.taskId,sourceId])).rows;
+  expect(event.occurred_at.toISOString()).toBe(cancelledAt);expect(event.recorded_at.toISOString()).not.toBe(cancelledAt);
+  await run(async()=>{
+   const facts=new JourneyFactRepository(f.db),{model}=await facts.buildOne(resource());
+   const scopes=model.fixedSchedule!.scopes;
+   expect(scopes).toHaveLength(2);
+   for(const scope of scopes)expect(scope.facts['source:development_materials']).toMatchObject({ownTaskId:original.taskId,terminated:true,terminationAt:cancelledAt,evidenceRefs:expect.arrayContaining([`digital_production_task_events:${event.event_id}`])});
+   expect(model.termination).toBeNull();
+   const previous='journey-facts-washing-window-identities-v15';
+   await f.db.query('UPDATE digital_journey_fact_models SET calculation_version=$2 WHERE resource_kind=\'order\' AND resource_id=$1',[orderId,previous]);
+   const client=await f.db.connect();
+   try{
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    expect(await facts.readStoredWithClient(client,resource())).toMatchObject({status:'obsolete',model:null});
+    const observation=await f.runtime.repository.view(scene),selection=await facts.readSelectionsWithClient(client,[resource()],observation.now);
+    expect(selection.items.get(`order:${orderId}`)).toMatchObject({status:'obsolete',facts:null});
+   }finally{await client.query('ROLLBACK');client.release();}
+   expect((await facts.buildOne(resource())).model.fixedSchedule).toEqual(model.fixedSchedule);
+  });
+  for(const [index,now] of ['2026-11-18T03:00:00.000Z','2027-04-14T16:00:00.000Z'].entries()){
+   await f.advance(scene,now);
+   const detail=await run(async()=>{
+    expect(await tasks.read(f.root,original.taskId)).toMatchObject({state:'cancelled',enteredAt:start,dueAt:deadline,completedAt:null,canExecute:false});
+    const detail=await journeys.read(f.root,orderId,undefined,true),node=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===original.taskId)!;
+    await writeFile(join(h.evidence,`cancel-linked-source-${index}.json`),JSON.stringify({node,scopes:detail.fixedSchedule?.scopes},null,2));
+    expect(detail.display?.mainState).not.toBe('cancelled');
+    expect(node).toMatchObject({state:'cancelled',actualAt:null,overdueSeconds:14400,nativeTaskDeadline:{at:deadline}});
+    expect(node.risks).not.toContain('overdue');
+    const ownTargets=node.fixedTargets!;expect(ownTargets).toHaveLength(2);expect(new Set(ownTargets.map(target=>target.lineId)).size).toBe(2);
+    for(const own of ownTargets)expect(own.progress).toMatchObject({businessCompleted:false,goalDelta:{kind:'terminated',actual:{precision:'unknown'}},ownSla:{state:'terminated',deadlineAt:deadline,overdueMinutes:{minimum:240,maximum:240}}});
+    expect(detail.fixedSchedule!.scopes.some(scope=>scope.nodes.some(work=>work.id.startsWith('garment_packing:')&&work.state!=='terminated'))).toBe(true);
+    return {id:detail.id,stage:node.stage};
+   });
+   if(index===0){
+    h.setCollectionScene(scene);
+    const tab=await h.open(f.root.actorId,1165,{},`/ui/digital-cockpit?selected=${detail.id}&expanded=${detail.stage}&focus=${original.taskId}`);
+    try{
+     const current=tab.page.locator('.cockpit-current-summary');await current.waitFor();
+     await expect.poll(()=>current.innerText()).toContain('终止前超时4小时');
+     expect(await current.innerText()).toContain(new Date(deadline).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));
+     expect(await tab.page.getByRole('link',{name:'进入该节点办理',exact:true}).count()).toBe(0);
+    }finally{await tab.context.close();}
+   }
+  }
+  expect(await repo.current(resource())).toEqual(plan);
+  expect((await f.db.query(eventQuery,[original.taskId,sourceId])).rows).toEqual([event]);
  });
 });
