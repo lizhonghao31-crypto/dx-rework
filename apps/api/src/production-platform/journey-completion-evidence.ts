@@ -20,8 +20,8 @@ export function journeyActualPoint(node:JourneyNode,asOf:string):JourneyCompleti
 
 /** A current task's stored lifecycle is not its completion at this observation.
  * Keep date-only recorded proof at its native precision, and let exact current
- * inheritance use its own adoption event. Unverified instants remain visible
- * to the time reader but cannot count as completed work. */
+ * inheritance use its own adoption event. A task's unverified report does
+ * not establish completion. */
 export function journeyCompletedAtObservation(node:JourneyNode,asOf:string):boolean{
  if(node.progressApplicability==='unknown'||node.progressApplicability==='not_applicable')return false;
  const occurrence=journeyActualPoint(node,asOf);
@@ -29,5 +29,10 @@ export function journeyCompletedAtObservation(node:JourneyNode,asOf:string):bool
  // execution or timestamp. Contradictory evidence still disqualifies it.
  if(!occurrence&&node.key==='cutting_gate'&&node.state==='completed'&&node.occurrence===null
   &&node.instanceId===`cutting_gate:${node.round??0}`&&!node.actualAt&&!node.actualDate&&!node.timing?.assessmentIssue)return true;
- return occurrence!==null&&(node.state==='inherited'||occurrence.precision==='date'||occurrence.quality==='verified');
+ // The native closure projector checks physical packing and its exact scope
+ // before attaching A. It keeps the original recorded time quality and
+ // independently indicates whether this packing also completes the order.
+ const nativePacking=node.key==='packing'&&node.current&&node.completesOrder!==undefined
+  &&node.records.some(record=>record.domain==='closure');
+ return occurrence!==null&&(node.state==='inherited'||occurrence.precision==='date'||occurrence.quality==='verified'||nativePacking);
 }
