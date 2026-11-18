@@ -38,6 +38,16 @@ async function saveDraftAndReadReceipt(page:Page,sourceId:string,expectedVersion
  expect(result).toMatchObject({sourceId,version:expectedVersion+1});
 }
 
+async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',click:()=>Promise<void>){
+ const [receipt]=await Promise.all([
+  page.waitForResponse(response=>response.request().method()===method&&new URL(response.url()).pathname===path),
+  click(),
+ ]);
+ const result=await receipt.json();
+ expect(receipt.status(),result.error?.code).toBe(200);
+ return {result,body:receipt.request().postDataJSON()};
+}
+
 (url?describe:describe.skip)('special craft library original App settings',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'special-craft-ui-'+randomUUID()),{fullApp:true,orderTimeModel:true});});
@@ -170,22 +180,30 @@ async function saveDraftAndReadReceipt(page:Page,sourceId:string,expectedVersion
   const ready=await productionReadinessFixture(h.db,f.root,order.productionOrderId,worker.actorId,f.people.warehouse!);
   await instructions.publish(f.root,order.productionOrderId,{expectedVersion:saved.version,orderVersion:saved.currentOrderVersion,expectedReadinessRevision:ready.revision},randomUUID());
   const bulk={kind:'order' as const,id:order.productionOrderId},path='/ui/digital-quotation?kind=order&id='+order.productionOrderId;
+  const api=`/api/digital-production/orders/${order.productionOrderId}/quotation`;
   const admin=await h.open(f.root.actorId,1165,{},path);
   try{
    await admin.page.getByLabel('TEST 仅大货压花价格负责人',{exact:true}).selectOption('pattern_room_worker:'+worker.actorId);
-   await admin.page.getByRole('button',{name:'保存报价',exact:true}).click();
-   await expect.poll(async()=>(await quotes.read(f.root,bulk)).rows.find(row=>row.name==='TEST 仅大货压花')?.assignment.priceAssigneeId).toBe(worker.actorId);
+   const assigned=await quotationWriteReceipt(admin.page,api,'PUT',()=>admin.page.getByRole('button',{name:'保存报价',exact:true}).click());
+   expect(assigned.result.commandReceipt).toMatchObject({action:'save',appliedVersion:assigned.body.expectedVersion+1});
+   const stored=await quotes.read(f.root,bulk),row=stored.rows.find(value=>value.name==='TEST 仅大货压花');
+   expect(row?.assignment.priceAssigneeId).toBe(worker.actorId);
+   const rowId=row!.rowId;
    const own=await h.open(worker.actorId,1165,{},path);
    try{
-    await own.page.getByLabel('TEST 仅大货压花负责单价',{exact:true}).fill('8');
+    const price=own.page.getByLabel('TEST 仅大货压花负责单价',{exact:true});
+    await price.fill('8');
     expect(await own.page.getByLabel('IE加工单价负责单价',{exact:true}).count()).toBe(0);
-    await own.page.locator('.quotation-row-input').filter({has:own.page.getByLabel('TEST 仅大货压花负责单价',{exact:true})}).getByRole('button',{name:'保存本行负责字段',exact:true}).click();
-    await expect.poll(async()=>(await quotes.read(f.root,bulk)).rows.find(row=>row.name==='TEST 仅大货压花')?.unitPrice).toBe('8');
+    const save=own.page.locator('.quotation-row-input').filter({has:price}).getByRole('button',{name:'保存本行负责字段',exact:true});
+    const priced=await quotationWriteReceipt(own.page,`${api}/rows/${rowId}`,'POST',()=>save.click());
+    expect(priced.body).toEqual({expectedVersion:stored.version,unitPrice:'8'});
+    expect(priced.result.commandReceipt).toMatchObject({action:`row:${rowId}`,appliedVersion:stored.version+1});
+    expect((await quotes.read(f.root,bulk)).rows.find(value=>value.rowId===rowId)?.unitPrice).toBe('8');
     await own.page.screenshot({path:join(h.evidence,'special-craft-bulk-price-1165.png'),fullPage:true});
     const assignment=(await h.db.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[worker.actorId])).rows[0];
     await f.access.assignRole(h.admin,{userId:worker.actorId,roleCode:'finance_read',reason:'TEST keep same session after craft role withdrawal'});
     await f.access.revokeRole(h.admin,assignment.assignment_id,'TEST bulk special craft current role withdrawal');
-    const response=await own.page.request.get(h.base+'/api/digital-production/orders/'+order.productionOrderId+'/quotation');
+    const response=await own.page.request.get(h.base+api);
     expect([403,404]).toContain(response.status());
 
    }finally{await own.context.close();}
