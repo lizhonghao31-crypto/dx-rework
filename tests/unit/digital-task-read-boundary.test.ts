@@ -30,7 +30,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
   const rows = [own, foreign];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
-    if (["SELECT to_regclass('digital_timeline_adoptions') AS relation", "SELECT to_regclass('digital_preparation_responsibilities') AS relation", "SELECT to_regclass('digital_preparation_material_versions') AS relation", "SELECT to_regclass('digital_order_time_standards') AS relation", "SELECT to_regclass('digital_whole_order_deleted_objects') AS relation"].includes(sql)) found = [{relation:null}];
+    if (["SELECT to_regclass('digital_timeline_adoptions') AS relation", "SELECT to_regclass('digital_preparation_responsibilities') AS relation", "SELECT to_regclass('digital_preparation_material_versions') AS relation", "SELECT to_regclass('digital_order_time_standards') AS relation", "SELECT to_regclass('digital_order_time_plan_versions') AS relation", "SELECT to_regclass('digital_whole_order_deleted_objects') AS relation"].includes(sql)) found = [{relation:null}];
     else if (sql === "SELECT to_regclass('digital_bulk_preshrink_corrections') AS relation") found = [{relation:'digital_bulk_preshrink_corrections'}];
     else if (sql === 'SELECT preshrink_task_id FROM digital_bulk_preshrink_corrections ORDER BY preshrink_task_id') found = [];
     else if (sql === "SELECT to_regclass('digital_sla_configurations') AS relation") found = [{relation:sla==='absent'?null:'digital_sla_configurations'}];
@@ -106,12 +106,14 @@ describe("task metadata is authorized independently from necessary order documen
     const f=fixture(mode),read=await f.service.read(f.actor(),f.own.task_id);
     expect(read.policyVersion).toBe(mode==='frozen'?7:1);expect(read.slaHours).toBe(mode==='frozen'?2:1);
     expect(read.canExecute).toBe(true);expect(read.orderId).toBe(f.orderId);
+    expect(read.currentPlanTargets).toMatchObject({state:'unknown',reason:'本单尚无已生效的当前计划',targets:[]});
+    expect(f.query.mock.calls.some(([sql])=>sql.includes('FROM digital_order_time_plan_versions'))).toBe(false);
     f.query.mockClear();
     for(const id of [f.foreign.task_id,randomUUID()]){
       await expect(f.service.read(f.actor(),id)).rejects.toMatchObject({statusCode:404});
       await expect(f.service.history(f.actor(),id)).rejects.toMatchObject({statusCode:404});
     }
-    expect(f.query.mock.calls.some(([sql])=>sql.includes('digital_sla_configurations')||sql.startsWith('SELECT event_id AS'))).toBe(false);
+    expect(f.query.mock.calls.some(([sql])=>sql.includes('digital_sla_configurations')||sql.includes('digital_order_time_plan_versions')||sql.startsWith('SELECT event_id AS'))).toBe(false);
     await expect(f.pool.query('SELECT unexpected_isolated_query')).rejects.toThrow('Unexpected isolated query');
   });
 

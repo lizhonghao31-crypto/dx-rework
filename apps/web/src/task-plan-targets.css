@@ -1,0 +1,4 @@
+.task-plan-targets{margin:12px 0;padding:12px;border:1px solid var(--dx-border,#dce6f5);border-radius:8px;min-width:0}
+.task-plan-targets>header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.task-plan-targets dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));gap:12px;margin:12px 0 0}
+.task-plan-targets dl>div{min-width:0}.task-plan-targets :is(dt,dd,p){overflow-wrap:anywhere}.task-plan-targets dd{margin:4px 0 0}.task-plan-targets p{margin-bottom:0}

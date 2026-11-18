@@ -3,6 +3,14 @@ import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {buildOrderTimeWork} from './order-time-schedule.js';
 import {fixedTimelineTargets,type FixedTimelineTarget} from './fixed-timeline-targets.js';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
+import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
+
+/** Current arranged P used by both Journey and the exact native-task reader.
+ * Completion/history assessment and milestone event constraints stay separate. */
+export function arrangedOrderTimeTarget(saved:Pick<StoredOrderTimePlan,'input'|'targets'>,scopeRef:string,workId:string){
+ const framework=saved.input.frameworkPlans?.[scopeRef];
+ return framework?framework.arranged.find(target=>target.id===workId):saved.targets[scopeRef]?.[workId];
+}
 
 /** An event contributes no extra work duration. Its scheduling position is not
  * an instruction to finish at order creation. Read its approved milestone or

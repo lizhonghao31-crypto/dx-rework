@@ -1,0 +1,4 @@
+import type {OrderTimeWork} from './order-time-schedule.js';
+const aliases:Record<string,string>={production_sheet:'production_instruction',warehouse_accessories:'accessories_ready',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',external_pattern:'development_external_pattern',development_craft_return:'development_craft_confirmation',factory_production_work:'production_reporting',factory_production:'factory_production_qc',garment_inspection:'receiving_inspection',garment_packing:'packing',return_logistics:'receipts'};
+/** Existing native-kind mapping, shared without loading the Journey reader. */
+export const orderTimeWorkTaskKind=(work:OrderTimeWork)=>work.parameterKey.startsWith('development_special_')?'development_printing':aliases[work.parameterKey]??work.parameterKey;
