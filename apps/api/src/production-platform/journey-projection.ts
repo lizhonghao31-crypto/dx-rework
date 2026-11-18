@@ -67,7 +67,8 @@ export function journeyUnfilteredSignals(item:JourneySelection):JourneySelection
   risks:{overdue:risk('overdue'),due_soon:risk('due_soon'),blocked:risk('blocked')},
   scopedBlocked:nodes.some(node=>node.state==='blocked'),scopedOverdue:open.some(node=>node.risks.includes('overdue')),scopedDueSoon:open.some(node=>node.risks.includes('due_soon'))};
 }
-export const journeyMatchesSearch=(item:JourneySelection,search:string)=>!search||[item.id,item.sourceId,item.orderId,item.designStyleNo,item.temporaryStyleNo,item.customer,item.designer,item.styleName,...item.orderNumbers,...item.links.map(link=>link.id),...item.merchandisers.map(person=>person.name),...item.lines.flatMap(line=>[line.po,line.formalStyleNo,line.temporaryStyleNo])].some(value=>value?.toLocaleLowerCase().includes(search));
+type JourneySearchFields=Pick<JourneySelection,'id'|'sourceId'|'orderId'|'designStyleNo'|'temporaryStyleNo'|'customer'|'designer'|'styleName'|'orderNumbers'|'links'|'merchandisers'|'lines'>;
+export const journeyMatchesSearch=(item:JourneySearchFields,search:string)=>!search||[item.id,item.sourceId,item.orderId,item.designStyleNo,item.temporaryStyleNo,item.customer,item.designer,item.styleName,...item.orderNumbers,...item.links.map(link=>link.id),...item.merchandisers.map(person=>person.name),...item.lines.flatMap(line=>[line.po,line.formalStyleNo,line.temporaryStyleNo])].some(value=>value?.toLocaleLowerCase().includes(search));
 /** Native identity/search fields remain current even while complex facts are
  * pending. An unrelated customer's update must not blank this query's totals. */
 export const journeyMatchesMetadata=(item:JourneySelection,filter:JourneyFilter)=>(item.selectionSignals?.searchMatched??journeyMatchesSearch(item,filter.search.toLocaleLowerCase()))

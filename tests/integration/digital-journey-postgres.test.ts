@@ -18,6 +18,7 @@ import pg from "pg";
 import Fastify from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-journey";
+import type {OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import { DigitalOrderCreateSchema,beijingCalendarDate,minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
 import {addCalendarDays} from '@dx-rework/contracts/series-calendar';
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
@@ -250,17 +251,25 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const first=(await journeys.read(rootActor,order.productionOrderId,undefined,true)).operationLog!;
     expect(first.items).toHaveLength(5);expect(first.nextCursor).not.toBeNull();
     const expected=(await db.query("SELECT e.event_id FROM digital_production_task_events e JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1",[order.productionOrderId])).rows.map(row=>`task:${row.event_id}`).sort();
-    const caseId=randomUUID(),operation=randomUUID();
+    const caseId=randomUUID(),operation=randomUUID(),styleId=randomUUID(),styleName='TEST 单独款名字段';
     const seed=await db.connect();
     try{await seed.query("BEGIN");
-    await seed.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,'TEST-cockpit-case',$2,ARRAY['root_superuser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$3,'TEST')",[operation,root,caseId]);
-    await seed.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason,workflow_generation) VALUES($1,$1::uuid::text,'TEST','TEST-SOURCING-LOG','garment_processing',300,$2,$3,'TEST-cockpit-case','TEST','digital_production_v1')",[caseId,root,operation]);
+    await seed.query("INSERT INTO sourcing_style_catalog(style_id,style_name,created_by) VALUES($1,$2,$3)",[styleId,styleName,root]);
+    await seed.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason,after_state) VALUES($1,'TEST-cockpit-case',$2,ARRAY['root_superuser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$3,'TEST',$4)",[operation,root,caseId,{gender:'男装',styleId,styleName}]);
+    await seed.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,gender,style_id,style_name_snapshot,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason,workflow_generation) VALUES($1,$1::uuid::text,'TEST-SOURCING-ERP-%_只读','TEST-SOURCING-LOG','男装',$4,$5,'garment_processing',300,$2,$3,'TEST-cockpit-case','TEST','digital_production_v1')",[caseId,root,operation,styleId,styleName]);
     await seed.query("INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,1,NULL,'pending_ie_quote','created','TEST',$3,$4,'TEST-cockpit-case')",[randomUUID(),caseId,root,operation]);
     await seed.query("INSERT INTO digital_production_child_links(module,child_id,production_order_id) VALUES('sourcing',$1,$2)",[caseId,order.productionOrderId]);
     await seed.query("UPDATE digital_production_tasks SET state='completed',entered_at='2026-10-01T00:00:00Z',completed_at='2026-10-01T12:00:00Z',completed_quality='现场登记' WHERE task_id=$1",[task.taskId]);
       await seed.query("COMMIT");
     }catch(error){await seed.query("ROLLBACK");throw error;}finally{seed.release();}
     const replaced=await journeys.read(rootActor,order.productionOrderId,undefined,true);
+    const primary=actor(merchandiser,['order_merchandiser']);
+    expect((await journeys.list(primary,JourneyFilterSchema.parse({search:order.productionOrderId}))).total).toBe(1);
+    for(const search of [caseId,'sourcing-erp-%_只读','单独款名字段']){
+      const filter=JourneyFilterSchema.parse({search});
+      expect((await journeys.list(rootActor,filter)).items.map(item=>item.orderId)).toEqual([order.productionOrderId]);
+      expect((await journeys.list(primary,filter)).total).toBe(0);
+    }
     expect(replaced.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_preparation')?.records.map(record=>record.domain)).toEqual(['sourcing']);
     expect(replaced.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_preparation')).toMatchObject({instanceId:task.taskId,
       enteredAt:'2026-10-01T00:00:00.000Z',actualAt:'2026-10-01T12:00:00.000Z',actualQuality:'verified',owner:{id:merchandiser}});
@@ -417,6 +426,43 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await journeys.list(actor(),JourneyFilterSchema.parse({search:"OTHER-STYLESUFFIX-1234"}))).total).toBe(0);
     // UUID substring search is supported; isolate the style fixture from random ID matches.
     expect((await journeys.list(actor(root,["root_superuser"]),JourneyFilterSchema.parse({search:"STYLESUFFIX-1234"}))).total).toBe(2);
+  });
+  it('prefilters legacy search before projection while preserving global facets, authorized fields and matching failures',async()=>{
+    const rootActor=actor(root,['root_superuser']),targetInput=input('SEARCH-FIELD-TARGET');
+    const visible=await identity.createOrder(actor(),{...targetInput,lines:targetInput.lines.map((line,index)=>index===0?{...line,poNumber:'TEST-应发%_PO',temporaryStyleNo:'TEST-只读临时款'}:line)},randomUUID());
+    const excluded=await identity.createOrder(rootActor,{...input('SEARCH-PROJECTION-EXCLUDED'),primaryMerchandiserId:merchandiser},randomUUID());
+    const request=(search:string,page=1)=>app.inject({url:'/digital-production/journeys?'+new URLSearchParams({search,page:String(page)}),headers:{cookie:`dx_rework_session=${root}`}});
+    const universe=await journeys.list(rootActor,JourneyFilterSchema.parse({}),false,undefined,{details:false});
+    expect(universe.facets.merchandisers.some(person=>person.id===merchandiser)).toBe(true);
+    const reader=journeys as unknown as {project(...args:unknown[]):Promise<OrderJourney|null>},original=reader.project,visits:string[]=[];
+    const spy=vi.spyOn(reader,'project').mockImplementation(async function(this:unknown,...args:unknown[]){
+      const row=args[2] as {order?:{production_order_id:string}};
+      if(row.order){visits.push(row.order.production_order_id);if(row.order.production_order_id===excluded.productionOrderId)throw Error('TEST excluded projection was reached');}
+      return original.apply(this,args);
+    });
+    try{
+      for(const search of ['  test-应发%_po  ','只读临时款',visible.productionOrderId]){
+        const result=await request(search);
+        expect(result.statusCode,result.body).toBe(200);
+        expect(result.json()).toMatchObject({total:1,items:[{orderId:visible.productionOrderId}],facets:universe.facets,observationMode:universe.observationMode});
+      }
+      const wildcard=await request('应发X_PO');expect(wildcard.statusCode).toBe(200);expect(wildcard.json().total).toBe(0);
+      const emptyPage=await request('TEST-应发%_PO',2);expect(emptyPage.statusCode).toBe(200);expect(emptyPage.json()).toMatchObject({page:2,total:1,items:[]});
+      expect(new Set(visits)).toEqual(new Set([visible.productionOrderId]));
+      const hidden=await journeys.list(actor(stranger),JourneyFilterSchema.parse({search:'TEST-应发%_PO'}));
+      expect(hidden.total).toBe(0);
+      for(const search of [excluded.productionOrderId,'']){
+        const result=await request(search);expect(result.statusCode).toBe(500);expect(result.json().error.message).toBe('TEST excluded projection was reached');
+      }
+    }finally{spy.mockRestore();}
+  });
+  it('keeps live clock mode from a nonmatching authorized order when the only match uses a fixed clock',async()=>{
+    const visible=await identity.createOrder(actor(),input('SEARCH-MATCHED-FIXED-CLOCK'),randomUUID());
+    const readPool={connect:db.connect.bind(db),query:db.query.bind(db)} as unknown as pg.Pool;
+    const clock='2026-11-18T01:50:48.407Z';
+    installAcceptanceClockReader(readPool,{read:async scope=>scope.id===visible.productionOrderId?{now:clock,scenarioId:null,revision:0}:null,nativeScenario:async()=>null});
+    const result=await new DigitalJourneyQuery(readPool).list(actor(root,['root_superuser']),JourneyFilterSchema.parse({search:visible.productionOrderId}));
+    expect(result).toMatchObject({total:1,observationMode:'live',items:[{orderId:visible.productionOrderId,observationMode:'fixed',asOf:clock}]});
   });
   it("keeps own-task metadata isolated from sibling tasks and does not start pending SLA",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-WORKER",temporaryStyleNo:null,customerCode:"PD"},randomUUID());

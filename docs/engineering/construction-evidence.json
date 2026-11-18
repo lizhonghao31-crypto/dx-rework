@@ -1,202 +1,158 @@
 {
   "version": 1,
-  "base": "d88f673fcdd0613c689749a797f8340717108928",
+  "base": "6b075a7bfa41542756ca7be5f7db7b7e9c08bc39",
   "risk": "full",
-  "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
+  "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
+  "rules": [
+    {
+      "rule": "Identify authorized literal search matches before expensive legacy projection",
+      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, search-only successor. The existing task hydration remains under the separate performance planning decision.",
+      "initialization": "Actual precision repair release merge 6b075a7bfa41542756ca7be5f7db7b7e9c08bc39 with identical tree to the predecessor used in the exact local source tests.",
+      "dateAndPermission": "Use original technical scope, exact actor and original linked-domain access within the same read-only repeatable snapshot. Preserve the literal keyword contract, actual clocks by native scope, final eligible ordering and current data.",
+      "writes": [
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "apps/api/src/production-platform/journey-projection.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/order-merchandisers.ts",
+        "apps/api/src/production-platform/development-amendment-repository.ts"
+      ],
+      "oldTests": [
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/unit/digital-journey-projection.test.ts"
+      ],
+      "expectation": "Only authorized matching candidates reach original summary and detail projection. Literal wildcard symbols, Chinese, mixed case, PO temporary identity, visible child ID, sourcing ERP and style name preserve the original matching and access boundaries. Matched or empty-search projection failures remain visible.",
+      "checks": [
+        "search-unit",
+        "search-native",
+        "search-lint",
+        "search-types",
+        "search-protocol"
+      ]
+    },
+    {
+      "rule": "Retain whole-permitted facets and actual clock observation across a filtered request",
+      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, search-only successor. The existing task hydration remains under the separate performance planning decision.",
+      "initialization": "Actual precision repair release merge 6b075a7bfa41542756ca7be5f7db7b7e9c08bc39 with identical tree to the predecessor used in the exact local source tests.",
+      "dateAndPermission": "Use original technical scope, exact actor and original linked-domain access within the same read-only repeatable snapshot. Preserve the literal keyword contract, actual clocks by native scope, final eligible ordering and current data.",
+      "writes": [
+        "apps/api/src/production-platform/journey-query.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "tests/integration/journey-page-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/journey-snapshot-reads.ts"
+      ],
+      "oldTests": [
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts"
+      ],
+      "expectation": "Global facets retain authorized off-match values. Fixed and live retain their original meaning even when the only matching item is fixed. The real signed browser observes the registered no-scope GET skipping a nonmatching exception and retaining a matched exception. Existing pagination, workspace and indexed consumers continue through their native paths.",
+      "checks": [
+        "search-unit",
+        "search-native",
+        "search-lint",
+        "search-types",
+        "search-protocol"
+      ]
+    }
+  ],
   "checks": [
     {
-      "id": "precision-unit",
+      "id": "search-unit",
       "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-journey-projection.test.ts tests/unit/journey-compatible-fallback.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-journey-search-20261118/final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-framework.test.ts tests/unit/order-time-reading.test.ts --reporter=default --reporter=json --outputFile=/workspace/sla-millisecond-precision-20261118/aligned-unit.json",
-      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
-      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
-      "startedAt": "2026-11-18T05:46:06.044437+00:00",
-      "endedAt": "2026-11-18T05:46:11.271806+00:00",
-      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-unit/command.log",
-      "logSha256": "ee9c7af86981cb0c7d0e8f598c053160362e3d14c67c7fe7f776cf3c7c175c16",
-      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation.",
-      "passed": 131,
+      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
+      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
+      "startedAt": "2026-11-18T05:56:04.074431+00:00",
+      "endedAt": "2026-11-18T05:56:09.346798+00:00",
+      "log": "/workspace/sla-journey-search-20261118/checks/final-unit/command.log",
+      "logSha256": "af474f29290e5a294c2da74e5ee2e1d54fa0d96e91588e500989a2ff413e6049",
+      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace.",
+      "passed": 162,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d1369d0cf0575d8ad84a2585e7afbb9e3f1491e47471ee95912ca7ead7113161"
+          "sha256": "cafaf7ae753f115d69b19240ebf0b06a031e8861acf281a02a37271ba3c6d748"
         }
       ]
     },
     {
-      "id": "precision-native",
+      "id": "search-native",
       "kind": "tests",
+      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts tests/integration/journey-page-native-browser-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-journey-search-20261118/pg/final-numeric-joined-search/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/fixed-progress-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-reading-postgres.test.ts tests/integration/order-time-washing-rework-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-millisecond-precision-20261118/pg/precision-original-consumers/tests.json",
-      "testedHead": "9c2b95842791a97ebf6cf4410fa34695ae5f0c02",
-      "sourceFingerprint": "2f70786892f9f1b62f044932a43639a0503ef9c1ecf1c9674eb4ea685e00f452",
-      "startedAt": "2026-11-18T05:03:25.116630+00:00",
-      "endedAt": "2026-11-18T05:05:03.250513+00:00",
-      "log": "/workspace/sla-millisecond-precision-20261118/pg/precision-original-consumers/tests.log",
-      "logSha256": "6f4462535cc7bdb62e46077b0267201feaf90a58690a887301e9cfc084062fbe",
-      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation.",
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "scripts",
-        "tests/acceptance",
-        "tests/helpers",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "vitest.config.ts",
-        "tests/integration/fixed-progress-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-reading-postgres.test.ts",
-        "tests/integration/order-time-washing-rework-postgres.test.ts",
-        "apps/web/src/attachment-upload-recovery.ts",
-        "apps/web/src/request-response-feedback.ts",
-        "apps/web/src/digital-development-editing.ts"
-      ],
-      "inputFingerprint": "5426960d78b4d8dad9bb12033d99480a2960772423c2101840f01a817231c51f",
-      "passed": 49,
+      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
+      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
+      "startedAt": "2026-11-18T05:55:23.578327+00:00",
+      "endedAt": "2026-11-18T05:57:54.560424+00:00",
+      "log": "/workspace/sla-journey-search-20261118/pg/final-numeric-joined-search/tests.log",
+      "logSha256": "2e4f24587c82f04267ad1492d8720a43b3fd6e89d0925d002f1506c6a5054830",
+      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace.",
+      "passed": 43,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9afa613a69ca1b8146345c675271a0ee250b6390890c8ca1c76892684188d515"
+          "sha256": "99364aaf6e6eb5957fc24c3b50d0b656f50617404d1784e20e4351e3cab27129"
         }
       ]
     },
     {
-      "id": "precision-lint",
+      "id": "search-lint",
       "kind": "command",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-search-metadata.ts apps/api/src/production-platform/journey-projection.ts tests/integration/digital-journey-postgres.test.ts tests/integration/journey-page-native-browser-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/fixed-timeline-targets.ts apps/api/src/production-platform/fixed-schedule-progress.ts apps/api/src/production-platform/order-time-request-plan.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/order-time-requests.test.ts",
-      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
-      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
-      "startedAt": "2026-11-18T05:46:11.556110+00:00",
-      "endedAt": "2026-11-18T05:46:12.830038+00:00",
-      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-lint/command.log",
+      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
+      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
+      "startedAt": "2026-11-18T05:58:18.147915+00:00",
+      "endedAt": "2026-11-18T05:58:19.959903+00:00",
+      "log": "/workspace/sla-journey-search-20261118/checks/final-lint/command.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation."
+      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace."
     },
     {
-      "id": "precision-types",
+      "id": "search-types",
       "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
-      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
-      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
-      "startedAt": "2026-11-18T05:46:13.180447+00:00",
-      "endedAt": "2026-11-18T05:46:31.800574+00:00",
-      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-types/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation."
-    },
-    {
-      "id": "precision-protocol",
-      "kind": "tests",
       "status": "passed",
       "exitCode": 0,
+      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
+      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
+      "startedAt": "2026-11-18T05:58:20.469184+00:00",
+      "endedAt": "2026-11-18T05:58:38.606268+00:00",
+      "log": "/workspace/sla-journey-search-20261118/checks/final-types/command.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace."
+    },
+    {
+      "id": "search-protocol",
+      "kind": "tests",
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
-      "testedHead": "d88f673fcdd0613c689749a797f8340717108928",
-      "sourceFingerprint": "595895538c77207fdce7c6e0a948b2bba06b9b7a4818a64ace8703c19daf915e",
-      "startedAt": "2026-11-18T05:46:32.114836+00:00",
-      "endedAt": "2026-11-18T05:46:39.932119+00:00",
-      "log": "/workspace/sla-millisecond-precision-20261118/checks/aligned-protocol/command.log",
-      "logSha256": "fdc973ae79299f591fccfde1cf4ff82670c2ef57924d7991e035b9327764c4b3",
-      "context": "Local exact millisecond fixture and compatible native consumer checks. Marked low-privilege isolated PostgreSQL16, with cleanup verified. The original incident archive is unavailable here and awaits separate read-only validation.",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "6ae93db43cd4dbd942df77bd8b4f26a8e68b0b11",
+      "sourceFingerprint": "8bf996588b2a86878082e1076a2f37f09848a5838482c53b4674e3d8bbc5d992",
+      "startedAt": "2026-11-18T05:58:38.923207+00:00",
+      "endedAt": "2026-11-18T05:58:45.613393+00:00",
+      "log": "/workspace/sla-journey-search-20261118/checks/final-protocol/command.log",
+      "logSha256": "7e4b942131519d02b0b6334cb475b5ab3cf6e9a6806e05bb409c7296930bb249",
+      "context": "Original registered API and signed App with isolated low-privilege PG16. Exact protected source after verifying the actual predecessor merge tree. The incident snapshot remains unavailable in this workspace.",
       "passed": 284,
       "failed": 0,
       "skipped": 0
-    }
-  ],
-  "rules": [
-    {
-      "rule": "Recover canonical minute encodings of whole milliseconds and move on the original calendar",
-      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, first precision-only repair.",
-      "initialization": "Actual merged release base d88f673fcdd0613c689749a797f8340717108928 with exact same authorized API, migrations, fixture, toolchain configuration and native test input fingerprint as the earlier isolated 49-test result.",
-      "dateAndPermission": "Retain public minute fields and adopted scope, revision, R/D/A and date exclusivity. Use safe integer milliseconds for internal motion and elapsed handoff credit, with literal submillisecond and unsafe offsets rejected. Preserve all three existing calendar semantics and native authorization.",
-      "writes": [
-        "apps/api/src/production-platform/fixed-timeline-targets.ts",
-        "tests/unit/fixed-timeline-targets.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/fixed-consumer-targets.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts"
-      ],
-      "oldTests": [
-        "tests/unit/fixed-timeline-targets.test.ts",
-        "tests/unit/order-time-framework.test.ts"
-      ],
-      "expectation": "Independent known date difference -16553351593ms is reversible on continuous and natural-days clocks. Beijing local midnight and excluded-Sunday edges remain exact to one millisecond and whole weeks are bounded. Actual fractional milliseconds and unsafe values fail closed.",
-      "checks": [
-        "precision-unit",
-        "precision-native",
-        "precision-lint",
-        "precision-types",
-        "precision-protocol"
-      ]
-    },
-    {
-      "rule": "Carry integer credit through each dependency and join before rendering public minutes",
-      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, first precision-only repair.",
-      "initialization": "Actual merged release base d88f673fcdd0613c689749a797f8340717108928 with exact same authorized API, migrations, fixture, toolchain configuration and native test input fingerprint as the earlier isolated 49-test result.",
-      "dateAndPermission": "Retain public minute fields and adopted scope, revision, R/D/A and date exclusivity. Use safe integer milliseconds for internal motion and elapsed handoff credit, with literal submillisecond and unsafe offsets rejected. Preserve all three existing calendar semantics and native authorization.",
-      "writes": [
-        "apps/api/src/production-platform/fixed-schedule-progress.ts",
-        "tests/unit/fixed-schedule-progress.test.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/journey-selection-clock.ts",
-        "apps/api/src/production-platform/development-cycle-evidence.ts"
-      ],
-      "oldTests": [
-        "tests/unit/fixed-schedule-progress.test.ts",
-        "tests/integration/fixed-progress-postgres.test.ts"
-      ],
-      "expectation": "Four former minutes round trips use the original integer delta. The exact synthetic DAG preserves known actual and deadline, conditional prediction and earlier credit. Native regression retains responsibility evidence, completion, date bounds and cancellation history.",
-      "checks": [
-        "precision-unit",
-        "precision-native",
-        "precision-lint",
-        "precision-types",
-        "precision-protocol"
-      ]
-    },
-    {
-      "rule": "Keep remaining-time search and reserve subtraction on the same whole-millisecond clock",
-      "source": "Approved PAGE25 precision and search projection addendum, Library libfile_fde3_f-6660dceeb72081918014becd4aa72b15_c8d3bf5d609c8191bce6411a30e94d44, first precision-only repair.",
-      "initialization": "Actual merged release base d88f673fcdd0613c689749a797f8340717108928 with exact same authorized API, migrations, fixture, toolchain configuration and native test input fingerprint as the earlier isolated 49-test result.",
-      "dateAndPermission": "Retain public minute fields and adopted scope, revision, R/D/A and date exclusivity. Use safe integer milliseconds for internal motion and elapsed handoff credit, with literal submillisecond and unsafe offsets rejected. Preserve all three existing calendar semantics and native authorization.",
-      "writes": [
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "tests/unit/order-time-requests.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-schedule.ts",
-        "apps/api/src/production-platform/order-time-reading.ts"
-      ],
-      "oldTests": [
-        "tests/unit/order-time-requests.test.ts",
-        "tests/integration/order-time-washing-rework-postgres.test.ts"
-      ],
-      "expectation": "The original active deadline and partially spent reserve reach the same exact forward instant. The native plan, washing, rework, and current-task tests retain original boundaries and outcomes.",
-      "checks": [
-        "precision-unit",
-        "precision-native",
-        "precision-lint",
-        "precision-types",
-        "precision-protocol"
-      ]
     }
   ]
 }

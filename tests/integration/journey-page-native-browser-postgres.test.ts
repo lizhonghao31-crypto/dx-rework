@@ -32,6 +32,24 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
    await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view=order][aria-busy=false]').waitFor();expect(await page.locator('.cockpit-stage').count()).toBe(7);
   }finally{await context.close();}
  });
+ it('keeps the signed no-scope search usable when an unrelated order projection fails',async()=>{
+  const {context,page}=await h.open();
+  const prototype=DigitalJourneyQuery.prototype as unknown as {project(...args:unknown[]):Promise<OrderJourney|null>};
+  const original=prototype.project,excluded=h.orders[0]!,matched=h.orders[1]!,visits:string[]=[];
+  const spy=vi.spyOn(prototype,'project').mockImplementation(async function(this:unknown,...args:unknown[]){
+   const row=args[2] as {order?:{production_order_id:string}};
+   if(row.order){visits.push(row.order.production_order_id);if(row.order.production_order_id===excluded)throw Error('TEST excluded order projection failed');}
+   return original.apply(this,args);
+  });
+  try{
+   const path=h.base+'/api/digital-production/journeys?';
+   const response=await page.request.get(path+new URLSearchParams({search:matched,page:'1'}));
+   expect(response.status(),await response.text()).toBe(200);
+   expect(await response.json()).toMatchObject({total:1,items:[{orderId:matched}]});
+   expect(new Set(visits)).toEqual(new Set([matched]));
+   expect((await page.request.get(path+new URLSearchParams({search:excluded,page:'1'}))).status()).toBe(500);
+  }finally{spy.mockRestore();await context.close();}
+ });
  it('keeps available orders usable while a real derived-object failure hides uncertain totals, pagination and false empty states',async()=>{
   const {context,page}=await h.open();const target=h.orders[0]!,search=(await h.fixture.db.query<{po_number:string}>('SELECT po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position LIMIT 1',[target])).rows[0]!.po_number;try{
    await h.corruptProjection(target);await page.getByRole('button',{name:'刷新数据',exact:true}).click();
