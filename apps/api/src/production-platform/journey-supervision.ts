@@ -14,7 +14,7 @@ import {SlaOrderService} from './sla-order-service.js';
 import {developmentSlaPlan} from './development-sla-enrollment.js';
 import {developmentEvaluationPlan,developmentNativeFacts,developmentSlaEvidence} from './development-sla-evidence.js';
 import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
-import {sourceCurrentSupervision} from './source-current-supervision.js';
+import {initialSourceCraftGraph,sourceCurrentSupervision} from './source-current-supervision.js';
 import {attachJourneyNativeTimes} from './journey-native-times.js';
 import {attachJourneyTerminalTiming} from './journey-terminal-timing.js';
 import {journeyTermination,type JourneyTermination} from './journey-termination.js';
@@ -130,7 +130,7 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
   attachSource=(basis,effective)=>{
    const scope=basis?.scopes.find(scope=>scope.scopeRef===`source:${sourceId}:round:${round}`&&scope.lineId===null);
    const evaluated=evaluateSlaPlan(plan,facts,time,{mode:'read_projection'});
-   const adopted=effective&&effective.revision>1&&scope?.targetRevision===`${effective.id}:${effective.revision}`?effective:null;
+   const adopted=effective&&scope&&scope.targetRevision===`${effective.id}:${effective.revision}`&&(effective.revision>1||initialSourceCraftGraph(effective,scope))?effective:null;
    const nodes=adopted&&scope?sourceCurrentSupervision(adopted,scope,saved.plan_json,evaluated,facts,time):evaluated;
    attachJourneySupervision(item,plan,saved.plan_json,nodes,time,{original:1,current:adopted?.revision??saved.revision},false,{facts,termination,...(evidence?.instances?.length?{instances:evidence.instances}:{})},authorizedTaskIds);
   };

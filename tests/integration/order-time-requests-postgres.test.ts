@@ -6,6 +6,7 @@ import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderInput} from '@dx-rework/contracts/digital-production';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import type {OrderTimeOperation} from '@dx-rework/contracts/order-time-requests';
@@ -644,6 +645,45 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     else expect(formalCheck.framework).toBeUndefined();
     await expect(identity.createOrder(row.actor,formal,randomUUID(),row.sourceId)).rejects.toMatchObject({code:'ORDER_TIME_INPUT_REQUIRED'});
     expect((await f.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[row.sourceId])).rowCount).toBe(0);
+   }
+  });
+ });
+
+ it('projects the complete first adopted serial craft route before starting the sample sewing forecast',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,true),standard=await settings.read(f.root);
+  const values=prepareTimeFrameworkConfiguration(r5OneHourConfiguration());
+  const work=(minutes:number)=>({kind:'work' as const,minutes,calendar:'continuous' as const,reminder:{enabled:false,percent:70}});
+  await settings.save(f.root,{expectedVersion:standard.version,values:{...values,stageBufferMinutes:0,nodes:{...values.nodes,development_positioning:work(60),development_printing:work(96*60),development_embroidery:work(96*60)}}},randomUUID());
+  const library=new SpecialCraftLibraryService(f.db),steps:CraftStepChoice[]=[{craftKind:'printing',sequence:1},{craftKind:'embroidery',sequence:2}];
+  for(const [i,hours] of [24,12].entries()){
+   const rule={minutes:hours*60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
+   const snapshot=await library.save(f.root,{id:null,expectedVersion:0,definition:{name:`TEST serial craft ${i}`,enabled:true,development:rule,bulk:rule}},randomUUID());
+   steps.push({craftKind:'special',sequence:steps.length+1,specialCraft:snapshot});
+  }
+  const scene=await f.scene('2027-09-01T00:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   for(const date of ['2027-10-15',null]){
+   const row=await make(date),before=await forms.read(row.actor,row.sourceId);
+    const draft=await forms.save(row.actor,row.sourceId,{expectedVersion:before.version,document:{...before.document!,craft:'特殊工艺',craftSteps:steps}},randomUUID());
+    if(row.operation.kind!=='development_publish')throw Error('TEST original source publication required');
+    await forms.publish(row.actor,row.sourceId,draft.version,randomUUID(),row.operation.input.patternOrder);
+    const resource={kind:'source' as const,id:row.sourceId},repo=new OrderTimePlanRepository(f.db),saved=(await repo.current(resource))!;
+    expect(saved.revision).toBe(1);
+    const scope=saved.input.scopes[0]!,crafts=saved.input.work.filter(node=>node.canonicalWorkRef?.endsWith(':work')&&node.canonicalWorkRef.includes(':step:'));
+    expect(new Set(crafts.map(node=>node.canonicalWorkRef)).size).toBe(4);
+    expect(crafts.slice(1).every((node,i)=>node.dependsOn.includes(crafts[i]!.id))).toBe(true);
+    expect(saved.input.work.filter(node=>node.canonicalWorkRef?.includes(':step:')&&node.includedIn).map(node=>node.includedIn).sort()).toEqual(crafts.flatMap(node=>[node.id,node.id]).sort());
+    const detail=await new DigitalJourneyQuery(f.db).read(f.root,row.sourceId,undefined,true),current=detail.supervision!.nodes.find(node=>node.id==='development_sewing')!;
+    expect(detail.orderId).toBeNull();expect(detail.supervision!.currentRevision).toBe(1);
+    if(!date){expect(scope.customerGoal.precision).toBe('unknown');continue;}
+    expect(scope.customerGoal).toMatchObject({precision:'date',value:date});
+    // Material and pattern each take one hour; cutting and positioning run
+    // in parallel for one hour. Four serial crafts then add 228 hours, and
+    // the sewing work adds one. Included dispatch/receipt add nothing.
+    const expected=new Date(Date.parse('2027-09-01T00:00:00.000Z')+(1+1+1+96+96+24+12+1)*3600000).toISOString();
+    expect(current.current.at).toBe(expected);
+    expect(current).toMatchObject({actualStart:null,actualEnd:null,forecast:current.current,forecastBasis:'plan'});
+    expect((await repo.current(resource))!.identityHash).toBe(saved.identityHash);
    }
   });
  });
