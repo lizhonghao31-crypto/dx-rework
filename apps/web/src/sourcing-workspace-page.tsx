@@ -1,7 +1,7 @@
 import { SourcingContractReturnFiles } from "./sourcing-contract-return-files.js";
 import { SourcingPriceReapplicationPanel } from "./sourcing-price-reapplication.js";
 import { SearchableSelect } from "./search-select.js";
-import { CONTRACT_RETURN_MAX_BYTES, CONTRACT_RETURN_MAX_FILES, confirmedContractReturnVersionFiles, confirmContractReturnSubmission, contractReturnSelectionError, finishContractReturnUpload, formatContractReturnSize, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
+import { CONTRACT_RETURN_MAX_BYTES, CONTRACT_RETURN_MAX_FILES, confirmedContractReturnVersionFiles, confirmContractReturnSubmission, contractReturnSelectionError, finishContractReturnUpload, formatContractReturnSize, isContractReturnVersionConflict, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
 import { sourcingCurrentDisplay } from "./sourcing-current-display.js";
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
 import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
@@ -1176,6 +1176,7 @@ function OrderDetailPage({
   const contractUploadGuard=useRef(false);
   const contractFileInput=useRef<HTMLInputElement | null>(null);
   const [contractReturnError,setContractReturnError] = useState("");
+  const [contractReturnNeedsRefresh,setContractReturnNeedsRefresh] = useState(false);
   const contractReturnErrorRef=useRef<HTMLParagraphElement>(null);
   const [contractReturnNotice,setContractReturnNotice] = useState<{tone:"success"|"warning";message:string}|null>(null);
   const contractPendingUpload = useRef<ContractReturnUpload | null>(null);
@@ -1184,6 +1185,7 @@ function OrderDetailPage({
     contractPendingUpload.current=null;
     setContractPendingSubmission(null);
     setContractReturnError("");
+    setContractReturnNeedsRefresh(false);
     setContractReturnNotice(null);
     setContractUploadStage(null);
   },[sourcingCaseId]);
@@ -1380,7 +1382,7 @@ function OrderDetailPage({
       method:"POST",headers:{"idempotency-key":submission.key},body:JSON.stringify({attachmentIds:submission.attachmentIds,expectedContractDocumentId:submission.expectedContractDocumentId}),
     }),async()=>{
       setContractUploadStage("checking");
-      const current=await request(`sourcing/cases/${sourcingCaseId}/contract-return`,SourcingContractReturnResponseSchema);
+      const current=await requestSubmission(`sourcing/cases/${sourcingCaseId}/contract-return`,SourcingContractReturnResponseSchema,{method:"GET"});
       setContractReturn(current);
       return current;
     },value=>savedFiles(value)!==null);
@@ -1395,11 +1397,37 @@ function OrderDetailPage({
     setContractReturnError("");
     setContractReturnNotice({tone:versionChanged?"warning":"success",message:receipt});
     try {
-      setItem(await request(`sourcing/cases/${sourcingCaseId}`,SourcingCaseSummarySchema));
+      setItem(await requestSubmission(`sourcing/cases/${sourcingCaseId}`,SourcingCaseSummarySchema,{method:"GET"}));
     } catch {
       // The business write has already committed. A summary refresh failure is not an upload failure.
       setContractReturnNotice({tone:"warning",message:`${receipt} 订单信息刷新失败，请刷新页面核对。`});
     }
+  };
+  const releaseSupersededContractReturn=(error:unknown):boolean=>{
+    if (!isContractReturnVersionConflict(error)) return false;
+    setContractPendingSubmission(null);
+    setContractReturnNeedsRefresh(true);
+    setContractReturnError("本次回签未保存：合同已换版，请刷新合同版本后重新选择对应文件。");
+    return true;
+  };
+  const refreshContractReturnVersion=async():Promise<void>=>{
+    if (!contractReturnNeedsRefresh || contractUploadGuard.current) return;
+    contractUploadGuard.current=true;setContractUploading(true);
+    try {
+      const [document,current]=await Promise.all([
+        requestSubmission(`sourcing/cases/${sourcingCaseId}/contract`,SourcingContractStateResponseSchema,{method:"GET"}),
+        requestSubmission(`sourcing/cases/${sourcingCaseId}/contract-return`,SourcingContractReturnResponseSchema,{method:"GET"}),
+      ]);
+      if (!document.item || document.item.sourcingContractDocumentId!==current.currentContractDocumentId) {
+        setContractReturnError("合同版本尚未同步，请再次刷新合同版本。");return;
+      }
+      setContract(document.item);
+      setContractReturn(current);
+      setContractReturnNeedsRefresh(false);
+      setContractReturnError("");
+    } catch {
+      setContractReturnError("合同版本刷新失败，请重试刷新。");
+    } finally {contractUploadGuard.current=false;setContractUploading(false);}
   };
   const continueContractReturnUpload = async ():Promise<void> => {
     const pending=contractPendingUpload.current;
@@ -1428,16 +1456,18 @@ function OrderDetailPage({
       const message=error instanceof Error?error.message:"回签合同上传失败";
       if(contractPendingUpload.current) {
         setContractReturnError(`${message}。已完成 ${pending.attachmentIds.length}/${pending.files.length} 个文件，尚未保存回签记录，请重试上传。`);
-      } else if(error instanceof SourcingRequestError && (error.status===400&&error.code==="VALIDATION_ERROR" || error.status===409&&error.code==="INVALID_STATE_TRANSITION")) {
-        setContractPendingSubmission(null);
-        setContractReturnError(`本次回签未保存：${message}`);
-      } else {
-        setContractReturnError(`文件已传输，但回签保存结果尚未确认：${message}。请使用“重试保存”核对同一次请求，勿重新上传文件。`);
+      } else if(!releaseSupersededContractReturn(error)) {
+        if(error instanceof SourcingRequestError && (error.status===400&&error.code==="VALIDATION_ERROR" || error.status===409&&error.code==="INVALID_STATE_TRANSITION")) {
+          setContractPendingSubmission(null);
+          setContractReturnError(`本次回签未保存：${message}`);
+        } else {
+          setContractReturnError(`文件已传输，但回签保存结果尚未确认：${message}。请使用“重试保存”核对同一次请求，勿重新上传文件。`);
+        }
       }
     } finally {contractUploadGuard.current=false;setContractUploading(false);setContractUploadStage(null);}
   };
   const uploadContractReturn = async (files:FileList|null):Promise<void> => {
-    if (!files?.length || contractUploadGuard.current || contractPendingSubmission || !contractReturn?.canUpload
+    if (!files?.length || contractUploadGuard.current || contractPendingSubmission || contractReturnNeedsRefresh || !contractReturn?.canUpload
       || contractReturn.currentContractDocumentId!==contract?.sourcingContractDocumentId) return;
     const chosen=Array.from(files);
     setContractReturnNotice(null);
@@ -1450,7 +1480,7 @@ function OrderDetailPage({
     if (!contractPendingSubmission || contractUploadGuard.current) return;
     contractUploadGuard.current=true;setContractUploading(true);setContractUploadStage("saving");setContractReturnError("");setContractReturnNotice(null);
     try {await saveContractReturn(contractPendingSubmission);}
-    catch(error){setContractReturnError(`回签保存结果尚未确认：${error instanceof Error?error.message:"请求失败"}。可使用原请求再次核对。`);}
+    catch(error){if(!releaseSupersededContractReturn(error))setContractReturnError(`回签保存结果尚未确认：${error instanceof Error?error.message:"请求失败"}。可使用原请求再次核对。`);}
     finally {contractUploadGuard.current=false;setContractUploading(false);setContractUploadStage(null);}
   };
   const styleDuplicateMessage = duplicateSourcingLineMessage(styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color})));
@@ -1957,7 +1987,9 @@ function OrderDetailPage({
                 </p>
                 <div ref={contractReturnSectionRef} tabIndex={-1} className="sourcing-contract-bar__actions sourcing-contract-return-actions">
                   {new URLSearchParams(window.location.search).get("contractDocumentId") && new URLSearchParams(window.location.search).get("contractDocumentId") !== contractReturn.currentContractDocumentId ? <p role="status">该待办对应的合同已换版。下方显示当前合同，请核对版本后下载及回传。</p> : null}
-                  {contractReturn.canUpload && contractReturn.currentContractDocumentId===contract.sourcingContractDocumentId ? <>
+                  {contractReturnNeedsRefresh ? <button className="dx-button dx-button--secondary" type="button" disabled={contractUploading || busy}
+                    onClick={()=>void refreshContractReturnVersion()}>刷新合同版本</button> : null}
+                  {!contractReturnNeedsRefresh && contractReturn.canUpload && contractReturn.currentContractDocumentId===contract.sourcingContractDocumentId ? <>
                     <input ref={contractFileInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple hidden disabled={contractUploading || !!contractPendingSubmission}
                       onChange={event=>{void uploadContractReturn(event.target.files);event.target.value="";}} />
                     <button className="dx-button dx-button--secondary" type="button" disabled={contractUploading || busy || !!contractPendingSubmission}

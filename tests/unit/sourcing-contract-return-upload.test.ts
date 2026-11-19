@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SourcingContractReturnUploadSchema } from "../../packages/contracts/src/sourcing.js";
-import { CONTRACT_RETURN_MAX_BYTES, confirmedContractReturnFiles, confirmedContractReturnVersionFiles, confirmContractReturnSubmission, contractReturnFileError, contractReturnSelectionError, finishContractReturnUpload, formatContractReturnSize } from "../../apps/web/src/sourcing-contract-return-upload.js";
+import { CONTRACT_RETURN_MAX_BYTES, confirmedContractReturnFiles, confirmedContractReturnVersionFiles, confirmContractReturnSubmission, contractReturnFileError, contractReturnSelectionError, finishContractReturnUpload, formatContractReturnSize, isContractReturnVersionConflict } from "../../apps/web/src/sourcing-contract-return-upload.js";
+import { SubmissionRequestError } from "../../apps/web/src/submission-validation.js";
 
 describe("contract return three-file upload", () => {
   const ids = [1, 2, 3, 4].map(n => `00000000-0000-4000-8000-00000000000${n}`);
@@ -84,6 +85,20 @@ describe("contract return three-file upload", () => {
     const submit=vi.fn().mockResolvedValue({attachments:[]});
     const read=vi.fn().mockRejectedValue(new Error("read forbidden"));
     await expect(confirmContractReturnSubmission([ids[0]],submit,read)).rejects.toThrow("合同回签保存结果尚未确认");
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+  it("releases the original retry only for the definitive contract version conflict", () => {
+    const versionMessage="合同版本已变化，请重新打开当前合同并回传对应版本";
+    expect(isContractReturnVersionConflict(new SubmissionRequestError(versionMessage,"INVALID_STATE_TRANSITION",409))).toBe(true);
+    expect(isContractReturnVersionConflict(new SubmissionRequestError("该请求标识已用于另一份回签合同","INVALID_STATE_TRANSITION",409))).toBe(false);
+    expect(isContractReturnVersionConflict(new SubmissionRequestError(versionMessage,"INVALID_STATE_TRANSITION",503))).toBe(false);
+    expect(isContractReturnVersionConflict(new DOMException("确认读取超时","AbortError"))).toBe(false);
+  });
+  it("preserves the save uncertainty after the confirmation read is aborted", async () => {
+    const original=new TypeError("TEST lost write response");
+    const submit=vi.fn().mockRejectedValue(original),read=vi.fn().mockRejectedValue(new DOMException("TEST read timeout","AbortError"));
+    await expect(confirmContractReturnSubmission([ids[0]!],submit,read)).rejects.toBe(original);
     expect(submit).toHaveBeenCalledTimes(1);
     expect(read).toHaveBeenCalledTimes(1);
   });

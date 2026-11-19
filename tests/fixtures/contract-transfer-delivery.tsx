@@ -39,13 +39,15 @@ let transferAttempts=0, renderedCaseId=id(100), transferCommitted=false;
 const returnFiles:Array<{attachmentId:string;filename:string;mimeType:'application/pdf'|'image/jpeg'|'image/png';sizeBytes:number}>=[
   {attachmentId:id(58),filename:'TEST-first.pdf',mimeType:'application/pdf',sizeBytes:10_968_861}];
 const pendingFiles=new Map<string,{filename:string;mimeType:'application/pdf'|'image/jpeg'|'image/png';sizeBytes:number}>();
-let uploadSaved=false,uploadAttempts=0;
+let uploadSaved=false,uploadAttempts=0,contractReplaced=false;
+const currentReturnFiles=()=>contractReplaced?returnFiles.slice(1):returnFiles;
 const uploadReturnState=()=>({contractReturnCycleId:null,contractReturnMonitoring:true,contractReturnStatus:'returned_late',
   contractGeneratedAt:now,contractReturnDueAt:now,contractReturnedAt:now,contractReturnOverdueHours:61,
-  uploadedByName:'TEST跟单',canUpload:true,uploadedFileCount:returnFiles.length,
-  uploadedTotalBytes:returnFiles.reduce((sum,file)=>sum+file.sizeBytes,0),
-  currentContractReturned:true,currentContractDocumentId:id(55),signedContractDocumentId:id(55),
-  signedContractVersion:7,signedContractNumber:'TEST-CONTRACT-V7',attachments:returnFiles,history:[]});
+  uploadedByName:'TEST跟单',canUpload:true,uploadedFileCount:currentReturnFiles().length,
+  uploadedTotalBytes:currentReturnFiles().reduce((sum,file)=>sum+file.sizeBytes,0),
+  currentContractReturned:currentReturnFiles().length>0,currentContractDocumentId:id(contractReplaced?56:55),signedContractDocumentId:id(contractReplaced?56:55),
+  signedContractVersion:contractReplaced?8:7,signedContractNumber:contractReplaced?'TEST-CONTRACT-V8':'TEST-CONTRACT-V7',attachments:currentReturnFiles(),
+  history:contractReplaced?[{revision:1,submittedAt:now,uploadedByName:'TEST跟单',signedContractDocumentId:id(55),signedContractVersion:7,signedContractNumber:'TEST-CONTRACT-V7',attachments:returnFiles.slice(0,1)}]:[]});
 Object.assign(window,{contractTransferRequests:requests});
 window.fetch=async(input,init)=>{
   const path=String(input),method=init?.method ?? 'GET',body=typeof init?.body==='string'?JSON.parse(init.body):null;
@@ -64,7 +66,9 @@ window.fetch=async(input,init)=>{
   }
   if(uploadCase&&method==='POST'&&path.endsWith('/contract-return')){
     uploadAttempts++;
-    if(uploadAttempts===1&&uploadOutcome==='retry')return new Response(null,{status:503});
+    if(uploadAttempts===1&&['retry','check-timeout','version-conflict'].includes(uploadOutcome??''))return new Response(null,{status:503});
+    if(uploadAttempts===2&&uploadOutcome==='version-conflict')contractReplaced=true;
+    if(body.expectedContractDocumentId!==id(contractReplaced?56:55))return Response.json({error:{code:'INVALID_STATE_TRANSITION',message:'合同版本已变化，请重新打开当前合同并回传对应版本'}},{status:409});
     for(const attachmentId of body.attachmentIds){
       if(returnFiles.some(file=>file.attachmentId===attachmentId))continue;
       const file=pendingFiles.get(attachmentId)!;
@@ -100,7 +104,15 @@ window.fetch=async(input,init)=>{
   if(path.endsWith('/factories'))return Response.json({items:[{supplierId:id(4),supplierCode:'TEST-OLD',supplierName:'TEST原工厂'},{supplierId:id(5),supplierCode:'TEST-NEW',supplierName:'TEST新工厂'}]});
   if(path.endsWith('/price-reapplications/current'))return Response.json({item:priceRequest});
   if(path.endsWith('/factory-changes/current'))return Response.json({item:null});
-  if(path.endsWith('/contract'))return Response.json({item:contractDocument});
+  if(path.endsWith('/contract'))return Response.json({item:contractReplaced?{...contractDocument,sourcingContractDocumentId:id(56),contractVersion:8,contractNumber:'TEST-CONTRACT-V8'}:contractDocument});
+  if(path.endsWith('/contract-return')&&uploadOutcome==='check-timeout'&&uploadAttempts===1){
+    const signal=init?.signal;
+    return new Promise<Response>((_,reject)=>{
+      signal?.addEventListener('abort',()=>{
+        Object.assign(window,{contractReturnReadAborted:true});reject(signal.reason);
+      },{once:true});
+    });
+  }
   if(path.endsWith('/contract-return'))return Response.json(uploadCase?uploadReturnState():{contractReturnCycleId:cycle?id(6):null,contractReturnMonitoring:true,contractReturnStatus:cycle?'pending':'returned_late',contractGeneratedAt:now,contractReturnDueAt:now,contractReturnedAt:cycle?null:now,contractReturnOverdueHours:cycle?0:61,uploadedByName:cycle?null:'TEST跟单',canUpload:true,uploadedFileCount:cycle?0:1,uploadedTotalBytes:cycle?0:128,currentContractReturned:false,currentContractDocumentId:id(55),signedContractDocumentId:id(54),signedContractVersion:6,signedContractNumber:'TEST-V6',attachments:[{attachmentId:id(58),filename:'TEST-signed.pdf',mimeType:'application/pdf',sizeBytes:128}],history:[]});
   if(path.endsWith('/dispatch'))return Response.json({item:null,canDispatch:false});
   if(path.endsWith('/cases/'+renderedCaseId))return uploadCase&&uploadRefreshFailure&&uploadSaved

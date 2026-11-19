@@ -1,4 +1,5 @@
 import type { SourcingContractReturnResponse } from "@dx-rework/contracts";
+import { SubmissionRequestError } from "./submission-validation.js";
 
 export type ContractReturnUpload = {
   files: File[];
@@ -10,6 +11,13 @@ export type ContractReturnUpload = {
 export const CONTRACT_RETURN_MAX_FILES = 3;
 export const CONTRACT_RETURN_MAX_BYTES = 20 * 1024 * 1024;
 const CONTRACT_RETURN_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+
+// This particular rejection is issued after the server checks the original
+// idempotency key. Other 409 responses do not prove the old upload was unsaved.
+export function isContractReturnVersionConflict(error: unknown): boolean {
+  return error instanceof SubmissionRequestError && error.status === 409 && error.code === "INVALID_STATE_TRANSITION"
+    && error.message === "合同版本已变化，请重新打开当前合同并回传对应版本";
+}
 
 export function formatContractReturnSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;

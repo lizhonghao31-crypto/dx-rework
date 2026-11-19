@@ -260,6 +260,56 @@ try{
     results.push({outcome,reusedOriginalRequest:outcome==='retry',readbackVerified:true,noDuplicateUpload:true,passed:true});
     await page.close();
   }
+  const recoveryFailures=[];
+  for(const outcome of ['version-conflict','check-timeout']){
+    const page=await browser.newPage({viewport:{width:390,height:844}});
+    try{
+      await page.clock.install();
+      await page.goto(origin+'/?role=root&uploadCase=1&uploadOutcome='+outcome);
+      const panel=page.locator('.sourcing-contract-bar'),input=panel.locator('input[type="file"]');
+      const retry=panel.getByRole('button',{name:'重试保存',exact:true});
+      const writes=()=>page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'&&r.path.endsWith('/contract-return')));
+      const attach=name=>input.setInputFiles({name,mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 TEST')});
+      await panel.getByText(/已保存 1\/3 份/).waitFor();
+      await attach('TEST-原版补签.pdf');
+      if(outcome==='check-timeout'){
+        await panel.getByRole('button',{name:'正在核对保存结果…'}).waitFor();
+        await page.waitForFunction(()=>window.contractTransferRequests.filter(r=>r.method==='GET'&&r.path.endsWith('/contract-return')).length===2);
+        await page.clock.fastForward(31_000);
+        assert.equal(await page.evaluate(()=>window.contractReturnReadAborted),true,'confirmation GET must be aborted');
+      }
+      await retry.waitFor();
+      assert.equal(await input.isDisabled(),true);
+      assert.equal(await panel.locator('.sourcing-contract-return-feedback').count(),0);
+      assert.equal((await writes()).length,1);
+      await retry.click();
+      if(outcome==='version-conflict'){
+        await panel.getByRole('alert').filter({hasText:'本次回签未保存'}).waitFor({timeout:3000});
+        assert.equal(await retry.count(),0);
+        const refresh=panel.getByRole('button',{name:'刷新合同版本',exact:true});
+        await refresh.click();
+        await panel.getByText(/已保存 0\/3 份/).waitFor();
+        assert.equal((await writes()).length,2,'refresh must be read-only');
+        await attach('TEST-新版补签.pdf');
+        await panel.getByText(/TEST-新版补签\.pdf.*已保存 1\/3 份/).waitFor();
+      }else{
+        await panel.getByText(/TEST-原版补签\.pdf.*已保存 2\/3 份/).waitFor();
+      }
+      const posted=await writes();
+      assert.equal(posted.length,outcome==='version-conflict'?3:2);
+      assert.ok(posted[0].key);
+      assert.equal(posted[1].key,posted[0].key);
+      assert.deepEqual(posted[1].body,posted[0].body);
+      if(outcome==='version-conflict'){
+        assert.notEqual(posted[2].key,posted[0].key);
+        assert.equal(posted[2].body.expectedContractDocumentId,'00000000-0000-4000-8000-000000000056');
+        assert.notDeepEqual(posted[2].body.attachmentIds,posted[0].body.attachmentIds);
+      }
+      results.push({outcome,originalRetryVerified:true,passed:true});
+    }catch(error){recoveryFailures.push(`${outcome}: ${error}`);}
+    finally{await page.close();}
+  }
+  assert.deepEqual(recoveryFailures,[]);
   const report={localOnly:true,synthetic:true,noRealBusinessAccess:true,results};
   if(evidence)await writeFile(join(evidence,'browser-result.json'),JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report,null,2));
