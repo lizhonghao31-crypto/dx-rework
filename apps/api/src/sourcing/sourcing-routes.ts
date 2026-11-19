@@ -44,6 +44,8 @@ import type { SourcingContractService } from "./sourcing-contract-service.js";
 import type { SourcingContractReturnService } from "./sourcing-contract-return-service.js";
 import type { SourcingProductionService } from "./sourcing-production-service.js";
 import type { SourcingService } from "./sourcing-service.js";
+import { JIASHUN_CLERK_ROLE, JIASHUN_CONTRACT_RETURN, JIASHUN_READ, isJiashunClerk,
+  type JiashunContractClerkScope } from "./jiashun-contract-clerk-scope.js";
 
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie
   ?.split(";")
@@ -80,6 +82,7 @@ export type SourcingHttpDependencies = Readonly<{
   dashboard?: ProductionDashboardService;
   closure?: ProductionClosureService;
   root?: RootAuthority;
+  clerkScope?: JiashunContractClerkScope;
 }>;
 
 export function registerSourcingRoutes(
@@ -89,9 +92,19 @@ export function registerSourcingRoutes(
   if (dependencies.closure) registerProductionClosureRoutes(app, {authenticate:dependencies.authenticate,root:dependencies.root,service:dependencies.closure});
   if (dependencies.reporting) registerProductionReportingRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.reporting });
   if (dependencies.dashboard) registerProductionDashboardRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.dashboard });
-  const readActor = async (request: FastifyRequest) => {
+  const readActor = async (request: FastifyRequest, scopedCaseId?: string) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);
+    if (!root && isJiashunClerk(user.businessRoles ?? [])) {
+      if (user.businessRoles?.length !== 1 || user.businessRoles[0] !== JIASHUN_CLERK_ROLE
+        || !user.capabilities.includes(JIASHUN_READ) || !dependencies.clerkScope) {
+        throw new ApplicationError("FORBIDDEN", "嘉顺文员账号或权限配置无效", 403);
+      }
+      const actor = await businessActor(dependencies.root,user,request.id,JIASHUN_READ);
+      await dependencies.clerkScope.assertActive(actor);
+      if (scopedCaseId) await dependencies.clerkScope.assertCase(actor,scopedCaseId);
+      return actor;
+    }
     if (!root && !user.capabilities.includes("sourcing:view")) {
       throw new ApplicationError("FORBIDDEN", "无权查看报价选厂数据", 403);
     }
@@ -101,6 +114,12 @@ export function registerSourcingRoutes(
       request.id,
       "sourcing:view",
     );
+  };
+
+  const regularReader = async (request: FastifyRequest) => {
+    const actor = await readActor(request);
+    if (isJiashunClerk(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "嘉顺文员无权读取跨厂分析或生产汇总", 403);
+    return actor;
   };
 
   const actionActor = async (
@@ -202,7 +221,7 @@ export function registerSourcingRoutes(
   if (dependencies.production) {
     const production = dependencies.production;
     app.get<{ Params: { sourcingCaseId: string } }>("/sourcing/cases/:sourcingCaseId/dispatch", async (request) =>
-      SourcingDispatchStateSchema.parse(await production.state(await readActor(request), caseId(request.params.sourcingCaseId))));
+      SourcingDispatchStateSchema.parse(await production.state(await readActor(request,caseId(request.params.sourcingCaseId)), caseId(request.params.sourcingCaseId))));
     app.post<{ Params: { sourcingCaseId: string } }>("/sourcing/cases/:sourcingCaseId/dispatch", async (request, reply) => {
       const actor = await actionActor(request, "order_merchandiser", "sourcing:contract:record");
       const parsed = DispatchSourcingOrderSchema.safeParse(request.body);
@@ -212,9 +231,9 @@ export function registerSourcingRoutes(
       return reply.code(result.statusCode).send(SourcingProductionOrderSchema.parse(result.value));
     });
     app.get<{ Querystring: { page?: string } }>("/sourcing/production-orders", async (request) =>
-      SourcingProductionOrderListSchema.parse(await production.list(await readActor(request), Number(request.query.page ?? "1"))));
+      SourcingProductionOrderListSchema.parse(await production.list(await regularReader(request), Number(request.query.page ?? "1"))));
     app.get<{ Params: { productionOrderId: string } }>("/sourcing/production-orders/:productionOrderId", async (request) =>
-      SourcingProductionOrderSchema.parse(await production.get(await readActor(request), caseId(request.params.productionOrderId))));
+      SourcingProductionOrderSchema.parse(await production.get(await regularReader(request), caseId(request.params.productionOrderId))));
   }
 
   app.post<{ Params: { sourcingCaseId: string } }>("/sourcing/cases/:sourcingCaseId/styles", async (request, reply) => {
@@ -233,7 +252,7 @@ export function registerSourcingRoutes(
   });
 
   app.get("/sourcing/analysis", async (request,reply) => {
-    const actor = await readActor(request);
+    const actor = await regularReader(request);
     reply.header("cache-control","no-store");
     return dependencies.service.analysis(actor,request.query);
   });
@@ -292,7 +311,7 @@ export function registerSourcingRoutes(
   app.get<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId",
     async (request) => dependencies.service.getCase(
-      await readActor(request),
+      await readActor(request,caseId(request.params.sourcingCaseId)),
       caseId(request.params.sourcingCaseId),
     ),
   );
@@ -314,7 +333,7 @@ export function registerSourcingRoutes(
   app.get<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/attachments",
     async (request) => dependencies.service.listAttachments(
-      await readActor(request),
+      await readActor(request,caseId(request.params.sourcingCaseId)),
       caseId(request.params.sourcingCaseId),
     ),
   );
@@ -340,7 +359,7 @@ export function registerSourcingRoutes(
   app.get<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/timeline",
     async (request) => dependencies.service.listTimeline(
-      await readActor(request),
+      await readActor(request,caseId(request.params.sourcingCaseId)),
       caseId(request.params.sourcingCaseId),
     ),
   );
@@ -350,7 +369,7 @@ export function registerSourcingRoutes(
     async (request) => {
       const node = SourcingHistoryNodeSchema.safeParse(request.params.node);
       if (!node.success) return validationError("历史节点无效");
-      return dependencies.service.nodeHistory(await readActor(request), caseId(request.params.sourcingCaseId),
+      return dependencies.service.nodeHistory(await readActor(request,caseId(request.params.sourcingCaseId)), caseId(request.params.sourcingCaseId),
         node.data, typeof request.query.entryId === "string" ? request.query.entryId : undefined);
     },
   );
@@ -524,7 +543,7 @@ export function registerSourcingRoutes(
       "/sourcing/cases/:sourcingCaseId/contract",
       async (request) => SourcingContractStateResponseSchema.parse(
         await dependencies.contracts!.getCurrent(
-          await readActor(request),
+          await readActor(request,caseId(request.params.sourcingCaseId)),
           caseId(request.params.sourcingCaseId),
         ),
       ),
@@ -563,7 +582,7 @@ export function registerSourcingRoutes(
     app.get<{ Params: { sourcingCaseId: string } }>(
       "/sourcing/cases/:sourcingCaseId/contract-return",
       async (request) => SourcingContractReturnResponseSchema.parse(
-        await dependencies.contractReturns!.get(await readActor(request),caseId(request.params.sourcingCaseId)),
+        await dependencies.contractReturns!.get(await readActor(request,caseId(request.params.sourcingCaseId)),caseId(request.params.sourcingCaseId)),
       ),
     );
     app.post<{ Params: { sourcingCaseId: string } }>(
@@ -571,9 +590,10 @@ export function registerSourcingRoutes(
       async (request) => {
         const parsed=SourcingContractReturnUploadSchema.safeParse(request.body);
         const input=parsed.success?parsed.data:validationError(parsed.error.issues[0]?.message??"回签附件信息不完整");
-        const actor=await readActor(request);
+        const actor=await readActor(request,caseId(request.params.sourcingCaseId));
         const capabilities=actor.authorizationCapabilities??[];
-        const capability=actor.actorRoles.includes("root_superuser") ? "sourcing:contract:record"
+        const capability=isJiashunClerk(actor.actorRoles) && capabilities.includes(JIASHUN_CONTRACT_RETURN) ? JIASHUN_CONTRACT_RETURN
+          : actor.actorRoles.includes("root_superuser") ? "sourcing:contract:record"
           : actor.actorRoles.includes("owner_group") && capabilities.includes("sourcing:owner:approve") ? "sourcing:owner:approve"
           : actor.actorRoles.includes("production_management") && capabilities.includes("sourcing:decision:record") ? "sourcing:decision:record"
           : actor.actorRoles.includes("order_merchandiser") && capabilities.includes("sourcing:contract:record") ? "sourcing:contract:record"
@@ -587,7 +607,7 @@ export function registerSourcingRoutes(
   }
 
   app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/price-reapplications/current",async request=>
-    SourcingPriceReapplicationStateSchema.parse(await dependencies.service.getCurrentPriceReapplication(await readActor(request),caseId(request.params.sourcingCaseId))));
+    SourcingPriceReapplicationStateSchema.parse(await dependencies.service.getCurrentPriceReapplication(await readActor(request,caseId(request.params.sourcingCaseId)),caseId(request.params.sourcingCaseId))));
   app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/price-reapplications",async(request,reply)=>{
     const actor=await actionActor(request,"production_management","sourcing:decision:record");
     const parsed=RequestSourcingPriceReapplicationSchema.safeParse(request.body);
@@ -607,7 +627,7 @@ export function registerSourcingRoutes(
   app.get<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/factory-changes/current",
     async (request) => dependencies.service.getCurrentFactoryChange(
-      await readActor(request),
+      await readActor(request,caseId(request.params.sourcingCaseId)),
       caseId(request.params.sourcingCaseId),
     ),
   );

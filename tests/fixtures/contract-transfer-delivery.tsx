@@ -16,8 +16,9 @@ const uploadCase=params.get('uploadCase')==='1';
 const uploadRefreshFailure=params.get('uploadRefreshFailure')==='1';
 const uploadOutcome=params.get('uploadOutcome');
 const role=params.get('role') ?? 'root', reviewed=params.get('reviewed')==='1';
-const roles=role==='root'?['root_superuser']:role==='management'?['production_management']:role==='owner'?['owner_group']:['order_merchandiser'];
-const capabilities=['sourcing:view','supplier_contract_data:read','sourcing:inquiry:create','sourcing:contract:record',
+const roles=role==='root'?['root_superuser']:role==='management'?['production_management']:role==='owner'?['owner_group']:role==='jiashun'?['jiashun_contract_clerk']:['order_merchandiser'];
+const capabilities=role==='jiashun'?['sourcing:jiashun:read','sourcing:jiashun:contract_return','tools:jiashun_contract_file']
+  :['sourcing:view','supplier_contract_data:read','sourcing:inquiry:create','sourcing:contract:record',
   ...(role==='management'?['sourcing:decision:record','sourcing:factory_change:verify']:role==='owner'?['sourcing:owner:approve']:['sourcing:factory_change:request'])];
 const lines=[{position:1,styleNo:'TEST-CONTRACT-TRANSFER',alternateStyleNo:null,color:'蓝',quantity:2020,unitPrice:'15.5',totalAmount:'31310'}];
 let item=SourcingCaseSummarySchema.parse({
@@ -66,6 +67,7 @@ window.fetch=async(input,init)=>{
   }
   if(uploadCase&&method==='POST'&&path.endsWith('/contract-return')){
     uploadAttempts++;
+    if(uploadOutcome==='role-revoked')return Response.json({error:{code:'FORBIDDEN',message:'TEST-嘉顺岗位权限已撤销'}},{status:403});
     if(uploadAttempts===1&&['retry','check-timeout','version-conflict'].includes(uploadOutcome??''))return new Response(null,{status:503});
     if(uploadAttempts===2&&uploadOutcome==='version-conflict')contractReplaced=true;
     if(body.expectedContractDocumentId!==id(contractReplaced?56:55))return Response.json({error:{code:'INVALID_STATE_TRANSITION',message:'合同版本已变化，请重新打开当前合同并回传对应版本'}},{status:409});

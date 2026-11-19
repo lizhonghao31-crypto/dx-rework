@@ -373,6 +373,7 @@ function AppRoutes() {
     return <AuthGate requiredAnyOf={[
       owner,
       { requiredCapability: "sourcing:view" },
+      ...(path === "/ui/sourcing/create" ? [] : [{ requiredRole: "jiashun_contract_clerk", requiredCapability: "sourcing:jiashun:read" }]),
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/cutting" || path.startsWith("/ui/cutting/")) {

@@ -1,4 +1,5 @@
 import { memberCanWriteModule } from "../access/member-module-policy.js";
+import { JiashunContractClerkScope, JIASHUN_READ, isJiashunClerk } from "./jiashun-contract-clerk-scope.js";
 import { productionNotExcluded } from "./production-visibility.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -92,14 +93,19 @@ export class SourcingProductionService {
   }
 
   async state(actor: TrustedActorContext, sourcingCaseId: string): Promise<SourcingDispatchState> {
-    if (!has(actor, READ)) fail("无权查看派单状态", 403);
+    const clerk=isJiashunClerk(actor.actorRoles);
+    if (clerk) {
+      if (actor.authorizationCapability!==JIASHUN_READ || !(actor.authorizationCapabilities??[]).includes(JIASHUN_READ))
+        fail("无权查看派单状态",403);
+      await new JiashunContractClerkScope(this.database).assertCase(actor,sourcingCaseId);
+    } else if (!has(actor, READ)) fail("无权查看派单状态", 403);
     const source = await this.source(this.database, sourcingCaseId);
     const result = await this.database.query<ProductionRow>(`${selectProduction}
       WHERE production.sourcing_case_id=$1`, [sourcingCaseId]);
     const row = result.rows[0];
     return {
       item: row ? { productionOrderId: row.production_order_id, status: row.status, dispatchedAt: iso(row.dispatched_at) } : null,
-      canDispatch: !row && await memberCanWriteModule(this.database, actor.actorId, "sourcing") && canWrite(actor, source.created_by) && source.contract_status === "ready",
+      canDispatch: !clerk && !row && await memberCanWriteModule(this.database, actor.actorId, "sourcing") && canWrite(actor, source.created_by) && source.contract_status === "ready",
     };
   }
 

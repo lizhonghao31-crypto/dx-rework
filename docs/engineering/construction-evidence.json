@@ -1,87 +1,260 @@
 {
   "version": 1,
-  "base": "97e6819ebcdc79ed6cf98c437c7956d6a81830a3",
-  "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-  "risk": "quick",
+  "base": "372e7970fadb445184152c6dbd31be45260b032e",
+  "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+  "risk": "full",
   "rules": [
     {
-      "rule": "合同回签在传输前准确判断本版本剩余可用份数及容量，只凭对应版本和附件确证成功，安全处理结果未知与订单摘要刷新失败。",
-      "source": "用户上传的合同回签 Work 交接 2026-11-19；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-09 合同回传三份及统一查看。",
+      "rule": "嘉顺专职文员仅通过原外发入口读取当前有效加工厂属于嘉顺三厂的订单，列表、汇总、搜索、订单详情及历史逐条按批准供应商和版本约束。",
+      "source": "用户批准的嘉顺专职文员需求，2026-11-19 独立施工包及复核；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-19 嘉顺专职文员的订单及合同版本边界。",
       "writes": [
-        "apps/web/src/sourcing-contract-return-upload.ts",
+        "apps/api/src/sourcing/jiashun-contract-clerk-scope.ts",
+        "apps/api/src/sourcing/sourcing-production-service.ts",
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/web/src/App.tsx",
+        "apps/web/src/acceptance-matrix.ts",
+        "apps/web/src/platform-home-page.tsx",
+        "apps/web/src/platform-modules.ts",
         "apps/web/src/sourcing-workspace-page.tsx",
-        "apps/web/src/sourcing-workspace.css",
-        "tests/acceptance/contract-transfer-delivery-browser.mjs",
+        "tests/acceptance/jiashun-contract-clerk-browser.mjs",
         "tests/fixtures/contract-transfer-delivery.tsx",
-        "tests/unit/sourcing-contract-return-upload.test.ts"
+        "tests/integration/jiashun-contract-clerk-routes.test.ts",
+        "tests/unit/jiashun-contract-clerk.test.ts"
       ],
       "reads": [
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts#SourcingContractReturnService",
-        "packages/contracts/src/sourcing.ts#SourcingContractReturnResponseSchema",
-        "apps/web/src/sourcing-contract-return-files.tsx#contractReturnFileGroups",
-        "apps/web/src/sourcing-contract-return-presentation.ts#sourcingContractReturnLabel",
-        "apps/web/src/submission-validation.ts#SubmissionRequestError",
-        "docs/requirements/sourcing-supplier-production-v1.0.md#2026-11-09 合同回传三份及统一查看"
+        "apps/api/src/sourcing/sourcing-service.ts#listCases",
+        "apps/api/src/sourcing/sourcing-service.ts#listTimeline",
+        "apps/api/src/sourcing/sourcing-service.ts#getCurrentFactoryChange",
+        "apps/api/src/sourcing/sourcing-service.ts#nodeHistory",
+        "apps/web/src/sourcing-workspace-page.tsx#OrderDetailPage"
+      ],
+      "oldTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/acceptance/contract-transfer-delivery-browser.mjs"
+      ],
+      "initialization": "旧加工厂和嘉顺工厂同时存在；真实订单先审批给外厂，再提交与批准转入；拟转出与正式转出分别读取。没有明确归属的旧合同保守不可读。",
+      "dateAndPermission": "当前生效批准用于订单级授权；历史记录各认原供应商，不提前采用拟转厂；其他岗位原权限和日期照常。",
+      "expectation": "外厂直连与跨厂分析失败；历史非嘉顺合同、附件、报价、审批说明及拟转厂资料均不在授权响应，正常嘉顺资料可见。",
+      "checks": [
+        "focused",
+        "sourcing-pg",
+        "browser",
+        "check-types",
+        "lint"
+      ]
+    },
+    {
+      "rule": "专用回签只在当前可回签合同上处理本人上传的 PDF、JPG 或 PNG，沿用原合同回签流程、首次时刻与每版本额度。",
+      "source": "用户批准的嘉顺专职文员需求，2026-11-19 独立施工包及复核；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-19 嘉顺专职文员的订单及合同版本边界。",
+      "writes": [
+        "apps/api/src/server.ts",
+        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts",
+        "apps/api/src/tools/attachments.ts",
+        "apps/api/src/tools/routes.ts",
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/tools/attachments.ts#finalizePending",
+        "apps/api/src/sourcing/sourcing-contract-return-service.ts#submit",
+        "apps/api/src/sourcing/sourcing-contract-return-service.ts#get",
+        "apps/api/src/sourcing/sourcing-contract-service.ts#getCurrent",
+        "packages/contracts/src/sourcing.ts#SourcingContractReturnResponseSchema"
       ],
       "oldTests": [
         "tests/unit/sourcing-contract-return-upload.test.ts",
         "tests/unit/sourcing-contract-return-files.test.ts",
-        "tests/unit/sourcing-contract-return-state.test.ts",
-        "tests/unit/sourcing-contract-return-list-query.test.ts",
-        "tests/acceptance/contract-return-files-browser.mjs",
-        "tests/acceptance/contract-transfer-delivery-browser.mjs"
+        "tests/integration/sourcing-pr03-postgres.test.ts"
       ],
-      "initialization": "首开从原回签详情 GET 取当前版本份数和容量；模拟已保存一份 10968861 字节，保留旧版历史组及未记录版本组；所有浏览器写入都在进程内模拟。",
-      "dateAndPermission": "保留原 canUpload/附件可读范围及服务端合同版本、归属和幂等校验，不改首次回传时间、原逾期、角色、历史或待办。历史附件只可证明同一原版本结果。",
-      "expectation": "每版本累计三份 PDF/JPG/PNG 且总量不超过 20971520 字节，超限无请求并聚焦报错；业务成功展示真实新附件和已存份数，后续读订单摘要失败保留回执；读回确认已提交时仅发一次 POST，未知重试保留原合同、附件和幂等键；核对 GET 有界，换版拒绝后仅在重读一致的新版后才可开启新提交。",
+      "initialization": "低权限应用角色从真实批准及生成合同开始，合成文件走上传意图和内容校验；旧版本和其他上传人使用独立真实记录。",
+      "dateAndPermission": "提交事务在幂等结果前核角色、工厂、合同，文件严格绑定当前版本和本人；保首次监控、历史和并发原额度。",
+      "expectation": "首次与追加读取同版对应附件，原时刻稳定；并发第三份只有一个成功；转出、撤权、换版和旧附件跨版均拒绝。",
       "checks": [
-        "build",
-        "unit",
-        "lint",
-        "types",
+        "focused",
+        "sourcing-pg",
         "browser",
-        "files-browser",
+        "check-types",
+        "lint"
+      ]
+    },
+    {
+      "rule": "只注册独立角色及三个专用能力，依三个已核主数据编码自动绑定并阻止混合角色、Root 或委托提升。迁移由原维护入口验收。",
+      "source": "用户批准的嘉顺专职文员需求，2026-11-19 独立施工包及复核；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-19 嘉顺专职文员的订单及合同版本边界。",
+      "writes": [
+        "apps/api/migrations/0233_jiashun_contract_clerk.sql",
+        "apps/api/src/access/service.ts",
+        "apps/api/src/platform/migration-manifest.json",
+        "docs/requirements/platform-permission-golden-source-v1.0.md",
+        "docs/requirements/sourcing-supplier-production-v1.0.md",
+        "scripts/deploy/main-maintenance-plans.json",
+        "scripts/test-suite-plan.mjs",
+        "tests/integration/jiashun-contract-clerk-postgres.test.ts",
+        "tests/integration/pmc-readonly-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/access/service.ts#assignRole",
+        "apps/api/src/access/service.ts#revokeRole",
+        "scripts/deploy/check-main-maintenance-plan.mjs",
+        "scripts/test-suite-plan.mjs#postgresPlan",
+        "docs/requirements/platform-permission-golden-source-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/unit/main-maintenance-plan.test.ts",
+        "tests/integration/pmc-readonly-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "initialization": "低权限迁移角色应用完整历史；只初始化合成公司、用户和主数据，实际写服务授予并撤销合成角色，角色迁移不自动授权员工。",
+      "dateAndPermission": "保留原 0232 及更早 checksum 和应用时戳、其他角色与历史许可，维护计划只检查已存在对象的所需权限。",
+      "expectation": "三厂绑定必须完整，后台并发最多一项互斥授权成功，PMC 无新增授权，维护检查保持原行为。",
+      "checks": [
+        "role-pg",
+        "sourcing-pg",
+        "pmc-pg",
+        "focused",
+        "check-migrations",
         "preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "build",
-      "kind": "command",
-      "command": "npm run build:packages",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
-      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-      "context": "Node v22.22.2, npm 10.9.9, npm ci from exact main lock and workspace manifests in isolated nonpersistent storage. Built workspace packages used by the candidate.",
-      "startedAt": "2026-11-19T04:45:14.068370+00:00",
-      "endedAt": "2026-11-19T04:45:20.978731+00:00",
-      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/build/command.log",
-      "logSha256": "42534bd96daa66688e58109269730dbaebe1e74278e8d2362cb7be3a3483b40d"
-    },
-    {
-      "id": "unit",
+      "id": "focused",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-return-files.test.ts tests/unit/sourcing-contract-return-state.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/sourcing-mobile-workspace.test.ts tests/unit/sourcing-feedback-contract.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/sourcing-pr4-contract-factory-change.test.ts tests/unit/sourcing-role-aware-factory-change-ui.test.ts tests/unit/order-detail-information-architecture.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/reports/vitest.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/jiashun-contract-clerk.test.ts tests/integration/jiashun-contract-clerk-routes.test.ts tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-return-files.test.ts tests/unit/main-maintenance-plan.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/focused.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
-      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-      "context": "Repository vitest.config.ts, nonDatabase worker limit 1, no DB URLs. Verbose log and JSON from the same original run; includes upload, capacity, version/role, task-detail and legacy readers.",
-      "startedAt": "2026-11-19T04:45:21.242050+00:00",
-      "endedAt": "2026-11-19T04:45:26.334089+00:00",
-      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/unit/command.log",
-      "logSha256": "f92fca4b396addc885c27c50280e4933c8ca89e41542ca19eed92f918995814d",
-      "passed": 47,
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "Node v22.22.2, locked npm dependencies, Vitest original reports. Scoped permission and HTTP routes, existing return upload/read controls, exact main maintenance-plan policy.",
+      "startedAt": "2026-11-19T08:58:27.365366+00:00",
+      "endedAt": "2026-11-19T08:58:46.843085+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/focused/command.log",
+      "logSha256": "515743c43fdda217bf9ec6a5454f0c45e50eb93a7e9d519224d59956a35aa09d",
+      "passed": 155,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ebaf1141a73a512bb9cca41519e5c3f8876057130d9103907ea31f3c53173ddb"
+          "sha256": "ad5404a3a031ca791ad400c2160dca86a4613c4640151c02fbfa2dd90616b398"
         }
       ]
+    },
+    {
+      "id": "role-pg",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/jiashun-contract-clerk-postgres.test.ts --config vitest.postgres-immediate.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/role-pg.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "PostgreSQL 16.16 disposable loopback marked test database, app test schema applies the full migration ledger. Tests automatic binding, no new employee assignment, incompatible role grants and concurrent exclusivity.",
+      "startedAt": "2026-11-19T08:58:42.982949+00:00",
+      "endedAt": "2026-11-19T08:58:48.388698+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/role-pg/command.log",
+      "logSha256": "11b24af61b84882357d61ba2286b5ed6014a3e6a312f3c619adefcadb9487318",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "015aec3d1e5c31a040d706cc2418d56b150cd018bd17523ac70c9406ffd41739"
+        }
+      ]
+    },
+    {
+      "id": "sourcing-pg",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts -t 'enforces Jiashun transfer' --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/sourcing-pg.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "PostgreSQL 16.16 isolated database and one targeted sourcing business case. True queries and transactions run through the original contract services as a non-privileged non-owner application database role, with only object storage emulated. Untargeted suite entries intentionally skipped for this local run.",
+      "startedAt": "2026-11-19T08:58:48.794587+00:00",
+      "endedAt": "2026-11-19T08:58:57.630547+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/sourcing-pg/command.log",
+      "logSha256": "f7d32cb2804625bea2442b76ca2134211104cfba7b07c72ba1a0e1e0fd7a7070",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 89,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "36b24d0252d2e2f8c725cfb502975ba4199db73a481f47bc5536c14ebcb9916b"
+        }
+      ]
+    },
+    {
+      "id": "pmc-pg",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/pmc-readonly-postgres.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/pmc-pg.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "Disposable PostgreSQL 16.16 using actual staged schema and official pending migrator. Original PMC capability/receipt/user/attachment behavior checked against current schema.",
+      "startedAt": "2026-11-19T08:58:57.985341+00:00",
+      "endedAt": "2026-11-19T08:59:06.318753+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/pmc-pg/command.log",
+      "logSha256": "8ce031f21d832213e303df6ecd12709cd0852d8370171e565dcbc664a77764e8",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "593b6e0a924a83974eec53c65e0dbca7794f67d6fcbd6b28491ff840a2aa59a0"
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "kind": "tests",
+      "command": "env CHROMIUM_PATH=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node tests/acceptance/jiashun-contract-clerk-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "Actual Chromium 151 and Playwright 1.57, desktop and mobile, original sourcing page with emulated loopback HTTP and object storage. Cases cover submit, read-only controls and role revoked response.",
+      "startedAt": "2026-11-19T08:59:18.322294+00:00",
+      "endedAt": "2026-11-19T08:59:23.191505+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/browser/command.log",
+      "logSha256": "dc9496cb4bf4065e4d29acf33a620cc5444f0c234995a8e2bf0b739732594b9e",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "check-types",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "Node v22.22.2 and TypeScript workspace typecheck using the repository package lock.",
+      "startedAt": "2026-11-19T08:58:27.428722+00:00",
+      "endedAt": "2026-11-19T08:59:17.850236+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/check-types/command.log",
+      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
+    },
+    {
+      "id": "check-migrations",
+      "kind": "command",
+      "command": "npm run db:migrate:lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "Exact manifest, migration sequence and SQL SHA-256 using repository migration lint.",
+      "startedAt": "2026-11-19T08:58:27.393689+00:00",
+      "endedAt": "2026-11-19T08:58:27.887755+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/check-migrations/command.log",
+      "logSha256": "5edba0b891f3e897ae8f4fb8f22ac9af3483965eadf948e395907349ef73281c"
     },
     {
       "id": "lint",
@@ -89,58 +262,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
-      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-      "context": "Repository-wide ESLint with max warnings zero. Node v22.22.2 and npm 10.9.9 from the locked install.",
-      "startedAt": "2026-11-19T04:45:21.242136+00:00",
-      "endedAt": "2026-11-19T04:45:38.611403+00:00",
-      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/lint/command.log",
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "ESLint across repository with maximum warnings zero using locked Node and npm packages.",
+      "startedAt": "2026-11-19T08:58:27.304279+00:00",
+      "endedAt": "2026-11-19T08:58:59.631094+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/lint/command.log",
       "logSha256": "c515bd0be1f85df3ce7017b7a7ab759a66a3184a30e6b65b5d13a9d4fea39cd7"
-    },
-    {
-      "id": "types",
-      "kind": "command",
-      "command": "npm run typecheck",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
-      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-      "context": "Repository-wide TypeScript compiler checks for all workspaces with the original package manifests and lock.",
-      "startedAt": "2026-11-19T04:45:38.862233+00:00",
-      "endedAt": "2026-11-19T04:46:20.678086+00:00",
-      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/types/command.log",
-      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
-    },
-    {
-      "id": "browser",
-      "kind": "command",
-      "command": "env CONTRACT_UI_EVIDENCE_DIR=/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/browser/screens PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/contract-transfer-delivery-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
-      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-      "context": "Real Chromium 151 with Playwright 1.57, loopback synthetic API fixture only. The original browser report has 40 passed scenarios, including both viewport sizes, refresh failure, failed first save, committed lost response, replaced version, and a confirmation GET stuck until the original timer aborts. Report /workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/browser/screens/browser-result.json, SHA256 e2e4f7d29579cf6ac4a21f4355381b40bba3afd2c5ca78c355316c04650c019d.",
-      "startedAt": "2026-11-19T04:45:38.864816+00:00",
-      "endedAt": "2026-11-19T04:46:26.159023+00:00",
-      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/browser/command.log",
-      "logSha256": "f605bb39096ffc589a83febbf911fa6323d88d9da4279f98c5cdbfa22038ef51"
-    },
-    {
-      "id": "files-browser",
-      "kind": "tests",
-      "command": "env PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/contract-return-files-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
-      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-      "context": "Real Chromium 151 and Playwright 1.57, loopback synthetic preview. Original desktop/mobile current/old version viewing and keyboard close.",
-      "startedAt": "2026-11-19T04:46:26.481442+00:00",
-      "endedAt": "2026-11-19T04:46:31.082525+00:00",
-      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/files-browser/command.log",
-      "logSha256": "03593741b04dcbfc033385a0d592e02255964f4a64d8a9ea9c560cd057ffbb3e",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0
     },
     {
       "id": "preflight",
@@ -148,13 +276,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
-      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
-      "context": "Repository preflight harness and original TAP results; canonical risk excludes PostgreSQL for this frontend and scripted test diff.",
-      "startedAt": "2026-11-19T04:46:31.359072+00:00",
-      "endedAt": "2026-11-19T04:46:40.098012+00:00",
-      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/preflight/command.log",
-      "logSha256": "dcbfcea7d5a7199457868f3ea0fc0e38a4c121fe80cb6d3d56f347d0074f551f",
+      "testedHead": "372e7970fadb445184152c6dbd31be45260b032e",
+      "sourceFingerprint": "8131595fd887d33d9a0785225537e510ace2d23e37274e767b5c11de1dea679c",
+      "context": "Repository unit preflight around initial Light and Full lanes, immutable evidence and managed PostgreSQL resource selection.",
+      "startedAt": "2026-11-19T08:58:27.379584+00:00",
+      "endedAt": "2026-11-19T08:58:41.843457+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/preflight/command.log",
+      "logSha256": "d9930546ffab9c07b3b89022bc475774f8f62e94ca12085d4cbaf90fbbb50ff9",
       "passed": 113,
       "failed": 0,
       "skipped": 0

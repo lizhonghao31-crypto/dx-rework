@@ -111,6 +111,22 @@ const sampleMutationDenyRules = Object.fromEntries(
  */
 const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
+    alias: "jiashun_clerk",
+    expectedRole: "jiashun_contract_clerk",
+    requiredCapabilities: ["sourcing:jiashun:read", "sourcing:jiashun:contract_return", "tools:jiashun_contract_file"],
+    forbiddenCapabilities: ["sourcing:view", "sourcing:contract:record", "supplier_contract_data:read", "tools:user", "access:admin", "report:export", "tools:export"],
+    allowedModules: ["sourcing"],
+    forbiddenModules: ["rework", "suppliers", "production", "samples", "finance"],
+    probes: [accessRolesDeny, sourcingAllow, suppliersDeny, productionDashboardDeny, samplesDeny,
+      probe("sourcing-analysis", "跨厂外发分析", "sourcing/analysis", 403)],
+    ruleRefs: approvedKeys("PERM-JIASHUN-CLERK-20261119", [
+      ...["sourcing:jiashun:read", "sourcing:jiashun:contract_return", "tools:jiashun_contract_file"].map(cap=>`cap:${cap}:allow`),
+      ...["sourcing:view", "sourcing:contract:record", "supplier_contract_data:read", "tools:user", "access:admin", "report:export", "tools:export"].map(cap=>`cap:${cap}:deny`),
+      "module:sourcing:allow", ...["rework","suppliers","production","samples","finance"].map(module=>`module:${module}:deny`),
+      "http:access-roles", "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list", "http:sourcing-analysis",
+    ]),
+  },
+  {
     alias: "root",
     expectedRole: "owner_group",
     expectedRoot: true,

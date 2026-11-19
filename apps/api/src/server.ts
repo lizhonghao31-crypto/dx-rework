@@ -42,6 +42,7 @@ import { ReceivingService } from "./receiving/receiving-service.js";
 import { SourcingService } from "./sourcing/sourcing-service.js";
 import { SourcingContractService } from "./sourcing/sourcing-contract-service.js";
 import { SourcingContractReturnService } from "./sourcing/sourcing-contract-return-service.js";
+import { JiashunContractClerkScope, JIASHUN_FILE_UPLOAD, isJiashunClerk } from "./sourcing/jiashun-contract-clerk-scope.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
 import { BusinessAwareWholeOrderReviewService } from "./rework/business-aware-whole-order-review-service.js";
@@ -151,6 +152,7 @@ const cuttingService = new CuttingService(database);
 const receivingService = new ReceivingService(database,undefined,undefined,productionClosure,{allowLegacyStyleInput:true});
 const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments,undefined,undefined,todoProjection);
+const jiashunClerkScope = new JiashunContractClerkScope(database);
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
   (diagnostic): void => { app.log.warn({ factoryChangeFailure: diagnostic }, "factory change request failed"); },
@@ -273,6 +275,7 @@ const app = buildApp({
     service: sourcingService,
     contracts: sourcingContractService,
     contractReturns: new SourcingContractReturnService(database),
+    clerkScope: jiashunClerkScope,
     production: sourcingProductionService,
     reporting: new ProductionReportingService(database,undefined,undefined,productionClosure),
     closure: productionClosure,
@@ -283,8 +286,13 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     isRootUser: (id) => rootAuthority.isRootUser(id),
     attachments,
+    clerkScope: jiashunClerkScope,
     exports: new ExportJobService(database),
     canDownloadBoundAttachment: async (actor, binding) => {
+      if (isJiashunClerk(actor.actorRoles)) return jiashunClerkScope.canDownloadBoundAttachment({
+        actorId:actor.actorId,actorRoles:actor.actorRoles,authorizationCapability:JIASHUN_FILE_UPLOAD,
+        authorizationCapabilities:actor.capabilities,requestId:"jiashun-contract-download",
+      },binding);
       const isRoot=await rootAuthority.isRootUser(actor.actorId);
       const effectiveRoles=isRoot && !actor.actorRoles.includes(ROOT_ACTOR_ROLE)
         ? [...actor.actorRoles,ROOT_ACTOR_ROLE]

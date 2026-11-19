@@ -11,6 +11,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner_group: "老板",
   production_management: "生产管理",
   pmc: "PMC",
+  jiashun_contract_clerk: "嘉顺专职文员",
   order_merchandiser: "订单跟单",
   factory_payables: "加工厂应付会计",
   finance_director: "财务总监",

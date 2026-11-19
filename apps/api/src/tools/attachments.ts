@@ -13,6 +13,9 @@ import { InvalidStoredFileError, validateStoredFileContent } from "./file-conten
 import { createPrivateObjectKey, ObjectStorageObjectNotFoundError, type ObjectStorage } from "./storage.js";
 import type { TrustedActorContext } from "./repositories.js";
 import { OperationEventRepository } from "./repositories.js";
+import { isJiashunClerk, JiashunContractClerkScope } from "../sourcing/jiashun-contract-clerk-scope.js";
+
+type JiashunFileScope = Readonly<{sourcingCaseId:string;documentId:string}>;
 
 const MIME_EXTENSIONS: Record<string, readonly string[]> = {
   "image/jpeg": ["jpg", "jpeg"],
@@ -93,8 +96,14 @@ export class AttachmentService {
     return {bytes,sha256};
   }
 
-  async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent): Promise<UploadIntentResponse> {
+  async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent, clerkScope?: JiashunFileScope): Promise<UploadIntentResponse> {
     if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
+    if (isJiashunClerk(actor.actorRoles)) {
+      if (!clerkScope) throw new ApplicationError("FORBIDDEN", "嘉顺文员仅能暂存当前合同回传文件", 403);
+      if (!["application/pdf","image/jpeg","image/png"].includes(input.mimeType) || input.sizeBytes > 20 * 1024 * 1024) {
+        throw new ApplicationError("VALIDATION_ERROR", "嘉顺合同文件限 PDF/JPG/PNG，单份不超过20 MB", 400);
+      }
+    }
     this.validate(input);
     const attachmentId = randomUUID();
     const objectKey = createPrivateObjectKey(this.options.prefix, input.filename);
@@ -108,6 +117,8 @@ export class AttachmentService {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      if (clerkScope) await new JiashunContractClerkScope(this.pool)
+        .assertCurrentDocument(actor,clerkScope.sourcingCaseId,clerkScope.documentId,client);
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
         [`attachment-upload:${actor.actorId}`],
@@ -132,6 +143,9 @@ export class AttachmentService {
         `INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7)`,
         [attachmentId, objectKey, input.filename, input.mimeType, input.sizeBytes, input.sha256, actor.actorId],
       );
+      if (clerkScope) await client.query(`INSERT INTO sourcing_jiashun_contract_uploads(
+        attachment_id,actor_id,sourcing_case_id,sourcing_contract_document_id) VALUES($1,$2,$3,$4)`,
+      [attachmentId,actor.actorId,clerkScope.sourcingCaseId,clerkScope.documentId]);
       await this.events.append(client, actor, {
         action: "attachment.upload_requested",
         entityType: "attachment",
@@ -156,9 +170,20 @@ export class AttachmentService {
     };
   }
 
+  async clerkUploadContext(actorId:string,attachmentId:string):Promise<JiashunFileScope|null>{
+    const rows=await this.pool.query<{sourcing_case_id:string;sourcing_contract_document_id:string}>(`SELECT sourcing_case_id,sourcing_contract_document_id
+      FROM sourcing_jiashun_contract_uploads WHERE attachment_id=$1 AND actor_id=$2`,[attachmentId,actorId]);
+    return rows.rows[0]?{sourcingCaseId:rows.rows[0].sourcing_case_id,documentId:rows.rows[0].sourcing_contract_document_id}:null;
+  }
+
   async finalize(actor: TrustedActorContext, attachmentId: string): Promise<AttachmentResponse> {
     if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
+    const clerk = isJiashunClerk(actor.actorRoles);
+    const scope = clerk ? await this.clerkUploadContext(actor.actorId, attachmentId) : null;
+    if (clerk && !scope) throw new ApplicationError("FORBIDDEN", "附件不属于当前嘉顺合同上传", 403);
     const row = await this.owned(attachmentId, actor.actorId);
+    if (scope) await new JiashunContractClerkScope(this.pool)
+      .assertCurrentDocument(actor,scope.sourcingCaseId,scope.documentId);
     if (row.status === "ready") return this.dto(row);
     if (row.status !== "pending") {
       throw new ApplicationError("INVALID_STATE_TRANSITION", "Attachment is not pending", 409);
@@ -174,7 +199,7 @@ export class AttachmentService {
     }
     this.activeFinalizationsByActor.set(actor.actorId, active + 1);
     try {
-      return await this.finalizePending(actor, row, attachmentId);
+      return await this.finalizePending(actor, row, attachmentId, scope);
     } finally {
       const remaining = (this.activeFinalizationsByActor.get(actor.actorId) ?? 1) - 1;
       if (remaining <= 0) this.activeFinalizationsByActor.delete(actor.actorId);
@@ -186,6 +211,7 @@ export class AttachmentService {
     actor: TrustedActorContext,
     row: AttachmentRow,
     attachmentId: string,
+    scope: JiashunFileScope | null,
   ): Promise<AttachmentResponse> {
     const metadata = await this.verificationCall(actor, row, () => this.storage.head(row.object_key));
 
@@ -221,6 +247,8 @@ export class AttachmentService {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      if (scope) await new JiashunContractClerkScope(this.pool)
+        .assertCurrentDocument(actor,scope.sourcingCaseId,scope.documentId,client);
       const updated = await client.query<AttachmentRow>(
         `UPDATE attachments SET status='ready',ready_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1 AND status='pending' RETURNING *`,
         [attachmentId],
@@ -324,7 +352,7 @@ export class AttachmentService {
     disposition: "attachment" | "inline" = "attachment",
     variant?: "thumbnail",
   ): Promise<DownloadIntentResponse> {
-    const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound);
+    const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound, isJiashunClerk(actor.actorRoles));
     if (row.status !== "ready") throw new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
     if (variant === "thumbnail" && !row.mime_type.startsWith("image/")) throw new ApplicationError("VALIDATION_ERROR", "该文件不是图片", 400);
     const grant = await this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
@@ -522,6 +550,7 @@ export class AttachmentService {
     id: string,
     userId: string,
     authorizeBound?: (row: { attachmentId: string; entityType: string; entityId: string; uploadedBy: string; mimeType: string }) => Promise<boolean>,
+    blockUnboundForClerk = false,
   ): Promise<AttachmentRow> {
     const result = await this.pool.query<AttachmentRow>(`SELECT * FROM attachments WHERE attachment_id=$1`, [id]);
     const row = result.rows[0];
@@ -530,7 +559,7 @@ export class AttachmentService {
       if (!authorizeBound || !(await authorizeBound({ attachmentId: row.attachment_id, entityType: row.entity_type, entityId: row.entity_id, uploadedBy: row.uploaded_by, mimeType: row.mime_type }))) {
         throw new ApplicationError("FORBIDDEN", "Attachment access denied", 403);
       }
-    } else if (row.uploaded_by !== userId) {
+    } else if (row.uploaded_by !== userId || blockUnboundForClerk) {
       throw new ApplicationError("FORBIDDEN", "Attachment access denied", 403);
     }
     return row;
