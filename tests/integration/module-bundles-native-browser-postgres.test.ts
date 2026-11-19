@@ -23,7 +23,7 @@ async function openCockpitNavigation(page:Page,afterNavigate=()=>{}){
   const start=h.resources.length,{context,page}=await h.open(undefined,{},1440);try{
    const loaded=new Set(h.resources.slice(start).map(r=>r.path));expect(loaded.has(asset('digital-cockpit-page.tsx'))).toBe(true);
    for(const name of ['rework-detail-page.tsx','sourcing-workspace-page.tsx','wages/wage-page.tsx','admin-console-page.tsx','cockpit-production-settings.tsx','delivery-calendar-page.tsx','acceptance-lab-page.tsx'])expect(loaded.has(asset(name))).toBe(false);
-   for(const width of [1165,1440]){await page.setViewportSize({width,height:1003});expect(await page.locator('.app-shell>aside').count()).toBe(1);expect(await page.locator('.journey-kpis button').count()).toBe(7);expect(await page.locator('.journey-orders tbody tr').count()).toBe(15);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'production-home-'+width+'.png'),fullPage:true});}
+   for(const width of [1165,1440]){await page.setViewportSize({width,height:1003});expect(await page.locator('.app-shell>aside').count()).toBe(1);expect(await page.locator('.journey-kpis .dx-production-kpi').count()).toBe(6);expect(await page.locator('.journey-orders tbody tr').count()).toBe(15);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'production-home-'+width+'.png'),fullPage:true});}
    const resourceEntries=await page.evaluate(()=>performance.getEntriesByType('resource').map(e=>{const r=e as PerformanceResourceTiming;return {url:new URL(r.name).pathname,type:r.initiatorType,transfer:r.transferSize,encoded:r.encodedBodySize,duration:r.duration};}));
    await writeFile(join(h.evidence,'first-production-assets.json'),JSON.stringify({source:'Isolated native TEST production build, loopback uncompressed assets; not onsite or production compression equivalence',served:h.resources.slice(start),resourceEntries},null,2));
    await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view=order][aria-busy=false]').waitFor();expect(await page.locator('.cockpit-stage').count()).toBe(7);
@@ -47,7 +47,7 @@ async function openCockpitNavigation(page:Page,afterNavigate=()=>{}){
    await page.evaluate(()=>{history.replaceState(null,'',location.pathname+location.search+'#TEST-preserve-unsaved');dispatchEvent(new PopStateEvent('popstate'));});
    expect(await input.inputValue()).toBe(next);expect(await page.getByRole('region',{name:'开发纸样设置',exact:true}).count()).toBe(1);
    await page.getByRole('region',{name:'开发纸样设置',exact:true}).getByRole('button',{name:'取消',exact:true}).click();await page.getByRole('region',{name:'开发纸样设置',exact:true}).waitFor({state:'detached'});
-   await page.goBack();await homeReady(page);expect(page.url()).toBe(originalUrl);expect(await page.locator('.journey-kpis button').count()).toBe(7);expect(await layout()).toEqual(before);
+   await page.goBack();await homeReady(page);expect(page.url()).toBe(originalUrl);expect(await page.locator('.journey-kpis .dx-production-kpi').count()).toBe(6);expect(await layout()).toEqual(before);
    await page.screenshot({path:join(h.evidence,'production-home-after-settings.png'),fullPage:true});
   }finally{await context.close();}
  });

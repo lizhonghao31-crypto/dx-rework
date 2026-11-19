@@ -157,7 +157,9 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
    await page.getByRole('button',{name:'刷新数据',exact:true}).click();await page.getByRole('alert').filter({hasText:'1 单详情暂未读到'}).waitFor();
    const after=await h.read(page,{page:'2'});expect(after.page).toBe(2);expect(after.total).toBe(scale);expect(after.summary).toEqual(before.summary);expect(after.freshness).toMatchObject({failed:1,detailsOnly:true});
    expect(after.items.map(item=>item.id)).toEqual(before.items.filter(item=>item.orderId!==target).map(item=>item.id));
-   expect(await page.locator('.journey-orders tbody tr').count()).toBe(14);expect(await page.getByRole('navigation',{name:'分页',exact:true}).count()).toBe(1);expect(await page.locator('.journey-kpis').innerText()).not.toContain('—');
+   expect(await page.locator('.journey-orders tbody tr').count()).toBe(14);expect(await page.getByRole('navigation',{name:'分页',exact:true}).count()).toBe(1);
+   expect(await page.locator('.journey-kpis .dx-production-kpi strong').allTextContents()).toEqual(
+    [before.summary.all,before.summary.active,before.summary.dueSoon,before.summary.overdue,before.summary.completed,before.summary.todo].map(value=>String(value??'—')));
   }finally{spy?.mockRestore();await context.close();}
  });
  it('rechecks the real same valid PMC session after native revocation instead of trusting a cached manager projection',async()=>{

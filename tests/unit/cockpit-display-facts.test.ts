@@ -63,8 +63,10 @@ it("uses only shipment H for mutually exclusive order states; node risk remains 
   nodes(active).find(node=>node.key==="development_pattern")!.risks=["overdue"];
   nodes(closed).find(node=>node.key==="packing")!.state="completed";
   const result=selectJourneys([active,closed,notStarted,due,overdue,order("development")].map(o=>o.id==="development"?{...o,orderId:null}:o),JourneyFilterSchema.parse({scope:"production"}),asOf);
-  expect(result.summary).toMatchObject({all:5,overdue:1,dueSoon:1,active:1,notStarted:1,completed:1});
+  expect(result.summary).toMatchObject({all:5,overdue:1,dueSoon:1,active:1,completed:1,todo:null});
+  expect(result.summary).not.toHaveProperty("notStarted");
   expect(result.items.map(o=>o.id)).toEqual(["overdue","due","active","waiting","closed"]);expect(result.scopeCounts?.development).toBe(1);
+  expect(result.items.find(o=>o.id==="waiting")?.display?.mainState).toBe("not_started");
   expect(journeyDisplay(active,asOf).mainState).toBe("active");
 });
 it("filters the complete authorized set before exclusive counts, sorting and pagination",()=>{
