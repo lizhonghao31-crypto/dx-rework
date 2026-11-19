@@ -27,6 +27,7 @@ import {writeFile} from 'node:fs/promises';
 import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {registerProductionReadinessRoutes} from '../../apps/api/src/production-platform/production-readiness-routes.js';
 import {registerInstructionRoutes} from '../../apps/api/src/production-platform/production-instruction-routes.js';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {readCockpitMaterialSupplements} from '../../apps/api/src/production-platform/cockpit-actionable.js';
 import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from '../../apps/api/src/production-platform/preparation-todos.js';
 import {completeBulkRangeFixture} from '../helpers/production-readiness-fixture.js';
@@ -364,7 +365,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(statements.length).toBeLessThanOrEqual(small.length+2);
    console.log(`Cockpit native supplement SQL: one=${small.length}, four=${statements.length}`);
   }finally{await transaction.query('ROLLBACK');transaction.release();}
- });
+ },testExecutionConfig.correctnessTimeoutMs);
  it('keeps partial ordinary-order work in the original 48h window; replenishment at60h and complete65h remain17h late',async()=>{
   const scene=await f.scene('2026-11-10T00:00:00Z');let ready!:Awaited<ReturnType<typeof f.bulkReady>>,accessory='';
   await f.runtime.run(scene,f.root,async()=>{ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true,accessory:true});

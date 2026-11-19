@@ -98,12 +98,13 @@ describe('Cockpit candidate SQL cohorts',()=>{
   const fieldNames=['__dx_cockpit_candidate','__dx_cockpit_result','note','at','file'];
   const moment=new Date('2026-11-19T17:00:00.000Z');
   const sql="SELECT note,at,file FROM t WHERE id=$1 AND code=$2 AND symbol='$1'";
-  const query=vi.fn(async(_text:string,_args:unknown[])=>({
+  const query=vi.fn(async(text:string,args:unknown[])=>{
+   expect(text).toContain(' UNION ALL ');expect(args).toHaveLength(4);return {
    ...result([{__dx_cockpit_candidate:0,__dx_cockpit_result:'1',note:'first',at:moment,file:Buffer.from('TEST')},
     {__dx_cockpit_candidate:0,__dx_cockpit_result:'2',note:'second'},
     {__dx_cockpit_candidate:1,__dx_cockpit_result:'1',note:'own'}]),
    fields:fieldNames.map(name=>({name}))
-  }));
+  };});
   const db={query} as unknown as PoolClient;
   const rows=await readJourneyCandidateCohort(db,['A','B','A'],async(client,id)=>(await client.query(sql,[id,'TEST'])).rows);
   expect(query).toHaveBeenCalledTimes(1);
