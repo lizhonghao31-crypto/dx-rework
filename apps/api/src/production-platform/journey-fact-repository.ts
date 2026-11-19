@@ -1,3 +1,4 @@
+import {effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
 import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {buildFixedReworkTargets} from './fixed-rework-progress.js';
 import type {Pool,PoolClient} from 'pg';
@@ -41,7 +42,7 @@ export class JourneyFactRepository{
    if(options?.retireMissing){
     const exists=resource.kind==='order'
      ?(await db.query(`SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND ${await wholeOrderActiveSql(db,'order','production_order_id')}`,[resource.id])).rowCount
-     :(await db.query(`SELECT 1 FROM digital_production_sources s WHERE s.source_id=$1 AND ${await wholeOrderActiveSql(db,'source','s.source_id')} AND NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)`,[resource.id])).rowCount;
+     :(await db.query(`SELECT 1 FROM digital_production_sources s WHERE s.source_id=$1 AND ${await effectiveDevelopmentSourceSql(db,'s.source_id')} AND ${await wholeOrderActiveSql(db,'source','s.source_id')} AND NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)`,[resource.id])).rowCount;
     if(!exists){await db.query('DELETE FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id]);
      await db.query('DELETE FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2 AND transaction_id=ANY($3::bigint[])',[resource.kind,resource.id,pending]);
      await db.query('DELETE FROM digital_journey_fact_retries WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id]);

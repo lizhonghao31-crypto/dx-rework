@@ -44,7 +44,7 @@ export async function savedDevelopmentRoute(db: DB, sourceId: string, document: 
   return saved?.route_nodes.length ? saved.route_nodes : developmentRoute(document);
 }
 export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorContext, sourceId: string,
-  document: DevelopmentDocument | null, time: BusinessTime, eventKey: string,newMode:TimelineAdoptionMode='legacy') {
+  document: DevelopmentDocument | null, time: BusinessTime, eventKey: string,newMode:TimelineAdoptionMode='legacy',activation:{eventId:string;createdBy:string}|null=null) {
   if (!(await db.query("SELECT to_regclass('digital_development_sla_plans') AS relation")).rows[0]?.relation) return;
   validateBusinessTime(time);
   const outputKind=(await db.query('SELECT output_kind FROM digital_development_revision_sources WHERE source_id=$1',[sourceId])).rows[0]?.output_kind??'整件样板';
@@ -60,7 +60,10 @@ export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorC
   if (prior && (!document || prior.route_nodes.length)) throw new Error("Development SLA enrollment/publication already captured");
   if (prior && (prior.business_time.scenarioId !== time.scenarioId || prior.business_time.revision > time.revision
     || Date.parse(prior.business_time.now) > Date.parse(time.now))) throw new Error("Development SLA clock scope or time regression");
-  if (!prior) {
+  if (activation) {
+    if(prior||!document)throw Error('First publication requires an unenrolled development document');
+    await captureTechnicalEnrollment(db,activation.createdBy,sourceId,activation.eventId);
+  } else if (!prior) {
     if (document&&!firstEffective) throw new Error("Historical development cannot be enrolled by publishing");
     const event = (await db.query("SELECT action,entity_id,actor_id FROM audit_events WHERE id=$1", [firstEffective?admission!.activationEventId:eventKey])).rows[0];
     if (event?.action !== (firstEffective?'order_time_activated':"digital_source_created") || event.entity_id !== sourceId || event.actor_id !== actor.actorId)
@@ -89,7 +92,7 @@ export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorC
   if(prior?.timeline_schema_version&&!['1','2'].includes(String(prior.timeline_schema_version)))throw Error('此开发单采用版本不受当前程序支持');
   const mode=inherited?'fixed_v2':prior?'legacy':newMode;
   if(!prior&&!document&&mode==='fixed_v2')await captureTechnicalEnrollment(db,actor.actorId,sourceId,eventKey);
-  const initial=inherited??await freezeInitialTimelineInput(db,firstEffective?'fixed_v2':mode,{resource:{kind:'source',id:sourceId},creationEventRef:`audit_events:${firstEffective?admission!.activationEventId:eventKey}`,time,
+  const initial=inherited??await freezeInitialTimelineInput(db,firstEffective?'fixed_v2':mode,{resource:{kind:'source',id:sourceId},creationEventRef:`audit_events:${activation?.eventId??(firstEffective?admission!.activationEventId:eventKey)}`,time,
     unified:{configurationId:prior?.configuration_id??config!.configurationId,snapshotRef:`digital_development_sla_plans:${sourceId}:1`,values:snapshot},...(admission?{orderTimePlan:admission.plan}:{})});
   const values=[sourceId, revision, prior?.configuration_id ?? config!.configurationId, snapshot.ruleVersion,
     JSON.stringify(snapshot.parameters), JSON.stringify(plan), document ? developmentSlaRoute(document,outputKind,initial?2:1) : [], actor.actorId, JSON.stringify(time),

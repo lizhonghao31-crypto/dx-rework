@@ -352,10 +352,14 @@ function linkedJourneyDatabase(roles: string[]) {
     completed_quality: '现场登记', route_instance_id: QUOTE, original_state: 'completed', returned: false,
   };
   return database(roles, (sql, values) => {
+    if (sql === "SELECT to_regclass('digital_development_source_lifecycle') AS relation") return [{relation:'digital_development_source_lifecycle'}];
     if (sql === "SELECT to_regclass('digital_bulk_preshrink_corrections') AS relation") return [{relation:'digital_bulk_preshrink_corrections'}];
     if (sql === 'SELECT preshrink_task_id FROM digital_bulk_preshrink_corrections ORDER BY preshrink_task_id') return [];
     if (sql === 'SELECT CURRENT_TIMESTAMP AS as_of') return [{as_of: completedAt}];
-    if (sql.startsWith('WITH live_roles AS (')) return [{source: null, order: mother}];
+    if (sql.startsWith('WITH live_roles AS (')) {
+      expect(sql).toContain('lifecycle.source_id=s.source_id AND lifecycle.is_draft');
+      return [{source:null,order:mother}];
+    }
     if (sql.startsWith('SELECT * FROM digital_production_orders ')) return values[0] === ORDER ? [mother] : [];
     if (sql.startsWith('SELECT a.task_id,a.task_kind,a.source_id,')) return [task];
     if (sql.startsWith('SELECT p.preparation_id FROM digital_bulk_preparations p')) return [{preparation_id: QUOTE}];
@@ -381,17 +385,20 @@ function linkedJourneyDatabase(roles: string[]) {
 }
 
 const SOURCE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-function sourceJourneyDatabase(roles: string[]) {
+function sourceJourneyDatabase(roles: string[],draft=false) {
   const source = {source_id: SOURCE, development_type: '头版', created_by: OTHER, design_style_no: 'TEST-PMC-SOURCE', temporary_style_no: null, customer_code: 'PD', created_at: '2026-10-24T08:00:00.000Z'};
   return database(roles, (sql, values) => {
     if(sql.startsWith('SELECT state FROM digital_production_resource_lifecycle')){expect(values).toEqual(['source',SOURCE]);return [];}
     if (sql === 'SELECT CURRENT_TIMESTAMP AS as_of') return [{as_of: '2026-10-24T09:00:00.000Z'}];
-    if (sql.startsWith('WITH live_roles AS (')) return [{source, order: null}];
+    if (sql.startsWith('WITH live_roles AS (')) {
+      expect(sql).toContain('lifecycle.source_id=s.source_id AND lifecycle.is_draft');
+      return draft?[]:[{source,order:null}];
+    }
     if (sql.startsWith('SELECT * FROM digital_production_sources ')) return values[0] === SOURCE ? [source] : [];
     if (sql.startsWith('SELECT display_name FROM app_users WHERE id=$1')) return [{display_name: 'TEST other designer'}];
     if (sql.startsWith('SELECT id,display_name FROM app_users WHERE id=ANY')) return [{id: OTHER, display_name: 'TEST other designer'}];
     if (sql.startsWith('SELECT coalesce(max(round_number),1)::int AS round ')) return [{round: 1}];
-    for (const relation of ['digital_development_amendments', 'digital_development_sla_plans', 'digital_preparation_responsibilities']) {
+    for (const relation of ['digital_development_source_lifecycle', 'digital_development_amendments', 'digital_development_sla_plans', 'digital_preparation_responsibilities']) {
       if (sql === `SELECT to_regclass('${relation}') AS relation`) return [{relation}];
     }
     if (sql.startsWith('SELECT a.task_id,a.task_kind,a.source_id,')
@@ -445,6 +452,12 @@ describe('PMC Journey linked records and timing remain read projections', () => 
     const db = sourceJourneyDatabase(active);
     const result = await new DigitalJourneyQuery(db.pool).read(actor(...roles), SOURCE, undefined, true);
     expect(result.supervision?.status).toBe(status);
+  });
+
+  it('keeps a reserved draft out of the PMC Journey detail before projecting any facts',async()=>{
+    const db=sourceJourneyDatabase(['pmc'],true);
+    await expect(new DigitalJourneyQuery(db.pool).read(actor('pmc'),SOURCE,undefined,true)).rejects.toMatchObject({statusCode:404});
+    expect(db.query.mock.calls.some(([sql])=>sql.startsWith('SELECT * FROM digital_development_sla_plans '))).toBe(false);
   });
 
   it('keeps an unrelated ordinary worker outside whole-source Journey scope', async () => {

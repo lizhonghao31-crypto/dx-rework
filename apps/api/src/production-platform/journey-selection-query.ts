@@ -68,7 +68,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    coalesce(o.design_style_no,s.design_style_no) AS order_style,s.design_style_no AS source_style,
    o.temporary_style_no AS order_temporary,s.temporary_style_no AS source_temporary,
    coalesce(o.customer_code,s.customer_code) AS order_customer,s.customer_code AS source_customer,
-   s.created_at AS source_created,o.created_at AS order_created,coalesce((to_jsonb(s)->>'order_time_managed')::boolean,false) AS source_managed,coalesce((to_jsonb(o)->>'order_time_managed')::boolean,false) AS order_managed,o.product_group,o.primary_merchandiser_id,
+   s.created_at AS source_created,o.created_at AS order_created,(coalesce((to_jsonb(s)->>'order_time_managed')::boolean,false) OR coalesce((to_jsonb(s)->>'draft_reserved')::boolean,false)) AS source_managed,coalesce((to_jsonb(o)->>'order_time_managed')::boolean,false) AS order_managed,o.product_group,o.primary_merchandiser_id,
    designer.display_name AS designer,primary_person.display_name AS primary_name,
    sourcing.child_id AS sourcing_id,production.child_id AS production_id,source_case.style_name_snapshot,source_case.erp_order_no,
    additional.people AS secondary_merchandisers,source_case.sourcing_case_id AS visible_sourcing_id,

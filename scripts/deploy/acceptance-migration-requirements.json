@@ -2233,5 +2233,32 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0296_development_first_publication": {
+    "checksum": "c6ae660cfc41c3f8174df90f9e695c12ddee794f39600bfc765142ae18e297d5",
+    "tables": [
+      "digital_production_sources",
+      "digital_development_documents",
+      "digital_development_revision_sources",
+      "digital_production_orders",
+      "audit_events"
+    ],
+    "functions": [
+      "acceptance_sla_clock_guard_resource",
+      "guard_preparation_evidence_identity"
+    ],
+    "references": [
+      "digital_production_sources",
+      "audit_events"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_first_publications"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

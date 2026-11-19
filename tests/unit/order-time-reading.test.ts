@@ -2,6 +2,7 @@ import {cancelledTaskHistory,cancelledWorkTaskKind,linkedSourceTaskCancellation}
 import {SERIES_MILESTONE_OFFSETS} from '@dx-rework/contracts/digital-series-plan';
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
+import {developmentLifecycleAvailable} from '../../apps/api/src/production-platform/development-source-lifecycle.js';
 import {orderTimeCreatedMany} from '../../apps/api/src/production-platform/order-time-created.js';
 import {describe,expect,it,vi} from 'vitest';
 import {JOURNEY_STAGES,type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
@@ -358,13 +359,18 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
 
 describe('native creation metadata batch',()=>{
  it('keeps a trustworthy creation date while isolating an invalid or missing subject in one batch',async()=>{
-  const query=vi.fn().mockResolvedValue({rows:[
+  const query=vi.fn().mockResolvedValueOnce({rows:[{relation:'digital_development_source_lifecycle'}]}).mockResolvedValue({rows:[
    {resource_kind:'source',resource_id:'a',created_business_time:{now:'2026-11-20T00:00:00.000Z',scenarioId:null,revision:0},creation_event_ref:'TEST actual creation'},
    {resource_kind:'order',resource_id:'b',created_business_time:{now:'invalid',scenarioId:null,revision:0},creation_event_ref:'TEST invalid input'},
    {resource_kind:'order',resource_id:'legacy',created_business_time:null,creation_event_ref:null,legacy_adopted:true},
    {resource_kind:'order',resource_id:'missing-new',created_business_time:null,creation_event_ref:null,legacy_adopted:false},
   ]});
-  const result=await orderTimeCreatedMany({query} as never,[{kind:'source',id:'a'},{kind:'order',id:'b'},{kind:'source',id:'missing'},{kind:'source',id:'a'},{kind:'order',id:'legacy'},{kind:'order',id:'missing-new'}]);
+  const db={query} as never;
+  expect(await developmentLifecycleAvailable(db)).toBe(true);
+  query.mockClear();
+  const result=await orderTimeCreatedMany(db,[{kind:'source',id:'a'},{kind:'order',id:'b'},{kind:'source',id:'missing'},{kind:'source',id:'a'},{kind:'order',id:'legacy'},{kind:'order',id:'missing-new'}]);
+  expect(query.mock.calls[0]?.[0]).toContain('l.is_draft IS DISTINCT FROM true');
+  expect(JSON.parse(query.mock.calls[0]?.[1][0])).toHaveLength(5);
   expect(query).toHaveBeenCalledTimes(1);expect(result.get('source:a')).toEqual({at:'2026-11-20T00:00:00.000Z',evidence:'TEST actual creation'});expect(result.get('order:b')).toBeNull();expect(result.get('source:missing')).toBeNull();expect(result.get('order:legacy')).toEqual({at:null,legacy:true});expect(result.get('order:missing-new')).toBeNull();
  });
 });

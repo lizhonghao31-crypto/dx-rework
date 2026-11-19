@@ -1,3 +1,4 @@
+import {developmentSourceLifecycle,effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
 import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
@@ -115,7 +116,7 @@ export class DigitalProductionIdentityService {
     const result = await this.database.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",s.design_style_no AS "designStyleNo",
       s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",s.created_by AS "createdBy",s.created_at AS "createdAt",o.production_order_id AS "productionOrderId"
       FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
-      WHERE ${await wholeOrderActiveSql(this.database,"source","s.source_id")} AND ${readScope("source", "s")} AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)
+      WHERE ${await wholeOrderActiveSql(this.database,"source","s.source_id")} AND ${await effectiveDevelopmentSourceSql(this.database,"s.source_id")} AND ${readScope("source", "s")} AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)
       AND ($6::boolean OR NOT $6::boolean) ORDER BY s.created_at DESC,s.source_id DESC LIMIT 15 OFFSET $4`, [isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser")]);
     return { items: result.rows, page };
   }
@@ -134,9 +135,9 @@ export class DigitalProductionIdentityService {
     // Never return another designer's source ID, customer, files or ownership.
     return {code:value,available:!result.rowCount};
   }
-  async createSource(actor: TrustedActorContext, input: DigitalSourceInput, key: string): Promise<{ sourceId: string }> {
+  async createSource(actor: TrustedActorContext, input: DigitalSourceInput, key: string, reserveDraft = false): Promise<{ sourceId: string }> {
     this.assertSourceCreation(actor);
-    return this.command(actor, "create-source", key, input, async client => {
+    return this.command(actor, reserveDraft ? "reserve-source-draft" : "create-source", key, input, async client => {
       if (input.customerCode) await this.customer(client, input.customerCode);
       const styleKey = digitalPoKey(input.designStyleNo);
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-source-style",styleKey])]);
@@ -145,12 +146,13 @@ export class DigitalProductionIdentityService {
       const id = randomUUID(),managed=await acceptsNewOrderTime(client);
       // Source identity is immutable. Record the adoption marker in its original
       // INSERT; historical schemas retain the original six-column contract.
-      await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''})
-        VALUES($1,$2,$3,$4,$5,$6${managed?',true':''})`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
+      await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''}${reserveDraft?',draft_reserved':''})
+        VALUES($1,$2,$3,$4,$5,$6${managed?',true':''}${reserveDraft?',true':''})`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
       if((await client.query("SELECT to_regclass('digital_design_code_registry') AS relation")).rows[0]?.relation)
         await client.query("INSERT INTO digital_design_code_registry(code_key,source_id,code,created_by) VALUES($1,$2,$3,$4)",[styleKey,id,input.designStyleNo,actor.actorId]);
-      const eventId = await this.audit(client, actor, "digital_source_created", id, null, input);
+      const eventId = await this.audit(client, actor, reserveDraft ? "digital_source_draft_reserved" : "digital_source_created", id, null, input);
       await registerAcceptanceCreated(client,{kind:'source',id},actor.actorId,eventId);
+      if(reserveDraft)return {sourceId:id};
       await enrollPreparation(client,{kind:'source',id},actor.actorId,eventId);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
         : observedBusinessTime(this.now);
@@ -159,6 +161,35 @@ export class DigitalProductionIdentityService {
       }else await captureDevelopmentSla(client, actor, id, null, time, eventId,newTimelineAdoptionMode(this.database));
       return { sourceId: id };
     });
+  }
+  async developmentDrafts(actor:TrustedActorContext,page:number,search:string){
+    this.assertSourceCreation(actor);
+    if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
+    const result=await this.database.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
+      s.design_style_no AS "designStyleNo",s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",
+      coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState"
+      FROM digital_production_sources s JOIN digital_development_source_lifecycle lifecycle USING(source_id)
+      LEFT JOIN digital_development_documents d USING(source_id)
+      LEFT JOIN LATERAL (
+        SELECT state FROM digital_order_time_requests request WHERE request.source_id=s.source_id
+          AND request.operation_json->>'kind'='development_publish'
+        ORDER BY request.updated_at DESC,request.request_id DESC LIMIT 1
+      ) approval ON true
+      WHERE lifecycle.is_draft AND ${await wholeOrderActiveSql(this.database,"source","s.source_id")}
+        AND ($1 OR s.created_by=$2) AND strpos(lower(s.design_style_no),lower($3))>0
+      ORDER BY coalesce(d.updated_at,s.created_at) DESC,s.source_id DESC LIMIT 16 OFFSET $4`,
+      [isRootActor(actor),actor.actorId,search,(page-1)*15]);
+    return {items:result.rows.slice(0,15),page,hasNext:result.rows.length>15};
+  }
+  async developmentDraftReceipt(actor:TrustedActorContext,key:string){
+    assertIdentityActor(actor);
+    if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少有效操作标识",400);
+    const saved=(await this.database.query<{source_id:string}>(`SELECT s.source_id FROM digital_production_commands c
+      JOIN digital_production_sources s ON s.source_id::text=c.response->>'sourceId'
+      WHERE c.actor_id=$1 AND c.command='reserve-source-draft' AND c.key=$2
+        AND s.created_by=$1 AND ${await wholeOrderActiveSql(this.database,"source","s.source_id")}`,[actor.actorId,key])).rows[0];
+    if(saved)await this.visibleSource(this.database,actor,saved.source_id);
+    return {sourceId:saved?.source_id??null};
   }
   private async customer(client: PoolClient, code: string, group?: string) {
     const result = await client.query("SELECT * FROM digital_production_customers WHERE code=$1 AND enabled AND ($2::text IS NULL OR $2=ANY(product_groups))", [code, group ?? null]);
@@ -250,6 +281,7 @@ export class DigitalProductionIdentityService {
     return this.command(actor, `attach-source:${id}`, key, { sourceId }, async client => {
       const context=acceptanceBusinessContext();if(context){await context.assertScope({kind:'order',id});await context.assertScope({kind:'source',id:sourceId});}
       const source = await this.visibleSource(client, actor, sourceId, true);
+      if((await developmentSourceLifecycle(client,sourceId))?.is_draft)fail("请先发布开发草稿");
       const order = await this.visibleOrder(client, actor, id, true);
       if (!isDigitalLeader(actor) && !(actor.actorRoles.includes("sample_designer") && order.created_by === actor.actorId && source.created_by === actor.actorId)) digitalForbidden();
       if (order.source_id === sourceId) return this.readWith(client, actor, id);

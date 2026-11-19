@@ -9,7 +9,7 @@ import {readOrderSecondaryMerchandisers} from './order-merchandisers.js';
 
 export type JourneyCandidate={
  has_order_time_plan?:boolean;
- source:{order_time_managed?:boolean;development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
+ source:{order_time_managed?:boolean;draft_reserved?:boolean|null;development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
  order:{order_time_managed?:boolean;production_order_id:string;source_id:string|null;created_by:string;primary_merchandiser_id:string|null;design_style_no:string;temporary_style_no:string|null;customer_code:string;product_group:string;contract_delivery_date:string|null;created_at:string}|null;
 };
 type Visibility={sourceAccess:boolean;orderAccess:boolean;fullOrder:boolean};
