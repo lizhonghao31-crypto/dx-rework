@@ -181,7 +181,7 @@
     "languages": ["sql", "plpgsql"],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
- },
+  },
   {
     "version": "0233_jiashun_contract_clerk",
     "checksum": "39d8d12d3e70ee7f5b885299e87258c55fbc7ddafbadb198d2e03ac16597d7e2",

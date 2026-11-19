@@ -74,20 +74,6 @@ export class JiashunContractClerkScope {
     if (!(await this.allowedDocumentIds(actor,sourcingCaseId,client)).has(documentId)) deny();
   }
 
-  async assertHistoricalSnapshot(actor: TrustedActorContext, sourcingCaseId: string, at: string, client: QueryClient = this.database): Promise<void> {
-    await this.assertCase(actor,sourcingCaseId,client);
-    const result=await client.query<{allowed:boolean}>(`SELECT EXISTS (
-      SELECT 1 FROM sourcing_approval_snapshots snapshot
-      JOIN sourcing_jiashun_allowed_factories factory ON factory.supplier_id=snapshot.supplier_id
-      WHERE snapshot.sourcing_case_id=$1 AND snapshot.approved_at <= $2::timestamptz
-        AND snapshot.sourcing_approval_snapshot_id=(SELECT latest.sourcing_approval_snapshot_id
-          FROM sourcing_approval_snapshots latest WHERE latest.sourcing_case_id=$1
-            AND latest.approved_at <= $2::timestamptz
-          ORDER BY latest.decision_version DESC,latest.approved_at DESC LIMIT 1)
-    ) AS allowed`,[sourcingCaseId,at]);
-    if (!result.rows[0]?.allowed) deny();
-  }
-
   async assertCurrentDocument(actor: TrustedActorContext, sourcingCaseId: string, expectedId: string | null | undefined, client: QueryClient = this.database): Promise<void> {
     if (client !== this.database) {
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);

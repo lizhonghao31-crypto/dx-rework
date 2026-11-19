@@ -1318,7 +1318,8 @@ export class SourcingService {
         : `SELECT ${time}::text AS at FROM ${table} WHERE ${id}=$1 AND sourcing_case_id=$2`, [entry.entryId, sourcingCaseId]);
     const at = cutoff.rows[0]?.at;
     if (!at) return fail("历史记录不存在", 404, "NOT_FOUND");
-    if (isJiashunClerk(actor.actorRoles)) await this.clerkScope.assertHistoricalSnapshot(actor,sourcingCaseId,at);
+    // The selected entry already passed listTimeline's factory/version filter.
+    // Initial quotes and decisions can belong to the approved factory even when recorded before approval.
     const item = await this.readCase(this.database, sourcingCaseId, actor, { at, node, entryId: entry.entryId });
     const evidence = await this.database.query<{ ids: string[] | null }>(
       `SELECT after_state->'attachmentIds' AS ids FROM operation_events

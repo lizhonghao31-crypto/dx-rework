@@ -4106,6 +4106,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await expect(clerkScope.assertCurrentDocument(clerkActor(),id,doc.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:409});
 
       const currentId=effective.sourcingContractDocumentId;
+      const firstApprovalId=await reviewedContractCase("JIASHUN-INITIAL-HISTORY",service,undefined,clerkFactories[2]!);
+      const firstApprovalTimeline=(await clerkOrders.listTimeline(clerkActor(),firstApprovalId)).items;
+      const quoteEntry=firstApprovalTimeline.find(entry=>entry.kind==="ie_quote")!;
+      const managementEntry=firstApprovalTimeline.find(entry=>entry.kind==="management_decision")!;
+      const initialApproval=(await clerkOrders.getCase(clerkActor(),firstApprovalId)).approvalSnapshot!;
+      expect(new Date(quoteEntry.handledAt).getTime()).toBeLessThan(new Date(initialApproval.approvedAt).getTime());
+      expect(new Date(managementEntry.handledAt).getTime()).toBeLessThan(new Date(initialApproval.approvedAt).getTime());
+      expect(await clerkOrders.nodeHistory(clerkActor(),firstApprovalId,"ie_quote",quoteEntry.entryId)).toMatchObject({
+        node:"ie_quote",entry:{entryId:quoteEntry.entryId},item:{ieQuote:{sourcingIeQuoteId:quoteEntry.entryId}},
+      });
+      expect(await clerkOrders.nodeHistory(clerkActor(),firstApprovalId,"management",managementEntry.entryId)).toMatchObject({
+        node:"management",entry:{entryId:managementEntry.entryId},item:{decision:{supplierId:clerkFactories[2]}},
+      });
+      const outsiderDecision=ownerTimeline.find(entry=>entry.kind==="management_decision" && entry.supplierName==="一号加工厂")!;
+      await expect(clerkOrders.nodeHistory(clerkActor(),id,"management",outsiderDecision.entryId)).rejects.toMatchObject({statusCode:404});
+
       const uploadActor=clerkActor(JIASHUN_FILE_UPLOAD);
       const saveActor=clerkActor(JIASHUN_CONTRACT_RETURN);
       const otherFile=await stage(clerkActor(JIASHUN_FILE_UPLOAD,otherClerkId),id,currentId);
