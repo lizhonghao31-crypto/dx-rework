@@ -46,7 +46,7 @@ export const orderTimeOperationScope=scoped;
 
 /** Original actor and original native rows, all on the caller's single client.
  * The public operation contains intent, never an authorized actor or a DTO. */
-export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedActorContext,raw:OrderTimeOperation,time:BusinessTime,changes:Record<string,OrderTimeRule>={},washingChanges:OrderTimeWashingChanges=[],rewashChanges:OrderTimeWashingReworkChanges=[]){
+export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedActorContext,raw:OrderTimeOperation,time:BusinessTime,changes:Record<string,OrderTimeRule>={},washingChanges:OrderTimeWashingChanges=[],rewashChanges:OrderTimeWashingReworkChanges=[],purpose:'command'|'native-refresh'='command'){
  const operation=OrderTimeOperationSchema.parse(raw),resource=scoped(operation),policy=new DigitalProductionAccessPolicy(db);
  if(resource)await policy.assert(actor,resource.kind,resource.id,'technical');
  const sourceId=resource?.kind==='source'?resource.id:resource?.kind==='order'?(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]?.source_id??null:null;
@@ -224,7 +224,9 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  sourceVersion.customerDates=dates;sourceVersion.workFacts=[...progress];sourceVersion.materialBounds=notBefore;
  const datedScopes=value.scopes.filter(scope=>scope.customerGoal.precision==='date');
  let formalEnds:Record<string,SlaTime[]>|undefined;
- if(operation.kind==='arrangement'&&saved&&!(plan.company.framework&&frameworkRoute&&datedScopes.length)){
+ // Publication also reloads an adopted route using an arrangement-shaped
+ // read. Only an actual arrangement command approves a new remaining plan.
+ if(purpose==='command'&&operation.kind==='arrangement'&&saved&&!(plan.company.framework&&frameworkRoute&&datedScopes.length)){
   const pending=[...pendingWork].sort();
   sourceVersion.formalPendingWork=pending;
   value.formalInputs={version:'approved-remaining-v1',progress:Object.fromEntries(progress),notBefore,pendingWork:pending};

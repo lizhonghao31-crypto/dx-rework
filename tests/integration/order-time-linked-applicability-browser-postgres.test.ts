@@ -81,7 +81,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect(target.requests.check(f.root,ordinary,{['bulk_special_'+unused.id.replaceAll('-','')]:overrides[parameterKey]!})).rejects.toThrow('不能修改本单不适用的节点');
    await expect(target.requests.check(f.root,ordinary,{['development_special_'+special.id.replaceAll('-','')]:overrides[parameterKey]!})).rejects.toThrow('不能修改本单不适用的节点');
    const current=await target.requests.check(f.root,ordinary),shared=current.rows.find(row=>row.parameterKey==='warehouse_dispatch')!,sharedChanges={warehouse_dispatch:{...shared.rule!,kind:'work' as const,minutes:120}},sharedPreview=await target.requests.check(f.root,ordinary,sharedChanges),raceBody={resource:target.resource(),fingerprint:sharedPreview.fingerprint,overrides:sharedChanges,acceptLate:true};
-   const raced=await Promise.allSettled([target.requests.arrange(f.root,raceBody,randomUUID()),target.requests.arrange(f.root,raceBody,randomUUID())]);expect(raced.filter(row=>row.status==='fulfilled')).toHaveLength(1);expect(raced.filter(row=>row.status==='rejected')).toHaveLength(1);
+   if(!framework){
+    const facts=sharedPreview.sourceVersion.workFacts as Array<[string,{completed:boolean;actualAt:string|null}]>;
+    const keys=['sourcing_approval','sourcing_ie','sourcing_selection'];
+    const completed=facts.filter(([ref])=>ref.startsWith('po:')&&keys.some(key=>ref.endsWith(':work:'+key)));
+    expect(completed.map(([ref])=>ref.split(':').at(-1)).sort()).toEqual(keys);
+    for(const [ref,fact]of completed)expect(fact,ref).toMatchObject({completed:true,actualAt:'2026-11-17T08:00:00.000Z'});
+   }
+   const raced=await Promise.allSettled([target.requests.arrange(f.root,raceBody,randomUUID()),target.requests.arrange(f.root,raceBody,randomUUID())]);
+   const messages=raced.flatMap(row=>row.status==='rejected'?[String(row.reason)]:[]);
+   expect(raced.filter(row=>row.status==='fulfilled'),messages.join('；')).toHaveLength(1);expect(raced.filter(row=>row.status==='rejected')).toHaveLength(1);
    expect((await target.repo.current(source))!.input.plan.overrides.warehouse_dispatch).toMatchObject({minutes:120});expect((await target.repo.current(source))!.input.plan.overrides[parameterKey]).toBeUndefined();
    const begun=(await target.requests.check(f.root,ordinary)).rows.find(row=>row.begun&&row.rule?.kind==='work');expect(begun).toBeDefined();
    await expect(target.requests.check(f.root,ordinary,{[begun!.parameterKey]:{...begun!.rule!,kind:'work',minutes:begun!.rule!.minutes!+60}})).rejects.toThrow(/已开始/);

@@ -24,7 +24,7 @@ export async function automaticOrderTime<T>(database:Pool,db:PoolClient,actor:Tr
  await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'order_time_activated','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,resource?.id??eventId,JSON.stringify({automatic:true,designerId:state.designerId,plan:state.value.plan,lateMinutes:state.check.lateMinutes})]);
  return withinOrderTimeAdmission(db,{requestId:null,requestVersion:null,actorId:actor.actorId,designerId:state.designerId,operation,plan:state.value.plan,time,activationEventId:eventId},async()=>{
   const result=await work(),target=created?.(result)??resource;if(!target)throw Error('原生生效缺少本单身份');
-  const actual=await loadOrderTimeOperation(database,db,actor,{kind:'arrangement',resource:target},time);
+  const actual=await loadOrderTimeOperation(database,db,actor,{kind:'arrangement',resource:target},time,{},[],[],'native-refresh');
   const prior=await new OrderTimePlanRepository(db).current(target);
   await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:prior?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-native:'+eventId},(resource,changes)=>refreshLinkedOrderTimeInput(database,db,actor,resource,time,changes));
   if(target.kind==='order')await new DigitalProductionTaskService(database).refreshShipSampleTimingWithClient(db,actor,target.id);
