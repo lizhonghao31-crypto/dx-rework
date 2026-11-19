@@ -251,7 +251,10 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
    const copy=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style+'-COPY',temporaryStyleNo:null,customerCode:null},randomUUID());
    const copied=await forms.save(designer,copy.sourceId,{expectedVersion:0,document:{...reopened.document!,orderDate:null}},randomUUID());
    expect(copied.timelineSchemaVersion).toBe(2);expect(copied.document!.craftSteps).toEqual(reopened.document!.craftSteps);
-   await expect(forms.save(h.f.people['pattern-room-worker']!,id,{expectedVersion:2,document:reopened.document!},randomUUID())).rejects.toMatchObject({statusCode:403});
+   const worker=h.f.people['pattern-room-worker']!;
+   await expect(forms.read(worker,id)).rejects.toMatchObject({statusCode:404});
+   await expect(forms.save(worker,id,{expectedVersion:2,document:reopened.document!},randomUUID())).rejects.toMatchObject({statusCode:404});
+   expect((await forms.read(designer,id)).version).toBe(reopened.version);
    expect((await forms.read(designer,old.sourceId)).timelineSchemaVersion).toBeUndefined();
    await page.screenshot({path:join(h.evidence,'managed-draft-reopened.png'),fullPage:true});
    expect(h.errors).toEqual([]);
