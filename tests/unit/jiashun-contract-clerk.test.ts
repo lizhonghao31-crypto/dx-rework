@@ -39,9 +39,10 @@ describe("嘉顺文员后端权限边界",()=>{
     const result=await new SourcingService(pool).listCases(clerk,"", "all",1);
     const sql=query.mock.calls.at(-1)?.[0]??"";
     expect(JIASHUN_CASE_FILTER_SQL).toContain("scoped_snapshot.supplier_id");
-    expect(sql).toContain("AND ($8::boolean=false OR ");
-    expect(sql.indexOf("AND ($8::boolean=false OR ")).toBeLessThan(sql.indexOf("SELECT count(*)::text AS total_count"));
-    expect(query.mock.calls.at(-1)?.[1]?.[7]).toBe(true);
+    expect(sql).toContain(JIASHUN_CASE_FILTER_SQL);
+    expect(sql.indexOf(JIASHUN_CASE_FILTER_SQL)).toBeLessThan(sql.indexOf("SELECT count(*)::text AS total_count"));
+    expect(sql.indexOf(JIASHUN_CASE_FILTER_SQL)).toBeLessThan(sql.indexOf("LIMIT 15 OFFSET $7"));
+    expect(query.mock.calls.at(-1)?.[1]).toEqual(["", "all", "all", "all", "", null, 0]);
     expect(result).toMatchObject({items:[],totalCount:0,totalOrderQuantity:0});
   });
 
@@ -49,7 +50,8 @@ describe("嘉顺文员后端权限边界",()=>{
     const {pool,query}=database();
     const actor={...clerk,actorRoles:["order_merchandiser"],authorizationCapability:"sourcing:view",authorizationCapabilities:["sourcing:view"]};
     await new SourcingService(pool).listCases(actor);
-    expect(query.mock.calls.at(-1)?.[1]?.[7]).toBe(false);
+    expect(query.mock.calls.at(-1)?.[0]).not.toContain("sourcing_jiashun_allowed_factories");
+    expect(query.mock.calls.at(-1)?.[1]).toEqual(["", "all", "all", "all", "", null, 0]);
   });
 
   it("A05-A06 非三厂订单直连403，历史合同按其原批准工厂独立核权",async()=>{

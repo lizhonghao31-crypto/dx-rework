@@ -1030,7 +1030,7 @@ export class SourcingService {
              )
            )
          )
-         AND ($8::boolean=false OR ${JIASHUN_CASE_FILTER_SQL})
+         ${clerk ? `AND ${JIASHUN_CASE_FILTER_SQL}` : ""}
        )
        SELECT page_row.*,totals.total_count,totals.total_order_quantity
        FROM (
@@ -1052,7 +1052,6 @@ export class SourcingService {
         normalizedStyleName,
         contractReturn,
         offset,
-        clerk,
       ],
     );
     const pageRows = result.rows.filter(row => row.sourcing_case_id != null);
