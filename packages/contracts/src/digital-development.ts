@@ -133,6 +133,7 @@ export type DevelopmentSheet = {
   independentRevisions?:boolean;
   revisionSource?:{sourceId:string;parentSourceId:string;rootSourceId:string;revisionNumber:number;parentRound:number;origin:string;customerComment:string;explanation:string;categories:string[];affectedNodes:string[];outputKind:string}|null;
   developmentCreatedDate?:string;
+  draftDocumentDate?:string;
   unavailableDraftAttachments?:string[];
   metadata?:JourneyDocumentMetadata;
   materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;

@@ -276,6 +276,79 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await legacy.dispose();}
  });
 
+ it('saves the first document when a reservation is reopened on another Beijing calendar day',async()=>{
+  const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  const designStyleNo='TEST-RESERVE-LATER-DAY-'+randomUUID();
+  const {sourceId}=await identity.createSource(actor,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode:null},randomUUID(),true);
+  const reserved=await forms.read(actor,sourceId);
+  expect(reserved.version).toBe(0);
+  expect(reserved.developmentCreatedDate).toBeUndefined();
+  const origin=reserved.draftDocumentDate!;
+  expect(origin).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const later=new Date(Date.parse(origin)+86400000).toISOString().slice(0,10);
+  const {page,context}=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  try{
+   await page.route('**/api/digital-production/options*',async route=>{
+    const response=await route.fetch(),body=await response.json();
+    await route.fulfill({response,json:{...body,serverToday:later}});
+   });
+   await page.getByRole('button',{name:'开发草稿箱',exact:true}).click();
+   await page.getByRole('button',{name:designStyleNo,exact:true}).click();
+   const saved=page.waitForResponse(response=>response.url().endsWith(`/sources/${sourceId}/development`)&&response.request().method()==='PUT');
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   const response=await saved;
+   expect(response.status(),await response.text()).toBe(200);
+   expect(response.request().postDataJSON().document.orderDate).toBe(origin);
+   expect((await forms.read(actor,sourceId)).document?.orderDate).toBe(origin);
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
+  }finally{await page.unrouteAll({behavior:'wait'});await context.close();}
+ });
+
+ it('reads the authorized original reservation receipt when creation is paused and preserves the unknown command on browser reload',async()=>{
+  const actor=h.f.root,style='TEST-PAUSED-RECEIPT-'+randomUUID(),tab=await h.open(actor.actorId,390,{},'/ui/digital-production?workspace=designer');
+  const {page,session}=tab;
+  try{
+   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
+   let originalKey='',sourceId='';
+   await page.route('**/api/digital-production/sources/drafts',async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    const response=await route.fetch();
+    expect(response.status()).toBe(200);
+    sourceId=(await response.json()).sourceId;originalKey=route.request().headers()['idempotency-key']!;
+    await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_ACK_LOST',message:'TEST 原回执不可用'}})});
+   });
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   await page.getByRole('alert').filter({hasText:'未收到可确认的提交结果'}).waitFor();
+   const paused=new DigitalProductionIdentityService(h.db,false);
+   expect(await paused.developmentDraftReceipt(actor,originalKey)).toEqual({sourceId});
+   const designer=h.f.people['sample-designer']!;
+   expect(await paused.developmentDraftReceipt(designer,originalKey)).toEqual({sourceId:null});
+   const ownKey=randomUUID(),owned=await new DigitalProductionIdentityService(h.db,true).createSource(designer,{
+    developmentType:'头版',designStyleNo:'TEST-EXISTING-READ-'+randomUUID(),temporaryStyleNo:null,customerCode:null},ownKey,true);
+   const reader={...designer,authorizationCapabilities:['digital_production:view']};
+   expect(await paused.developmentDraftReceipt(reader,ownKey)).toEqual(owned);
+   expect((await new DigitalDevelopmentService(h.db,true).read(reader,owned.sourceId)).canEdit).toBe(false);
+   const pausedForm=new DigitalDevelopmentService(h.db,false,h.patternOrders);
+   expect((await pausedForm.read(actor,sourceId)).canEdit).toBe(false);
+   await page.route('**/api/digital-production/options',async route=>{
+    const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),creationEnabled:false}});
+   });
+   await page.route('**/api/digital-production/sources/'+sourceId+'/development',async route=>{
+    if(route.request().method()!=='GET'){await route.continue();return;}
+    await route.fulfill({json:await pausedForm.read(actor,sourceId)});
+   });
+   await page.reload();
+   await page.getByRole('heading',{name:'原创建提交结果待核对',exact:true}).waitFor();
+   await page.getByRole('button',{name:'只读核对原提交结果',exact:true}).click();
+   await page.getByRole('alert').filter({hasText:'已核对原草稿回执。当前没有编辑权限'}).waitFor();
+   expect(h.requests.filter(row=>row.session===session&&['POST','PUT'].includes(row.method)&&row.path.includes('/sources'))).toHaveLength(1);
+   const reads=h.requests.filter(row=>row.session===session&&row.path==='/api/digital-production/sources/drafts/receipt');
+   expect(reads).toHaveLength(1);expect(reads[0]?.key).toBe(originalKey);
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
+  }finally{await page.unrouteAll({behavior:'wait'});await tab.context.close();}
+ });
+
  it('retains an acknowledged-server but browser-unknown source creation across real reload without issuing a duplicate source command',async()=>{
   const tab=await h.open(h.f.root.actorId,390,{},'/ui/digital-production?workspace=designer'),style='TEST-CREATION-UNKNOWN-'+randomUUID();let attempts=0;
   try{

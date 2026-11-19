@@ -182,13 +182,13 @@ export class DigitalProductionIdentityService {
     return {items:result.rows.slice(0,15),page,hasNext:result.rows.length>15};
   }
   async developmentDraftReceipt(actor:TrustedActorContext,key:string){
-    this.assertSourceCreation(actor);
-    if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
+    assertIdentityActor(actor);
     if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少有效操作标识",400);
     const saved=(await this.database.query<{source_id:string}>(`SELECT s.source_id FROM digital_production_commands c
       JOIN digital_production_sources s ON s.source_id::text=c.response->>'sourceId'
       WHERE c.actor_id=$1 AND c.command='reserve-source-draft' AND c.key=$2
         AND s.created_by=$1 AND ${await wholeOrderActiveSql(this.database,"source","s.source_id")}`,[actor.actorId,key])).rows[0];
+    if(saved)await this.visibleSource(this.database,actor,saved.source_id);
     return {sourceId:saved?.source_id??null};
   }
   private async customer(client: PoolClient, code: string, group?: string) {

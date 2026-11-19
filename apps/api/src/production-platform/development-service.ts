@@ -37,9 +37,13 @@ export class DigitalDevelopmentService {
   inTransaction(client:PoolClient){return new DigitalDevelopmentService(this.database,this.creationEnabled,this.patternOrders,this.now,this.businessClock,client);}
   private async source(db: Database, actor: TrustedActorContext, sourceId: string, write = false) {
     const source = (await db.query("SELECT s.*,u.display_name AS designer_name FROM digital_production_sources s JOIN app_users u ON u.id=s.created_by WHERE s.source_id=$1", [sourceId])).rows[0] ?? digitalNotFound();
-    const owner = isRootActor(actor) || (actor.actorRoles.includes("sample_designer") && source.created_by === actor.actorId && (actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create")) || await approvedOrderTimeSource(db,actor,sourceId);
+    const originalDesigner=actor.actorRoles.includes("sample_designer")&&source.created_by===actor.actorId;
+    const owner = isRootActor(actor) || (originalDesigner && (actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create")) || await approvedOrderTimeSource(db,actor,sourceId);
     const lifecycle=await developmentSourceLifecycle(db,sourceId);
-    if(lifecycle?.is_draft&&(!owner||!isRootActor(actor)&&source.created_by===actor.actorId&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer')))digitalNotFound();
+    if(lifecycle?.is_draft&&!isRootActor(actor)){
+      const mayRead=originalDesigner?await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'):owner;
+      if(!mayRead)digitalNotFound();
+    }
     if (write) { if (!this.creationEnabled || !owner) digitalForbidden(); }
     else if (!await new DigitalProductionAccessPolicy(db).allowed(actor, "source", sourceId, "technical")) {
       const tasks = (await db.query("SELECT task_id FROM digital_production_task_access WHERE source_id=$1", [sourceId])).rows;
@@ -47,13 +51,18 @@ export class DigitalDevelopmentService {
       for (const task of tasks) if (await new DigitalProductionAccessPolicy(db).allowed(actor, "task", task.task_id, "technical")) { visible = true; break; }
       if (!visible) digitalNotFound();
     }
-    return { ...source, lifecycle, can_edit: owner && this.creationEnabled, can_view_order_draft: owner };
+    return { ...source, lifecycle, can_edit: owner && this.creationEnabled, can_view_order_draft: owner || Boolean(lifecycle?.is_draft&&originalDesigner) };
   }
   async authorizeUpload(actor: TrustedActorContext, sourceId: string) { await this.source(this.database, actor, sourceId, true); }
   async authorizeAttachmentRead(actor:TrustedActorContext,sourceId:string){await this.source(this.database,actor,sourceId);}
   async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string,db:Database=this.database): Promise<boolean> {
     await this.source(db, actor, sourceId);
     return Boolean((await db.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount)||await inheritedDevelopmentFile(db,sourceId,attachmentId);
+  }
+  private async draftDocumentOrigin(db:Database,sourceId:string,source:{created_at:Date|string;draft_reserved?:boolean|null}){
+    if(!acceptanceBusinessContext())return source.created_at;
+    if(source.draft_reserved)return observedBusinessTime(this.now).now;
+    return (await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at;
   }
   async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number): Promise<DevelopmentSheet> {
     const source = await this.source(db, actor, sourceId);
@@ -76,13 +85,16 @@ export class DigitalDevelopmentService {
         WHERE b.source_id=$1 AND b.attachment_id=requested.id AND a.status='ready'
       )`,[sourceId,document.files.map(file=>file.attachmentId)])).rows.map(item=>item.id):[];
     const effectiveMaterials=row?.status==="published"&&(await db.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation?(await materialReadiness(db,sourceId,row.round_number??1)).materials:[];
-    const createdTime=source.lifecycle?.first_business_time?.now??(source.order_time_managed?(await db.query('SELECT created_business_time FROM digital_order_time_subjects WHERE source_id=$1',[sourceId])).rows[0]?.created_business_time?.now
+    const draftDocumentDate=source.lifecycle?.is_draft
+      ?document?.orderDate??beijingCalendarDate(new Date(await this.draftDocumentOrigin(db,sourceId,source)))
+      :null;
+    const createdTime=draftDocumentDate?null:source.lifecycle?.first_business_time?.now??(source.order_time_managed?(await db.query('SELECT created_business_time FROM digital_order_time_subjects WHERE source_id=$1',[sourceId])).rows[0]?.created_business_time?.now
       :acceptanceBusinessContext()?(await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now:null);
     // Managed sources are enrolled at creation; their first plan is frozen only
     // on publication. Do not downgrade their draft editor while that plan is absent.
     // An existing plan remains authoritative for historical sources.
     const timelineSchemaVersion=adoptedPlan?.timeline_schema_version??(source.order_time_managed?2:undefined);
-    return { ...(unavailableDraftAttachments.length?{unavailableDraftAttachments}:{}),orderTimeEnabled:Boolean(source.order_time_managed)||await acceptsNewOrderTime(db),...(timelineSchemaVersion===2?{timelineSchemaVersion:2 as const}:{}),revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(adoptedPlan),...(source.lifecycle?.is_draft?{}:{developmentCreatedDate:beijingCalendarDate(new Date(createdTime??source.created_at))}), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
+    return { ...(unavailableDraftAttachments.length?{unavailableDraftAttachments}:{}),orderTimeEnabled:Boolean(source.order_time_managed)||await acceptsNewOrderTime(db),...(timelineSchemaVersion===2?{timelineSchemaVersion:2 as const}:{}),revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(adoptedPlan),...(draftDocumentDate?{draftDocumentDate}:{developmentCreatedDate:beijingCalendarDate(new Date(createdTime??source.created_at))}), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
@@ -106,8 +118,7 @@ export class DigitalDevelopmentService {
   }
   async draftSaveReceipt(actor:TrustedActorContext,sourceId:string,key:string){
     if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
-    const source=await this.source(this.database,actor,sourceId);
-    if(!source.can_view_order_draft||!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'sample_designer'))digitalNotFound();
+    await this.source(this.database,actor,sourceId);
     const row=(await this.database.query<{version:number;sourceId:string}>(`SELECT response->>'sourceId' AS "sourceId",(response->>'version')::int AS version
       FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3`,[actor.actorId,`development:${sourceId}:save`,key])).rows[0];
     return {sourceId,version:row?.sourceId===sourceId?row.version:null};
@@ -151,11 +162,8 @@ export class DigitalDevelopmentService {
       const row = (await db.query("SELECT version,status,document FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0];
       if ((row?.version ?? 0) !== input.expectedVersion) conflict("开发单已更新，请重新打开后再保存");
       if (row?.status === "published") conflict("已发布开发单不可覆盖，请通过复版记录实际修改");
-      const source=(await db.query("SELECT created_at,to_jsonb(s)->>'draft_reserved' AS reserved FROM digital_production_sources s WHERE source_id=$1",[sourceId])).rows[0];
-      const sourceDate=source.reserved==='true'&&acceptanceBusinessContext()
-        ?observedBusinessTime(this.now).now
-        :acceptanceBusinessContext()?(await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at:source.created_at;
-      const document=developmentDraftForSave(input.document,row?.document,sourceDate);
+      const source=(await db.query("SELECT created_at,(to_jsonb(s)->>'draft_reserved')::boolean AS draft_reserved FROM digital_production_sources s WHERE source_id=$1",[sourceId])).rows[0];
+      const document=developmentDraftForSave(input.document,row?.document,await this.draftDocumentOrigin(db,sourceId,source));
       if(document.customerOrderDraft?.withOrder&&await developmentRevisionSource(db,sourceId))conflict('复版沿原开发档案的客户订单，不重复填写大货数量');
       await validateAuxiliaryReferences(db,document,row?.document);
       await validateSpecialCraftChoices(db,document.craftSteps??[],row?.document?.craftSteps??[],'development');

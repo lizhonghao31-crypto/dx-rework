@@ -12,6 +12,7 @@ async function readCreationSource(record:CreationDraftRecord){
  if(sheet&&record.phase!=='draft'&&sheet.sourceId!==record.sourceId)throw Error('原开发档案身份不匹配，不能恢复办理');
  if(record.phase==='bound'&&sheet){
   if(sheet.productionOrderId)return {sheet,mode:'complete' as const,problem:'原开发档案已有客户订单；本页旧草稿保留，不能重新创建或确认。'};
+  if(!sheet.canEdit)return {sheet,mode:'conflict' as const,problem:'已读回原草稿，当前没有编辑权限。本页原资料仍保留。'};
   if(sheet.version!==(record.version??0))return {sheet,mode:'conflict' as const,problem:'原开发档案版本已变化；本页草稿保留，请先核对，未自动保存。'};
  }
  return {sheet,mode:record.phase==='pending'?'pending' as const:'editable' as const,problem:''};
@@ -32,7 +33,7 @@ export function useDevelopmentCreationDraft(){
   owner.current=identity;loaded.current=namespace;blocked.current=true;
   try{
    const record=readCreationDraft(window.sessionStorage,identity);if(!record){blocked.current=false;return null;}
-   if((record.phase==='draft'||!record.sourceId)&&(!access.create||!creationEnabled))throw Error('当前身份不能创建；本页原草稿仍保留。');
+   if(record.phase==='draft'&&(!access.create||!creationEnabled))throw Error('当前身份不能创建；本页原草稿仍保留。');
    const hydrated=await readCreationSource(record);
    if(stamp!==epoch.current)return null;current.current=record;view.current=record.viewId;setViewId(record.viewId);setRestored(record);
    setSourceSheet(hydrated.sheet);setMode(hydrated.mode);setProblem(hydrated.problem);
@@ -112,12 +113,12 @@ export function useDevelopmentCreationDraft(){
    const sheet=await digitalRequest<DevelopmentSheet>(`sources/${receipt.sourceId}/development`);
    if(stamp!==epoch.current||record!==current.current)return null;
    if(sheet.sourceId!==receipt.sourceId)throw Error('原草稿身份与回执不符，原输入仍保留');
-   const matching=sheet.status==='draft'&&sheet.version===expectedVersion;
+   const matching=sheet.status==='draft'&&sheet.version===expectedVersion&&sheet.canEdit;
    const next:CreationDraftRecord={schemaVersion:1,viewId:record.viewId,identity:record.identity,
     open:true,snapshot:record.snapshot,phase:'bound',sourceId:sheet.sourceId,version:expectedVersion};
    persist(next,record.original);setRestored(next);setSourceSheet(sheet);
    setMode(matching?'editable':'conflict');blocked.current=!matching;
-   setProblem(matching?'':'原草稿已在另一处更新，请核对；本页原输入仍保留');
+   setProblem(matching?'':!sheet.canEdit?'已核对原草稿回执。当前没有编辑权限，本页原输入仍保留。':'原草稿已在另一处更新，请核对。本页原输入仍保留。');
    return null;
   }
   const result=await recoverDevelopmentSubmission(record.native,false);if(stamp!==epoch.current)return null;

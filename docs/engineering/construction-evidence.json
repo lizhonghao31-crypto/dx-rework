@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "4189ef6a9072a968b8346b83065de525b6268d63",
-  "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+  "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
   "risk": "full",
   "rules": [
     {
@@ -27,8 +27,8 @@
         "tests/unit/development-creation-draft.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "initialization": "沿源单唯一身份及逐次文档版本读回原 PO 和 ready 附件；无文档时草稿列表仍可找到原预留身份。",
-      "dateAndPermission": "沿有效设计师本人和 Root 权限，附件与原来源绑定；只读回执使用原发起人与命令键。",
+      "initialization": "沿源单唯一身份及逐次文档版本读回原 PO 和 ready 附件。无文档时草稿列表仍可找到原预留身份。",
+      "dateAndPermission": "沿有效设计师本人和 Root 权限，附件与原来源绑定。只读回执使用原发起人与命令键。",
       "expectation": "新会话逐张恢复，读回三行 PO 与两份原附件，断线后只读查原回执、未发第二个写请求，原较新服务端版本受保护。",
       "checks": [
         "pg",
@@ -38,7 +38,7 @@
       ]
     },
     {
-      "rule": "首次实际发布事务才建立有效开发时钟；正式确认拥有独立原生时钟，旧已发布和冻结记录保留。",
+      "rule": "首次实际发布事务才建立有效开发时钟。正式确认拥有独立原生时钟，旧已发布和冻结记录保留。",
       "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md 版本3 补正1 首次有效发布、待审批失败及历史边界。",
       "writes": [
         "apps/api/migrations/0296_development_first_publication.sql",
@@ -60,6 +60,7 @@
         "apps/api/src/production-platform/order-time-created.ts",
         "apps/api/src/production-platform/order-time-operation-state.ts",
         "apps/api/src/production-platform/quotation-assembly.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json",
         "scripts/deploy/acceptance-migration-requirements.json",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
         "tests/unit/order-time-reading.test.ts"
@@ -77,15 +78,16 @@
         "tests/integration/order-time-requests-postgres.test.ts",
         "tests/unit/current-migration-manifest-checksum.test.ts"
       ],
-      "initialization": "按迁移应用前、未发布态和发布成功态核对；保留平行正式订单与源单独立创建事件，迁移不回填旧时间。",
-      "dateAndPermission": "使用原业务时钟、事务锁、审批、附件和打板服务；测试时钟仅允许同事务原认证测试身份，持久时间为秒及毫秒精度。",
-      "expectation": "草稿不出现在座舱且无钟；审批待决和失败无激活；一次成功或并发原命令只写一条首发事实；旧已采用内容保持且疑义旧稿安全拒绝。",
+      "initialization": "按迁移应用前、未发布态和发布成功态核对。保留平行正式订单与源单独立创建事件，迁移不回填旧时间。",
+      "dateAndPermission": "使用原业务时钟、事务锁、审批、附件和打板服务。测试时钟仅允许同事务原认证测试身份，持久时间为秒及毫秒精度。",
+      "expectation": "草稿不出现在座舱且无钟。审批待决和失败无激活。一次成功或并发原命令只写一条首发事实。旧已采用内容保持且疑义旧稿安全拒绝。",
       "checks": [
         "pg",
         "migration",
         "types",
         "build",
-        "lint"
+        "lint",
+        "protocol"
       ]
     }
   ],
@@ -96,11 +98,11 @@
       "command": "npm run build:packages",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
-      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "testedHead": "4831e6728c951b478b5af2a76cb750bbdebba58d",
+      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
       "context": "Built workspace packages from the candidate and locked release package manifests on Node 22.",
-      "startedAt": "2026-11-19T15:08:29.342Z",
-      "endedAt": "2026-11-19T15:08:40.687Z",
+      "startedAt": "2026-11-19T15:18:59.577Z",
+      "endedAt": "2026-11-19T15:19:10.232Z",
       "log": "/tmp/dx-cockpit-pr1-final/build.log",
       "logSha256": "42534bd96daa66688e58109269730dbaebe1e74278e8d2362cb7be3a3483b40d"
     },
@@ -110,11 +112,11 @@
       "command": "npm run db:migrate:lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
-      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "testedHead": "4831e6728c951b478b5af2a76cb750bbdebba58d",
+      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
       "context": "Validated the entire append-only migration inventory and the checksum of the first-publication migration.",
-      "startedAt": "2026-11-19T15:08:40.761Z",
-      "endedAt": "2026-11-19T15:08:40.977Z",
+      "startedAt": "2026-11-19T15:19:10.276Z",
+      "endedAt": "2026-11-19T15:19:10.482Z",
       "log": "/tmp/dx-cockpit-pr1-final/migration.log",
       "logSha256": "1b85bb2907a50bf4f998ba91052fe8c6250d5e53bb9f1f5660e6f9b0c575bccf"
     },
@@ -124,11 +126,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
-      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "testedHead": "4831e6728c951b478b5af2a76cb750bbdebba58d",
+      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
       "context": "Ran the original repository TypeScript checks for all workspaces using the candidate.",
-      "startedAt": "2026-11-19T15:08:41.015Z",
-      "endedAt": "2026-11-19T15:10:09.808Z",
+      "startedAt": "2026-11-19T15:19:10.520Z",
+      "endedAt": "2026-11-19T15:20:34.414Z",
       "log": "/tmp/dx-cockpit-pr1-final/types.log",
       "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
     },
@@ -138,11 +140,11 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
-      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "testedHead": "4831e6728c951b478b5af2a76cb750bbdebba58d",
+      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
       "context": "Ran the original repository ESLint command against the complete candidate snapshot.",
-      "startedAt": "2026-11-19T15:08:41.011Z",
-      "endedAt": "2026-11-19T15:09:46.932Z",
+      "startedAt": "2026-11-19T15:19:10.520Z",
+      "endedAt": "2026-11-19T15:20:13.112Z",
       "log": "/tmp/dx-cockpit-pr1-final/lint.log",
       "logSha256": "c515bd0be1f85df3ce7017b7a7ab759a66a3184a30e6b65b5d13a9d4fea39cd7"
     },
@@ -152,22 +154,39 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/order-time-reading.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-cockpit-pr1-final/unit.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
-      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "testedHead": "4831e6728c951b478b5af2a76cb750bbdebba58d",
+      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
       "context": "Vitest ran the original local creation-draft recovery and migration manifest checksum tests without a database.",
-      "startedAt": "2026-11-19T15:08:41.017Z",
-      "endedAt": "2026-11-19T15:08:52.030Z",
+      "startedAt": "2026-11-19T15:19:10.519Z",
+      "endedAt": "2026-11-19T15:19:20.749Z",
       "log": "/tmp/dx-cockpit-pr1-final/unit.log",
-      "logSha256": "5b160f89fdb3e899d841d71dc726eb4d77b78709bbf872ae9372f44a409d2d71",
+      "logSha256": "4230c9154792ab84d9a9627b3c3ed60ca7d8fac46b521e733eaab77d4d3bce17",
       "passed": 53,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e26cea0f746879ae1123312977f54af165e3247aab3a6f15f18e36845bc0a431"
+          "sha256": "3623a37477b1bd4329b19cd0b6285ca0ba7c62153f0e35e31629fc59d34cb092"
         }
       ]
+    },
+    {
+      "id": "protocol",
+      "kind": "tests",
+      "command": "bash -c 'node --test scripts/ci/*.test.mjs'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4831e6728c951b478b5af2a76cb750bbdebba58d",
+      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
+      "context": "Run the original GitHub Light protocol test command against the complete candidate after refreshing the explicit time-source inventory.",
+      "startedAt": "2026-11-19T15:21:05.292Z",
+      "endedAt": "2026-11-19T15:21:15.514Z",
+      "log": "/tmp/dx-cockpit-pr1-final/protocol.log",
+      "logSha256": "ba51d24bf267bd8a96dbf2692da4662d527fc79765e1d0e2bc58898d398bc718",
+      "passed": 284,
+      "failed": 0,
+      "skipped": 0
     },
     {
       "id": "pg",
@@ -175,20 +194,20 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-cockpit-pr1-final/pg.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
-      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "testedHead": "4831e6728c951b478b5af2a76cb750bbdebba58d",
+      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
       "context": "Real Chromium with authenticated original App routes and isolated PostgreSQL 16 schemas. Covers saved draft source identity, permissions at display, acknowledgements, publication and formal order clocks and legacy migration.",
-      "startedAt": "2026-11-19T15:08:41.012Z",
-      "endedAt": "2026-11-19T15:10:25.611Z",
+      "startedAt": "2026-11-19T15:19:10.515Z",
+      "endedAt": "2026-11-19T15:21:01.667Z",
       "log": "/tmp/dx-cockpit-pr1-final/pg.log",
-      "logSha256": "be5003b1805a28f962c2cd722a5d0f7c729670c8ddbb84bbe10c91f213ba9d1f",
-      "passed": 12,
+      "logSha256": "9ca90181bf3337e489cd8ecfae9e23f972e94022f3d04a6a64dcf8d0a2a57ac0",
+      "passed": 14,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0419bb36fe5be7f6c4f5322b5b382f8b9045495a7c8813cb83fe5b3e1f6e0eae"
+          "sha256": "0f72f4be8da3ad323effdf5b600b5e7d69daf1628d38064d3931f9498074b169"
         }
       ]
     }
