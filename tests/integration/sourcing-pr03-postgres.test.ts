@@ -4013,161 +4013,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     return id;
   };
 
-  it("enforces Jiashun transfer, history, version, ownership and revocation with real app-role contract returns", async () => {
-    const clerkId = randomUUID(), otherClerkId = randomUUID(), accessAdminId = randomUUID();
-    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-嘉顺一',true),($2,'TEST-嘉顺二',true),($3,'TEST-角色授权人',true)",
-      [clerkId,otherClerkId,accessAdminId]);
-    const accessAdmin = {...rootActor(),actorId:accessAdminId,authorizationCapability:"access:admin"};
-    await craftService.ensureOrganizationPolicy();
-    await database.query(`INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
-      SELECT mapping.id,mapping.user_id,'dingtalk','corp','TEST-'||mapping.user_id,'TEST-'||mapping.user_id,true,true,CURRENT_TIMESTAMP
-      FROM (VALUES ($1::uuid,$2::uuid),($3::uuid,$4::uuid),($5::uuid,$6::uuid)) mapping(id,user_id)`,
-    [randomUUID(),accessAdminId,randomUUID(),clerkId,randomUUID(),otherClerkId]);
-    await database.query(`INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id)
-      VALUES(true,$1,'TEST-'||$1::uuid,'corp')`,[accessAdminId]);
-    const clerkFactories = [];
-    for (const [supplierCode,supplierName] of [["FAC_601BEF926B41","嘉顺七厂"],["FAC_386DAEFCCF2E","嘉顺九厂"],["FAC_7AACCD28B81F","嘉顺十厂"]] as const) {
-      const factory=await craftService.createSupplier({...accessAdmin,authorizationCapability:"supplier_profile:write",requestId:randomUUID()},
-        {supplierCode,supplierName,supplierType:"factory",active:true,notes:"",supportedCrafts:["车缝"],dailyCapacity:100,
-          contactPerson:null,contactPhone:null,address:"TEST 地址",contractEntityName:supplierName,partyBRepresentative:"测试代表",
-          payeeName:"测试收款",bankAccount:"622202",bankName:"测试银行",changeReason:"TEST 确认加工厂"});
-      clerkFactories.push(factory.supplierId);
-    }
-    const {assignmentId}=await craftService.assignRole(accessAdmin,{userId:clerkId,roleCode:JIASHUN_CLERK_ROLE,reason:"TEST 嘉顺独立账号"});
-    await craftService.assignRole(accessAdmin,{userId:otherClerkId,roleCode:JIASHUN_CLERK_ROLE,reason:"TEST 第二独立账号"});
-    await expect(craftService.assignRole(accessAdmin,{userId:clerkId,roleCode:"production_management",reason:"TEST 不允许兼任"}))
-      .rejects.toMatchObject({statusCode:409});
-    const appRole = "dx_rework_acceptance_app";
-    await database.query(`GRANT USAGE ON SCHEMA ${schema} TO ${appRole}`);
-    await database.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${appRole}`);
-    await database.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO ${appRole}`);
-    const runtime = new pg.Pool({connectionString:databaseUrl!,options:`-c search_path=${schema} -c role=${appRole}`});
-    try {
-      const runtimeIdentity=(await runtime.query(`SELECT current_user AS name,rolsuper,rolbypassrls,
-        pg_has_role(current_user,table_owner.oid,'USAGE') AS table_owner
-        FROM pg_roles role CROSS JOIN LATERAL (
-          SELECT relowner AS oid FROM pg_class WHERE oid='sourcing_contract_return_submissions'::regclass
-        ) table_owner WHERE role.rolname=current_user`)).rows[0];
-      expect(runtimeIdentity).toEqual({name:appRole,rolsuper:false,rolbypassrls:false,table_owner:false});
-      const clerkActor=(capability=JIASHUN_READ,actorId=clerkId):TrustedActorContext=>({
-        actorId,actorRoles:[JIASHUN_CLERK_ROLE],authorizationCapability:capability,
-        authorizationCapabilities:[JIASHUN_READ,JIASHUN_CONTRACT_RETURN,JIASHUN_FILE_UPLOAD],requestId:randomUUID(),
-      });
-      const clerkOrders=new SourcingService(runtime);
-      const clerkReturns=new SourcingContractReturnService(runtime);
-      const clerkFiles=new AttachmentService(runtime,contractStorage,{prefix:"jiashun-test",ttlSeconds:60,maxUploadBytes:20*1024*1024});
-      const clerkScope=new JiashunContractClerkScope(runtime);
-      const id=await reviewedContractCase("JIASHUN-RUNTIME");
-      const doc=(await contractService.getCurrent(rootActor(),id)).item!;
-      const inputBytes=await sharp({create:{width:2,height:2,channels:3,background:"#876234"}}).png().toBuffer();
-      const uploadInput={filename:"TEST-嘉顺回签.png",mimeType:"image/png",sizeBytes:inputBytes.byteLength,
-        sha256:createHash("sha256").update(inputBytes).digest("hex")};
-      const stage=async (actor:TrustedActorContext,caseId:string,documentId?:string) => {
-        if(documentId) await clerkScope.assertCurrentDocument(actor,caseId,documentId);
-        const upload=await clerkFiles.createUploadIntent(actor,uploadInput,documentId?{sourcingCaseId:caseId,documentId}:undefined);
-        await contractStorage.writeImmutable(upload.objectKey,inputBytes,uploadInput);
-        expect(await clerkFiles.finalize(actor,upload.attachmentId)).toMatchObject({attachmentId:upload.attachmentId});
-        return upload.attachmentId;
-      };
-      const outsiderFile=await stage(contractActor(),id);
-      await contractReturns.submit(contractActor(),id,[outsiderFile],randomUUID(),doc.sourcingContractDocumentId);
-      const find=async (hint:string)=>(await clerkOrders.listCases(clerkActor(),hint,"all",1)).items.map(order=>order.sourcingCaseId);
-      const transfer=async (supplierId:string,unitPrice:string,changeReason:string)=> {
-        await service.requestFactoryChange(managerActor(),id,{supplierId,unitPrice,changeReason},randomUUID());
-        return (await service.getCurrentFactoryChange(readerActor(),id)).item!;
-      };
-      expect(await find("TEST-JIASHUN-RUNTIME")).not.toContain(id);
-      await expect(clerkOrders.getCase(clerkActor(),id)).rejects.toMatchObject({statusCode:403});
-      const incoming=await transfer(clerkFactories[0]!,"16","TEST-非嘉顺旧提案");
-      expect(incoming).toMatchObject({status:"pending_owner"});
-      await expect(clerkReturns.get(clerkActor(),id)).rejects.toMatchObject({statusCode:403});
-      await service.decideFactoryChange(ownerActor(),id,incoming.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-原厂历史决定"},randomUUID());
-      const effective=(await contractService.getCurrent(rootActor(),id)).item!;
-      expect(effective).toMatchObject({status:"ready"});
-      expect(await find("TEST-JIASHUN-RUNTIME")).toContain(id);
-      expect(await clerkOrders.getCase(clerkActor(),id)).toMatchObject({approvalSnapshot:{supplierId:clerkFactories[0]}});
-      expect(await clerkOrders.getCurrentFactoryChange(clerkActor(),id)).toEqual({item:null});
-      expect(await clerkReturns.get(clerkActor(),id)).toMatchObject({attachments:[],history:[],canUpload:true});
-      const ownerTimeline=(await service.listTimeline(readerActor(),id)).items;
-      const outsiderIds=ownerTimeline.filter(item=>item.entryId===doc.sourcingContractDocumentId
-        ||item.entryId===incoming.factoryChangeRequestId||item.supplierName==="一号加工厂"
-        ||item.kind==="factory_change_verification" && item.reason==="TEST-原厂历史决定").map(item=>item.entryId);
-      expect(outsiderIds.length).toBeGreaterThanOrEqual(4);
-      const visible=(await clerkOrders.listTimeline(clerkActor(),id)).items;
-      expect(visible.map(item=>item.reason)).not.toContain("TEST-原厂历史决定");
-      expect((await clerkOrders.getCase(clerkActor(),id)).decision).toMatchObject({
-        supplierId:clerkFactories[0],supersedesDecisionId:null,decisionReason:"当前工厂决定已生效",
-      });
-      expect(visible.map(item=>item.entryId)).toContain(effective.sourcingContractDocumentId);
-      for(const entryId of outsiderIds) expect(visible.map(item=>item.entryId)).not.toContain(entryId);
-      expect(await clerkScope.canDownloadBoundAttachment(clerkActor(),{attachmentId:outsiderFile,entityType:"sourcing_contract_return",
-        entityId:id,mimeType:"image/png"})).toBe(false);
-      expect(await find(doc.contractNumber)).not.toContain(id);
-      await expect(clerkScope.assertCurrentDocument(clerkActor(),id,doc.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:409});
-
-      const currentId=effective.sourcingContractDocumentId;
-      const firstApprovalId=await reviewedContractCase("JIASHUN-INITIAL-HISTORY",service,undefined,clerkFactories[2]!);
-      const firstApprovalTimeline=(await clerkOrders.listTimeline(clerkActor(),firstApprovalId)).items;
-      const quoteEntry=firstApprovalTimeline.find(entry=>entry.kind==="ie_quote")!;
-      const managementEntry=firstApprovalTimeline.find(entry=>entry.kind==="management_decision")!;
-      const initialApproval=(await clerkOrders.getCase(clerkActor(),firstApprovalId)).approvalSnapshot!;
-      expect(new Date(quoteEntry.handledAt).getTime()).toBeLessThan(new Date(initialApproval.approvedAt).getTime());
-      expect(new Date(managementEntry.handledAt).getTime()).toBeLessThan(new Date(initialApproval.approvedAt).getTime());
-      expect(await clerkOrders.nodeHistory(clerkActor(),firstApprovalId,"ie_quote",quoteEntry.entryId)).toMatchObject({
-        node:"ie_quote",entry:{entryId:quoteEntry.entryId},item:{ieQuote:{sourcingIeQuoteId:quoteEntry.entryId}},
-      });
-      expect(await clerkOrders.nodeHistory(clerkActor(),firstApprovalId,"management",managementEntry.entryId)).toMatchObject({
-        node:"management",entry:{entryId:managementEntry.entryId},item:{decision:{supplierId:clerkFactories[2]}},
-      });
-      const outsiderDecision=ownerTimeline.find(entry=>entry.kind==="management_decision" && entry.supplierName==="一号加工厂")!;
-      await expect(clerkOrders.nodeHistory(clerkActor(),id,"management",outsiderDecision.entryId)).rejects.toMatchObject({statusCode:404});
-
-      const uploadActor=clerkActor(JIASHUN_FILE_UPLOAD);
-      const saveActor=clerkActor(JIASHUN_CONTRACT_RETURN);
-      const otherFile=await stage(clerkActor(JIASHUN_FILE_UPLOAD,otherClerkId),id,currentId);
-      await expect(clerkReturns.submit(saveActor,id,[otherFile],randomUUID(),currentId)).rejects.toMatchObject({statusCode:403});
-      const first=await stage(uploadActor,id,currentId), key=randomUUID();
-      const [saved,replayed]=await Promise.all([clerkReturns.submit(saveActor,id,[first],key,currentId),
-        clerkReturns.submit(saveActor,id,[first],key,currentId)]);
-      expect(saved).toMatchObject({currentContractReturned:true,uploadedFileCount:1,attachments:[{attachmentId:first}]});
-      expect(replayed.contractReturnedAt).toBe(saved.contractReturnedAt);
-      expect(await clerkScope.canDownloadBoundAttachment(clerkActor(),{attachmentId:first,entityType:"sourcing_contract_return",
-        entityId:id,mimeType:"image/png"})).toBe(true);
-      const second=await stage(uploadActor,id,currentId);
-      expect(await clerkReturns.submit(saveActor,id,[second],randomUUID(),currentId)).toMatchObject({
-        uploadedFileCount:2,contractReturnedAt:saved.contractReturnedAt,attachments:[{attachmentId:first},{attachmentId:second}],
-      });
-      const last=await stage(uploadActor,id,currentId), surplus=await stage(uploadActor,id,currentId);
-      const race=await Promise.allSettled([last,surplus].map(file=>clerkReturns.submit(saveActor,id,[file],randomUUID(),currentId)));
-      expect(race.filter(result=>result.status==="fulfilled")).toHaveLength(1);
-      expect(race.find(result=>result.status==="rejected")).toMatchObject({reason:{statusCode:409}});
-
-      const outgoing=await transfer(replacementFactoryId,"17","TEST-不应泄露的拟转出");
-      expect(outgoing).toMatchObject({status:"pending_owner",proposedSupplierName:"二号加工厂"});
-      expect(await clerkOrders.getCurrentFactoryChange(clerkActor(),id)).toEqual({item:null});
-      expect((await clerkOrders.listTimeline(clerkActor(),id)).items.map(item=>item.entryId)).not.toContain(outgoing.factoryChangeRequestId);
-      expect(await find("TEST-JIASHUN-RUNTIME")).toContain(id);
-      await service.decideFactoryChange(ownerActor(),id,outgoing.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-实际转出"},randomUUID());
-      expect(await find("TEST-JIASHUN-RUNTIME")).not.toContain(id);
-      await expect(clerkReturns.submit(saveActor,id,[first],key,currentId)).rejects.toMatchObject({statusCode:403});
-      expect((await service.getCase(readerActor(),id)).approvalSnapshot?.supplierId).toBe(replacementFactoryId);
-      const returnAgain=await transfer(clerkFactories[1]!,"17","TEST-转回嘉顺");
-      expect(returnAgain.status).toBe("effective");
-      const next=(await contractService.getCurrent(rootActor(),id)).item!;
-      expect(next.sourcingContractDocumentId).not.toBe(currentId);
-      expect(await clerkReturns.get(clerkActor(),id)).toMatchObject({canUpload:true,uploadedFileCount:0, currentContractReturned:false});
-      await expect(clerkReturns.submit(saveActor,id,[first],key,currentId)).rejects.toMatchObject({statusCode:409});
-      await expect(clerkReturns.submit(saveActor,id,[first],randomUUID(),next.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:403});
-      const pending=await stage(uploadActor,id,next.sourcingContractDocumentId);
-      await craftService.revokeRole({...accessAdmin,requestId:randomUUID()},assignmentId,"TEST 正式撤销回签角色");
-      await expect(clerkFiles.finalize(uploadActor,pending)).rejects.toMatchObject({statusCode:403});
-      await expect(clerkReturns.submit(saveActor,id,[pending],randomUUID(),next.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:403});
-      expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).uploadedFileCount).toBe(0);
-    } finally {
-      await runtime.end();
-    }
-  });
-
   it("binds both authorized merchandisers to the effective transfer version, cancels old versions and completes only on current return",async()=>{
     await ensureReturnTodoRecipient();
     const second=randomUUID();
@@ -5201,6 +5046,162 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const after = await cycleSnapshot(id);
     await currentService.requestFactoryChange(actor, id, input, key);
     expect(await cycleSnapshot(id)).toEqual(after);
+  });
+
+  it("enforces Jiashun transfer, history, version, ownership and revocation with real app-role contract returns", async () => {
+    const clerkId = randomUUID(), otherClerkId = randomUUID();
+    await ensureReturnTodoRecipient();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-嘉顺一',true),($2,'TEST-嘉顺二',true)",
+      [clerkId,otherClerkId]);
+    const accessAdmin = {...rootActor(),authorizationCapability:"access:admin"};
+    await database.query(`INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
+      SELECT mapping.id,mapping.user_id,'dingtalk','corp','TEST-'||mapping.user_id,'TEST-'||mapping.user_id,true,true,CURRENT_TIMESTAMP
+      FROM (VALUES ($1::uuid,$2::uuid),($3::uuid,$4::uuid)) mapping(id,user_id)`,
+    [randomUUID(),clerkId,randomUUID(),otherClerkId]);
+    // Use the same Root identity recognized by the existing HTTP fixtures.
+    await database.query(`INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id)
+      VALUES(true,$1,$2,'corp')`,[merchandiserId,`ding-${merchandiserId}`]);
+    const clerkFactories = [];
+    for (const [supplierCode,supplierName] of [["FAC_601BEF926B41","嘉顺七厂"],["FAC_386DAEFCCF2E","嘉顺九厂"],["FAC_7AACCD28B81F","嘉顺十厂"]] as const) {
+      const factory=await craftService.createSupplier({...accessAdmin,authorizationCapability:"supplier_profile:write",requestId:randomUUID()},
+        {supplierCode,supplierName,supplierType:"factory",active:true,notes:"",supportedCrafts:["车缝"],dailyCapacity:100,
+          contactPerson:null,contactPhone:null,address:"TEST 地址",contractEntityName:supplierName,partyBRepresentative:"测试代表",
+          payeeName:"测试收款",bankAccount:"622202",bankName:"测试银行",changeReason:"TEST 确认加工厂"});
+      clerkFactories.push(factory.supplierId);
+    }
+    const {assignmentId}=await craftService.assignRole(accessAdmin,{userId:clerkId,roleCode:JIASHUN_CLERK_ROLE,reason:"TEST 嘉顺独立账号"});
+    await craftService.assignRole(accessAdmin,{userId:otherClerkId,roleCode:JIASHUN_CLERK_ROLE,reason:"TEST 第二独立账号"});
+    await expect(craftService.assignRole(accessAdmin,{userId:clerkId,roleCode:"production_management",reason:"TEST 不允许兼任"}))
+      .rejects.toMatchObject({statusCode:409});
+    const appRole = "dx_rework_acceptance_app";
+    await database.query(`GRANT USAGE ON SCHEMA ${schema} TO ${appRole}`);
+    await database.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${appRole}`);
+    await database.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO ${appRole}`);
+    const runtime = new pg.Pool({connectionString:databaseUrl!,options:`-c search_path=${schema} -c role=${appRole}`});
+    try {
+      const runtimeIdentity=(await runtime.query(`SELECT current_user AS name,rolsuper,rolbypassrls,
+        pg_has_role(current_user,table_owner.oid,'USAGE') AS table_owner
+        FROM pg_roles role CROSS JOIN LATERAL (
+          SELECT relowner AS oid FROM pg_class WHERE oid='sourcing_contract_return_submissions'::regclass
+        ) table_owner WHERE role.rolname=current_user`)).rows[0];
+      expect(runtimeIdentity).toEqual({name:appRole,rolsuper:false,rolbypassrls:false,table_owner:false});
+      const clerkActor=(capability=JIASHUN_READ,actorId=clerkId):TrustedActorContext=>({
+        actorId,actorRoles:[JIASHUN_CLERK_ROLE],authorizationCapability:capability,
+        authorizationCapabilities:[JIASHUN_READ,JIASHUN_CONTRACT_RETURN,JIASHUN_FILE_UPLOAD],requestId:randomUUID(),
+      });
+      const clerkOrders=new SourcingService(runtime);
+      const clerkReturns=new SourcingContractReturnService(runtime);
+      const clerkFiles=new AttachmentService(runtime,contractStorage,{prefix:"jiashun-test",ttlSeconds:60,maxUploadBytes:20*1024*1024});
+      const clerkScope=new JiashunContractClerkScope(runtime);
+      const id=await reviewedContractCase("JIASHUN-RUNTIME");
+      const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+      const inputBytes=await sharp({create:{width:2,height:2,channels:3,background:"#876234"}}).png().toBuffer();
+      const uploadInput={filename:"TEST-嘉顺回签.png",mimeType:"image/png",sizeBytes:inputBytes.byteLength,
+        sha256:createHash("sha256").update(inputBytes).digest("hex")};
+      const stage=async (actor:TrustedActorContext,caseId:string,documentId?:string) => {
+        if(documentId) await clerkScope.assertCurrentDocument(actor,caseId,documentId);
+        const upload=await clerkFiles.createUploadIntent(actor,uploadInput,documentId?{sourcingCaseId:caseId,documentId}:undefined);
+        await contractStorage.writeImmutable(upload.objectKey,inputBytes,uploadInput);
+        expect(await clerkFiles.finalize(actor,upload.attachmentId)).toMatchObject({attachmentId:upload.attachmentId});
+        return upload.attachmentId;
+      };
+      const outsiderFile=await stage(contractActor(),id);
+      await contractReturns.submit(contractActor(),id,[outsiderFile],randomUUID(),doc.sourcingContractDocumentId);
+      const find=async (hint:string)=>(await clerkOrders.listCases(clerkActor(),hint,"all",1)).items.map(order=>order.sourcingCaseId);
+      const transfer=async (supplierId:string,unitPrice:string,changeReason:string)=> {
+        await service.requestFactoryChange(managerActor(),id,{supplierId,unitPrice,changeReason},randomUUID());
+        return (await service.getCurrentFactoryChange(readerActor(),id)).item!;
+      };
+      expect(await find("TEST-JIASHUN-RUNTIME")).not.toContain(id);
+      await expect(clerkOrders.getCase(clerkActor(),id)).rejects.toMatchObject({statusCode:403});
+      const incoming=await transfer(clerkFactories[0]!,"16","TEST-非嘉顺旧提案");
+      expect(incoming).toMatchObject({status:"pending_owner"});
+      await expect(clerkReturns.get(clerkActor(),id)).rejects.toMatchObject({statusCode:403});
+      await service.decideFactoryChange(ownerActor(),id,incoming.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-原厂历史决定"},randomUUID());
+      const effective=(await contractService.getCurrent(rootActor(),id)).item!;
+      expect(effective).toMatchObject({status:"ready"});
+      expect(await find("TEST-JIASHUN-RUNTIME")).toContain(id);
+      expect(await clerkOrders.getCase(clerkActor(),id)).toMatchObject({approvalSnapshot:{supplierId:clerkFactories[0]}});
+      expect(await clerkOrders.getCurrentFactoryChange(clerkActor(),id)).toEqual({item:null});
+      expect(await clerkReturns.get(clerkActor(),id)).toMatchObject({attachments:[],history:[],canUpload:true});
+      const ownerTimeline=(await service.listTimeline(readerActor(),id)).items;
+      const outsiderIds=ownerTimeline.filter(item=>item.entryId===doc.sourcingContractDocumentId
+        ||item.entryId===incoming.factoryChangeRequestId||item.supplierName==="一号加工厂"
+        ||item.kind==="factory_change_verification" && item.reason==="TEST-原厂历史决定").map(item=>item.entryId);
+      expect(outsiderIds.length).toBeGreaterThanOrEqual(4);
+      const visible=(await clerkOrders.listTimeline(clerkActor(),id)).items;
+      expect(visible.map(item=>item.reason)).not.toContain("TEST-原厂历史决定");
+      expect((await clerkOrders.getCase(clerkActor(),id)).decision).toMatchObject({
+        supplierId:clerkFactories[0],supersedesDecisionId:null,decisionReason:"当前工厂决定已生效",
+      });
+      expect(visible.map(item=>item.entryId)).toContain(effective.sourcingContractDocumentId);
+      for(const entryId of outsiderIds) expect(visible.map(item=>item.entryId)).not.toContain(entryId);
+      expect(await clerkScope.canDownloadBoundAttachment(clerkActor(),{attachmentId:outsiderFile,entityType:"sourcing_contract_return",
+        entityId:id,mimeType:"image/png"})).toBe(false);
+      expect(await find(doc.contractNumber)).not.toContain(id);
+      await expect(clerkScope.assertCurrentDocument(clerkActor(),id,doc.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:409});
+
+      const currentId=effective.sourcingContractDocumentId;
+      const firstApprovalId=await reviewedContractCase("JIASHUN-INITIAL-HISTORY",service,undefined,clerkFactories[2]!);
+      const firstApprovalTimeline=(await clerkOrders.listTimeline(clerkActor(),firstApprovalId)).items;
+      const quoteEntry=firstApprovalTimeline.find(entry=>entry.kind==="ie_quote")!;
+      const managementEntry=firstApprovalTimeline.find(entry=>entry.kind==="management_decision")!;
+      const initialApproval=(await clerkOrders.getCase(clerkActor(),firstApprovalId)).approvalSnapshot!;
+      expect(new Date(quoteEntry.handledAt).getTime()).toBeLessThan(new Date(initialApproval.approvedAt).getTime());
+      expect(new Date(managementEntry.handledAt).getTime()).toBeLessThan(new Date(initialApproval.approvedAt).getTime());
+      expect(await clerkOrders.nodeHistory(clerkActor(),firstApprovalId,"ie_quote",quoteEntry.entryId)).toMatchObject({
+        node:"ie_quote",entry:{entryId:quoteEntry.entryId},item:{ieQuote:{sourcingIeQuoteId:quoteEntry.entryId}},
+      });
+      expect(await clerkOrders.nodeHistory(clerkActor(),firstApprovalId,"management",managementEntry.entryId)).toMatchObject({
+        node:"management",entry:{entryId:managementEntry.entryId},item:{decision:{supplierId:clerkFactories[2]}},
+      });
+      const outsiderDecision=ownerTimeline.find(entry=>entry.kind==="management_decision" && entry.supplierName==="一号加工厂")!;
+      await expect(clerkOrders.nodeHistory(clerkActor(),id,"management",outsiderDecision.entryId)).rejects.toMatchObject({statusCode:404});
+
+      const uploadActor=clerkActor(JIASHUN_FILE_UPLOAD);
+      const saveActor=clerkActor(JIASHUN_CONTRACT_RETURN);
+      const otherFile=await stage(clerkActor(JIASHUN_FILE_UPLOAD,otherClerkId),id,currentId);
+      await expect(clerkReturns.submit(saveActor,id,[otherFile],randomUUID(),currentId)).rejects.toMatchObject({statusCode:403});
+      const first=await stage(uploadActor,id,currentId), key=randomUUID();
+      const [saved,replayed]=await Promise.all([clerkReturns.submit(saveActor,id,[first],key,currentId),
+        clerkReturns.submit(saveActor,id,[first],key,currentId)]);
+      expect(saved).toMatchObject({currentContractReturned:true,uploadedFileCount:1,attachments:[{attachmentId:first}]});
+      expect(replayed.contractReturnedAt).toBe(saved.contractReturnedAt);
+      expect(await clerkScope.canDownloadBoundAttachment(clerkActor(),{attachmentId:first,entityType:"sourcing_contract_return",
+        entityId:id,mimeType:"image/png"})).toBe(true);
+      const second=await stage(uploadActor,id,currentId);
+      expect(await clerkReturns.submit(saveActor,id,[second],randomUUID(),currentId)).toMatchObject({
+        uploadedFileCount:2,contractReturnedAt:saved.contractReturnedAt,attachments:[{attachmentId:first},{attachmentId:second}],
+      });
+      const last=await stage(uploadActor,id,currentId), surplus=await stage(uploadActor,id,currentId);
+      const race=await Promise.allSettled([last,surplus].map(file=>clerkReturns.submit(saveActor,id,[file],randomUUID(),currentId)));
+      expect(race.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+      expect(race.find(result=>result.status==="rejected")).toMatchObject({reason:{statusCode:409}});
+
+      const outgoing=await transfer(replacementFactoryId,"17","TEST-不应泄露的拟转出");
+      expect(outgoing).toMatchObject({status:"pending_owner",proposedSupplierName:"二号加工厂"});
+      expect(await clerkOrders.getCurrentFactoryChange(clerkActor(),id)).toEqual({item:null});
+      expect((await clerkOrders.listTimeline(clerkActor(),id)).items.map(item=>item.entryId)).not.toContain(outgoing.factoryChangeRequestId);
+      expect(await find("TEST-JIASHUN-RUNTIME")).toContain(id);
+      await service.decideFactoryChange(ownerActor(),id,outgoing.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-实际转出"},randomUUID());
+      expect(await find("TEST-JIASHUN-RUNTIME")).not.toContain(id);
+      await expect(clerkReturns.submit(saveActor,id,[first],key,currentId)).rejects.toMatchObject({statusCode:403});
+      expect((await service.getCase(readerActor(),id)).approvalSnapshot?.supplierId).toBe(replacementFactoryId);
+      const returnAgain=await transfer(clerkFactories[1]!,"17","TEST-转回嘉顺");
+      expect(returnAgain.status).toBe("effective");
+      const next=(await contractService.getCurrent(rootActor(),id)).item!;
+      expect(next.sourcingContractDocumentId).not.toBe(currentId);
+      expect(await clerkReturns.get(clerkActor(),id)).toMatchObject({canUpload:true,uploadedFileCount:0, currentContractReturned:false});
+      await expect(clerkReturns.submit(saveActor,id,[first],key,currentId)).rejects.toMatchObject({statusCode:409});
+      await expect(clerkReturns.submit(saveActor,id,[first],randomUUID(),next.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:403});
+      const pending=await stage(uploadActor,id,next.sourcingContractDocumentId);
+      await craftService.revokeRole({...accessAdmin,requestId:randomUUID()},assignmentId,"TEST 正式撤销回签角色");
+      await expect(clerkFiles.finalize(uploadActor,pending)).rejects.toMatchObject({statusCode:403});
+      await expect(clerkReturns.submit(saveActor,id,[pending],randomUUID(),next.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:403});
+      expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).uploadedFileCount).toBe(0);
+    } finally {
+      await runtime.end();
+    }
   });
 
 });

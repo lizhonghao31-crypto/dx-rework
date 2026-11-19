@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "372e7970fadb445184152c6dbd31be45260b032e",
-  "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+  "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
   "risk": "full",
   "rules": [
     {
@@ -114,7 +114,9 @@
         "pmc-pg",
         "focused",
         "check-migrations",
-        "preflight"
+        "preflight",
+        "seed-and-migrate",
+        "canonical-pg"
       ]
     }
   ],
@@ -125,20 +127,20 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/unit/jiashun-contract-clerk.test.ts tests/integration/jiashun-contract-clerk-routes.test.ts tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-return-files.test.ts tests/unit/main-maintenance-plan.test.ts tests/unit/acceptance-matrix.test.ts tests/unit/platform-modules.test.ts tests/unit/sourcing-role-visibility.test.ts tests/unit/sourcing-list-pagination.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/focused.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "Node v22.22.2, locked npm dependencies, Vitest original reports. Scoped permission and HTTP routes, existing return upload/read controls, exact main maintenance-plan policy.",
-      "startedAt": "2026-11-19T09:13:10.937992+00:00",
-      "endedAt": "2026-11-19T09:13:32.881981+00:00",
+      "startedAt": "2026-11-19T09:24:58.004450+00:00",
+      "endedAt": "2026-11-19T09:25:19.010610+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/focused/command.log",
-      "logSha256": "d17af4983b680ae38954ff91116abbb9d83e974a908179375bbdbcf085188062",
+      "logSha256": "bb894cc8052d6f90587e0d0813279e76154ad8f7cf29461fa45f3b829fa67bad",
       "passed": 184,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9f1a3e2f850abd6ca6104f1cfdc74a076bf49a2df6e87f51cd2f98f29ded57b7"
+          "sha256": "8be62046e67dc9581d439db7a1c3d7e55b2716baacb0eccc0ebb4257f578450c"
         }
       ]
     },
@@ -148,43 +150,43 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/integration/jiashun-contract-clerk-postgres.test.ts --config vitest.postgres-immediate.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/role-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "PostgreSQL 16.16 disposable loopback marked test database, app test schema applies the full migration ledger. Tests automatic binding, no new employee assignment, incompatible role grants and concurrent exclusivity.",
-      "startedAt": "2026-11-19T09:13:22.005712+00:00",
-      "endedAt": "2026-11-19T09:13:28.014102+00:00",
+      "startedAt": "2026-11-19T09:25:10.575538+00:00",
+      "endedAt": "2026-11-19T09:25:16.239807+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/role-pg/command.log",
-      "logSha256": "aa0159cd2b4a4ca26ef53cdb594d4fb1c8cd6c4323432b9de766d81362b464c3",
+      "logSha256": "aa7edc41364b5d50e44e709fa1baf3f08493960bc37ed14651040d71b4f3bd01",
       "passed": 4,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cf8b7711e8399cc7c6c9a97fd6c2dee3d554f165bdac6f64089f433170c0e9ac"
+          "sha256": "55b02c8012a6c7726f27d9e040b3cb01ffe297faceae747140ab4ca5b866656b"
         }
       ]
     },
     {
       "id": "sourcing-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts -t 'enforces Jiashun transfer' --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/sourcing-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/sourcing-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
-      "context": "PostgreSQL 16.16 isolated database and one targeted sourcing business case. True queries and transactions run through the original contract services as a non-privileged non-owner application database role, with only object storage emulated. Untargeted suite entries intentionally skipped for this local run.",
-      "startedAt": "2026-11-19T09:13:28.526389+00:00",
-      "endedAt": "2026-11-19T09:13:38.981814+00:00",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
+      "context": "PostgreSQL 16.16 isolated database and the entire original sourcing PR03-PR05 and Work Analysis suite. The new case runs through real contract services with a non-owner application role, using only emulated object storage. Existing Root-only HTTP tests and the new clerk role share the original test Root identity.",
+      "startedAt": "2026-11-19T09:25:16.482007+00:00",
+      "endedAt": "2026-11-19T09:26:20.513878+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/sourcing-pg/command.log",
-      "logSha256": "81aee7ae6401a32467cfe714cd42ecf43bfcf9d6d218b3dbf995b14eaea453af",
-      "passed": 1,
+      "logSha256": "badf46984d59e5720aa5af97e60f013064e99d8ea8bf4a791ddc2bc4ba7415f8",
+      "passed": 90,
       "failed": 0,
-      "skipped": 89,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c446a84d0d9ad53100126d5d23bbc9557e1163e2b762ddc6fd2b1fe00f259c83"
+          "sha256": "91ab3ea0465f46d9deb81798c60c329e760be010b5af7ef6863ea544b4410594"
         }
       ]
     },
@@ -194,20 +196,20 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/integration/pmc-readonly-postgres.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/pmc-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "Disposable PostgreSQL 16.16 using actual staged schema and official pending migrator. Original PMC capability/receipt/user/attachment behavior checked against current schema.",
-      "startedAt": "2026-11-19T09:13:39.548824+00:00",
-      "endedAt": "2026-11-19T09:13:47.465079+00:00",
+      "startedAt": "2026-11-19T09:26:20.742645+00:00",
+      "endedAt": "2026-11-19T09:26:26.105072+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/pmc-pg/command.log",
-      "logSha256": "959e8fa8027b4ea5789ddc9da98d57474ab581d8c48bcf4f8431768fb7436775",
+      "logSha256": "6687826c4890319c59675030d53d5013fa0c658c8fa38798e52b10895e92962c",
       "passed": 6,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a7e4745e189a3f3e8e61035bfec153125d3b477d6d43cacdae5af0e826b60a32"
+          "sha256": "f839568fb26a5b06e1418d4fdf2d99d1d926516031f4731780ec38076a1b91f0"
         }
       ]
     },
@@ -217,13 +219,13 @@
       "command": "env CHROMIUM_PATH=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node tests/acceptance/jiashun-contract-clerk-browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "Actual Chromium 151 and Playwright 1.57, desktop and mobile, original sourcing page with emulated loopback HTTP and object storage. Cases cover submit, read-only controls and role revoked response.",
-      "startedAt": "2026-11-19T09:13:59.594313+00:00",
-      "endedAt": "2026-11-19T09:14:04.888403+00:00",
+      "startedAt": "2026-11-19T09:26:26.933119+00:00",
+      "endedAt": "2026-11-19T09:26:32.018076+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/browser/command.log",
-      "logSha256": "6b8847e405d077fad630f3267cb9a6f659f72fc5f68ab8cd17b9bfa6147c1641",
+      "logSha256": "6acffb4aa1f1b72ccf0cd2043f39c1301350c84e1e26705eeb71deb190698cca",
       "passed": 1,
       "failed": 0,
       "skipped": 0
@@ -234,11 +236,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "Node v22.22.2 and TypeScript workspace typecheck using the repository package lock.",
-      "startedAt": "2026-11-19T09:13:10.939660+00:00",
-      "endedAt": "2026-11-19T09:13:59.258201+00:00",
+      "startedAt": "2026-11-19T09:24:57.989945+00:00",
+      "endedAt": "2026-11-19T09:25:43.645790+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/check-types/command.log",
       "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
     },
@@ -248,11 +250,11 @@
       "command": "npm run db:migrate:lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "Exact manifest, migration sequence and SQL SHA-256 using repository migration lint.",
-      "startedAt": "2026-11-19T09:13:10.972787+00:00",
-      "endedAt": "2026-11-19T09:13:11.392862+00:00",
+      "startedAt": "2026-11-19T09:24:58.009808+00:00",
+      "endedAt": "2026-11-19T09:24:58.408482+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/check-migrations/command.log",
       "logSha256": "5edba0b891f3e897ae8f4fb8f22ac9af3483965eadf948e395907349ef73281c"
     },
@@ -262,13 +264,41 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "ESLint across repository with maximum warnings zero using locked Node and npm packages.",
-      "startedAt": "2026-11-19T09:13:10.983758+00:00",
-      "endedAt": "2026-11-19T09:13:42.810153+00:00",
+      "startedAt": "2026-11-19T09:24:57.993146+00:00",
+      "endedAt": "2026-11-19T09:25:28.126844+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/lint/command.log",
       "logSha256": "c515bd0be1f85df3ce7017b7a7ab759a66a3184a30e6b65b5d13a9d4fea39cd7"
+    },
+    {
+      "id": "seed-and-migrate",
+      "kind": "command",
+      "command": "bash -c 'bash scripts/seed-base-migrations.sh && npm run db:migrate:check && DATABASE_URL=\"$TEST_DATABASE_URL\" node scripts/deploy/check-main-maintenance-plan.mjs \"$PWD\"'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
+      "context": "Real isolated PostgreSQL 16: replayed pinned main migration history, applied only 0233, confirmed repeated migration no-op and checksum/removed-history rejection.",
+      "startedAt": "2026-11-19T09:27:29.072391+00:00",
+      "endedAt": "2026-11-19T09:27:31.032960+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/seed-and-migrate/command.log",
+      "logSha256": "86b9c2cf65cf24b22bb42cf194bf9ec82f8dcb985fff3daae27e5feff1412a3f"
+    },
+    {
+      "id": "canonical-pg",
+      "kind": "command",
+      "command": "node scripts/run-business-chain-gate.mjs --full-gate",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
+      "context": "Original Full runner with the exact diff-derived 26-suite PostgreSQL plan across its three Vitest profiles, marked disposable PostgreSQL 16 databases, original resource lifecycle and local execution ID. All required local suites and resource cleanup passed. Separate raw receipt is retained locally.",
+      "startedAt": "2026-11-19T09:27:31.244294+00:00",
+      "endedAt": "2026-11-19T09:29:52.623576+00:00",
+      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/canonical-pg/command.log",
+      "logSha256": "d73fb1645a50ef77be7725c23f49283369108d7180c5bf4e22fd1d2fc20f6c1f"
     },
     {
       "id": "preflight",
@@ -276,13 +306,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74cf6f4c6cbbd1bbeed898973449793b2983f294",
-      "sourceFingerprint": "24e47d2b335a92c777687940ae497348f27b0c368676b0c5dfed7334ff38793b",
+      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
+      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
       "context": "Repository unit preflight around initial Light and Full lanes, immutable evidence and managed PostgreSQL resource selection.",
-      "startedAt": "2026-11-19T09:13:10.918711+00:00",
-      "endedAt": "2026-11-19T09:13:24.969877+00:00",
+      "startedAt": "2026-11-19T09:24:58.008102+00:00",
+      "endedAt": "2026-11-19T09:25:12.009302+00:00",
       "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/preflight/command.log",
-      "logSha256": "2afb44b20cd7cf0855ea78554126bff50eccf37f6c4bd14d97fd48bae75f80f2",
+      "logSha256": "9d2691be83a3eb351dd55039f6db0b6f55cbc19a3f656a1a1831194fda0ff905",
       "passed": 113,
       "failed": 0,
       "skipped": 0
