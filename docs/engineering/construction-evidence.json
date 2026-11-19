@@ -1,197 +1,163 @@
 {
   "version": 1,
-  "base": "9e19be87067c6c24ed587dae2376dcb20682aa80",
-  "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
-  "risk": "full",
+  "base": "97e6819ebcdc79ed6cf98c437c7956d6a81830a3",
+  "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+  "risk": "quick",
   "rules": [
     {
-      "rule": "Exact persisted factory-payables identity opens the full rework board and per-order node reads without generic report or company wage capabilities.",
-      "source": "docs/requirements/platform-permission-golden-source-v1.0.md PERM-FACTORY-PAYABLES-REWORK-READ-20261116; user approved screenshot comparison and main implementation on2026-11-16.",
+      "rule": "合同回签在传输前准确判断本版本剩余可用份数及容量，只凭对应版本和附件确证成功，安全处理结果未知与订单摘要刷新失败。",
+      "source": "用户上传的合同回签 Work 交接 2026-11-19；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-09 合同回传三份及统一查看。",
       "writes": [
-        "packages/contracts/src/reporting.ts",
-        "apps/api/src/rework/finance-order-access.ts",
-        "apps/api/src/reporting/management-reporting-routes.ts",
-        "apps/api/src/reporting/management-reporting-service.ts",
-        "apps/api/src/reporting/management-reporting-orders.ts",
-        "apps/api/src/reporting/finance-node-reader.ts",
-        "tests/unit/factory-payables-rework-readonly.test.ts",
-        "tests/integration/helpers/finance-order-query-scenario.ts"
+        "apps/web/src/sourcing-contract-return-upload.ts",
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "apps/web/src/sourcing-workspace.css",
+        "tests/acceptance/contract-transfer-delivery-browser.mjs",
+        "tests/fixtures/contract-transfer-delivery.tsx",
+        "tests/unit/sourcing-contract-return-upload.test.ts"
       ],
       "reads": [
-        "apps/web/src/reporting/reporting-client.ts",
-        "apps/api/src/reporting/report-export-service.ts",
-        "apps/api/src/wages/wage-access.ts"
+        "apps/api/src/sourcing/sourcing-contract-return-service.ts#SourcingContractReturnService",
+        "packages/contracts/src/sourcing.ts#SourcingContractReturnResponseSchema",
+        "apps/web/src/sourcing-contract-return-files.tsx#contractReturnFileGroups",
+        "apps/web/src/sourcing-contract-return-presentation.ts#sourcingContractReturnLabel",
+        "apps/web/src/submission-validation.ts#SubmissionRequestError",
+        "docs/requirements/sourcing-supplier-production-v1.0.md#2026-11-09 合同回传三份及统一查看"
       ],
       "oldTests": [
-        "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/integration/finance-wage-access-postgres.test.ts",
-        "tests/integration/management-reporting-routes.test.ts",
-        "tests/unit/finance-wage-access.test.ts"
+        "tests/unit/sourcing-contract-return-upload.test.ts",
+        "tests/unit/sourcing-contract-return-files.test.ts",
+        "tests/unit/sourcing-contract-return-state.test.ts",
+        "tests/unit/sourcing-contract-return-list-query.test.ts",
+        "tests/acceptance/contract-return-files-browser.mjs",
+        "tests/acceptance/contract-transfer-delivery-browser.mjs"
       ],
-      "initialization": "No SQL migration, grant, role registration or real assignment changes. Existing direct-role/capability SQL rechecks trusted current identity, including forged claim and revoked-session cases.",
-      "dateAndPermission": "Original Shanghai date filters, financial source facts, current role revocation and mixed-role business rights retained. No wage/report/export expansion.",
-      "expectation": "Full-board figures match the existing finance director projection; original supplier-name search finds pre-determination orders; unrelated finance roles, company reports/exports, stale and forged factory roles remain denied.",
+      "initialization": "首开从原回签详情 GET 取当前版本份数和容量；模拟已保存一份 10968861 字节，保留旧版历史组及未记录版本组；所有浏览器写入都在进程内模拟。",
+      "dateAndPermission": "保留原 canUpload/附件可读范围及服务端合同版本、归属和幂等校验，不改首次回传时间、原逾期、角色、历史或待办。历史附件只可证明同一原版本结果。",
+      "expectation": "每版本累计三份 PDF/JPG/PNG 且总量不超过 20971520 字节，超限无请求并聚焦报错；业务成功展示真实新附件和已存份数，后续读订单摘要失败保留回执；读回确认已提交时仅发一次 POST，未知重试保留原合同、附件和幂等键；核对 GET 有界，换版拒绝后仅在重读一致的新版后才可开启新提交。",
       "checks": [
-        "native",
+        "build",
         "unit",
         "lint",
         "types",
-        "secret"
-      ]
-    },
-    {
-      "rule": "Complete rework details, historical nodes, liability records and bound attachments are readable while all original node and deduction write guards retain their duties.",
-      "source": "Approved2026-11-16 full rework-only read scope; platform permission golden-source increment; existing original direct-payables write policy.",
-      "writes": [
-        "apps/api/src/rework/rework-business-detail-service.ts",
-        "apps/api/src/rework/rework-node-history.ts",
-        "apps/api/src/rework/external-responsibility-service.ts",
-        "apps/api/src/rework/fixed-external-responsibility-service.ts",
-        "tests/unit/rework-node-history.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/rework/external-responsibility-application-service.ts",
-        "apps/api/src/rework/external-responsibility-routes.ts",
-        "apps/web/src/rework-node-history-page.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/integration/quality-basic-rework-postgres.test.ts",
-        "tests/unit/rework-node-history.test.ts",
-        "tests/unit/finance-read-business-access.test.ts"
-      ],
-      "initialization": "Existing legacy and fixed settlement readers use the same persisted read increment; no change to events, amounts, tables, historical facts or original SQL mutation functions.",
-      "dateAndPermission": "Bound order/case and nondeleted constraints stay in place. Other payable case write flags stay false; original processing-factory payables behavior is exercised throughout the native full business chain.",
-      "expectation": "Before-ledger and completed orders return complete history and amounts, unrelated attachment IDs are denied, all other basic projections stay restricted and existing authorized writes remain available.",
-      "checks": [
-        "native",
-        "unit",
-        "lint",
-        "types",
-        "secret"
-      ]
-    },
-    {
-      "rule": "Reuse the existing full rework board and original current/history read-only components, preserving original visual system and entry points.",
-      "source": "User screenshots Figure1 full board/Figure2 basic board and approved plan; rework UI golden source; current existing components.",
-      "writes": [
-        "apps/web/src/reporting/basic-rework-board.tsx",
-        "apps/web/src/reporting/rework-query-page.tsx",
-        "apps/web/src/rework-detail-page.tsx",
-        "apps/web/src/acceptance-matrix.ts"
-      ],
-      "reads": [
-        "apps/web/src/App.tsx",
-        "apps/web/src/reporting/management-order-card.tsx",
-        "apps/web/src/reporting/finance-node-panel.tsx",
-        "apps/web/src/rework-node-history-page.tsx",
-        "apps/web/src/rework-node-access.ts"
-      ],
-      "oldTests": [
-        "tests/unit/finance-node-mixed-role-access.test.ts",
-        "tests/unit/reporting-contracts-workbook-and-web.test.ts",
-        "tests/unit/factory-payables-receiving-read.test.ts",
-        "tests/integration/full-business-chain-postgres.test.ts"
-      ],
-      "initialization": "No new page, duplicate dashboard or CSS redesign. Exact factory role selects original business board; other basic-reader entry points stay unchanged.",
-      "dateAndPermission": "Displayed dates, currency, current workflow and original write flags unchanged; full read is never an edit permission. Original mixed business roles keep their permitted actions.",
-      "expectation": "Original API chain and routes support the existing frontend; scoped role can read all nodes without acquiring node-edit grants. Separate real Chromium checks cover original App board at390/1440px, keyboard filters, amounts, empty/error and original read panel with TEST synthetic payloads; not claimed as live Acceptance.",
-      "checks": [
-        "native",
-        "unit",
-        "lint",
-        "types"
+        "browser",
+        "files-browser",
+        "preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native",
-      "command": "bash /tmp/factory-rework-main-pg.sh",
-      "kind": "tests",
+      "id": "build",
+      "kind": "command",
+      "command": "npm run build:packages",
       "status": "passed",
       "exitCode": 0,
-      "passed": 41,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
-      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
-      "context": "Dedicated marked PG16 tmpfs container, localhost random port, NOSUPERUSER NOCREATEDB low-privilege owner; original business-chain config one worker; all owned resources removed. Current working-tree source on actual main base; no Acceptance/production connection.",
-      "startedAt": "2026-11-16T11:29:59.620000+00:00",
-      "endedAt": "2026-11-16T11:30:45.792750+00:00",
-      "logSha256": "68d20e58281fe55d01e9d74be04c40425620d11f2359ec68045af96b10df354e",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "76fec0d62076a5b3b778db7a5daabe4e518bce2659ca3245e6b9cebc1ca41e80"
-        }
-      ],
-      "log": "/tmp/factory-rework-native-final.log"
+      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
+      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+      "context": "Node v22.22.2, npm 10.9.9, npm ci from exact main lock and workspace manifests in isolated nonpersistent storage. Built workspace packages used by the candidate.",
+      "startedAt": "2026-11-19T04:45:14.068370+00:00",
+      "endedAt": "2026-11-19T04:45:20.978731+00:00",
+      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/build/command.log",
+      "logSha256": "42534bd96daa66688e58109269730dbaebe1e74278e8d2362cb7be3a3483b40d"
     },
     {
       "id": "unit",
-      "command": "node_modules/.bin/vitest run tests/unit/factory-payables-rework-readonly.test.ts tests/unit/rework-node-history.test.ts tests/unit/finance-node-mixed-role-access.test.ts tests/unit/finance-read-business-access.test.ts tests/unit/factory-payables-receiving-read.test.ts tests/unit/finance-director-rework-detail-access.test.ts tests/unit/finance-wage-access.test.ts tests/unit/reporting-contracts-workbook-and-web.test.ts tests/unit/sourcing-finance-readonly-contract.test.ts tests/integration/management-reporting-routes.test.ts tests/integration/finance-wage-access.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/tmp/factory-rework-final-unit.json",
       "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-return-files.test.ts tests/unit/sourcing-contract-return-state.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/sourcing-mobile-workspace.test.ts tests/unit/sourcing-feedback-contract.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/sourcing-pr4-contract-factory-change.test.ts tests/unit/sourcing-role-aware-factory-change-ui.test.ts tests/unit/order-detail-information-architecture.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/reports/vitest.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 58,
+      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
+      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+      "context": "Repository vitest.config.ts, nonDatabase worker limit 1, no DB URLs. Verbose log and JSON from the same original run; includes upload, capacity, version/role, task-detail and legacy readers.",
+      "startedAt": "2026-11-19T04:45:21.242050+00:00",
+      "endedAt": "2026-11-19T04:45:26.334089+00:00",
+      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/unit/command.log",
+      "logSha256": "f92fca4b396addc885c27c50280e4933c8ca89e41542ca19eed92f918995814d",
+      "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
-      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
-      "context": "Node22.22.2/npm10.9.9, exact main locked dependencies, original Vitest one worker; original finance/routes/receiving/history consumers and new scoped role regression.",
-      "startedAt": "2026-11-16T11:30:17.484000+00:00",
-      "endedAt": "2026-11-16T11:30:28.197222+00:00",
-      "logSha256": "7b71db19c402e8bf7bb9e5e6715627a81beefd1c35a8c89f114a64b2708a9bbe",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c3603a51bd98595f3900afce7dbd8ec5002bd0dce5380ef4e4e9fc6f2685075e"
+          "sha256": "ebaf1141a73a512bb9cca41519e5c3f8876057130d9103907ea31f3c53173ddb"
         }
-      ],
-      "log": "/tmp/factory-rework-final-unit.log"
+      ]
     },
     {
       "id": "lint",
-      "command": "npm run lint",
       "kind": "command",
+      "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
-      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
-      "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
-      "startedAt": "2026-11-16T11:29:53.656130+00:00",
-      "endedAt": "2026-11-16T11:30:46.344056+00:00",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "log": "/tmp/factory-rework-lint-final.log"
+      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
+      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+      "context": "Repository-wide ESLint with max warnings zero. Node v22.22.2 and npm 10.9.9 from the locked install.",
+      "startedAt": "2026-11-19T04:45:21.242136+00:00",
+      "endedAt": "2026-11-19T04:45:38.611403+00:00",
+      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/lint/command.log",
+      "logSha256": "c515bd0be1f85df3ce7017b7a7ab759a66a3184a30e6b65b5d13a9d4fea39cd7"
     },
     {
       "id": "types",
-      "command": "npm run typecheck",
       "kind": "command",
+      "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
-      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
-      "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
-      "startedAt": "2026-11-16T11:29:53.656130+00:00",
-      "endedAt": "2026-11-16T11:30:46.344056+00:00",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "log": "/tmp/factory-rework-types-final.log"
+      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
+      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+      "context": "Repository-wide TypeScript compiler checks for all workspaces with the original package manifests and lock.",
+      "startedAt": "2026-11-19T04:45:38.862233+00:00",
+      "endedAt": "2026-11-19T04:46:20.678086+00:00",
+      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/types/command.log",
+      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
     },
     {
-      "id": "secret",
-      "command": "npm run secret:scan",
+      "id": "browser",
       "kind": "command",
+      "command": "env CONTRACT_UI_EVIDENCE_DIR=/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/browser/screens PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/contract-transfer-delivery-browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9e19be87067c6c24ed587dae2376dcb20682aa80",
-      "sourceFingerprint": "987f683fa13e55aae1c723619989fc34248ec1683d3ddcbd83cf4a52f9a35ea0",
-      "context": "Node22.22.2/npm10.9.9, exact main lockfile, original command; recorded envelope covers the sequential lint/typecheck/secret-scan invocation on current worktree, not a committed-base result.",
-      "startedAt": "2026-11-16T11:29:53.656130+00:00",
-      "endedAt": "2026-11-16T11:30:46.344056+00:00",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "log": "/tmp/factory-rework-secret-final.log"
+      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
+      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+      "context": "Real Chromium 151 with Playwright 1.57, loopback synthetic API fixture only. The original browser report has 40 passed scenarios, including both viewport sizes, refresh failure, failed first save, committed lost response, replaced version, and a confirmation GET stuck until the original timer aborts. Report /workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/browser/screens/browser-result.json, SHA256 e2e4f7d29579cf6ac4a21f4355381b40bba3afd2c5ca78c355316c04650c019d.",
+      "startedAt": "2026-11-19T04:45:38.864816+00:00",
+      "endedAt": "2026-11-19T04:46:26.159023+00:00",
+      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/browser/command.log",
+      "logSha256": "f605bb39096ffc589a83febbf911fa6323d88d9da4279f98c5cdbfa22038ef51"
+    },
+    {
+      "id": "files-browser",
+      "kind": "tests",
+      "command": "env PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs CHROMIUM_PATH=/usr/bin/chromium node tests/acceptance/contract-return-files-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
+      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+      "context": "Real Chromium 151 and Playwright 1.57, loopback synthetic preview. Original desktop/mobile current/old version viewing and keyboard close.",
+      "startedAt": "2026-11-19T04:46:26.481442+00:00",
+      "endedAt": "2026-11-19T04:46:31.082525+00:00",
+      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/files-browser/command.log",
+      "logSha256": "03593741b04dcbfc033385a0d592e02255964f4a64d8a9ea9c560cd057ffbb3e",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "preflight",
+      "kind": "tests",
+      "command": "npm run test:preflight",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "9c591858cfbb454cf0db1d61fa49a1ba80ed2d9b",
+      "sourceFingerprint": "0f829349064a67d2af03c924af587fe7ee9f5871f4ec0ad85f3167145844158c",
+      "context": "Repository preflight harness and original TAP results; canonical risk excludes PostgreSQL for this frontend and scripted test diff.",
+      "startedAt": "2026-11-19T04:46:31.359072+00:00",
+      "endedAt": "2026-11-19T04:46:40.098012+00:00",
+      "log": "/workspace/contract-return-feedback-input-20261119.Hrpz6r6y/validation/review-green/preflight/command.log",
+      "logSha256": "dcbfcea7d5a7199457868f3ea0fc0e38a4c121fe80cb6d3d56f347d0074f551f",
+      "passed": 113,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }

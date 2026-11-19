@@ -178,6 +178,138 @@ try{
     await page.waitForFunction(()=>window.contractTransferRequests.some(r=>r.method==='POST'&&r.path.includes('/price-reapplications/')&&r.body.decision==='approved'));
     results.push({ownerExistingApproval:true,noNewOwnerEntry:true,passed:true});await page.close();
   }
+  for(const width of [390,1440]){
+    const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(origin+'/?role=root&uploadCase=1');
+    const panel=page.locator('.sourcing-contract-bar');
+    await panel.getByText(/已保存 1\/3 份/).waitFor();
+    assert.match(await panel.locator('.sourcing-contract-return-capacity').innerText(),/剩余 9\.54 MiB/);
+    await panel.locator('input[type="file"]').setInputFiles({
+      name:'TEST-第二份超限.pdf',mimeType:'application/pdf',buffer:Buffer.alloc(10_002_660),
+    });
+    const alert=panel.getByRole('alert');await alert.waitFor({state:'visible'});
+    assert.match(await alert.innerText(),/本次未上传.*第二份超限\.pdf.*仅剩/s);
+    assert.match(await alert.innerText(),/9\.54 MiB/);
+    assert.equal(await page.evaluate(()=>document.activeElement?.classList.contains('sourcing-contract-return-error')),true);
+    assert.equal((await page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'&&r.path.includes('upload-intents')))).length,0);
+    assert.match(await panel.locator('.sourcing-contract-return-capacity').innerText(),/已保存 1\/3 份/);
+    assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
+    if(evidence)await panel.screenshot({path:join(evidence,'contract-upload-excess-'+width+'.png')});
+    assert.deepEqual(errors,[]);
+    results.push({width,oversizeBlockedBeforeNetwork:true,exactCapacity:true,errorFocused:true,countUnchanged:true,passed:true});
+    await page.close();
+  }
+  for(const refreshFailure of [false,true]){
+    const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(origin+'/?role=root&uploadCase=1'+(refreshFailure?'&uploadRefreshFailure=1':''));
+    const panel=page.locator('.sourcing-contract-bar');
+    await panel.getByText(/已保存 1\/3 份/).waitFor();
+    await panel.locator('input[type="file"]').setInputFiles({
+      name:'TEST-第二份.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 TEST'),
+    });
+    const receipt=panel.locator('.sourcing-contract-return-feedback');
+    await receipt.waitFor({state:'visible'});
+    assert.match(await receipt.innerText(),/TEST-第二份\.pdf.*上传成功.*已保存 2\/3 份/);
+    assert.equal(await panel.getByRole('alert').count(),0);
+    assert.match(await panel.locator('.sourcing-contract-return-capacity').innerText(),/已保存 2\/3 份/);
+    if(refreshFailure){
+      await panel.getByText(/订单信息刷新失败/).waitFor();
+      assert.match(await receipt.innerText(),/订单信息刷新失败/);
+      assert.match(await receipt.getAttribute('class')||'',/--warning/);
+    }
+    const submissions=await page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'&&r.path.endsWith('/contract-return')));
+    assert.equal(submissions.length,1);
+    assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
+    if(evidence)await panel.screenshot({path:join(evidence,'contract-upload-saved-'+(refreshFailure?'refresh-failed':'normal')+'.png')});
+    assert.deepEqual(errors,[]);
+    results.push({refreshFailure,confirmedBusinessSave:true,visibleReceipt:true,noFalseSaveFailure:true,oneBusinessSubmission:true,passed:true});
+    await page.close();
+  }
+  for(const outcome of ['retry','lost-response']){
+    const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(origin+'/?role=root&uploadCase=1&uploadOutcome='+outcome);
+    const panel=page.locator('.sourcing-contract-bar');
+    await panel.getByText(/已保存 1\/3 份/).waitFor();
+    const input=panel.locator('input[type="file"]');
+    await input.setInputFiles({name:'TEST-安全重试.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 TEST')});
+    if(outcome==='retry'){
+      const retry=panel.getByRole('button',{name:'重试保存',exact:true});
+      await retry.waitFor();
+      assert.equal(await input.isDisabled(),true);
+      assert.equal(await panel.getByRole('button',{name:'补传回签合同',exact:true}).isDisabled(),true);
+      assert.match(await panel.locator('.sourcing-contract-return-capacity').innerText(),/已保存 1\/3 份/);
+      await retry.click();
+    }
+    await panel.getByText(/TEST-安全重试\.pdf.*上传成功.*已保存 2\/3 份/).waitFor();
+    const requests=await page.evaluate(()=>window.contractTransferRequests);
+    const returns=requests.filter(r=>r.path.endsWith('/contract-return'));
+    const writes=returns.filter(r=>r.method==='POST');
+    assert.equal(returns.filter(r=>r.method==='GET').length,2);
+    assert.equal(writes.length,outcome==='retry'?2:1);
+    assert.ok(writes[0].key);
+    if(outcome==='retry'){
+      assert.equal(writes[1].key,writes[0].key);
+      assert.deepEqual(writes[1].body,writes[0].body);
+    }
+    assert.equal(requests.filter(r=>r.method==='POST'&&r.path.includes('upload-intents')).length,1);
+    assert.equal(await panel.getByRole('alert').count(),0);
+    assert.deepEqual(errors,[]);
+    results.push({outcome,reusedOriginalRequest:outcome==='retry',readbackVerified:true,noDuplicateUpload:true,passed:true});
+    await page.close();
+  }
+  const recoveryFailures=[];
+  for(const outcome of ['version-conflict','check-timeout']){
+    const page=await browser.newPage({viewport:{width:390,height:844}});
+    try{
+      await page.clock.install();
+      await page.goto(origin+'/?role=root&uploadCase=1&uploadOutcome='+outcome);
+      const panel=page.locator('.sourcing-contract-bar'),input=panel.locator('input[type="file"]');
+      const retry=panel.getByRole('button',{name:'重试保存',exact:true});
+      const writes=()=>page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'&&r.path.endsWith('/contract-return')));
+      const attach=name=>input.setInputFiles({name,mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 TEST')});
+      await panel.getByText(/已保存 1\/3 份/).waitFor();
+      await attach('TEST-原版补签.pdf');
+      if(outcome==='check-timeout'){
+        await panel.getByRole('button',{name:'正在核对保存结果…'}).waitFor();
+        await page.waitForFunction(()=>window.contractTransferRequests.filter(r=>r.method==='GET'&&r.path.endsWith('/contract-return')).length===2);
+        await page.clock.fastForward(31_000);
+        assert.equal(await page.evaluate(()=>window.contractReturnReadAborted),true,'confirmation GET must be aborted');
+      }
+      await retry.waitFor();
+      assert.equal(await input.isDisabled(),true);
+      assert.equal(await panel.locator('.sourcing-contract-return-feedback').count(),0);
+      assert.equal((await writes()).length,1);
+      await retry.click();
+      if(outcome==='version-conflict'){
+        await panel.getByRole('alert').filter({hasText:'本次回签未保存'}).waitFor({timeout:3000});
+        assert.equal(await retry.count(),0);
+        const refresh=panel.getByRole('button',{name:'刷新合同版本',exact:true});
+        await refresh.click();
+        await panel.getByText(/已保存 0\/3 份/).waitFor();
+        assert.equal((await writes()).length,2,'refresh must be read-only');
+        await attach('TEST-新版补签.pdf');
+        await panel.getByText(/TEST-新版补签\.pdf.*已保存 1\/3 份/).waitFor();
+      }else{
+        await panel.getByText(/TEST-原版补签\.pdf.*已保存 2\/3 份/).waitFor();
+      }
+      const posted=await writes();
+      assert.equal(posted.length,outcome==='version-conflict'?3:2);
+      assert.ok(posted[0].key);
+      assert.equal(posted[1].key,posted[0].key);
+      assert.deepEqual(posted[1].body,posted[0].body);
+      if(outcome==='version-conflict'){
+        assert.notEqual(posted[2].key,posted[0].key);
+        assert.equal(posted[2].body.expectedContractDocumentId,'00000000-0000-4000-8000-000000000056');
+        assert.notDeepEqual(posted[2].body.attachmentIds,posted[0].body.attachmentIds);
+      }
+      results.push({outcome,originalRetryVerified:true,passed:true});
+    }catch(error){recoveryFailures.push(`${outcome}: ${error}`);}
+    finally{await page.close();}
+  }
+  assert.deepEqual(recoveryFailures,[]);
   const report={localOnly:true,synthetic:true,noRealBusinessAccess:true,results};
   if(evidence)await writeFile(join(evidence,'browser-result.json'),JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report,null,2));
