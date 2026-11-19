@@ -285,6 +285,70 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   expect(result.work.find(work=>work.id==='b')!.dependsOn).toContain('TEST redo');expect(result.work.find(work=>work.id==='TEST redo')).toMatchObject({originalHandoffAt:at(6),accountingRole:'added_work'});
   expect(evaluateFixedJourneyBasis({...old,scopes:[result]},at(5),false).scopes[0]!.nodes.find(node=>node.id==='TEST redo')!.ownSla).toMatchObject({state:'overdue',overdueMinutes:{minimum:60,maximum:60}});
  });
+ it('merges the same round by unique canonical work while retaining a real addition and its original handoff',()=>{
+  const saved=stored(),scopeRef='TEST scope',scope=saved.input.scopes[0]!;
+  const refs={a:'source:TEST-source:round:2:step:own:work',b:'source:TEST-source:round:2:work:delivery'};
+  const byId=(id:string)=>id==='a'||id==='b'?id+':round:2':id;
+  const legacy=build(),old=legacy.scopes[0]!;
+  const a=old.work.find(work=>work.id==='a')!,b=old.work.find(work=>work.id==='b')!;
+  const handoff={...a,id:'prior_source_completion',canonicalWorkRef:'source:TEST-source:round:1:work:delivery',
+   start:at(2),end:at(2),minutes:0,accountingRole:'shared_reference' as const};
+  const addition={...a,id:'extra-craft',canonicalWorkRef:'source:TEST-source:round:2:step:extra:work',
+   accountingRole:'added_work' as const,dependsOn:['a',handoff.id],dependencyReserves:{a:{minutes:15,calendar:'continuous' as const}},
+   originalHandoffAt:at(2),responsibilitySlaRef:'TEST own extra window'};
+  old.work=[{...a,canonicalWorkRef:refs.a,accountingRole:'added_work',dependsOn:[handoff.id]},
+   {...b,canonicalWorkRef:refs.b,dependsOn:['a',addition.id]},handoff,addition];
+  old.facts={...old.facts,[handoff.id]:{...old.facts.a!,completed:point(2),businessCompleted:true},
+   [addition.id]:{...old.facts.a!,clockStart:point(3)}};
+  saved.input.work=saved.input.work.map(work=>({...work,id:byId(work.id),dependsOn:work.dependsOn.map(byId),
+   ...(work.id==='a'||work.id==='b'?{canonicalWorkRef:refs[work.id]}:{})}));
+  saved.input.scopes=[{...scope,terminalIds:scope.terminalIds.map(byId),goals:Object.fromEntries(Object.entries(scope.goals).map(([id,goal])=>[byId(id),goal]))}];
+  saved.targets[scopeRef]=Object.fromEntries(Object.entries(saved.targets[scopeRef]!).map(([id,target])=>[byId(id),{...target,id:byId(id)}]));
+  const original=structuredClone(legacy);
+  const result=build(saved,item(),legacy).scopes[0]!,work=new Map(result.work.map(node=>[node.id,node]));
+  expect([...work.keys()]).toEqual(['a:round:2','b:round:2','future','extra-craft',handoff.id]);
+  expect(work.get('a:round:2')).toMatchObject({dependsOn:[],end:saved.targets[scopeRef]!['a:round:2']!.end.at});
+  expect(work.get('b:round:2')!.dependsOn).toEqual(['a:round:2','extra-craft']);
+  expect(work.get(addition.id)).toMatchObject({dependsOn:['a:round:2',handoff.id],
+   dependencyReserves:{'a:round:2':{minutes:15,calendar:'continuous'}},responsibilitySlaRef:'TEST own extra window'});
+  expect(result.facts[handoff.id]!.completed).toEqual(point(2));
+  expect(result.facts[addition.id]!.clockStart).toEqual(point(3));
+  expect(legacy).toEqual(original);
+ });
+ it.each(['missing-handoff','a'])('still rejects an unresolved added-work predecessor %s',predecessor=>{
+  const legacy=build(),scope=legacy.scopes[0]!,template=scope.work[0]!;
+  scope.work=[...scope.work.map(work=>work.id==='a'?{...work,canonicalWorkRef:'source:TEST-source:round:1:step:other:work'}:work),
+   {...template,id:'extra-craft',canonicalWorkRef:'source:TEST-source:round:2:step:extra:work',
+    accountingRole:'added_work',dependsOn:[predecessor]}];
+  expect(()=>build(stored(),item(),legacy)).toThrow('固定计划缺少依赖工作');
+ });
+ it('keeps work identities separate across rounds, parallel steps and PO scopes',()=>{
+  const saved=stored(),scope=saved.input.scopes[0]!,legacy=build(),original=legacy.scopes[0]!,template=original.work[0]!;
+  const currentRef='source:TEST-source:round:2:step:own:work';
+  saved.input.work=saved.input.work.map(work=>work.id==='a'?{...work,canonicalWorkRef:currentRef}:work);
+  saved.input.scopes=[{...scope,lineId:'PO-1'},{...scope,scopeRef:'PO-2 scope',lineId:'PO-2'}];
+  const additions=[
+   {...template,id:'earlier-round',canonicalWorkRef:'source:TEST-source:round:1:step:own:work',accountingRole:'added_work' as const},
+   {...template,id:'parallel-step',canonicalWorkRef:'source:TEST-source:round:2:step:parallel:work',accountingRole:'added_work' as const},
+   {...template,id:'ambiguous-one',canonicalWorkRef:currentRef,accountingRole:'added_work' as const},
+   {...template,id:'ambiguous-two',canonicalWorkRef:currentRef,accountingRole:'added_work' as const},
+  ];
+  const siblings={...original,scopeRef:scope.scopeRef,lineId:'PO-2',work:[{...additions[0]!,id:'PO-2 addition'}]};
+  legacy.scopes=[siblings,{...original,lineId:'PO-1',work:additions}];
+  const results=build(saved,item(),legacy).scopes;
+  expect(results[0]!.work.filter(work=>work.accountingRole==='added_work').map(work=>work.id)).toEqual(additions.map(work=>work.id));
+  expect(results[1]!.work.filter(work=>work.accountingRole==='added_work').map(work=>work.id)).toEqual(['PO-2 addition']);
+ });
+ it('does not copy one historical fact to multiple current works with an ambiguous canonical reference',()=>{
+  const saved=stored(),legacy=build(),old=legacy.scopes[0]!;
+  const ref='source:TEST-source:round:2:step:ambiguous:work';
+  saved.input.work=saved.input.work.map(work=>['a','future'].includes(work.id)?{...work,canonicalWorkRef:ref}:work);
+  old.work=old.work.map(work=>work.id==='a'?{...work,canonicalWorkRef:ref}:work);
+  old.facts={...old.facts,a:{...old.facts.a!,completed:point(2),businessCompleted:true,evidenceRefs:['TEST legacy task']}};
+  const facts=build(saved,item(),legacy).scopes[0]!.facts;
+  expect(facts.a).toMatchObject({completed:unknown,businessCompleted:false,evidenceRefs:[]});
+  expect(facts.future).toMatchObject({completed:unknown,businessCompleted:false,evidenceRefs:[]});
+ });
  it('whitelists exact policy/stage/reminder facts without carrying company settings, roles or display DTO into shared storage',()=>{
   const basis=build();Object.assign(basis,{company:{TESTsecret:true},actorRoles:['TEST root']});basis.scopes[0]!.work[0]!.responsibilityReminderPercent=70;
   const saved=fixedScheduleBasisSnapshot(basis);expect(saved.policyVersion).toBe('order-time-plan-v1');expect(saved.scopes[0]!.work[0]).toMatchObject({stage:2,responsibilityReminderPercent:70});

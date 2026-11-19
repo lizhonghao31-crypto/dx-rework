@@ -1,134 +1,117 @@
 {
   "version": 1,
-  "base": "4f2051e9aca56a36fcd9a0a330d6a927063af36c",
+  "base": "17f8459720e100546f6bfef42e132480632d4ca9",
+  "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
   "risk": "full",
-  "sourceFingerprint": "672438e5a0fcdd78d1a8212c72dc3cb43dbb43f820c6d7d8b02fb760ec83b6e7",
   "rules": [
     {
-      "rule": "Use the exact authorized initial factory duration in native confirmation while preserving pre-existing source freeze",
-      "source": "Approved Remaining Allocation v8 PR-07 and Unified Repair v10 C6 (approved +20-day confirmation).",
+      "rule": "复版工作图在同一真实范围内以唯一的冻结工作身份合并，保留有证据的新增工作、前置与首轮交接；缺真实前置仍按原校验失败。",
+      "source": "docs/requirements/digital-sla-golden-source-20261023.md 供应链总看板原始事实与就绪、冻结目标及独立工艺规则；BA112 已批准的窄范围修复。",
+      "writes": [
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "tests/unit/order-time-reading.test.ts",
+        "tests/integration/journey-source-rebuild-isolated-postgres.test.ts"
+      ],
       "reads": [
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-native-commands.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
-        "apps/api/src/production-platform/fixed-timeline-initial-input.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts"
+        "apps/api/src/production-platform/fixed-schedule-basis.ts#readFixedScheduleBasis",
+        "apps/api/src/production-platform/fixed-timeline-adoptions.ts#buildPendingTargets",
+        "apps/api/src/production-platform/journey-fact-repository.ts#buildOne",
+        "apps/api/src/production-platform/journey-fact-updates.ts#runOnce",
+        "apps/api/src/production-platform/fixed-timeline-targets.ts#requiredFixedTimelineWork"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/order-time-framework-submission.test.ts"
-      ],
-      "initialization": "Original approval request, independently verified accept-late gate, actual authorized native creation, one version-scoped work identity, and duplicate or invalid versions in a clean isolation schema.",
-      "dateAndPermission": "Exact actor/source/order/request/fingerprint, accepted version, existing authenticated transaction and original identity comparison other than the approved factory-duration adjustment.",
-      "expectation": "Valid +20 days produces exactly one order and the approved factory work once while the shared development freeze stays unchanged. Invalid stale, route, scope, acceptance or shared-work changes roll the command back.",
-      "writes": [
-        "apps/api/src/production-platform/fixed-timeline-initial-input.ts",
-        "apps/api/src/production-platform/order-time-admission.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
+        "tests/unit/order-time-reading.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
         "tests/integration/order-time-requests-postgres.test.ts"
       ],
+      "newTests": [
+        "tests/integration/journey-source-rebuild-isolated-postgres.test.ts"
+      ],
+      "initialization": "通过原生开发首轮发布、绣花复版、冻结采用和真实 worker 建立夹具。首轮已有初始目标，第二轮只有冻结输入，v10 仅为旧索引标记模拟。真实数据库行锁失败经原批次登记重试，随后解锁并真实重建。",
+      "dateAndPermission": "不改变任何权限模板、业务写入口、历史快照、任务事件、责任期限或采用目标。验证角色非表所有者、非超级用户且无 BYPASSRLS，同源同轮与逐 PO 身份不互相借用。",
+      "expectation": "原始问题在固定基线的低权限数据库夹具中失败。修后第二轮 B0 内容与原冻结输入计算相同并真实落库，索引到 v18 可读，两类待重建记录均清理，首轮 B0、两轮采用输入、计划、原任务及责任和任务历史摘要前后相同。真实缺项仍显式失败。",
       "checks": [
-        "native",
+        "postgres",
         "unit",
         "lint",
-        "types",
-        "preflight"
+        "types"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native",
+      "id": "postgres",
       "kind": "tests",
-      "command": "taskset -c 0,1 node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-plan-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/sla-shared-task-read-facts-20261118/pg/factory-lifecycle-recovered-native/tests.json",
+      "command": "env -i HOME=/tmp PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 bash ../local-pg-final-report.sh /workspace/ba112-offline-17f84597.2txqau/draft-checks/final-postgres.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "04cdb5167f24b83a34fb184752a1ea968c18e56f",
-      "sourceFingerprint": "672438e5a0fcdd78d1a8212c72dc3cb43dbb43f820c6d7d8b02fb760ec83b6e7",
-      "startedAt": "2026-11-19T00:17:41.587079+00:00",
-      "endedAt": "2026-11-19T00:18:51.702089+00:00",
-      "log": "/workspace/sla-shared-task-read-facts-20261118/pg/factory-lifecycle-recovered-native/tests.log",
-      "logSha256": "bcf1899bc9a2d48a385ed84ec17c4d7ef59f995c9173ee6bd8c7f48e9a4ac95a",
-      "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable.",
-      "passed": 47,
+      "testedHead": "3f2d0b06ebd0e1c4b64c29f9f7d9f9ef3e0b7e4b",
+      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
+      "context": "Node 22.22.2, Vitest 4.1.10, vitest.config.ts, one worker. Separate isolated marked PostgreSQL 16.16 instance with the canonical migration fixture plus the same restricted SET ROLE configuration as repository CI. Before retry an actual row lock causes SQLSTATE 55P03. The original application worker records the retry and the successful rebuild clears it. The runner removes and verifies removal of the test container.",
+      "startedAt": "2026-11-19T08:12:52+00:00",
+      "endedAt": "2026-11-19T08:13:11.909560+00:00",
+      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-postgres-report.log",
+      "logSha256": "fffc4d3673c180139ae31f728446ca6954e6c6c890474399e31e37b6537fb27f",
+      "passed": 1,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "910dc547c4933f558b11c85788d4aea4d92c1378cae6c0eea49e429dbec3d363"
+          "sha256": "929f3c598bb0853625f82bbda92ca0799ac88551003c43ee5c1eb89eaf76ea03"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/unit/order-time-framework-submission.test.ts tests/unit/order-time-framework.test.ts tests/unit/order-time-settings.test.ts tests/unit/order-time-reading.test.ts tests/unit/order-time-requests.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sla-factory-lifecycle-20261118/unit/tests.json",
+      "command": "/workspace/.task-toolchains/time-read/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-unit.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "04cdb5167f24b83a34fb184752a1ea968c18e56f",
-      "sourceFingerprint": "672438e5a0fcdd78d1a8212c72dc3cb43dbb43f820c6d7d8b02fb760ec83b6e7",
-      "startedAt": "2026-11-19T00:15:51.475595+00:00",
-      "endedAt": "2026-11-19T00:16:01.345477+00:00",
-      "log": "/tmp/dx-sla-factory-lifecycle-recovered-20261118/unit/command.log",
-      "logSha256": "f1dce1c1cf4a6f19bd758ddd1fd44c7cca98d018b8aa04299990906c23cccfba",
-      "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable.",
-      "passed": 115,
+      "testedHead": "3f2d0b06ebd0e1c4b64c29f9f7d9f9ef3e0b7e4b",
+      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
+      "context": "Node 22.22.2, Vitest 4.1.10 and one non-database worker. The reading-basis suite includes unique scoped identities, truly added work, the original handoff and original responsibility, missing predecessors, PO and craft isolation and ambiguity.",
+      "startedAt": "2026-11-19T08:12:52+00:00",
+      "endedAt": "2026-11-19T08:12:57.349324+00:00",
+      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-unit-report.log",
+      "logSha256": "ec3f3f3b9f9850e82e3cd7ecb2ff62c34c59fd1e64cbe6bd6c7277f372279297",
+      "passed": 47,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "80beb15ac58ba67dc16f860cca905b84ca6e2b783cc5b75ff6fb15a76370a434"
+          "sha256": "0502940eedd7dc0cbf853d104a7e88245bcb46125c826487e402bfade6c1e2c4"
         }
       ]
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "taskset -c 2,3 node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/fixed-timeline-initial-input.ts apps/api/src/production-platform/order-time-admission.ts apps/api/src/production-platform/order-time-request-service.ts apps/api/src/production-platform/sla-order-service.ts tests/integration/order-time-requests-postgres.test.ts --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/order-time-reading.ts tests/unit/order-time-reading.test.ts tests/integration/journey-source-rebuild-isolated-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "04cdb5167f24b83a34fb184752a1ea968c18e56f",
-      "sourceFingerprint": "672438e5a0fcdd78d1a8212c72dc3cb43dbb43f820c6d7d8b02fb760ec83b6e7",
-      "startedAt": "2026-11-19T00:15:47.962171+00:00",
-      "endedAt": "2026-11-19T00:15:51.025088+00:00",
-      "log": "/tmp/dx-sla-factory-lifecycle-recovered-20261118/lint/command.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable."
+      "testedHead": "17f8459720e100546f6bfef42e132480632d4ca9",
+      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
+      "context": "Node 22.22.2 with the exact repository lock. ESLint checks the production change and both affected tests with zero warnings allowed.",
+      "startedAt": "2026-11-19T07:54:05.690306+00:00",
+      "endedAt": "2026-11-19T07:54:07.100010+00:00",
+      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "id": "types",
       "kind": "command",
-      "command": "taskset -c 2,3 npm run typecheck",
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "04cdb5167f24b83a34fb184752a1ea968c18e56f",
-      "sourceFingerprint": "672438e5a0fcdd78d1a8212c72dc3cb43dbb43f820c6d7d8b02fb760ec83b6e7",
-      "startedAt": "2026-11-19T00:17:41.830423+00:00",
-      "endedAt": "2026-11-19T00:19:02.574391+00:00",
-      "log": "/tmp/dx-sla-factory-lifecycle-recovered-20261118/types/command.log",
-      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable."
-    },
-    {
-      "id": "preflight",
-      "kind": "tests",
-      "command": "taskset -c 2,3 npm run test:preflight",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "04cdb5167f24b83a34fb184752a1ea968c18e56f",
-      "sourceFingerprint": "672438e5a0fcdd78d1a8212c72dc3cb43dbb43f820c6d7d8b02fb760ec83b6e7",
-      "startedAt": "2026-11-19T00:16:01.732105+00:00",
-      "endedAt": "2026-11-19T00:16:22.840125+00:00",
-      "log": "/tmp/dx-sla-factory-lifecycle-recovered-20261118/preflight/command.log",
-      "logSha256": "5593234fb1fa72fa538b908cbd0d2feec40c9b6f06139720d70e778ae2dd77a9",
-      "context": "Current committed source and isolated low-privilege PostgreSQL with original authenticated application where applicable.",
-      "passed": 284,
-      "failed": 0,
-      "skipped": 0
+      "testedHead": "17f8459720e100546f6bfef42e132480632d4ca9",
+      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
+      "context": "Node 22.22.2 with the exact repository lock. The API tsconfig is checked using TypeScript --noEmit.",
+      "startedAt": "2026-11-19T07:54:07.100183+00:00",
+      "endedAt": "2026-11-19T07:54:29.211874+00:00",
+      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/types.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }

@@ -27,7 +27,7 @@ import {requiredFixedTimelineWork} from './fixed-timeline-targets.js';
 import {nativeTaskReadiness,nativeCuttingReadiness,type NativeCuttingReadiness} from './task-readiness-facts.js';
 import {nativeCuttingCompletions,type NativeCuttingCompletion} from './cutting-completion-facts.js';
 import type {FixedScheduleBasis} from './fixed-schedule-basis.js';
-import type {ScheduleFact,ScheduleWork} from './fixed-schedule-progress.js';
+import type {ScheduleFact,ScheduleScopeInput,ScheduleWork} from './fixed-schedule-progress.js';
 import {journeyTermination,type JourneyTermination} from './journey-termination.js';
 import {orderTimeCreated} from './order-time-created.js';
 import {orderTimePolicyHistory} from './order-time-native-timing.js';
@@ -134,6 +134,64 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  return {fact,task,...(value?{native:value}:{})};
 }
 
+function uniqueWorkByRef<T extends {canonicalWorkRef?:string}>(work:readonly T[]){
+ const byRef=new Map<string,T|null>();
+ for(const node of work)if(node.canonicalWorkRef)
+  byRef.set(node.canonicalWorkRef,byRef.has(node.canonicalWorkRef)?null:node);
+ return byRef;
+}
+
+function mergeHistoricalWork(work:ScheduleWork[],facts:Record<string,ScheduleFact>,original:ScheduleScopeInput,originalByRef:ReadonlyMap<string,ScheduleWork|null>){
+ const byRef=uniqueWorkByRef(work),originalById=new Map(original.work.map(node=>[node.id,node]));
+ const matched=new Map<string,ScheduleWork>();
+ for(const old of original.work){
+  if(old.accountingRole==='shared_reference'||originalByRef.get(old.canonicalWorkRef)!==old)continue;
+  const current=byRef.get(old.canonicalWorkRef);
+  if(current)matched.set(old.id,current);
+ }
+ // The same round's adopted work may use different local IDs in the two views.
+ // Keep real additions and only the shared history references they actually use.
+ const added=original.work.filter(node=>node.accountingRole==='added_work'&&!matched.has(node.id));
+ const addedIds=new Set(added.map(node=>node.id)),references=new Map<string,ScheduleWork>();
+ const retainReference=(id:string)=>{
+  if(references.has(id)||addedIds.has(id)||matched.has(id))return;
+  const reference=originalById.get(id);
+  if(reference?.accountingRole!=='shared_reference')return;
+  references.set(id,reference);
+  for(const predecessor of reference.dependsOn)retainReference(predecessor);
+  if(reference.includedIn)retainReference(reference.includedIn);
+ };
+ for(const node of added){
+  for(const predecessor of node.dependsOn)retainReference(predecessor);
+  if(node.includedIn)retainReference(node.includedIn);
+ }
+ const currentIds=new Set(work.map(node=>node.id));
+ // A reused local ID cannot satisfy an unresolved dependency. Other missing
+ // dependencies remain visible to the existing graph validator below.
+ const resolve=(id:string)=>{
+  const replacement=matched.get(id);
+  if(replacement)return replacement.id;
+  if(currentIds.has(id)&&!addedIds.has(id)&&!references.has(id))throw Error('固定计划缺少依赖工作');
+  return id;
+ };
+ for(const old of [...added,...references.values()]){
+  const node=structuredClone(old);
+  node.dependsOn=node.dependsOn.map(resolve);
+  if(node.includedIn)node.includedIn=resolve(node.includedIn);
+  if(node.dependencyReserves)node.dependencyReserves=Object.fromEntries(Object.entries(node.dependencyReserves).map(([id,reserve])=>[resolve(id),reserve]));
+  work.push(node);
+  facts[node.id]=structuredClone(original.facts[node.id]??empty());
+ }
+ for(const [id,node] of matched){
+  const old=originalById.get(id)!;
+  const addedPredecessors=old.dependsOn.filter(predecessor=>addedIds.has(predecessor)&&!node.dependsOn.includes(predecessor));
+  if(!addedPredecessors.length)continue;
+  node.dependsOn=[...node.dependsOn,...addedPredecessors];
+  const reserves=addedPredecessors.flatMap(predecessor=>old.dependencyReserves?.[predecessor]?[[predecessor,old.dependencyReserves[predecessor]] as const]:[]);
+  if(reserves.length)node.dependencyReserves={...node.dependencyReserves,...Object.fromEntries(reserves)};
+ }
+}
+
 /** Pure mapping of explicit frozen work, retained B and already-scoped facts.
  * Legacy windows remain authoritative for begun responsibility, even after an
  * order arrangement changes. No current-company lookup or implicit adoption. */
@@ -142,12 +200,17 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
  const rewashByWork=new Map((saved.input.rewashing??[]).flatMap(row=>preparedStoredRewash(row).work.map((work,index)=>[work.id,{row,inspection:index===1}] as const)));
  const completionTargets=new Map<FrozenTimeFramework,ReturnType<typeof frameworkNodeTargets>>();
  const scopes=saved.input.scopes.map(scope=>{
-  const original=legacy?.scopes.find(value=>value.scopeRef===scope.scopeRef||scope.lineId&&value.lineId===scope.lineId);
+  const sameLine=legacy?.scopes.filter(value=>value.lineId===scope.lineId)??[];
+  const original=sameLine.find(value=>value.scopeRef===scope.scopeRef)??(scope.lineId&&sameLine.length===1?sameLine[0]:undefined);
+  const originalByRef=uniqueWorkByRef(original?.work??[]);
   const framework=saved.input.frameworkPlans?.[scope.scopeRef],frameworkTargets=framework?frameworkNodeTargets(framework):null;
   const required=requiredFixedTimelineWork(definitions,scope.terminalIds),facts:Record<string,ScheduleFact>={};
+  const requiredByRef=uniqueWorkByRef(required.map(work=>byId.get(work.id)!));
   const work:ScheduleWork[]=required.map(definition=>{
    const source=byId.get(definition.id)!,originalTarget=saved.targets[scope.scopeRef]?.[source.id],target=framework?arrangedOrderTimeTarget(saved,scope.scopeRef,source.id):originalTarget,policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
-   const old=original?.work.find(value=>source.canonicalWorkRef?value.canonicalWorkRef===source.canonicalWorkRef:value.id===source.id);
+   const old=source.canonicalWorkRef
+    ?requiredByRef.get(source.canonicalWorkRef)===source?originalByRef.get(source.canonicalWorkRef):undefined
+    :original?.work.find(value=>value.id===source.id);
    const own=nativeFor(source,scope,resource,item,native,evidence),previous=old&&original?.facts[old.id];
    const arrangement=framework?undefined:arrangedOrderTimeTarget(saved,scope.scopeRef,source.id);
    const currentPrecision=frameworkTargetPrecision(arrangement);
@@ -237,7 +300,6 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   // original route. Preserve its original handoff/clock and reconnect only
   // those native additions; never restore a superseded planned route.
   for(const history of evidence.unplannedRewashing??[])if(history.lineId===scope.lineId){work.push(structuredClone(history.work));facts[history.work.id]=structuredClone(history.fact);}
-  const ids=new Set(work.map(node=>node.id)),added=original?.work.filter(node=>node.accountingRole==='added_work'&&!ids.has(node.id))??[];
   // A craft's processing report does not close its parent window. Reconcile
   // only that frozen work's included return, so another craft/round cannot
   // supply its completion when there is no matching legacy basis.
@@ -249,9 +311,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    fact.completed=fact.businessCompleted?receipt!.completed:unknown;
    fact.evidenceRefs=[...new Set([...fact.evidenceRefs,...receipt?.evidenceRefs??[]])];
   }
-  const addedIds=new Set(added.map(node=>node.id));
-  for(const node of added){work.push(structuredClone(node));facts[node.id]=structuredClone(original!.facts[node.id]??empty());}
-  for(const node of work){const old=original?.work.find(previous=>previous.id===node.id);if(old)node.dependsOn=[...new Set([...node.dependsOn,...old.dependsOn.filter(id=>addedIds.has(id))])];}
+  if(original)mergeHistoricalWork(work,facts,original,originalByRef);
   for(const node of work){const fact=facts[node.id]!;
    const source=byId.get(node.id);
    if(source&&fact.businessCompleted&&(evidence.policies?.some(version=>version.history)||evidence.inheritedPolicies))node.completionTarget=orderTimeCompletionTarget(source,scope,fact.completed,evidence.policies??[],saved.time.scenarioId,evidence.inheritedPolicies,completionTargets);
