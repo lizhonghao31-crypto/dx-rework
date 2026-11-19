@@ -1,3 +1,4 @@
+import {effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
 import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
 import {readBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
@@ -49,7 +50,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
       u.display_name AS designer,m.display_name AS merchandiser,o.contract_delivery_date AS "deliveryDate",coalesce(o.created_at,s.created_at) AS "createdAt"
       FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
       JOIN app_users u ON u.id=coalesce(o.created_by,s.created_by) LEFT JOIN app_users m ON m.id=o.primary_merchandiser_id
-      WHERE ${await wholeOrderActiveSql(db,'source','s.source_id')} AND ${await wholeOrderActiveSql(db,'order','o.production_order_id')} AND ($1='development' AND s.source_id IS NOT NULL OR $1='bulk' AND o.production_order_id IS NOT NULL)
+      WHERE ${await effectiveDevelopmentSourceSql(db,'s.source_id')} AND ${await wholeOrderActiveSql(db,'source','s.source_id')} AND ${await wholeOrderActiveSql(db,'order','o.production_order_id')} AND ($1='development' AND s.source_id IS NOT NULL OR $1='bulk' AND o.production_order_id IS NOT NULL)
       AND ($2='' OR strpos(lower(coalesce(o.design_style_no,s.design_style_no)),lower($2))>0
         OR strpos(lower(coalesce(o.customer_code,s.customer_code,'')),lower($2))>0
         OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND strpos(lower(coalesce(l.po_number,'')),lower($2))>0))

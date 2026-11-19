@@ -1,3 +1,4 @@
+import {effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
 import {commentTimeColumns} from './development-comment-time.js';
 import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
@@ -111,7 +112,7 @@ export class DigitalJourneyQuery {
       WHERE o.production_order_id IS NOT NULL AND plan.resource_kind='order' AND plan.production_order_id=o.production_order_id
        OR o.production_order_id IS NULL AND plan.resource_kind='source' AND plan.source_id=s.source_id)`:'false'} AS has_order_time_plan
     FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
-    WHERE ${await wholeOrderActiveSql(db,"source","s.source_id")} AND ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND ($4::uuid IS NULL OR s.source_id=$4 OR o.production_order_id=$4)
+    WHERE ${await effectiveDevelopmentSourceSql(db,'s.source_id')} AND ${await wholeOrderActiveSql(db,"source","s.source_id")} AND ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND ($4::uuid IS NULL OR s.source_id=$4 OR o.production_order_id=$4)
       AND ($5::text[] IS NULL OR EXISTS(SELECT 1 FROM digital_production_task_access board_task WHERE (board_task.source_id=s.source_id OR board_task.production_order_id=o.production_order_id) AND board_task.task_kind=ANY($5::text[]))) AND ($3
       OR ('sample_designer' IN (SELECT role_code FROM live_roles) AND $1 IN (s.created_by,o.created_by))
       OR ('order_merchandiser' IN (SELECT role_code FROM live_roles) AND o.primary_merchandiser_id=$1)
@@ -528,7 +529,7 @@ export class DigitalJourneyQuery {
         replace(key,value);
       }
     }
-    const nativeSourceCreation=sourceAccess&&source?.order_time_managed?await orderTimeCreated(db,{kind:'source',id:source.source_id}):null;
+    const nativeSourceCreation=sourceAccess&&(source?.order_time_managed||source?.draft_reserved===true)?await orderTimeCreated(db,{kind:'source',id:source.source_id}):null;
     const nativeOrderCreation=!nativeSourceCreation&&orderAccess&&order?.order_time_managed?await orderTimeCreated(db,{kind:'order',id:order.production_order_id}):null;
     const visibleCreation=sourceAccess?nativeSourceCreation:nativeOrderCreation;
     if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],nativeOrderCreation?.at??iso(order!.created_at),{id:order!.created_by,name:designer});

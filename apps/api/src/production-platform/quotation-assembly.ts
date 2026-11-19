@@ -1,3 +1,4 @@
+import {developmentSourceLifecycle} from './development-source-lifecycle.js';
 import {quotationMaterialConsumptionBasis,quotationMaterialPriceBasis,quotationMaterialPricingUnit} from './quotation-material-unit.js';
 import {notifySpecialCraftQuotes} from './special-craft-quotation-todos.js';
 import {craftStepIdentity,craftStepLabel,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
@@ -21,7 +22,7 @@ function rowId(sourceId:string,key:string){const h=digest([sourceId,key]);return
  * No GET invokes this writer; confirmed snapshots and budgets are never updated here. */
 export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:string,appliedVersion?:number,previousSource?:Awaited<ReturnType<typeof developmentDocumentRow>>):Promise<AssembledQuotation|undefined>{
  const saved=await developmentDocumentRow(db,sourceId);
- if(saved?.document?.quotationMode!=='automatic_v1')return;
+ if(saved?.document?.quotationMode!=='automatic_v1'||(await developmentSourceLifecycle(db,sourceId))?.is_draft)return;
  const document=saved.document as DevelopmentDocument,round=saved.round_number??1;
  const source=(await db.query('SELECT s.created_by,o.production_order_id FROM digital_production_sources s LEFT JOIN digital_production_orders o USING(source_id) WHERE s.source_id=$1',[sourceId])).rows[0];
  if(!source)return;

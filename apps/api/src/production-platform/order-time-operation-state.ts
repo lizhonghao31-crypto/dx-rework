@@ -1,3 +1,4 @@
+import {developmentSourceLifecycle} from './development-source-lifecycle.js';
 import {orderTimeFactoryCommitments,outstandingFactoryCommitments} from './order-time-factory-commitments.js';
 import {publicationFormalInput} from './order-time-publication-intent.js';
 import {beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
@@ -51,6 +52,9 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(resource)await policy.assert(actor,resource.kind,resource.id,'technical');
  const sourceId=resource?.kind==='source'?resource.id:resource?.kind==='order'?(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]?.source_id??null:null;
  const source=sourceId?(await db.query('SELECT * FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]??digitalNotFound():null;
+ const lifecycle=sourceId?await developmentSourceLifecycle(db,sourceId):null;
+ if(resource?.kind==='source'&&lifecycle?.is_draft&&operation.kind!=='development_publish')
+  return conflict('开发草稿尚未有效发布，请先沿原流程发布');
  const order=resource?.kind==='order'?(await db.query('SELECT * FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]??digitalNotFound():null;
  const designerId=source?.created_by??order?.created_by??actor.actorId;
  const designer=isRootActor(actor)||actor.actorId===designerId&&actor.actorRoles.includes('sample_designer')&&actor.authorizationCapabilities?.includes('pattern_room:orders:create')&&await policy.activeRole(actor.actorId,'sample_designer');
@@ -59,7 +63,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(!designer&&!manager&&!main)digitalForbidden();
  const saved=resource?await new OrderTimePlanRepository(db).current(resource):null;
  const inherited=resource?.kind==='order'&&sourceId?await new OrderTimePlanRepository(db).current({kind:'source',id:sourceId}):null;
- const original=saved?.input.plan??inherited?.input.plan??orderTimeAdmission(db)?.plan,oldResource=source&&!source.order_time_managed?{kind:'source' as const,id:source.source_id}:order&&!order.order_time_managed?{kind:'order' as const,id:order.production_order_id}:null;
+ const original=saved?.input.plan??inherited?.input.plan??orderTimeAdmission(db)?.plan,oldResource=source&&!lifecycle?.is_draft&&!source.order_time_managed?{kind:'source' as const,id:source.source_id}:order&&!order.order_time_managed?{kind:'order' as const,id:order.production_order_id}:null;
  const company=original?.company??(oldResource?await historicalOrderTimeCompany(db,oldResource):await currentOrderTimeCompany(db));
  if(!company)return conflict('请先在生产管理设置保存本次公司时效，再办理本单时效');
  const plan=FrozenOrderTimePlanSchema.parse(original?{...original,overrides:{...original.overrides,...changes},revision:Object.keys(changes).length?original.revision+1:original.revision}:{version:'order-time-plan-v1',company,overrides:changes,revision:1});
@@ -235,8 +239,9 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal,...(formalEnds?{formalEnds}:{})});
  if(plan.company.framework&&frameworkRoute&&datedScopes.length){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
-  const created=resource?await orderTimeCreated(db,resource):null;
-  const acceptedAt:SlaAnchor=created?{precision:'instant',value:created.at,source:created.evidence}:resource
+  const prospective=operation.kind==='confirm_order'&&Boolean(lifecycle?.first_event_id)||operation.kind==='development_publish'&&lifecycle?.is_draft;
+  const created=resource&&!prospective?await orderTimeCreated(db,resource):null;
+  const acceptedAt:SlaAnchor=created?{precision:'instant',value:created.at,source:created.evidence}:resource&&!prospective
    ?{precision:'unknown',reason:'本单接单发生时间缺少原始记录'}:{precision:'instant',value:time.now,source:'本次新单拟生效接单时刻'};
   if(created)for(const work of value.work.filter(row=>row.parameterKey==='order_creation'))progress.set(work.canonicalWorkRef??work.id,{completed:true,actualAt:created.at,readyAt:null,deadline:null});
   if(order){

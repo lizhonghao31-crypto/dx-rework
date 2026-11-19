@@ -1,15 +1,19 @@
-import {mkdtemp,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {supplychainSettingsBrowser,type SettingsBrowserFault} from '../acceptance/supplychain-settings-browser.js';
+import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
-import {InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
+import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
+import {orderTimeCreated,orderTimeCreatedMany} from '../../apps/api/src/production-platform/order-time-created.js';
+import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -53,10 +57,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const save=page.getByRole('button',{name:'保存开发资料草稿',exact:true}),saved=page.waitForResponse(response=>/\/sources\/[^/]+\/development$/.test(new URL(response.url()).pathname)&&response.request().method()==='PUT');
    await save.click();const reply=await saved;expect(reply.status(),await reply.text()).toBe(200);const sheet=await reply.json();
    await expect.poll(async()=>{const records=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));return records[0]?.phase;}).toBe('bound');
-   const created=h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources'&&row.method==='POST');expect(created).toHaveLength(1);
+   const created=h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources/drafts'&&row.method==='POST');expect(created).toHaveLength(1);
    expect((await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rows).toEqual([{source_id:sheet.sourceId}]);
    const boundPath=`/api/digital-production/sources/${sheet.sourceId}/development`,countPuts=()=>h.requests.filter(row=>row.session===tab.session&&row.path===boundPath&&row.method==='PUT').length;
-   const reopen=async()=>{await page.getByRole('button',{name:'返回列表',exact:true}).click();await page.getByRole('button',{name:'新建开发订单',exact:true}).click();};
+   const reopen=async()=>{await page.getByRole('button',{name:'返回列表',exact:true}).click();
+    const box=page.getByRole('button',{name:'开发草稿箱',exact:true});if(await box.getAttribute('aria-expanded')==='false')await box.click();
+    await page.getByRole('button',{name:style,exact:true}).click();
+   };
    for(const [index,reload]of [false,true,false].entries()){
     if(reload)await page.reload();else await reopen();
     const field=page.getByRole('textbox',{name:'设计款号',exact:true});await field.waitFor();expect(await field.inputValue()).toBe(style);
@@ -68,25 +75,223 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const result=await savedAgain;expect(result.status(),await result.text()).toBe(200);expect(result.request().postDataJSON().expectedVersion).toBe(version);
     expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:version+1,document:{instructions:text}});
    }
+   const unsaved=page.locator('#development-instructions'),section=unsaved.locator('xpath=ancestor::details[1]');
+   if(await section.count()&&!await section.evaluate(node=>(node as HTMLDetailsElement).open))await section.locator('summary').first().click();
+   await unsaved.fill('TEST unsaved input survives conflict');
    await page.getByRole('button',{name:'返回列表',exact:true}).click();
+   await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
    const service=new DigitalDevelopmentService(h.db,true,h.patternOrders),latest=await service.read(h.f.root,sheet.sourceId);
    await service.save(h.f.root,sheet.sourceId,{expectedVersion:latest.version,document:{...latest.document!,instructions:'TEST newer authorized edit'}},randomUUID());
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
    await page.getByRole('alert').filter({hasText:'原开发档案版本已变化'}).waitFor();expect(await save.count()).toBe(0);expect(countPuts()).toBe(4);
-   expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources'&&row.method==='POST')).toHaveLength(1);
+   expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources/drafts'&&row.method==='POST')).toHaveLength(1);
    expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:5,document:{instructions:'TEST newer authorized edit'}});
   }catch(error){await writeFile(join(h.evidence,'explicit-save-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
+ it('opens two independent server drafts from a new authenticated browser session, retaining three PO rows and two original ready files',async()=>{
+  const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  const styles=[`TEST-CABINET-A-${randomUUID()}`,`TEST-CABINET-B-${randomUUID()}`];
+  const sourceIds:string[]=[],attachments=[await h.f.image(actor),await h.f.image(actor)];
+  for(const [index,designStyleNo] of styles.entries()){
+   const {sourceId}=await identity.createSource(actor,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   sourceIds.push(sourceId);
+   const order=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo,orderDate:'2026-11-19',
+    temporaryStyleNo:null,contractDeliveryDate:null,lines:Array.from({length:index===0?3:1},(_,line)=>({
+     formalPoNo:`TEST-${index}-PO${line+1}`,color:['黑','白','灰'][line],deliveryDate:null,sizes:[{size:'M',quantity:String(line+1)}]
+    }))});
+   await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),instructions:`TEST independent ${index}`,
+    customerOrderDraft:{withOrder:true,stage:'formal',order},files:index===0?attachments.map(attachmentId=>({attachmentId,kind:'款图' as const})):[]}},randomUUID());
+  }
+  const initialTab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  await initialTab.context.close();
+  const {context,page,session}=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  try{
+   await page.getByRole('button',{name:'开发草稿箱',exact:true}).click();
+   for(const index of [0,1,0]){
+    await page.getByRole('button',{name:styles[index]!,exact:true}).click();
+    expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(styles[index]);
+    const po=page.getByRole('textbox',{name:/^PO \d+ 正式款号 \/ PO$/});
+    expect(await po.count()).toBe(index===0?3:1);
+    for(let line=0;line<await po.count();line++)expect(await po.nth(line).inputValue()).toBe(`TEST-${index}-PO${line+1}`);
+    const sheet=await forms.read(actor,sourceIds[index]!);
+    expect(sheet.version).toBe(1);expect(sheet.document!.files.map(file=>file.attachmentId)).toEqual(index===0?attachments:[]);
+    if(index===0){
+     const metadata=await page.evaluate(async({id,attachments})=>Promise.all(attachments.map(async attachment=>{
+      const response=await fetch(`/api/digital-production/sources/${id}/development/attachments/${attachment}/metadata`);
+      return {status:response.status,attachmentId:(await response.json()).attachmentId};
+     })),{id:sourceIds[0]!,attachments});
+     expect(metadata).toEqual(attachments.map(attachmentId=>({status:200,attachmentId})));
+    }
+    await page.getByRole('button',{name:'返回列表',exact:true}).click();
+   }
+   expect(h.requests.filter(row=>row.session===session&&['POST','PUT'].includes(row.method)&&row.path.includes('/sources'))).toEqual([]);
+   const journeys=new DigitalJourneyQuery(h.db);
+   for(const id of sourceIds)await expect(journeys.read(actor,id)).rejects.toMatchObject({statusCode:404});
+   const clocks=await orderTimeCreatedMany(h.db,sourceIds.map(id=>({kind:'source',id})));
+   expect([...clocks.values()]).toEqual([null,null]);
+  }finally{await context.close();}
+ });
+
+ it('starts one effective clock at successful publication, rolls back a failed native pattern write, and preserves it through later order confirmation',async()=>{
+  const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  const designStyleNo='TEST-FIRST-EFFECTIVE-'+randomUUID(),scene=await h.f.scene('2026-11-19T01:02:03.123Z');
+  const input={developmentType:'头版' as const,designStyleNo,temporaryStyleNo:null,customerCode:'PD'},reserveKey=randomUUID();
+  const sourceId=await h.f.runtime.run(scene,actor,async()=>{
+   const {sourceId}=await identity.createSource(actor,input,reserveKey,true);
+   expect(await identity.createSource(actor,input,reserveKey,true)).toEqual({sourceId});
+   await expect(identity.createSource(actor,input,randomUUID(),true)).rejects.toThrow('已有开发档案');
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
+   expect((await h.db.query("SELECT 1 FROM digital_preparation_rule_adoptions WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rowCount).toBe(0);
+   return sourceId;
+  });
+  const publication='2026-11-19T06:07:08.456Z';
+  await h.f.advance(scene,publication);
+  const saved=await h.f.runtime.run(scene,actor,async()=>{
+   const category=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const price=await new PatternRoomPriceService(h.db).quote(actor,'category',category.price_id);
+   const sheet=await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    files:[{attachmentId:await h.f.image(actor),kind:'款图'}],patternCategoryId:category.price_id}},randomUUID());
+   const operation={kind:'development_publish' as const,sourceId,input:{expectedVersion:sheet.version,patternOrder:{categoryId:category.price_id,priceVersion:price.version}}};
+   const requests=h.orderTimeRequests!;
+   const check=await requests.check(actor,operation);
+   const pending=await requests.submit(actor,{operation,fingerprint:check.fingerprint,reason:'TEST first publication requires this original decision'},randomUUID());
+   expect(pending.state).toBe('pending');
+   await expect(forms.publish(actor,sourceId,sheet.version,randomUUID(),operation.input.patternOrder)).rejects.toMatchObject({code:'ORDER_TIME_REQUEST_REQUIRED'});
+   expect((await identity.developmentDrafts(actor,1,designStyleNo)).items[0]).toMatchObject({sourceId,approvalState:'pending'});
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
+   const returned=await requests.close(actor,pending.requestId,{expectedVersion:pending.version,reason:'TEST return before original publication'},randomUUID(),'returned');
+   expect(returned.state).toBe('returned');
+   expect((await identity.developmentDrafts(actor,1,designStyleNo)).items[0]).toMatchObject({sourceId,approvalState:'returned'});
+   await expect(forms.publish(actor,sourceId,sheet.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version+1000})).rejects.toMatchObject({code:'PRICE_CHANGED'});
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
+   expect(await new OrderTimePlanRepository(h.db).current({kind:'source',id:sourceId})).toBeNull();
+   expect((await forms.read(actor,sourceId)).version).toBe(sheet.version);
+   const valid={categoryId:category.price_id,priceVersion:price.version},key=randomUUID();
+   const sameSource=await Promise.all([key,randomUUID()].map(id=>forms.publish(actor,sourceId,sheet.version,id,valid)));
+   for(const value of sameSource)expect(value).toMatchObject({sourceId,version:sheet.version+1,publishedAt:publication});
+   expect(await forms.publish(actor,sourceId,sheet.version,key,valid)).toEqual(sameSource[0]);
+   expect((await h.db.query("SELECT count(*)::int AS n FROM audit_events WHERE action='digital_development_first_published' AND entity_id=$1",[sourceId])).rows[0]!.n).toBe(1);
+   expect((await h.db.query("SELECT effective FROM digital_order_time_subjects WHERE source_id=$1",[sourceId])).rows).toEqual([{effective:true}]);
+   const creation=await orderTimeCreated(h.db,{kind:'source',id:sourceId});
+   expect(creation).toMatchObject({at:publication});
+   const plan=await new OrderTimePlanRepository(h.db).current({kind:'source',id:sourceId});
+   expect(plan).toBeTruthy();
+   return {creation,plan};
+  });
+  const formal='2026-11-19T06:18:09.789Z';
+  await h.f.advance(scene,formal);
+  await h.f.runtime.run(scene,actor,async()=>{
+   const formalInput=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo,temporaryStyleNo:null,
+    orderDate:'2026-11-19',contractDeliveryDate:null,requiresColorMatching:false,salesYear:2027,salesSeries:'P03',
+    productionPlanning:{craftSteps:[],preshrink:false},lines:[{formalPoNo:designStyleNo+'-PO',color:'黑',
+     deliveryDate:null,customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:2}]}]});
+   await expect(identity.createOrder(actor,{...formalInput,designStyleNo:'TEST-MISMATCH'},randomUUID(),sourceId)).rejects.toThrow();
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+   const key=randomUUID(),order=await identity.createOrder(actor,formalInput,key,sourceId);
+   expect(await identity.createOrder(actor,formalInput,key,sourceId)).toEqual(order);
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(1);
+   expect(await orderTimeCreated(h.db,{kind:'order',id:order.productionOrderId})).toMatchObject({at:formal});
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toEqual(saved.creation);
+   expect(await new OrderTimePlanRepository(h.db).current({kind:'source',id:sourceId})).toEqual(saved.plan);
+   const directStyle='TEST-DIRECT-'+randomUUID();
+   const direct=await identity.createOrder(actor,{...formalInput,designStyleNo:directStyle,
+    lines:formalInput.lines.map(line=>({...line,formalPoNo:directStyle+'-PO'}))},randomUUID());
+   expect(direct.sourceId).toBeNull();
+   expect(await orderTimeCreated(h.db,{kind:'order',id:direct.productionOrderId})).toMatchObject({at:formal});
+  });
+ });
+ it('applies a real manager approval to publish and confirm a complete draft in one native transaction with both exact clocks',async()=>{
+  const designer=h.f.people['sample-designer']!,manager=h.f.root;
+  const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),requests=h.orderTimeRequests!;
+  const designStyleNo='TEST-APPROVAL-FIRST-'+randomUUID(),scene=await h.f.scene('2026-11-19T01:30:00.000Z');
+  const {pending,sourceId}=await h.f.runtime.run(scene,designer,async()=>{
+   const {sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const category=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const price=await new PatternRoomPriceService(h.db).quote(manager,'category',category.price_id);
+   const order=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo,temporaryStyleNo:null,
+    orderDate:'2026-11-19',contractDeliveryDate:null,requiresColorMatching:false,salesYear:2027,salesSeries:'P03',
+    lines:[{formalPoNo:designStyleNo+'-PO',color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:'2'}]}]});
+   const sheet=await forms.save(designer,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    files:[{attachmentId:await h.f.image(designer),kind:'款图'}],patternCategoryId:category.price_id,
+    customerOrderDraft:{withOrder:true,stage:'formal',order},productionPlanning:{craftSteps:[],preshrink:false}}},randomUUID());
+   const operation={kind:'development_publish' as const,sourceId,input:{expectedVersion:sheet.version,patternOrder:{categoryId:category.price_id,priceVersion:price.version}}};
+   const check=await requests.check(designer,operation);
+   const pending=await requests.submit(designer,{operation,fingerprint:check.fingerprint,reason:'TEST native formal execution on manager approval'},randomUUID());
+   expect(pending.state).toBe('pending');
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+   return {pending,sourceId};
+  });
+  const approvedAt='2026-11-19T04:15:25.555Z';
+  await h.f.advance(scene,approvedAt);
+  await h.f.runtime.run(scene,manager,async()=>{
+   const review=await requests.read(manager,pending.requestId),key=randomUUID();
+   const input={expectedVersion:review.version,fingerprint:review.check.fingerprint,overrides:{},acceptLate:false};
+   const applied=await requests.apply(manager,pending.requestId,input,key);
+   expect(applied.state).toBe('applied');
+   const orderId=applied.result?.orderId;
+   expect(orderId).toBeTruthy();
+   expect(await requests.apply(manager,pending.requestId,input,key)).toEqual(applied);
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toMatchObject({at:approvedAt});
+   expect(await orderTimeCreated(h.db,{kind:'order',id:orderId!})).toMatchObject({at:approvedAt});
+   expect((await h.db.query(`SELECT a.actor_id,a.after_state->>'createdBy' AS designer_id
+    FROM digital_development_first_publications p JOIN audit_events a ON a.id=p.event_id WHERE p.source_id=$1`,[sourceId])).rows)
+    .toEqual([{actor_id:manager.actorId,designer_id:designer.actorId}]);
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(1);
+  });
+ });
+
+ it('reuses a legacy provisional identity without rewriting historical clocks and blocks an already frozen draft',async()=>{
+  const legacy=await businessAnchorFixture(url!,{throughVersion:'0295_order_time_rewash_input'});
+  try{
+   const identity=new DigitalProductionIdentityService(legacy.db,true),forms=new DigitalDevelopmentService(legacy.db,true),actor=legacy.root;
+   const source=async(prefix:string)=>(await identity.createSource(actor,{developmentType:'头版',
+    designStyleNo:`TEST-${prefix}-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+   const save=async(id:string)=>forms.save(actor,id,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    files:[{attachmentId:await legacy.image(actor),kind:'款图'}]}},randomUUID());
+   const frozen=await source('FROZEN');const frozenDraft=await save(frozen);
+   await prepareRewashSettings(legacy);
+   const published=await source('HISTORICAL');const publishedDraft=await save(published);
+   await forms.publish(actor,published,publishedDraft.version,randomUUID());
+   const provisional=await source('PROVISIONAL');const pending=await save(provisional);
+   const tables=['digital_development_sla_plans','digital_timeline_adoptions','digital_order_time_plan_versions','digital_order_time_subjects'];
+   const snapshot=async(id:string)=>await Promise.all(tables.map(table=>legacy.db.query(`SELECT to_jsonb(t) AS row FROM ${table} t WHERE source_id=$1 ORDER BY to_jsonb(t)::text`,[id]).then(result=>result.rows)));
+   const beforePublished=await snapshot(published),beforeFrozen=await snapshot(frozen);
+   const oldOrigin=await orderTimeCreated(legacy.db,{kind:'source',id:provisional});
+   expect(oldOrigin).toBeTruthy();
+   const migration=await readFile(new URL('../../apps/api/migrations/0296_development_first_publication.sql',import.meta.url),'utf8');
+   await legacy.db.query(migration);
+   expect(await orderTimeCreated(legacy.db,{kind:'source',id:provisional})).toBeNull();
+   expect(await orderTimeCreated(legacy.db,{kind:'source',id:frozen})).toBeNull();
+   await expect(forms.publish(actor,frozen,frozenDraft.version,randomUUID())).rejects.toMatchObject({code:'DEVELOPMENT_DRAFT_TIMELINE_CONFLICT'});
+   expect(await snapshot(frozen)).toEqual(beforeFrozen);
+   const effective=await forms.publish(actor,provisional,pending.version,randomUUID());
+   const newOrigin=await orderTimeCreated(legacy.db,{kind:'source',id:provisional});
+   expect(newOrigin).toMatchObject({at:effective.publishedAt});
+   expect(newOrigin?.evidence).not.toBe(oldOrigin?.evidence);
+   expect((await legacy.db.query('SELECT creation_event_ref,created_business_time FROM digital_order_time_subjects WHERE source_id=$1',[provisional])).rows[0]).toMatchObject({
+    creation_event_ref:oldOrigin?.evidence,created_business_time:{now:oldOrigin?.at}
+   });
+   expect(await snapshot(published)).toEqual(beforePublished);
+  }finally{await legacy.dispose();}
+ });
+
  it('retains an acknowledged-server but browser-unknown source creation across real reload without issuing a duplicate source command',async()=>{
   const tab=await h.open(h.f.root.actorId,390,{},'/ui/digital-production?workspace=designer'),style='TEST-CREATION-UNKNOWN-'+randomUUID();let attempts=0;
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
-   await page.route('**/api/digital-production/sources',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}attempts++;const response=await route.fetch();expect(response.status(),await response.text()).toBe(200);await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_CREATE_ACK_LOST',message:'TEST 已创建但原回执丢失'}})});});
+   await page.route('**/api/digital-production/sources/drafts',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}attempts++;const response=await route.fetch();expect(response.status(),await response.text()).toBe(200);await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_CREATE_ACK_LOST',message:'TEST 已创建但原回执丢失'}})});});
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();await page.getByRole('alert').filter({hasText:'未收到可确认的提交结果'}).waitFor();
-   const prior=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(prior[0]).toMatchObject({phase:'pending',sourceId:null,original:{path:'sources',method:'POST'}});expect(prior[0].original.key).toBeTruthy();
+   const prior=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(prior[0]).toMatchObject({phase:'pending',sourceId:null,original:{path:'sources/drafts',method:'POST'}});expect(prior[0].original.key).toBeTruthy();
    await page.reload();await page.getByRole('heading',{name:'原创建提交结果待核对',exact:true}).waitFor();await page.waitForTimeout(2700);
-   expect(await page.getByRole('textbox',{name:'设计款号',exact:true}).count()).toBe(0);expect(await page.getByRole('button',{name:'只读核对原提交结果',exact:true}).count()).toBe(0);expect(await page.getByText('该原创建或保存步骤尚无受支持的只读终态入口；原实际标识及输入保留。不能把它当成新草稿再提交，请先核对权威终态。',{exact:true}).count()).toBe(1);
-   const next=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(next[0].original).toEqual(prior[0].original);expect(attempts).toBe(1);expect((await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rowCount).toBe(1);
+   expect(await page.getByRole('textbox',{name:'设计款号',exact:true}).count()).toBe(0);
+   const next=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));
+   expect(next[0].original).toEqual(prior[0].original);expect(attempts).toBe(1);
+   await page.getByRole('button',{name:'只读核对原提交结果',exact:true}).click();
+   const restored=page.getByRole('textbox',{name:'设计款号',exact:true});await restored.waitFor();expect(await restored.inputValue()).toBe(style);
+   const receipt=h.requests.filter(row=>row.session===tab.session&&row.method==='GET'&&row.path==='/api/digital-production/sources/drafts/receipt');
+   expect(receipt).toHaveLength(1);expect(receipt[0]!.key).toBe(prior[0].original.key);
+   expect((await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rowCount).toBe(1);
    expect(h.requests.filter(row=>row.session===tab.session&&row.method==='PUT'&&row.path.includes('/development'))).toEqual([]);
   }catch(error){await writeFile(join(h.evidence,'unknown-create-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
@@ -119,7 +324,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const fault:SettingsBrowserFault={},tab=await h.open(h.f.root.actorId,1165,fault,'/ui/digital-production?workspace=designer'),style='TEST-CREATION-READ-FAIL-'+randomUUID();let sourceId='',creates=0;
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
-   await page.route('**/api/digital-production/sources',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}creates++;const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);sourceId=(await result.json()).sourceId;fault.readPath=`/api/digital-production/sources/${sourceId}/development`;fault.failRead=true;await route.fulfill({response:result});});
+   await page.route('**/api/digital-production/sources/drafts',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}creates++;const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);sourceId=(await result.json()).sourceId;fault.readPath=`/api/digital-production/sources/${sourceId}/development`;fault.failRead=true;await route.fulfill({response:result});});
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();await page.getByRole('alert').filter({hasText:'TEST 设置读取暂时失败'}).waitFor();
    const stored=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(stored[0]).toMatchObject({phase:'bound',sourceId,version:null});expect(stored[0]).not.toHaveProperty('original');
    await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();await page.waitForTimeout(2700);expect(creates).toBe(1);

@@ -37,7 +37,7 @@ function validate(value:unknown):CreationDraftRecord{
  if(!snapshot.form.lines.length)throw Error('本页原PO行结构不完整，保留草稿，不创建新单');
  if(snapshot.measurementIds.length!==snapshot.document.measurements.length||snapshot.poSizeIds.length<Math.max(...snapshot.form.lines.map(line=>line.sizes.length)))throw Error('本页原草稿行身份不完整；记录保留，不创建新单');
  if(checked.phase==='pending'){
-  const id=checked.sourceId,allowed=id?[`sources/${id}/development`,`sources/${id}/development/publish`,`sources/${id}/confirm`]:['sources'];
+  const id=checked.sourceId,allowed=id?[`sources/${id}/development`,`sources/${id}/development/publish`,`sources/${id}/confirm`]:['sources','sources/drafts'];
   if(!allowed.includes(checked.original.path)||checked.original.method!==(checked.original.path===`sources/${id}/development`?'PUT':'POST'))throw Error('原创建命令范围不符，保留记录，不能重发');
   JSON.parse(checked.original.body);
   if(checked.native&&(checked.native.sourceId!==id||checked.native.key!==checked.original.key||checked.original.path!==(checked.native.operation==='publish'?`sources/${id}/development/publish`:`sources/${id}/confirm`)||JSON.stringify(checked.native.body)!==checked.original.body))throw Error('原创建回执身份不一致；记录保留，不能重发');

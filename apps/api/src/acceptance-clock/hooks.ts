@@ -40,7 +40,7 @@ export function registerAcceptanceClockHooks(app:FastifyInstance,runtime:Accepta
    if(!scenes.size)return;
    if(scenes.size!==1||roots.some(r=>!r.scenarioId))clockConflict('不能混用其他场景或非测试订单');
    const id=[...scenes][0]!;
-   if(!roots.length&&!['POST /digital-production/sources','POST /digital-production/orders'].includes(`${request.method} ${path}`))clockConflict('请从测试单原关联入口办理；全局统计不使用单场景测试时间');
+   if(!roots.length&&!['POST /digital-production/sources','POST /digital-production/sources/drafts','POST /digital-production/orders'].includes(`${request.method} ${path}`))clockConflict('请从测试单原关联入口办理；全局统计不使用单场景测试时间');
    const actor=await acceptanceClockActor(request,auth,root,runtime);
    return {id,actor};
   };

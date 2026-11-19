@@ -1239,6 +1239,10 @@
     {
       "version": "0295_order_time_rewash_input",
       "checksum": "ae1c5deffe295987716fd5792b0247b946f2aac4ac94a273938ec08101d0faae"
+    },
+    {
+      "version": "0296_development_first_publication",
+      "checksum": "c6ae660cfc41c3f8174df90f9e695c12ddee794f39600bfc765142ae18e297d5"
     }
   ]
 }

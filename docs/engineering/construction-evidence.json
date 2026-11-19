@@ -1,117 +1,196 @@
 {
   "version": 1,
-  "base": "17f8459720e100546f6bfef42e132480632d4ca9",
-  "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
+  "base": "4189ef6a9072a968b8346b83065de525b6268d63",
+  "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
   "risk": "full",
   "rules": [
     {
-      "rule": "复版工作图在同一真实范围内以唯一的冻结工作身份合并，保留有证据的新增工作、前置与首轮交接；缺真实前置仍按原校验失败。",
-      "source": "docs/requirements/digital-sla-golden-source-20261023.md 供应链总看板原始事实与就绪、冻结目标及独立工艺规则；BA112 已批准的窄范围修复。",
+      "rule": "一张未发布开发草稿保留原来源、全部 PO 和服务器已确认附件，同账号跨会话可恢复多张。",
+      "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md 版本3 补正1 预留、持久保存和跨会话恢复。",
       "writes": [
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "tests/unit/order-time-reading.test.ts",
-        "tests/integration/journey-source-rebuild-isolated-postgres.test.ts"
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/web/src/development-creation-draft.ts",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/use-development-creation-draft.ts",
+        "packages/contracts/src/digital-development.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/fixed-schedule-basis.ts#readFixedScheduleBasis",
-        "apps/api/src/production-platform/fixed-timeline-adoptions.ts#buildPendingTargets",
-        "apps/api/src/production-platform/journey-fact-repository.ts#buildOne",
-        "apps/api/src/production-platform/journey-fact-updates.ts#runOnce",
-        "apps/api/src/production-platform/fixed-timeline-targets.ts#requiredFixedTimelineWork"
+        "apps/web/src/digital-designer-workspace.tsx#DigitalDesignerWorkspace",
+        "apps/api/src/production-platform/development-service.ts#read",
+        "apps/api/src/production-platform/access-policy.ts#DigitalProductionAccessPolicy"
       ],
       "oldTests": [
-        "tests/unit/order-time-reading.test.ts",
-        "tests/integration/journey-fact-model-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/journey-source-rebuild-isolated-postgres.test.ts"
-      ],
-      "initialization": "通过原生开发首轮发布、绣花复版、冻结采用和真实 worker 建立夹具。首轮已有初始目标，第二轮只有冻结输入，v10 仅为旧索引标记模拟。真实数据库行锁失败经原批次登记重试，随后解锁并真实重建。",
-      "dateAndPermission": "不改变任何权限模板、业务写入口、历史快照、任务事件、责任期限或采用目标。验证角色非表所有者、非超级用户且无 BYPASSRLS，同源同轮与逐 PO 身份不互相借用。",
-      "expectation": "原始问题在固定基线的低权限数据库夹具中失败。修后第二轮 B0 内容与原冻结输入计算相同并真实落库，索引到 v18 可读，两类待重建记录均清理，首轮 B0、两轮采用输入、计划、原任务及责任和任务历史摘要前后相同。真实缺项仍显式失败。",
+      "initialization": "沿源单唯一身份及逐次文档版本读回原 PO 和 ready 附件；无文档时草稿列表仍可找到原预留身份。",
+      "dateAndPermission": "沿有效设计师本人和 Root 权限，附件与原来源绑定；只读回执使用原发起人与命令键。",
+      "expectation": "新会话逐张恢复，读回三行 PO 与两份原附件，断线后只读查原回执、未发第二个写请求，原较新服务端版本受保护。",
       "checks": [
-        "postgres",
+        "pg",
         "unit",
-        "lint",
-        "types"
+        "types",
+        "lint"
+      ]
+    },
+    {
+      "rule": "首次实际发布事务才建立有效开发时钟；正式确认拥有独立原生时钟，旧已发布和冻结记录保留。",
+      "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md 版本3 补正1 首次有效发布、待审批失败及历史边界。",
+      "writes": [
+        "apps/api/migrations/0296_development_first_publication.sql",
+        "apps/api/src/acceptance-clock/hooks.ts",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/cockpit-query.ts",
+        "apps/api/src/production-platform/development-cycle-evidence.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/production-platform/journey-fact-updates.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/order-time-created.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/unit/order-time-reading.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-time-created.ts#orderTimeCreated",
+        "apps/api/src/production-platform/journey-query.ts#DigitalJourneyQuery",
+        "apps/api/src/production-platform/journey-selection-query.ts#orderTimeCreatedMany",
+        "apps/api/src/production-platform/order-time-request-service.ts#OrderTimeRequestService",
+        "apps/api/src/production-platform/preparation-material-repository.ts#enrollPreparation"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/unit/current-migration-manifest-checksum.test.ts"
+      ],
+      "initialization": "按迁移应用前、未发布态和发布成功态核对；保留平行正式订单与源单独立创建事件，迁移不回填旧时间。",
+      "dateAndPermission": "使用原业务时钟、事务锁、审批、附件和打板服务；测试时钟仅允许同事务原认证测试身份，持久时间为秒及毫秒精度。",
+      "expectation": "草稿不出现在座舱且无钟；审批待决和失败无激活；一次成功或并发原命令只写一条首发事实；旧已采用内容保持且疑义旧稿安全拒绝。",
+      "checks": [
+        "pg",
+        "migration",
+        "types",
+        "build",
+        "lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "postgres",
-      "kind": "tests",
-      "command": "env -i HOME=/tmp PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 bash ../local-pg-final-report.sh /workspace/ba112-offline-17f84597.2txqau/draft-checks/final-postgres.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "3f2d0b06ebd0e1c4b64c29f9f7d9f9ef3e0b7e4b",
-      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
-      "context": "Node 22.22.2, Vitest 4.1.10, vitest.config.ts, one worker. Separate isolated marked PostgreSQL 16.16 instance with the canonical migration fixture plus the same restricted SET ROLE configuration as repository CI. Before retry an actual row lock causes SQLSTATE 55P03. The original application worker records the retry and the successful rebuild clears it. The runner removes and verifies removal of the test container.",
-      "startedAt": "2026-11-19T08:12:52+00:00",
-      "endedAt": "2026-11-19T08:13:11.909560+00:00",
-      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-postgres-report.log",
-      "logSha256": "fffc4d3673c180139ae31f728446ca6954e6c6c890474399e31e37b6537fb27f",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "929f3c598bb0853625f82bbda92ca0799ac88551003c43ee5c1eb89eaf76ea03"
-        }
-      ]
-    },
-    {
-      "id": "unit",
-      "kind": "tests",
-      "command": "/workspace/.task-toolchains/time-read/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-unit.json --no-color",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "3f2d0b06ebd0e1c4b64c29f9f7d9f9ef3e0b7e4b",
-      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
-      "context": "Node 22.22.2, Vitest 4.1.10 and one non-database worker. The reading-basis suite includes unique scoped identities, truly added work, the original handoff and original responsibility, missing predecessors, PO and craft isolation and ambiguity.",
-      "startedAt": "2026-11-19T08:12:52+00:00",
-      "endedAt": "2026-11-19T08:12:57.349324+00:00",
-      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-unit-report.log",
-      "logSha256": "ec3f3f3b9f9850e82e3cd7ecb2ff62c34c59fd1e64cbe6bd6c7277f372279297",
-      "passed": 47,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "0502940eedd7dc0cbf853d104a7e88245bcb46125c826487e402bfade6c1e2c4"
-        }
-      ]
-    },
-    {
-      "id": "lint",
+      "id": "build",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/order-time-reading.ts tests/unit/order-time-reading.test.ts tests/integration/journey-source-rebuild-isolated-postgres.test.ts",
+      "command": "npm run build:packages",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "17f8459720e100546f6bfef42e132480632d4ca9",
-      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
-      "context": "Node 22.22.2 with the exact repository lock. ESLint checks the production change and both affected tests with zero warnings allowed.",
-      "startedAt": "2026-11-19T07:54:05.690306+00:00",
-      "endedAt": "2026-11-19T07:54:07.100010+00:00",
-      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
+      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "context": "Built workspace packages from the candidate and locked release package manifests on Node 22.",
+      "startedAt": "2026-11-19T15:08:29.342Z",
+      "endedAt": "2026-11-19T15:08:40.687Z",
+      "log": "/tmp/dx-cockpit-pr1-final/build.log",
+      "logSha256": "42534bd96daa66688e58109269730dbaebe1e74278e8d2362cb7be3a3483b40d"
+    },
+    {
+      "id": "migration",
+      "kind": "command",
+      "command": "npm run db:migrate:lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
+      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "context": "Validated the entire append-only migration inventory and the checksum of the first-publication migration.",
+      "startedAt": "2026-11-19T15:08:40.761Z",
+      "endedAt": "2026-11-19T15:08:40.977Z",
+      "log": "/tmp/dx-cockpit-pr1-final/migration.log",
+      "logSha256": "1b85bb2907a50bf4f998ba91052fe8c6250d5e53bb9f1f5660e6f9b0c575bccf"
     },
     {
       "id": "types",
       "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
+      "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "17f8459720e100546f6bfef42e132480632d4ca9",
-      "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
-      "context": "Node 22.22.2 with the exact repository lock. The API tsconfig is checked using TypeScript --noEmit.",
-      "startedAt": "2026-11-19T07:54:07.100183+00:00",
-      "endedAt": "2026-11-19T07:54:29.211874+00:00",
-      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/types.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
+      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "context": "Ran the original repository TypeScript checks for all workspaces using the candidate.",
+      "startedAt": "2026-11-19T15:08:41.015Z",
+      "endedAt": "2026-11-19T15:10:09.808Z",
+      "log": "/tmp/dx-cockpit-pr1-final/types.log",
+      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "command": "npm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
+      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "context": "Ran the original repository ESLint command against the complete candidate snapshot.",
+      "startedAt": "2026-11-19T15:08:41.011Z",
+      "endedAt": "2026-11-19T15:09:46.932Z",
+      "log": "/tmp/dx-cockpit-pr1-final/lint.log",
+      "logSha256": "c515bd0be1f85df3ce7017b7a7ab759a66a3184a30e6b65b5d13a9d4fea39cd7"
+    },
+    {
+      "id": "unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-creation-draft.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/order-time-reading.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-cockpit-pr1-final/unit.json --no-color",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
+      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "context": "Vitest ran the original local creation-draft recovery and migration manifest checksum tests without a database.",
+      "startedAt": "2026-11-19T15:08:41.017Z",
+      "endedAt": "2026-11-19T15:08:52.030Z",
+      "log": "/tmp/dx-cockpit-pr1-final/unit.log",
+      "logSha256": "5b160f89fdb3e899d841d71dc726eb4d77b78709bbf872ae9372f44a409d2d71",
+      "passed": 53,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e26cea0f746879ae1123312977f54af165e3247aab3a6f15f18e36845bc0a431"
+        }
+      ]
+    },
+    {
+      "id": "pg",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-cockpit-pr1-final/pg.json --no-color",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4189ef6a9072a968b8346b83065de525b6268d63",
+      "sourceFingerprint": "f31e8f317d379c600b0af8bbaa4d982e1a872ec22a950f07a633b1c5d9ec0be7",
+      "context": "Real Chromium with authenticated original App routes and isolated PostgreSQL 16 schemas. Covers saved draft source identity, permissions at display, acknowledgements, publication and formal order clocks and legacy migration.",
+      "startedAt": "2026-11-19T15:08:41.012Z",
+      "endedAt": "2026-11-19T15:10:25.611Z",
+      "log": "/tmp/dx-cockpit-pr1-final/pg.log",
+      "logSha256": "be5003b1805a28f962c2cd722a5d0f7c729670c8ddbb84bbe10c91f213ba9d1f",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "0419bb36fe5be7f6c4f5322b5b382f8b9045495a7c8813cb83fe5b3e1f6e0eae"
+        }
+      ]
     }
   ]
 }

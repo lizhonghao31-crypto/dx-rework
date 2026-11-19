@@ -15,7 +15,7 @@ const cycleValues=(value:Record<string,unknown>)=>DevelopmentCycleValuesSchema.p
 
 export async function captureTechnicalEnrollment(db:PoolClient,actorId:string,sourceId:string,eventKey:string){
  if(!(await db.query("SELECT to_regclass('digital_development_technical_enrollments') AS relation")).rows[0]?.relation)return;
- if(!(await db.query("SELECT 1 FROM audit_events WHERE id=$1 AND entity_id=$2 AND actor_id=$3 AND action='digital_source_created'",[eventKey,sourceId,actorId])).rowCount)throw Error('Technical enrollment requires real source creation');
+ if(!(await db.query("SELECT 1 FROM audit_events WHERE id=$1 AND entity_id=$2 AND ((action='digital_source_created' AND actor_id=$3::uuid) OR (action='digital_development_first_published' AND after_state->>'createdBy'=$3::text))",[eventKey,sourceId,actorId])).rowCount)throw Error('Technical enrollment requires real source creation');
  const policy=(await db.query('SELECT * FROM digital_development_cycle_standards ORDER BY version DESC LIMIT 1')).rows[0];
  const values=DevelopmentCycleValuesSchema.parse(policy.values_json);
  await db.query(`INSERT INTO digital_development_technical_enrollments(source_id,rule_version,policy_version,values_json,created_by,event_key)
