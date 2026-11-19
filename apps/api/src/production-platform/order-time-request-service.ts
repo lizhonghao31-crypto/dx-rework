@@ -111,7 +111,9 @@ export class OrderTimeRequestService{
    await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
     VALUES($1,$2,$3,'order_time_activated','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,resource?.id??id,JSON.stringify({requestId:id,requestedBy:row.requested_by,designerId:row.designer_id,operation:state.operation,plan:state.value.plan,lateMinutes:state.check.lateMinutes,acceptedLate:input.acceptLate})]);
    await db.query('UPDATE digital_order_time_requests SET operation_json=$2 WHERE request_id=$1 AND version=$3',[id,JSON.stringify(operation),row.version]);
-   const outcome=await withinOrderTimeAdmission(db,{requestId:id,requestVersion:row.version,actorId:actor.actorId,designerId:row.designer_id,operation:state.operation,plan:state.value.plan,time,activationEventId:eventId},async()=>{
+   const approvedFactoryWork=state.operation.kind==='confirm_order'&&Object.hasOwn(input.overrides,'factory_production_work')
+    &&state.value.work.some(work=>work.parameterKey==='factory_production_work'&&!work.includedIn&&work.canonicalWorkRef?.startsWith('order:'));
+   const outcome=await withinOrderTimeAdmission(db,{requestId:id,requestVersion:row.version,actorId:actor.actorId,designerId:row.designer_id,operation:state.operation,plan:state.value.plan,time,activationEventId:eventId,...(approvedFactoryWork?{approvedFactoryWork:true as const}:{})},async()=>{
     const native=state.operation.kind==='arrangement'?{sourceId:state.sourceId,orderId:state.orderId}:await this.execute(db,actor,state.operation,'order-time:'+id+':'+row.version);
     const target=native.orderId?{kind:'order' as const,id:native.orderId}:native.sourceId?{kind:'source' as const,id:native.sourceId}:resource;
     if(!target)throw Error('原业务办理没有返回本单身份');

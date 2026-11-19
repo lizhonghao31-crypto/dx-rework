@@ -30,7 +30,7 @@ export async function readInitialTimelineInput(db:DB,resource:BusinessTimeScope)
  * route/goal publication. Later scope capture may add genuine route facts but
  * must inherit these values, never the later global defaults.
  */
-export async function freezeInitialTimelineInput(db:DB,mode:TimelineAdoptionMode,input:Omit<FrozenInitialTimelineInput['data'],'development'|'planning'>,inherited?:FrozenInitialTimelineInput|null):Promise<FrozenInitialTimelineInput|null>{
+export async function freezeInitialTimelineInput(db:DB,mode:TimelineAdoptionMode,input:Omit<FrozenInitialTimelineInput['data'],'development'|'planning'>,inherited?:FrozenInitialTimelineInput|null,approvedFactoryWork=false):Promise<FrozenInitialTimelineInput|null>{
  if(mode==='legacy')return null;
  if(!(await db.query("SELECT to_regclass('digital_timeline_standard_versions') AS relation")).rows[0]?.relation)throw Error('固定计划采用所需迁移尚未完成');
  let development:FrozenInitialTimelineInput['data']['development']=inherited?inherited.data.development:null;
@@ -43,9 +43,21 @@ export async function freezeInitialTimelineInput(db:DB,mode:TimelineAdoptionMode
  const row=inherited||!development?null:(await db.query('SELECT standard_id,version,planning_json FROM digital_timeline_standard_versions WHERE unified_configuration_id=$1 AND development_version=$2 ORDER BY version DESC LIMIT 1',[input.unified.configurationId,development.version])).rows[0];
  const planning=inherited?inherited.data.planning:row?{standardRef:row.standard_id,version:Number(row.version),values:row.planning_json}:null;
  const confirmed=inherited?await new OrderTimePlanRepository(db).current(inherited.data.resource):null;
- const policy=confirmed?.input.plan??inherited?.data.orderTimePlan??input.orderTimePlan;
+ let policy=confirmed?.input.plan??inherited?.data.orderTimePlan??input.orderTimePlan;
  if(inherited?.data.orderTimePlan&&policy&&fixedTimelineIdentity(policy.company)!==fixedTimelineIdentity(inherited.data.orderTimePlan.company))throw Error('正式订单不能替换本单原公司标准');
- if(inherited&&input.orderTimePlan&&fixedTimelineIdentity(input.orderTimePlan)!==fixedTimelineIdentity(policy??null))throw Error('正式订单须沿本单当前已确认的时间方案');
+ if(inherited&&input.orderTimePlan&&fixedTimelineIdentity(input.orderTimePlan)!==fixedTimelineIdentity(policy??null)){
+  const adopted=input.orderTimePlan;
+  const {factory_production_work:factory,...shared}=adopted.overrides;
+  // An authorized first order may add this order-only forecast. The complete
+  // rest of the policy must still hash to the exact source version. No source
+  // with its own such work can accept a different value at order creation.
+  const originalFactory=policy?.overrides.factory_production_work;
+  if(!approvedFactoryWork||input.resource.kind!=='order'||!confirmed||!policy||factory?.kind!=='forecast'
+   ||confirmed.input.work.some(work=>work.parameterKey==='factory_production_work')||adopted.revision!==policy.revision+1
+   ||fixedTimelineIdentity({...adopted,revision:policy.revision,overrides:{...shared,...(originalFactory?{factory_production_work:originalFactory}:{})}})!==fixedTimelineIdentity(policy))
+   throw Error('正式订单须沿本单当前已确认的时间方案');
+  policy=adopted;
+ }
  const data=structuredClone({...input,development,planning,...(policy?{orderTimePlan:FrozenOrderTimePlanSchema.parse(policy)}:{})});
  return {version:2,identityHash:fixedTimelineIdentity(data),data};
 }

@@ -19,6 +19,7 @@ import {OrderTimeRequestService} from '../../apps/api/src/production-platform/or
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {OrderTimeScopeRecoveryService} from '../../apps/api/src/production-platform/order-time-scope-recovery.js';
+import {readInitialTimelineInput} from '../../apps/api/src/production-platform/fixed-timeline-initial-input.js';
 import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
@@ -825,6 +826,50 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const detail=await new DigitalJourneyQuery(f.db).read(f.root,row.sourceId,undefined,true);
    expect(detail.fixedSchedule?.scopes[0]?.nodes.find(node=>node.canonicalWorkRef===workRef)).toMatchObject({currentTarget:{at:null},goalDelta:{targetAt:originalB,actual:{precision:'unknown'}}});
    expect(await repo.current(resource)).toEqual(version);
+  });
+ });
+
+ it('adopts an expressly approved new factory duration without altering the existing development freeze',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,true),standard=await settings.read(f.root);
+  await settings.save(f.root,{expectedVersion:standard.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  const scene=await f.scene('2027-08-01T00:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2027-10-01',true);if(row.operation.kind!=='development_publish')throw Error('TEST source publication required');
+   const published=await forms.publish(row.actor,row.sourceId,row.operation.input.expectedVersion,randomUUID(),row.operation.input.patternOrder);
+   expect(published.document!.customerOrderDraft).toBeUndefined();
+   const source={kind:'source' as const,id:row.sourceId},repo=new OrderTimePlanRepository(f.db),original=(await repo.current(source))!;
+   expect(original.input.work.some(work=>work.parameterKey==='factory_production_work')).toBe(false);
+   const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:published.designStyleNo,orderDate:'2027-08-01',contractDeliveryDate:'2027-08-15',requiresColorMatching:false,salesYear:2027,salesSeries:'P10',
+    lines:[{formalPoNo:`TEST-C6-${randomUUID()}`,color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:2}]}],productionPlanning:{craftSteps:[],preshrink:false}});
+   const operation={kind:'confirm_order' as const,sourceId:row.sourceId,input};
+   const preflight=await requests.check(row.actor,operation);
+   const pending=await requests.submit(row.actor,{operation,fingerprint:preflight.fingerprint,reason:'TEST approval for added factory work'},randomUUID());
+   const overrides={factory_production_work:{kind:'forecast' as const,minutes:20*1440,calendar:'continuous' as const,reminder:{enabled:false,percent:70}}};
+   const preview=await requests.read(f.root,pending.requestId,overrides);
+   expect(preview.check).toMatchObject({coverage:[],feasibility:'insufficient'});
+   const apply={expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides,acceptLate:true};
+   const admissions=async()=>((await f.db.query(`SELECT (SELECT count(*) FROM digital_production_orders WHERE source_id=$1) AS orders,
+    (SELECT count(*) FROM audit_events WHERE entity_id=$1::text AND action='order_time_activated') AS activations`,[source.id])).rows[0]);
+   const before=await admissions();
+   await expect(requests.apply(f.root,pending.requestId,{...apply,acceptLate:false},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_LATE_CONFIRMATION'});
+   await expect(requests.apply(f.root,pending.requestId,{...apply,expectedVersion:apply.expectedVersion+1},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_STALE'});
+   const altered={...overrides,development_cutting:{kind:'work' as const,minutes:120,calendar:'continuous' as const,reminder:{enabled:false,percent:70}}};
+   const alteredPreview=await requests.read(f.root,pending.requestId,altered);
+   await expect(requests.apply(f.root,pending.requestId,{...apply,overrides:altered,fingerprint:alteredPreview.check.fingerprint},randomUUID())).rejects.toThrow('正式订单须沿本单当前已确认的时间方案');
+   expect(await admissions()).toEqual(before);
+   expect((await requests.read(f.root,pending.requestId)).state).toBe('pending');expect(await repo.current(source)).toEqual(original);
+   const key=randomUUID(),applied=await requests.apply(f.root,pending.requestId,apply,key),orderId=applied.result!.orderId!;
+   expect(applied.state).toBe('applied');expect(orderId).toBeTruthy();
+   const order={kind:'order' as const,id:orderId},initial=(await readInitialTimelineInput(f.db,order))!,effective=(await repo.current(order))!;
+   expect(initial.data.orderTimePlan).toEqual(effective.input.plan);
+   expect(effective.input.plan.company).toEqual(original.input.plan.company);
+   expect(effective.input.plan.overrides).toEqual({...original.input.plan.overrides,...overrides});
+   expect(effective.input.work.filter(work=>work.parameterKey==='factory_production_work')).toMatchObject([{canonicalWorkRef:expect.stringContaining(`order:${orderId}:`)}]);
+   expect(effective.input.scopes[0]!.customerGoal).toMatchObject({precision:'date',value:'2027-08-15'});
+   expect(await repo.current(source)).toEqual(original);expect((await admissions()).orders).toBe('1');
+   expect(await requests.apply(f.root,pending.requestId,apply,key)).toEqual(applied);
+   await expect(requests.apply(f.root,pending.requestId,{...apply,acceptLate:false},key)).rejects.toMatchObject({statusCode:409});
+   expect(await repo.current(order)).toEqual(effective);
   });
  });
 

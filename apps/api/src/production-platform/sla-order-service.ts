@@ -29,7 +29,7 @@ import { developmentEvaluationPlan, developmentNativeFacts, developmentSlaEviden
 import { applyOrderCreationEvidence, orderCreationSlaEvidence } from "./sla-order-evidence.js";
 import {newTimelineAdoptionMode} from './fixed-timeline-mode.js';
 import {freezeInitialTimelineInput,readInitialTimelineInput} from './fixed-timeline-initial-input.js';
-import {orderTimeAdmission} from './order-time-admission.js';
+import {approvedOrderTimePoCreation,orderTimeAdmission} from './order-time-admission.js';
 import {orderTimeSnapshot} from './order-time-native-timing.js';
 
 /** Creation and reads reuse order authorization; there is no generic event/date edit endpoint. */
@@ -86,9 +86,11 @@ export class SlaOrderService {
     // a legacy combined route. Independent new orders still follow the switch.
     const inheritedInput=order.source_id?await readInitialTimelineInput(client,{kind:'source',id:order.source_id}):null;
     const initialMode=inheritedInput||admission?'fixed_v2':newTimelineAdoptionMode(this.database);
+    const approvedFactoryWork=Boolean(inheritedInput&&admission?.approvedFactoryWork&&admission.operation.kind==='confirm_order'
+      &&admission.operation.sourceId===order.source_id&&await approvedOrderTimePoCreation(client,actor,orderId));
     const initial=initialMode==='fixed_v2'?await freezeInitialTimelineInput(client,initialMode,{resource:{kind:'order',id:orderId},creationEventRef:`audit_events:${creationEventId}`,time,
       unified:{configurationId:sourcePlan?.configuration_id??config!.configurationId,snapshotRef:snapshot.snapshotId,values:snapshot.snapshot},...(admission?{orderTimePlan:admission.plan}:{})},
-      inheritedInput):null;
+      inheritedInput,approvedFactoryWork):null;
     await plans.appendPlan({ orderId, expectedRevision: 0, snapshotId: snapshot.snapshotId, plan, time, actorId: actor.actorId,
       reason: "新订单保存全链首版计划；未有依据的日期保持未知", requestKey: randomUUID(),...(initial?{initialAdoptionInput:initial}:{}) });
     await new ShipSampleService(this.database).ensureWithClient(client,actor,orderId);
