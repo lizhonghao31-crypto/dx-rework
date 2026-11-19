@@ -9,7 +9,7 @@ import {orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order
 import type {OrderTimeCheckResult} from '@dx-rework/contracts/order-time-requests';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
 import type {OrderTimeInput} from './order-time-plan-repository.js';
-import {buildOrderTimeWork} from './order-time-schedule.js';
+import {buildOrderTimeWork,type OrderTimeScope} from './order-time-schedule.js';
 import {fixedMinutesToMilliseconds,fixedTimelineElapsedMilliseconds,fixedTimelineForward,requiredFixedTimelineWork,shiftFixedTimelineMilliseconds,type FixedTimelineCalendar} from './fixed-timeline-targets.js';
 
 export type OrderTimeNativeProgress={completed:boolean;actualAt:string|null;actualDate?:string|null;readyAt:string|null;deadline:string|null;calendar?:FixedTimelineCalendar|null;unresolvedOverrun?:boolean};
@@ -58,6 +58,22 @@ export function orderTimeInputFromRoute(plan:FrozenOrderTimePlan,route:Pick<Fixe
  * R/D; an exhausted window has only "no earlier than now", never a fake C.
  * These temporary forward inputs are never saved as actuals or fixed B. */
 type RemainingResult={scopes:Array<{scopeRef:string;coverage:string[];expectedEnd:SlaTime|null;feasibility:'unknown'|'insufficient'|'sufficient'|'not_applicable';lateMinutes:number|null;requiredSpanMinutes:number|null}>;lowerBound:boolean};
+function assessRemainingScope(route:OrderTimeInput['route'],scope:OrderTimeScope,time:BusinessTime,ends:readonly SlaTime[],issues:readonly string[],optionalDevelopmentGoal:boolean):RemainingResult['scopes'][number]{
+ const goal=slaAnchorTime(scope.customerGoal,'客户交期');
+ const end=ends.length&&ends.every(value=>value.at)?ends.reduce((a,b)=>{
+  const difference=Date.parse(a.at!)-Date.parse(b.at!);
+  return difference>0||difference===0&&!a.exclusive?a:b;
+ }):null;
+ // Only original independent development may omit an optional sample goal.
+ const goalOptional=optionalDevelopmentGoal&&scope.scopeRef.startsWith('source:')&&scope.customerGoal.precision==='unknown';
+ const coverage=[...new Set([...(route.complete?[]:route.missing),...issues,...ends.flatMap(end=>end.reasons),...(goalOptional?[]:goal.reasons)])];
+ const known=route.complete&&!coverage.length&&end?.at&&(goalOptional||goal.at);
+ const difference=known&&goal.at?(Date.parse(end.at!)-Date.parse(goal.at!))/60000:null;
+ const insufficient=difference!==null&&(difference>0||difference===0&&goal.exclusive&&!end!.exclusive);
+ return {scopeRef:scope.scopeRef,coverage,expectedEnd:known?end:null,feasibility:known&&goalOptional?'not_applicable':difference===null?'unknown':insufficient?'insufficient':'sufficient',
+  lateMinutes:difference===null?null:Math.max(0,difference),requiredSpanMinutes:known?Math.max(0,(Date.parse(end.at!)-Date.parse(time.now))/60000):null};
+}
+
 export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progress:ReadonlyMap<string,OrderTimeNativeProgress>,notBefore:Readonly<Record<string,SlaAnchor>>={},optionalDevelopmentGoal=false):RemainingResult{
  if(input.scopes.length>1||[...progress.keys()].some(key=>key.includes('|'))){
   const results=input.scopes.map(scope=>{
@@ -102,27 +118,19 @@ export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progre
   const required=requiredFixedTimelineWork(remaining,scope.terminalIds),arranged=fixedTimelineForward(required,{precision:'instant',value:time.now,source:'当前进度演算，不是真实完成'},notBefore);
   const ends=scope.terminalIds.map(id=>{const work=byId.get(id)!,actual=progress.get(work.canonicalWorkRef??id);
    return actual?.completed?orderTimeCompletionBound(actual,time.now):arranged.find(node=>node.id===id)!.end;
-  }),goal=slaAnchorTime(scope.customerGoal,'客户交期');
-  const end=ends.length&&ends.every(value=>value.at)?ends.reduce((a,b)=>{
-   const difference=Date.parse(a.at!)-Date.parse(b.at!);
-   return difference>0||difference===0&&!a.exclusive?a:b;
-  }):null;
-  // Only the original independent-development adapter can opt out of an
-  // absent optional sample goal. Route, durations, supply and actual evidence
-  // still have to be computable; a formal PO can never borrow this exception.
-  const goalOptional=optionalDevelopmentGoal&&scope.scopeRef.startsWith('source:')&&scope.customerGoal.precision==='unknown';
-  const coverage=[...new Set([...(input.route.complete?[]:input.route.missing),...arranged.flatMap(node=>{const original=byId.get(node.id)!,label=ORDER_TIME_NODES.find(entry=>entry.key===original.parameterKey)?.label??'流程交接';return [...node.start.reasons,...node.end.reasons].map(reason=>`${label}：${reason}`);}),...ends.flatMap(end=>end.reasons),...(goalOptional?[]:goal.reasons)])];
-  const known=input.route.complete&&!coverage.length&&end?.at&&(goalOptional||goal.at);
-  const difference=known&&goal.at?(Date.parse(end.at!)-Date.parse(goal.at!))/60000:null;
-  const insufficient=difference!==null&&(difference>0||difference===0&&goal.exclusive&&!end!.exclusive);
-  return {scopeRef:scope.scopeRef,coverage,expectedEnd:known?end:null,feasibility:known&&goalOptional?'not_applicable' as const:difference===null?'unknown' as const:insufficient?'insufficient' as const:'sufficient' as const,
-   lateMinutes:difference===null?null:Math.max(0,difference),requiredSpanMinutes:known?Math.max(0,(Date.parse(end.at!)-Date.parse(time.now))/60000):null};
+  });
+  const issues=arranged.flatMap(node=>{const original=byId.get(node.id)!,label=ORDER_TIME_NODES.find(entry=>entry.key===original.parameterKey)?.label??'流程交接';return [...node.start.reasons,...node.end.reasons].map(reason=>`${label}：${reason}`);});
+  return assessRemainingScope(input.route,scope,time,ends,issues,optionalDevelopmentGoal);
  });
  return {scopes,lowerBound};
 }
 
-export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;progress:ReadonlyMap<string,OrderTimeNativeProgress>;sourceVersion:Record<string,unknown>;resource:OrderTimeCheckResult['resource'];styleNo:string;customerDates:OrderTimeCheckResult['customerDates'];canRequest:boolean;canApply:boolean;notBefore?:Readonly<Record<string,SlaAnchor>>;extraSettings?:ReadonlyMap<string,boolean>;optionalDevelopmentGoal?:boolean}):OrderTimeCheckResult{
- const {value,time}=input,{scopes,lowerBound}=orderTimeRemaining(value,time,input.progress,input.notBefore,input.resource.kind==='source'&&input.optionalDevelopmentGoal===true),coverage=[...new Set(scopes.flatMap(scope=>scope.coverage))];
+export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;progress:ReadonlyMap<string,OrderTimeNativeProgress>;sourceVersion:Record<string,unknown>;resource:OrderTimeCheckResult['resource'];styleNo:string;customerDates:OrderTimeCheckResult['customerDates'];canRequest:boolean;canApply:boolean;notBefore?:Readonly<Record<string,SlaAnchor>>;extraSettings?:ReadonlyMap<string,boolean>;optionalDevelopmentGoal?:boolean;formalEnds?:Readonly<Record<string,readonly SlaTime[]>>}):OrderTimeCheckResult{
+ const {value,time,formalEnds}=input,optionalGoal=input.resource.kind==='source'&&input.optionalDevelopmentGoal===true;
+ const {scopes,lowerBound}=formalEnds
+  ?{scopes:value.scopes.map(scope=>assessRemainingScope(value.route,scope,time,formalEnds[scope.scopeRef]??[],[],optionalGoal)),lowerBound:false}
+  :orderTimeRemaining(value,time,input.progress,input.notBefore,optionalGoal);
+ const coverage=[...new Set(scopes.flatMap(scope=>scope.coverage))];
  const computable=scopes.length>0&&scopes.every(scope=>scope.feasibility!=='unknown'),compared=scopes.filter(scope=>scope.feasibility!=='not_applicable'),late=computable&&compared.length?Math.max(...compared.map(scope=>scope.lateMinutes??0)):null;
  const insufficient=compared.some(scope=>scope.feasibility==='insufficient');
  const known=computable&&(!lowerBound||insufficient);if(computable&&lowerBound&&!insufficient)coverage.push('在办节点已超时，剩余工作时间尚未确认');

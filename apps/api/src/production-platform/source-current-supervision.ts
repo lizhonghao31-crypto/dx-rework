@@ -76,7 +76,11 @@ export function sourceCurrentSupervision(saved:StoredOrderTimePlan,scope:Schedul
  }});
  return nodes.map<SlaNodeEvaluation>(node=>{
   const work=current.get(node.id),forecast=forecasts.get(node.id);
-  if(exactLegacyId(node.id)&&work&&forecast)return {...node,start:work.start,end:work.end,...forecast};
+  if(exactLegacyId(node.id)&&work&&forecast){
+   const formal=scope.work.find(value=>value.id===node.id)?.approvedCurrentTarget;
+   const approved=saved.input.formalTargets?.[scope.scopeRef]?.[node.id];
+   return {...node,start:approved?.start??work.start,end:approved?.end??(formal?missing('原调整未保存剩余安排依据，请从本单时效重新核对并正式安排'):work.end),...forecast};
+  }
   if(!washingIds.has(node.id))return node;
   const unknown=missing('现行安排缺少本轮洗水工作依据');
   return {...node,start:unknown,end:unknown,forecast:unknown,forecastBasis:'unknown'};

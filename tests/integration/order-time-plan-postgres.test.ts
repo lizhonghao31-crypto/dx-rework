@@ -1,5 +1,6 @@
 import {orderTimePolicyHistory} from '../../apps/api/src/production-platform/order-time-native-timing.js';
 import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
+import {arrangedOrderTimeTarget} from '../../apps/api/src/production-platform/framework-node-targets.js';
 import {fixedGoalDelta} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate,initialFrameworkMilestoneStandard} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {readTimeFrameworkPlan,type TimeFrameworkInput} from '@dx-rework/contracts/order-time-framework';
@@ -123,6 +124,67 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
    expect(h2.targets[scope]!['a:'+line]!.start.at).toBe('2027-02-25T16:00:00.000Z');
    expect((await f.db.query('SELECT fixed_targets FROM digital_order_time_plan_versions WHERE plan_version_id=$1',[h1.id])).rows[0].fixed_targets).toEqual(h1.targets);
    expect((await f.db.query('SELECT 1 FROM digital_order_time_plan_versions WHERE production_order_id=$1',[order.productionOrderId])).rowCount).toBe(5);
+  });
+ });
+ it('preserves a sibling PO formal target across scoped arrangement and later native PO approval',async()=>{
+  const own=await f.scene('2027-02-01T00:00:00.000Z');
+  const inScene=<T,>(action:()=>Promise<T>)=>f.runtime.run(own,f.root,action);
+  const {order,initial,planned,sibling,changed,line}=await inScene(async()=>{
+   const order=await make('2027-04-01'),input=value(order);
+   for(const scope of input.scopes){
+    scope.customerGoal={precision:'date',value:'2027-04-01',source:'TEST original customer date'};
+    scope.goals[scope.customerGoalIds[0]!]=scope.customerGoal;
+   }
+   const initial=await confirm(order,input);
+   const [changed,sibling]=initial.input.scopes,line=order.lines[0]!.lineId;
+   const proposal:OrderTimeInput={...input,formalInputs:{version:'approved-remaining-v1',progress:{},notBefore:{
+    ['b:'+sibling!.lineId]:{precision:'instant',value:'2027-02-04T00:00:00.000Z',source:'TEST true independent sibling condition'}}}};
+   const planned=await confirm(order,proposal,initial.revision);
+   expect(planned.input.formalTargets?.[changed!.scopeRef]?.[changed!.terminalIds[0]!]?.end.at).toBe('2027-02-06T00:00:00.000Z');
+   expect(planned.input.formalTargets?.[sibling!.scopeRef]?.[sibling!.terminalIds[0]!]?.end.at).toBe('2027-02-07T00:00:00.000Z');
+   return {order,initial,planned,sibling:sibling!,changed:changed!,line};
+  });
+  const saved=async(id:string)=>(await f.db.query('SELECT input_snapshot,fixed_targets FROM digital_order_time_plan_versions WHERE plan_version_id=$1',[id])).rows[0];
+  const old=await saved(planned.id),siblingP=planned.input.formalTargets![sibling.scopeRef],siblingTerminal=sibling.terminalIds[0]!;
+  await f.advance(own,'2027-02-03T00:00:00.000Z');
+  const next=await inScene(async()=>{
+   const repo=new OrderTimePlanRepository(f.db),proposal=structuredClone(planned.input);
+   proposal.formalInputs!.notBefore={...proposal.formalInputs!.notBefore,['a:'+line]:{precision:'instant',value:'2027-02-08T00:00:00.000Z',source:'TEST one PO changed planning condition'}};
+   const scoped=await confirm(order,proposal,planned.revision);
+   expect(scoped.input.formalTargets?.[changed.scopeRef]?.[changed.terminalIds[0]!]?.end.at).toBe('2027-02-13T00:00:00.000Z');
+   expect(scoped.input.formalTargets?.[sibling.scopeRef]).toEqual(siblingP);
+   expect(scoped.targets).toEqual(initial.targets);
+   const dates=new PoCustomerDateService(f.db),sheet=await dates.read(f.root,order.productionOrderId);
+   const version=(await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[order.productionOrderId])).rows[0].version;
+   const request=await dates.request(f.root,order.productionOrderId,{orderVersion:version,changes:[{lineId:line,date:'2027-04-02',expectedVersion:sheet.customerPoDates.find(po=>po.lineId===line)!.version}],reason:'TEST approve only one customer PO'},randomUUID()) as {requestId:string};
+   await dates.decide(f.root,order.productionOrderId,request.requestId,true,randomUUID());
+   const approved=(await repo.current(initial.resource))!;
+   expect(approved.input.scopes.find(scope=>scope.scopeRef===changed.scopeRef)?.customerGoal).toMatchObject({value:'2027-04-02'});
+   expect(approved.input.scopes.find(scope=>scope.scopeRef===sibling.scopeRef)?.customerGoal).toEqual(sibling.customerGoal);
+   expect(approved.input.formalTargets).toEqual(scoped.input.formalTargets);
+   expect(approved.targets[sibling.scopeRef]).toEqual(initial.targets[sibling.scopeRef]);
+   const value=structuredClone(approved.input);delete value.formalInputs;delete value.formalTargets;
+   value.work.push({id:'printing:'+line,parameterKey:'printing',stage:4,dependsOn:['a:'+line]});
+   value.work.find(work=>work.id==='b:'+line)!.dependsOn=['printing:'+line];
+   const key=randomUUID(),followup=await confirm(order,value,approved.revision,key);
+   expect(followup.input.formalInputs).toBeUndefined();
+   expect(arrangedOrderTimeTarget(followup,sibling.scopeRef,siblingTerminal)).toEqual(siblingP![siblingTerminal]);
+   expect(arrangedOrderTimeTarget(followup,changed.scopeRef,changed.terminalIds[0]!)).toBeUndefined();
+   expect(await confirm(order,value,approved.revision,key)).toEqual(followup);
+   expect(await saved(planned.id)).toEqual(old);
+   return {followup,notBefore:proposal.formalInputs!.notBefore};
+  });
+  await f.advance(own,'2027-02-04T00:00:00.000Z');
+  await inScene(async()=>{
+   const before=await saved(next.followup.id),proposal=structuredClone(next.followup.input);
+   proposal.formalInputs={version:'approved-remaining-v1',progress:{},notBefore:{...next.notBefore,
+    ['a:'+line]:{precision:'instant',value:'2027-02-09T00:00:00.000Z',source:'TEST changed condition for the original first PO only'}}};
+   const adopted=await confirm(order,proposal,next.followup.revision);
+   expect(arrangedOrderTimeTarget(adopted,changed.scopeRef,changed.terminalIds[0]!)?.end.at).toBe('2027-02-15T00:00:00.000Z');
+   expect(adopted.input.formalTargets?.[sibling.scopeRef]).toEqual(siblingP);
+   expect(arrangedOrderTimeTarget(adopted,sibling.scopeRef,siblingTerminal)?.end.at).toBe('2027-02-07T00:00:00.000Z');
+   expect(adopted.input.scopes.find(scope=>scope.scopeRef===sibling.scopeRef)?.customerGoal).toEqual(sibling.customerGoal);
+   expect(await saved(next.followup.id)).toEqual(before);
   });
  });
  it('rejects a stale competing confirmation without overwriting the winner',()=>run(async()=>{

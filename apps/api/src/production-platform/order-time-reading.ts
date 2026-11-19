@@ -146,9 +146,13 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   const framework=saved.input.frameworkPlans?.[scope.scopeRef],frameworkTargets=framework?frameworkNodeTargets(framework):null;
   const required=requiredFixedTimelineWork(definitions,scope.terminalIds),facts:Record<string,ScheduleFact>={};
   const work:ScheduleWork[]=required.map(definition=>{
-   const source=byId.get(definition.id)!,target=arrangedOrderTimeTarget(saved,scope.scopeRef,source.id),policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
+   const source=byId.get(definition.id)!,originalTarget=saved.targets[scope.scopeRef]?.[source.id],target=framework?arrangedOrderTimeTarget(saved,scope.scopeRef,source.id):originalTarget,policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
    const old=original?.work.find(value=>source.canonicalWorkRef?value.canonicalWorkRef===source.canonicalWorkRef:value.id===source.id);
    const own=nativeFor(source,scope,resource,item,native,evidence),previous=old&&original?.facts[old.id];
+   const arrangement=framework?undefined:arrangedOrderTimeTarget(saved,scope.scopeRef,source.id);
+   const currentPrecision=frameworkTargetPrecision(arrangement);
+   const approvedCurrentTarget=!framework&&(saved.input.formalTargets?.[scope.scopeRef]||arrangement!==originalTarget)
+    ?{at:arrangement?.end.at??null,date:currentPrecision.targetDate,precision:currentPrecision.targetPrecision}:undefined;
    // An empty legacy placeholder is not a conflicting historical event. It
    // cannot hide this exact scope's already verified native completion.
    const emptyPrevious=previous&&!previous.businessCompleted&&!previous.evidenceRefs.length&&[previous.ready,previous.clockStart,previous.completed].every(value=>value.precision==='unknown');
@@ -224,7 +228,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const goal=!framework&&scope.customerGoalIds.includes(source.id),anchor=scope.goals[source.id];
    const eventConstraint=frameworkTargets?.get(source.id),eventTarget=eventConstraint&&eventConstraint!==target?{end:eventConstraint.end.at,...frameworkTargetPrecision(eventConstraint),exclusive:eventConstraint.end.exclusive}:undefined;
    return {...definition,...(rewash?{accountingRole:'original_work' as const,rewashRound:rewash.row.round}:{}),stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
-    start:target?.start.at??null,end:target?.end.at??null,...(target?{startExclusive:target.start.exclusive,endExclusive:target.end.exclusive}:{}),...originalOwn,...(eventTarget?{eventTarget}:{}),
+    start:target?.start.at??null,end:target?.end.at??null,...(target?{startExclusive:target.start.exclusive,endExclusive:target.end.exclusive}:{}),...originalOwn,...(eventTarget?{eventTarget}:{}),...(approvedCurrentTarget?{approvedCurrentTarget}:{}),
     responsibilitySlaRef:originalOwn.responsibilitySlaRef,responsibilityMinutes:originalOwn.responsibilityMinutes??null,responsibilityCalendar:originalOwn.responsibilityCalendar??null,
     ...(begun?{responsibilityWarningAt:fact.clockStart.precision==='unknown'?null:own.task?.warning_at?.toISOString()??(atStart?capturedWarning:old?.responsibilityWarningAt??null)}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
     ...(framework?frameworkTargetPrecision(target):{targetPrecision:goal&&anchor?.precision==='date'?'date' as const:'instant' as const,targetDate:goal&&anchor?.precision==='date'?anchor.value:null})};

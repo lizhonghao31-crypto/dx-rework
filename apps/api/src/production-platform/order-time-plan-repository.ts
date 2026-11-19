@@ -15,9 +15,13 @@ import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {SlaVersionConflict,SlaIdempotencyConflict} from './sla-configuration-repository.js';
 import {evaluateOrderTimeScenario,type OrderTimeScope,type OrderTimeWork} from './order-time-schedule.js';
 import type {FixedTimelineTarget} from './fixed-timeline-targets.js';
+import {formalRemainingSchedule,retainFormalTargets,type FormalRemainingInputs} from './order-time-formal-arrangement.js';
 
 type DB=Pick<PoolClient,'query'>;
 export type OrderTimeInput={version:'order-time-input-v1'|'order-time-input-rewash-v1';plan:FrozenOrderTimePlan;work:OrderTimeWork[];
+ formalInputs?:FormalRemainingInputs;
+ formalTargets?:Targets;
+ carriedFormalInputs?:FormalRemainingInputs;
  rewashing?:OrderTimeWashingReworkPlan[];
  frameworkContext?:{route:SeriesRoute;acceptedAt:SlaAnchor;notBefore:Record<string,SlaAnchor>;progress:Record<string,OrderTimeNativeProgress>};
  frameworkPlans?:Record<string,FrozenTimeFramework>;
@@ -104,6 +108,7 @@ export class OrderTimePlanRepository{
   if(!await this.available())throw Error('本单时间方案迁移尚未完成');
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||!input.eventRef.trim()||!input.requestKey.trim()||input.requestKey.length>200)throw Error('本单时间方案身份或版本无效');
   const time=validateBusinessTime(input.time),value=structuredClone(input.value);
+  delete value.carriedFormalInputs;
   if(!['order-time-input-v1','order-time-input-rewash-v1'].includes(value.version))throw Error('本单时间输入版本不受支持');
   FrozenOrderTimePlanSchema.parse(value.plan);
   const resource=input.resource,table=resource.kind==='source'?'digital_production_sources':'digital_production_orders',column=resource.kind==='source'?'source_id':'production_order_id';
@@ -121,7 +126,7 @@ export class OrderTimePlanRepository{
      row.introducedAt=stored.introducedAt;row.introducedEventRef=stored.introducedEventRef;
     }
    }
-   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity({...result.input,frameworkPlans:undefined})!==fixedTimelineIdentity({...replayed,frameworkPlans:undefined}))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
+   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity({...result.input,frameworkPlans:undefined,formalTargets:undefined,carriedFormalInputs:undefined})!==fixedTimelineIdentity({...replayed,frameworkPlans:undefined,formalTargets:undefined}))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
    return result;
   }
   const previous=await this.current(resource);
@@ -182,6 +187,19 @@ export class OrderTimePlanRepository{
    const kept=changedScopes.has(scope.scopeRef)?undefined:targets[scope.scopeRef];
    const evaluated=evaluateOrderTimeScenario({...value,start:{precision:'instant',value:time.now,source:input.eventRef},scopes:[scope],...(kept?{fixedTargets:kept}:{})})[0]!;
    targets[scope.scopeRef]={...targets[scope.scopeRef],...Object.fromEntries(evaluated.targets.map(target=>[target.id,target]))};
+  }
+  if(previous&&kind==='arrangement'&&value.formalInputs&&!value.frameworkContext)
+   value.formalTargets=formalRemainingSchedule(value,value.formalInputs,previous,time,input.eventRef).targets;
+  else if(previous?.input.formalTargets){
+   const carried=retainFormalTargets(value,previous);
+   if(carried){
+    value.formalTargets=carried;
+    // Carry the comparison facts with their adopted targets without turning a
+    // non-arrangement version into a new formal arrangement on replay.
+    const basis=previous.input.carriedFormalInputs??previous.input.formalInputs;
+    if(basis&&fixedTimelineIdentity(basis)!==fixedTimelineIdentity(value.formalInputs??null))
+     value.carriedFormalInputs=structuredClone(basis);
+   }else delete value.formalTargets;
   }
   if(value.frameworkContext){
    const context=value.frameworkContext,progress=new Map(Object.entries(context.progress));
