@@ -32,7 +32,7 @@ it('shows one original milestone ring, full target date, real incomplete status 
 it('homepage shows the customer delivery date, never the internal lower-bound forecast as that date',()=>{
  const o=fixture();o.visualProgress={timeRatio:.25,actualRatio:.5} as OrderJourney['visualProgress'];o.orderId='TEST';
  const html=renderToStaticMarkup(createElement(CockpitHomeProgress,{order:o}));
- expect(html).toContain('2027-03-15');expect(html).not.toContain('2027-03-08');expect(html).not.toContain('预计完成');expect(html).toContain('交货日期');expect(html).toContain('实际进度');expect(html.indexOf('2027-03-15')).toBeLessThan(html.indexOf('data-progress-kind="time"'));expect(html).toContain('aria-valuenow="25"');expect(html).toContain('aria-valuenow="50"');
+ expect(html).toContain('2027-03-15');expect(html).not.toContain('2027-03-08');expect(html).not.toContain('预计完成');expect(html).not.toContain('交货日期');expect(html).toContain('aria-label="整单自然时间进度"');expect(html).toContain('实际进度');expect(html.indexOf('2027-03-15')).toBeLessThan(html.indexOf('data-progress-kind="time"'));expect(html).toContain('aria-valuenow="25"');expect(html).toContain('aria-valuenow="50"');
 });
 it('keeps objective delay independent from own responsibility and missing evidence',async()=>{
  const {frameworkResponsibility}=await import('../../apps/web/src/cockpit-framework-nodes.js');
