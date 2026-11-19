@@ -19,8 +19,15 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {nativeTaskReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import type {JourneyCompleteResult} from '@dx-rework/contracts/digital-production-journey';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+// The native SQL selector deliberately carries no live action eligibility.
+// Compare every structural field here, and check todo on the public list after enrichment.
+function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:readonly {id:string}[]}){
+ const {todo,...summary}=result.summary;
+ return {projection:{...result,summary,items:result.items.map(item=>item.id)},todo};
+}
 (url?describe.sequential:describe.skip)('PERF01 original single-mother facts in owned PostgreSQL',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,repo:JourneyFactRepository,identity:DigitalProductionIdentityService,scene:string;
  const run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
@@ -263,17 +270,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    for(const patch of [{},{stage:'preparation'},{node:'packing'},{risk:'overdue'},{missing:'customer_date'},{search:a.designStyleNo},{kpi:'not_started'}]){
     const filter=JourneyFilterSchema.parse({scope:'production',...patch}),read=await readJourneySelections(f.db,client,f.root,candidates,filter,asOf);
     expect(read.items.every(row=>row.status==='ready')).toBe(true);
-    expect(read.items.every(row=>row.selection.stages.length===0)).toBe(true);
+    expect(read.items.every(row=>row.selection.stages.length===0&&row.selection.actionableTodo===undefined)).toBe(true);
     const actual=selectJourneySelections(read.items.map(row=>row.selection),filter,asOf),original=selectJourneys(expected,filter,asOf);
-    expect({...actual,items:actual.items.map(item=>item.id)}).toEqual({...original,items:original.items.map(item=>item.id)});
+    expect(actual.summary.todo).toBe(actual.summary.all?null:0);
+    expect(reduceSelection(actual).projection).toEqual(reduceSelection(original).projection);
    }
    await client.query('COMMIT');
   }finally{if(client.query)await client.query('ROLLBACK');client.release();}
+  const indexed=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'});
+  const filter=JourneyFilterSchema.parse({scope:'production',search:a.designStyleNo,kpi:'todo'});
+  for(const result of await Promise.all([query.list(f.root,filter),indexed.list(f.root,filter)]))
+   expect(result).toMatchObject({total:0,summary:{todo:0},items:[]});
  }));
  it('keeps linked native preparation and partial-role selection identical without sharing full-manager nodes',()=>run(async()=>{
   const ready=await f.bulkReady('无',undefined,2),candidate={source:{source_id:ready.sourceId},order:{production_order_id:ready.id}};
   await repo.buildOne({kind:'order',id:ready.id});
-  const query=new DigitalJourneyQuery(f.db),asOf=(await f.runtime.repository.view(scene)).now,client=await f.db.connect(),differences:unknown[]=[];
+  const query=new DigitalJourneyQuery(f.db),indexed=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'});
+  const asOf=(await f.runtime.repository.view(scene)).now,client=await f.db.connect(),differences:unknown[]=[];
   try{
    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
    const actors=[f.root,...['production-management','sample-designer','merchandiser','pattern-room-worker','warehouse','qc','development-clerk'].flatMap(key=>f.people[key]?[f.people[key]!]:[]),
@@ -283,8 +296,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     for(const patch of [{},{stage:'development'},{stage:'preparation'},{node:'sourcing_preparation'},{node:'sourcing_preparation',state:'active'},{state:'active'},{risk:'unknown'},{missing:'scope'}]){
      const filter=JourneyFilterSchema.parse({scope:'production',...patch}),read=await readJourneySelections(f.db,client,actor,[candidate],filter,asOf);
      const expected=selectJourneys(original?[original]:[],filter,asOf),actual=selectJourneySelections(read.items.map(row=>row.selection),filter,asOf);
-     const reduce=(value:typeof actual)=>({...value,items:value.items.map(item=>item.id)});
-     if(JSON.stringify(reduce(actual))!==JSON.stringify(reduce(expected)))differences.push({roles:actor.actorRoles,filter:patch,expected:reduce(expected),actual:reduce(actual)});
+     expect(read.items.every(row=>row.selection.actionableTodo===undefined)).toBe(true);
+     expect(actual.summary.todo).toBe(actual.summary.all?null:0);
+     const expectedProjection=reduceSelection(expected).projection,actualProjection=reduceSelection(actual).projection;
+     if(JSON.stringify(actualProjection)!==JSON.stringify(expectedProjection))differences.push({roles:actor.actorRoles,filter:patch,expected:expectedProjection,actual:actualProjection});
+    }
+    if(!original)continue;
+    const filter=JourneyFilterSchema.parse({scope:'production',search:ready.id,kpi:'todo'});
+    const expected=selectJourneys([original],filter,asOf);
+    for(const actual of await Promise.all([query.list(actor,filter),indexed.list(actor,filter)])){
+     expect(actual.summary?.todo).toBe(expected.summary.todo);
+     expect(actual.total).toBe(expected.summary.todo===null?null:expected.total);
+     expect(actual.items.map(item=>item.id)).toEqual(expected.items.map(item=>item.id));
     }
    }
    await client.query('COMMIT');expect(differences).toEqual([]);

@@ -82,7 +82,16 @@ export type CustomerDateHistory = {
 export function initialInstruction(): InstructionDocument {
   return { styleName: "", category: "", season: "", fabricType: "", composition: "", date: null, process: "", secondaryCraft:"沿用开发", remarks: "", patternMaker: "", preshrink: "待确认", shipSample: "", sewingRequirements: SEWING_REQUIREMENTS.join("\n"), comments: "", fabrics: [], accessories: [], images: [], unit: "inch", sizes: [], measurements: [] };
 }
-export function instructionErrors(doc: InstructionDocument, order: DigitalOrder): string[] {
+type InstructionOrderSizes = {lines: ReadonlyArray<{
+  lineId:string; sizes: ReadonlyArray<{size:string}>;
+}>};
+export function instructionMatchesTechnicalSizes(doc:InstructionDocument,order:InstructionOrderSizes,table:TechnicalSizeTable):boolean {
+  return doc.unit===table.unit&&order.lines.every(line=>line.sizes.every(size=>table.sizes.includes(size.size)))
+    &&table.sizes.every(size=>doc.sizes.includes(size))
+    &&table.measurements.every(row=>doc.measurements.some(measurement=>measurement.name===row.name
+      &&table.sizes.every((size,index)=>measurement.values[doc.sizes.indexOf(size)]?.trim()===row.values[index]?.trim())));
+}
+export function instructionErrors(doc: InstructionDocument, order: InstructionOrderSizes): string[] {
   const errors: string[] = [];
   if (!doc.styleName || !doc.category || !doc.date) errors.push("请填写款名、类型、制单日期");
   if (doc.preshrink === "待确认") errors.push("请选择是否预缩");

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { JourneyFilterSchema, JourneyReturnContextSchema, JOURNEY_STAGES, journeyReturnUrl, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,type JourneySelection } from "../../apps/api/src/production-platform/journey-projection.js";
-import {journeyDisplay} from '../../apps/api/src/production-platform/journey-display.js';
+import {cockpitCreationTime,journeyDisplay} from '../../apps/api/src/production-platform/journey-display.js';
+import {cockpitHomeFacts} from '../../apps/api/src/production-platform/cockpit-home-facts.js';
 import { JOURNEY_NODES } from "../../apps/api/src/production-platform/journey-catalog.js";
 const at="2026-10-04T10:00:00.000Z";
 const node=(key:string,patch:Partial<JourneyNode>={}):JourneyNode=>({key,instanceId:key,label:key,stage:"development",state:"pending",current:true,round:1,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedPrecision:"missing",expectedKind:"unset",actualAt:null,actualQuality:"missing",enteredAt:null,sla:"not_started",completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,...patch});
@@ -110,5 +111,49 @@ describe("V2 Journey shared query semantics",()=>{
     expect(JourneyReturnContextSchema.parse(Object.fromEntries(new URLSearchParams(url.split("?")[1])))).toMatchObject({search:"PO 中文",page:2,selected:id,expanded:"cutting_gate"});
     expect(JourneyReturnContextSchema.safeParse({returnTo:"https://external.invalid"}).success).toBe(false);
     expect(JourneyFilterSchema.safeParse({startDate:"2026-10-05",endDate:"2026-10-01"}).success).toBe(false);
+  });
+});
+
+describe('cockpit whole-order read facts',()=>{
+  it('uses native activation before any downstream work and keeps former node progress outside cockpit scope',()=>{
+    const order=item('native',[node('creation',{stage:'creation',state:'completed'})],{
+      orderId:'native',cockpitCreation:{developmentCreatedAt:'2026-09-10T00:00:00.000Z',orderCreatedAt:at}
+    });
+    expect(cockpitCreationTime('2026-10-05T00:00:00Z','2026-10-01T00:00:00Z',at)).toBeNull();
+    expect(journeyDisplay(order,at).mainState).toBe('active');
+    const cockpit=selectJourneys([order],JourneyFilterSchema.parse({scope:'production',kpi:'active'}),at);
+    expect(cockpit).toMatchObject({total:1,summary:{active:1}});
+    expect(selectJourneys([order],JourneyFilterSchema.parse({kpi:'active'}),at).total).toBe(0);
+    expect(journeyDisplay({...order,cockpitCreation:{...order.cockpitCreation!,orderCreatedAt:null}},at).mainState).toBe('not_started');
+  });
+
+  it('counts the same actionable mothers before pagination, independently of delivery risk',()=>{
+    const one=item('one',[],{orderId:'one',cockpitCreation:{developmentCreatedAt:null,orderCreatedAt:at}});
+    const action={orderId:'one',category:'sourcing_owner_approval' as const,evidenceId:'original-decision',missingObject:'选厂老板审批',
+      handlerRole:'owner_group',handlerId:'original-handler',originalRoute:'/ui/sourcing/orders/test',reason:'有效审批待办',asOf:at};
+    const late={...one,display:{...journeyDisplay(one,at),mainState:'overdue' as const},
+      actionableTodo:{status:'complete' as const,items:[action,{...action,evidenceId:'another-original-item'}]}};
+    const handled={...one,id:'two',orderId:'two',actionableTodo:{status:'complete' as const,items:[]}};
+    const filter=JourneyFilterSchema.parse({scope:'production',kpi:'todo'});
+    expect(selectJourneys([late,late,handled],filter,at)).toMatchObject({total:1,summary:{all:2,overdue:1,active:1,todo:1},items:[{id:'one'}]});
+    expect(selectJourneys([late,{...handled,actionableTodo:{status:'unavailable',items:[]}}],filter,at)).toMatchObject({summary:{todo:null},items:[]});
+    expect(selectJourneys([handled],filter,at)).toMatchObject({total:0,summary:{todo:0}});
+  });
+
+  it('keeps no receipt, proven zero, partial coverage and concealed factory lines distinct',()=>{
+    const lineA=item('native',[]).lines[0]!,lineB={...lineA,id:'second'};
+    const input={orderId:'native',fullOrder:true,lines:[lineA,lineB],sentLineIds:new Set<string>(),
+      sampleApplicable:undefined,sampleWaiting:false};
+    expect(cockpitHomeFacts(input)).toMatchObject({
+      production:{status:'unavailable'},receiving:{status:'unavailable',received:null},shipSample:{status:'no_record'}
+    });
+    const receipts=[lineA,lineB].map(line=>({lineId:line.id,demand:100,received:0,recorded:true}));
+    expect(cockpitHomeFacts({...input,receipts})).toMatchObject({receiving:{status:'not_started',tone:'gray',received:0,demand:200}});
+    expect(cockpitHomeFacts({...input,receipts:[{...receipts[0]!,received:100}],sentLineIds:new Set([lineA.id]),
+      factories:[{lineId:lineA.id,quantity:100,status:'production_completed',visible:true},{lineId:lineB.id,quantity:100,status:'production_completed',visible:false}]
+    })).toMatchObject({production:{status:'partial',scope:'visible'},receiving:{status:'partial',scope:'visible',received:100,demand:100},
+      shipSample:{status:'partial',tone:'blue'}});
+    expect(cockpitHomeFacts({...input,fullOrder:false,receipts})).toMatchObject({receiving:{status:'unavailable',received:null,demand:null}});
+    expect(cockpitHomeFacts({...input,sampleApplicable:false})).toMatchObject({shipSample:{status:'not_applicable',tone:'neutral'}});
   });
 });

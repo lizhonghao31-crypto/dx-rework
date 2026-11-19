@@ -112,3 +112,92 @@ export function reuseJourneySnapshotReads(client: PoolClient): PoolClient {
   } });
   batchScopes.set(proxy,batches);return proxy;
 }
+
+const COHORT_SIZE=32;
+const COHORT_SQL_BYTES=256*1024;
+const COHORT_INDEX='__dx_cockpit_candidate';
+const COHORT_ROW='__dx_cockpit_result';
+const cohortIdentifiers=new RegExp(`${COHORT_INDEX}|${COHORT_ROW}`,'i');
+function cloneCohortValue<T>(value:T):T {
+ if(Buffer.isBuffer(value))return Buffer.from(value) as T;
+ if(value instanceof Date)return new Date(value.getTime()) as T;
+ if(Array.isArray(value))return value.map(cloneCohortValue) as T;
+ if(value&&typeof value==='object'&&Object.getPrototypeOf(value)===Object.prototype){
+  return Object.fromEntries(Object.entries(value).map(([key,entry])=>[key,cloneCohortValue(entry)])) as T;
+ }
+ return value;
+}
+const bindMarker=/'(?:[^']|'')*'|"(?:[^"]|"")*"|\$([1-9][0-9]*)\b/g;
+type CohortRead={statement:string;args:unknown[];resolve:(result:QueryResult)=>void;reject:(error:unknown)=>void};
+
+/** Execute identical native SELECT shapes as one ordered SQL read on the
+ * caller's read-only snapshot. Bindings keep their original inference and pg
+ * decoders. Native evaluators retain their own authorization and branching. */
+export async function readJourneyCandidateCohort<T,R>(db:PoolClient,candidates:readonly T[],read:(client:PoolClient,candidate:T)=>Promise<R>):Promise<R[]>{
+ const results:R[]=[];
+ for(let offset=0;offset<candidates.length;offset+=COHORT_SIZE){
+  const pending:CohortRead[]=[];
+  let draining=false,failed=false,failure:unknown;
+  const dispatch=async(group:CohortRead[])=>{
+   const first=group[0]!;
+   if(group.length===1){first.resolve(await db.query(first.statement,first.args));return;}
+   const unique=[...new Map(group.map(entry=>[JSON.stringify(entry.args),entry])).values()];
+   if(unique.length===1){
+    const result=await db.query(first.statement,first.args);
+    for(const entry of group)entry.resolve({...result,rows:cloneCohortValue(result.rows)});
+    return;
+   }
+   const args:unknown[]=[],indexes=new Map<string,number>();
+   const parts=unique.map((entry,index)=>{
+    indexes.set(JSON.stringify(entry.args),index);
+    const statement=entry.statement.replace(bindMarker,(match,digit:string|undefined)=>digit?`$${args.length+Number(digit)}`:match);
+    args.push(...entry.args);
+    return `SELECT ${index} AS "${COHORT_INDEX}",row_number() OVER () AS "${COHORT_ROW}",original.* FROM (${statement}) original`;
+   });
+   const result=await db.query(`${parts.join(' UNION ALL ')} ORDER BY "${COHORT_INDEX}","${COHORT_ROW}"`,args);
+   if(result.fields.filter(field=>field.name===COHORT_INDEX).length!==1||
+      result.fields.filter(field=>field.name===COHORT_ROW).length!==1)throw Error('Missing cockpit candidate result metadata');
+   const rows=Array.from({length:unique.length},()=>[] as QueryResult['rows']);
+   for(const {[COHORT_INDEX]:index,[COHORT_ROW]:ordinal,...row} of result.rows){
+    if(!Number.isInteger(index)||!rows[index]||ordinal==null)throw Error('Invalid cockpit candidate result scope');
+    rows[index].push(row);
+   }
+   const fields=result.fields.filter(field=>field.name!==COHORT_INDEX&&field.name!==COHORT_ROW);
+   for(const entry of group){
+    const matches=cloneCohortValue(rows[indexes.get(JSON.stringify(entry.args))!]!);
+    entry.resolve({...result,fields,rows:matches,rowCount:matches.length});
+   }
+  };
+  const drain=async()=>{
+   while(pending.length){
+    const wave=pending.splice(0),groups=new Map<string,CohortRead[]>();
+    for(const [i,entry] of wave.entries()){
+     const tokens=readTokens(entry.statement);
+     const batchable=/^(SELECT|WITH)\b/i.test(entry.statement)&&tokens!==null&&!unsafeRead.test(tokens)
+      &&!entry.statement.includes(';')&&!cohortIdentifiers.test(entry.statement)
+      &&Buffer.byteLength(entry.statement)*COHORT_SIZE<=COHORT_SQL_BYTES
+      &&entry.args.length*COHORT_SIZE<=32767&&entry.args.every(scalar);
+     const key=batchable?entry.statement:String(i),group=groups.get(key)??[];
+     group.push(entry);groups.set(key,group);
+    }
+    for(const group of groups.values()){
+     try{
+      if(failed)throw failure;
+      await dispatch(group);
+     }catch(error){failed=true;failure=error;for(const entry of group)entry.reject(error);}
+    }
+   }
+   draining=false;
+  };
+  const query=(sql:string,values:unknown[]=[])=>new Promise<QueryResult>((resolve,reject)=>{
+   if(failed){reject(failure);return;}
+   pending.push({statement:sql.trim().replace(/;\s*$/,''),args:values,resolve,reject});
+   if(!draining){draining=true;queueMicrotask(()=>void drain());}
+  });
+  const client=new Proxy(db,{get(target,key){return key==='query'?query:Reflect.get(target,key,target);}});
+  // Drain every branch before returning to the savepoint owner, even on error.
+  const settled=await Promise.allSettled(candidates.slice(offset,offset+COHORT_SIZE).map(candidate=>read(client,candidate)));
+  for(const outcome of settled){if(outcome.status==='rejected')throw outcome.reason;results.push(outcome.value);}
+ }
+ return results;
+}

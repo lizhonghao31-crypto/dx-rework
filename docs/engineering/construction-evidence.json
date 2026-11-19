@@ -1,228 +1,401 @@
 {
   "version": 1,
-  "base": "4189ef6a9072a968b8346b83065de525b6268d63",
-  "sourceFingerprint": "25622c79948e1726e7a525318b4c7710ca76c6630d108a0b926aaa4862f28d4f",
+  "base": "ce769864c2ef591f4b05d0473e0781fcd232ae48",
+  "sourceFingerprint": "90bb1a3a16d36d7154851f7d4294c491579c9a6746dff92858e8be3bf5f07976",
   "risk": "full",
   "rules": [
     {
-      "rule": "一张未发布开发草稿保留原来源、全部 PO 和服务器已确认附件，同账号跨会话可恢复多张。",
-      "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md 版本3 补正1 预留、持久保存和跨会话恢复。",
+      "rule": "采用有效创建事实并只在原授权母单范围投影可验证的生产、收货和船样状态。",
+      "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md v3 §三与座舱PR2交接",
       "writes": [
-        "apps/api/src/production-platform/development-routes.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/web/src/development-creation-draft.ts",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/use-development-creation-draft.ts",
-        "packages/contracts/src/digital-development.ts"
-      ],
-      "reads": [
-        "apps/web/src/digital-designer-workspace.tsx#DigitalDesignerWorkspace",
-        "apps/api/src/production-platform/development-service.ts#read",
-        "apps/api/src/production-platform/access-policy.ts#DigitalProductionAccessPolicy"
-      ],
-      "oldTests": [
-        "tests/unit/development-creation-draft.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
-      ],
-      "initialization": "沿源单唯一身份及逐次文档版本读回原 PO 和 ready 附件。无文档时草稿列表仍可找到原预留身份。",
-      "dateAndPermission": "沿有效设计师本人和 Root 权限，附件与原来源绑定。只读回执使用原发起人与命令键。",
-      "expectation": "新会话逐张恢复，读回三行 PO 与两份原附件，断线后只读查原回执、未发第二个写请求，原较新服务端版本受保护。",
-      "checks": [
-        "pg",
-        "unit",
-        "types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "首次实际发布事务才建立有效开发时钟。正式确认拥有独立原生时钟，旧已发布和冻结记录保留。",
-      "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md 版本3 补正1 首次有效发布、待审批失败及历史边界。",
-      "writes": [
-        "apps/api/migrations/0296_development_first_publication.sql",
-        "apps/api/src/acceptance-clock/hooks.ts",
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/cockpit-query.ts",
-        "apps/api/src/production-platform/development-cycle-evidence.ts",
-        "apps/api/src/production-platform/development-routes.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-sla-enrollment.ts",
-        "apps/api/src/production-platform/development-source-lifecycle.ts",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts",
-        "apps/api/src/production-platform/journey-fact-updates.ts",
+        "apps/api/src/production-platform/cockpit-home-facts.ts",
+        "apps/api/src/production-platform/journey-display.ts",
         "apps/api/src/production-platform/journey-query.ts",
         "apps/api/src/production-platform/journey-search-metadata.ts",
         "apps/api/src/production-platform/journey-selection-query.ts",
         "apps/api/src/production-platform/order-time-created.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/order-time-reading.test.ts"
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-created.ts#orderTimeCreated",
-        "apps/api/src/production-platform/journey-query.ts#DigitalJourneyQuery",
-        "apps/api/src/production-platform/journey-selection-query.ts#orderTimeCreatedMany",
-        "apps/api/src/production-platform/order-time-request-service.ts#OrderTimeRequestService",
-        "apps/api/src/production-platform/preparation-material-repository.ts#enrollPreparation"
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/web/src/cockpit-home.tsx"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/current-migration-manifest-checksum.test.ts"
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts"
       ],
-      "initialization": "按迁移应用前、未发布态和发布成功态核对。保留平行正式订单与源单独立创建事件，迁移不回填旧时间。",
-      "dateAndPermission": "使用原业务时钟、事务锁、审批、附件和打板服务。测试时钟仅允许同事务原认证测试身份，持久时间为秒及毫秒精度。",
-      "expectation": "草稿不出现在座舱且无钟。审批待决和失败无激活。一次成功或并发原命令只写一条首发事实。旧已采用内容保持且疑义旧稿安全拒绝。",
+      "initialization": "延用既有冷索引和历史母单创建审计，草稿或未知原事实继续不可计。",
+      "dateAndPermission": "读模型以同一观察时点和每条PO可见范围为准。PMC、管理者及无关人员均复用原授权判定。",
+      "expectation": "查询、翻页与详情保持相同原始身份和时点，部分PO不得标整单完成，撤权的同会话不得返回原详情。",
       "checks": [
-        "pg",
-        "migration",
-        "types",
-        "build",
-        "lint",
-        "protocol"
+        "unit-current",
+        "browser-current",
+        "typecheck-current",
+        "ci-protocol-current",
+        "cockpit-contract-current",
+        "postgres-followup-current",
+        "factory-scope-current"
+      ]
+    },
+    {
+      "rule": "制单与补料待处理复用已有资格、原生入口和精确处理角色。",
+      "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md v3 §三补正2和本次批量读取交接",
+      "writes": [
+        "apps/api/src/production-platform/cockpit-actionable.ts",
+        "apps/api/src/production-platform/journey-snapshot-reads.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/special-craft-library.ts",
+        "packages/contracts/src/production-instruction.ts",
+        "tests/unit/journey-snapshot-reads.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/journey-query.ts"
+      ],
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/journey-snapshot-reads.test.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts"
+      ],
+      "initialization": "原制单和原补料记录各自读取现有前置，不增加办理流程或迁移。按v3暂不计无法直达办理弹窗的回货差异。",
+      "dateAndPermission": "同一只读快照内合并相同SQL形状，保留原角色及冻结。按当前有效交接识别纯开发跟单，保留已发布制单未发布的新版本。",
+      "expectation": "制单新版本发布后退出，撤回交接重现发起人的待办。原生投料取得有效交接接受人的同一业务资格。",
+      "checks": [
+        "unit-current",
+        "browser-current",
+        "typecheck-current",
+        "ci-protocol-current",
+        "cockpit-contract-current",
+        "postgres-followup-current",
+        "factory-scope-current"
+      ]
+    },
+    {
+      "rule": "待处理KPI与筛选按母单同一权威集合去重，保留独立整单进行中状态。",
+      "source": "DX_Cockpit_SLA_Astryx_Pilot_Review_20261119.md v3 §三和§五PR2",
+      "writes": [
+        "apps/api/src/production-platform/journey-projection.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/unit/cockpit-display-facts.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "apps/api/src/production-platform/journey-query.ts"
+      ],
+      "oldTests": [
+        "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+        "tests/unit/digital-journey-projection.test.ts"
+      ],
+      "initialization": "旧深链接仍可读。采用原过滤栏控件保留覆盖缺项入口，未变更视觉样式或节点办理。",
+      "dateAndPermission": "同一母单可以独立计入逾期和待处理。权限不足时待处理数不可用且不出现错误零值。",
+      "expectation": "六项卡片按已验证口径显示，待处理的列表和全局总数一致并保留独立页码过滤。",
+      "checks": [
+        "unit-current",
+        "browser-current",
+        "typecheck-current",
+        "ci-protocol-current",
+        "cockpit-contract-current",
+        "postgres-followup-current",
+        "factory-scope-current"
+      ]
+    },
+    {
+      "rule": "测试通过原生事务准备有资格制单、原可补料以及真实身份撤权，记录多候选SQL对照。",
+      "source": "本次PR2采用原审批和原到料证据的验收要求，不替代业务工作流",
+      "writes": [
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/module-bundles-native-browser-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/cockpit-actionable.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/web/src/digital-journey-cockpit.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "initialization": "仅原生合成数据在低权限测试实例准备，全部验证后关闭浏览器与清理临时库。",
+      "dateAndPermission": "同一测试时钟及数据库快照中比较一个和多个候选。既有普通、PMC及管理角色断言不变。",
+      "expectation": "保留原取消状态、授权分页、界面交互和轻量SQL投影断言；通过两条对外读取链核真实待办，并验证私有开发草稿的无权读写均隐藏和数据不变。",
+      "checks": [
+        "unit-current",
+        "browser-current",
+        "typecheck-current",
+        "ci-protocol-current",
+        "cockpit-contract-current",
+        "postgres-followup-current",
+        "factory-scope-current"
       ]
     }
   ],
   "checks": [
     {
-      "id": "build",
-      "kind": "command",
-      "command": "npm run build:packages",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f768c7bb20e3819b0ad8995ac781ac171e1fcbc2",
-      "sourceFingerprint": "25622c79948e1726e7a525318b4c7710ca76c6630d108a0b926aaa4862f28d4f",
-      "context": "Built workspace packages from the candidate and locked release package manifests on Node 22.",
-      "startedAt": "2026-11-19T15:41:19.543Z",
-      "endedAt": "2026-11-19T15:41:30.282Z",
-      "log": "/tmp/dx-cockpit-pr1-final/build.log",
-      "logSha256": "42534bd96daa66688e58109269730dbaebe1e74278e8d2362cb7be3a3483b40d"
-    },
-    {
-      "id": "migration",
-      "kind": "command",
-      "command": "npm run db:migrate:lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f768c7bb20e3819b0ad8995ac781ac171e1fcbc2",
-      "sourceFingerprint": "25622c79948e1726e7a525318b4c7710ca76c6630d108a0b926aaa4862f28d4f",
-      "context": "Validated the entire append-only migration inventory and the checksum of the first-publication migration.",
-      "startedAt": "2026-11-19T15:41:30.390Z",
-      "endedAt": "2026-11-19T15:41:30.619Z",
-      "log": "/tmp/dx-cockpit-pr1-final/migration.log",
-      "logSha256": "1b85bb2907a50bf4f998ba91052fe8c6250d5e53bb9f1f5660e6f9b0c575bccf"
-    },
-    {
-      "id": "types",
-      "kind": "command",
-      "command": "npm run typecheck",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f768c7bb20e3819b0ad8995ac781ac171e1fcbc2",
-      "sourceFingerprint": "25622c79948e1726e7a525318b4c7710ca76c6630d108a0b926aaa4862f28d4f",
-      "context": "Ran the original repository TypeScript checks for all workspaces using the candidate.",
-      "startedAt": "2026-11-19T15:41:30.664Z",
-      "endedAt": "2026-11-19T15:42:44.187Z",
-      "log": "/tmp/dx-cockpit-pr1-final/types.log",
-      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "npm run lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f768c7bb20e3819b0ad8995ac781ac171e1fcbc2",
-      "sourceFingerprint": "25622c79948e1726e7a525318b4c7710ca76c6630d108a0b926aaa4862f28d4f",
-      "context": "Ran the original repository ESLint command against the complete candidate snapshot.",
-      "startedAt": "2026-11-19T15:41:30.659Z",
-      "endedAt": "2026-11-19T15:42:24.080Z",
-      "log": "/tmp/dx-cockpit-pr1-final/lint.log",
-      "logSha256": "c515bd0be1f85df3ce7017b7a7ab759a66a3184a30e6b65b5d13a9d4fea39cd7"
-    },
-    {
-      "id": "unit",
+      "id": "unit-current",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-development-workspace.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/order-time-reading.test.ts tests/unit/development-creation-draft.test.ts tests/unit/current-migration-manifest-checksum.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-cockpit-pr1-final/unit.json --no-color",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-display-facts.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/journey-snapshot-reads.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/dx-cockpit-home.HtNsdO/unit-current.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f768c7bb20e3819b0ad8995ac781ac171e1fcbc2",
-      "sourceFingerprint": "25622c79948e1726e7a525318b4c7710ca76c6630d108a0b926aaa4862f28d4f",
-      "context": "Vitest ran the original local creation-draft recovery and migration manifest checksum tests without a database.",
-      "startedAt": "2026-11-19T15:41:13.229Z",
-      "endedAt": "2026-11-19T15:41:19.485Z",
-      "log": "/tmp/dx-cockpit-pr1-final/unit.log",
-      "logSha256": "269de6e3f7d4e90a892ca7629ce556761b79eb7430240f3bcc5e8924bd562921",
-      "passed": 109,
+      "testedHead": "a6b0f908a098aa364b6abea0457b487255bca839",
+      "sourceFingerprint": "90bb1a3a16d36d7154851f7d4294c491579c9a6746dff92858e8be3bf5f07976",
+      "startedAt": "2026-11-19T19:26:54Z",
+      "endedAt": "2026-11-19T19:27:05Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/unit-current.log",
+      "logSha256": "160de67e4c03b395ea9aa57d74955a668fd420d65ed13c13d6074528cc49d404",
+      "passed": 89,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "95f1151bab27bf79dd834983fadf2db42fe7ee72f78323d378705c3034d9a613"
+          "sha256": "f4369af2f9b27e50880f7f0884c455196f0046cf11858f5dd6f736df92fa31f8"
         }
       ]
     },
     {
-      "id": "protocol",
+      "id": "browser-current",
       "kind": "tests",
-      "command": "bash -c 'node --test scripts/ci/*.test.mjs'",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/journey-page-native-browser-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --config vitest.config.ts -t 'renders current15 rows|reads native creation|enters and exits the current instruction action|batches the native draft prerequisites|rechecks the real same valid PMC|reads the six whole-range KPI|reads one and four original partial-work requirements|uses the effective handover and its native handler|allows drafts before final prerequisites|keeps reliable global KPI' --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/dx-cockpit-home.HtNsdO/browser-current.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f768c7bb20e3819b0ad8995ac781ac171e1fcbc2",
-      "sourceFingerprint": "25622c79948e1726e7a525318b4c7710ca76c6630d108a0b926aaa4862f28d4f",
-      "context": "Run the original GitHub Light protocol test command against the complete candidate after refreshing the explicit time-source inventory.",
-      "startedAt": "2026-11-19T15:41:33.993Z",
-      "endedAt": "2026-11-19T15:41:48.841Z",
-      "log": "/tmp/dx-cockpit-pr1-final/protocol.log",
-      "logSha256": "68838a75610a147a5918db4386f903e93f9ff9793054e73a737c56a86f4600ae",
+      "testedHead": "f8c37ace78b8ea76860f872d75326e8b12abeb1a",
+      "sourceFingerprint": "f8bc91eeaea8ebbc6f694d4f08aa712f6c794d3eb5446c8160dab395c2a8ec71",
+      "startedAt": "2026-11-19T19:17:30Z",
+      "endedAt": "2026-11-19T19:19:19Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。 最新候选仅修订另有完整验证的两个测试文件；本组执行入口、依赖和运行配置未变。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/browser-current.log",
+      "logSha256": "e6f569d939ac449730307c789c0cea315baad75c044eeef2c53dde7096599304",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
+        ".github",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/module-bundles-native-browser-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts"
+      ],
+      "inputFingerprint": "fa37494a90bac5752838a951f15912d6b2f195f1b0792d486ad19d8a86dc89c0",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 36,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a3c6763a1dc35c815fc5b1114a497b0fa30c45102a6e39a2f2c902674770b509"
+        }
+      ]
+    },
+    {
+      "id": "lint-current",
+      "kind": "command",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/cockpit-actionable.ts apps/api/src/production-platform/cockpit-home-facts.ts apps/api/src/production-platform/journey-display.ts apps/api/src/production-platform/journey-projection.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-search-metadata.ts apps/api/src/production-platform/journey-selection-query.ts apps/api/src/production-platform/journey-snapshot-reads.ts apps/api/src/production-platform/order-time-created.ts apps/api/src/production-platform/order-time-operation-state.ts apps/api/src/production-platform/production-instruction-service.ts apps/api/src/production-platform/special-craft-library.ts apps/web/src/cockpit-home.tsx apps/web/src/digital-journey-cockpit-model.ts apps/web/src/digital-journey-cockpit.tsx packages/contracts/src/digital-production-journey.ts packages/contracts/src/production-instruction.ts tests/helpers/business-anchor-fixture.ts tests/integration/digital-journey-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-page-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-snapshot-reads.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a6b0f908a098aa364b6abea0457b487255bca839",
+      "sourceFingerprint": "90bb1a3a16d36d7154851f7d4294c491579c9a6746dff92858e8be3bf5f07976",
+      "startedAt": "2026-11-19T19:26:54Z",
+      "endedAt": "2026-11-19T19:26:59Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/lint-current.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "typecheck-current",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a6b0f908a098aa364b6abea0457b487255bca839",
+      "sourceFingerprint": "90bb1a3a16d36d7154851f7d4294c491579c9a6746dff92858e8be3bf5f07976",
+      "startedAt": "2026-11-19T19:26:54Z",
+      "endedAt": "2026-11-19T19:28:05Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/typecheck-current.log",
+      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
+    },
+    {
+      "id": "build-packages-current",
+      "kind": "command",
+      "command": "npm run build:packages",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a6b0f908a098aa364b6abea0457b487255bca839",
+      "sourceFingerprint": "90bb1a3a16d36d7154851f7d4294c491579c9a6746dff92858e8be3bf5f07976",
+      "startedAt": "2026-11-19T19:26:42Z",
+      "endedAt": "2026-11-19T19:26:54Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/build-packages-current.log",
+      "logSha256": "42534bd96daa66688e58109269730dbaebe1e74278e8d2362cb7be3a3483b40d"
+    },
+    {
+      "id": "ci-protocol-current",
+      "kind": "tests",
+      "command": "node --test --test-reporter=tap scripts/ci/*.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a6b0f908a098aa364b6abea0457b487255bca839",
+      "sourceFingerprint": "90bb1a3a16d36d7154851f7d4294c491579c9a6746dff92858e8be3bf5f07976",
+      "startedAt": "2026-11-19T19:29:05Z",
+      "endedAt": "2026-11-19T19:29:15Z",
+      "context": "带Git历史元数据的干净隔离候选工作树，运行首次Light的同一Node协议测试套件，保留TAP输出。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/ci-protocol-current.log",
+      "logSha256": "84407fa38b71fc919df0afeb550d95abe1d7ffe34b01ab4bbb633f9d695c0aa1",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "84407fa38b71fc919df0afeb550d95abe1d7ffe34b01ab4bbb633f9d695c0aa1"
+        }
+      ],
       "passed": 284,
       "failed": 0,
       "skipped": 0
     },
     {
-      "id": "pg",
+      "id": "cockpit-contract-current",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-creation-draft-native-browser-postgres.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-cockpit-pr1-final/pg.json --no-color",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/dx-cockpit-home.HtNsdO/cockpit-contract-current.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f768c7bb20e3819b0ad8995ac781ac171e1fcbc2",
-      "sourceFingerprint": "766aa9d7ead752bd17c4d7cf5e78fda5fae3cf1d5e1acfbb365325831bb92273",
-      "context": "Real Chromium with authenticated original App routes and isolated PostgreSQL 16 schemas. Covers saved draft source identity, permissions at display, acknowledgements, publication and formal order clocks and legacy migration.",
-      "startedAt": "2026-11-19T15:19:10.515Z",
-      "endedAt": "2026-11-19T15:21:01.667Z",
-      "log": "/tmp/dx-cockpit-pr1-final/pg.log",
-      "logSha256": "9ca90181bf3337e489cd8ecfae9e23f972e94022f3d04a6a64dcf8d0a2a57ac0",
+      "testedHead": "f8c37ace78b8ea76860f872d75326e8b12abeb1a",
+      "sourceFingerprint": "f8bc91eeaea8ebbc6f694d4f08aa712f6c794d3eb5446c8160dab395c2a8ec71",
+      "startedAt": "2026-11-19T19:19:19Z",
+      "endedAt": "2026-11-19T19:24:23Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。 最新候选仅修订另有完整验证的两个测试文件；本组执行入口、依赖和运行配置未变。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/cockpit-contract-current.log",
+      "logSha256": "32ce00fc8260614bfb5db5f9104ef09364a97f5469d15fed1d49c2e58eff5a78",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
+        "tests/helpers",
         "tests/acceptance",
         "tests/fixtures",
-        "tests/helpers",
-        "tests/integration",
+        ".github",
+        ".node-version",
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
-        "vitest.config.ts"
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/module-bundles-native-browser-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts"
       ],
-      "inputFingerprint": "24eb021ff7063cb72e1ba4b0f455c6b869c66769b699a7f855ca0598ab46a5d6",
-      "passed": 14,
+      "inputFingerprint": "fa37494a90bac5752838a951f15912d6b2f195f1b0792d486ad19d8a86dc89c0",
+      "passed": 58,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0f72f4be8da3ad323effdf5b600b5e7d69daf1628d38064d3931f9498074b169"
+          "sha256": "0090f6fab86d3494b0f1025a563acf0905e26761a4319168dffcdb14aba7d185"
+        }
+      ]
+    },
+    {
+      "id": "postgres-followup-current",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/dx-cockpit-home.HtNsdO/postgres-followup-current.json --no-color",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "a6b0f908a098aa364b6abea0457b487255bca839",
+      "sourceFingerprint": "90bb1a3a16d36d7154851f7d4294c491579c9a6746dff92858e8be3bf5f07976",
+      "startedAt": "2026-11-19T19:27:04Z",
+      "endedAt": "2026-11-19T19:29:33Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/postgres-followup-current.log",
+      "logSha256": "2affe8eeff796118fe27c39da3ab94a9e4208a3716213608b13986096188f8ae",
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "0789ba47e0626a2f0c4aabd9ccf2519faba1d25d24669f908dc131bebc146f69"
+        }
+      ]
+    },
+    {
+      "id": "factory-scope-current",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/factory-supervision-instances-browser-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/dx-cockpit-home.HtNsdO/factory-scope-current.json --no-color",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "f8c37ace78b8ea76860f872d75326e8b12abeb1a",
+      "sourceFingerprint": "f8bc91eeaea8ebbc6f694d4f08aa712f6c794d3eb5446c8160dab395c2a8ec71",
+      "startedAt": "2026-11-19T19:24:51Z",
+      "endedAt": "2026-11-19T19:25:25Z",
+      "context": "干净提交快照，Node 22，本仓库 Vitest 配置。数据库场景使用本地一次性 PostgreSQL 16 及真实签名 Chromium 会话，隔离库已清理。 最新候选仅修订另有完整验证的两个测试文件；本组执行入口、依赖和运行配置未变。",
+      "log": "/workspace/dx-cockpit-home.HtNsdO/factory-scope-current.log",
+      "logSha256": "d752e75d1f8528e23e53e79b39af02420ead9a2afde5165f41b17e84a81ce8fe",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
+        ".github",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/module-bundles-native-browser-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts"
+      ],
+      "inputFingerprint": "fa37494a90bac5752838a951f15912d6b2f195f1b0792d486ad19d8a86dc89c0",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "22ba3b681d97d583715bf49025fc1774e6da14f8ed076d0dab8f36448f21fbd3"
         }
       ]
     }

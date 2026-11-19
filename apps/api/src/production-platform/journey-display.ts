@@ -1,4 +1,4 @@
-import { JOURNEY_NODES, JOURNEY_STAGES, isJourneyPlanningNode, type JourneyDisplay, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_NODES, JOURNEY_STAGES, isJourneyPlanningNode, type CockpitCreationFacts, type JourneyDisplay, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import {journeyObservedDay} from './journey-risk-clock.js';
 import {journeyCompletedAtObservation} from './journey-completion-evidence.js';
 
@@ -7,6 +7,18 @@ import {journeyCompletedAtObservation} from './journey-completion-evidence.js';
 export function journeyOrderState(input:{cancelled:boolean;closed:boolean;specialClosed?:boolean;activated:boolean;earliestShipmentDate:string|null;reminderDate:string|null},asOf:string):JourneyDisplay['mainState']{
  const today=journeyObservedDay(asOf),date=input.earliestShipmentDate;
  return input.cancelled?'cancelled':input.closed?'completed':input.specialClosed?'closed':date&&date<today?'overdue':date&&(input.reminderDate??date)<=today?'due_soon':input.activated?'active':'not_started';
+}
+
+/** Managed roots need native event evidence. The immutable order row and
+ * original publication timestamp are the respective legacy facts. */
+export function cockpitCreationTime(nativeAt:string|null|undefined,legacyAt:Date|string|null|undefined,asOf:string):string|null {
+ const value=nativeAt??legacyAt;
+ if(!value)return null;
+ const time=new Date(value);
+ return Number.isFinite(time.getTime())&&time.getTime()<=Date.parse(asOf)?time.toISOString():null;
+}
+export function cockpitIsActivated(orderId:string|null,creation:CockpitCreationFacts):boolean {
+ return Boolean(orderId?creation.orderCreatedAt:creation.developmentCreatedAt);
 }
 
 /** Canonical business shares, independent of legacy count flags and PO/task multiplicity. */
@@ -26,7 +38,7 @@ export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelle
   const closed=nodes.some(node=>node.key==="packing"&&node.state==="completed"&&node.completesOrder!==false),specialClosed=nodes.some(node=>node.key==="special_closure"&&node.state==="completed");
   const dates=order.poDeliveryDates??[];
   const earliestShipmentDate=dates.flatMap(line=>line.customerWarehouseArrivalDate?[line.customerWarehouseArrivalDate]:[]).sort()[0]??null;
-  const activated=journeyActivated(order);
+  const activated=order.cockpitCreation?cockpitIsActivated(order.orderId,order.cockpitCreation):journeyActivated(order);
   const mainState=journeyOrderState({cancelled:Boolean(terminal.cancelled),closed,specialClosed,activated,earliestShipmentDate,reminderDate:itemReminder(order)??null},asOf);
   const stages=JOURNEY_STAGES.map(definition=>{
     const candidates=nodes.filter(node=>node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development")));

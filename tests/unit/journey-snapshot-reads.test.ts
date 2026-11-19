@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import { describe, expect, it, vi } from "vitest";
-import { reuseJourneySnapshotReads } from "../../apps/api/src/production-platform/journey-snapshot-reads.js";
+import { readJourneyCandidateCohort,reuseJourneySnapshotReads } from "../../apps/api/src/production-platform/journey-snapshot-reads.js";
 const result = (rows: unknown[]) => ({ command: "SELECT", rowCount: rows.length, oid: 0, fields: [], rows });
 describe("Journey read reuse stays inside its read-only snapshot", () => {
   it("keeps earlier reads when a business action literal contains merge or update", async () => {
@@ -91,4 +91,36 @@ describe("Journey read reuse stays inside its read-only snapshot", () => {
     await db.query("SELECT large"); await db.query("SELECT large");
     expect(query).toHaveBeenCalledTimes(6);
   });
+});
+
+describe('Cockpit candidate SQL cohorts',()=>{
+ it('rebases only real binds and returns authorized rows to their originating candidate in order',async()=>{
+  const fieldNames=['__dx_cockpit_candidate','__dx_cockpit_result','note','at','file'];
+  const moment=new Date('2026-11-19T17:00:00.000Z');
+  const sql="SELECT note,at,file FROM t WHERE id=$1 AND code=$2 AND symbol='$1'";
+  const query=vi.fn(async(text:string,args:unknown[])=>{
+   expect(text).toContain(' UNION ALL ');expect(args).toHaveLength(4);return {
+   ...result([{__dx_cockpit_candidate:0,__dx_cockpit_result:'1',note:'first',at:moment,file:Buffer.from('TEST')},
+    {__dx_cockpit_candidate:0,__dx_cockpit_result:'2',note:'second'},
+    {__dx_cockpit_candidate:1,__dx_cockpit_result:'1',note:'own'}]),
+   fields:fieldNames.map(name=>({name}))
+  };});
+  const db={query} as unknown as PoolClient;
+  const rows=await readJourneyCandidateCohort(db,['A','B','A'],async(client,id)=>(await client.query(sql,[id,'TEST'])).rows);
+  expect(query).toHaveBeenCalledTimes(1);
+  expect(query.mock.calls[0]![0]).toContain("WHERE id=$3 AND code=$4 AND symbol='$1'");
+  expect(query.mock.calls[0]![1]).toEqual(['A','TEST','B','TEST']);
+  expect(rows.map(slot=>slot.map(row=>row.note))).toEqual([['first','second'],['own'],['first','second']]);
+  rows[0]![0].file[0]=0;
+  expect(rows[2]![0].file).toEqual(Buffer.from('TEST'));expect(rows[2]![0].at).toBeInstanceOf(Date);
+ });
+ it('fails the cohort before the transaction owner can roll back and does not issue later reads after failure',async()=>{
+  const query=vi.fn(async()=>{throw Error('TEST snapshot statement failed');});
+  const db={query} as unknown as PoolClient;
+  await expect(readJourneyCandidateCohort(db,[1,2],async(client,id)=>{
+   if(id===2)try{await client.query('SELECT x FROM t WHERE id=$1',[id]);}catch{await client.query('SELECT retry');}
+   else await client.query('SELECT x FROM t WHERE id=$1',[id]);
+  })).rejects.toThrow('TEST snapshot statement failed');
+  expect(query).toHaveBeenCalledOnce();
+ });
 });

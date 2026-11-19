@@ -14,7 +14,7 @@ import type { InstructionDateRequest } from "@dx-rework/contracts/production-ins
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { initialInstruction, instructionErrors, changedInstructionSourceGroups, applyInstructionSourceReview, type InstructionSourceReview, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
+import { initialInstruction, instructionErrors, instructionMatchesTechnicalSizes, changedInstructionSourceGroups, applyInstructionSourceReview, type InstructionSourceReview, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
 import type { DigitalOrder } from "@dx-rework/contracts/digital-production";
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -165,7 +165,7 @@ export class ProductionInstructionService {
       const readiness=await productionReadiness(db,id);
       if(readiness.adoption){if(input.expectedReadinessRevision!==readiness.revision)fail('产前依据已变化，请刷新并核对当前有效资料');if(readiness.finalReasons.length)fail(readiness.finalReasons.join('；'));
        const table=(await publishedTechnicalArtifact(db,order.sourceId!,current.sourceRound!))!.artifact.body.baseSizeTable;
-       if(current.document.unit!==table.unit||order.lines.some(l=>l.sizes.some(s=>!table.sizes.includes(s.size)))||table.sizes.some(size=>!current.document.sizes.includes(size))||table.measurements.some(row=>!current.document.measurements.some(m=>m.name===row.name&&table.sizes.every((size,i)=>m.values[current.document.sizes.indexOf(size)]?.trim()===row.values[i]?.trim()))))fail('制单尺寸与当前有效技术尺寸表不一致，请明确采用技术表；缺订购尺码须由技术补充复核');
+       if(!instructionMatchesTechnicalSizes(current.document,order,table))fail('制单尺寸与当前有效技术尺寸表不一致，请明确采用技术表；缺订购尺码须由技术补充复核');
       }
       const issues=instructionErrors(current.document,order);if(issues.length)fail(issues.join("；"));
       await this.bindImages(db,actor,order,current.document);

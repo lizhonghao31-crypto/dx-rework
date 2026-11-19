@@ -59,12 +59,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
- it('renders the original full Shell, seven peer KPIs, and aligned date/progress rows without changing source facts',async()=>{
+ it('renders the original full Shell, six peer KPIs, and aligned date/progress rows without changing source facts',async()=>{
   const {context,page}=await h.open(undefined,{},1584);
   try{const actual=await h.read(page);expect(actual.total).toBe(31);for(const width of [1165,1366,1440,1920]){
-   await page.setViewportSize({width,height:1003});expect(await page.locator('.app-shell>aside').count()).toBe(1);expect(await page.locator('.journey-kpis button').count()).toBe(7);expect(await page.locator('.journey-secondary-kpis').count()).toBe(0);expect(await page.locator('.journey-orders th').count()).toBe(8);expect(await page.locator('.journey-orders th[aria-label="订单操作"]').count()).toBe(1);
+   await page.setViewportSize({width,height:1003});expect(await page.locator('.app-shell>aside').count()).toBe(1);expect(await page.locator('.journey-kpis .dx-production-kpi').count()).toBe(6);expect(await page.locator('.journey-secondary-kpis').count()).toBe(0);expect(await page.locator('.journey-orders th').count()).toBe(8);expect(await page.locator('.journey-orders th[aria-label="订单操作"]').count()).toBe(1);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
-   const cards=await page.locator('.journey-kpis button').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().top));expect(Math.max(...cards)-Math.min(...cards)).toBeLessThan(2);
+   const cards=await page.locator('.journey-kpis .dx-production-kpi').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().top));expect(Math.max(...cards)-Math.min(...cards)).toBeLessThan(2);
    const row=page.locator('.journey-orders tbody tr').first(),before=await row.boundingBox();await row.locator('.journey-order-select').hover();expect((await row.boundingBox())!.height).toBe(before!.height);
    for(const order of actual.items){const meter=page.locator(`[data-order-id="${order.id}"]`).getByRole('progressbar',{name:'整单实际进度'}),ratio=order.visualProgress?.actualRatio;if(ratio===null||ratio===undefined)expect(await meter.getAttribute('aria-valuenow')).toBeNull();else expect(Number(await meter.getAttribute('aria-valuenow'))).toBeCloseTo(ratio===1?100:Math.min(99.9,Math.round(ratio*1000)/10));}
    const body=await page.locator('body').innerText();for(const noise of ['查看进度依据与采用版本','完成办理前','当前结果：','时间规则待完善'])expect(body).not.toContain(noise);
@@ -75,10 +75,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'viewport-home-390.png')});
   }finally{await context.close();}
  });
- it('retains every original KPI click path and matches its authorized whole-range count, including zero results',async()=>{
+ it('matches the six current KPI cards to their authorized whole-range counts, including zero and unavailable',async()=>{
   const {context,page}=await h.open();try{const source=await h.read(page);
-   for(const [label,field]of [['进行中','active'],['未启动','notStarted'],['临期','dueSoon'],['逾期','overdue'],['整单已完成','completed'],['订单总数','all']] as const){
-    const button=page.locator('[aria-label="订单状态统计"]').getByRole('button',{name:new RegExp(label)}),expected=source.summary[field];expect(await button.locator('strong').innerText()).toBe(String(expected));
+   const stats=page.getByRole('region',{name:'订单状态统计',exact:true});
+   expect(await stats.getByText('未启动',{exact:true}).count()).toBe(0);
+   for(const [label,field]of [['进行中','active'],['临期','dueSoon'],['逾期','overdue'],['整单已完成','completed'],['待处理','todo'],['订单总数','all']] as const){
+    const card=stats.locator('.dx-production-kpi').filter({has:page.getByText(label,{exact:true})}),expected=source.summary[field];
+    expect(await card.locator('strong').innerText()).toBe(String(expected??'—'));
+    if(expected==null){expect(await card.evaluate(element=>element.tagName)).toBe('ARTICLE');continue;}
+    const button=stats.getByRole('button',{name:new RegExp(label)});
     const response=page.waitForResponse(r=>r.url().includes('/digital-production/journeys?')&&!new URL(r.url()).searchParams.has('missing'));
     await button.click();const result=await (await response).json();expect(result.total).toBe(expected);await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();
     expect(await page.locator('.journey-orders tbody tr').count()).toBe(Math.min(expected??0,15));expect(new URL(page.url()).searchParams.get('page')??'1').toBe('1');

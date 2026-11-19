@@ -32,3 +32,12 @@ export async function orderTimeCreatedMany(db:Pick<PoolClient,'query'>,resources
  for(const row of rows){const key=row.resource_kind+':'+row.resource_id;if(row.legacy_adopted===true){result.set(key,{at:null,legacy:true});continue;}try{result.set(key,{at:validateBusinessTime(row.created_business_time).now,evidence:String(row.creation_event_ref)});}catch{result.set(key,null);}}
  return result;
 }
+
+/** Original legacy creators also recorded a business-clock occurrence in their
+ * audit event. Registration time is the fallback only for older native roots
+ * whose creation did not store a business clock. The alias is internal SQL. */
+export const cockpitLegacyOrderTimeSql=(order:'o')=>`coalesce((
+ SELECT origin.after_state->'slaBusinessTime'->>'now' FROM audit_events origin
+ WHERE origin.entity_type='digital_production' AND origin.action='digital_order_created'
+  AND origin.entity_id=${order}.production_order_id::text
+ ORDER BY origin.created_at,origin.id LIMIT 1),${order}.created_at::text)`;

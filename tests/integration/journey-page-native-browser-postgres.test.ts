@@ -7,6 +7,13 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {cockpitHomeBrowser,homeReady} from '../acceptance/m01-cockpit-home-native-browser.js';
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {initialInstruction} from '@dx-rework/contracts/production-instruction';
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {readCockpitInstructionActions} from '../../apps/api/src/production-platform/cockpit-actionable.js';
+
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 const scale=process.env.DX_JOURNEY_SCALE==='5000'?5000:process.env.DX_JOURNEY_SCALE==='1000'?1000:31;
@@ -31,6 +38,77 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
    await expect.poll(()=>page.locator('.journey-orders tbody tr').evaluateAll(rows=>rows.map(row=>(row as HTMLElement).dataset.orderId)),{timeout:12000}).toEqual(second.items.map(item=>item.id));
    await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view=order][aria-busy=false]').waitFor();expect(await page.locator('.cockpit-stage').count()).toBe(7);
   }finally{await context.close();}
+ });
+ it('reads native creation and complete cockpit counters from existing indexed facts through the signed API',async()=>{
+  const {context,page}=await h.open();try{
+   const snapshot=await h.read(page);
+   expect(snapshot.summary?.todo).toEqual(expect.any(Number));
+   const todo=await h.read(page,{kpi:'todo'});
+   expect(todo.total).toBe(snapshot.summary?.todo);
+   const order=snapshot.items.find(item=>item.cockpitCreation?.orderCreatedAt);
+   expect(order?.orderId).toBeTruthy();
+   expect(order?.cockpitFacts).toHaveProperty('production');
+   expect(order?.cockpitFacts).toHaveProperty('receiving');
+   expect(order?.cockpitFacts).toHaveProperty('shipSample');
+   if(!order)throw Error('Missing visible native order');
+   const response=await page.request.get(`${h.base}/api/digital-production/journeys/${order.id}?view=cockpit`);
+   expect(response.status(),await response.text()).toBe(200);
+   const detail=await response.json() as OrderJourney;
+   expect(detail).toMatchObject({id:order.id,cockpitCreation:order.cockpitCreation,display:{mainState:order.display?.mainState}});
+  }finally{await context.close();}
+ });
+ it('enters and exits the current instruction action only around the original eligible publication',async()=>{
+  const query=new DigitalJourneyQuery(h.fixture.db);
+  let before=false;
+  const prepared=await h.runInScene(()=>h.fixture.bulkReady('无',undefined,1,h.fixture.sourcing,{beforeInstructionPublish:async orderId=>{
+    const detail=await query.read(h.fixture.root,orderId,undefined,true);
+    const action=detail.actionableTodo?.items.find(item=>item.category==='instruction_publish');
+    expect(action).toMatchObject({handlerId:h.fixture.people.merchandiser!.actorId,
+      originalRoute:'/ui/digital-production?instruction='+orderId});
+    before=true;
+  }}));
+  expect(before).toBe(true);
+  const after=await query.read(h.fixture.root,prepared.id,undefined,true);
+  expect(after.actionableTodo?.items.some(item=>item.category==='instruction_publish')).toBe(false);
+ });
+ it('batches the native draft prerequisites for one and eight authorized candidates in one PostgreSQL snapshot',async()=>{
+  const {db,root,people}=h.fixture,primary=people.merchandiser!;
+  const candidates=await h.runInScene(async()=>{
+    const identities=new DigitalProductionIdentityService(db,true),instructions=new ProductionInstructionService(db,true);
+    const data:Array<{id:string;orderId:string;asOf:string}>=[];
+    for(let index=0;index<8;index++){
+      const order=(await identities.createOrder(root,DigitalOrderCreateSchema.parse({
+        customerCode:'PD',productGroup:'男装',designStyleNo:`TEST-COCKPIT-BATCH-${index}`,orderDate:businessNow().toISOString().slice(0,10),
+        primaryMerchandiserId:primary.actorId,lines:[{formalPoNo:`TEST-BATCH-PO-${index}`,color:'黑',
+          customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:20}]}]
+      }),randomUUID()));
+      await instructions.save(primary,order.productionOrderId,{expectedVersion:0,orderVersion:order.version,document:{
+        ...initialInstruction(),styleName:'TEST 批量制单',category:'上衣',date:businessNow().toISOString().slice(0,10),preshrink:'无需预缩',
+        sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6']}],
+        images:[{attachmentId:await h.fixture.image(primary),kind:'款图',description:'TEST'}]
+      }},randomUUID());
+      data.push({id:order.productionOrderId,orderId:order.productionOrderId,asOf:businessNow().toISOString()});
+    }
+    return data;
+  });
+  const transaction=await db.connect(),statements:string[]=[];
+  const counted=new Proxy(transaction,{get(target,key){
+    if(key==='query')return (sql:string,args:unknown[])=>{statements.push(sql);return target.query(sql,args);};
+    const value:unknown=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+  }});
+  try{
+    await transaction.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const small=await readCockpitInstructionActions(db,counted,root,candidates.slice(0,1));
+    const one=statements.splice(0);
+    const many=await readCockpitInstructionActions(db,counted,root,candidates);
+    // Both use the original native technical prerequisites, not a bypass
+    // for complete-looking drafts whose orders lack the required adoption facts.
+    expect(one.some(statement=>statement.includes('digital_development')||statement.includes('digital_preparation_rule_adoptions'))).toBe(true);
+    expect(many).toEqual(small);
+    expect(statements.some(statement=>statement.includes('__dx_cockpit_candidate')&&statement.includes(' UNION ALL '))).toBe(true);
+    expect(statements.length).toBeLessThanOrEqual(one.length+2);
+    console.log(`Cockpit native readiness SQL: one=${one.length}, eight=${statements.length}`);
+  }finally{await transaction.query('ROLLBACK');transaction.release();}
  });
  it('keeps the signed no-scope search usable when an unrelated order projection fails',async()=>{
   const {context,page}=await h.open();
@@ -79,7 +157,9 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
    await page.getByRole('button',{name:'刷新数据',exact:true}).click();await page.getByRole('alert').filter({hasText:'1 单详情暂未读到'}).waitFor();
    const after=await h.read(page,{page:'2'});expect(after.page).toBe(2);expect(after.total).toBe(scale);expect(after.summary).toEqual(before.summary);expect(after.freshness).toMatchObject({failed:1,detailsOnly:true});
    expect(after.items.map(item=>item.id)).toEqual(before.items.filter(item=>item.orderId!==target).map(item=>item.id));
-   expect(await page.locator('.journey-orders tbody tr').count()).toBe(14);expect(await page.getByRole('navigation',{name:'分页',exact:true}).count()).toBe(1);expect(await page.locator('.journey-kpis').innerText()).not.toContain('—');
+   expect(await page.locator('.journey-orders tbody tr').count()).toBe(14);expect(await page.getByRole('navigation',{name:'分页',exact:true}).count()).toBe(1);
+   expect(await page.locator('.journey-kpis .dx-production-kpi strong').allTextContents()).toEqual(
+    [before.summary.all,before.summary.active,before.summary.dueSoon,before.summary.overdue,before.summary.completed,before.summary.todo].map(value=>String(value??'—')));
   }finally{spy?.mockRestore();await context.close();}
  });
  it('rechecks the real same valid PMC session after native revocation instead of trusting a cached manager projection',async()=>{

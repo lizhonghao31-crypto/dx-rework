@@ -18,7 +18,7 @@ import {CockpitHomeRisks,cockpitHomeRisks} from './cockpit-home-risks.js';
 import './cockpit-home.css';
 import './cockpit-home-r5.css';
 
-const stateLabels={closed:'已特殊结案',completed:'整单已完成',overdue:'逾期',due_soon:'临期',active:'进行中',not_started:'未启动',cancelled:'已取消'};
+const stateLabels={closed:'已特殊结案',completed:'整单已完成',overdue:'逾期',due_soon:'临期',active:'进行中',not_started:'状态待核',cancelled:'已取消'};
 function Task({node,lines,showBlocker=true}:{node:JourneyNode;lines:OrderJourney['lines'];showBlocker?:boolean}){
  const result=frameworkResponsibility(node,undefined);
  const stopped=nodeTerminationLabel(node);
@@ -63,7 +63,7 @@ export function CockpitHome({data,error,context,onChange,canDelete=false,onDelet
     </tr>;
    })}</tbody>
   </BusinessTable></div>
-  {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&!data.freshness&&<p role="status">当前授权和筛选范围没有订单。</p>}
+  {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&data.total===0&&!data.freshness&&<p role="status">当前授权和筛选范围没有订单。</p>}
   {(!data?.freshness||data.freshness.detailsOnly)&&<Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>onChange({page})}/>}
   {canDelete&&deleting&&<CockpitOrderDeletion ids={deleting} onClose={()=>setDeleting(null)} onCommitted={()=>{setSelected([]);onDeleted?.();}}/>}
   {riskOrder&&<CockpitHomeRisks order={riskOrder} context={context} onClose={()=>setRiskSelection(null)} onNode={node=>{setRiskSelection(null);enter(riskOrder,node);}} onOrder={()=>{setRiskSelection(null);enter(riskOrder);}}/>}
