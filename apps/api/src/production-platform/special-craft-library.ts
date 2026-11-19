@@ -63,7 +63,7 @@ export class SpecialCraftLibraryService{
 
 /** Called under the source/order lifecycle lock, after its original authority
  * check. Unchanged selected versions survive library edits and disable. */
-export async function validateSpecialCraftChoices(db:Pick<PoolClient,'query'>,choices:readonly CraftStepChoice[],previous:readonly CraftStepChoice[],stage:'development'|'bulk',enabled=SPECIAL_CRAFT_ADOPTION_ENABLED){
+export async function validateSpecialCraftChoices(db:Pick<PoolClient,'query'>,choices:readonly CraftStepChoice[],previous:readonly CraftStepChoice[],stage:'development'|'bulk',enabled=SPECIAL_CRAFT_ADOPTION_ENABLED,lock=true){
  for(const choice of choices){
   if(choice.craftKind!=='special')continue;
   const selected=choice.specialCraft;if(!selected)conflict('请选择具体特殊工艺');
@@ -72,7 +72,7 @@ export async function validateSpecialCraftChoices(db:Pick<PoolClient,'query'>,ch
   if(!row||!isDeepStrictEqual(dto(row),selected))conflict('工艺库版本依据不一致，请重新读取');
   if(!prior||!isDeepStrictEqual(prior,selected)){
    if(!enabled)conflict('特殊工艺将在完整时间方案启用后开放，原订单保持不变');
-   const current=(await db.query<Row>('SELECT v.* FROM digital_special_craft_heads h JOIN digital_special_craft_versions v ON v.craft_id=h.craft_id AND v.version=h.current_version WHERE h.craft_id=$1 FOR SHARE OF h',[selected!.id])).rows[0];
+   const current=(await db.query<Row>('SELECT v.* FROM digital_special_craft_heads h JOIN digital_special_craft_versions v ON v.craft_id=h.craft_id AND v.version=h.current_version WHERE h.craft_id=$1'+(lock?' FOR SHARE OF h':''),[selected!.id])).rows[0];
    if(!current||current.version!==selected!.version)conflict('特殊工艺设置已更新，请重新选择');
    adoptSpecialCraft(dto(current!),stage);
   }else{

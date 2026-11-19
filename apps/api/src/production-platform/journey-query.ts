@@ -1,9 +1,11 @@
+import {readCockpitDevelopmentSupply,readCockpitMaterialActions,readCockpitMaterialSupplements,readCockpitOwnerApprovals,readCockpitInstructionActions} from './cockpit-actionable.js';
+import {cockpitHomeFacts,readCockpitFactoryScopes} from './cockpit-home-facts.js';
 import {effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
 import {commentTimeColumns} from './development-comment-time.js';
 import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
-import {orderTimeCreated} from './order-time-created.js';
+import {cockpitLegacyOrderTimeSql,orderTimeCreated} from './order-time-created.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -36,14 +38,14 @@ import { OrderClosureService } from "./order-closure-service.js";
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
 import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
-import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,journeyMatchesMetadata,journeyMatchesSearch } from "./journey-projection.js";
+import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,journeyMatchesMetadata,journeyMatchesSearch,type JourneySelection } from "./journey-projection.js";
 import {journeyCandidateClock,readJourneyCandidateVisibility,readJourneyCommercialMetadata,readJourneySearchMetadata,readJourneyStyleIdentity,type JourneyCandidate as Candidate,type JourneySearchMetadata} from './journey-search-metadata.js';
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
 import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
 import { poDeliveryRisks } from "@dx-rework/contracts";
 import { assertBusinessExportAllowed } from "../access/export-authority.js";
-import {journeyDisplay} from "./journey-display.js";
+import {cockpitCreationTime,cockpitIsActivated,journeyDisplay} from "./journey-display.js";
 import {readJourneyLog} from "./journey-log.js";
 import {readJourneyRiskHistory} from "./journey-risk-history.js";
 import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
@@ -88,6 +90,8 @@ export class DigitalJourneyQuery {
   private readonly observations=new WeakMap<PoolClient,Map<string,{scope:BusinessTimeScope;time:BusinessTime}>>();
   private readonly authorizedTasks=new WeakMap<OrderJourney,readonly JourneyAuthorizedTask[]>();
   private readonly merchandiserNames=new WeakMap<PoolClient,Map<string,OrderJourney['merchandisers']>>();
+  private readonly cockpitRange=new WeakMap<OrderJourney,boolean>();
+  private readonly cockpitFactories=new WeakMap<PoolClient,Awaited<ReturnType<typeof readCockpitFactoryScopes>>>();
   constructor(private readonly database:Pool,private readonly options:{listReadMode?:'legacy'|'indexed'}={}) {}
   private async snapshot<T>(work:(db:PoolClient,asOf:string,transaction:PoolClient)=>Promise<T>) {
     const db=await this.database.connect(),reads=reuseJourneySnapshotReads(db),observations=new Map<string,{scope:BusinessTimeScope;time:BusinessTime}>();
@@ -95,7 +99,7 @@ export class DigitalJourneyQuery {
     try { await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
       result=await work(reads,asOf,db);await db.query("COMMIT");
-    } catch(error) { await db.query("ROLLBACK");throw error; } finally {forgetWholeOrderSnapshot(reads);this.observations.delete(reads);this.merchandiserNames.delete(reads);db.release();}
+    } catch(error) { await db.query("ROLLBACK");throw error; } finally {forgetWholeOrderSnapshot(reads);this.observations.delete(reads);this.merchandiserNames.delete(reads);this.cockpitFactories.delete(reads);db.release();}
     await journeyMeasure('clock_postcheck',()=>assertBusinessClocksUnchanged(new ContextBusinessClock(this.database),observations.values()));
     return result;
   }
@@ -108,7 +112,8 @@ export class DigitalJourneyQuery {
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
       WHERE a.user_id=$1 AND a.revoked_at IS NULL AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
       AND a.role_code=ANY($2::text[]) AND EXISTS(SELECT 1 FROM identity_mappings m WHERE m.user_id=u.id AND m.active AND m.employed)
-    ) SELECT row_to_json(s) AS source,row_to_json(o) AS "order",${typedPlan?`EXISTS(SELECT 1 FROM digital_order_time_plan_versions plan
+    ) SELECT row_to_json(s) AS source,row_to_json(o) AS "order",
+      ${cockpitLegacyOrderTimeSql('o')} AS cockpit_legacy_order_at,${typedPlan?`EXISTS(SELECT 1 FROM digital_order_time_plan_versions plan
       WHERE o.production_order_id IS NOT NULL AND plan.resource_kind='order' AND plan.production_order_id=o.production_order_id
        OR o.production_order_id IS NULL AND plan.resource_kind='source' AND plan.source_id=s.source_id)`:'false'} AS has_order_time_plan
     FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
@@ -126,7 +131,7 @@ export class DigitalJourneyQuery {
     assertIdentityActor(actor);
     if(this.options.listReadMode==='indexed'&&filter.scope&&!exportAll&&!selectPage&&options.details!==false&&!options.patternBusiness)
       return this.snapshot((db,asOf,transaction)=>this.indexedList(db,actor,filter,asOf,transaction));
-    return this.snapshot(async(db,asOf)=>{
+    return this.snapshot(async(db,asOf,transaction)=>{
       // Internal workspace selection runs after all authorized facts, before detail hydration.
       const summaryOnly=options.details===false||!exportAll||Boolean(selectPage);
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
@@ -148,6 +153,14 @@ export class DigitalJourneyQuery {
         categories: [...new Set(facetItems.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
         merchandisers: [...new Map(facetItems.flatMap(item=>item.merchandisers).map(person=>[person.id,person])).values()],
       };
+      if(filter.scope){
+        const facts:JourneySelection[]=items.map(item=>({...item,cockpitRangeComplete:this.cockpitRange.get(item)??false,
+          cockpitAsOf:item.asOf??asOf,cockpitActivated:cockpitIsActivated(item.orderId,item.cockpitCreation!)}));
+        const matching=selectJourneySelections(facts,{...filter,kpi:'all',progress:undefined,missing:undefined},asOf,false).items;
+        await this.cockpitActions(db,transaction,actor,matching);
+        const actionable=new Map(matching.map(item=>[item.id,item.actionableTodo]));
+        for(const item of items){const fact=actionable.get(item.id);if(fact)item.actionableTodo=fact;}
+      }
       const result=selectJourneys(items,filter,asOf,!exportAll);
       endFilter();
       if(summaryOnly&&options.details!==false&&!filter.scope){
@@ -164,7 +177,7 @@ export class DigitalJourneyQuery {
         result.items=details;
       }
       const live=prepared?[...prepared.values()].some(({observation})=>observation.mode==='live'):items.some(item=>item.observationMode==='live');
-      return {...result,observationMode:live?'live' as const:'fixed' as const,canManagePolicies:isDigitalLeader(actor),facets};
+      return {...result,...(filter.scope&&filter.kpi==='todo'&&result.summary.todo===null?{total:null}:{}),observationMode:live?'live' as const:'fixed' as const,canManagePolicies:isDigitalLeader(actor),facets};
     });
   }
   private async prepareSearch(db:PoolClient,actor:TrustedActorContext,rows:Candidate[],asOf:string){
@@ -264,11 +277,22 @@ export class DigitalJourneyQuery {
     let pending=relevant.filter(row=>['missing','pending','obsolete'].includes(row.status)).length,failed=relevant.filter(row=>row.status==='failed').length;
     const retryIds=relevant.filter(row=>row.status==='failed').map(row=>row.selection.id);
     const ready=read.items.filter(row=>row.status==='ready').map(row=>row.selection),incomplete=Boolean(pending||failed);
+    const matching=selectJourneySelections(ready,{...filter,kpi:'all',progress:undefined,missing:undefined},asOf,false).items;
+    await this.cockpitActions(db,transaction,actor,matching);
+    const actions=new Map(matching.map(item=>[item.id,item.actionableTodo]));
+    for(const item of ready){const fact=actions.get(item.id);if(fact)item.actionableTodo=fact;}
+
     const selected=selectJourneySelections(ready,incomplete?{...filter,page:1}:filter,asOf);
     const candidateByResource=new Map(candidates.map(row=>[row.order?businessScopeKey({kind:'order',id:row.order.production_order_id}):businessScopeKey({kind:'source',id:row.source!.source_id}),row]));
     const candidateById=new Map(read.items.map(row=>[row.selection.id,candidateByResource.get(businessScopeKey(row.resource))!]));
     if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,selected.items.flatMap(item=>item.orderId?[item.orderId]:[]));
     if(isDigitalManagementReader(actor)&&(actor.actorRoles.includes('root_superuser')||(actor.authorizationCapabilities??[]).includes('sourcing:view')))this.merchandiserNames.set(db,await readOrderMerchandisersByOrder(db,selected.items.flatMap(item=>item.orderId?[item.orderId]:[])));
+    this.cockpitFactories.set(db,await readCockpitFactoryScopes(db,actor,selected.items.flatMap(item=>{
+      const candidate=candidateById.get(item.id);
+      const scope=candidate&&journeyCandidateClock(candidate);
+      const clock=scope&&read.clocks.get(businessScopeKey(scope));
+      return item.orderId&&clock&&item.cockpitRangeComplete?[{id:item.orderId,asOf:clock.now}]:[];
+    })));
     const items:OrderJourney[]=[];
     for(const selectedItem of selected.items){
       // The enclosing transaction is READ ONLY. Savepoint control cannot
@@ -278,7 +302,7 @@ export class DigitalJourneyQuery {
       await transaction.query('SAVEPOINT journey_page_object');
       try{
         const item=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidateById.get(selectedItem.id)!,asOf,undefined,true,null,false,true));
-        if(item)items.push({...item,hitReasons:selectJourneys([item],{...filter,scope:undefined,kpi:'all',page:1,missing:undefined},asOf,false).items[0]?.hitReasons??[]});else pending++;
+        if(item)items.push({...item,...(selectedItem.actionableTodo?{actionableTodo:selectedItem.actionableTodo}:{}),hitReasons:selectJourneys([item],{...filter,scope:undefined,kpi:'all',page:1,missing:undefined},asOf,false).items[0]?.hitReasons??[]});else pending++;
         await transaction.query('RELEASE SAVEPOINT journey_page_object');
       }catch(error){
         await transaction.query('ROLLBACK TO SAVEPOINT journey_page_object');await transaction.query('RELEASE SAVEPOINT journey_page_object');
@@ -288,7 +312,37 @@ export class DigitalJourneyQuery {
     }
     if(incomplete){const available={...selected};delete available.scopeCounts;delete available.supervision;
       return {...available,page:filter.page,total:null,summary:null,items,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}};}
-    return {...selected,items,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),...(pending||failed?{freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15),detailsOnly:true as const}}:{})};
+    return {...selected,...(filter.kpi==='todo'&&selected.summary.todo===null?{total:null}:{}),items,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),...(pending||failed?{freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15),detailsOnly:true as const}}:{})};
+  }
+  private async cockpitActions(db:PoolClient,transaction:PoolClient,actor:TrustedActorContext,items:JourneySelection[]){
+    if(!items.length)return;
+    const open=items.flatMap(item=>{
+      if(!item.cockpitRangeComplete||!item.cockpitActivated||!item.cockpitAsOf||
+        !item.display||['completed','closed','cancelled'].includes(item.display.mainState))return [];
+      return [{id:item.id,orderId:item.orderId,sourceId:item.sourceId,asOf:item.cockpitAsOf}];
+    });
+    for(const item of items)item.actionableTodo={status:'unavailable',items:[]};
+    if(!open.length)return;
+    const sourcingAllowed=isRootActor(actor)||(actor.authorizationCapabilities??[]).includes('sourcing:view');
+    const formal=open.flatMap(item=>item.orderId?[{...item,orderId:item.orderId}]:[]);
+    await transaction.query('SAVEPOINT cockpit_action_facts');
+    try{
+      const materials=await readCockpitMaterialActions(db,open);
+      const developmentSupply=await readCockpitDevelopmentSupply(db,open);
+      const supplements=await readCockpitMaterialSupplements(db,formal);
+      const instructions=await readCockpitInstructionActions(this.database,db,actor,formal);
+      const owners=sourcingAllowed?await readCockpitOwnerApprovals(db,formal):new Map();
+      for(const item of items)item.actionableTodo={
+        status:item.cockpitActivated&&item.cockpitRangeComplete&&(!item.orderId||sourcingAllowed&&!instructions.unavailable.has(item.orderId))?'complete':'unavailable',
+        items:[...(materials.get(item.id)??[]),...(developmentSupply.get(item.id)??[]),...(supplements.get(item.id)??[]),...(owners.get(item.id)??[]),...(instructions.items.get(item.id)??[])]
+      };
+      await transaction.query('RELEASE SAVEPOINT cockpit_action_facts');
+    }catch(error){
+      await transaction.query('ROLLBACK TO SAVEPOINT cockpit_action_facts');
+      await transaction.query('RELEASE SAVEPOINT cockpit_action_facts');
+      if(error instanceof ApplicationError&&error.statusCode===409)throw error;
+      for(const item of items)item.actionableTodo={status:'unavailable',items:[]};
+    }
   }
   /** An explicit, authorized single-object retry, never a GET-side rebuild.
    * Only derived queue/backoff rows change; business facts remain untouched. */
@@ -323,10 +377,18 @@ export class DigitalJourneyQuery {
   }
   async read(actor:TrustedActorContext,id:string,round?:number,compact=false) {
     assertIdentityActor(actor);
-    return this.snapshot(async(db,asOf)=>{
+    return this.snapshot(async(db,asOf,transaction)=>{
       const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
       const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact);if(!item)return digitalNotFound();
       const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact);
+      if(compact&&current){
+        const observation=current.asOf??asOf;
+        const actions={...current,cockpitAsOf:observation,
+          cockpitActivated:cockpitIsActivated(current.orderId,current.cockpitCreation!),
+          cockpitRangeComplete:this.cockpitRange.get(current)??false};
+        await this.cockpitActions(db,transaction,actor,[actions]);
+        if(actions.actionableTodo)item.actionableTodo=actions.actionableTodo;
+      }
       if(current){
         if(current.businessProgress)item.businessProgress=current.businessProgress;
         if(current.fixedSchedule)item.fixedSchedule=current.fixedSchedule;
@@ -530,7 +592,7 @@ export class DigitalJourneyQuery {
       }
     }
     const nativeSourceCreation=sourceAccess&&(source?.order_time_managed||source?.draft_reserved===true)?await orderTimeCreated(db,{kind:'source',id:source.source_id}):null;
-    const nativeOrderCreation=!nativeSourceCreation&&orderAccess&&order?.order_time_managed?await orderTimeCreated(db,{kind:'order',id:order.production_order_id}):null;
+    const nativeOrderCreation=orderAccess&&order?.order_time_managed?await orderTimeCreated(db,{kind:'order',id:order.production_order_id}):null;
     const visibleCreation=sourceAccess?nativeSourceCreation:nativeOrderCreation;
     if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],nativeOrderCreation?.at??iso(order!.created_at),{id:order!.created_by,name:designer});
     if(!oid)replace("order_information",emptyNode("order_information","uncreated"));
@@ -669,6 +731,7 @@ export class DigitalJourneyQuery {
     capture?.nativeNodes?.(baseNodes);
     // Future and applicable nodes stay visible; historical instances do not disappear after revision.
     const progress:OrderJourney["progress"]={development:null,bulk:null};
+    let cockpitReceipts:Array<{lineId:string;demand:number;received:number;recorded:boolean}>|undefined;
     let businessQuantities:ReturnType<typeof journeyBusinessQuantities>|undefined;
     const requirementEvidence:RequirementEvidence=new Map();
     const devTask=taskDtos.find(task=>task.sourceId===sid&&task.routeVersion===round);
@@ -786,6 +849,8 @@ export class DigitalJourneyQuery {
         JOIN sourcing_decisions decision ON decision.sourcing_decision_id=coalesce(link.factory_decision_id,production.sourcing_decision_id)
         JOIN digital_production_child_links native ON native.module='production' AND native.child_id=link.production_order_id AND native.production_order_id=$1
         WHERE link.receipt_id=ANY($2::uuid[]) AND decision.supplier_id IS NOT NULL`,[oid,receiptIds])).rows:[];
+      cockpitReceipts=closure.lines.map(line=>({lineId:line.lineId,demand:line.orderedQuantity,received:line.actualQuantity,
+        recorded:line.receiptCount>0}));
       businessQuantities=journeyBusinessQuantities(closure,new Set(attributed.map(row=>row.receipt_id)));
       const reworks=closure.lines.flatMap(line=>line.reworks);
       if(!reworks.length)for(const key of ['rework','rework_review','responsibility'])requirementEvidence.set(key,{applicability:'not_applicable',completed:false,reason:'本单原记录中没有适用的做尾或返工业务',instanceIds:[]});
@@ -936,7 +1001,21 @@ export class DigitalJourneyQuery {
       baseNodes.splice(first,0,...scopedCraft);
     }
     const stages=journeyStages(baseNodes);
-    const item:OrderJourney={observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:identity.id,sourceId:identity.sourceId,orderId:identity.orderId,designStyleNo:identity.designStyleNo,temporaryStyleNo:identity.temporaryStyleNo,customer:identity.customer,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:visibleCreation&&Date.parse(visibleCreation.at)<=Date.parse(asOf)?visibleCreation.at:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
+    const item:OrderJourney={cockpitCreation:{
+      developmentCreatedAt:sourceAccess?cockpitCreationTime(source?.draft_reserved===true||document?.status==='published'?nativeSourceCreation?.at:null,
+        source?.order_time_managed||source?.draft_reserved===true||document?.status!=='published'?null:document.published_at,observed.now):null,
+      orderCreatedAt:orderAccess?cockpitCreationTime(nativeOrderCreation?.at,order?.order_time_managed?null:row.cockpit_legacy_order_at??order?.created_at,observed.now):null
+    },observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:identity.id,sourceId:identity.sourceId,orderId:identity.orderId,designStyleNo:identity.designStyleNo,temporaryStyleNo:identity.temporaryStyleNo,customer:identity.customer,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:visibleCreation&&Date.parse(visibleCreation.at)<=Date.parse(asOf)?visibleCreation.at:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
+    if(actor&&(compact||supervision)&&!patternKinds&&(orderAccess||!oid&&sourceAccess)){
+      this.cockpitRange.set(item,(fullOrder||!oid&&sourceAccess)&&(!sid||sourceAccess));
+      const factoryRead=this.cockpitFactories.get(db);
+      const factories=fullOrder&&oid?(factoryRead??await readCockpitFactoryScopes(db,actor,[{id:oid,asOf:observed.now}])).get(oid):undefined;
+      const sample=baseNodes.find(node=>node.current&&node.key==='bulk_ship_sample');
+      const sampleApplicable=sample?.state==='not_applicable'?false:sample?.records.some(record=>record.domain==='task')?true:undefined;
+      item.cockpitFacts=cockpitHomeFacts({orderId:item.orderId,fullOrder,lines,factories,receipts:cockpitReceipts,
+        sentLineIds:new Set(samples.filter(sample=>!sample.occurredAt||Date.parse(sample.occurredAt)<=Date.parse(observed.now)).flatMap(sample=>sample.lineIds)),
+        sampleApplicable,sampleWaiting:sampleApplicable===true&&sample?.state==='pending'});
+    }
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
     capture?.untimedNodes?.(baseNodes);

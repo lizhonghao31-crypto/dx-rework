@@ -27,6 +27,7 @@ import {writeFile} from 'node:fs/promises';
 import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {registerProductionReadinessRoutes} from '../../apps/api/src/production-platform/production-readiness-routes.js';
 import {registerInstructionRoutes} from '../../apps/api/src/production-platform/production-instruction-routes.js';
+import {readCockpitMaterialSupplements} from '../../apps/api/src/production-platform/cockpit-actionable.js';
 import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from '../../apps/api/src/production-platform/preparation-todos.js';
 import {completeBulkRangeFixture} from '../helpers/production-readiness-fixture.js';
 import {randomUUID} from 'node:crypto';
@@ -323,6 +324,46 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const again=await service.deliver(p.primary,id,{instructionVersion:1,recipient:'TEST加工厂',occurredAt:businessNow().toISOString(),note:'TEST交付原版本',evidenceIds:[]},'TEST-native-delivery');expect(again.instructionDeliveries).toEqual(repeated.instructionDeliveries);
    expect(await styleLabelCuttingReason(f.db,id,(await identity.read(p.primary,id)).lines.map(l=>l.lineId))).toContain('款号唛');
   });
+ });
+ it('reads one and four original partial-work requirements in the same number of SQL statements',async()=>{
+  const scene=await f.scene('2026-11-09T00:00:00Z');
+  const candidates=await f.runtime.run(scene,f.root,async()=>{
+   const result:Array<{id:string;orderId:string;asOf:string}>=[];
+   for(let index=0;index<4;index++){
+    const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true,accessory:true});
+    const accessory=(await bulk.read(ready.primary,ready.id)).materials!.items[0]!.id;
+    const order={kind:'order' as const,id:ready.id};
+    const old=(await service.read(f.root,order)).facts.find(fact=>fact.kind==='accessories_ready')!;
+    await service.record(f.people.warehouse!,order,{expectedVersion:old.version,state:'unknown',occurredAt:null,
+     note:'TEST原待补辅料',kind:'accessories_ready',scopeRef:'whole',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+    const pattern=f.people['pattern-room-worker']!,current=await service.read(pattern,order);
+    await bulk.complete(pattern,ready.id,{preparationId:ready.preparationId,kind:'纸样完成',expectedReadinessRevision:current.revision,range:{
+     expectedVersion:0,lineIds:(await identity.read(ready.primary,ready.id)).lines.map(line=>line.lineId),complete:false,
+     pendingMaterialIds:[accessory],note:'TEST局部纸样可完成',evidenceIds:[]
+    }},randomUUID());
+    result.push({id:ready.id,orderId:ready.id,asOf:businessNow().toISOString()});
+   }
+   return result;
+  });
+  const transaction=await f.db.connect(),statements:string[]=[];
+  const counted=new Proxy(transaction,{get(target,key){
+   if(key==='query')return (sql:string,args:unknown[])=>{statements.push(sql);return target.query(sql,args);};
+   const value:unknown=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+  }});
+  try{
+   await transaction.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const one=await readCockpitMaterialSupplements(counted,candidates.slice(0,1)),small=statements.splice(0);
+   const many=await readCockpitMaterialSupplements(counted,candidates);
+   expect(many.size).toBe(4);
+   expect(many.get(candidates[0]!.id)).toEqual(one.get(candidates[0]!.id));
+   for(const {id} of candidates)expect(many.get(id)).toMatchObject([{
+    category:'preparation_material',handlerId:f.people.warehouse!.actorId,
+    originalRoute:`/ui/digital-production?bulk=${id}&materialKind=accessories_ready`
+   }]);
+   expect(statements.some(statement=>statement.includes('__dx_cockpit_candidate')&&statement.includes(' UNION ALL '))).toBe(true);
+   expect(statements.length).toBeLessThanOrEqual(small.length+2);
+   console.log(`Cockpit native supplement SQL: one=${small.length}, four=${statements.length}`);
+  }finally{await transaction.query('ROLLBACK');transaction.release();}
  });
  it('keeps partial ordinary-order work in the original 48h window; replenishment at60h and complete65h remain17h late',async()=>{
   const scene=await f.scene('2026-11-10T00:00:00Z');let ready!:Awaited<ReturnType<typeof f.bulkReady>>,accessory='';

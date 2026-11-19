@@ -9,6 +9,7 @@ export function cockpitContext(search: string): CockpitContext {
   const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && (params.get(key) !== "" || key === "milestone" || key === "expanded" || key === "row")));
   // Retired workspace links remain usable without treating "bulk" as a Journey stage.
   if (input.stage === "bulk") input.stage = "preparation";
+  if (input.kpi === "not_started") input.kpi = "all";
   const parsed = JourneyReturnContextSchema.safeParse(input);
   return parsed.success ? parsed.data : JourneyReturnContextSchema.parse({});
 }
@@ -123,7 +124,7 @@ export function stageStatus(stage: OrderJourney["stages"][number], asOf?: string
   return nodes.every(node => node.completionResult === "early") ? "提前完成" : "按时完成";
 }
 export function orderStatus(order: OrderJourney): string {
-  if(order.display)return {closed:"已特殊结案",completed:"整单已完成",overdue:"逾期",due_soon:"临期",active:"进行中",not_started:"未启动",cancelled:"已取消"}[order.display.mainState];
+  if(order.display)return {closed:"已特殊结案",completed:"整单已完成",overdue:"逾期",due_soon:"临期",active:"进行中",not_started:"状态待核",cancelled:"已取消"}[order.display.mainState];
   const nodes = order.stages.flatMap(stage => stage.nodes).filter(node => node.current);
   if (nodes.some(node => node.key === "packing" && node.completesOrder !== false && node.state === "completed")) return "整单已完成";
   if (nodes.some(node => node.key === "special_closure" && node.state === "completed")) return "已特殊结案";

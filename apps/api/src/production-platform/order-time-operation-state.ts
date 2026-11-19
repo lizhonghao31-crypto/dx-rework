@@ -47,7 +47,7 @@ export const orderTimeOperationScope=scoped;
 
 /** Original actor and original native rows, all on the caller's single client.
  * The public operation contains intent, never an authorized actor or a DTO. */
-export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedActorContext,raw:OrderTimeOperation,time:BusinessTime,changes:Record<string,OrderTimeRule>={},washingChanges:OrderTimeWashingChanges=[],rewashChanges:OrderTimeWashingReworkChanges=[],purpose:'command'|'native-refresh'='command'){
+export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedActorContext,raw:OrderTimeOperation,time:BusinessTime,changes:Record<string,OrderTimeRule>={},washingChanges:OrderTimeWashingChanges=[],rewashChanges:OrderTimeWashingReworkChanges=[],purpose:'command'|'native-refresh'|'cockpit-instruction-read'='command'){
  const operation=OrderTimeOperationSchema.parse(raw),resource=scoped(operation),policy=new DigitalProductionAccessPolicy(db);
  if(resource)await policy.assert(actor,resource.kind,resource.id,'technical');
  const sourceId=resource?.kind==='source'?resource.id:resource?.kind==='order'?(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]?.source_id??null:null;
@@ -60,7 +60,11 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const designer=isRootActor(actor)||actor.actorId===designerId&&actor.actorRoles.includes('sample_designer')&&actor.authorizationCapabilities?.includes('pattern_room:orders:create')&&await policy.activeRole(actor.actorId,'sample_designer');
  const manager=isRootActor(actor)||actor.actorRoles.some(role=>['owner_group','production_management'].includes(role))&&Boolean(await policy.activeRole(actor.actorId,'owner_group')||await policy.activeRole(actor.actorId,'production_management'));
  const main=Boolean(order&&order.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser'));
- if(!designer&&!manager&&!main)digitalForbidden();
+ // This internal probe returns readiness to a read-only cockpit caller. It
+ // does not provide command admission or change the public operation routes.
+ const cockpitReader=purpose==='cockpit-instruction-read'&&operation.kind==='instruction_publish'
+  &&actor.actorRoles.includes('pmc')&&await policy.activeRole(actor.actorId,'pmc');
+ if(!designer&&!manager&&!main&&!cockpitReader)digitalForbidden();
  const saved=resource?await new OrderTimePlanRepository(db).current(resource):null;
  const inherited=resource?.kind==='order'&&sourceId?await new OrderTimePlanRepository(db).current({kind:'source',id:sourceId}):null;
  const original=saved?.input.plan??inherited?.input.plan??orderTimeAdmission(db)?.plan,oldResource=source&&!lifecycle?.is_draft&&!source.order_time_managed?{kind:'source' as const,id:source.source_id}:order&&!order.order_time_managed?{kind:'order' as const,id:order.production_order_id}:null;

@@ -46,7 +46,7 @@ export const JourneyFilterSchema = z.object({
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
   missing: z.enum(JOURNEY_COVERAGE_KEYS).optional(),
   progress:z.enum(['schedule_lag','customer_due_passed','unknown']).optional(),
-  kpi: z.enum(["all", "active", "not_started", "due_soon", "overdue", "blocked", "completed"]).default("all"),
+  kpi: z.enum(["all", "active", "not_started", "due_soon", "overdue", "blocked", "completed", "todo"]).default("all"),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
   if (value.startDate && value.endDate && value.startDate > value.endDate) context.addIssue({code:"custom", message:"开始日期不能晚于结束日期", path:["endDate"]});
@@ -139,6 +139,9 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  cockpitCreation?: CockpitCreationFacts;
+  cockpitFacts?: CockpitHomeFacts;
+  actionableTodo?: CockpitActionableTodo;
   observationMode?:'live'|'fixed';
   fixedSchedule?:FixedScheduleProgress;
   /** Shared UI ratios. Business-requirement counts and legacy workspace ratios remain separate. */
@@ -228,9 +231,39 @@ export type JourneyVisualProgress = {
   expected: JourneyBusinessDate; actual: JourneyBusinessDate;
   stages: JourneyVisualStage[];
 };
+/** Original, observable creation facts. The two clocks survive a conversion. */
+export type CockpitCreationFacts = {
+  developmentCreatedAt: string | null;
+  orderCreatedAt: string | null;
+};
+export type CockpitActionableItem = {
+  orderId: string;
+  category: 'preparation_material'|'instruction_publish'|'sourcing_owner_approval'|'receiving_difference';
+  evidenceId: string;
+  missingObject: string;
+  handlerRole: string;
+  handlerId: string;
+  originalRoute: string;
+  reason: string;
+  asOf: string;
+};
+export type CockpitActionableTodo = {status:'complete'|'unavailable';items:CockpitActionableItem[]};
+export type CockpitFactStatus = 'not_started'|'partial'|'complete'|'no_record'|'not_applicable'|'unavailable';
+export type CockpitFact = {
+  status: CockpitFactStatus;
+  tone: 'gray'|'blue'|'green'|'neutral';
+  label: string;
+  scope: 'whole'|'visible'|'unknown';
+};
+export type CockpitHomeFacts = {
+  production: CockpitFact;
+  receiving: CockpitFact & {received: number | null; demand: number | null};
+  shipSample: CockpitFact;
+};
+
 export type JourneyCompleteResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
-  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number;timingMissing?:number;scheduleLag?:number;customerDuePassed?:number;scheduleUnknown?:number};
+  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number;timingMissing?:number;todo?:number|null;scheduleLag?:number;customerDuePassed?:number;scheduleUnknown?:number};
   supervision?:{overdue:number;dueSoon:number;coverage:Array<{key:JourneyCoverage["key"];orders:number;message:string}>};
   scopeCounts?: {production:number;development:number;cancelled:number}; items: OrderJourney[] };
 /** An incomplete read cannot present zero or an old total as the latest value.

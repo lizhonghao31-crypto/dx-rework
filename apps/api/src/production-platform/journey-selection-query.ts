@@ -1,4 +1,4 @@
-import {orderTimeCreatedMany} from './order-time-created.js';
+import {cockpitLegacyOrderTimeSql,orderTimeCreatedMany} from './order-time-created.js';
 import type {WorkspaceNodeFact} from './journey-workspace-facts.js';
 import type {Pool,PoolClient} from 'pg';
 import type {JourneyFilter,JourneyCoverage} from '@dx-rework/contracts/digital-production-journey';
@@ -10,7 +10,7 @@ import {JOURNEY_FACT_CALCULATION_VERSION} from './journey-fact-model.js';
 import {readJourneySelectionAccess} from './journey-selection-access.js';
 import {developmentReadTables} from './development-amendment-repository.js';
 import {canReadProductionReporting,productionVisibilityFor,productionVisibilityArgs} from '../sourcing/production-reporting-service.js';
-import {journeyOrderState} from './journey-display.js';
+import {cockpitCreationTime,cockpitIsActivated,journeyOrderState} from './journey-display.js';
 import {journeyMatchesSearch,type JourneySelection,type JourneySelectionSignals} from './journey-projection.js';
 
 export type JourneySelectionCandidate={source:{source_id:string}|null;order:{production_order_id:string}|null};
@@ -50,7 +50,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   AND nullif($3::jsonb->>'stage','') IS NULL AND nullif($3::jsonb->>'node','') IS NULL
   AND nullif($3::jsonb->>'state','') IS NULL AND nullif($3::jsonb->>'risk','') IS NULL)`;
  const selection=`CASE WHEN ${fullView} THEN m.selection_full_json ELSE m.selection_json END`;
- type Row={creationKind:'source'|'order'|null;creationId:string|null;kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
+ type Row={creationKind:'source'|'order'|null;creationId:string|null;cockpitRangeComplete:boolean;sourcePublished:boolean;sourceReserved:boolean;sourceCreationId:string|null;orderCreationId:string|null;legacyPublishedAt:string|null;legacyOrderAt:string|null;kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
   merchandisers:JourneySelection['merchandisers'];orderNumbers:string[];createdAt:string;specialClosed:boolean;closed:boolean;activated:boolean;cancelled:boolean;closedAt:string|null;earliestShipmentDate:string|null;reminder:string|null;coverage:JourneyCoverage[];signals:JourneySelectionSignals;search_values:string[];workspace_nodes:WorkspaceNodeFact[];scheduleSelection:JourneySelection['scheduleSelection']};
  const rows=(await db.query<Row>(`WITH requested AS (
   SELECT * FROM jsonb_to_recordset($1::jsonb) AS r(kind text,id uuid,"sourceAccess" boolean,"orderAccess" boolean,"fullOrder" boolean,timing boolean,budget boolean,now timestamptz,scenario uuid,revision bigint)
@@ -68,11 +68,14 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    coalesce(o.design_style_no,s.design_style_no) AS order_style,s.design_style_no AS source_style,
    o.temporary_style_no AS order_temporary,s.temporary_style_no AS source_temporary,
    coalesce(o.customer_code,s.customer_code) AS order_customer,s.customer_code AS source_customer,
-   s.created_at AS source_created,o.created_at AS order_created,(coalesce((to_jsonb(s)->>'order_time_managed')::boolean,false) OR coalesce((to_jsonb(s)->>'draft_reserved')::boolean,false)) AS source_managed,coalesce((to_jsonb(o)->>'order_time_managed')::boolean,false) AS order_managed,o.product_group,o.primary_merchandiser_id,
+   s.created_at AS source_created,o.created_at AS order_created,${cockpitLegacyOrderTimeSql('o')} AS legacy_order_business_time,(coalesce((to_jsonb(s)->>'order_time_managed')::boolean,false) OR coalesce((to_jsonb(s)->>'draft_reserved')::boolean,false)) AS source_managed,coalesce((to_jsonb(o)->>'order_time_managed')::boolean,false) AS order_managed,o.product_group,o.primary_merchandiser_id,
    designer.display_name AS designer,primary_person.display_name AS primary_name,
    sourcing.child_id AS sourcing_id,production.child_id AS production_id,source_case.style_name_snapshot,source_case.erp_order_no,
    additional.people AS secondary_merchandisers,source_case.sourcing_case_id AS visible_sourcing_id,
    CASE WHEN coalesce(round.round_number,1)>1 THEN round.document->>'template' ELSE document.document->>'template' END AS category_template,
+   CASE WHEN document.status='published' THEN document.published_at END AS legacy_published_at,
+   coalesce(document.status='published',false) AS source_published,
+   coalesce((to_jsonb(s)->>'draft_reserved')::boolean,false) AS source_reserved,
    EXISTS(SELECT 1 FROM audit_events e WHERE e.entity_type='digital_production' AND e.entity_id=o.production_order_id::text AND e.action='digital_source_attached' AND e.after_state->>'sourceId'=s.source_id::text) AS attached,
    EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.task_kind<>'factory_material_count' AND (a.source_id=s.source_id OR a.production_order_id=o.production_order_id) AND a.assignee_id=$6 AND a.required_role=ANY($5::text[])) AS direct
   FROM requested r
@@ -174,6 +177,12 @@ flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed' AND complet
   CASE WHEN n.erp_order_no IS NOT NULL AND n.erp_order_no<>'' THEN ARRAY[n.erp_order_no] ELSE ARRAY[]::text[] END AS "orderNumbers",
   CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN 'source' END WHEN n."orderAccess" AND n.order_managed THEN 'order' END AS "creationKind",
   CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN n.sid::text END WHEN n."orderAccess" AND n.order_managed THEN n.oid::text END AS "creationId",
+  n.source_published AS "sourcePublished",n.source_reserved AS "sourceReserved",
+  (n."fullOrder" OR n.oid IS NULL AND n."sourceAccess") AND (n.sid IS NULL OR n."sourceAccess") AS "cockpitRangeComplete",
+  CASE WHEN n."sourceAccess" AND n.source_managed THEN n.sid::text END AS "sourceCreationId",
+  CASE WHEN n."orderAccess" AND n.order_managed THEN n.oid::text END AS "orderCreationId",
+  CASE WHEN n."sourceAccess" AND NOT n.source_managed THEN n.legacy_published_at END AS "legacyPublishedAt",
+  CASE WHEN n."orderAccess" AND NOT n.order_managed THEN n.legacy_order_business_time END AS "legacyOrderAt",
   coalesce(CASE WHEN n."sourceAccess" THEN n.source_created WHEN n."orderAccess" THEN n.order_created END,n.source_created,n.order_created)::text AS "createdAt",
   coalesce(flags.closed,false) AS closed,coalesce(flags.special_closed,false) AS "specialClosed",coalesce(flags.activated,false) AS activated,
   n."orderAccess" AND coalesce((n.facts->>'cancelled')::boolean,false) OR n.oid IS NULL AND n."sourceAccess" AND coalesce((n.facts->>'cancelled')::boolean,false) AS cancelled,
@@ -214,12 +223,20 @@ flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed' AND complet
  LEFT JOIN flags ON flags.kind=n.kind AND flags.id=n.id
  LEFT JOIN delivery ON delivery.kind=n.kind AND delivery.id=n.id`,
  [JSON.stringify(requested),JOURNEY_FACT_CALCULATION_VERSION,JSON.stringify(filter),JSON.stringify(JOURNEY_NODES),roles,actor.actorId,canSourcing,canRework,production,closureLinks,canCutting,Boolean(options.workspaceNodes),options.workspaceNodes??null,options.workspaceKinds??[]])).rows;
- const created=await orderTimeCreatedMany(db,rows.flatMap(row=>row.creationKind&&row.creationId?[{kind:row.creationKind,id:row.creationId}]:[]));
+ const created=await orderTimeCreatedMany(db,rows.flatMap(row=>[
+  ...(row.sourceCreationId?[{kind:'source' as const,id:row.sourceCreationId}]:[]),
+  ...(row.orderCreationId?[{kind:'order' as const,id:row.orderCreationId}]:[])
+ ]));
  const items:JourneySelectionRead[]=rows.map(row=>{
   const resource={kind:row.kind,id:row.resource_id},clock=clocks.get(businessScopeKey(resource))!;
-  const selection:JourneySelection={id:row.id,sourceId:row.sourceId,orderId:row.orderId,designStyleNo:row.designStyleNo,temporaryStyleNo:row.temporaryStyleNo,customer:row.customer,category:row.category,designer:row.designer,styleName:row.styleName,
+  const cockpitCreation={
+   developmentCreatedAt:cockpitCreationTime(row.sourcePublished||row.sourceReserved?created.get('source:'+row.sourceCreationId)?.at:null,row.legacyPublishedAt,clock.now),
+   orderCreatedAt:cockpitCreationTime(created.get('order:'+row.orderCreationId)?.at,row.legacyOrderAt,clock.now)
+  };
+  const cockpitActivated=cockpitIsActivated(row.orderId,cockpitCreation);
+  const selection:JourneySelection={cockpitRangeComplete:row.cockpitRangeComplete,cockpitActivated,cockpitAsOf:clock.now,id:row.id,sourceId:row.sourceId,orderId:row.orderId,designStyleNo:row.designStyleNo,temporaryStyleNo:row.temporaryStyleNo,customer:row.customer,category:row.category,designer:row.designer,styleName:row.styleName,
    merchandisers:row.merchandisers,orderNumbers:row.orderNumbers,createdAt:created.get(row.creationKind+':'+row.creationId)?.at??new Date(row.createdAt).toISOString(),links:[],lines:[],stages:[],supervision:{coverage:row.coverage},
-   ...(row.scheduleSelection?{scheduleSelection:row.scheduleSelection}:{}),display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,specialClosed:row.specialClosed,activated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
+   ...(row.scheduleSelection?{scheduleSelection:row.scheduleSelection}:{}),display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,specialClosed:row.specialClosed,activated:filter.scope?cockpitActivated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
   selection.selectionSignals!.searchMatched=journeyMatchesSearch(selection,filter.search.toLocaleLowerCase())||row.search_values.some(value=>value?.toLocaleLowerCase().includes(filter.search.toLocaleLowerCase()));
   return {resource,status:row.creationKind&&!created.get(row.creationKind+':'+row.creationId)?'failed':row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
  });

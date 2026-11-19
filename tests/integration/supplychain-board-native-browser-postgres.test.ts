@@ -45,8 +45,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
- it('preserves all seven original whole-range KPI values and separate plan filters on the actual current query',async()=>{
-  const {page,context}=await h.open();try{await page.goto(h.base+'/ui/digital-cockpit');await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();const query=await page.evaluate(async()=> (await fetch('/api/digital-production/journeys?scope=production')).json());expect(query.total).toBe(1);for(const[label,key]of [['订单总数','all'],['进行中','active'],['未启动','notStarted'],['临期','dueSoon'],['逾期','overdue'],['时效待补充','timingMissing'],['整单已完成','completed']] as const){expect(await page.locator('.journey-kpis').getByRole('button',{name:new RegExp(label)}).locator('strong').innerText()).toBe(String(query.summary[key]));}
+ it('reads the six whole-range KPI values and separate plan filters on the actual current query',async()=>{
+  const {page,context}=await h.open();try{await page.goto(h.base+'/ui/digital-cockpit');await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();const query=await page.evaluate(async()=> (await fetch('/api/digital-production/journeys?scope=production')).json());expect(query.total).toBe(1);for(const[label,key]of [['订单总数','all'],['进行中','active'],['临期','dueSoon'],['逾期','overdue'],['整单已完成','completed'],['待处理','todo']] as const){expect(await page.locator('.journey-kpis').getByRole('button',{name:new RegExp(label)}).locator('strong').innerText()).toBe(String(query.summary[key]??'—'));}
    await page.getByRole('button',{name:'更多筛选',exact:true}).click();await page.getByLabel('计划与交期',{exact:true}).selectOption('unknown');await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();expect(new URL(page.url()).searchParams.get('progress')).toBe('unknown');
   }finally{await context.close();}
  });
