@@ -700,6 +700,12 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.sourcing-contract-return-capacity {
+  margin: 6px 0 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .sourcing-contract-return-links {
   display: flex;
   flex: 1 1 150px;
@@ -745,7 +751,27 @@
 }
 .sourcing-contract-return-error {
   color: var(--dx-v2-color-danger, #dc2626);
-  margin: 6px 0 0;
+  font-weight: 600;
+}
+.sourcing-contract-return-error,
+.sourcing-contract-return-feedback {
+  margin: 8px 0 0;
+  padding: var(--dx-v2-space-3);
+  border: 1px solid currentColor;
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-surface);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sourcing-contract-return-error:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.sourcing-contract-return-feedback--success {
+  color: var(--dx-v2-color-success, #087f61);
+}
+.sourcing-contract-return-feedback--warning {
+  color: var(--dx-v2-color-warning, #a35e00);
 }
 
 .sourcing-finance-confirmation summary {
