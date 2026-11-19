@@ -42,36 +42,48 @@
     {
       "id": "postgres",
       "kind": "tests",
-      "command": "env -i HOME=/tmp PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 bash ../local-pg.sh",
+      "command": "env -i HOME=/tmp PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 bash ../local-pg-final-report.sh /workspace/ba112-offline-17f84597.2txqau/draft-checks/final-postgres.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "17f8459720e100546f6bfef42e132480632d4ca9",
+      "testedHead": "3f2d0b06ebd0e1c4b64c29f9f7d9f9ef3e0b7e4b",
       "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
       "context": "Node 22.22.2, Vitest 4.1.10, vitest.config.ts, one worker. Separate isolated marked PostgreSQL 16.16 instance with the canonical migration fixture plus the same restricted SET ROLE configuration as repository CI. Before retry an actual row lock causes SQLSTATE 55P03. The original application worker records the retry and the successful rebuild clears it. The runner removes and verifies removal of the test container.",
-      "startedAt": "2026-11-19T07:54:00.791092+00:00",
-      "endedAt": "2026-11-19T07:54:22.500772+00:00",
-      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/postgres.log",
-      "logSha256": "7efafabee56ba0220d4ebc8d6a4d49a2a7c3620cb705377f585c8b608f970c6d",
+      "startedAt": "2026-11-19T08:12:52+00:00",
+      "endedAt": "2026-11-19T08:13:11.909560+00:00",
+      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-postgres-report.log",
+      "logSha256": "fffc4d3673c180139ae31f728446ca6954e6c6c890474399e31e37b6537fb27f",
       "passed": 1,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "929f3c598bb0853625f82bbda92ca0799ac88551003c43ee5c1eb89eaf76ea03"
+        }
+      ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --no-color",
+      "command": "/workspace/.task-toolchains/time-read/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-unit.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "17f8459720e100546f6bfef42e132480632d4ca9",
+      "testedHead": "3f2d0b06ebd0e1c4b64c29f9f7d9f9ef3e0b7e4b",
       "sourceFingerprint": "af45d4bd535e7b3e872c8b2548ffb3a98a3f3c847852eca394d69835d37d0324",
       "context": "Node 22.22.2, Vitest 4.1.10 and one non-database worker. The reading-basis suite includes unique scoped identities, truly added work, the original handoff and original responsibility, missing predecessors, PO and craft isolation and ambiguity.",
-      "startedAt": "2026-11-19T07:54:00.791508+00:00",
-      "endedAt": "2026-11-19T07:54:05.689932+00:00",
-      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/unit.log",
-      "logSha256": "eff1f07c4e578fdfdf7ae9db67d1052098f4c901d96cd853a0915fa40ec91457",
+      "startedAt": "2026-11-19T08:12:52+00:00",
+      "endedAt": "2026-11-19T08:12:57.349324+00:00",
+      "log": "/workspace/ba112-offline-17f84597.2txqau/draft-checks/final-unit-report.log",
+      "logSha256": "ec3f3f3b9f9850e82e3cd7ecb2ff62c34c59fd1e64cbe6bd6c7277f372279297",
       "passed": 47,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "0502940eedd7dc0cbf853d104a7e88245bcb46125c826487e402bfade6c1e2c4"
+        }
+      ]
     },
     {
       "id": "lint",
