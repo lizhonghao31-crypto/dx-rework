@@ -52,3 +52,21 @@
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task-heading>strong {flex:1 1 auto;min-width:0;font-size:14px}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task .dx-badge {font-size:12px;padding:1px 4px}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table td.cockpit-home-task-cell {padding-top:3px;padding-bottom:3px}
+
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-order-title{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-order-title .journey-order-select{min-width:0;overflow-wrap:anywhere}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table td.cockpit-home-order-state{border-inline-start:3px solid var(--cockpit-order-edge,#9aa9bc);font-weight:600;overflow-wrap:anywhere}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-order-state.is-active{--cockpit-order-edge:#2475e8;color:#174a91}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-order-state.is-due_soon{--cockpit-order-edge:#b5740f;color:#85510c}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-order-state.is-overdue{--cockpit-order-edge:#c94343;color:#a52231}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-order-state.is-completed{--cockpit-order-edge:#238f69;color:#157250}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home td.cockpit-home-facts-cell{text-align:start}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact + .cockpit-home-fact{margin-block-start:4px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact :is(a,button){max-inline-size:100%;text-align:start;white-space:normal}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-quantity{font-variant-numeric:tabular-nums}
+.digital-journey-cockpit[data-view="overview"] :is(.cockpit-home-fact-status,.cockpit-home-type){font-size:13px;line-height:1.4;padding:0 4px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact{--cockpit-fact-dot:#7b8798}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact[data-fact-tone="blue"]{--cockpit-fact-dot:#2475e8}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact[data-fact-tone="green"]{--cockpit-fact-dot:#238f69}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--cockpit-fact-dot);margin-inline-end:4px;vertical-align:middle}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th.cockpit-home-progress-heading{white-space:normal}

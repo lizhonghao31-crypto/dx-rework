@@ -103,7 +103,9 @@ function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:reado
   const task=(await f.db.query("SELECT t.* FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind='bulk_ship_sample'",[id])).rows[0]!;
   expect(task.route_instance_id).toBe(id);
   expect((await f.db.query('SELECT 1 FROM digital_bulk_preparations WHERE production_order_id=$1',[id])).rowCount).toBe(0);
-  const check=async(completed:boolean)=>{
+  const check=async(sent:0|1|2)=>{
+   const completed=sent===2;
+   const expectedStatus=['not_started','partial','complete'][sent];
    for(const cockpit of [false,true]){
     const item=await query.read(primary,id,undefined,cockpit),nodes=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.key==='bulk_ship_sample');
     expect(nodes).toHaveLength(1);expect(nodes[0]).toMatchObject({instanceId:task.task_id,current:true,state:completed?'completed':'active'});
@@ -112,22 +114,24 @@ function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:reado
     expect(requirement).toMatchObject({applicability:'applicable',completed});
     expect(requirement.reasons.join('')).not.toContain('退役');
     expect(item.visualProgress!.stages.find(stage=>stage.key==='production')!.actualRatio).not.toBeNull();
+    if(cockpit)expect(item.cockpitFacts?.shipSample).toMatchObject({status:expectedStatus,scope:'whole'});
    }
    const built=await repo.buildOne({kind:'order',id});
    expect(built.model.nodes.filter(node=>node.key==='bulk_ship_sample')).toEqual([expect.objectContaining({instanceId:task.task_id,current:true,state:completed?'completed':'active'})]);
    expect(built.model.requirements.find(row=>row.key==='bulk_ship_sample')).toMatchObject({applicability:'applicable',completed});
    const listed=await new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}).list(primary,JourneyFilterSchema.parse({scope:'production',search:order.designStyleNo}));
    expect(listed.total).toBe(1);expect(listed.items[0]!.businessProgress!.requirements.find(row=>row.key==='bulk_ship_sample')).toMatchObject({applicability:'applicable',completed});
+   expect(listed.items[0]?.cockpitFacts?.shipSample).toMatchObject({status:expectedStatus,scope:'whole'});
   };
-  await check(false);
+  await check(0);
   let state=await flow.read(primary,id);
   const input={expectedRevision:state.revision,kind:'船样寄出' as const,occurredAt:'2026-11-08T00:00:00.000Z',trackingNumber:'TEST-CURRENT-SAMPLE',note:'TEST native order identity'};
   await expect(flow.followup(f.people['pattern-room-worker']!,id,{...input,lineIds:[order.lines[0]!.lineId]},randomUUID())).rejects.toMatchObject({statusCode:404});
   const key=randomUUID();state=await flow.followup(primary,id,{...input,lineIds:[order.lines[0]!.lineId]},key);
   await flow.followup(primary,id,{...input,lineIds:[order.lines[0]!.lineId]},key);
-  expect(state.shipSamples).toHaveLength(1);await check(false);
+  expect(state.shipSamples).toHaveLength(1);await check(1);
   state=await flow.followup(primary,id,{...input,expectedRevision:state.revision,lineIds:[order.lines[1]!.lineId],trackingNumber:'TEST-CURRENT-SAMPLE-2'},randomUUID());
-  expect(state.shipSamples).toHaveLength(2);await check(true);
+  expect(state.shipSamples).toHaveLength(2);await check(2);
   expect((await f.db.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='ship_sample_sent'",[id])).rows[0].n).toBe(2);
   expect((await f.db.query('SELECT 1 FROM digital_factory_routes WHERE production_order_id=$1',[id])).rowCount).toBe(0);
   await expect(query.read(f.people['pattern-room-worker']!,id,undefined,true)).rejects.toMatchObject({statusCode:404});

@@ -19,14 +19,14 @@ export function cockpitFact(kind:FactKind,status:CockpitFactStatus,scope:Cockpit
  return {status,tone:tone[status],label,scope};
 }
 
-type FactoryScope = {lineId:string;quantity:number;visible:boolean;status:string|null};
+type FactoryScope = {lineId:string;quantity:number;visible:boolean;status:string|null;reportedWork:boolean};
 
 export async function readCockpitFactoryScopes(db:PoolClient,actor:TrustedActorContext,orders:readonly {id:string;asOf:string}[]){
  const result=new Map<string,FactoryScope[]>();
  if(!orders.length||!canReadProductionReporting(actor))return result;
  const rows=(await db.query<FactoryScope&{mother:string}>(`SELECT link.production_order_id AS mother,map.line_id AS "lineId",allocation.quantity,
   coalesce(${factoryProductionVisibilityFor(actor)},false) AS visible,
-  current.status
+  current.status,coalesce(reports.quantity>0,false) AS "reportedWork"
   FROM jsonb_to_recordset($5::jsonb) AS requested(id uuid,"asOf" timestamptz)
   JOIN digital_production_child_links link ON link.production_order_id=requested.id
   JOIN sourcing_production_factory_orders production ON production.production_order_id=link.child_id
@@ -37,6 +37,14 @@ export async function readCockpitFactoryScopes(db:PoolClient,actor:TrustedActorC
   LEFT JOIN LATERAL (SELECT state.status FROM sourcing_production_transitions state
    WHERE state.production_order_id=production.production_order_id AND state.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id
    AND state.created_at<=requested."asOf" ORDER BY state.sequence DESC LIMIT 1) current ON true
+  LEFT JOIN LATERAL (
+   SELECT sum(revision.quantity) AS quantity FROM (
+    SELECT DISTINCT ON (report.root_report_id) report.quantity
+    FROM sourcing_production_reports report WHERE report.production_order_id=production.production_order_id
+     AND report.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id AND report.created_at<=requested."asOf"
+    ORDER BY report.root_report_id,report.revision DESC
+   ) revision
+  ) reports ON current.status='in_production'
   WHERE link.module='production' AND allocation.quantity>0`,
   [...productionVisibilityArgs(actor),JSON.stringify(orders)])).rows;
  for(const {id} of orders)result.set(id,[]);
@@ -58,7 +66,7 @@ export function cockpitProductionFact(lines:OrderJourney['lines'],scopes:readonl
   demand.size>0&&[...demand].every(([lineId,quantity])=>quantity>0&&allocated.get(lineId)===quantity);
  const done=(scope:FactoryScope)=>scope.status==='production_completed'||scope.status==='shipped';
  if(completeScope&&visible.every(done))return fact('complete','whole');
- if(visible.some(scope=>done(scope)||scope.status==='in_production'))return fact('partial',completeScope?'whole':'visible');
+ if(visible.some(scope=>done(scope)||scope.status==='in_production'&&scope.reportedWork))return fact('partial',completeScope?'whole':'visible');
  return fact('no_record',completeScope?'whole':'visible');
 }
 

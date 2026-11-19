@@ -1,7 +1,8 @@
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
-import {writeFile} from 'node:fs/promises';
+import {stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {gzipSync} from 'node:zlib';
 import {tmpdir} from 'node:os';
 import type {Page} from 'playwright-core';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
@@ -29,6 +30,87 @@ async function openCockpitNavigation(page:Page,afterNavigate=()=>{}){
    await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view=order][aria-busy=false]').waitFor();expect(await page.locator('.cockpit-stage').count()).toBe(7);
    await page.setViewportSize({width:1165,height:1003});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'production-detail-1165.png'),fullPage:true});
   }finally{await context.close();}
+ });
+ it('measures the cockpit pilot at the original viewports and isolates its compiled styles from other modules',async()=>{
+  const pilotStyle='style[data-cockpit-style="astryx-v0.7.16"]';
+  const astryxAssets=Object.entries(h.assetManifest!).filter(([source])=>/digital-cockpit-page|focusOutline\.stylex|astryxdesign/.test(source)).map(([,entry])=>'/'+entry.file);
+  const offRouteStart=h.resources.length;
+  const cold=await h.open(undefined,{},1165,1,{height:747,path:'/ui/employee-access'});
+  try{
+   await cold.page.locator('.app-shell>aside').waitFor();
+   await cold.page.waitForLoadState('networkidle');
+   expect(await cold.page.locator(pilotStyle).count()).toBe(0);
+   expect(h.resources.slice(offRouteStart).some(resource=>astryxAssets.includes(resource.path))).toBe(false);
+   expect(h.resources.slice(offRouteStart).some(resource=>resource.path===asset('employee-access-page.tsx'))).toBe(true);
+  }finally{await cold.context.close();}
+
+  const baseline=process.env.COCKPIT_PILOT_BASELINE_ASSETS;
+  const observed:unknown[]=[];
+  for(const [width,height] of [[1165,747],[1440,900],[1280,800],[390,844],[360,800]] as const){
+   const inspect=async(enabled:boolean)=>{
+    const start=h.resources.length,transferred=new Map<string,number>();
+    const {context,page}=await h.open(undefined,enabled||baseline?{}:{cockpitAstryx:'off'},width,1,{
+     height,
+     ...(!enabled&&baseline?{beforeNavigate:async(tab:Page)=>{
+      await tab.route(url=>url.pathname.startsWith('/assets/')||url.pathname==='/ui/digital-cockpit',async route=>{
+       const path=new URL(route.request().url()).pathname;
+       if(path==='/ui/digital-cockpit'){await route.fulfill({path:join(baseline,'index.html'),contentType:'text/html'});return;}
+       const file=join(baseline,path);
+       transferred.set(path,(await stat(file)).size);
+       await route.fulfill({path:file});
+      });
+     }}:{})
+    });
+    const readyMs=await page.evaluate(()=>performance.now());
+    try{
+     expect(await page.locator(pilotStyle).count()).toBe(enabled?1:0);
+     const sections=['.cockpit-detail-identity','.cockpit-flow-panel','.journey-current-panel','.journey-risk-panel','.journey-node-panel','.journey-documents-panel','.journey-activity-panel'];
+     const home=await page.evaluate(()=>{
+      const table=document.querySelector('.journey-orders table')!;
+      const button=document.querySelector<HTMLButtonElement>('.journey-filter-actions button[type=submit]')!;
+      const bounds=button.getBoundingClientRect(),css=getComputedStyle(button);
+      const rows=[...table.querySelectorAll('tbody tr')];
+      return {visibleRows:rows.filter(row=>{const box=row.getBoundingClientRect();return box.top>=0&&box.bottom<=innerHeight;}).length,orderIds:rows.map(row=>row.getAttribute('data-order-id')),viewportOverflow:document.documentElement.scrollWidth>innerWidth+1,button:{height:bounds.height,width:bounds.width,fontSize:css.fontSize,background:css.backgroundColor,class:button.className},overflow:table.clientWidth>innerWidth};
+     });
+     const moduleAssets=transferred.size?[...transferred].map(([path,bytes])=>({path,bytes})):h.resources.slice(start);
+     const resources=await page.evaluate(()=>performance.getEntriesByType('resource').map(entry=>{const resource=entry as PerformanceResourceTiming;return {path:new URL(resource.name).pathname,bytes:resource.encodedBodySize,ms:resource.duration};}));
+     await page.screenshot({path:join(h.evidence,`pilot-${enabled?'new':'old'}-home-${width}x${height}.png`)});
+     if(enabled){
+      expect(home.button.class.includes('dx-cockpit-astryx-button')).toBe(width>=380);
+      const scoped=await page.locator(pilotStyle).evaluate((element:HTMLStyleElement)=>[...element.sheet!.cssRules].map(rule=>rule.constructor.name));
+      expect(scoped).toEqual(['CSSScopeRule']);
+      const dates=await page.locator('.cockpit-home-delivery-date').first().locator('time').allTextContents();
+      expect(dates).toEqual([...new Set(dates)]);expect(dates.every(date=>/^\d{4}-\d{2}-\d{2}$/.test(date))).toBe(true);
+     }
+     const clickStart=performance.now();
+     await page.locator('.journey-order-select').first().click();
+     await page.locator('[data-view=order][aria-busy=false]').waitFor();
+     const detailMs=performance.now()-clickStart;
+     const detail=await page.evaluate((selectors)=>Object.fromEntries(selectors.map(selector=>{
+      const element=document.querySelector(selector)!;
+      const box=element.getBoundingClientRect();
+      return [selector,{width:box.width,height:box.height,left:box.left,top:box.top}];
+     })),sections);
+     expect(await page.locator('.cockpit-identity-facts>div').count()).toBe(6);
+     expect(await page.locator('.cockpit-current-additional[open]').count()).toBe(enabled||!baseline?1:0);
+     const detailWidth=await page.evaluate(()=>document.documentElement.scrollWidth);
+     await page.screenshot({path:join(h.evidence,`pilot-${enabled?'new':'old'}-detail-${width}x${height}.png`)});
+     expect(detailWidth,`${enabled?'Astryx':'DX'} detail at ${width}×${height}`).toBeLessThanOrEqual(width+1);
+     const scopedCss=enabled?await page.locator(pilotStyle).textContent():null;
+     return {home,detail,detailMs,readyMs,resources,moduleAssets,scopedCss:scopedCss?{raw:Buffer.byteLength(scopedCss),gzip:gzipSync(scopedCss).length}:null};
+    }finally{await context.close();}
+   };
+   const old=await inspect(false),pilot=await inspect(true);
+   console.log('COCKPIT_PILOT '+JSON.stringify({width,height,oldRows:old.home.visibleRows,newRows:pilot.home.visibleRows,oldReadyMs:old.readyMs,newReadyMs:pilot.readyMs,oldDetailMs:old.detailMs,newDetailMs:pilot.detailMs,oldButtonWidth:old.home.button.width,newButtonWidth:pilot.home.button.width,oldHomeBytes:old.moduleAssets.reduce((total,asset)=>total+asset.bytes,0),newHomeBytes:pilot.moduleAssets.reduce((total,asset)=>total+asset.bytes,0)}));
+   expect(pilot.home.orderIds).toEqual(old.home.orderIds);
+   expect(pilot.home.viewportOverflow).toBe(false);
+   expect(pilot.home.visibleRows).toBeGreaterThanOrEqual(old.home.visibleRows);
+   expect(pilot.home.button.height).toBeGreaterThanOrEqual(old.home.button.height);
+   expect(pilot.home.button.width+1).toBeGreaterThanOrEqual(old.home.button.width);
+   expect(Number.parseFloat(pilot.home.button.fontSize)).toBeGreaterThanOrEqual(Number.parseFloat(old.home.button.fontSize));
+   observed.push({width,height,old,pilot});
+  }
+  await writeFile(join(h.evidence,'cockpit-astryx-comparison.json'),JSON.stringify({baseline:baseline?'Separate frozen frontend, same TEST data and application API':'DX component fallback in the same build',observed},null,2));
  });
  it('keeps the original access gate ahead of an unauthorized module import',async()=>{
   const {context,page}=await h.open(h.pmcId);try{

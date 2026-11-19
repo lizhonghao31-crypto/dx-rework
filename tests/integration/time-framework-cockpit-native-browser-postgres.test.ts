@@ -38,8 +38,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?search=TEST-TIME08-');
   try{
    const page=tab.page;
-   await page.getByRole('progressbar',{name:'整单交货日期进度',exact:true}).first().waitFor();
-   expect(await page.getByRole('progressbar',{name:'整单交货日期进度',exact:true}).count()).toBe(2);
+   await page.getByRole('progressbar',{name:'整单自然时间进度',exact:true}).first().waitFor();
+   expect(await page.getByRole('progressbar',{name:'整单自然时间进度',exact:true}).count()).toBe(2);
    expect(await page.getByRole('progressbar',{name:'整单实际进度',exact:true}).count()).toBe(2);
    expect(await page.locator('.cockpit-home-delivery-date').allTextContents()).toEqual(['2027-02-20','2027-02-20']);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);

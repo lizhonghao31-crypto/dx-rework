@@ -86,7 +86,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(window).toMatchObject({evidence:target,startedAt:native.startedAt,deadline:native.dueAt,completedAt:native.completedAt});
     await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:fixture.sourceId,expanded:node.stage,focus:node.instanceId,row:node.instanceId}));
     await page.locator('[data-view=order][aria-busy=false]').waitFor();
-    const current=page.getByRole('region',{name:'当前节点详情'});await current.locator('summary').filter({hasText:'节点详情'}).click();
+    const current=page.getByRole('region',{name:'当前节点详情'});expect(await current.locator('.cockpit-current-additional[open]').count()).toBe(1);
     const link=current.getByRole('link',{name:'查看本窗口记录',exact:true});
     const exact=link;let clicked=false;
     for(let i=0;i<await exact.count();i++)if(new URL((await exact.nth(i).getAttribute('href'))!,h.base).searchParams.get('washingWindow')===target){await exact.nth(i).click();clicked=true;break;}
@@ -173,7 +173,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     for(const node of nodes){
      const context={selected:fixture.sourceId,expanded:node.stage,focus:node.instanceId,row:node.instanceId},own=node.nativeWindows!;
      await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams(context));await page.locator('[data-view=order][aria-busy=false]').waitFor();
-     const current=page.getByRole('region',{name:'当前节点详情'}),details=current.locator('.cockpit-current-additional');await details.locator('summary').first().click();
+     const current=page.getByRole('region',{name:'当前节点详情'}),details=current.locator('.cockpit-current-additional');expect(await details.getAttribute('open')).not.toBeNull();
      expect((await current.locator('[data-washing-choice]').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-washing-choice')!))).sort()).toEqual(own.map(window=>window.evidence).sort());
      for(const window of own){
       const selectedRow=current.locator('[data-washing-choice="'+window.evidence+'"]');
@@ -235,7 +235,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      const rows=implicit.getByRole('region',{name:'节点列表'});
      expect(await rows.locator('[aria-pressed=true]').getAttribute('data-cockpit-focus')).toBe('node:'+original.instanceId);
      expect(new URL(implicit.url()).searchParams.has('focus')).toBe(false);
-     await current.locator('summary').filter({hasText:'节点详情'}).click();
+     expect(await current.locator('.cockpit-current-additional[open]').count()).toBe(1);
      const selectedRow=current.locator('[data-washing-choice="'+shared.evidence+'"]');
      const link=selectedRow.getByRole('link',{name:'查看本窗口记录',exact:true});
      const href=new URL((await link.getAttribute('href'))!,h.base);
