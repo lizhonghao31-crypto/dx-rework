@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@astryxdesign/core": "0.7.16",
     "@dx-rework/contracts": "0.1.0",
     "@dx-rework/domain": "0.1.0",
     "@dx-rework/ui": "0.1.0",

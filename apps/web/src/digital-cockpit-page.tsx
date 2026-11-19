@@ -7,14 +7,17 @@ import {canLeaveInternalPage,registerInternalNavigationGuard} from './internal-n
 import {useCockpitReads} from './cockpit-reads.js';
 import {cachedVerifiedSession,verifySession} from './auth-session.js';
 import {cockpitViewPatch,rememberCockpitReading,rememberedCockpitView,restoreCockpitReading,reconcileCockpitAnchor,matchesCockpitReading} from './cockpit-reading-context.js';
-import {Button} from '@dx-rework/ui';
+import {CockpitAstryxScope,CockpitButton,hasCockpitAstryx} from './cockpit-astryx.js';
 import './production-command-center-view.css';
 import './digital-cockpit.css';
 import {deliveryReturnPath} from './delivery-calendar-model.js';
 export {taskTimeProgress} from './digital-cockpit-model.js';
 
 export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|undefined}={}){
- const calendarReturn=deliveryReturnPath(deliveryReturn??null,import.meta.env.BASE_URL),returnContextUrl=(context:CockpitContext)=>journeyReturnUrl(context)+(calendarReturn?'&'+new URLSearchParams({deliveryReturn:calendarReturn}):'');
+ const [astryx]=useState(hasCockpitAstryx);
+ const [optedOut]=useState(()=>new URLSearchParams(window.location.search).get('cockpitAstryx')==='off');
+ const calendarReturn=deliveryReturnPath(deliveryReturn??null,import.meta.env.BASE_URL);
+ const returnContextUrl=(context:CockpitContext)=>journeyReturnUrl(context)+(calendarReturn?'&'+new URLSearchParams({deliveryReturn:calendarReturn}):'')+(optedOut?'&cockpitAstryx=off':'');
  const [context,setContext]=useState<CockpitContext>(()=>({...cockpitContext(window.location.search),scope:cockpitContext(window.location.search).scope??'production'})),[refresh,setRefresh]=useState(0),[contextError,setContextError]=useState(''),[notice,setNotice]=useState('');
  const [searchDraft,setSearchDraft]=useState({value:context.search,pending:false});
  const reads=useCockpitReads(context,refresh),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
@@ -59,5 +62,5 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  },[reads.detail,reads.detailLoading,context.focus,context.row,context.materialNode]);
  const draftChanged=useCallback((value:string,pending:boolean)=>setSearchDraft(current=>current.value===value&&current.pending===pending?current:{value,pending}),[]);
  const reload=()=>{remember();if(!reads.identity)void verifySession(true);setRefresh(value=>value+1);};
- return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit canDelete={canDelete} identityKey={reads.identity} data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions">{calendarReturn&&<a className="journey-text-action" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(calendarReturn)}>返回交付点阵图</a>}<Button variant="secondary" onClick={reload}>刷新数据</Button></div>}/></div>;
+ return <div ref={root} className={astryx?'digital-cockpit dx-cockpit-astryx':'digital-cockpit'} onFocusCapture={remember}><CockpitAstryxScope enabled={astryx}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit canDelete={canDelete} identityKey={reads.identity} data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions">{calendarReturn&&<a className="journey-text-action" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(calendarReturn)}>返回交付点阵图</a>}<CockpitButton variant="secondary" onClick={reload}>刷新数据</CockpitButton></div>}/></CockpitAstryxScope></div>;
 }

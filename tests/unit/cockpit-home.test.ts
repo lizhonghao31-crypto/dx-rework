@@ -33,9 +33,14 @@ it('consumes only the shared visual projection, keeps partial progress below 100
  o.visualProgress=visual(null);expect(render()).not.toContain('aria-valuenow=');
  o.lines=[{id:'line1',po:'TEST-PO',color:'蓝',orderedQuantity:4,formalStyleNo:null,temporaryStyleNo:null}];
  o.businessProgress={ruleVersion:'journey-business-v1',asOf:'2026-10-19T00:00:00Z',requirements:[],applicable:0,completed:0,unknown:0,ratio:null,stages:[],plan:{status:'not_adopted',planId:null,revision:null,covered:0,missing:0,due:0,outstandingDue:[],reasons:[]},quantities:{revision:'TEST',factoryAttribution:'unknown',lines:[{lineId:'line1',demand:4,received:2,packed:2,inspected:null,qualified:null,remainingReceipt:2,remainingShipment:2,qualityGap:null,qualityConflict:false,factoryAttribution:'unknown',reasons:[]}]}};
- expect(render()).not.toContain('欠收');expect(home(o)).toContain('欠收 2件');expect(home(o)).not.toContain('可见范围欠收');
- o.lines.push({...o.lines[0]!,id:'line2'});expect(home(o)).toContain('可见范围欠收 2件');
- o.businessProgress!.quantities!.lines[0]!.remainingReceipt=NaN;expect(home(o)).not.toContain('欠收');
+ o.cockpitFacts={
+  production:{status:'no_record',tone:'neutral',label:'暂无记录',scope:'whole'},
+  receiving:{status:'partial',tone:'blue',label:'部分收货',scope:'whole',received:2,demand:4},
+  shipSample:{status:'not_applicable',tone:'neutral',label:'不适用',scope:'whole'}
+ };
+ expect(render()).not.toContain('欠收');expect(home(o)).toContain('2/4 件');expect(home(o)).not.toContain('可见 PO');expect(cockpitReceiptGap(o)?.gap).toBe(2);
+ o.lines.push({...o.lines[0]!,id:'line2'});o.cockpitFacts.receiving.scope='visible';expect(home(o)).toContain('可见 PO');expect(cockpitReceiptGap(o)?.gap).toBe(2);
+ o.businessProgress!.quantities!.lines[0]!.remainingReceipt=NaN;expect(cockpitReceiptGap(o)).toBeNull();
  o.businessProgress!.quantities!.lines[0]!.remainingReceipt=2;o.businessProgress!.quantities!.lines.push({...o.businessProgress!.quantities!.lines[0]!});expect(cockpitReceiptGap(o)).toBeNull();
  o.businessProgress!.quantities!.lines.splice(1);o.businessProgress!.quantities!.lines[0]!.lineId='unreadable-line';expect(cockpitReceiptGap(o)).toBeNull();
 });
@@ -44,11 +49,11 @@ it("chooses the earliest unresolved risk and retains every parallel current node
   expect(representativeCockpitNodes(o).map(node=>node.key)).toEqual(["earlier","later","due"]);
   expect(representativeCockpitNodes(order([node("wait",{state:"pending"}),node("active")])).map(node=>node.key)).toEqual(["active"]);
 });
-it("renders seven compact columns and never substitutes old 80% for unavailable display facts",()=>{
+it("renders the eight approved columns and never substitutes old 80% for unavailable display facts",()=>{
   const o=order([node("work")]);o.styleImageUrl="/TEST.png";
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
-  expect(html.match(/<th(?:\s|>)/g)).toHaveLength(7);expect(html).not.toContain("时间规则待完善");expect(html).toContain('aria-label="整单交货日期进度"');expect(html).toContain('aria-label="整单实际进度"');expect(html).not.toContain('aria-valuenow=');expect(html).toContain("预览TEST-HOME款图");expect(html).not.toContain("80%");expect(html).not.toContain("<small>0%</small>");expect(html).not.toContain(">详情<");expect(html).toContain('订单ID：—');
-  expect(html.indexOf('data-progress-kind="time"')).toBeLessThan(html.indexOf('data-progress-kind="actual"'));expect(html).not.toContain('预计完成');expect(html).not.toContain('实际完成');expect(html).toContain('交货日期 —');expect(html).toContain('实际进度 —');
+  expect(html.match(/<th(?:\s|>)/g)).toHaveLength(8);expect(html).not.toContain("时间规则待完善");expect(html).toContain('aria-label="整单自然时间进度"');expect(html).toContain('aria-label="整单实际进度"');expect(html).not.toContain('aria-valuenow=');expect(html).toContain("预览TEST-HOME款图");expect(html).not.toContain("80%");expect(html).not.toContain("<small>0%</small>");expect(html).not.toContain(">详情<");expect(html).toContain('订单ID：—');
+  expect(html.indexOf('data-progress-kind="time"')).toBeLessThan(html.indexOf('data-progress-kind="actual"'));expect(html).not.toContain('预计完成');expect(html).not.toContain('实际完成');expect(html).not.toContain('交货日期');expect(html).toContain('实际进度 —');
 });
 it("keeps a real zero distinct from unavailable progress and uses the server's main state",()=>{
   const o=order([node("local-risk",{risks:["overdue"]})]);o.display={ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:"2026-11-30",missingShipmentDates:0,closedAt:null,actualRatio:0,actualLabel:"0.0%",awaitingClosure:false,stages:[],timeRatio:null,timeLabel:"时间规则待完善"};
@@ -56,7 +61,7 @@ it("keeps a real zero distinct from unavailable progress and uses the server's m
  o.poDeliveryDates=[{lineId:'TEST line',customerWarehouseArrivalDate:'2026-11-30'} as NonNullable<OrderJourney['poDeliveryDates']>[number]];
   o.visualProgress=visual(0);o.visualProgress.expected={at:'2026-11-30',precision:'date',quality:'recorded',status:'complete',covered:1,total:1,reasons:[]};
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
-  expect(html).toContain('aria-valuenow="0"');expect(html).toContain('title="0%"');expect(html).toContain("cockpit-order-state is-active");expect(html).toContain('dx-badge--danger">逾期');expect(html).toContain('2026-11-30');expect(html).not.toContain('2026-11-30 00:00');expect(html).toContain("未上传款图");
+  expect(html).toContain('aria-valuenow="0"');expect(html).toContain('title="0%"');expect(html).toContain("cockpit-home-order-state is-active");expect(html).toContain('dx-badge--danger">逾期');expect(html).toContain('2026-11-30');expect(html).not.toContain('2026-11-30 00:00');expect(html).toContain("未上传款图");
 });
 it("keeps unknown completion and retained original risks without turning closure into 100 percent",()=>{
   const o=order([node("original-work",{risks:["overdue"]})]);
@@ -73,10 +78,10 @@ it("keeps independent factory/sample risks and concrete blockers visible without
   o.display={ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:"2026-11-30",missingShipmentDates:0,closedAt:null,actualRatio:0,actualLabel:"0.0%",awaitingClosure:false,stages:[],timeRatio:null,timeLabel:"时间规则待完善"};
   o.deliveryRisks=[{lineId:"PO-1",poNumber:"PO-1",color:"蓝",kind:"factory",date:"2026-10-18",risk:"overdue",nodeKey:"production_reporting"},{lineId:"PO-2",poNumber:"PO-2",color:"红",kind:"sample",date:"2026-10-19",risk:"due_soon",nodeKey:"bulk_ship_sample"}];
   const render=(context:ReturnType<typeof JourneyReturnContextSchema.parse>)=>renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:1,completed:0},items:[o]},error:"",context,onChange(){}}));
-  const context=JourneyReturnContextSchema.parse({scope:'production'}),html=render(context);expect(html).toContain("本轮主布尚未齐料");expect(html).not.toContain("加工厂交货日");expect(html).toContain('另 2 项风险');expect(html).toContain("cockpit-order-state is-active");
+  const context=JourneyReturnContextSchema.parse({scope:'production'}),html=render(context);expect(html).toContain("本轮主布尚未齐料");expect(html).not.toContain("加工厂交货日");expect(html).toContain('另 2 项风险');expect(html).toContain("cockpit-home-order-state is-active");
   const modal=renderToStaticMarkup(createElement(CockpitHomeRisks,{order:o,context,onClose(){},onNode(){},onOrder(){}}));expect(modal).toContain('加工厂交货日');expect(modal).toContain('约定日期已过');expect(modal).toContain('船样目标日');expect(modal).toContain('今天到期');expect(modal).toContain('交接单尚未确认');expect(modal).toContain('本轮主布尚未齐料');
-  o.stages[1]!.nodes[0]!.blockers=[];o.stages[1]!.nodes[0]!.state="active";const ordinary=render(JourneyReturnContextSchema.parse({scope:"production"}));expect(ordinary).toContain("项风险");expect(ordinary).toContain("cockpit-order-state is-active");
-  o.display.mainState="due_soon";const dueMother=render(JourneyReturnContextSchema.parse({scope:"production",kpi:"due_soon"}));expect(dueMother).toContain("项风险");expect(dueMother).toContain("cockpit-order-state is-due_soon");
+  o.stages[1]!.nodes[0]!.blockers=[];o.stages[1]!.nodes[0]!.state="active";const ordinary=render(JourneyReturnContextSchema.parse({scope:"production"}));expect(ordinary).toContain("项风险");expect(ordinary).toContain("cockpit-home-order-state is-active");
+  o.display.mainState="due_soon";const dueMother=render(JourneyReturnContextSchema.parse({scope:"production",kpi:"due_soon"}));expect(dueMother).toContain("项风险");expect(dueMother).toContain("cockpit-home-order-state is-due_soon");
   const filtered=render(JourneyReturnContextSchema.parse({scope:"production",risk:"due_soon"}));expect(filtered).not.toContain("约定日期已过");expect(filtered).toContain("船样目标日");
 });
 

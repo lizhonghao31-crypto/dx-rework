@@ -37,13 +37,13 @@ export function CockpitHomeProgress({order}:{order:OrderJourney}){
  const meter=(label:string,ratio:number|null|undefined,key:string)=>{
   const known=ratio!==null&&ratio!==undefined&&Number.isFinite(ratio)&&ratio>=0&&ratio<=1;
   const percentage=known?ratio===1?100:Math.min(99.9,Math.round(ratio*1000)/10):undefined;
-  return <div className="cockpit-home-progress-row" data-progress-kind={key} key={key}><span className="cockpit-home-progress-label">{label} {known?`${percentage}%`:'—'}</span><span className="cockpit-home-progress-track" role="progressbar" aria-label={`${order.orderId?'整单':'开发'}${key==='time'?'交货日期进度':'实际进度'}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage} aria-valuetext={known?`${percentage}%`:'暂不可计算'} title={known?`${percentage}%`:'暂不可计算'}>{known?<i style={{width:`${ratio*100}%`}}/>:<span className="cockpit-home-progress-unknown" aria-hidden="true">—</span>}</span></div>;
+  return <div className="cockpit-home-progress-row" data-progress-kind={key} key={key}><span className="cockpit-home-progress-label">{label&&label+' '}{known?`${percentage}%`:'—'}</span><span className="cockpit-home-progress-track" role="progressbar" aria-label={`${order.orderId?'整单':'开发'}${key==='time'?'自然时间进度':'实际进度'}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage} aria-valuetext={known?`${percentage}%`:'暂不可计算'} title={known?`${percentage}%`:'暂不可计算'}>{known?<i style={{width:`${ratio*100}%`}}/>:<span className="cockpit-home-progress-unknown" aria-hidden="true">—</span>}</span></div>;
  };
  const dates=order.fixedSchedule?.framework?.scopes.map(scope=>scope.customerDate)??order.poDeliveryDates?.map(line=>line.customerWarehouseArrivalDate)??[];
  const complete=dates.length>0&&dates.length===order.lines.length&&dates.every(date=>Boolean(date)),unique=[...new Set(dates.filter((date):date is string=>Boolean(date)))].sort();
  return <div className={`cockpit-home-progress is-${order.display?.mainState??'unknown'}`}>
-  <div className="cockpit-home-delivery-date">{complete?unique.map(date=><CockpitDate key={date} value={date} precision="date" short/>):<span>—</span>}</div>
-  {meter('交货日期',ratio,'time')}
+  <div className="cockpit-home-delivery-date">{unique.map(date=><CockpitDate key={date} value={date} precision="date" short/>)}{!complete&&<span>{unique.length?'部分日期待核':'—'}</span>}</div>
+  {meter('',ratio,'time')}
   {meter('实际进度',progress?.actualRatio,'actual')}
   {order.display?.mainState==='completed'&&<small className="cockpit-home-completed-date">实际完成 <HomeDate value={progress?.actual} missing="完成时间待核"/></small>}
  </div>;

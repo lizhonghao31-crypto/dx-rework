@@ -14,6 +14,7 @@ import {CockpitTimingCoverage,cockpitCoverageLabels} from './cockpit-timing-cove
 import {CockpitDate} from './cockpit-date.js';
 import {cockpitAvailabilityMessage} from './cockpit-reads.js';
 import {CockpitRetryUpdates} from './cockpit-retry-updates.js';
+import {CockpitButton,CockpitFilterControls} from './cockpit-astryx.js';
 
 const kpis = [
   {key:"all",label:"订单总数",field:"all",tone:"info",icon:"List"},
@@ -35,9 +36,9 @@ function CockpitFilters({ context, data, onChange, onSearchDraft,onCoverage }: {
     <label className="journey-search"><span className="journey-visually-hidden">综合搜索</span><input maxLength={100} aria-label="综合搜索" placeholder="款号、客户、PO、跟单等" value={draft.search} onCompositionStart={()=>{composing.current=true;liveSearch.onCompositionStart();}} onCompositionEnd={()=>{composing.current=false;liveSearch.onCompositionEnd();}} onChange={event => field("search", event.target.value)} /></label>
     <label>客户<SearchableSelect aria-label="客户" value={draft.customer ?? ""} onChange={event => field("customer", event.target.value)}><option value="">全部客户</option>{data?.facets?.customers.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
     <label>状态<select aria-label="整单状态" value={draft.kpi} onChange={event=>field('kpi',event.target.value)}><option value="all">全部状态</option>{kpis.filter(kpi=>kpi.key!=='all'&&kpi.key!=='todo').map(kpi=><option key={kpi.key} value={kpi.key}>{kpi.label}</option>)}<option value="blocked">受阻</option></select></label>
-    <div className="journey-filter-actions"><Button type="submit">搜索</Button><Button type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</Button>
-    <Button type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined, progress:undefined, missing:undefined })}>重置筛选</Button><Button type="button" variant="secondary" disabled={!onCoverage}
-      onClick={onCoverage}>时效待补充</Button></div>
+    <CockpitFilterControls><CockpitButton type="submit">搜索</CockpitButton><CockpitButton type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</CockpitButton>
+    <CockpitButton type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined, progress:undefined, missing:undefined })}>重置筛选</CockpitButton><CockpitButton type="button" variant="secondary" disabled={!onCoverage}
+      {...(onCoverage?{onClick:onCoverage}:{})}>时效待补充</CockpitButton></CockpitFilterControls>
     {more && <div className="journey-more-filters">
       <label>订单范围<select aria-label="订单范围" value={draft.scope??'production'} onChange={event=>field('scope',event.target.value)}><option value="production">生产订单</option><option value="development">纯开发未下单</option></select></label>
       <label>跟单<SearchableSelect aria-label="跟单" value={draft.merchandiserId ?? ""} onChange={event => field("merchandiserId", event.target.value)}><option value="">主 / 第二跟单</option>{data?.facets?.merchandisers.map(person => <option value={person.id} key={person.id}>{person.name ?? person.id}</option>)}</SearchableSelect></label>

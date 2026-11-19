@@ -8,7 +8,7 @@ function StageDate({value}:{value:JourneyBusinessDate|undefined}){
  return value?.status==='complete'&&value.at&&value.precision!=='unknown'?<CockpitDate value={value.at} precision={value.precision} short/>:<span>—</span>;
 }
 /** Only the shared server projection supplies progress, risk and date facts. */
-export function CockpitStageProgress({stage,index,fact,selected,scheduleAsOf,lines,onSelect}:{stage:OrderJourney['stages'][number];index:number;fact:JourneyVisualStage|undefined;selected:boolean;lines?:OrderJourney['lines']|undefined;scheduleAsOf?:string|undefined;onSelect:()=>void;tooltipOpen?:boolean;onTooltipOpen?:()=>void;onTooltipClose?:()=>void}){
+export function CockpitStageProgress({stage,index,fact,selected,scheduleAsOf,lines,onSelect,creationEntries}:{stage:OrderJourney['stages'][number];index:number;fact:JourneyVisualStage|undefined;selected:boolean;lines?:OrderJourney['lines']|undefined;scheduleAsOf?:string|undefined;onSelect:()=>void;creationEntries?:Array<{label:string;at:string}>|undefined;tooltipOpen?:boolean;onTooltipOpen?:()=>void;onTooltipClose?:()=>void}){
  const time=cockpitStagePercentage(fact?.timeRatio),actual=cockpitStagePercentage(fact?.actualRatio);
  const started=Boolean(fact?.startedAt)||known(fact?.actualRatio)&&fact.actualRatio>0;
  const tone=!fact||fact.applicability!=='applicable'||fact.risk==='unknown'?'neutral':fact.risk==='overdue'?'danger':fact.risk==='due_soon'?'warning':started?'success':'neutral';
@@ -23,6 +23,6 @@ export function CockpitStageProgress({stage,index,fact,selected,scheduleAsOf,lin
     <text x="52" y="62" textAnchor="middle" fontSize="30" fontWeight="700">{fact?.actualRatio===1&&fact.applicability==='applicable'?'✓':index+1}</text>
    </svg></span><strong>{stage.label}</strong>
   </button>
-  <div className="cockpit-stage-dates-with-delta"><div className="cockpit-stage-dates" aria-label={`${stage.label}日期`}><div><span>预计：</span><StageDate value={fact?.expected}/></div><div><span>实际：</span><StageDate value={fact?.actual}/></div></div>{fact?.goalDelta?<CockpitStageDifference goal={fact.goalDelta} asOf={scheduleAsOf} wrapUnits/>:<CockpitTargetDifference nodes={stage.nodes} asOf={scheduleAsOf} {...(lines?{lines}:{})} wrapUnits/>}</div>
+  <div className="cockpit-stage-dates-with-delta">{creationEntries&&creationEntries.length>1&&<div className="cockpit-creation-events">{creationEntries.map(entry=><small key={entry.label}>{entry.label} <CockpitDate value={entry.at} short/></small>)}</div>}<div className="cockpit-stage-dates" aria-label={`${stage.label}日期`}><div><span>预计：</span><StageDate value={fact?.expected}/></div><div><span>实际：</span><StageDate value={fact?.actual}/></div></div>{fact?.goalDelta?<CockpitStageDifference goal={fact.goalDelta} asOf={scheduleAsOf} wrapUnits/>:<CockpitTargetDifference nodes={stage.nodes} asOf={scheduleAsOf} {...(lines?{lines}:{})} wrapUnits/>}</div>
  </div>;
 }

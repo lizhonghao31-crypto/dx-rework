@@ -1014,7 +1014,7 @@ export class DigitalJourneyQuery {
       const sampleApplicable=sample?.state==='not_applicable'?false:sample?.records.some(record=>record.domain==='task')?true:undefined;
       item.cockpitFacts=cockpitHomeFacts({orderId:item.orderId,fullOrder,lines,factories,receipts:cockpitReceipts,
         sentLineIds:new Set(samples.filter(sample=>!sample.occurredAt||Date.parse(sample.occurredAt)<=Date.parse(observed.now)).flatMap(sample=>sample.lineIds)),
-        sampleApplicable,sampleWaiting:sampleApplicable===true&&sample?.state==='pending'});
+        sampleApplicable,sampleWaiting:sampleApplicable===true&&(sample?.state==='pending'||sample?.state==='active')});
     }
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
