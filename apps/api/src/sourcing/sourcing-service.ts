@@ -58,6 +58,7 @@ import {
   type TrustedActorContext,
 } from "../tools/repositories.js";
 import type { SourcingContractService } from "./sourcing-contract-service.js";
+import { JiashunContractClerkScope, JIASHUN_CASE_FILTER_SQL, JIASHUN_READ, isJiashunClerk } from "./jiashun-contract-clerk-scope.js";
 import { contractReturnState, type ContractReturnFilter } from "./contract-return-state.js";
 
 const CASE_CREATE_CAPABILITY = "sourcing:inquiry:create";
@@ -294,6 +295,28 @@ export const canViewSourcingDaxingPrice = (
   )
   || actor.actorRoles.some((role) => role !== CASE_CREATE_ROLE && DAXING_PRICE_ROLES.has(role));
 
+// Expressions are fixed column references from the queries below, never request input.
+const jiashunSupplier = (id: string) => `EXISTS (SELECT 1 FROM sourcing_jiashun_allowed_factories allowed WHERE allowed.supplier_id=${id})`;
+const jiashunDecision = (id: string, caseId: string) => `EXISTS (SELECT 1 FROM sourcing_decisions scoped_decision
+  WHERE scoped_decision.sourcing_decision_id=${id} AND scoped_decision.sourcing_case_id=${caseId}
+    AND ${jiashunSupplier("scoped_decision.supplier_id")})`;
+const jiashunDocument = (id: string, caseId: string) => `EXISTS (SELECT 1 FROM sourcing_contract_documents scoped_document
+  JOIN sourcing_approval_snapshots scoped_snapshot USING(sourcing_approval_snapshot_id)
+  WHERE scoped_document.sourcing_contract_document_id=${id} AND scoped_document.sourcing_case_id=${caseId}
+    AND scoped_snapshot.sourcing_case_id=${caseId} AND ${jiashunSupplier("scoped_snapshot.supplier_id")})`;
+const jiashunQuote = (alias: string) => `EXISTS (SELECT 1 FROM sourcing_approval_snapshots scoped_snapshot
+  JOIN sourcing_decisions scoped_decision USING(sourcing_decision_id)
+  WHERE scoped_decision.source_ie_quote_id=${alias}.sourcing_ie_quote_id
+    AND scoped_snapshot.sourcing_case_id=${alias}.sourcing_case_id AND ${jiashunSupplier("scoped_snapshot.supplier_id")})`;
+const jiashunTransfer = (alias: string) =>
+  `${jiashunSupplier(alias+".proposed_supplier_id")} AND ${jiashunDecision(alias+".from_decision_id",alias+".sourcing_case_id")}`;
+const jiashunCrossScopeDecision = (alias: string) => `${alias}.supersedes_decision_id IS NOT NULL
+  AND NOT (${jiashunDecision(alias+".supersedes_decision_id",alias+".sourcing_case_id")})`;
+const jiashunDecisionReason = (alias: string) =>
+  `CASE WHEN ${jiashunCrossScopeDecision(alias)} THEN '当前工厂决定已生效' ELSE ${alias}.decision_reason END`;
+const jiashunReconciliation = (alias: string) => `${jiashunSupplier(alias+".actual_supplier_id")}
+  AND ${jiashunDocument(alias+".sourcing_contract_document_id",alias+".sourcing_case_id")}`;
+
 const mapCase = (
   row: SourcingCaseRow,
   actor: TrustedActorContext,
@@ -443,6 +466,7 @@ const databaseCode = (error: unknown): string | undefined =>
 const requiresSourcingPriceOwnerApproval=(proposed:string,basis:string):boolean=>scaledUnitPrice(proposed)>scaledUnitPrice(basis);
 
 export class SourcingService {
+  private get clerkScope(): JiashunContractClerkScope { return new JiashunContractClerkScope(this.database); }
   constructor(
     private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
@@ -487,6 +511,8 @@ export class SourcingService {
   }
 
   private assertReader(actor: TrustedActorContext): void {
+    if (isJiashunClerk(actor.actorRoles) && actor.authorizationCapability === JIASHUN_READ
+      && (actor.authorizationCapabilities ?? []).includes(JIASHUN_READ)) return;
     if (
       actor.authorizationCapability !== READ_CAPABILITY
       || (
@@ -504,6 +530,8 @@ export class SourcingService {
     actor: TrustedActorContext,
     history?: { at: string; node: SourcingHistoryNode; entryId: string },
   ): Promise<SourcingCaseSummary> {
+    const clerk=isJiashunClerk(actor.actorRoles);
+    if (clerk) await this.clerkScope.assertCase(actor,sourcingCaseId,client);
     const result = await client.query<SourcingCaseRow>(
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
@@ -539,14 +567,14 @@ export class SourcingService {
          quote_row.quoted_by,quote_row.quoted_at,
          decision_row.sourcing_decision_id,decision_row.decision_version,
          decision_row.source_type,decision_row.source_ie_quote_id,
-         decision_row.supersedes_decision_id,decision_row.supplier_id,
+         ${clerk ? `CASE WHEN ${jiashunCrossScopeDecision("decision_row")} THEN NULL ELSE decision_row.supersedes_decision_id END` : "decision_row.supersedes_decision_id"} AS supersedes_decision_id,decision_row.supplier_id,
          decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
          decision_row.unit_price AS decision_unit_price,
          decision_row.quantity AS decision_quantity,
          decision_row.total_amount AS decision_total_amount,
          decision_lines_row.line_prices AS decision_line_prices,
          decision_row.cutting_process,decision_row.cutting_process_other,
-         decision_row.decision_reason AS management_decision_reason,
+         ${clerk ? jiashunDecisionReason("decision_row") : "decision_row.decision_reason"} AS management_decision_reason,
          decision_row.decided_by AS management_decided_by,
          decision_row.decided_at AS management_decided_at,
          owner_row.sourcing_owner_decision_id,
@@ -625,7 +653,7 @@ export class SourcingService {
            ${history ? "AND quote.quoted_at <= $2::timestamptz AND $3::text <> 'created' AND ($3::text <> 'ie_quote' OR quote.sourcing_ie_quote_id=$4::uuid)" : "AND quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)"}
          ORDER BY quote.quote_version DESC
          LIMIT 1
-       ) quote_row ON true
+       ) quote_row ON ${clerk ? jiashunQuote("quote_row") : "true"}
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'quantity',line.quantity,
@@ -641,7 +669,7 @@ export class SourcingService {
            ${history ? "AND decision_fact.decided_at <= $2::timestamptz AND $3::text NOT IN ('created','ie_quote') AND ($3::text <> 'management' OR decision_fact.sourcing_decision_id=$4::uuid) AND ($3::text <> 'owner' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_owner_decisions WHERE sourcing_owner_decision_id=$4::uuid)) AND ($3::text <> 'finance' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_finance_reconciliations WHERE sourcing_reconciliation_id=$4::uuid))" : "AND decision_fact.decided_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)"}
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
-       ) decision_row ON true
+       ) decision_row ON ${clerk ? jiashunSupplier("decision_row.supplier_id") : "true"}
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'quantity',line.quantity,
@@ -659,7 +687,7 @@ export class SourcingService {
          WHERE approval.sourcing_case_id=case_view.sourcing_case_id
            ${history ? "AND approval.approved_at <= $2::timestamptz AND $3::text IN ('owner','finance')" : ""}
          ORDER BY approval.decision_version DESC LIMIT 1
-       ) snapshot ON true
+       ) snapshot ON ${clerk ? jiashunSupplier("snapshot.supplier_id") : "true"}
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'styleNo',line.style_no,
@@ -670,7 +698,7 @@ export class SourcingService {
          FROM sourcing_approval_snapshot_lines line
          WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
        ) snapshot_lines ON true
-       WHERE case_view.sourcing_case_id=$1`,
+       WHERE case_view.sourcing_case_id=$1${clerk ? ` AND ${JIASHUN_CASE_FILTER_SQL}` : ""}`,
       history ? [sourcingCaseId, history.at, history.node, history.entryId] : [sourcingCaseId],
     );
     const row = result.rows[0];
@@ -684,7 +712,8 @@ export class SourcingService {
          WHERE d.sourcing_case_id=$1
          ORDER BY d.contract_version DESC LIMIT 1`, [sourcingCaseId])).rows[0];
       // An older supplier/decision's contract is never projected over a new transfer.
-      if (currentContract) {
+      if (currentContract && (!isJiashunClerk(actor.actorRoles)
+        || (await this.clerkScope.allowedDocumentIds(actor,sourcingCaseId,client)).has(currentContract.sourcing_contract_document_id))) {
         const parsed = ContractContentSchema.safeParse(currentContract.content);
         if (currentContract.sourcing_decision_id === item.decision.sourcingDecisionId && parsed.success) {
           const c = parsed.data;
@@ -712,7 +741,7 @@ export class SourcingService {
       if (transition.rows[0]) { item.status = transition.rows[0].status; item.version = Number(transition.rows[0].version); }
       delete item.identityRevision;
     }
-    const latestReturn = history ? null : (await client.query<{reason:string}>(
+    const latestReturn = history || clerk ? null : (await client.query<{reason:string}>(
       "SELECT transition_reason AS reason FROM sourcing_case_transitions WHERE sourcing_case_id=$1 AND business_action='returned_to_merchandiser' ORDER BY sequence DESC LIMIT 1",[sourcingCaseId])).rows[0];
     const visits = await client.query<{to:string;changesNode:boolean;enteredAt:string;leftAt:string|null;asOf:string}>(
       `SELECT to_status AS to,true AS "changesNode",transitioned_at::text AS "enteredAt",
@@ -726,6 +755,7 @@ export class SourcingService {
 
   async analysis(actor: TrustedActorContext, input: unknown) {
     this.assertReader(actor);
+    if (isJiashunClerk(actor.actorRoles)) fail("嘉顺文员无权查看跨工厂统计分析",403,"FORBIDDEN");
     return readQuoteAnalysis(this.database,input);
   }
 
@@ -742,6 +772,8 @@ export class SourcingService {
     }> = {},
   ): Promise<SourcingCaseListResponse> {
     this.assertReader(actor);
+    const clerk=isJiashunClerk(actor.actorRoles);
+    if (clerk) await this.clerkScope.assertActive(actor);
     const normalizedQuery = query.trim();
     const stage = filters.stage ?? "all";
     const gender = filters.gender ?? "all";
@@ -791,14 +823,14 @@ export class SourcingService {
          quote_row.quoted_by,quote_row.quoted_at,
          decision_row.sourcing_decision_id,decision_row.decision_version,
          decision_row.source_type,decision_row.source_ie_quote_id,
-         decision_row.supersedes_decision_id,decision_row.supplier_id,
+         ${clerk ? `CASE WHEN ${jiashunCrossScopeDecision("decision_row")} THEN NULL ELSE decision_row.supersedes_decision_id END` : "decision_row.supersedes_decision_id"} AS supersedes_decision_id,decision_row.supplier_id,
          decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
          decision_row.unit_price AS decision_unit_price,
          decision_row.quantity AS decision_quantity,
          decision_row.total_amount AS decision_total_amount,
          decision_lines_row.line_prices AS decision_line_prices,
          decision_row.cutting_process,decision_row.cutting_process_other,
-         decision_row.decision_reason AS management_decision_reason,
+         ${clerk ? jiashunDecisionReason("decision_row") : "decision_row.decision_reason"} AS management_decision_reason,
          decision_row.decided_by AS management_decided_by,
          decision_row.decided_at AS management_decided_at,
          owner_row.sourcing_owner_decision_id,
@@ -879,7 +911,7 @@ export class SourcingService {
          AND quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)
          ORDER BY quote.quote_version DESC
          LIMIT 1
-       ) quote_row ON true
+       ) quote_row ON ${clerk ? jiashunQuote("quote_row") : "true"}
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'quantity',line.quantity,
@@ -895,7 +927,7 @@ export class SourcingService {
          AND decision_fact.decided_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
-       ) decision_row ON true
+       ) decision_row ON ${clerk ? jiashunSupplier("decision_row.supplier_id") : "true"}
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'quantity',line.quantity,
@@ -911,7 +943,7 @@ export class SourcingService {
          FROM sourcing_approval_snapshots approval
          WHERE approval.sourcing_case_id=case_view.sourcing_case_id
          ORDER BY approval.decision_version DESC LIMIT 1
-       ) snapshot ON true
+       ) snapshot ON ${clerk ? jiashunSupplier("snapshot.supplier_id") : "true"}
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
            'position',line.position,'styleNo',line.style_no,
@@ -951,6 +983,7 @@ export class SourcingService {
             FROM sourcing_contract_executions contract_row
             WHERE contract_row.sourcing_case_id=case_view.sourcing_case_id
               AND contract_row.contract_reference ILIKE '%'||$1||'%'
+              ${clerk ? "AND false" : ""}
           ))
          AND ($2::text='all' OR ($2::text='closed' AND case_view.status='closed')
            OR ($2::text='pending' AND case_view.status<>'closed'))
@@ -997,6 +1030,7 @@ export class SourcingService {
              )
            )
          )
+         ${clerk ? `AND ${JIASHUN_CASE_FILTER_SQL}` : ""}
        )
        SELECT page_row.*,totals.total_count,totals.total_order_quantity
        FROM (
@@ -1283,6 +1317,8 @@ export class SourcingService {
         : `SELECT ${time}::text AS at FROM ${table} WHERE ${id}=$1 AND sourcing_case_id=$2`, [entry.entryId, sourcingCaseId]);
     const at = cutoff.rows[0]?.at;
     if (!at) return fail("历史记录不存在", 404, "NOT_FOUND");
+    // The selected entry already passed listTimeline's factory/version filter.
+    // Initial quotes and decisions can belong to the approved factory even when recorded before approval.
     const item = await this.readCase(this.database, sourcingCaseId, actor, { at, node, entryId: entry.entryId });
     const evidence = await this.database.query<{ ids: string[] | null }>(
       `SELECT after_state->'attachmentIds' AS ids FROM operation_events
@@ -1292,8 +1328,9 @@ export class SourcingService {
        ORDER BY created_at DESC,event_id DESC LIMIT 1`, [sourcingCaseId, at]);
     const ids = evidence.rows[0]?.ids;
     const attachments = await this.listAttachments(actor, sourcingCaseId, true);
-    const contract = node === "finance" ? await this.database.query<{ reference: string }>(
-      `SELECT sourcing_contract_display_number(document.sourcing_contract_document_id,document.contract_number) AS reference FROM sourcing_finance_reconciliations reconciliation
+    const contract = node === "finance" ? await this.database.query<{ reference: string; document_id: string }>(
+      `SELECT document.sourcing_contract_document_id AS document_id,
+              sourcing_contract_display_number(document.sourcing_contract_document_id,document.contract_number) AS reference FROM sourcing_finance_reconciliations reconciliation
        JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=reconciliation.sourcing_contract_document_id
        WHERE reconciliation.sourcing_reconciliation_id=$1 AND reconciliation.sourcing_case_id=$2`,
       [entry.entryId, sourcingCaseId]) : null;
@@ -1304,9 +1341,12 @@ export class SourcingService {
       ? record.kind === "factory_change_request" || record.kind === "factory_change_verification" || record.kind === "price_reapplication"
       : node === "finance" ? record.kind === "exception_verification" || record.kind === "contract"
         : node === "created" && record.kind === "style_revision");
+    const contractVisible = !isJiashunClerk(actor.actorRoles)
+      || !contract?.rows[0]
+      || (await this.clerkScope.allowedDocumentIds(actor,sourcingCaseId)).has(contract.rows[0].document_id);
     return { item, node, entry, versions, relatedEntries,
       attachments: ids ? attachments.items.filter(image => ids.includes(image.attachmentId)) : [], notices,
-      contractReference: contract?.rows[0]?.reference ?? null };
+      contractReference: contractVisible ? contract?.rows[0]?.reference ?? null : null };
   }
 
   async listTimeline(
@@ -1316,6 +1356,8 @@ export class SourcingService {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     await this.readCase(this.database, sourcingCaseId, actor);
+    const clerk=isJiashunClerk(actor.actorRoles);
+    const scoped=(test: string)=>clerk ? ` AND (${test})` : "";
     const result = await this.database.query<{
       entry_id: string;
       pdf_attachment_id: string | null;
@@ -1347,37 +1389,37 @@ export class SourcingService {
                 NULL::integer AS quantity,'{}'::text[] AS difference_fields,
                 NULL::text AS result,NULL::text AS resolution
          FROM sourcing_cases source_case
-         WHERE source_case.sourcing_case_id=$1
+         WHERE source_case.sourcing_case_id=$1${scoped("false")}
          UNION ALL
          SELECT correction.correction_id,'created',correction.correction_version+1,correction.corrected_by,
                 correction.corrected_at,correction.reason,NULL::numeric,NULL::numeric,NULL::text,NULL::text,
                 NULL::text,NULL::date,correction.order_quantity,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_case_corrections correction WHERE correction.sourcing_case_id=$1
+         FROM sourcing_case_corrections correction WHERE correction.sourcing_case_id=$1${scoped("false")}
          UNION ALL
          SELECT revision.operation_event_id,'style_revision',revision.revision,revision.changed_by,
                 revision.created_at,'补充或修改款号',NULL::numeric,NULL::numeric,
                 NULL::text,NULL::text,NULL::text,NULL::date,NULL::integer,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_style_revisions revision WHERE revision.sourcing_case_id=$1
+         FROM sourcing_style_revisions revision WHERE revision.sourcing_case_id=$1${scoped("false")}
          UNION ALL
          SELECT quote.sourcing_ie_quote_id,'ie_quote',quote.quote_version,quote.quoted_by,
                 quote.quoted_at,quote.quote_reason,quote.unit_price,quote.total_amount,
                 NULL::text,NULL::text,NULL::text,NULL::date,
                 quote.quantity,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_ie_quotes quote WHERE quote.sourcing_case_id=$1
+         FROM sourcing_ie_quotes quote WHERE quote.sourcing_case_id=$1${scoped(jiashunQuote("quote"))}
          UNION ALL
          SELECT choice.sourcing_decision_id,'management_decision',choice.decision_version,
-                choice.decided_by,choice.decided_at,choice.decision_reason,
+                choice.decided_by,choice.decided_at,${clerk ? jiashunDecisionReason("choice") : "choice.decision_reason"},
                 choice.unit_price,choice.total_amount,choice.supplier_name_snapshot,
                 NULL::text,NULL::text,NULL::date,
                 choice.quantity,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_decisions choice WHERE choice.sourcing_case_id=$1
+         FROM sourcing_decisions choice WHERE choice.sourcing_case_id=$1${scoped(jiashunSupplier("choice.supplier_id"))}
          UNION ALL
          SELECT owner.sourcing_owner_decision_id,'owner_decision',
                 row_number() OVER (ORDER BY owner.decided_at,owner.sourcing_owner_decision_id),
                 owner.decided_by,owner.decided_at,owner.decision_reason,
                 NULL::numeric,NULL::numeric,NULL::text,owner.decision,NULL::text,NULL::date,
                 NULL::integer,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_owner_decisions owner WHERE owner.sourcing_case_id=$1
+         FROM sourcing_owner_decisions owner WHERE owner.sourcing_case_id=$1${scoped(jiashunDecision("owner.sourcing_decision_id","owner.sourcing_case_id"))}
          UNION ALL
          SELECT contract.sourcing_contract_id,'contract',
                 row_number() OVER (ORDER BY contract.recorded_at,contract.sourcing_contract_id),
@@ -1385,7 +1427,7 @@ export class SourcingService {
                 NULL::numeric,NULL::numeric,NULL::text,NULL::text,
                 contract.contract_reference,contract.signed_on,
                 NULL::integer,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_contract_executions contract WHERE contract.sourcing_case_id=$1
+         FROM sourcing_contract_executions contract WHERE contract.sourcing_case_id=$1${scoped("false")}
          UNION ALL
          SELECT contract.sourcing_contract_document_id,'contract',contract.contract_version,
                 contract.prepared_by,contract.prepared_at,
@@ -1396,13 +1438,17 @@ export class SourcingService {
                 sourcing_contract_display_number(contract.sourcing_contract_document_id,contract.contract_number),
                 (contract.prepared_at AT TIME ZONE 'Asia/Shanghai')::date,
                 NULL::integer,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_contract_documents contract WHERE contract.sourcing_case_id=$1
+         FROM sourcing_contract_documents contract WHERE contract.sourcing_case_id=$1${scoped(jiashunDocument("contract.sourcing_contract_document_id","contract.sourcing_case_id"))}
          UNION ALL
          SELECT event.event_id,'price_reapplication',row_number() OVER(ORDER BY event.created_at,event.event_id),event.actor_id,event.created_at,
            CASE event.action WHEN 'sourcing.price_reapplication.request' THEN '价格重新申请：' WHEN 'sourcing.price_reapplication.effective' THEN '价格申请已生效：'
              WHEN 'sourcing.price_reapplication.returned' THEN '价格申请已退回：' WHEN 'sourcing.price_reapplication.cancelled' THEN '价格申请已撤销：' ELSE '价格申请已驳回：' END || COALESCE(event.reason,''),
            (event.after_state->>'unitPrice')::numeric,NULL::numeric,NULL::text,NULL::text,NULL::text,NULL::date,NULL::integer,'{}'::text[],NULL::text,NULL::text
          FROM operation_events event WHERE event.entity_id=$1::text AND event.entity_type='sourcing_case' AND event.action LIKE 'sourcing.price_reapplication.%'
+           ${scoped(`EXISTS (SELECT 1 FROM sourcing_price_reapplications request
+             LEFT JOIN sourcing_price_reviews review USING(price_request_id)
+             WHERE request.sourcing_case_id=$1 AND event.event_id IN (request.operation_event_id,review.operation_event_id)
+               AND ${jiashunDocument("request.base_document_id","request.sourcing_case_id")})`)}
          UNION ALL
          SELECT change.factory_change_request_id,'factory_change_request',
                 row_number() OVER (ORDER BY change.requested_at,change.factory_change_request_id),
@@ -1410,7 +1456,7 @@ export class SourcingService {
                 change.proposed_unit_price,change.proposed_total_amount,
                 change.proposed_supplier_name_snapshot,NULL::text,NULL::text,NULL::date,
                 change.proposed_quantity,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_factory_change_requests change WHERE change.sourcing_case_id=$1
+         FROM sourcing_factory_change_requests change WHERE change.sourcing_case_id=$1${scoped(jiashunTransfer("change"))}
          UNION ALL
          SELECT verification.factory_change_decision_id,'factory_change_verification',
                 row_number() OVER (ORDER BY verification.verified_at,verification.factory_change_decision_id),
@@ -1420,7 +1466,7 @@ export class SourcingService {
          FROM sourcing_factory_change_decisions verification
          JOIN sourcing_factory_change_requests change
            ON change.factory_change_request_id=verification.factory_change_request_id
-         WHERE change.sourcing_case_id=$1
+         WHERE change.sourcing_case_id=$1${scoped(jiashunTransfer("change"))}
          UNION ALL
          SELECT reconciliation.sourcing_reconciliation_id,'finance_reconciliation',
                 reconciliation.reconciliation_version,reconciliation.reconciled_by,
@@ -1431,7 +1477,7 @@ export class SourcingService {
                 reconciliation.actual_quantity,reconciliation.difference_fields,
                 reconciliation.result,NULL::text
          FROM sourcing_finance_reconciliations reconciliation
-         WHERE reconciliation.sourcing_case_id=$1
+         WHERE reconciliation.sourcing_case_id=$1${scoped(jiashunReconciliation("reconciliation"))}
          UNION ALL
          SELECT event.event_id,'exception_verification',
                 row_number() OVER (ORDER BY event.created_at,event.event_id),
@@ -1445,6 +1491,10 @@ export class SourcingService {
          FROM operation_events event
          WHERE event.entity_type='sourcing_case' AND event.entity_id=$1::text
            AND event.action IN ('sourcing.exception.close','sourcing.exception.reopen_reconciliation')
+           ${scoped(`EXISTS (SELECT 1 FROM sourcing_finance_reconciliations reconciliation
+             WHERE reconciliation.sourcing_case_id=$1
+               AND reconciliation.reconciliation_version::text=event.before_state->>'reconciliationVersion'
+               AND ${jiashunReconciliation("reconciliation")})`)}
        )
        SELECT timeline.entry_id,timeline.kind,timeline.entry_version,
               COALESCE(app_user.display_name,'系统用户') AS handled_by,
@@ -1459,7 +1509,7 @@ export class SourcingService {
        ORDER BY timeline.handled_at,timeline.kind,timeline.entry_version`,
       [sourcingCaseId],
     );
-    if (result.rows.length === 0) fail("报价选厂询价不存在", 404, "NOT_FOUND");
+    if (result.rows.length === 0 && !clerk) fail("报价选厂询价不存在", 404, "NOT_FOUND");
     return {
       items: result.rows.map((row) => ({
         entryId: row.entry_id,
@@ -1516,6 +1566,8 @@ export class SourcingService {
     actor: TrustedActorContext,
   ): Promise<SourcingFactoryListResponse> {
     this.assertReader(actor);
+    const clerk=isJiashunClerk(actor.actorRoles);
+    if (clerk) await this.clerkScope.assertActive(actor);
     const result = await this.database.query<{
       supplier_id: string;
       supplier_code: string;
@@ -1536,7 +1588,10 @@ export class SourcingService {
               ],NULL)::text[] AS contract_data_missing
        FROM current_supplier_catalog
        WHERE supplier_type='factory' AND active=true
+         AND ($1::boolean=false OR (SELECT count(*) FROM sourcing_jiashun_allowed_factories)=3
+           AND supplier_id IN (SELECT supplier_id FROM sourcing_jiashun_allowed_factories))
        ORDER BY supplier_name,supplier_code`,
+      [clerk],
     );
     return {
       items: result.rows.map((row) => ({
@@ -1545,8 +1600,8 @@ export class SourcingService {
         supplierName: row.supplier_name,
         supportedCrafts: row.supported_crafts,
         dailyCapacity: row.daily_capacity === null ? null : Number(row.daily_capacity),
-        notes: row.notes,
-        contractDataMissing: row.contract_data_missing,
+        notes: clerk ? "" : row.notes,
+        contractDataMissing: clerk ? [] : row.contract_data_missing,
       })),
     };
   }
@@ -1557,6 +1612,8 @@ export class SourcingService {
   ): Promise<SourcingFactoryChangeStateResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const clerk=isJiashunClerk(actor.actorRoles);
+    if (clerk) await this.clerkScope.assertCase(actor,sourcingCaseId);
     const result = await this.database.query<{
       factory_change_request_id: string;
       from_decision_id: string;
@@ -1578,7 +1635,9 @@ export class SourcingService {
       owner_decision: "approved" | "rejected" | null;
       effective: boolean;
     }>(
-      `SELECT change.factory_change_request_id,change.from_decision_id,
+      `${clerk ? "SELECT latest.* FROM (" : ""}
+       SELECT change.factory_change_request_id,change.from_decision_id,
+              change.sourcing_case_id,
               change.initiator_role,change.proposed_supplier_id,
               change.proposed_supplier_name_snapshot,change.proposed_unit_price,
               change.proposed_quantity,change.proposed_total_amount,
@@ -1607,7 +1666,7 @@ export class SourcingService {
        WHERE change.sourcing_case_id=$1
        AND change.requested_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=$1 AND business_action='returned_to_merchandiser'),'-infinity'::timestamptz)
        ORDER BY change.requested_at DESC,change.factory_change_request_id DESC
-       LIMIT 1`,
+       LIMIT 1${clerk ? `) latest WHERE ${jiashunTransfer("latest")}` : ""}`,
       [sourcingCaseId],
     );
     const row = result.rows[0];
@@ -3102,6 +3161,8 @@ export class SourcingService {
       OR request.base_document_id IS DISTINCT FROM (SELECT sourcing_contract_document_id FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1) AS basis_changed
       FROM sourcing_price_reapplications request LEFT JOIN sourcing_price_reviews review USING(price_request_id)
       WHERE request.sourcing_case_id=$1 ORDER BY request.requested_at DESC,request.price_request_id DESC LIMIT 1`,[caseId])).rows[0];
+    if (row&&isJiashunClerk(actor.actorRoles)
+        && !(await this.clerkScope.allowedDocumentIds(actor,caseId)).has(row.base_document_id)) return {item:null};
     return {item:row?{priceRequestId:row.price_request_id,baseDecisionId:row.base_decision_id,baseDocumentId:row.base_document_id,
       unitPrice:row.unit_price,reason:row.reason,requestedBy:row.requested_by,requestedAt:toIso(row.requested_at),requiresOwnerApproval:row.requires_owner_approval,
       status:(row.decision??"pending") as "pending"|"approved"|"rejected"|"returned"|"cancelled",basisChanged:row.basis_changed}:null};

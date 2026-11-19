@@ -77,6 +77,12 @@ const normalizeAliases = async (client: PoolClient, aliases: readonly string[]):
 
 const translateDatabaseError = (error: unknown): never => {
   const code = (error as DatabaseError | null)?.code;
+  if (code === "23514" && error instanceof Error && error.message.includes("Jiashun supplier codes")) {
+    throw new ApplicationError("CONFLICT", "三家嘉顺工厂编码未能在供应商主数据中唯一对应，暂不能启用专职文员角色", 409);
+  }
+  if (code === "23514" && error instanceof Error && error.message.includes("Jiashun clerk")) {
+    throw new ApplicationError("CONFLICT", "嘉顺专职文员必须使用独立账号，不能兼任其它角色或接受临时授权", 409);
+  }
   if (code === "23505") throw new ApplicationError("CONFLICT", "记录已存在或别名已绑定给其他人员", 409);
   if (code === "23503") throw new ApplicationError("NOT_FOUND", "引用的用户、角色或基础资料不存在", 404);
   if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前用户无权执行该操作", 403);

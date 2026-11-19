@@ -1,4 +1,5 @@
 import { SourcingTransferContractTodos } from "./sourcing-transfer-contract-todos.js";
+import { currentJiashunApprovalIdSql, JiashunContractClerkScope, JIASHUN_READ, isJiashunClerk } from "./jiashun-contract-clerk-scope.js";
 import { SourcingContractContentService, loadContractContent, hydrateContractContentImages, canEditContractContent } from "./sourcing-contract-content.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -267,6 +268,8 @@ export class SourcingContractService {
     sourcingCaseId: string,
   ): Promise<SourcingContractStateResponse> {
     this.assertReader(actor);
+    const clerk=isJiashunClerk(actor.actorRoles);
+    const allowed=clerk?await new JiashunContractClerkScope(this.database).allowedDocumentIds(actor,sourcingCaseId):null;
     const result = await this.database.query<ContractRow>(
       `SELECT document.*,source_case.created_by,
               EXISTS(SELECT 1 FROM sourcing_contract_return_submissions WHERE sourcing_case_id=document.sourcing_case_id) AS returned,
@@ -275,10 +278,13 @@ export class SourcingContractService {
        FROM sourcing_contract_documents document
        JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
        WHERE document.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
+        ${clerk ? `AND document.sourcing_approval_snapshot_id=${currentJiashunApprovalIdSql("source_case.sourcing_case_id")}` : ""}
        ORDER BY document.contract_version DESC LIMIT 1`,
       [sourcingCaseId],
     );
-    return { item: result.rows[0] ? await this.dto(result.rows[0], actor) : null };
+    const current=result.rows[0];
+    return { item: current && (allowed===null || allowed.has(current.sourcing_contract_document_id))
+      ? await this.dto(current, actor) : null };
   }
 
   async supplement(
@@ -465,6 +471,8 @@ export class SourcingContractService {
   }
 
   private assertReader(actor: TrustedActorContext): void {
+    if (isJiashunClerk(actor.actorRoles) && actor.authorizationCapability===JIASHUN_READ
+      && (actor.authorizationCapabilities??[]).includes(JIASHUN_READ)) return;
     if (!actor.actorRoles.includes(ROOT_ROLE)
       && !(actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)) {
       throw new ApplicationError("FORBIDDEN", "无权查看合同数据", 403);

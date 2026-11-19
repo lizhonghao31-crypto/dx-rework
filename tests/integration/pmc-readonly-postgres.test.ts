@@ -28,6 +28,8 @@ const url = process.env.TEST_DATABASE_URL;
   const ids: Record<string, string> = {};
   const actors: Record<string, TrustedActorContext> = {};
   const root = () => actors.root!;
+  const pmcMigration = "0232_pmc_readonly_role";
+  let laterVersions: string[];
   let oldHistory: unknown[], oldGrants: unknown[], oldCapabilities: unknown[];
   const input = (name: string) => ({ supplierCode: `PMC_${randomUUID().slice(0,8).toUpperCase()}`, supplierName: name, supplierType: "factory" as const,
     active: true, notes: "", supportedCrafts: ["车缝"], dailyCapacity: 100, contactPerson: "TEST联系人", contactPhone: "123456789", address: "TEST地址",
@@ -44,14 +46,18 @@ const url = process.env.TEST_DATABASE_URL;
     // Genuine previous schema, then the official incremental migrator; no partial DDL fixtures.
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     const migrations = await discoverValidatedMigrations();
-    for (const migration of migrations.slice(0,-1)) {
+    const pmcIndex = migrations.findIndex(migration => migration.version === pmcMigration);
+    expect(pmcIndex).toBeGreaterThan(0);
+    laterVersions = migrations.slice(pmcIndex).map(migration => migration.version);
+    for (const migration of migrations.slice(0,pmcIndex)) {
       await db.query("BEGIN");await db.query(migration.sql);
       await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)", [migration.version,migration.checksum]);await db.query("COMMIT");
     }
     oldHistory = (await db.query("SELECT * FROM schema_migrations ORDER BY version")).rows;
     oldGrants = (await db.query("SELECT * FROM user_role_assignments ORDER BY assignment_id")).rows;
     oldCapabilities = (await db.query("SELECT * FROM role_capabilities ORDER BY role_code,capability")).rows;
-    expect((await applyMigrations(scoped.toString())).applied).toEqual(["0232_pmc_readonly_role"]);
+    expect((await applyMigrations(scoped.toString())).applied).toEqual(laterVersions);
+    expect(laterVersions[0]).toBe(pmcMigration);
     expect((await db.query("SELECT * FROM user_role_assignments ORDER BY assignment_id")).rows).toEqual(oldGrants);
     await access.ensureOrganizationPolicy();
     for (const [name, roles] of Object.entries({ root: [], pm: ["production_management"], pmc: ["pmc"], multi: ["pmc","pattern_room_worker"], applicant: ["order_merchandiser"], worker: ["worker"], disabled: ["pmc"] })) {
@@ -66,10 +72,12 @@ const url = process.env.TEST_DATABASE_URL;
   afterAll(async () => { await db.end();await releaseOwnedPostgresSchema(admin, schema);await admin.end(); });
 
   it("appends only the independent role/read grants, preserving historical checksums/timestamps and zero employee grants", async () => {
-    expect((await db.query("SELECT * FROM schema_migrations WHERE version<>'0232_pmc_readonly_role' ORDER BY version")).rows).toEqual(oldHistory);
+    expect((await db.query("SELECT * FROM schema_migrations WHERE version < $1 ORDER BY version",[pmcMigration])).rows).toEqual(oldHistory);
     const caps=(await db.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='pmc' ORDER BY capability")).rows.map(r=>r.capability);
     expect(caps).toEqual([...PMC_READ_CAPABILITIES].sort());
-    expect((await db.query("SELECT * FROM role_capabilities WHERE role_code<>'pmc' ORDER BY role_code,capability")).rows).toEqual(oldCapabilities);
+    const untouched = await db.query("SELECT * FROM role_capabilities WHERE role_code=ANY($1::text[]) ORDER BY role_code,capability",
+      [[...new Set((oldCapabilities as {role_code:string}[]).map(row=>row.role_code))]]);
+    expect(untouched.rows).toEqual(oldCapabilities);
     expect((await db.query("SELECT display_name,enabled FROM business_roles WHERE role_code='pmc'")).rows).toEqual([{display_name:"PMC",enabled:true}]);
     expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
   });

@@ -14,7 +14,9 @@ export type PlatformModule = Readonly<{
 export function canAccessSourcing(user: AuthorizedUser): boolean {
   return user.isRoot === true
     || user.businessRoles?.includes("owner_group") === true
-    || user.capabilities.includes("sourcing:view");
+    || user.capabilities.includes("sourcing:view")
+    || (user.businessRoles?.length === 1 && user.businessRoles[0] === "jiashun_contract_clerk"
+      && user.capabilities.includes("sourcing:jiashun:read"));
 }
 
 export function canAccessSupplierCenter(user: AuthorizedUser): boolean {

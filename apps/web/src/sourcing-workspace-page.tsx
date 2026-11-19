@@ -212,6 +212,10 @@ const canAct = (user: AuthorizedUser | null, role: string, capability: string): 
   user?.isRoot === true
   || (moduleCanWrite(user, "sourcing") && user?.businessRoles?.includes(role) === true && (user.effectiveWriteCapabilities ?? user.capabilities).includes(capability));
 
+const isJiashunContractClerk=(user:AuthorizedUser|null):boolean=>user?.isRoot!==true
+  && user?.businessRoles?.length===1 && user?.businessRoles?.[0]==="jiashun_contract_clerk"
+  && user?.capabilities.includes("sourcing:jiashun:read")===true;
+
 const formatDateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
   month: "2-digit",
@@ -1252,7 +1256,7 @@ function OrderDetailPage({
   };
   const priceComposing = (kind: "quote" | "decision") => [...priceInputs.current].some(([key, control]) => key.startsWith(`${kind}-`) && control.composing);
 
-  const moduleWritable = moduleCanWrite(user, "sourcing");
+  const moduleWritable = moduleCanWrite(user, "sourcing") && !isJiashunContractClerk(user);
   const canSupplementImages = user?.isRoot === true
     || moduleWritable && (item?.createdBy === user?.id || user?.businessRoles?.some(role => role!=="order_merchandiser" && SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number]))) && user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
       role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number],
@@ -1438,6 +1442,9 @@ function OrderDetailPage({
         const intent=await request("tools/attachments/upload-intents",UploadIntentResponseSchema,{
           method:"POST",body:JSON.stringify({
             filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),
+            ...(isJiashunContractClerk(user)?{
+              sourcingCaseId,expectedContractDocumentId:pending.expectedContractDocumentId,
+            }:{}),
           }),
         });
         const upload=new FormData();
@@ -1454,6 +1461,13 @@ function OrderDetailPage({
       await saveContractReturn(submission);
     } catch(error) {
       const message=error instanceof Error?error.message:"回签合同上传失败";
+      if(error instanceof SourcingRequestError && error.status===403){
+        contractPendingUpload.current=null;
+        setContractPendingSubmission(null);
+        setContractReturn(current=>current?{...current,canUpload:false}:current);
+        setContractReturnError("账号权限或订单工厂已变化，当前页面无法确认回签保存结果。请由管理员核对订单记录后再处理。");
+        return;
+      }
       if(contractPendingUpload.current) {
         setContractReturnError(`${message}。已完成 ${pending.attachmentIds.length}/${pending.files.length} 个文件，尚未保存回签记录，请重试上传。`);
       } else if(!releaseSupersededContractReturn(error)) {
@@ -1480,7 +1494,7 @@ function OrderDetailPage({
     if (!contractPendingSubmission || contractUploadGuard.current) return;
     contractUploadGuard.current=true;setContractUploading(true);setContractUploadStage("saving");setContractReturnError("");setContractReturnNotice(null);
     try {await saveContractReturn(contractPendingSubmission);}
-    catch(error){if(!releaseSupersededContractReturn(error))setContractReturnError(`回签保存结果尚未确认：${error instanceof Error?error.message:"请求失败"}。可使用原请求再次核对。`);}
+    catch(error){if(error instanceof SourcingRequestError&&error.status===403){setContractPendingSubmission(null);setContractReturn(current=>current?{...current,canUpload:false}:current);setContractReturnError("回传权限已撤销或订单已转厂，当前页面无法确认保存结果。请由管理员核对订单记录。");}else if(!releaseSupersededContractReturn(error))setContractReturnError(`回签保存结果尚未确认：${error instanceof Error?error.message:"请求失败"}。可使用原请求再次核对。`);}
     finally {contractUploadGuard.current=false;setContractUploading(false);setContractUploadStage(null);}
   };
   const styleDuplicateMessage = duplicateSourcingLineMessage(styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color})));
@@ -1543,7 +1557,8 @@ function OrderDetailPage({
     ? "请选择交货日期" : !sourcingDatesValid(item?.estimatedCutPieceSendDate ?? null,factoryChangeDraft.deliveryDate) ? SOURCING_DATE_ORDER_ERROR : "";
   const hideFinanceForMerchandiser = isMerchandiserOnly(user?.businessRoles,user?.isRoot);
   const canReadContractData = user?.isRoot === true
-    || user?.capabilities.includes("supplier_contract_data:read") === true;
+    || user?.capabilities.includes("supplier_contract_data:read") === true
+    || isJiashunContractClerk(user);
   const hasPendingFactoryChange = factoryChange?.status === "pending_management"
     || factoryChange?.status === "pending_owner";
   const canVerifyException = canAct(user, "production_management", "sourcing:exception:verify");

@@ -8,6 +8,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { TodoProjectionService } from "../todos/projection-service.js";
 import { TodoService } from "../todos/service.js";
 import { contractReturnState } from "./contract-return-state.js";
+import { currentJiashunApprovalIdSql, JiashunContractClerkScope, JIASHUN_CONTRACT_RETURN, JIASHUN_READ, isJiashunClerk } from "./jiashun-contract-clerk-scope.js";
 
 const ROOT = "root_superuser";
 const READ = "sourcing:view";
@@ -33,6 +34,8 @@ type MonitorRow = {
   current_contract_returned: boolean;
   current_contract_accepts_upload: boolean;
   current_contract_document_id: string | null;
+  current_contract_status?: string | null;
+  current_contract_matches_approval?: boolean | null;
   as_of: Date | string;
 };
 type FileRow = { attachment_id: string; original_filename: string; mime_type: string; size_bytes: string;
@@ -47,14 +50,19 @@ const fileDto = (row: FileRow) => ({
 export class SourcingContractReturnService {
   constructor(private readonly database: Pool, private readonly events = new OperationEventRepository(),
     private readonly todos = new TodoProjectionService(new TodoService(database))) {}
+  private get clerkScope(): JiashunContractClerkScope { return new JiashunContractClerkScope(this.database); }
 
   private assertReader(actor: TrustedActorContext): void {
+    if (isJiashunClerk(actor.actorRoles) && actor.authorizationCapability===JIASHUN_READ
+      && (actor.authorizationCapabilities??[]).includes(JIASHUN_READ)) return;
     if (!actor.actorRoles.includes(ROOT) || actor.authorizationCapability !== READ) {
       if (actor.authorizationCapability !== READ || !(actor.authorizationCapabilities ?? []).includes(READ)) forbidden();
     }
   }
 
   private async canUpload(actor: TrustedActorContext, creator: string, additional: string | null): Promise<boolean> {
+    if (isJiashunClerk(actor.actorRoles)) return actor.actorRoles.length===1
+      && (actor.authorizationCapabilities??[]).includes(JIASHUN_CONTRACT_RETURN);
     if (actor.actorRoles.includes(ROOT)) return true;
     if (!(await memberCanWriteModule(this.database,actor.actorId,"sourcing"))) return false;
     const capabilities = actor.authorizationCapabilities ?? [];
@@ -66,6 +74,8 @@ export class SourcingContractReturnService {
 
   async get(actor: TrustedActorContext, sourcingCaseId: string) {
     this.assertReader(actor);
+    const clerk=isJiashunClerk(actor.actorRoles);
+    const allowedDocuments=clerk ? await this.clerkScope.allowedDocumentIds(actor,sourcingCaseId) : null;
     const result = await this.database.query<MonitorRow>(`SELECT source_case.sourcing_case_id,source_case.created_by,
       nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
       monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
@@ -81,6 +91,12 @@ export class SourcingContractReturnService {
       (SELECT document.sourcing_contract_document_id FROM sourcing_contract_documents document
         WHERE document.sourcing_case_id=source_case.sourcing_case_id
         ORDER BY document.contract_version DESC LIMIT 1) AS current_contract_document_id,
+      (SELECT document.status FROM sourcing_contract_documents document
+        WHERE document.sourcing_case_id=source_case.sourcing_case_id
+        ORDER BY document.contract_version DESC LIMIT 1) AS current_contract_status,
+      ${clerk ? `(SELECT document.sourcing_approval_snapshot_id=${currentJiashunApprovalIdSql("source_case.sourcing_case_id")}
+        FROM sourcing_contract_documents document WHERE document.sourcing_case_id=source_case.sourcing_case_id
+        ORDER BY document.contract_version DESC LIMIT 1) AS current_contract_matches_approval,` : ""}
       EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
         JOIN sourcing_contract_return_attachments link ON link.submission_id=signed.submission_id
         JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'
@@ -94,11 +110,14 @@ export class SourcingContractReturnService {
       WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL`,[sourcingCaseId]);
     const row=result.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND","外发订单不存在",404);
-    const status=contractReturnState({ ...row,contract_return_monitor_enabled:row.contract_return_monitor_enabled === true },row.as_of);
-    const canViewFile=actor.actorRoles.includes(ROOT)
+    const currentDocumentAllowed=allowedDocuments===null
+      || row.current_contract_document_id!==null && row.current_contract_matches_approval===true && allowedDocuments.has(row.current_contract_document_id);
+    const status=contractReturnState({ ...row,contract_return_monitor_enabled:
+      row.contract_return_monitor_enabled===true && (!clerk || currentDocumentAllowed) },row.as_of);
+    const canViewFile=clerk || actor.actorRoles.includes(ROOT)
       || (actor.authorizationCapabilities ?? []).includes(READ)
         && (actor.authorizationCapabilities ?? []).includes("supplier_contract_data:read");
-    const files=canViewFile && status.contractReturnMonitoring
+    const files=canViewFile && (clerk || status.contractReturnMonitoring)
       ? await this.database.query<FileRow>(`SELECT submission.revision,submission.submitted_at,
         uploader.display_name AS uploaded_by_name,
         file.attachment_id,file.original_filename,file.mime_type,file.size_bytes,
@@ -110,7 +129,15 @@ export class SourcingContractReturnService {
         JOIN app_users uploader ON uploader.id=submission.submitted_by
         LEFT JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=submission.sourcing_contract_document_id
         WHERE submission.sourcing_case_id=$1
-        ORDER BY submission.revision DESC,link.position`,[sourcingCaseId]) : null;
+          AND ($2::boolean=false OR EXISTS (
+            SELECT 1 FROM sourcing_contract_documents authorized_document
+            JOIN sourcing_approval_snapshots approved_supplier
+              ON approved_supplier.sourcing_approval_snapshot_id=authorized_document.sourcing_approval_snapshot_id
+              AND approved_supplier.sourcing_case_id=submission.sourcing_case_id
+            JOIN sourcing_jiashun_allowed_factories allowed_factory ON allowed_factory.supplier_id=approved_supplier.supplier_id
+            WHERE authorized_document.sourcing_case_id=submission.sourcing_case_id
+              AND authorized_document.sourcing_contract_document_id=submission.sourcing_contract_document_id))
+        ORDER BY submission.revision DESC,link.position`,[sourcingCaseId,clerk]) : null;
     const versions=new Map<number,{revision:number;submittedAt:string;uploadedByName:string;
       signedContractDocumentId:string|null;signedContractVersion:number|null;signedContractNumber:string|null;
       attachments:ReturnType<typeof fileDto>[] }>();
@@ -126,32 +153,35 @@ export class SourcingContractReturnService {
       versions.get(file.revision)!.attachments.push(fileDto(file));
     }
     const [current,...history]=[...versions.values()];
-    const totals=(await this.database.query<{count:number;bytes:string}>(`SELECT count(*)::int AS count,COALESCE(sum(file.size_bytes),0)::text AS bytes
+    const totals=clerk&&!currentDocumentAllowed ? {count:0,bytes:"0"} : (await this.database.query<{count:number;bytes:string}>(`SELECT count(*)::int AS count,COALESCE(sum(file.size_bytes),0)::text AS bytes
       FROM sourcing_contract_return_submissions submission
       JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
       JOIN attachments file ON file.attachment_id=link.attachment_id
       WHERE submission.sourcing_case_id=$1
-        AND submission.sourcing_contract_document_id IS NOT DISTINCT FROM $2::uuid`,[sourcingCaseId,row.current_contract_document_id])).rows[0] ?? {count:0,bytes:"0"};
+        AND submission.sourcing_contract_document_id IS NOT DISTINCT FROM $2::uuid`,[sourcingCaseId,currentDocumentAllowed?row.current_contract_document_id:null])).rows[0] ?? {count:0,bytes:"0"};
     // Display additions together only when they belong to the same recorded contract version.
     const currentFiles=current ? [...versions.values()].filter(version=>version.signedContractDocumentId===current.signedContractDocumentId)
       .reverse().flatMap(version=>version.attachments) : [];
 
-    return { ...status,contractReturnCycleId:row.return_cycle_id,uploadedByName:status.contractReturnMonitoring ? row.uploader_name : null,
-      currentContractReturned:row.current_contract_returned,
-      currentContractDocumentId:row.current_contract_document_id,
+    return { ...status,contractReturnCycleId:clerk&&!currentDocumentAllowed?null:row.return_cycle_id,uploadedByName:status.contractReturnMonitoring && currentDocumentAllowed ? row.uploader_name : null,
+      currentContractReturned:currentDocumentAllowed && row.current_contract_returned,
+      currentContractDocumentId:currentDocumentAllowed ? row.current_contract_document_id : null,
       signedContractDocumentId:current?.signedContractDocumentId ?? null,
       signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
-      canUpload: status.contractReturnMonitoring && row.current_contract_accepts_upload
+      canUpload: status.contractReturnMonitoring && currentDocumentAllowed && (!clerk || row.current_contract_status==="ready") && row.current_contract_accepts_upload
         && totals.count < 3 && Number(totals.bytes) < MAX_UPLOAD_BYTES && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
       uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
       attachments:currentFiles,history };
   }
 
   async submit(actor: TrustedActorContext,sourcingCaseId: string,attachmentIds: readonly string[],key: string,expectedContractDocumentId?: string | null) {
-    if (!actor.actorRoles.includes(ROOT) && !(actor.authorizationCapabilities ?? []).includes(READ)) forbidden();
+    const clerk=isJiashunClerk(actor.actorRoles);
+    if (!actor.actorRoles.includes(ROOT) && !(actor.authorizationCapabilities ?? []).includes(clerk?JIASHUN_READ:READ)) forbidden();
     if (!actor.actorRoles.includes(ROOT) &&
       !(
-        actor.authorizationCapability === "sourcing:contract:record" && actor.actorRoles.includes(MERCHANDISER)
+        clerk && actor.actorRoles.length===1 && actor.authorizationCapability===JIASHUN_CONTRACT_RETURN
+          && (actor.authorizationCapabilities??[]).includes(JIASHUN_CONTRACT_RETURN)
+        || actor.authorizationCapability === "sourcing:contract:record" && actor.actorRoles.includes(MERCHANDISER)
         || actor.authorizationCapability === "sourcing:owner:approve" && actor.actorRoles.includes(OWNER)
         || actor.authorizationCapability === "sourcing:decision:record" && actor.actorRoles.includes(MANAGEMENT)
       )) forbidden();
@@ -163,7 +193,12 @@ export class SourcingContractReturnService {
     try {
       await client.query("BEGIN");
       // Serialize version selection with refresh, style edits and approvals.
-      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
+      if (clerk) {
+        // Check the locked role, current supplier and document before reading any old receipt.
+        await this.clerkScope.assertCurrentDocument(actor,sourcingCaseId,expectedContractDocumentId,client);
+      } else {
+        await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
+      }
       const locked=await client.query<MonitorRow>(`SELECT monitor.sourcing_case_id,source_case.created_by,
           nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
           monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
@@ -189,7 +224,7 @@ export class SourcingContractReturnService {
           throw new ApplicationError("INVALID_STATE_TRANSITION","该请求标识已用于另一份回签合同",409);
         }
         await client.query("COMMIT");
-        return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
+        return this.get({...actor,authorizationCapability:clerk?JIASHUN_READ:READ},sourcingCaseId);
       }
       const document=(await client.query<{sourcing_contract_document_id:string;is_transfer:boolean;status:string;requires_version:boolean}>(`SELECT document.sourcing_contract_document_id,document.status,
           EXISTS(SELECT 1 FROM sourcing_contract_return_cycles cycle WHERE cycle.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id) AS requires_version,
@@ -209,11 +244,12 @@ export class SourcingContractReturnService {
         JOIN attachments file ON file.attachment_id=link.attachment_id
         WHERE submission.sourcing_case_id=$1`,[sourcingCaseId]);
       // A fresh key may retry the very same already-bound files; it consumes no slot or revision.
-      if (attachmentIds.every(id=>existing.rows.some(file=>file.attachment_id===id && file.submitted_by===actor.actorId))) {
+      if (attachmentIds.every(id=>existing.rows.some(file=>file.attachment_id===id && file.submitted_by===actor.actorId
+        && (!clerk || file.sourcing_contract_document_id===documentId)))) {
         await client.query(`INSERT INTO sourcing_contract_return_requests(sourcing_case_id,request_id,submitted_by,attachment_ids)
           VALUES($1,$2,$3,$4::uuid[])`,[sourcingCaseId,key,actor.actorId,attachmentIds]);
         await client.query("COMMIT");
-        return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
+        return this.get({...actor,authorizationCapability:clerk?JIASHUN_READ:READ},sourcingCaseId);
       }
       const currentVersionFiles=existing.rows.filter(file=>file.sourcing_contract_document_id===documentId);
       if (currentVersionFiles.length + attachmentIds.length > 3) {
@@ -223,6 +259,12 @@ export class SourcingContractReturnService {
       const files=await client.query<FileRow & { uploaded_by: string }>(`SELECT attachment_id,original_filename,mime_type,size_bytes,uploaded_by
         FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND status='ready'
           AND entity_type IS NULL AND entity_id IS NULL FOR UPDATE`,[attachmentIds]);
+      if (clerk) {
+        const scopedFiles=await client.query<{attachment_id:string}>(`SELECT attachment_id FROM sourcing_jiashun_contract_uploads
+          WHERE attachment_id=ANY($1::uuid[]) AND actor_id=$2 AND sourcing_case_id=$3
+            AND sourcing_contract_document_id=$4::uuid`,[attachmentIds,actor.actorId,sourcingCaseId,documentId]);
+        if (scopedFiles.rows.length!==attachmentIds.length) forbidden();
+      }
       if (files.rows.length!==attachmentIds.length || files.rows.some(file=>file.uploaded_by!==actor.actorId
         || !MIME_TYPES.includes(file.mime_type as (typeof MIME_TYPES)[number])
         || Number(file.size_bytes)>MAX_UPLOAD_BYTES)
@@ -262,7 +304,7 @@ export class SourcingContractReturnService {
         );
       }
       await client.query("COMMIT");
-      return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
+      return this.get({...actor,authorizationCapability:clerk?JIASHUN_READ:READ},sourcingCaseId);
     } catch(error) {
       await client.query("ROLLBACK").catch(()=>undefined);
       throw error;

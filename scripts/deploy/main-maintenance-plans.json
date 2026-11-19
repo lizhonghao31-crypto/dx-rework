@@ -181,5 +181,17 @@
     "languages": ["sql", "plpgsql"],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0233_jiashun_contract_clerk",
+    "checksum": "39d8d12d3e70ee7f5b885299e87258c55fbc7ddafbadb198d2e03ac16597d7e2",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": ["public.business_roles", "public.capability_catalog", "public.role_capabilities"],
+    "triggerTables": ["public.user_role_assignments", "public.delegated_authorizations", "public.owner_bootstrap_consumptions"],
+    "schema": "public",
+    "functions": [],
+    "languages": ["plpgsql"],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]
