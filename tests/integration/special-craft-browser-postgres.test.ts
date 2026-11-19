@@ -254,7 +254,9 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
    const worker=h.f.people['pattern-room-worker']!;
    await expect(forms.read(worker,id)).rejects.toMatchObject({statusCode:404});
    await expect(forms.save(worker,id,{expectedVersion:2,document:reopened.document!},randomUUID())).rejects.toMatchObject({statusCode:404});
-   expect((await forms.read(designer,id)).version).toBe(reopened.version);
+   const afterDeniedSave=await forms.read(designer,id);
+   expect(afterDeniedSave.version).toBe(reopened.version);
+   expect(afterDeniedSave.document?.craftSteps).toEqual(reopened.document!.craftSteps);
    expect((await forms.read(designer,old.sourceId)).timelineSchemaVersion).toBeUndefined();
    await page.screenshot({path:join(h.evidence,'managed-draft-reopened.png'),fullPage:true});
    expect(h.errors).toEqual([]);

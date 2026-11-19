@@ -272,13 +272,15 @@ function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:reado
     expect(read.items.every(row=>row.status==='ready')).toBe(true);
     expect(read.items.every(row=>row.selection.stages.length===0&&row.selection.actionableTodo===undefined)).toBe(true);
     const actual=selectJourneySelections(read.items.map(row=>row.selection),filter,asOf),original=selectJourneys(expected,filter,asOf);
+    expect(actual.summary.todo).toBe(actual.summary.all?null:0);
     expect(reduceSelection(actual).projection).toEqual(reduceSelection(original).projection);
    }
    await client.query('COMMIT');
   }finally{if(client.query)await client.query('ROLLBACK');client.release();}
   const indexed=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'});
   const filter=JourneyFilterSchema.parse({scope:'production',search:a.designStyleNo,kpi:'todo'});
-  expect(await indexed.list(f.root,filter)).toMatchObject({total:0,summary:{todo:0},items:[]});
+  for(const result of await Promise.all([query.list(f.root,filter),indexed.list(f.root,filter)]))
+   expect(result).toMatchObject({total:0,summary:{todo:0},items:[]});
  }));
  it('keeps linked native preparation and partial-role selection identical without sharing full-manager nodes',()=>run(async()=>{
   const ready=await f.bulkReady('无',undefined,2),candidate={source:{source_id:ready.sourceId},order:{production_order_id:ready.id}};
@@ -295,15 +297,18 @@ function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:reado
      const filter=JourneyFilterSchema.parse({scope:'production',...patch}),read=await readJourneySelections(f.db,client,actor,[candidate],filter,asOf);
      const expected=selectJourneys(original?[original]:[],filter,asOf),actual=selectJourneySelections(read.items.map(row=>row.selection),filter,asOf);
      expect(read.items.every(row=>row.selection.actionableTodo===undefined)).toBe(true);
+     expect(actual.summary.todo).toBe(actual.summary.all?null:0);
      const expectedProjection=reduceSelection(expected).projection,actualProjection=reduceSelection(actual).projection;
      if(JSON.stringify(actualProjection)!==JSON.stringify(expectedProjection))differences.push({roles:actor.actorRoles,filter:patch,expected:expectedProjection,actual:actualProjection});
     }
     if(!original)continue;
     const filter=JourneyFilterSchema.parse({scope:'production',search:ready.id,kpi:'todo'});
-    const expected=selectJourneys([original],filter,asOf),actual=await indexed.list(actor,filter);
-    expect(actual.summary?.todo).toBe(expected.summary.todo);
-    expect(actual.total).toBe(expected.summary.todo===null?null:expected.total);
-    expect(actual.items.map(item=>item.id)).toEqual(expected.items.map(item=>item.id));
+    const expected=selectJourneys([original],filter,asOf);
+    for(const actual of await Promise.all([query.list(actor,filter),indexed.list(actor,filter)])){
+     expect(actual.summary?.todo).toBe(expected.summary.todo);
+     expect(actual.total).toBe(expected.summary.todo===null?null:expected.total);
+     expect(actual.items.map(item=>item.id)).toEqual(expected.items.map(item=>item.id));
+    }
    }
    await client.query('COMMIT');expect(differences).toEqual([]);
   }finally{await client.query('ROLLBACK');client.release();}
