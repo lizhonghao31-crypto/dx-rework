@@ -130,7 +130,7 @@ export class OrderTimeRequestService{
       // An already adopted source keeps its existing version and history.
       const source={kind:'source' as const,id:native.sourceId},plans=new OrderTimePlanRepository(db);
       if(!await plans.current(source)){
-       const actual=await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource:source},time,input.overrides);
+       const actual=await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource:source},time,input.overrides,[],[],'native-refresh');
        await plans.confirm({resource:source,expectedRevision:0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version+':source'});
       }
       await db.query("UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind='source' AND source_id=$1",[source.id]);
@@ -140,7 +140,7 @@ export class OrderTimeRequestService{
     // same client; temporary preview IDs never become real execution events.
     if(input.washing?.length){if(target.kind!=='order')conflict('ORDER_TIME_INPUT_REQUIRED','请在正式订单采用洗水安排');for(const change of input.washing)await adoptBulkWashingWithClient(db,actor,target.id,change.lineId,change.expectedVersion,change.document);}
     const actualOperation:OrderTimeOperation={kind:'arrangement',resource:target};
-    const actual=state.operation.kind==='arrangement'&&!input.washing?.length?state:await loadOrderTimeOperation(this.database,db,actor,actualOperation,time,input.overrides);
+    const actual=state.operation.kind==='arrangement'&&!input.washing?.length?state:await loadOrderTimeOperation(this.database,db,actor,actualOperation,time,input.overrides,[],[],state.operation.kind==='arrangement'?'command':'native-refresh');
     const previous=await new OrderTimePlanRepository(db).current(target);
     const saved=await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:previous?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version},(resource,changes)=>refreshLinkedOrderTimeInput(this.database,db,actor,resource,time,changes));
     if(target.kind==='order')await new DigitalProductionTaskService(this.database).refreshShipSampleTimingWithClient(db,actor,target.id);
