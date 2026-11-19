@@ -125,7 +125,7 @@ export async function readCockpitMaterialActions(db:PoolClient,candidates:readon
    AND (requested."orderId" IS NOT NULL OR NOT EXISTS(SELECT 1 FROM digital_production_orders linked WHERE linked.source_id=s.source_id))`,
   [JSON.stringify(candidates)])).rows;
  const asOf=new Map(candidates.map(row=>[row.id,row.asOf])),context=acceptanceBusinessContext();
- for(const row of rows){
+ await readJourneyCandidateCohort(db,rows,async(client,row)=>{
   const collection:CockpitActionableTodo['items']=[];
   const add=(kind:'design_handover'|'material_investment',handlerRole:string,handlerId:string,evidenceId:string,reason:string)=>{
    collection.push({orderId:row.id,category:'preparation_material',evidenceId,handlerRole,handlerId,
@@ -133,17 +133,21 @@ export async function readCockpitMaterialActions(db:PoolClient,candidates:readon
       ?`/ui/digital-production?bulk=${row.orderId}&materialKind=${kind}`
       :`/ui/digital-production?development=${row.sourceId}&round=${row.round}&materialKind=${kind}`,reason,asOf:asOf.get(row.id)!});
   };
-  const recipient=row.merchandiser&&(!context||await context.acceptsActor(row.merchandiser))?row.merchandiser:null;
-  const validHandover=row.designHandover?.state==='ready'&&row.designHandover.filesReady&&
-    row.designHandover.sourceVersion===row.sourceVersion&&row.designHandover.recipientId===recipient;
-  const canHandover=row.orderId?Boolean(recipient):row.canChooseRecipient&&!context;
-  if(canHandover&&row.designer&&(!context||await context.acceptsActor(row.designer))&&
-      (!row.designHandover||row.designHandover.sourceVersion!==row.sourceVersion||!row.designHandover.filesReady))
+  const handover=row.designHandover;
+  const currentHandover=handover?.state==='ready'&&handover.filesReady&&handover.sourceVersion===row.sourceVersion;
+  const primary=row.merchandiser&&(!context||await context.acceptsActor(row.merchandiser))?row.merchandiser:null;
+  // The native preparation service authorizes a source-only recipient by the
+  // effective handover and a still-active merchandiser role.
+  const sourceRecipient=!row.orderId&&currentHandover?handover.recipientId:null;
+  const recipient=row.orderId?primary:sourceRecipient&&await new DigitalProductionAccessPolicy(client).activeRole(sourceRecipient,'order_merchandiser')?sourceRecipient:null;
+  const validHandover=currentHandover&&recipient!==null&&handover.recipientId===recipient;
+  const canHandover=row.orderId?Boolean(primary):row.canChooseRecipient&&!context;
+  if(canHandover&&!validHandover&&row.designer&&(!context||await context.acceptsActor(row.designer)))
    add('design_handover','sample_designer',row.designer,row.designHandover?.id??row.enrollmentId,'当前已发布资料尚未有效交接给本单跟单');
   if(recipient&&validHandover&&row.hasRequiredFabric&&(!row.materialInvestment||!row.materialInvestment.filesReady))
    add('material_investment','order_merchandiser',recipient,row.enrollmentId,'本单已交接当前资料，待跟单按原单记录实际投料');
   items.set(row.id,collection);
- }
+ });
  return items;
 }
 
@@ -216,7 +220,7 @@ export async function readCockpitMaterialSupplements(db:PoolClient,candidates:re
 
 type InstructionBasis={
   id:string;motherId:string;primaryId:string;version:number;orderVersion:number;sourceId:string|null;sourceRound:number|null;latestRound:number|null;
-  document:InstructionDocument;lines:Array<{lineId:string;sizes:Array<{size:string}>}>;
+  document:InstructionDocument;previouslyPublished:InstructionDocument|null;lines:Array<{lineId:string;sizes:Array<{size:string}>}>;
   imagesUsable:boolean;adoptedPreparation:boolean;existingPlan:boolean;
 };
 
@@ -229,7 +233,7 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
  const typedTime=await acceptsNewOrderTime(db);
  const rows=(await db.query<InstructionBasis>(`SELECT requested.id,mother.production_order_id AS "motherId",
   primary_person.id AS "primaryId",draft.version,mother.version AS "orderVersion",mother.source_id AS "sourceId",draft.source_round AS "sourceRound",latest.round_number AS "latestRound",
-  draft.document,coalesce(po.lines,'[]'::jsonb) AS lines,NOT EXISTS(
+  draft.document,published.document AS "previouslyPublished",coalesce(po.lines,'[]'::jsonb) AS lines,NOT EXISTS(
    SELECT 1 FROM jsonb_array_elements(draft.document->'images') AS picture(value)
    WHERE NOT EXISTS(SELECT 1 FROM attachments a WHERE a.attachment_id::text=picture.value->>'attachmentId'
     AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')
@@ -245,7 +249,9 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
     WHERE p.resource_kind='order' AND p.production_order_id=mother.production_order_id) AS "existingPlan"
   FROM jsonb_to_recordset($1::jsonb) AS requested(id uuid,"orderId" uuid)
   JOIN digital_production_orders mother ON mother.production_order_id=requested."orderId"
-  JOIN digital_instruction_documents draft ON draft.production_order_id=mother.production_order_id AND draft.version>0 AND draft.published_version IS NULL
+  JOIN digital_instruction_documents draft ON draft.production_order_id=mother.production_order_id
+    AND draft.version>0 AND draft.version IS DISTINCT FROM draft.published_version
+  LEFT JOIN digital_instruction_versions published ON published.production_order_id=mother.production_order_id AND published.version=draft.published_version
   JOIN app_users primary_person ON primary_person.id=mother.primary_merchandiser_id AND primary_person.enabled
    AND NOT coalesce((to_jsonb(primary_person)->>'manual_access_disabled')::boolean,false)
    AND EXISTS(SELECT 1 FROM user_role_assignments a JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
@@ -278,7 +284,7 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
   }
   if(row.document.craftSteps?.some(step=>step.craftKind==='special')){
    const source=row.sourceId?(await developmentDocumentRow(client,row.sourceId,row.sourceRound??undefined)):null;
-   try{await validateSpecialCraftChoices(client,row.document.craftSteps,source?.document.craftSteps??[],'bulk',undefined,false);}
+   try{await validateSpecialCraftChoices(client,row.document.craftSteps,[...(row.previouslyPublished?.craftSteps??[]),...(source?.document.craftSteps??[])],'bulk',undefined,false);}
    catch(error){if(error instanceof ApplicationError&&error.statusCode===409)return;throw error;}
   }
   if(typedTime||row.existingPlan){
@@ -297,7 +303,7 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
    }
   }
   items.set(row.id,[{orderId:row.id,category:'instruction_publish',evidenceId:`instruction:${row.motherId}:v${row.version}`,
-   missingObject:'大货制单尚未发布',handlerRole:'order_merchandiser',handlerId:row.primaryId,
+   missingObject:'当前大货制单版本尚未发布',handlerRole:'order_merchandiser',handlerId:row.primaryId,
    originalRoute:`/ui/digital-production?instruction=${row.motherId}`,reason:'当前制单草稿已具备原发布条件',asOf:asOf.get(row.id)!}]);
  });
  return {items,unavailable};
