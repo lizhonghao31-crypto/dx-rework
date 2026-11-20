@@ -1,13 +1,13 @@
 import {originalNodeDeadlineLabel} from './journey-sla-details.js';
 import {StatusBadge} from '@dx-rework/ui';
-import {type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {type JourneyNode,type CockpitHomeOrder} from '@dx-rework/contracts/digital-production-journey';
 import {cockpitVisibleBlockers,cockpitNodeOwner} from './cockpit-node-rows.js';
 import {journeyRiskLabels,matchingPoDeliveryRisks,type CockpitContext} from './digital-journey-cockpit-model.js';
 import {poDeliveryKindLabels} from './po-delivery-dates.js';
 import {CockpitHomeDialog} from './cockpit-home-dialog.js';
 import {cockpitReceiptGap} from './cockpit-home-progress.js';
 
-export function cockpitHomeRisks(order:OrderJourney,context:CockpitContext){
+export function cockpitHomeRisks(order:CockpitHomeOrder,context:CockpitContext){
  const nodes=[...new Map(order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!['completed','inherited','cancelled','not_applicable','unavailable'].includes(node.state)&&(!context.stage||node.stage===context.stage)&&(!context.node||node.key===context.node)&&(!context.state||node.state===context.state)&&(!context.risk||node.risks.includes(context.risk))&&(node.risks.length>0||node.state==='blocked'||cockpitVisibleBlockers(node).length>0)).map(node=>[node.instanceId,node])).values()];
  const rank=(node:JourneyNode)=>node.risks.includes('overdue')?0:node.risks.includes('due_soon')?1:2;
  nodes.sort((a,b)=>rank(a)-rank(b)||(a.expectedAt??'z').localeCompare(b.expectedAt??'z')||a.instanceId.localeCompare(b.instanceId));
@@ -15,7 +15,7 @@ export function cockpitHomeRisks(order:OrderJourney,context:CockpitContext){
  return {nodes,deliveries,total:nodes.length+deliveries.length};
 }
 
-export function CockpitHomeRisks({order,context,onClose,onNode,onOrder}:{order:OrderJourney;context:CockpitContext;onClose:()=>void;onNode:(node:JourneyNode)=>void;onOrder:()=>void}){
+export function CockpitHomeRisks({order,context,onClose,onNode,onOrder}:{order:CockpitHomeOrder;context:CockpitContext;onClose:()=>void;onNode:(node:JourneyNode)=>void;onOrder:()=>void}){
  const risks=cockpitHomeRisks(order,context),gap=cockpitReceiptGap(order),receiptNode=order.stages.flatMap(stage=>stage.nodes).find(node=>node.current&&node.key==='receipts'&&node.state!=='unavailable');
  return <CockpitHomeDialog title="风险明细" onClose={onClose}>
   <p className="cockpit-home-dialog-order">{order.designStyleNo}</p>

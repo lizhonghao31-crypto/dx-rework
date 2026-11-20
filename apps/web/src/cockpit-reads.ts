@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
-import type {JourneyResult,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {CockpitHomeResult,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {cachedVerifiedSession,registerSessionInvalidator,verifiedSessionIdentity,verifySession} from './auth-session.js';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {cockpitQuery,type CockpitContext} from './digital-journey-cockpit-model.js';
@@ -7,21 +7,21 @@ import {cockpitQuery,type CockpitContext} from './digital-journey-cockpit-model.
 function currentIdentity(){const session=cachedVerifiedSession();return session===undefined?'':session==='denied'?'denied':session.status!=='authorized'?'no-role':verifiedSessionIdentity(session);}
 const subscribe=(notify:()=>void)=>{let live=true;const check=()=>{if(!live)return;notify();void verifySession().then(()=>{if(live)notify();});};const stop=registerSessionInvalidator(check);check();return()=>{live=false;stop();};};
 export const useCockpitIdentity=()=>useSyncExternalStore(subscribe,currentIdentity,()=> '');
-type ListRead={identity:string;requested:string;busy:boolean;data:JourneyResult|null;applied:CockpitContext|null;error:string};
+type ListRead={identity:string;requested:string;busy:boolean;data:CockpitHomeResult|null;applied:CockpitContext|null;error:string};
 type DetailRead={identity:string;key:string;busy:boolean;data:OrderJourney|null;error:string};
 const denied=(error:unknown)=>error instanceof DigitalRequestError&&error.status!==null&&[401,403,404].includes(error.status);
 const message=(error:unknown)=>error instanceof Error?error.message:'读取失败，请重试';
-function validList(value:JourneyResult,page:number){
+function validList(value:CockpitHomeResult,page:number){
  const partial=value?.freshness;
  const validTotals=partial?Number.isSafeInteger(partial.pending)&&partial.pending>=0&&Number.isSafeInteger(partial.failed)&&partial.failed>=0&&partial.pending+partial.failed>0&&(partial.detailsOnly?Number.isSafeInteger(value.total)&&value.total!==null&&value.total>=0&&Boolean(value.summary):value.total===null&&value.summary===null)
   :value?.total!==null&&Number.isSafeInteger(value?.total)&&value.total>=0&&Boolean(value.summary);
  return value?.ruleVersion==='journey-v2.0'&&value.page===page&&validTotals&&Array.isArray(value.items)&&typeof value.asOf==='string'&&Number.isFinite(Date.parse(value.asOf));
 }
-export function cockpitAvailabilityMessage(data:JourneyResult){const state=data.freshness;if(state?.detailsOnly)return `${state.pending+state.failed} 单详情暂未读到，统计和分页仍可用。可重试读取。`;return state
+export function cockpitAvailabilityMessage(data:CockpitHomeResult){const state=data.freshness;if(state?.detailsOnly)return `${state.pending+state.failed} 单详情暂未读到，统计和分页仍可用。可重试读取。`;return state
  ?`${state.failed?`${state.failed} 单信息更新失败，`:''}${state.pending?`${state.pending} 单正在更新，`:''}统计和分页暂未更新。可先查看以下已更新订单，稍后刷新。`:'';}
 /** Results own their successful conditions. The independent generations also
  * protect same-key A1→B→A2, retries and finalizers; no settled API data is cached. */
-export function useCockpitReads(context:CockpitContext,refresh:number){
+export function useCockpitReads(context:CockpitContext,refresh:number,view?:'home'){
  const session=useCockpitIdentity(),identity=['denied','no-role'].includes(session)?'':session,identityError=session==='denied'?'当前登录或读取身份尚未核准，请重新登录或刷新重试':session==='no-role'?'当前身份尚无业务角色，请返回工作台核对授权':'',query=cockpitQuery(context),selected=context.selected??'',detailKey=`${selected}:${context.round??'current'}`;
  const [list,setList]=useState<ListRead|null>(null),[detail,setDetail]=useState<DetailRead|null>(null);
  const listGeneration=useRef(0),detailGeneration=useRef(0),liveIdentity=useRef(identity);liveIdentity.current=identity;
@@ -30,13 +30,13 @@ export function useCockpitReads(context:CockpitContext,refresh:number){
   const live=()=>turn===listGeneration.current&&identity===liveIdentity.current;
   if(!identity||selected)return()=>{++listGeneration.current;controller.abort();};
   setList(previous=>({identity,requested:query,busy:true,data:previous?.identity===identity?previous.data:null,applied:previous?.identity===identity?previous.applied:null,error:''}));
-  void digitalRequest<JourneyResult>('journeys?'+query,'GET',undefined,undefined,{signal:controller.signal}).then(value=>{
+  void digitalRequest<CockpitHomeResult>('journeys?'+query+(view?'&view='+view:''),'GET',undefined,undefined,{signal:controller.signal}).then(value=>{
    if(!live())return;if(!validList(value,conditions.page))throw new DigitalRequestError('订单结果与本次查询不一致，请重新读取',null,'INVALID_RESPONSE');
    setList({identity,requested:query,busy:false,data:value,applied:conditions,error:''});
   }).catch(error=>{if(!live()||error?.name==='AbortError')return;setList(previous=>({identity,requested:query,busy:false,data:!denied(error)&&previous?.identity===identity?previous.data:null,applied:!denied(error)&&previous?.identity===identity?previous.applied:null,error:message(error)}));
   }).finally(()=>{if(live())setList(previous=>previous?.identity===identity?{...previous,busy:false}:previous);});
   return()=>{++listGeneration.current;controller.abort();};
- },[query,identity,refresh,Boolean(selected)]);
+ },[query,identity,refresh,Boolean(selected),view]);
  useEffect(()=>{
   const turn=++detailGeneration.current,controller=new AbortController();
   const live=()=>turn===detailGeneration.current&&identity===liveIdentity.current;
