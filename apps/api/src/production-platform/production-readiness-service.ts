@@ -30,6 +30,9 @@ export class ProductionReadinessService{
   return {context,policy,responsibility,history,facts,leader,designer,merch,warehouse,color};
  }
  async authorize(actor:TrustedActorContext,resource:PreparationResource){await this.access(this.database,actor,resource);}
+ async readResponsibility(actor:TrustedActorContext,resource:PreparationResource,db:PreparationDB){
+  return (await this.access(db,actor,resource)).responsibility;
+ }
  async read(actor:TrustedActorContext,resource:PreparationResource,db:PreparationDB=this.database):Promise<ProductionReadinessState>{
   const a=await this.access(db,actor,resource),orderId=a.context.orderId;
   const readiness=orderId?await productionReadiness(db,orderId):null;

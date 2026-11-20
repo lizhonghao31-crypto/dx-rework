@@ -756,8 +756,8 @@ export class DigitalJourneyQuery {
     const {lines,links,merchandisers,orderNumbers,styleName,children,sourcing,sourcingAllowed,sourcingFields}=commercial;
     if(fullOrder&&oid) {
       if(!patternKinds){
-      const bulk=await journeyMeasure('bulk',async()=>actor?await new BulkPreparationService(this.database).read(actor,oid,db):await new BulkPreparationService(this.database).readJourneyFactsWithClient(oid,db,observed));
-      const gates=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).gates(db,oid));
+      const preparation=new BulkPreparationService(this.database);
+      const {sheet:bulk,gates}=await journeyMeasure('bulk',()=>preparation.readJourneyFactsWithClient(oid,db,observed,actor));
       const bulkUrl=`/ui/digital-production?bulk=${oid}`;
       const confirmation=gates.customerSampleFact?.payload;
       if(confirmation&&['现场登记','已核实'].includes(confirmation.timeQuality)&&typeof confirmation.actualCompletedAt==='string'
