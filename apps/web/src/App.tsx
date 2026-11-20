@@ -302,7 +302,7 @@ function routeContent(navigation:InternalLocation){
   const {path:requestedPath,search}=navigation;
   const path=patternPagePath(requestedPath,search);
   const hasReworkContext=new URLSearchParams(search).has("rework");
-  const receivingEntryBatchId=new URLSearchParams(search).get("receivingEntryBatchId")?.trim()??"";
+  const receivingEntryBatchId=new URLSearchParams(search).get("receivingBatchId")?.trim()??"";
   if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;

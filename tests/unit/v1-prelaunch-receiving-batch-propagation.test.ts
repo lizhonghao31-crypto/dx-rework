@@ -6,12 +6,14 @@ const read = (path: string) => readFile(path, "utf8");
 
 describe("PR-01 stable receiving batch propagation", () => {
   it("carries receivingBatchId from the board through N01 without making local save a server binding", async () => {
-    const [board, form] = await Promise.all([
+    const [board, app, form] = await Promise.all([
       read("apps/web/src/order-board-page.tsx"),
+      read("apps/web/src/App.tsx"),
       read("apps/web/src/rework-v2-form.tsx"),
     ]);
 
     expect(board).toContain("receivingBatchId: row.receivingBatchId");
+    expect(app).toMatch(/const receivingEntryBatchId\s*=\s*new URLSearchParams\(search\)\.get\("receivingBatchId"\)/);
     expect(form).toContain('get("receivingBatchId")');
     expect(form).toContain("parsed.receivingBatchId !== requestedBatchId");
     expect(form).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
