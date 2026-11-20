@@ -197,6 +197,43 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {context,page}=await h.open(undefined,{page:'2',customer:'PD',kpi:'todo'});try{const original=new URL(page.url()),ids=await page.locator('.journey-orders tbody tr').evaluateAll(rows=>rows.map(el=>el.getAttribute('data-order-id')));await openPendingCoverage(page);const category=page.locator('.cockpit-coverage-categories button:enabled').first();await category.click();await coverageReady(page);await page.locator('.cockpit-coverage-order-list button').first().click();await page.locator('[data-view="order"][aria-busy="false"]').waitFor();await page.getByRole('button',{name:'‹ 生产管理总览'}).first().click();await homeReady(page);const returned=new URL(page.url());for(const key of ['search','customer','page'])expect(returned.searchParams.get(key)).toBe(original.searchParams.get(key));expect(await page.locator('.journey-orders tbody tr').evaluateAll(rows=>rows.map(el=>el.getAttribute('data-order-id')))).toEqual(ids);
   }finally{await context.close();}
  });
+ it('keeps the current page during a slow next-page read and accepts a different foreground search',async()=>{
+  const {context,page}=await h.open(undefined,{search:''});
+  let release=()=>{};
+  try{
+   await homeReady(page);
+   const rows=page.locator('.journey-orders tbody tr[data-order-id]');
+   const before=await rows.evaluateAll(items=>items.map(row=>row.getAttribute('data-order-id')));
+   expect(before.length).toBeGreaterThan(0);
+   let started!:()=>void;
+   const entered=new Promise<void>(resolve=>{started=resolve;});
+   const held=new Promise<void>(resolve=>{release=resolve;});
+   let pageTwoRequests=0;
+   await page.route('**/api/digital-production/journeys?**',async route=>{
+    const params=new URL(route.request().url()).searchParams;
+    if(params.get('page')==='2'&&!params.get('search')){
+     pageTwoRequests++;const actual=await route.fetch();started();
+     await held;await route.fulfill({response:actual}).catch(()=>{});
+    }else await route.continue();
+   });
+   const next=page.locator('.journey-orders').getByRole('button',{name:'下一页',exact:true});
+   await next.click();
+   await entered;
+   const feedback=page.getByText('请稍等',{exact:true});
+   await feedback.waitFor();
+   expect(await rows.evaluateAll(items=>items.map(row=>row.getAttribute('data-order-id')))).toEqual(before);
+   await next.evaluate((button:HTMLButtonElement)=>button.click());
+   const search=page.getByRole('textbox',{name:'综合搜索',exact:true});
+   await search.fill(h.shortage.designStyleNo);
+   await homeReady(page);
+   await expect.poll(()=>rows.count()).toBe(1);
+   expect(await rows.first().innerText()).toContain(h.shortage.designStyleNo);
+   release();await page.unroute('**/api/digital-production/journeys?**',{behavior:'wait'});
+   expect(pageTwoRequests).toBe(1);
+   expect(await rows.first().innerText()).toContain(h.shortage.designStyleNo);
+   await feedback.waitFor({state:'hidden'});
+  }finally{release();await context.close();}
+ });
  it('uses original received and packed facts for remaining receipt debt and never promotes a technical order UUID to business ID',async()=>{
   const {context,page}=await h.open(undefined,{search:h.shortage.designStyleNo});try{const data=await h.read(page,{search:h.shortage.designStyleNo}),order=data.items[0]!;expect(order.businessProgress!.quantities!.lines.map(line=>line.remainingReceipt)).toEqual([2]);const trigger=page.getByRole('button',{name:/收货数量/});expect(await trigger.innerText()).toMatch(/部分收货\s*· 2\/4 件/);expect(await page.locator('.cockpit-home-receipt-gap').count()).toBe(0);const row=page.locator('.journey-orders tbody tr').first(),before=await row.boundingBox();expect(await row.innerText()).toContain('订单ID：—');expect(await row.innerText()).not.toContain(order.id);await page.screenshot({path:join(h.evidence,'full-home-original-receipt-debt.png'),fullPage:true});await trigger.click();const dialog=page.getByRole('dialog',{name:'风险明细'});await dialog.waitFor();expect(await dialog.innerText()).toContain('应收 4件 · 已收 2件 · 欠收 2件');expect(await dialog.locator('[aria-label="回货差额"] button').count()).toBe(1);await page.screenshot({path:join(h.evidence,'full-home-receipt-debt-modal.png'),fullPage:true});await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});expect(await trigger.evaluate(el=>el===document.activeElement)).toBe(true);expect((await row.boundingBox())!.height).toBe(before!.height);}finally{await context.close();}
  });

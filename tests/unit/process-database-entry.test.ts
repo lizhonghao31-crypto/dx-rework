@@ -28,7 +28,7 @@ describe("process database entry", () => {
     expect(page).toContain('view === "processes" ? <Surface');
     expect(page).toContain('if (view === "crafts")');
     expect(page).toContain('else if (view === "suppliers")');
-    expect(page).toContain('json<ProcessPage>(processCatalogPath(appliedProcessSearch))');
+    expect(page).toContain('json<ProcessPage>(processCatalogPath(appliedProcessSearch),init)');
     expect(css).toContain(".master-data-grid--single");
     expect(css).toContain(".master-data-view-tabs");
   });

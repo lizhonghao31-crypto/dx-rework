@@ -106,6 +106,34 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     await d.page.locator('.quotation-row-input').filter({has:d.page.getByLabel('TEST棉布负责单价',{exact:true})}).getByRole('button',{name:'保存本行负责字段',exact:true}).click();
     await expect.poll(async()=>(await quotes.read(designer,resource)).status).toBe('draft');
     expect((await quotes.read(designer,resource,undefined,frozen)).document!.rows.find(r=>r.rowId===materialId)!.unitPrice).toBe('20');
+
+    const oldSheet=d.page.locator('.quotation-editor');
+    await expect.poll(()=>oldSheet.innerText()).toContain('协作草稿');
+    const historyURL=h.base+'/api/digital-production/sources/'+source.sourceId+'/quotation?version='+frozen;
+    let releaseHistory!:()=>void;
+    const holdHistory=new Promise<void>(resolve=>{releaseHistory=resolve;});
+    let historyRequests=0;
+    await d.page.route(historyURL,async route=>{
+     historyRequests++;
+     await holdHistory;
+     await route.continue();
+    });
+    try{
+     await d.page.getByLabel('查看报价版本',{exact:true}).selectOption(String(frozen));
+     await d.page.getByRole('status').filter({hasText:'请稍等'}).waitFor();
+     expect(historyRequests).toBe(1);
+     expect(await oldSheet.innerText()).toContain('协作草稿');
+     expect(await d.page.getByRole('button',{name:'保存报价',exact:true}).isDisabled()).toBe(true);
+     releaseHistory();
+     await expect.poll(()=>oldSheet.innerText()).toContain('客户已确认');
+     await d.page.getByRole('status').filter({hasText:'请稍等'}).waitFor({state:'hidden'});
+     expect((await quotes.read(designer,resource)).status).toBe('draft');
+    }finally{
+     releaseHistory();
+     await d.page.unroute(historyURL);
+    }
+    await d.page.getByLabel('查看报价版本',{exact:true}).selectOption('');
+    await expect.poll(()=>oldSheet.innerText()).toContain('协作草稿');
     await d.page.screenshot({path:join(h.evidence,'designer-1165.png'),fullPage:true});
     await w.page.screenshot({path:join(h.evidence,'worker-1165.png'),fullPage:true});
     // Same authenticated session after native role revocation, not a Lab role switch.

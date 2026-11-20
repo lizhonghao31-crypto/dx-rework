@@ -1,3 +1,5 @@
+import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
+import {useForegroundRead} from "./use-foreground-read.js";
 import {
   AttachmentResponseSchema,
   CuttingOrderDetailSchema,
@@ -12,7 +14,7 @@ import {
 } from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createClientRequestId } from "./client-request-id.js";
 import {
@@ -151,48 +153,29 @@ export function CuttingListPage() {
   const [q, setQ] = useState(initial.q);
   const [status, setStatus] = useState<CuttingListQuery["status"]>(initial.status);
   const [outOfRange, setOutOfRange] = useState(initial.outOfRange);
-  const [page, setPage] = useState(initial.page);
-  const [data, setData] = useState<ReturnType<typeof CuttingOrderListResponseSchema.parse> | null>(null);
-  const [error, setError] = useState("");
-  const [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const search = useDebouncedValue(q.trim(), 180);
+  const [selection,setSelection]=useState({search:initial.q.trim(),page:initial.page});
+  const {search,page}=selection;
+  const setPage=(next:number)=>setSelection(current=>current.page===next?current:{...current,page:next});
+  const debouncedSearch=useDebouncedValue(q.trim(),180);
+  useEffect(()=>setSelection(current=>current.search===debouncedSearch?current:{search:debouncedSearch,page:1}),[debouncedSearch]);
   const listPath = cuttingListPath({ q: search, status, outOfRange, page });
+  const applied=q.trim()===search;
+  const load=useCallback(async(signal:AbortSignal)=>{
+    const params=new URLSearchParams({q:search,status,outOfRange:String(outOfRange),page:String(page)});
+    const result=await cuttingRequest(`orders?${params}`,CuttingOrderListResponseSchema,{signal});
+    return {result,path:cuttingListPath({q:search,status,outOfRange,page:result.page})};
+  },[search,status,outOfRange,page]);
+  const read=useForegroundRead('cutting-list',listPath,load,true);
+  const data=read.value?.result??null,error=read.error?.message??"",loading=read.waiting;
+  useForegroundWait(applied?read.foregroundKey:undefined);
   useInternalReturnScroll(!loading && data !== null);
 
-  useEffect(() => {
-    window.history.replaceState(window.history.state, "", pageUrl(listPath));
-  }, [listPath]);
-
-  useEffect(() => {
-    const abort = new AbortController();
-    const params = new URLSearchParams({
-      q: search,
-      status,
-      outOfRange: outOfRange ? "true" : "false",
-      page: String(page),
-    });
-    setLoading(true);
-    setError("");
-    void cuttingRequest(
-      `orders?${params}`,
-      CuttingOrderListResponseSchema,
-      { signal: abort.signal },
-    ).then((result) => {
-      if (!abort.signal.aborted) {
-        setData(result);
-        if (page !== result.page) setPage(result.page);
-      }
-    }).catch((cause) => {
-      if (!abort.signal.aborted) {
-        setData(null);
-        setError(cause instanceof Error ? cause.message : "读取裁床订单失败");
-      }
-    }).finally(() => {
-      if (!abort.signal.aborted) setLoading(false);
-    });
-    return () => abort.abort();
-  }, [search, status, outOfRange, page, refresh]);
+  useEffect(()=>{
+    if(applied)window.history.replaceState(window.history.state,"",pageUrl(listPath));
+  },[applied,listPath]);
+  useEffect(()=>{
+    if(applied&&!loading&&data&&data.page!==page)setPage(data.page);
+  },[applied,loading,data,page]);
 
   const changeStatus = (next: CuttingListQuery["status"]) => {
     setStatus(next);
@@ -255,14 +238,13 @@ export function CuttingListPage() {
             value={q}
             onChange={(event) => {
               setQ(event.target.value);
-              setPage(1);
             }}
           />
         </label>
         <Button
           className="cutting-toolbar__refresh"
           disabled={loading}
-          onClick={() => setRefresh((value) => value + 1)}
+          onClick={read.retry}
         >
           刷新
         </Button>
@@ -274,7 +256,7 @@ export function CuttingListPage() {
       ) : null}
       <div className="cutting-list" aria-busy={loading}>
         {data?.items.map((item) => (
-          <CuttingCard key={item.cuttingOrderId} item={item} returnTo={listPath} />
+          <CuttingCard key={item.cuttingOrderId} item={item} returnTo={read.value?.path??listPath} />
         ))}
       </div>
       {data && !data.items.length ? (
@@ -286,7 +268,6 @@ export function CuttingListPage() {
           <ListPagination
             page={data.page}
             totalPages={data.totalPages}
-            busy={loading}
             onPageChange={setPage}
             ariaLabel="裁床实裁分页"
           />
@@ -332,6 +313,12 @@ function CountInput({
 
 export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }) {
   const [item, setItem] = useState<CuttingOrderDetail | null>(null);
+  const [readVersion,setReadVersion]=useState(0),[readFailed,setReadFailed]=useState(false);
+  const detailRead=useRef<{abort:AbortController;finish:()=>void}|null>(null);
+  const retryDetail=()=>{
+    if(detailRead.current)return;
+    setReadFailed(false);setError("");setReadVersion(current=>current+1);
+  };
   const [pieceCount, setPieceCount] = useState("");
   const [actualCutCount, setActualCutCount] = useState("");
   const [pieceError, setPieceError] = useState("");
@@ -361,8 +348,9 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
   }, []);
 
   useEffect(() => {
-    const abort = new AbortController();
-    setError("");
+    const abort = new AbortController(),work={abort,finish:beginForegroundWait()};
+    detailRead.current=work;
+    setError("");setReadFailed(false);
     void cuttingRequest(
       `orders/${cuttingOrderId}`,
       CuttingOrderDetailSchema,
@@ -377,12 +365,18 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
       }
     }).catch((cause) => {
       if (!abort.signal.aborted) {
-        setItem(null);
+        setItem(null);setReadFailed(true);
         setError(cause instanceof Error ? cause.message : "读取裁床订单失败");
       }
+    }).finally(()=>{
+      work.finish();
+      if(detailRead.current===work)detailRead.current=null;
     });
-    return () => abort.abort();
-  }, [cuttingOrderId]);
+    return()=>{
+      abort.abort();work.finish();
+      if(detailRead.current===work)detailRead.current=null;
+    };
+  }, [cuttingOrderId,readVersion]);
 
   const updateDigits = (
     next: string,
@@ -651,7 +645,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
         backHref={backHref}
         {...(item ? { subtitle: `${item.supplierName} · ${statusLabel(item.status)}` } : {})}
       />
-      {error ? <Surface><p className="cutting-error" role="alert">{error}</p></Surface> : null}
+      {error ? <Surface><p className="cutting-error" role="alert">{error}</p>{readFailed?<Button onClick={retryDetail}>重新读取裁床订单</Button>:null}</Surface> : null}
       {notice ? <Surface><p role="status">{notice}</p></Surface> : null}
       {!item && !error ? <p role="status">正在读取裁床订单…</p> : null}
       {item ? (

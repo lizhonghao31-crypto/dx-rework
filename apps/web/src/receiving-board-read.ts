@@ -1,4 +1,6 @@
-import {useEffect,useState} from "react";
+import {beginForegroundWait} from "./foreground-loading.js";
+import {registerSessionInvalidator} from "./auth-session.js";
+import {useEffect,useRef,useState} from "react";
 import {hasWarehouseReceivingRole} from "@dx-rework/contracts";
 import {createWebUrls} from "../url-contract.js";
 import {moduleCanWrite} from "./member-module-policy.js";
@@ -43,6 +45,15 @@ export function useReceivingBoardRead(targetBatchId:string|undefined,invalidTarg
   const [isRoot, setIsRoot] = useState(false);
 
   const [refreshToken, setRefreshToken] = useState(0);
+  const [actorEpoch,setActorEpoch]=useState(0);
+  const controller=useRef<AbortController|null>(null);
+  const lastQuery=useRef<{path:string;scope:string}|null>(null);
+  const explicitRetry=useRef(false);
+  const retryRead=()=>{
+    if(controller.current||explicitRetry.current)return;
+    explicitRetry.current=true;
+    setRefreshToken(value=>value+1);
+  };
 
   const [page, setPage] = useState(1);
 
@@ -90,37 +101,49 @@ export function useReceivingBoardRead(targetBatchId:string|undefined,invalidTarg
         setIsRoot(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [actorEpoch]);
 
+  const currentSearch=debouncedQuery.trim().toUpperCase();
+  const readySearch=Boolean(targetBatchId)||currentSearch===query.trim().toUpperCase();
+  const params = new URLSearchParams({ startDate, endDate });
+  params.set("status", status);
+  params.set("page", String(page));
+  if(targetBatchId){params.set("receivingBatchId",targetBatchId);params.set("status","all");params.set("page","1");}
+  if(currentSearch)params.set("q",currentSearch);
+  const path=apiUrl(`receiving/board?${params}`);
+  const scope=targetBatchId??"board";
+  useEffect(()=>registerSessionInvalidator(()=>{
+    controller.current?.abort();
+    setData(null);setCanReceive(false);setCanInitiate(false);setCanInitiateFinishing(false);
+    setCanExport(false);setCanResolveDifferences(false);setCanManagePacking(false);setIsRoot(false);
+    setActorEpoch(value=>value+1);
+  }),[]);
   useEffect(() => {
-    let active = true;
-    if(invalidTarget){setData(null);setMessage("收货批次链接无效，请返回来源订单");return;}
+    if(invalidTarget){setData(null);setPageLoading(false);setReadFailed(false);setMessage("收货批次链接无效，请返回来源订单");return;}
+    if(!readySearch){setPageLoading(false);return;}
+    const abort=new AbortController(),previous=lastQuery.current;
+    controller.current=abort;
+    if(previous&&previous.scope!==scope)setData(null);
+    const finish=explicitRetry.current||previous?.path!==path?beginForegroundWait():()=>{};
+    explicitRetry.current=false;lastQuery.current={path,scope};
     setPageLoading(true);setReadFailed(false);
-    const params = new URLSearchParams({ startDate, endDate });
-    params.set("status", status);
-    params.set("page", String(page));
-    if(targetBatchId){params.set("receivingBatchId",targetBatchId);params.set("status","all");params.set("page","1");}
-    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
-    void receivingBoardRead<BoardResult>(apiUrl(`receiving/board?${params.toString()}`))
-      .then((body) => {
-        if (!active) return;
-        setData(body);
-        setMessage(body.rows.length
-          ? ""
-          : body.mode === "search"
-            ? "全时间范围内没有匹配的收货记录"
-            : "选中日期内没有收货记录");
-      })
-      .catch((error:unknown) => {
-        if (!active) return;
-        setData(null);setReadFailed(true);
-        setMessage(error instanceof Error?error.message:"订单回货加载失败，请刷新后重试");
-      })
-      .finally(() => {
-        if (active) setPageLoading(false);
-      });
-    return () => { active = false; };
-  }, [startDate, endDate, debouncedQuery, status, page, refreshToken, targetBatchId, invalidTarget]);
+    void receivingBoardRead<BoardResult>(path,abort.signal).then(body=>{
+      if(abort.signal.aborted)return;
+      setData(body);
+      setMessage(body.rows.length?"":body.mode==="search"?"全时间范围内没有匹配的收货记录":"选中日期内没有收货记录");
+    }).catch((error:unknown)=>{
+      if(abort.signal.aborted)return;
+      setData(null);setReadFailed(true);
+      setMessage(error instanceof Error?error.message:"订单回货加载失败，请刷新后重试");
+    }).finally(()=>{
+      if(controller.current!==abort)return;
+      controller.current=null;setPageLoading(false);finish();
+    });
+    return ()=>{
+      abort.abort();finish();
+      if(controller.current===abort)controller.current=null;
+    };
+  },[path,scope,readySearch,refreshToken,actorEpoch,invalidTarget]);
 
   const toggleHistory = (receivingBatchId: string) => {
     setExpandedRows((current) => {
@@ -134,7 +157,7 @@ export function useReceivingBoardRead(targetBatchId:string|undefined,invalidTarg
     startDate,setStartDate,endDate,setEndDate,query,setQuery,
     status,setStatus,debouncedQuery,data,message,pageLoading,
     canReceive,canInitiate,canInitiateFinishing,canExport,canResolveDifferences,canManagePacking,
-    isRoot,setRefreshToken,setPage,expandedRows,readFailed,resetPagination,
+    isRoot,setRefreshToken,retryRead,setPage,expandedRows,readFailed,resetPagination,
     toggleHistory,
   };
 }

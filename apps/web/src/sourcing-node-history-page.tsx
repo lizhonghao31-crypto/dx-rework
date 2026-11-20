@@ -1,6 +1,9 @@
 import { SourcingOrderPhotos } from "./sourcing-order-photos.js";
 import { SourcingOrderDateFacts } from "./sourcing-order-date-facts.js";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useForegroundWait } from "./foreground-loading.js";
+import { useForegroundRead } from "./use-foreground-read.js";
+import { navigateInternalPage } from "./internal-navigation.js";
 import { SourcingNodeHistorySchema, type SourcingNodeHistory, type SourcingHistoryNode, type SourcingAttachment } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { DecisionSummary, KeyFacts, ResponsiveFactsTable, Surface, WorkflowRail } from "@dx-rework/ui";
@@ -29,22 +32,20 @@ const field = (label: string, value: string | null | undefined) => <label key={l
 export function SourcingNodeHistoryPage({ sourcingCaseId, node, returnTo }: {
   sourcingCaseId: string; node: SourcingHistoryNode; returnTo: string | null;
 }) {
-  const [history, setHistory] = useState<SourcingNodeHistory | null>(null);
-  const [error, setError] = useState("");
-  const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{target:string|null;image:SourcingAttachment} | null>(null);
   const entryId = new URLSearchParams(window.location.search).get("entryId");
-  useEffect(() => {
-    let cancelled = false;
-    setHistory(null); setError("");
-    const query = entryId ? `?${new URLSearchParams({ entryId })}` : "";
-    void fetch(apiUrl(`sourcing/cases/${sourcingCaseId}/history/${node}${query}`), { credentials: "include", cache: "no-store" })
-      .then(async response => {
-        if (!response.ok) throw new Error(response.status === 404 ? "该节点没有已提交的历史记录" : "历史页面加载失败，请返回重试");
-        return SourcingNodeHistorySchema.parse(await response.json());
-      }).then(value => { if (!cancelled) setHistory(value); })
-      .catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "历史页面加载失败"); });
-    return () => { cancelled = true; };
-  }, [sourcingCaseId, node, entryId]);
+  const query = entryId ? `?${new URLSearchParams({ entryId })}` : "";
+  const path = `sourcing/cases/${sourcingCaseId}/history/${node}${query}`;
+  const load = useCallback(async (signal:AbortSignal) => {
+    const response = await fetch(apiUrl(path), { credentials: "include", cache: "no-store", signal });
+    if (!response.ok) throw new Error(response.status === 404 ? "该节点没有已提交的历史记录" : "历史页面加载失败，请返回重试");
+    return SourcingNodeHistorySchema.parse(await response.json());
+  }, [path]);
+  const read = useForegroundRead(sourcingCaseId,path,load,true);
+  const history = read.value;
+  const error = read.error?.message;
+  const image = selectedImage?.target===read.loadedTarget ? selectedImage?.image : null;
+  useForegroundWait(read.foregroundKey);
   const href = (selected?: SourcingHistoryNode, version?: string) => {
     const query = new URLSearchParams();
     if (returnTo) query.set("returnTo", returnTo);
@@ -57,8 +58,8 @@ export function SourcingNodeHistoryPage({ sourcingCaseId, node, returnTo }: {
     {error ? <div className="sourcing-history-navigation"><a className="dx-button dx-button--primary" href={href()}>返回当前节点</a></div> : null}
   </div>;
   return <SourcingNodeHistoryView history={history} currentHref={href()} nodeHref={href}
-    onImage={setSelectedImage}>
-    {selectedImage ? <div className="rework-image-modal"><section className="rework-image-modal__content" role="dialog" aria-modal="true" aria-label={selectedImage.filename}><div className="rework-image-modal__heading"><strong>{selectedImage.filename}</strong><button type="button" onClick={() => setSelectedImage(null)}>关闭</button></div><ImageViewer src={pictureUrl(selectedImage.attachmentId)} alt={selectedImage.filename} /></section></div> : null}
+    onImage={image=>setSelectedImage({target:read.loadedTarget,image})}>
+    {image ? <div className="rework-image-modal"><section className="rework-image-modal__content" role="dialog" aria-modal="true" aria-label={image.filename}><div className="rework-image-modal__heading"><strong>{image.filename}</strong><button type="button" onClick={() => setSelectedImage(null)}>关闭</button></div><ImageViewer src={pictureUrl(image.attachmentId)} alt={image.filename} /></section></div> : null}
   </SourcingNodeHistoryView>;
 }
 
@@ -76,7 +77,7 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, onImag
     <div className="sourcing-history-navigation">
       <div><h2>{labels[node]}</h2><span>{dateTime(entry.handledAt)} · {entry.handledBy}</span></div>
       <a className="dx-button dx-button--primary" href={currentHref}>返回当前节点</a>
-      {versions.length > 1 ? <label>历史版本<select value={entry.entryId} onChange={event => { window.location.href = nodeHref(node, event.target.value); }}>
+      {versions.length > 1 ? <label>历史版本<select value={entry.entryId} onChange={event => { void navigateInternalPage(nodeHref(node, event.target.value)); }}>
         {versions.map(version => <option key={version.entryId} value={version.entryId}>V{version.version} · {dateTime(version.handledAt)}</option>)}
       </select></label> : null}
     </div>

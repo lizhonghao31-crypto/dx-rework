@@ -6,6 +6,7 @@ import type {ProductionReceivingSummary} from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
+import {beginForegroundWait} from "./foreground-loading.js";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -155,6 +156,7 @@ export function ReceivingPage() {
       return;
     }
     const controller = new AbortController();
+    const finish = beginForegroundWait();
     const params = new URLSearchParams({ q: needle });
     setRepeatSearching(true);
     void requestJson<RepeatOptions>(`receiving/repeat-options?${params.toString()}`, {
@@ -180,8 +182,8 @@ export function ReceivingPage() {
         setRepeatOptionsQuery("");
         setMessage(cause instanceof Error ? cause.message : "可追加收货订单加载失败");
       })
-      .finally(() => { if (!controller.signal.aborted) setRepeatSearching(false); });
-    return () => { controller.abort(); };
+      .finally(() => { if (!controller.signal.aborted) setRepeatSearching(false); finish(); });
+    return () => { controller.abort(); finish(); };
   }, [repeat, repeatSource, debouncedRepeatQuery]);
   useEffect(() => {
     const needle = debouncedStyleNo.trim();
@@ -192,6 +194,7 @@ export function ReceivingPage() {
       return;
     }
     const controller = new AbortController();
+    const finish = beginForegroundWait();
     setCuttingSearching(true);
     void requestJson<CuttingOptions>(
       `receiving/cutting-options?${new URLSearchParams({ q: needle }).toString()}`,
@@ -215,8 +218,9 @@ export function ReceivingPage() {
       setMessage(cause instanceof Error ? cause.message : "已裁正式款号加载失败");
     }).finally(() => {
       if (!controller.signal.aborted) setCuttingSearching(false);
+      finish();
     });
-    return () => controller.abort();
+    return () => { controller.abort(); finish(); };
   }, [open, repeat, debouncedStyleNo]);
 
   useEffect(() => () => {

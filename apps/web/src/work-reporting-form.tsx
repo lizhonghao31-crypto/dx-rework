@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {SUBMISSION_RECOVERY_WINDOW_MS} from "./submission-attempt.js";
 import {feedbackFetch,feedbackJson,feedbackNoContent,unknownWriteResult} from "./request-response-feedback.js";
 import { specialProcessLabel } from "@dx-rework/contracts";
@@ -309,7 +310,8 @@ export function WorkReportingForm({
   useEffect(() => {
     if (history) return;
     if (!reworkOrderId) { setMessage("请从当前节点工作台选择一张订单进入处理。"); return; }
-    let live = true;
+    let live=true;
+    const finish=beginForegroundWait();
     const load = async () => {
       setReviewReadDeniedForOrder(null);
       setMessage("");
@@ -336,21 +338,25 @@ export function WorkReportingForm({
       const adjustmentView = loaded?.reworkStatus === "in_progress"
         && (taskMode === "work_reporting" || taskMode === "workspace");
       if ((!assignable || !assignmentView) && (!activeAdjustable || !adjustmentView)) return;
-      const [, configuration] = await Promise.all([
+      const [peopleResult,configuration]=await Promise.all([
         request(
           adjustmentView ? "work-task-adjustment-options" : "work-task-options",
           WorkTaskAssignablePeopleResponseSchema.parse,
-        ).then((result) => setPeople(result.people)),
+        ),
         request(`rework-orders/${reworkOrderId}/process-configuration`, ProcessConfigurationResponseSchema.parse),
       ]);
+      if(!live)return;
+      setPeople(peopleResult.people);
       setConfigItems(configuration.configuration?.items.map((item) => ({
         configurationItemId: item.configurationItemId,
         processName: item.executionKind === "tail_inspection" && item.specialProcessType !== "other_craft" ? "整查" : item.processName,
         executionKind: item.executionKind,
       })) ?? []);
     };
-    void load().catch((cause: unknown) => { if (live) setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"); });
-    return () => { live = false; };
+    void load().catch((cause:unknown)=>{
+      if(live)setMessage(cause instanceof Error?cause.message:"当前节点加载失败");
+    }).finally(finish);
+    return()=>{live=false;finish();};
   }, [reworkOrderId, taskMode]);
 
   const choosePeopleType = (type: "internal" | "temporary") => {

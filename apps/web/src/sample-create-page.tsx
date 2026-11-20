@@ -1,3 +1,4 @@
+import {useForegroundWait} from "./foreground-loading.js";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { AttachmentResponseSchema, UploadIntentResponseSchema, SampleCreateResultSchema, SamplePeopleResponseSchema, SampleAttachmentListSchema, type SampleCreate } from "@dx-rework/contracts";
@@ -89,6 +90,7 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
   const onPendingUpload = (key: string, count: number) => setPendingUploads(current => ({ ...current, [key]: count }));
   const onUploadBusy = (active: boolean) => { uploaders.current = Math.max(0, uploaders.current + (active ? 1 : -1)); setUploading(uploaders.current > 0); };
   useEffect(() => { const abort = new AbortController(); void request("samples/creation-availability", availabilitySchema, { signal: abort.signal }).then(setAvailability).catch(e => { if (!abort.signal.aborted) setError(sampleErrorMessage(e, "无法读取登记状态")); }); return () => abort.abort(); }, []);
+  useForegroundWait(!availability&&!error?"sample:creation-availability":undefined);
   const disabled = busy || uploading || !!result || !availability?.enabled;
   const update = (key: string, patch: Partial<Draft>) => setItems(current => current.map(item => item.key === key ? { ...item, ...patch } : item));
   const submit = async () => {

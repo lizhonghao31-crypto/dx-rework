@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "../foreground-loading.js";
 import { exceptionRecordHref } from "./exception-presentation.js";
 import { canAccessFinance } from "../finance-access.js";
 import { verifySession } from "../auth.js";
@@ -22,7 +23,7 @@ const statuses:Record<ReportType,readonly (readonly [string,string])[]>={
   external_deductions:[["","全部状态"],["pending_business_signoff","待业务签收"],["pending_payables_confirmation","待应付确认"],["deduction_follow_up","扣款跟进"],["pending_special_approval","待财务总监特批"],["returned","已退回"],["pending_responsibility_revision","责任变更中"],["closed","已关闭"],["superseded","已被新版本替代"],["full","全额"],["partial","部分"],["not_deducted","未扣"],["over_deducted","超额扣款（已特批）"]],
   exceptions:[["","全部异常"],["overdue_todo","待办逾期"],["blocked_recipient","接收人失效"],["todo_delivery_failed","投递失败"],["deduction_follow_up_overdue","扣款跟进逾期"]],
 };
-type State={kind:"loading"}|{kind:"ready";value:ReportPreviewResponse}|{kind:"unavailable";message:string};
+type State={kind:"loading"}|{kind:"ready";value:ReportPreviewResponse;type:ReportType;key:string}|{kind:"unavailable";message:string;retryable?:boolean};
 const snapshotBusinessValue = (key: string, value: Parameters<typeof businessValue>[1]): string =>
   value !== null && value !== undefined && value !== "" && isBusinessMoneyField(key)
     ? fixedBusinessCurrency(String(value)) : businessValue(key, value);
@@ -38,10 +39,34 @@ export function ReportCenterPage(){
   const [q,setQ]=useState(initial.get("q")??"");
   const [status,setStatus]=useState(initial.get("status")??"");
   const [state,setState]=useState<State>({kind:"loading"});
+  const [revision,setRevision]=useState(0),[reading,setReading]=useState(true);
+  const pendingRead=useRef(false),manualRetry=useRef(false);
+  const retry=()=>{
+   if(pendingRead.current||manualRetry.current)return;
+   manualRetry.current=true;setRevision(value=>value+1);
+  };
   const [exportBusy,setExportBusy]=useState(false),[exportNotice,setExportNotice]=useState(''),[exportError,setExportError]=useState('');
   const exportRun=useRef(0),exportRequest=useRef<AbortController|null>(null);
   const filters=useMemo(()=>({from,to,q:q.trim()||undefined,status:status||undefined,limit:"100"}),[from,to,q,status]);
-  useEffect(()=>{if(type==="wages"){if(wageAccess===null)return;if(!wageAccess){setState({kind:"unavailable",message:"当前账号无权查看工资明细"});return;}}const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters,wageAccess]);
+  const reportKey=JSON.stringify([type,filters]),reportAccess=type!=="wages"?true:wageAccess;
+  useEffect(()=>{
+   if(reportAccess!==true){
+    if(reportAccess===false){setState({kind:"unavailable",message:"当前账号无权查看工资明细"});setReading(false);}
+    return;
+   }
+   const controller=new AbortController(),finish=beginForegroundWait();
+   pendingRead.current=true;manualRetry.current=false;setReading(true);
+   void loadReport(type,filters,controller.signal).then(value=>{
+    if(!controller.signal.aborted)setState({kind:"ready",value,type,key:reportKey});
+   }).catch((error:unknown)=>{
+    if(controller.signal.aborted)return;
+    setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败",retryable:true});
+   }).finally(()=>{
+    finish();
+    if(!controller.signal.aborted){pendingRead.current=false;setReading(false);}
+   });
+   return()=>{controller.abort();finish();pendingRead.current=false;};
+  },[reportKey,reportAccess,revision]);
   useEffect(()=>{exportRun.current++;exportRequest.current?.abort();setExportBusy(false);setExportNotice('');setExportError('');return()=>{exportRun.current++;exportRequest.current?.abort();};},[type,filters]);
   const download=async()=>{
    if(exportRequest.current&&!exportRequest.current.signal.aborted)return;
@@ -50,8 +75,8 @@ export function ReportCenterPage(){
    catch(error){if(version===exportRun.current&&(error as Error)?.name!=='AbortError')setExportError(error instanceof Error?error.message:'导出文件尚未取得，请在原筛选范围重试读取');}
    finally{if(version===exportRun.current){exportRequest.current=null;setExportBusy(false);}}
   };
-  const value=state.kind==="ready"?state.value:null;
-  const page=usePaginatedItems(value?.rows??[], `${type}:${from}:${to}:${q}:${status}`);
+  const value=state.kind==="ready"&&state.type===type&&(type!=="wages"||wageAccess===true)?state.value:null;
+  const page=usePaginatedItems(value?.rows??[],state.kind==="ready"?state.key:reportKey);
   return <Shell active="财务报表"><div className="report-center-layout"><Header title="财务报表" subtitle="查询返工、工资、责任和扣款明细" badge={value?`${formatBusinessDecimal(value.rowCount)} 行 · ${value.range.from} 至 ${value.range.to}`:"查询中"} />
     <Surface className="reporting-filters report-center-filters">
       <label>报表<select value={type} onChange={event=>{setType(ReportTypeSchema.parse(event.target.value));setStatus("");}}>{ReportTypeSchema.options.filter(item=>item!=="wages"||wageAccess===true).map(item=><option value={item} key={item}>{names[item]}</option>)}</select></label>
@@ -59,11 +84,11 @@ export function ReportCenterPage(){
       <label>结束日期<input type="date" value={to} onChange={event=>setTo(event.target.value)} /></label>
       <label>状态/类型<select value={status} onChange={event=>setStatus(event.target.value)}>{statuses[type].map(([item,label])=><option value={item} key={item}>{label}</option>)}</select></label>
       <InsetField label="关键词" value={q} onChange={event=>setQ(event.target.value)} placeholder="单号 / 款号 / 人员 / 供应商" />
-      {value?.canExport && <Button variant="primary" disabled={exportBusy} onClick={()=>void download()}>{exportBusy?"正在读取导出文件…":"导出 Excel"}</Button>}
+      {value?.canExport && <Button variant="primary" disabled={exportBusy||reading||state.kind!=="ready"||state.key!==reportKey} onClick={()=>void download()}>{exportBusy?"正在读取导出文件…":"导出 Excel"}</Button>}
     </Surface>
     {exportError&&<Surface><p role="alert">{exportError}</p></Surface>}{exportNotice&&<p role="status">{exportNotice}</p>}
-    {state.kind==="loading"&&<Surface className="reporting-state">正在生成报表…</Surface>}
-    {state.kind==="unavailable"&&<Surface className="reporting-state">{state.message}</Surface>}
+    {reading&&!value&&<Surface className="reporting-state"><p role="status">正在生成报表…</p></Surface>}
+    {!reading&&state.kind==="unavailable"&&<Surface className="reporting-state"><p role="alert">{state.message}</p>{state.retryable?<Button onClick={retry}>重试读取报表</Button>:null}</Surface>}
     {value&&<>
       <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>{formatBusinessTime(value.asOf)}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{businessFieldLabel(key)}：{snapshotBusinessValue(key, total)}</StatusBadge>)}</div></Surface>
       <Surface className="reporting-table-surface"><div className="reporting-table-wrap" tabIndex={0} role="region" aria-label="财务报表明细，可横向滚动"><table><thead><tr>{value.columns.map(column=><th key={column.key} scope="col">{column.label}</th>)}</tr></thead><tbody>{page.items.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key} className={isBusinessMoneyField(column.key)?"reporting-money":undefined}>{column.key === "settlementStatus" ? (row[column.key] === "settled" ? "已结算" : "未结算") : type === "exceptions" && column.key === "deepLink" ? exceptionRecordHref(row[column.key],import.meta.env.BASE_URL) ? <a className="reporting-exception-link" href={exceptionRecordHref(row[column.key],import.meta.env.BASE_URL)!}>查看原记录</a> : "记录不可用" : snapshotBusinessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}<ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="财务报表分页" /></Surface>

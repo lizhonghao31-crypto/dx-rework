@@ -1,3 +1,4 @@
+import {ReworkInitiationService} from "../../apps/api/src/rework/service.js";
 import {afterAll,beforeAll,describe,expect,it,vi} from "vitest";
 import {randomUUID} from "node:crypto";
 import {createServer,type Server} from "node:http";
@@ -32,7 +33,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // Native command creates isolated historical style-only receipts; this TEST
   // service option does not change runtime production configuration or routes.
   const receiving=new ReceivingService(f.db,undefined,undefined,undefined,{allowLegacyStyleInput:true});
-  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},receiving:{authenticate,root,service:receiving}});await app.ready();
+  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},receiving:{authenticate,root,service:receiving},rework:{authenticate,root,service:new ReworkInitiationService(f.db,"anchor-test")}});await app.ready();
   for(const role of ["root","warehouse"])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   const warehouse={...f.people.warehouse!,authorizationCapability:"receiving:create",authorizationCapabilities:["receiving:create"]};
   for(let index=0;index<4;index++){
@@ -108,6 +109,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.setViewportSize({width:390,height:1003});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   }finally{await context.close();}
   const warehouse=await open(2,'warehouse');try{await warehouse.page.getByRole('button',{name:/第1次收货/}).click();expect(await warehouse.page.getByRole('button',{name:'修正本次',exact:true}).count()).toBe(0);}finally{await warehouse.context.close();}
+ });
+ it.each([
+   {title:"发起返工",kind:null,endpoint:"receiving-entry"},
+   {title:"本厂做尾",kind:"inhouse_finishing",endpoint:"finishing/receiving-entry"},
+ ])("opens $title from the original receiving board with the exact batch id",async ({title,kind,endpoint})=>{
+  const {context,page}=await open(0);
+  try {
+   const batchId=ids[0]!;
+   const body=page.waitForResponse(response=>
+    new URL(response.url()).pathname===`/api/rework-orders/${endpoint}/${batchId}`&&response.request().method()==="GET");
+   await page.getByRole("link",{name:title,exact:true}).click();
+   await page.getByRole("heading",{name:title,exact:true}).waitFor();
+   const opened=new URL(page.url());
+   expect(opened.pathname).toBe("/ui/qc/new");
+   expect(opened.searchParams.get("receivingBatchId")).toBe(batchId);
+   expect(opened.searchParams.get("kind")).toBe(kind);
+   const response=await body;
+   expect(response.status()).toBe(200);
+   expect(await response.json()).toMatchObject({receivingBatchId:batchId});
+  }finally{await context.close();}
  });
  it("retains the real warehouse role and exact-batch return path without exposing Root or merchandiser actions",async()=>{
   const {context,page}=await open(0,"warehouse",1440);try{

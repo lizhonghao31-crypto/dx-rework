@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import "./rework-governed.css";
 import { currentModuleCanWrite } from "./member-module-policy.js";
@@ -299,8 +300,9 @@ export function ReworkInitiationV2Form({
 
   useEffect(() => {
     if(history) return;
-    const controller = new AbortController();
-    let active = true;
+    const controller=new AbortController();
+    const finish=reworkOrderId||receivingBatchId?beginForegroundWait():()=>{};
+    let active=true;
     const coreOptions = request(
       isFinishing ? "rework-orders/finishing/initiation-options" : "rework-orders/initiation-options",
       ReworkInitiationOptionsResponseSchema,
@@ -348,7 +350,7 @@ export function ReworkInitiationV2Form({
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "返工草稿加载失败");
-      });
+      }).finally(finish);
     } else if (receivingBatchId) {
       void Promise.all([
         coreOptions,
@@ -389,10 +391,10 @@ export function ReworkInitiationV2Form({
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "收货订单资料加载失败");
-      });
+      }).finally(finish);
     }
 
-    return () => { active = false; controller.abort(); };
+    return()=>{active=false;controller.abort();finish();};
   }, [receivingBatchId, reworkOrderId, isFinishing]);
 
   useEffect(() => () => {

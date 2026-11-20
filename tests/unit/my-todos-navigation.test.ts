@@ -45,7 +45,8 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain('<div className="my-todos-toolbar">');
     expect(page).toContain('<div className="my-todos-modules" role="group"');
     expect(page).not.toContain('<nav className="my-todos-modules"');
-    expect(page).toContain("aria-pressed={!activeQuery && module.id === activeModule}");
+    expect(page).toContain('state.kind==="ready"?state.appliedQuery:activeQuery');
+    expect(page).toContain('aria-pressed={!displayedQuery && module.id === activeModule}');
     expect(page.indexOf('{ id: "sourcing", label: "外发定价&选厂" }')).toBeLessThan(
       page.indexOf('{ id: "rework", label: "订单返工" }'),
     );

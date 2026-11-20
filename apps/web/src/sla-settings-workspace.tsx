@@ -1,3 +1,4 @@
+import {useForegroundWait} from "./foreground-loading.js";
 import {useEffect,useState,type ReactNode} from 'react';
 import {registerSessionInvalidator,sessionCacheVersion} from './auth-session.js';
 import {SpecialCraftLibrary} from './special-craft-library.js';
@@ -18,6 +19,7 @@ function SettingsWorkspaces({readOnly,customerControl,riskControl,onAuthorityCha
  const tabs:readonly (readonly [Tab,string])[]=riskControl?[...baseTabs,['risks','生产风险提醒']]:baseTabs;
  const [tab,setTab]=useState<Tab>('settings'),[calculationVisited,setCalculationVisited]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[craftsVisited,setCraftsVisited]=useState(false);
  const [timeSettings,setTimeSettings]=useState<OrderTimeSettingsRead|null>(null),[timeError,setTimeError]=useState(''),[reload,setReload]=useState(0);
+ useForegroundWait(!timeSettings&&!timeError?'order-time-settings:entry':undefined);
  useEffect(()=>{let live=true;const controller=new AbortController();setTimeError('');void digitalRequest<OrderTimeSettingsRead>('order-time-settings','GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(live)setTimeSettings(value);}).catch(reason=>{if(live&&reason.name!=='AbortError'){setTimeError(reason.message);if(reason instanceof DigitalRequestError&&[401,403].includes(reason.status??0))onAuthorityChanged();}});return()=>{live=false;controller.abort();};},[reload,onAuthorityChanged]);
  const enhanced=timeSettings&&(timeSettings.enabled||timeSettings.record);
  useEffect(()=>{onHistoryChange?.(historyOpen&&tab==='settings');},[historyOpen,tab,onHistoryChange]);

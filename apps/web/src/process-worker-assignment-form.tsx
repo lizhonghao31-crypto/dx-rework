@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import { specialProcessLabel, specialProcessName } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import {
@@ -203,7 +204,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     }
   };
 
-  const loadCore = async () => {
+  const loadCore=async(isCurrent:()=>boolean=()=>true)=>{
     if (history) { hydrate(history.configuration, history.plan); setAssignmentOptionsLoading(false); setMessage(""); return; }
     setAssignmentOptionsLoading(true);
     const [session, config, workerPlan, loadedDetail] = await Promise.all([
@@ -214,6 +215,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         ? Promise.resolve(initialDetail)
         : request(`rework-orders/${reworkOrderId}/business-detail`, (value) => value as ProcessWorkerAssignmentDetail),
     ]);
+    if(!isCurrent())return;
     if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
     setUser(session.user); setDetail(loadedDetail); hydrate(config, workerPlan);
     const configurable = session.user.isRoot === true || moduleCanWrite(session.user, "rework") && Boolean(session.user.businessRoles?.includes("tail_supervisor") && session.user.capabilities.includes("process:configure") && session.user.capabilities.includes("work:assign"));
@@ -222,6 +224,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema.parse),
         request("work-task-options", parseWorkTaskOptions),
       ]);
+      if(!isCurrent())return;
       const issues: string[] = [];
       if (processResult.status === "fulfilled") setProcessOptions(processResult.value.processes);
       else issues.push(`工序目录加载失败：${processResult.reason instanceof Error ? processResult.reason.message : "请刷新重试"}`);
@@ -249,7 +252,15 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     setAssignmentOptionsLoading(false);
     setMessage("");
   };
-  useEffect(() => { void loadCore().catch((error: unknown) => { setAssignmentOptionsLoading(false); setMessage(error instanceof Error ? error.message : "当前节点加载失败"); }); }, [reworkOrderId]);
+  useEffect(()=>{
+    let live=true;
+    const finish=history?()=>{}:beginForegroundWait();
+    void loadCore(()=>live).catch((error:unknown)=>{
+      if(!live)return;
+      setAssignmentOptionsLoading(false);setMessage(error instanceof Error?error.message:"当前节点加载失败");
+    }).finally(finish);
+    return()=>{live=false;finish();};
+  },[reworkOrderId]);
 
   const setItem = (index: number, next: Partial<ItemForm>) => { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...next } : item)); pendingSubmit.current = null; };
   const selectCatalogProcess = (index: number, processId: string): void => {

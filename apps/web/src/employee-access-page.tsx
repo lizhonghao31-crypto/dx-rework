@@ -1,5 +1,6 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {z} from 'zod';
-import {feedbackFetch,feedbackJson,feedbackNoContent,unknownWriteResult} from './request-response-feedback.js';
+import {RequestFeedbackError,feedbackFetch,feedbackJson,feedbackNoContent,unknownWriteResult} from './request-response-feedback.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {EmployeeAccessDirectorySchema,EmployeeAccessSyncResponseSchema,EmployeeAccessRoleMutationResponseSchema} from '@dx-rework/contracts/employee-access';
 import { SearchableSelect } from "./search-select.js";
@@ -79,25 +80,45 @@ export function EmployeeAccessPage() {
   const [reading,setReading]=useState(false),[uncertain,setUncertain]=useState(false),[refreshPending,setRefreshPending]=useState(false),[notice,setNotice]=useState("");
   const working=useRef(false),readVersion=useRef(0);useDigitalDetailNavigationGuard(uncertain,Boolean(busy),working,"原权限操作结果尚未确认，离开不会撤销操作；请先核对原员工记录。仍要离开？");
   const locked=Boolean(busy)||uncertain||refreshPending;
-  const load = async (saved=false) => {
-    const version=++readVersion.current;setReading(true);
+  const activeRead=useRef<{controller:AbortController;finish:()=>void}|null>(null);
+  const load=async(saved=false)=>{
+    if(activeRead.current&&!saved)return;
+    activeRead.current?.controller.abort();activeRead.current?.finish();
+    const controller=new AbortController(),work={controller,finish:saved?()=>{}:beginForegroundWait()};
+    activeRead.current=work;
+    const init={signal:controller.signal},version=++readVersion.current;
+    setReading(true);
     setError("");
     try {
       const [nextDirectory, nextRoles, currentUser] = await Promise.all([
-        json<EmployeeAccessDirectory>("employee-access/employees"),
-        json<Role[]>("access/roles"),
-        json<CurrentUser>("access/me"),
+        json<EmployeeAccessDirectory>("employee-access/employees",init),
+        json<Role[]>("access/roles",init),
+        json<CurrentUser>("access/me",init),
       ]);
       if(version!==readVersion.current)return;
       setDirectory(nextDirectory);
       setRoles(nextRoles);
       setMe(currentUser);if(saved||refreshPending)setNotice("修改已保存，最新员工目录已重新读取。");setRefreshPending(false);
     } catch (loadError) {
-      if(version===readVersion.current)setError((saved?"修改已保存，最新员工权限资料尚未读取；只需重读，不重复提交。":"")+(loadError instanceof Error ? loadError.message : "员工权限资料尚未读取"));
-    }finally{if(version===readVersion.current)setReading(false);}
+      if(version===readVersion.current&&!controller.signal.aborted){
+        if(loadError instanceof RequestFeedbackError&&[401,403,404].includes(loadError.status??0)){
+          setDirectory(null);setRoles([]);setMe(null);
+        }
+        setError((saved?"修改已保存，最新员工权限资料尚未读取；只需重读，不重复提交。":"")+(loadError instanceof Error?loadError.message:"员工权限资料尚未读取"));
+      }
+    }finally{
+      work.finish();
+      if(activeRead.current===work){activeRead.current=null;setReading(false);}
+    }
   };
 
-  useEffect(() => { void load();return()=>{readVersion.current++;}; }, []);
+  useEffect(()=>{
+    void load();
+    return()=>{
+      readVersion.current++;
+      activeRead.current?.controller.abort();activeRead.current?.finish();activeRead.current=null;
+    };
+  },[]);
 
   const roleNameByCode = useMemo(
     () => new Map(roles.map((role) => [role.roleCode, role.displayName])),

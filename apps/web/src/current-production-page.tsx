@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {ProductionCollaborationPanel} from './production-collaboration-panel.js';
 import {ProductionPeriodPanel,ProductionPeriodControls} from './production-period-panel.js';
 import {useEffect,useRef,useState} from 'react';
@@ -29,12 +30,15 @@ export function CurrentProductionPage({navigation}:{navigation?:Readonly<{search
  const [returnNavigation]=useState(()=>{try{return readProductionNavigation(window.sessionStorage.getItem(returnKey),window.location.pathname+window.location.search,verifiedSessionIdentity(cachedVerifiedSession()));}catch{return null;}});
  const [filters,setFilters]=useState<ProductionStatisticsFilters>(()=>({...context().filters,groupBy:context().filters.groupBy??preferences().groups,drillMetric:context().filters.drillMetric??'backlog'})),[data,setData]=useState<ProductionStatisticsResponse|null>(null),[view,setView]=useState<ProductionPreferences>(()=>({...preferences(),groups:context().filters.groupBy??preferences().groups})),[busy,setBusy]=useState(false),[error,setError]=useState(()=>context().error),[refresh,setRefresh]=useState(0),[expired,setExpired]=useState(false),[drawerId,setDrawerId]=useState<string|undefined>(()=>context().drawer),[drawer,setDrawer]=useState<Drawer|null>(null),[drawerError,setDrawerError]=useState(''),[expanded,setExpanded]=useState<Set<string>>(()=>new Set(Array.isArray(window.history.state?.currentProductionExpanded)?window.history.state.currentProductionExpanded.filter((item:unknown)=>typeof item==='string').slice(0,1000):returnNavigation?.expanded??[])),[problemSearch,setProblemSearch]=useState(''),[linkWarning,setLinkWarning]=useState(()=>context().error),[poolLimit,setPoolLimit]=useState(15),[problemLimit,setProblemLimit]=useState(15);
  const ownership=useRef(new ProductionReadOwnership()),latest=useRef({query:'',session:''}),retained=useRef<ProductionStatisticsResponse|null>(null),seenRefresh=useRef(0),drawerTurn=useRef(0),returnFocus=useRef<HTMLElement|null>(null),restore=useRef(true);
+ const silentRevalidate=useRef(false);
  const query=productionQuery(filters),session=verifiedSessionIdentity(cachedVerifiedSession());latest.current={query,session};
- useEffect(()=>registerSessionInvalidator(()=>{ownership.current.invalidate();drawerTurn.current++;retained.current=null;setData(null);setDrawer(null);setError('身份或权限已变化，请重新读取有权范围');}),[]);
- useEffect(()=>{if(!navigation)return;const next=context(navigation.search);ownership.current.invalidate();setFilters({...next.filters,groupBy:next.filters.groupBy??preferences().groups,drillMetric:next.filters.drillMetric??'backlog'});setView(value=>({...value,groups:next.filters.groupBy??value.groups}));setDrawerId(next.drawer);setDrawer(null);setError(next.error);setLinkWarning(next.error);setRefresh(value=>value+1);restore.current=true;},[navigation]);
+ useEffect(()=>registerSessionInvalidator(()=>{silentRevalidate.current=true;ownership.current.invalidate();drawerTurn.current++;retained.current=null;setData(null);setDrawer(null);setError('身份或权限已变化，请重新读取有权范围');}),[]);
+ useEffect(()=>{if(!navigation)return;const next=context(navigation.search);silentRevalidate.current=false;ownership.current.invalidate();setFilters({...next.filters,groupBy:next.filters.groupBy??preferences().groups,drillMetric:next.filters.drillMetric??'backlog'});setView(value=>({...value,groups:next.filters.groupBy??value.groups}));setDrawerId(next.drawer);setDrawer(null);setError(next.error);setLinkWarning(next.error);setRefresh(value=>value+1);restore.current=true;},[navigation]);
  useEffect(()=>{try{window.localStorage.setItem(preferenceKey,JSON.stringify(view));}catch{/* View configuration remains usable without storage. */}},[view]);
  useEffect(()=>{
   const controller=new AbortController(),turn=ownership.current.begin(query,session),previous=retained.current,fresh=refresh!==seenRefresh.current;seenRefresh.current=refresh;setBusy(true);setError('');
+  const finish=silentRevalidate.current?()=>{}:beginForegroundWait();
+  silentRevalidate.current=false;
   const current=()=>ownership.current.current(turn,latest.current.query,verifiedSessionIdentity(cachedVerifiedSession()));
   const read=async()=>{
    const sameSource=previous&&productionSourceKey(previous.filters)===productionSourceKey(filters)&&!fresh&&Date.parse(previous.expiresAt)>Date.now(),snapshotId=sameSource?previous.snapshotId:filters.snapshotId;
@@ -44,22 +48,23 @@ export function CurrentProductionPage({navigation}:{navigation?:Readonly<{search
    if(!current())return;retained.current=value;setData(value);setExpired(false);setDrawer(null);
    if(restore.current){restore.current=false;requestAnimationFrame(()=>{window.scrollTo(0,Number(window.history.state?.currentProductionScroll??returnNavigation?.scroll??0));const id=window.history.state?.currentProductionFocus??returnNavigation?.focus;if(typeof id==='string'){returnFocus.current=document.getElementById(id);if(!drawerId)returnFocus.current?.focus({preventScroll:true});}});}
   };
-  void read().catch(reason=>{if(!current()||reason?.name==='AbortError')return;if(reason instanceof DigitalRequestError&&[401,403].includes(reason.status??0)){retained.current=null;setData(null);setDrawer(null);}if(reason instanceof DigitalRequestError&&reason.code==='ANALYSIS_RESULT_EXPIRED')setExpired(true);setError(reason instanceof Error?reason.message:'本次完整结果读取失败，请重试读取');}).finally(()=>{if(current())setBusy(false);});
-  return()=>{controller.abort();ownership.current.invalidate();};
+  void read().catch(reason=>{if(!current()||reason?.name==='AbortError')return;if(reason instanceof DigitalRequestError&&[401,403].includes(reason.status??0)){retained.current=null;setData(null);setDrawer(null);}if(reason instanceof DigitalRequestError&&reason.code==='ANALYSIS_RESULT_EXPIRED')setExpired(true);setError(reason instanceof Error?reason.message:'本次完整结果读取失败，请重试读取');}).finally(()=>{if(current())setBusy(false);finish();});
+  return()=>{controller.abort();ownership.current.invalidate();finish();};
  },[query,refresh,session]);
  useEffect(()=>{if(!data)return;const delay=Math.max(0,Date.parse(data.expiresAt)-Date.now()),timer=window.setTimeout(()=>setExpired(true),delay);return()=>window.clearTimeout(timer);},[data]);
  useEffect(()=>{
   if(!drawerId||!data){setDrawer(null);return;}const turn=++drawerTurn.current,snapshotId=data.snapshotId,local=data.result.rows.find(row=>row.line.lineId===drawerId),controller=new AbortController();setDrawerError('');
   if(local){setDrawer({data,row:local});return;}
-  setDrawer(null);void digitalRequest<ProductionStatisticsResponse>(`analysis?${productionQuery({...data.filters,page:1,snapshotId,drillLineId:drawerId})}`,'GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(turn!==drawerTurn.current||retained.current?.snapshotId!==snapshotId)return;const row=value.result.rows.find(item=>item.line.lineId===drawerId);if(row)setDrawer({data:value,row});else setDrawerError('本PO不在当前已应用范围内，请返回列表选择');}).catch(reason=>{if(reason?.name!=='AbortError'&&turn===drawerTurn.current)setDrawerError(reason.message);});return()=>{controller.abort();drawerTurn.current++;};
+  const finish=beginForegroundWait();
+  setDrawer(null);void digitalRequest<ProductionStatisticsResponse>(`analysis?${productionQuery({...data.filters,page:1,snapshotId,drillLineId:drawerId})}`,'GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(turn!==drawerTurn.current||retained.current?.snapshotId!==snapshotId)return;const row=value.result.rows.find(item=>item.line.lineId===drawerId);if(row)setDrawer({data:value,row});else setDrawerError('本PO不在当前已应用范围内，请返回列表选择');}).catch(reason=>{if(reason?.name!=='AbortError'&&turn===drawerTurn.current)setDrawerError(reason.message);}).finally(finish);return()=>{controller.abort();drawerTurn.current++;finish();};
  },[drawerId,data]);
  const remember=()=>window.history.replaceState({...window.history.state,currentProductionScroll:window.scrollY,currentProductionFocus:document.activeElement?.id??'',currentProductionExpanded:[...expanded]},'',window.location.href);
  const replaceUrl=(value:ProductionStatisticsFilters,selected?:string)=>window.history.replaceState(window.history.state,'',urls.pageUrl('ui/digital-analysis')+'?'+productionReturnQuery(value,{drawer:selected,group:view.groups[0]}));
  const change=(patch:FilterPatch,base=filters)=>{
   const parsed=DigitalAnalysisFilterSchema.safeParse({...base,snapshotId:undefined,page:1,...patch});if(!parsed.success){setError(parsed.error.issues[0]?.message??'筛选条件无效');return;}
-  const next=normalizeProductionFilters(parsed.data);setLinkWarning('');remember();ownership.current.invalidate();setFilters(next);setDrawerId(undefined);setDrawer(null);replaceUrl(next,undefined);
+  const next=normalizeProductionFilters(parsed.data);silentRevalidate.current=false;setLinkWarning('');remember();ownership.current.invalidate();setFilters(next);setDrawerId(undefined);setDrawer(null);replaceUrl(next,undefined);
  };
- const refreshAll=()=>{ownership.current.invalidate();setFilters(value=>normalizeProductionFilters({...value,snapshotId:undefined}));setRefresh(value=>value+1);};
+ const refreshAll=()=>{silentRevalidate.current=false;ownership.current.invalidate();setFilters(value=>normalizeProductionFilters({...value,snapshotId:undefined}));setRefresh(value=>value+1);};
  const openLine=(id:string)=>{remember();returnFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null;setDrawerId(id);replaceUrl(data?.filters??filters,id);};
  const open=(row:StatisticsPoResult)=>openLine(row.line.lineId);
  const close=()=>{drawerTurn.current++;setDrawerId(undefined);setDrawer(null);setDrawerError('');replaceUrl(data?.filters??filters,undefined);requestAnimationFrame(()=>returnFocus.current?.focus());};

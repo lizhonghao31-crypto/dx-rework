@@ -42,7 +42,7 @@ describe("sourcing form feedback", () => {
     expect(source).toContain("useDebouncedValue(search.trim(), 180)");
     expect(source).toContain("useDebouncedValue(styleName.trim(), 180)");
     expect(source).not.toContain('type="submit">搜索</button>');
-    expect(source).toContain("returnTo={listPath}");
+    expect(source).toContain("returnTo={loadedPath??listPath}");
     expect(source).toContain("const listBackPath = sourcingReturnPath(window.location.search);");
   });
   it("provides inline reason feedback and avoids sending a known-invalid decision", async () => {

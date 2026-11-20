@@ -1,3 +1,4 @@
+import {beginForegroundWait} from './foreground-loading.js';
 import {cachedVerifiedSession,refreshSession} from './auth-session.js';
 import {subscribeTodoRead} from './todo-indicator-refresh.js';
 import {TodoRoutingTransfer} from './todo-routing-transfer.js';
@@ -30,6 +31,7 @@ type LoadState =
   | {
       kind: "ready";
       activeModule: TodoModule;
+      appliedQuery: string;
       moduleCounts: TodoModuleCounts;
       page: number;
       pageSize: 15;
@@ -140,12 +142,19 @@ export function MyTodosPage() {
   const unreadCount=readIndicator?.actorId===queryOwner?readIndicator.count:null;
   useEffect(()=>{const receive=(event:Event)=>{const detail=(event as CustomEvent<{actorId:string;unreadCount?:number}>).detail,session=cachedVerifiedSession();if(session&&session!=='denied'&&detail?.actorId===session.user.id)setReadIndicator(detail.unreadCount===undefined?null:{actorId:detail.actorId,count:detail.unreadCount});};window.addEventListener('dx-rework:todo-refresh',receive);return()=>window.removeEventListener('dx-rework:todo-refresh',receive);},[]);
   const [refresh,setRefresh] = useState(0);
-  useEffect(()=>subscribeTodoRead(()=>setRefresh(value=>value+1)),[]);
+  const running=useRef<{controller:AbortController;refreshOnSettle:boolean}|null>(null);
+  const lastTarget=useRef<string|null>(null);
+  useEffect(()=>subscribeTodoRead(()=>{
+    if(running.current)running.current.refreshOnSettle=true;
+    else setRefresh(value=>value+1);
+  }),[]);
   const [routingAccess,setRoutingAccess]=useState({manage:false});
   const [busy, setBusy] = useState(false);
   const [accessibleTodoModules, setAccessibleTodoModules] = useState<ReadonlySet<TodoModule> | null>(null);
   const loadVersion = useRef(0);
   const activeQuery = useDebouncedValue(searchQuery.trim(), 250);
+  const searchReady=activeQuery===searchQuery.trim();
+  const displayedQuery=state.kind==="ready"?state.appliedQuery:activeQuery;
   useInternalReturnScroll(state.kind === "ready" && !busy);
 
   const load = async (
@@ -171,6 +180,7 @@ export function MyTodosPage() {
       setState({
         kind: "ready",
         activeModule: result.activeModule,
+        appliedQuery:query,
         moduleCounts: result.moduleCounts,
         page: result.page,
         pageSize: result.pageSize,
@@ -207,10 +217,23 @@ export function MyTodosPage() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    if(queryOwner && activeQuery===searchQuery.trim()) void load(requestedModule, activeQuery, requestedPage, controller.signal);
-    return () => controller.abort();
-  }, [activeQuery, requestedModule, requestedPage, queryOwner, searchQuery, refresh]);
+    if(!queryOwner||!searchReady){setBusy(false);return;}
+    const controller = new AbortController(),work={controller,refreshOnSettle:false};
+    const target=JSON.stringify([queryOwner,requestedModule,activeQuery,requestedPage]);
+    const finish=target===lastTarget.current?()=>{}:beginForegroundWait();
+    running.current=work;
+    void load(requestedModule,activeQuery,requestedPage,controller.signal).finally(()=>{
+      finish();
+      if(running.current!==work)return;
+      if(!controller.signal.aborted)lastTarget.current=target;
+      running.current=null;
+      if(work.refreshOnSettle)setRefresh(value=>value+1);
+    });
+    return()=>{
+      finish();controller.abort();
+      if(running.current===work)running.current=null;
+    };
+  }, [activeQuery, requestedModule, requestedPage, queryOwner, searchReady, refresh]);
 
   useEffect(()=>{
     if(!queryOwner)return;
@@ -222,7 +245,7 @@ export function MyTodosPage() {
     const restored=(event:PageTransitionEvent)=>{
       if(!event.persisted)return;
       const savedOwner=window.history.state?.dxTodoQueryUser;
-      ++loadVersion.current;setQueryOwner(null);setState({kind:"loading"});
+      ++loadVersion.current;running.current?.controller.abort();lastTarget.current=null;setQueryOwner(null);setState({kind:"loading"});
       void refreshSession().then(session=>{
         if(!mounted)return;
         if(session==="denied"||session.status!=="authorized"||savedOwner!==session.user.id){
@@ -299,9 +322,9 @@ export function MyTodosPage() {
           <div className="my-todos-modules" role="group" aria-label="待办模块">
             {visibleTodoModules.map((module) => <button
               type="button"
-              className={!activeQuery && module.id === activeModule ? "is-active" : ""}
-              aria-pressed={!activeQuery && module.id === activeModule}
-              disabled={busy}
+              className={!displayedQuery && module.id === activeModule ? "is-active" : ""}
+              aria-pressed={!displayedQuery && module.id === activeModule}
+              disabled={busy&&module.id===requestedModule&&!searchQuery.trim()}
               onClick={() => openModule(module.id)}
               key={module.id}
             ><span>{module.label}</span><strong>{formatBusinessDecimal(moduleCounts[module.id] ?? 0)}件</strong></button>)}
@@ -310,7 +333,7 @@ export function MyTodosPage() {
         </div>
       {todos.length === 0 && (
         <div className="my-todos-state my-todos-module-empty">
-          <p>{activeQuery
+          <p>{displayedQuery
             ? "未找到匹配的待办，请检查款号、供应商、跟单或事项名称。"
             : totalActionable === 0
               ? "您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。"
@@ -342,11 +365,11 @@ export function MyTodosPage() {
                       <StatusBadge tone="danger">需要转交</StatusBadge>
                       <h2>{taskTitle(todo)}</h2>
                       <p>{todo.blockedReason ?? "当前任务需要由管理人员转交。"}</p>
-                      {todo.entityType==="digital_task"&&todo.category==="digital_assignment"&&order?.styleNo&&<><p>{orderSummary}</p><a href={withTodoReturn(taskHref(todo),{q:activeQuery,module:activeModule,page})}>查看任务与人员安排</a></>}
+                      {todo.entityType==="digital_task"&&todo.category==="digital_assignment"&&order?.styleNo&&<><p>{orderSummary}</p><a href={withTodoReturn(taskHref(todo),{q:displayedQuery,module:activeModule,page})}>查看任务与人员安排</a></>}
                     </div>
                   </div>
                 ) : (
-                  <a className="my-todo-row" href={withTodoReturn(taskHref(todo),{q:activeQuery,module:activeModule,page})}>
+                  <a className="my-todo-row" href={withTodoReturn(taskHref(todo),{q:displayedQuery,module:activeModule,page})}>
                     <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
@@ -374,7 +397,7 @@ export function MyTodosPage() {
           type="button"
           className={page === 1 ? "is-active" : ""}
           aria-current={page === 1 ? "page" : undefined}
-          disabled={busy}
+          disabled={busy&&requestedPage===1}
           onClick={() => setRequestedPage(1)}
         >1</button>}
         {pageWindowStart > 2 && <span className="my-todos-pagination__ellipsis" aria-hidden="true">…</span>}
@@ -382,7 +405,7 @@ export function MyTodosPage() {
           type="button"
           className={pageNumber === page ? "is-active" : ""}
           aria-current={pageNumber === page ? "page" : undefined}
-          disabled={busy}
+          disabled={busy&&requestedPage===pageNumber}
           onClick={() => setRequestedPage(pageNumber)}
           key={pageNumber}
         >{pageNumber}</button>)}
@@ -391,7 +414,7 @@ export function MyTodosPage() {
           type="button"
           className={page === renderedTotalPages ? "is-active" : ""}
           aria-current={page === renderedTotalPages ? "page" : undefined}
-          disabled={busy}
+          disabled={busy&&requestedPage===renderedTotalPages}
           onClick={() => setRequestedPage(renderedTotalPages)}
         >{renderedTotalPages}</button>}
       </nav>

@@ -1,4 +1,6 @@
-import {lazyBusinessPage} from './lazy-business-page.js';
+import {ForegroundLoading,beginForegroundWait,useForegroundWait} from './foreground-loading.js';
+import './foreground-loading.css';
+import {lazyBusinessPage,preloadBusinessRoute} from './lazy-business-page.js';
 import {auxiliaryCatalogRequirements} from "./auxiliary-catalog-access.js";
 import { ProductionWorkspace } from "@dx-rework/ui/production";
 import {deliveryReturnPath} from './delivery-calendar-model.js';
@@ -8,12 +10,14 @@ import { patternRoomPriceRequirements, patternRoomOrderRequirements, patternRoom
 import { patternPagePath } from "./pattern-order-query.js";
 import { financePageRequirements } from "./finance-access.js";
 import { installInternalNavigation } from "./internal-navigation.js";
+import {cachedVerifiedSession} from "./auth-session.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import {
   AuthGate,
+  canOpenAuthorizedPage,
   DeniedPage,
   LoginPage,
   QrLoginPage,
@@ -109,20 +113,24 @@ type InternalLocation = Readonly<{
   hash: string;
 }>;
 
-function readInternalLocation(basePath: string): InternalLocation {
+function readInternalLocation(basePath:string,location:Pick<Location,"pathname"|"search"|"hash">=window.location):InternalLocation{
   return {
-    path: window.location.pathname.startsWith(basePath)
-      ? window.location.pathname.slice(basePath.length) || "/"
-      : window.location.pathname,
-    search: window.location.search,
-    hash: window.location.hash,
+    path:location.pathname.startsWith(basePath)?location.pathname.slice(basePath.length)||"/":location.pathname,
+    search:location.search,
+    hash:location.hash,
   };
 }
 
 function useInternalLocation(basePath: string): InternalLocation {
   const [location, setLocation] = useState(() => readInternalLocation(basePath));
 
-  useEffect(() => installInternalNavigation(basePath, () => setLocation(readInternalLocation(basePath))), [basePath]);
+  useEffect(() => installInternalNavigation(basePath, () => setLocation(readInternalLocation(basePath)), target => {
+    const session = cachedVerifiedSession();
+    if (!session || session === "denied" || session.status !== "authorized") return;
+    const ready = preloadBusinessRoute(routeContent(readInternalLocation(basePath, target)), element =>
+      element.type !== AuthGate || canOpenAuthorizedPage(session.user, element.props as ComponentProps<typeof AuthGate>));
+    return ready ? { ready, finish: beginForegroundWait() } : undefined;
+  }), [basePath]);
 
   return location;
 }
@@ -277,7 +285,7 @@ function LegacySupplierCenterRedirect() {
   return <Shell active="供应商目录"><Surface className="admin-card"><p>正在进入供应商中心…</p></Surface></Shell>;
 }
 
-export function App() { return <SessionBoundary><AppRoutes /></SessionBoundary>; }
+export function App() { return <SessionBoundary><ForegroundLoading /><AppRoutes /></SessionBoundary>; }
 
 function AppRoutes() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -285,9 +293,16 @@ function AppRoutes() {
   const { path: requestedPath, search } = navigation;
   const path = patternPagePath(requestedPath, search);
   const platformEntryReady = useInitialPlatformEntryCheck(path, search);
-  const hasReworkContext = new URLSearchParams(search).has("rework");
-  const receivingEntryBatchId = new URLSearchParams(search).get("receivingBatchId")?.trim() ?? "";
-  if (!platformEntryReady) return <PlatformEntryChecking />;
+  useForegroundWait(!platformEntryReady&&path.startsWith("/ui/")?`entry:${path}${search}`:undefined);
+  if(!platformEntryReady)return <PlatformEntryChecking/>;
+  return routeContent(navigation);
+}
+
+function routeContent(navigation:InternalLocation){
+  const {path:requestedPath,search}=navigation;
+  const path=patternPagePath(requestedPath,search);
+  const hasReworkContext=new URLSearchParams(search).has("rework");
+  const receivingEntryBatchId=new URLSearchParams(search).get("receivingBatchId")?.trim()??"";
   if (path === "/") return <HomeLanding />;
   if (path === "/auth/login") return <LoginPage />;
   if (path === "/auth/denied") return <DeniedPage />;

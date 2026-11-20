@@ -164,17 +164,24 @@ function StatePage({ tone, title, detail, children }: { tone: "info" | "warning"
   return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone={tone}>达兴组织准入</StatusBadge><h1>{title}</h1><p>{detail}</p>{children}</Surface></main>;
 }
 
+type AuthGateRequirements={
+  requiredRole?:string|undefined;
+  requiredCapability?:string|undefined;
+  requiredAnyOf?:readonly PageAccessRequirement[]|undefined;
+};
+
+export function canOpenAuthorizedPage(user:AuthorizedUser,requirements:AuthGateRequirements):boolean{
+  const {requiredRole,requiredCapability,requiredAnyOf}=requirements;
+  return hasPageAccess(user,{requiredRole,requiredCapability})
+    &&(requiredAnyOf===undefined||requiredAnyOf.some(item=>hasPageAccess(user,item)));
+}
+
 export function AuthGate({
   children,
   requiredRole,
   requiredCapability,
   requiredAnyOf,
-}: {
-  children: ReactNode;
-  requiredRole?: string | undefined;
-  requiredCapability?: string | undefined;
-  requiredAnyOf?: readonly PageAccessRequirement[] | undefined;
-}) {
+}: AuthGateRequirements & {children:ReactNode}) {
   const [state, setState] = useState<AuthGateState>(() => cachedVerifiedSession() ?? "loading");
   const [sessionReadFailed,setSessionReadFailed]=useState(()=>Boolean(cachedSessionVerificationResult()?.requestFailed));
   const [sessionReadAttempt,setSessionReadAttempt]=useState(0);
@@ -191,13 +198,7 @@ export function AuthGate({
   if (state === "loading") return <StatePage tone="info" title="正在确认身份" detail="正在确认钉钉组织与账号状态，请稍候。" />;
   if (state === "denied") return <LoginPage />;
   if (state.status === "no_role") return <StatePage tone="warning" title="尚未分配业务角色" detail="您的达兴组织身份已验证，但暂时不能读取业务数据。请联系管理员分配业务角色。"><LogoutButton /></StatePage>;
-  if (
-    !hasPageAccess(state.user, { requiredRole, requiredCapability })
-    || (
-      requiredAnyOf !== undefined
-      && !requiredAnyOf.some((requirement) => hasPageAccess(state.user, requirement))
-    )
-  ) {
+  if(!canOpenAuthorizedPage(state.user,{requiredRole,requiredCapability,requiredAnyOf})){
     return <StatePage tone="warning" title="无权访问此页面" detail="当前业务角色或权限不包含此页面；如需操作，请联系管理员核对岗位权限。" />;
   }
   return children;

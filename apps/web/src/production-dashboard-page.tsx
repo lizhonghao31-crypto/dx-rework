@@ -13,6 +13,7 @@ import { ProductionDashboardSchema, ProductionDashboardDetailSchema, type Produc
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { verifySession } from "./auth.js";
+import { beginForegroundWait } from "./foreground-loading.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { Header, Shell } from "./components.js";
 import { ListPagination } from "./list-pagination.js";
@@ -71,11 +72,22 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
   if(risk)criteria.set("risk",risk);
   const target=productionOrderId?`/${productionOrderId}${factoryQuery}`:`?${criteria}`;
   const active=useRef<{target:string;controller:AbortController}|null>(null);
+  const feedback=useRef<{finish:()=>void}|null>(null);
+  const [settled,setSettled]=useState<{target:string;feedback:{finish:()=>void}|null}|null>(null);
+  useEffect(()=>{
+    // Keep the existing feedback through a replacement filter's debounce and request.
+    // Only the displayed result for the latest filter can end that continuous wait.
+    if(!settled||!searchReady||settled.target!==target||active.current||settled.feedback!==feedback.current)return;
+    feedback.current?.finish();
+    feedback.current=null;
+  },[searchReady,settled,target]);
+  useEffect(()=>()=>{feedback.current?.finish();feedback.current=null;},[]);
   const last=useRef<{target:string;data:ProductionDashboard}|null>(null),belt=useRef<HTMLDivElement|null>(null);
   const load=useCallback(async(manual=false,changedByWrite=false)=>{
     if(!searchReady||(!changedByWrite&&active.current?.target===target))return;
     active.current?.controller.abort();
     const controller=new AbortController(),read={target,controller};
+    if(!changedByWrite&&!feedback.current)feedback.current={finish:beginForegroundWait()};
     active.current=read;setLoading(true);setError("");
     const accepts=()=>active.current===read&&!controller.signal.aborted;
     try{
@@ -99,12 +111,19 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
       }
       setError(error instanceof Error?error.message:"加载失败");
     }finally{
-      if(accepts()){active.current=null;setLoading(false);}
+      if(accepts()){
+        active.current=null;
+        setLoading(false);
+        setSettled({target,feedback:feedback.current});
+      }
     }
   },[productionOrderId,searchReady,target]);
   useEffect(()=>{
     if(searchReady)void load();
-    return()=>{active.current?.controller.abort();active.current=null;};
+    return()=>{
+      active.current?.controller.abort();
+      active.current=null;
+    };
   },[load,searchReady]);
   useEffect(()=>{if(productionOrderId)setDetail(null);},[productionOrderId,factoryQuery]);
   useEffect(()=>{if(!changed.length)return;const timer=setTimeout(()=>setChanged([]),1800);return()=>clearTimeout(timer);},[changed]);

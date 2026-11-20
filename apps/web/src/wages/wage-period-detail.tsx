@@ -4,14 +4,15 @@ import { financePageRequirements } from "../finance-access.js";
 import {
   WagePeriodDetailSchema,
   WagePeriodDetailPageSchema,
-  type WagePeriodDetailPage as PagedWagePeriod,
 } from "@dx-rework/contracts/wages";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { fixedBusinessCurrency as formatBusinessCurrency } from "../fixed-business-currency.js";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
-import {useEffect,useState} from "react";
+import {useCallback,useEffect,useState} from "react";
 import {ListPagination} from "../list-pagination.js";
 import {useLiveSearch} from "../use-live-search.js";
+import {useForegroundRead} from "../use-foreground-read.js";
+import {useForegroundWait} from "../foreground-loading.js";
 
 import { createWebUrls } from "../../url-contract.js";
 
@@ -26,20 +27,22 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
 }
 
 function WagePeriodDetailContent({ periodId }: { periodId: string }) {
-  const [detail,setDetail]=useState<PagedWagePeriod|null>(null),[message,setMessage]=useState("");
-  const [selection,setSelection]=useState({periodId,page:1}),[q,setQ]=useState(""),[search,setSearch]=useState(""),[revision,setRevision]=useState(0);
+  const [selection,setSelection]=useState({periodId,page:1}),[q,setQ]=useState(""),[search,setSearch]=useState("");
   const page=selection.periodId===periodId?selection.page:1,setPage=(page:number)=>setSelection({periodId,page});
   const live=useLiveSearch(q,search,value=>{setSearch(value);setPage(1);});
-  const load=()=>setRevision(value=>value+1);
+  const read=useCallback(async(signal:AbortSignal)=>{
+    const response=await feedbackFetch(apiUrl(`wage-periods/${periodId}?`+new URLSearchParams({page:String(page),q:search})),
+      {credentials:"include",headers:{accept:"application/json"},signal});
+    return feedbackJson(response,"GET",value=>WagePeriodDetailPageSchema.parse(value));
+  },[periodId,page,search]);
+  const report=useForegroundRead(periodId,JSON.stringify([page,search]),read,true);
+  useForegroundWait(q.trim()===search?report.foregroundKey:undefined);
+  const detail=report.value,message=report.error?.message??"",load=report.retry;
   useEffect(()=>{
-    const controller=new AbortController();setDetail(null);setMessage("");
-    void feedbackFetch(apiUrl(`wage-periods/${periodId}?`+new URLSearchParams({page:String(page),q:search})),{credentials:"include",headers:{accept:"application/json"},signal:controller.signal})
-      .then(response=>feedbackJson(response,"GET",value=>WagePeriodDetailPageSchema.parse(value)))
-      .then(value=>{if(!controller.signal.aborted)setDetail(value);})
-      .catch((error:unknown)=>{if(!controller.signal.aborted)setMessage(error instanceof Error?error.message:"工资详情加载失败");});
-    return()=>controller.abort();
-  },[periodId,page,search,revision]);
-  useEffect(()=>{if(detail&&detail.page>Math.max(1,Math.ceil(detail.totalCount/15)))setSelection({periodId,page:Math.max(1,Math.ceil(detail.totalCount/15))});},[detail,periodId]);
+    if(report.waiting||!detail)return;
+    const lastPage=Math.max(1,Math.ceil(detail.totalCount/15));
+    if(detail.page>lastPage)setSelection({periodId,page:lastPage});
+  },[detail,periodId,report.waiting]);
 
   const period=detail?.period,items=detail?.items??[];
   return (
@@ -52,7 +55,7 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
       </header>
 
       <Surface><InsetField label="搜索本期工资明细" value={q} type="search" onChange={event=>setQ(event.target.value)} onCompositionStart={live.onCompositionStart} onCompositionEnd={live.onCompositionEnd} placeholder="工人 / 返工单 / 款号 / 工序" />{detail&&<p>{formatBusinessDecimal(detail.totalCount)} 条当前结果</p>}</Surface>
-      {!detail&&<Surface><p role={message?"alert":"status"}>{message||"正在读取工资明细…"}</p>{message&&<Button onClick={load}>重新读取工资详情</Button>}</Surface>}
+      {!detail&&<Surface><p role={message?"alert":"status"}>{message||"正在读取工资明细…"}</p>{message&&<Button disabled={report.waiting} onClick={load}>重新读取工资详情</Button>}</Surface>}
       {period&&<Surface className="wage-summary">
         <dl>
           <dt>工人 / 明细</dt><dd>{formatBusinessDecimal(period.personCount)} / {formatBusinessDecimal(period.sourceItemCount)}</dd>

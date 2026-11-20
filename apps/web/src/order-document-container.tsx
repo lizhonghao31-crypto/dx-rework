@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {developmentFieldChapter} from "./digital-development-validation.js";
 import {DigitalReadFailure} from './digital-read-failure.js';
 import {useEffect,useState,useCallback,useRef,type ReactNode} from 'react';
@@ -49,14 +50,17 @@ export function OrderDocumentContainer({initial,onClose,initialCategory,onCatego
  const selectChapter=(value:string)=>{setChapter(value);rememberDigitalDetailContext({documentChapter:value});};
  const [toolbar,setToolbar]=useState<HTMLElement|null>(null);
  useEffect(()=>{
-  let live=true;setDirectory(null);setError(null);
-  void (taskId?digitalRequest<DigitalTaskDocuments>(`tasks/${taskId}/documents`).then(value=>Object.fromEntries(Object.entries(value).map(([kind,reference])=>[kind,reference.state==='published'?{state:'available',id:reference.id,version:reference.version}:{state:reference.state}])) as Directory):digitalRequest<Directory>(`document-directory/${initial.kind==='development'?'source':'order'}/${initial.id}`)).then(value=>{
-   if(!live)return;setDirectory(value);
+  const controller=new AbortController(),finish=beginForegroundWait();
+  setDirectory(null);setError(null);
+  const read={signal:controller.signal};
+  void (taskId?digitalRequest<DigitalTaskDocuments>(`tasks/${taskId}/documents`,"GET",undefined,undefined,read).then(value=>Object.fromEntries(Object.entries(value).map(([kind,reference])=>[kind,reference.state==='published'?{state:'available',id:reference.id,version:reference.version}:{state:reference.state}])) as Directory):digitalRequest<Directory>(`document-directory/${initial.kind==='development'?'source':'order'}/${initial.id}`,"GET",undefined,undefined,read)).then(value=>{
+   if(controller.signal.aborted)return;setDirectory(value);
    const query=new URLSearchParams(window.location.search),context=readDigitalDetailContext(window.location.search),currentCategory=query.getAll('documentCategory').length===1&&(documentCategories as readonly string[]).includes(query.get('documentCategory')??'')?context.category:initialCategory??initial.kind;
    const kind=currentCategory==='images'?'development':Object.hasOwn(documentNames,currentCategory)?currentCategory as DocumentKind:readDocumentKind(window.location.search)??initial.kind;
    if(!kind)return;const reference=value[kind];if(reference.state==='available')setSelection({kind,id:reference.id,version:isCurrentDocumentVersion(kind,window.location.search)?undefined:readDocumentVersion(kind,window.location.search)??(taskId?reference.version:kind===initial.kind?initial.version:reference.version)});
    if(kind!=='instruction')setChapter(context.chapter&&documentChapters[kind].some(([id])=>id===context.chapter)?context.chapter:kind==='budget'?'budget-basic':'development-images');
-  }).catch(reason=>{if(live)setError(reason);});return()=>{live=false;};
+  }).catch(reason=>{if(!controller.signal.aborted)setError(reason);}).finally(finish);
+  return()=>{controller.abort();finish();};
  },[initial.kind,initial.id,initial.version,taskId,directoryRetry]);
  const remember=(next:DocumentSelection,category:DocumentCategory)=>{
   // The route identifies the original source/order/task. Directory references
