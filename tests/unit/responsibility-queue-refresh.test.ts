@@ -1,5 +1,22 @@
 import { readdir, readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { invalidateSession, sessionCacheVersion, verifySession } from "../../apps/web/src/auth-session.js";
+import { markTodoIndicatorRead, readTodoIndicator } from "../../apps/web/src/todo-indicator-read.js";
+import { installTodoIndicatorRefresh, publishTodoRead } from "../../apps/web/src/todo-indicator-refresh.js";
+
+afterEach(() => {
+  invalidateSession();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+const authorized = (id: string, capabilities = ["todo:view"]) => Response.json({
+  status: "authorized", user: { id, displayName: "TEST", capabilities },
+});
+const indicator = (actorId: string, pendingCount: number) => Response.json(
+  { pendingCount, unreadCount: pendingCount },
+  { headers: { "x-dx-rework-actor-id": actorId } },
+);
 
 describe("web refresh policy", () => {
   it("keeps business queues manual-refresh while allowing the lightweight todo indicator", async () => {
@@ -39,3 +56,123 @@ describe("web refresh policy", () => {
   });
 });
 
+
+describe("todo indicator refresh", () => {
+  it("pauses hidden polling, coalesces visibility triggers and follows a read saved during an older request", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(authorized("first")));
+    await verifySession();
+    const tab = new EventTarget();
+    const document = Object.assign(new EventTarget(), { visibilityState: "visible" as "hidden" | "visible" });
+    vi.stubGlobal("window", Object.assign(tab, { setInterval, clearInterval }));
+    vi.stubGlobal("document", document);
+
+    const first = Promise.withResolvers<void>();
+    const refresh = vi.fn<() => Promise<void>>().mockResolvedValueOnce(undefined)
+      .mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
+    const stop = installTodoIndicatorRefresh(refresh);
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      document.visibilityState = "hidden";
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      document.visibilityState = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(refresh).toHaveBeenCalledTimes(2);
+      document.dispatchEvent(new Event("visibilitychange"));
+      publishTodoRead("someone-else");
+      publishTodoRead("first");
+      publishTodoRead("first");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(refresh).toHaveBeenCalledTimes(2);
+      first.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(refresh).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(refresh).toHaveBeenCalledTimes(4);
+    } finally {
+      stop();
+    }
+    await vi.advanceTimersByTimeAsync(120_000);
+    document.dispatchEvent(new Event("visibilitychange"));
+    publishTodoRead("first");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refresh).toHaveBeenCalledTimes(4);
+  });
+
+  it("shares reads within the current identity and discards old responses across permission or actor changes", async () => {
+    const stale = Promise.withResolvers<Response>();
+    const fresh = Promise.withResolvers<Response>();
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(authorized("first"))
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce(authorized("second"))
+      .mockReturnValueOnce(fresh.promise)
+      .mockResolvedValueOnce(indicator("second", 3))
+      .mockResolvedValueOnce(authorized("second", []));
+    vi.stubGlobal("fetch", fetch);
+
+    await verifySession();
+    const firstEpoch = sessionCacheVersion();
+    const first = readTodoIndicator("first", firstEpoch);
+    expect(readTodoIndicator("first", firstEpoch)).toBe(first);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    await verifySession(true);
+    const secondEpoch = sessionCacheVersion();
+    expect(fetch.mock.calls[1]![1].signal.aborted).toBe(true);
+    const second = readTodoIndicator("second", secondEpoch);
+    stale.resolve(indicator("wrong-actor", 900));
+    await expect(first).resolves.toBeNull();
+    expect(readTodoIndicator("second", secondEpoch)).toBe(second);
+    fresh.resolve(indicator("second", 2));
+    await expect(second).resolves.toMatchObject({ pendingCount: 2, unreadCount: 2 });
+
+    await expect(readTodoIndicator("second", secondEpoch)).resolves.toMatchObject({ pendingCount: 3 });
+    await verifySession(true);
+    await expect(readTodoIndicator("second", sessionCacheVersion())).resolves.toBeNull();
+    await expect(readTodoIndicator("first", firstEpoch)).resolves.toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(6);
+  });
+
+  it("retains one read-triggered refresh when the original Shell unmounts before its response", async () => {
+    vi.useFakeTimers();
+    const held=Promise.withResolvers<Response>();
+    const fetch=vi.fn().mockResolvedValueOnce(authorized("first"))
+      .mockReturnValueOnce(held.promise)
+      .mockResolvedValueOnce(Response.json({pendingCount:1,unreadCount:0},{headers:{"x-dx-rework-actor-id":"first"}}));
+    vi.stubGlobal("fetch",fetch);
+    await verifySession();
+    const tab=new EventTarget(),doc=Object.assign(new EventTarget(),{visibilityState:"visible"});
+    vi.stubGlobal("window",Object.assign(tab,{setInterval,clearInterval}));
+    vi.stubGlobal("document",doc);
+    const epoch=sessionCacheVersion(),seen=vi.fn();
+    const mount=()=>{
+      let mounted=true;
+      const stop=installTodoIndicatorRefresh(async ()=>{
+        const value=await readTodoIndicator("first",epoch);
+        if(mounted)seen(value);
+      },()=>markTodoIndicatorRead("first",epoch));
+      return ()=>{mounted=false;stop();};
+    };
+    const stopFirst=mount();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    publishTodoRead("first");
+    stopFirst();
+    const stopSecond=mount();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      held.resolve(indicator("first",1));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(seen).toHaveBeenCalledExactlyOnceWith({pendingCount:1,unreadCount:0});
+    } finally {
+      stopSecond();
+    }
+  });
+});
