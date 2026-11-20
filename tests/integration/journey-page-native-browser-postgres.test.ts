@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {cockpitHomeBrowser,homeReady} from '../acceptance/m01-cockpit-home-native-browser.js';
-import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {scheduleCanAdvance,type CockpitHomeResult,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
@@ -55,6 +55,45 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
    expect(response.status(),await response.text()).toBe(200);
    const detail=await response.json() as OrderJourney;
    expect(detail).toMatchObject({id:order.id,cockpitCreation:order.cockpitCreation,display:{mainState:order.display?.mainState}});
+  }finally{await context.close();}
+ });
+ it('keeps the complete authorized home selection, current nodes and PO facts in the smaller home response',async()=>{
+  const {context,page}=await h.open(h.fixture.people.merchandiser!.actorId);try{
+   for(const conditions of [{},{page:'2'},{search:'TEST-R3-HOME-01'}]){
+    const [full,compact]=await Promise.all([h.read(page,conditions),h.read(page,{...conditions,view:'home'})]);
+    const summary=compact as CockpitHomeResult;
+    expect(Number.isFinite(Date.parse(full.asOf))).toBe(true);
+    expect(Number.isFinite(Date.parse(summary.asOf))).toBe(true);
+    // Independent live requests can observe different milliseconds.
+    const pageShape=(result:CockpitHomeResult)=>({...result,items:undefined,asOf:undefined});
+    expect(pageShape(summary)).toEqual(pageShape(full));
+    const fullOrders=full.items,homeOrders=summary.items;
+    expect(homeOrders.map(order=>order.id)).toEqual(fullOrders.map(order=>order.id));
+    expect(homeOrders.length).toBeGreaterThan(0);
+    for(const order of homeOrders){
+     const original=fullOrders.find(candidate=>candidate.id===order.id)!;
+     const atCurrentNodes=(input:OrderJourney['stages'])=>input.map(stage=>({...stage,nodes:stage.nodes.filter(node=>node.current)}));
+     const withoutObservationStamp=(value:unknown)=>JSON.stringify(value,(key,member)=>key==='asOf'?undefined:member);
+     expect(withoutObservationStamp(order.stages)).toBe(withoutObservationStamp(atCurrentNodes(original.stages)));
+     expect(order.display?.mainState).toBe(original.display?.mainState);
+     expect(order.cockpitFacts).toEqual(original.cockpitFacts);
+     expect(order.lines).toEqual(original.lines);
+     expect(order.poDeliveryDates).toEqual(original.poDeliveryDates);
+     expect(order.deliveryRisks).toEqual(original.deliveryRisks);
+     expect(order.businessProgress?.quantities).toEqual(original.businessProgress?.quantities);
+     expect(order).not.toHaveProperty('supervision');
+     expect(order.visualProgress).not.toHaveProperty('stages');
+     expect(order.businessProgress).not.toHaveProperty('requirements');
+     if(original.fixedSchedule){
+      const schedule=order.fixedSchedule!;
+      expect(schedule).toHaveProperty('clockCanAdvance',scheduleCanAdvance(original.fixedSchedule));
+      expect(schedule.scopes.map(scope=>scope.completionEstimate)).toEqual(original.fixedSchedule.scopes.map(scope=>scope.completionEstimate));
+      expect(schedule.framework?.scopes.map(scope=>scope.customerDate)).toEqual(original.fixedSchedule.framework?.scopes.map(scope=>scope.customerDate));
+      for(const scope of schedule.scopes)expect(scope).not.toHaveProperty('nodes');
+     }
+    }
+    expect(Buffer.byteLength(JSON.stringify(summary))).toBeLessThan(Buffer.byteLength(JSON.stringify(full)));
+   }
   }finally{await context.close();}
  });
  it('enters and exits the current instruction action only around the original eligible publication',async()=>{
@@ -195,8 +234,10 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
   }});
   try{
    const {page}=tab,identity=page.locator('.digital-task-identity');
-   await expect.poll(()=>historyReads).toBe(1);
+   // This heading is based on the completed task read. The first history
+   // response is still held, so its request can start without gating the body.
    await identity.getByRole('heading',{name:style,exact:true}).waitFor();
+   await expect.poll(()=>historyReads,{timeout:12_000}).toBe(1);
    const history=page.locator('details').filter({has:page.getByText('历史记录与核实',{exact:true})}).last();
    await history.locator('summary').click();
    await history.getByRole('status').getByText('正在读取历史记录…',{exact:true}).waitFor();

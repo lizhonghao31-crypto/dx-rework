@@ -306,7 +306,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     try{
      const current=tab.page.locator('.cockpit-current-summary');await current.waitFor();
      await expect.poll(()=>current.innerText()).toContain('终止前超时4小时');
-     expect(await current.innerText()).toContain(new Date(deadline).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));
+     const originalDeadline=new Date(deadline).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});
+     const details=tab.page.getByRole('region',{name:'当前节点资料',exact:true});
+     const deadlineLine=details.locator('dl > div').filter({has:tab.page.getByText('原任务截止：',{exact:true})});
+     await expect.poll(()=>deadlineLine.allTextContents()).toEqual([expect.stringContaining(originalDeadline)]);
+     expect(await current.innerText()).not.toContain(originalDeadline);
      expect(await tab.page.getByRole('link',{name:'进入该节点办理',exact:true}).count()).toBe(0);
     }finally{await tab.context.close();}
    }

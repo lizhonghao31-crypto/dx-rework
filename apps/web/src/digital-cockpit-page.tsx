@@ -20,7 +20,7 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  const returnContextUrl=(context:CockpitContext)=>journeyReturnUrl(context)+(calendarReturn?'&'+new URLSearchParams({deliveryReturn:calendarReturn}):'')+(optedOut?'&cockpitAstryx=off':'');
  const [context,setContext]=useState<CockpitContext>(()=>({...cockpitContext(window.location.search),scope:cockpitContext(window.location.search).scope??'production'})),[refresh,setRefresh]=useState(0),[contextError,setContextError]=useState(''),[notice,setNotice]=useState('');
  const [searchDraft,setSearchDraft]=useState({value:context.search,pending:false});
- const reads=useCockpitReads(context,refresh),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
+ const reads=useCockpitReads(context,refresh,'home'),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
  const session=cachedVerifiedSession(),canDelete=Boolean(session&&session!=='denied'&&session.status==='authorized'&&session.user.isRoot);
  const ready=context.selected?Boolean(reads.detail)&&!reads.detailLoading:Boolean(reads.data)&&!['preparing','loading'].includes(reads.listPhase);
  // Live observation advances visible time locally, not the whole query.

@@ -4,7 +4,7 @@ import {CockpitOrderDeletion} from './cockpit-order-deletion.js';
 import {Button} from '@dx-rework/ui';
 import {cockpitScheduleReason} from './cockpit-fixed-schedule.js';
 import {useEffect,useState} from 'react';
-import {type JourneyNode,type JourneyResult,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {type JourneyNode,type CockpitHomeResult,type CockpitHomeOrder} from '@dx-rework/contracts/digital-production-journey';
 import {StatusBadge} from '@dx-rework/ui';
 import {BusinessTable,Pagination} from '@dx-rework/ui/production';
 import {CockpitPhoto} from './cockpit-photo-preview.js';
@@ -19,24 +19,24 @@ import './cockpit-home.css';
 import './cockpit-home-r5.css';
 
 const stateLabels={closed:'已特殊结案',completed:'整单已完成',overdue:'逾期',due_soon:'临期',active:'进行中',not_started:'状态待核',cancelled:'已取消'};
-function Task({node,lines,showBlocker=true}:{node:JourneyNode;lines:OrderJourney['lines'];showBlocker?:boolean}){
+function Task({node,lines,showBlocker=true}:{node:JourneyNode;lines:CockpitHomeOrder['lines'];showBlocker?:boolean}){
  const result=frameworkResponsibility(node,undefined);
  const stopped=nodeTerminationLabel(node);
  const status=stopped??(node.risks.includes('overdue')?'逾期':node.risks.includes('due_soon')?'临期':node.state==='blocked'?'受阻':node.state==='active'?'进行中':'等待前置');
  return <><span className="cockpit-home-task-heading"><strong>{node.label}</strong><StatusBadge tone={stopped?'neutral':node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge></span><small>{cockpitNodeOwner(node)}</small><small className="cockpit-home-task-date"><span>计划</span><CockpitPlanDates node={node} lines={lines}/></small><small className="cockpit-home-task-date"><span>实际</span>{node.state==='completed'?<CockpitActualDates node={node} lines={lines} short/>:'未完成'}</small>{Boolean(node.fixedTargets?.length)&&<small><CockpitTargetDifference nodes={[node]} lines={lines}/> · {result.text}</small>}{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
 }
-function HomePos({order,onOpen}:{order:OrderJourney;onOpen:()=>void}){
+function HomePos({order,onOpen}:{order:CockpitHomeOrder;onOpen:()=>void}){
  const lines=sortedCockpitPoLines(order);
  return <div className="cockpit-home-pos">{lines.slice(0,2).map(line=><div key={line.id}><strong title={`${line.po||'PO待补'} / ${line.color} / ${line.orderedQuantity.toLocaleString()}件`} tabIndex={0}>{line.po||'PO待补'} / {line.color} / {line.orderedQuantity.toLocaleString()}件</strong><small>出货 <time>{order.poDeliveryDates?.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate??'—'}</time></small></div>)}{lines.length>2&&<button type="button" className="journey-text-action" onClick={onOpen}>另 {lines.length-2} 个PO，查看订单</button>}{!lines.length&&<span>—</span>}</div>;
 }
-export function CockpitHome({data,error,context,onChange,canDelete=false,onDeleted}:{canDelete?:boolean;onDeleted?:(()=>void)|undefined;data:JourneyResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
+export function CockpitHome({data,error,context,onChange,canDelete=false,onDeleted}:{canDelete?:boolean;onDeleted?:(()=>void)|undefined;data:CockpitHomeResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
  const query=cockpitQuery(context),[riskSelection,setRiskSelection]=useState<{id:string;query:string}|null>(null);
  const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[deleting,setDeleting]=useState<string[]|null>(null);
  const pageIds=data?.items.map(item=>item.id)??[];
  const toggle=(id:string)=>setSelected(items=>items.includes(id)?items.filter(value=>value!==id):items.length<200?[...items,id]:items);
  const riskOrder=riskSelection?.query===query?data?.items.find(order=>order.id===riskSelection.id):undefined;
  useEffect(()=>{if(!riskOrder)setRiskSelection(null);},[riskOrder]);
- const enter=(order:OrderJourney,node?:JourneyNode)=>onChange({selected:order.id,...(node?{round:undefined,expanded:node.stage,focus:node.instanceId,row:undefined}:context.stage?{round:undefined,expanded:context.stage,focus:undefined,row:undefined}:{})},true);
+ const enter=(order:CockpitHomeOrder,node?:JourneyNode)=>onChange({selected:order.id,...(node?{round:undefined,expanded:node.stage,focus:node.instanceId,row:undefined}:context.stage?{round:undefined,expanded:context.stage,focus:undefined,row:undefined}:{})},true);
  return <section className="dx-production-panel journey-orders cockpit-home" aria-label="订单列表" aria-busy={!data&&!error}>
   <div className="journey-section-title"><h2>订单总览</h2>{canDelete&&!selecting&&<CockpitButton variant="secondary" onClick={()=>setSelecting(true)}>批量删除</CockpitButton>}</div>
   {canDelete&&selecting&&<div className="cockpit-delete-toolbar"><strong>已选 {selected.length} 单</strong><button className="journey-text-action" onClick={()=>setSelected([])}>清空选择</button><span className="spacer"/><Button variant="secondary" onClick={()=>{setSelecting(false);setSelected([]);}}>退出选择</Button><Button className="cockpit-delete-danger" disabled={!selected.length} onClick={()=>setDeleting([...selected])}>删除所选（{selected.length}）</Button></div>}

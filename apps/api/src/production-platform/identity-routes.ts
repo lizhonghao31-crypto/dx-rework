@@ -3,6 +3,7 @@ import {registerDeliveryCalendarRoutes} from './delivery-calendar-routes.js';
 import {registerOrderTimeRequestRoutes} from './order-time-request-routes.js';
 import type {OrderTimeRequestService} from './order-time-request-service.js';
 import type {DeliveryCalendarQuery} from './delivery-calendar-query.js';
+import {projectCockpitHome} from './journey-home-projection.js';
 import {journeyMeasure} from '../platform/journey-diagnostic.js';
 import {registerQcProductionProgressRoutes} from './qc-production-progress-routes.js';
 import type {QcProductionProgressService} from './qc-production-progress-service.js';
@@ -11,7 +12,7 @@ import type {ProductionReadinessService} from './production-readiness-service.js
 import type { DigitalJourneyQuery } from "./journey-query.js";
 import { DevelopmentWorkspaceQuery } from "./development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
-import { JourneyFilterSchema,JourneyLogFilterSchema,NodeMaterialsQuerySchema } from "@dx-rework/contracts/digital-production-journey";
+import { JourneyFilterSchema,JourneyListFilterSchema,JourneyLogFilterSchema,NodeMaterialsQuerySchema } from "@dx-rework/contracts/digital-production-journey";
 import { registerDigitalAnalysisRoutes } from "./reporting-routes.js";
 import type { DigitalAnalysisQuery } from "./reporting-query.js";
 import type { DigitalCockpitQuery } from "./cockpit-query.js";
@@ -123,7 +124,12 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys);
     app.get("/digital-production/workspaces/designer", async request => workspaces.designer(await actor(request), parse(DevelopmentWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
-    app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await journeyMeasure('route_auth',()=>actor(request)), parse(JourneyFilterSchema, request.query)));
+    app.get("/digital-production/journeys", async request => {
+      const trusted=await journeyMeasure('route_auth',()=>actor(request));
+      const {view,...filter}=parse(JourneyListFilterSchema,request.query);
+      const result=await dependencies.journeys!.list(trusted,filter);
+      return view==='home'?projectCockpitHome(result):result;
+    });
     app.post('/digital-production/journeys/:id/refresh',async request=>dependencies.journeys!.refreshOne(await actor(request),id(request,'id')));
     app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/:id/node-materials", async request => {

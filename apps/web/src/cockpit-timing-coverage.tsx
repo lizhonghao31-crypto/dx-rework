@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {JOURNEY_COVERAGE_KEYS,JOURNEY_PENDING_COVERAGE_KEYS,type JourneyCoverage,type JourneyResult} from '@dx-rework/contracts/digital-production-journey';
+import {JOURNEY_COVERAGE_KEYS,JOURNEY_PENDING_COVERAGE_KEYS,type JourneyCoverage,type CockpitHomeResult} from '@dx-rework/contracts/digital-production-journey';
 import {Button} from '@dx-rework/ui';
 import {Pagination} from '@dx-rework/ui/production';
 import {CockpitHomeDialog} from './cockpit-home-dialog.js';
@@ -23,7 +23,7 @@ function CoverageOrders({context,category,onOpen,onBack}:{context:CockpitContext
  </div>;
 }
 
-export function CockpitTimingCoverage({data,context,onClose,onOpen}:{data:JourneyResult;context:CockpitContext;onClose:()=>void;onOpen:(id:string)=>void}){
+export function CockpitTimingCoverage({data,context,onClose,onOpen}:{data:Pick<CockpitHomeResult,'supervision'>;context:CockpitContext;onClose:()=>void;onOpen:(id:string)=>void}){
  const [category,setCategory]=useState<JourneyCoverage['key']|null>(null);
  const keys=context.kpi==='todo'?JOURNEY_PENDING_COVERAGE_KEYS:JOURNEY_COVERAGE_KEYS;
  return <CockpitHomeDialog title="待补资料" onClose={onClose}>
