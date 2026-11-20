@@ -10,7 +10,8 @@
         "apps/api/src/production-platform/bulk-preparation-service.ts",
         "apps/api/src/production-platform/journey-query.ts",
         "apps/api/src/production-platform/production-readiness-service.ts",
-        "tests/integration/journey-fact-model-postgres.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "oldTests": [
         "tests/integration/journey-fact-model-postgres.test.ts",
@@ -19,7 +20,7 @@
       ],
       "initialization": "沿用旧产前门槛、截面的业务时间、真实制单和任务事实。管理角色仍用同一技术与任务授权，历史和工作台入口继续读各自完整详情。",
       "dateAndPermission": "全范围权限、当前责任、已采用计划和历史首次时间沿原来源，Root、管理、PMC 与原相关普通员工范围保留。",
-      "expectation": "原生有权任务、裁片、责任、时效、待办、风险、汇总和分页完整相同。不重复组装无消费者的领料历史与工作台回执。",
+      "expectation": "原生有权任务、裁片、责任、时效、待办、风险、汇总和分页完整相同。不重复组装无消费者的领料历史与工作台回执。 只更新实际变动的位点，逐字段保留已批准的 P02 冻结和审计边界以及原人工证据。",
       "writes": [
         "apps/api/src/production-platform/bulk-preparation-service.ts",
         "apps/api/src/production-platform/journey-query.ts",
@@ -29,7 +30,8 @@
       ],
       "checks": [
         "pg-native-facts",
-        "permission-unit"
+        "permission-unit",
+        "inventory-annotation-parity"
       ]
     }
   ],
@@ -77,6 +79,29 @@
         {
           "format": "vitest-json",
           "sha256": "039cb671901762e99e0b52f44467436cbeb0d529084eadda2fb38e15cccfb291"
+        }
+      ]
+    },
+    {
+      "id": "inventory-annotation-parity",
+      "command": "node --test /tmp/dx-performance-v7/pr10b/time-inventory-retains-review.test.mjs",
+      "context": "基线对照实际仓库文件，验证原 P02 注记和批准来源完全一致，只更新本次影响的源文本位点；同时核对正常生成器校验。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr10b/inventory-proof.log",
+      "logSha256": "d8db703284701170d80970d9c6e735552774ad4c76995b6e40b3aea92790511d",
+      "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
+      "testedHead": "ee8ae871fb9dd59dfdfeb90dabdb0d129b3c42ce",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-20T17:34:56.757Z",
+      "endedAt": "2026-11-20T17:34:57.457Z",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "d8db703284701170d80970d9c6e735552774ad4c76995b6e40b3aea92790511d"
         }
       ]
     }
