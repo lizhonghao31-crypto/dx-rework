@@ -75,8 +75,21 @@ export const selectProduction = `SELECT production.production_order_id,productio
   FROM sourcing_production_orders production
   JOIN sourcing_cases source_case USING(sourcing_case_id)
   JOIN LATERAL (SELECT sourcing_factory_order_status(production.production_order_id) AS status) transition ON true`;
+const factoryProductionFrom=(relation:'sourcing_production_factory_orders'|'dashboard_page'='sourcing_production_factory_orders')=>` FROM ${relation} production JOIN sourcing_cases source_case USING(sourcing_case_id)
+ JOIN LATERAL (SELECT status FROM sourcing_production_transitions transition WHERE transition.production_order_id=production.production_order_id
+  AND transition.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id ORDER BY sequence DESC LIMIT 1) transition ON true`;
+
+export function selectFactoryDashboardCandidates(withPoDeadlines:boolean,withPrevious:boolean){
+ const firstStyle=withPrevious?"sourcing_current_first_style(production.sourcing_case_id)":"NULL";
+ return `SELECT production.production_order_id,production.factory_decision_id,production.sourcing_case_id,production.quantity,production.supplier_id,
+  production.supplier_name_snapshot,production.delivery_date::text AS delivery_date,transition.status,
+  ${firstStyle} AS first_style_no
+  ${withPoDeadlines?`,${selectPoDeliveryDates},${selectPoDeliveryClosed}`:""}
+  ${factoryProductionFrom()}`;
+}
+
 /** Each factory is an execution of the same order; no new production or actual quantity ledger. */
-export const selectFactoryProduction = `SELECT production.*,${selectPoDeliveryDates},${selectPoDeliveryClosed},sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
+const factoryProjection=(relation:'sourcing_production_factory_orders'|'dashboard_page')=>`SELECT production.*,${selectPoDeliveryDates},${selectPoDeliveryClosed},sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
  source_case.deleted_at IS NOT NULL AS source_case_archived,transition.status,
  sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,
  production.delivery_date::text AS delivery_date,
@@ -88,9 +101,10 @@ export const selectFactoryProduction = `SELECT production.*,${selectPoDeliveryDa
   FROM sourcing_production_lines line JOIN current_sourcing_case_lines identity ON identity.sourcing_case_id=production.sourcing_case_id AND identity.position=line.position
   JOIN sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation ON allocation.position=line.position
   WHERE line.production_order_id=production.production_order_id) AS lines
- FROM sourcing_production_factory_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
- JOIN LATERAL (SELECT status FROM sourcing_production_transitions transition WHERE transition.production_order_id=production.production_order_id
-  AND transition.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id ORDER BY sequence DESC LIMIT 1) transition ON true`;
+ ${factoryProductionFrom(relation)}`;
+
+export const selectFactoryProduction=factoryProjection('sourcing_production_factory_orders');
+export const selectFactoryDashboardPage=factoryProjection('dashboard_page');
 
 export const toOrder = (row: ProductionRow): SourcingProductionOrder => SourcingProductionOrderSchema.parse({
   ...(row.factory_decision_id===undefined?{}:{factoryDecisionId:row.factory_decision_id}),

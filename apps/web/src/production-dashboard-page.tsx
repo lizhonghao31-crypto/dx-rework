@@ -7,12 +7,13 @@ import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { ProductionReceiptSummary } from "./production-closure-ui.js";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { z } from "zod";
 import { ProductionDashboardSchema, ProductionDashboardDetailSchema, type ProductionDashboard, type ProductionDashboardItem } from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { verifySession } from "./auth.js";
+import { useDebouncedValue } from "./use-debounced-value.js";
 import { Header, Shell } from "./components.js";
 import { ListPagination } from "./list-pagination.js";
 import { createWebUrls } from "../url-contract.js";
@@ -25,9 +26,14 @@ import "./production-board.css";
 const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 const number=(value:number)=>formatBusinessDecimal(value);
 const timestamp=(value:string)=>shanghaiBusinessTime(value);
-async function request<T>(path:string,schema:z.ZodType<T>) {
-  const response=await fetch(apiUrl(`production-dashboard${path}`),{credentials:"include",cache:"no-store",headers:{accept:"application/json"}});
-  const body=await response.json();if(!response.ok)throw new Error(body?.error?.message??"看板加载失败，请重试");return schema.parse(body);
+class DashboardReadError extends Error {
+  constructor(message:string, readonly status:number){super(message);}
+}
+async function request<T>(path:string,schema:z.ZodType<T>,signal:AbortSignal) {
+  const response=await fetch(apiUrl(`production-dashboard${path}`),{signal,credentials:"include",cache:"no-store",headers:{accept:"application/json"}});
+  const body=await response.json().catch(()=>null);
+  if(!response.ok)throw new DashboardReadError(body?.error?.message??"看板加载失败，请重试",response.status);
+  return schema.parse(body);
 }
 export function ProductionProgressBars({item,motion=false}:{item:ProductionDashboardItem;motion?:boolean}) {
   const p=item.progress,node=useRef<HTMLDivElement|null>(null),[inView,setInView]=useState(false);
@@ -55,22 +61,51 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
   const [visible,setVisible]=useState(!document.hidden),[overflow,setOverflow]=useState(false),[now,setNow]=useState(Date.now()),[filtersOpen,setFiltersOpen]=useState(false),[touchReading,setTouchReading]=useState(false);
   const [canControlMotion,setCanControlMotion]=useState(false),[canOpenReporting,setCanOpenReporting]=useState(false);
   useEffect(()=>{let live=true;void verifySession().then(session=>{if(!live)return;if(session==="denied"){setCanControlMotion(false);setCanOpenReporting(false);return;}setRoot(session.user.isRoot===true);setCanControlMotion(canControlProductionMotion(session.user));setCanOpenReporting(canAccessProductionReporting(session.user));}).catch(()=>{if(live){setCanControlMotion(false);setCanOpenReporting(false);}});return()=>{live=false;};},[]);
-  const sequence=useRef(0),last=useRef<ProductionDashboard|null>(null),belt=useRef<HTMLDivElement|null>(null);
-  const load=async(manual=false)=>{
-    const version=++sequence.current;setLoading(true);setError("");
+  const search=useDebouncedValue(q.trim(),250);
+  const searchReady=Boolean(productionOrderId)||q.trim()===search;
+  const criteria=new URLSearchParams({page:String(page)});
+  if(search)criteria.set("q",search);
+  if(supplier)criteria.set("supplierId",supplier);
+  if(status)criteria.set("status",status);
+  if(progressState)criteria.set("progressState",progressState);
+  if(risk)criteria.set("risk",risk);
+  const target=productionOrderId?`/${productionOrderId}${factoryQuery}`:`?${criteria}`;
+  const active=useRef<{target:string;controller:AbortController}|null>(null);
+  const last=useRef<{target:string;data:ProductionDashboard}|null>(null),belt=useRef<HTMLDivElement|null>(null);
+  const load=useCallback(async(manual=false,changedByWrite=false)=>{
+    if(!searchReady||(!changedByWrite&&active.current?.target===target))return;
+    active.current?.controller.abort();
+    const controller=new AbortController(),read={target,controller};
+    active.current=read;setLoading(true);setError("");
+    const accepts=()=>active.current===read&&!controller.signal.aborted;
     try{
-      if(productionOrderId){const result=await request(`/${productionOrderId}${factoryQuery}`,ProductionDashboardDetailSchema);if(version===sequence.current){setDetail(result);
-
-      }}
-      else{const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);if(progressState)params.set("progressState",progressState);if(risk)params.set("risk",risk);
-        if(manual&&last.current)params.set("previousAsOf",last.current.asOf);
-        const result=await request(`?${params}`,ProductionDashboardSchema);
-        if(version===sequence.current){setChanged(manual&&last.current?changedDashboardOrders(last.current.items,result.items):[]);setData(result);last.current=result;}
+      if(productionOrderId){
+        const detail=await request(target,ProductionDashboardDetailSchema,controller.signal);
+        if(accepts())setDetail(detail);
+      }else{
+        const previous=manual&&last.current?.target===target?last.current.data:null;
+        const query=new URLSearchParams(target.slice(1));
+        if(previous)query.set("previousAsOf",previous.asOf);
+        const next=await request(`?${query}`,ProductionDashboardSchema,controller.signal);
+        if(accepts()){
+          setChanged(previous?changedDashboardOrders(previous.items,next.items):[]);
+          setData(next);last.current={target,data:next};
+        }
       }
-    }catch(e){if(version===sequence.current)setError(e instanceof Error?e.message:"加载失败");}finally{if(version===sequence.current)setLoading(false);}
-  };
-  // Only initial load, explicit filter/page changes and the refresh button request data.
-  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);sequence.current++;};},[productionOrderId,factoryQuery,page,q,supplier,status,progressState,risk]);
+    }catch(error){
+      if(!accepts())return;
+      if(error instanceof DashboardReadError&&[401,403,404].includes(error.status)){
+        setData(null);setDetail(null);last.current=null;
+      }
+      setError(error instanceof Error?error.message:"加载失败");
+    }finally{
+      if(accepts()){active.current=null;setLoading(false);}
+    }
+  },[productionOrderId,searchReady,target]);
+  useEffect(()=>{
+    if(searchReady)void load();
+    return()=>{active.current?.controller.abort();active.current=null;};
+  },[load,searchReady]);
   useEffect(()=>{if(productionOrderId)setDetail(null);},[productionOrderId,factoryQuery]);
   useEffect(()=>{if(!changed.length)return;const timer=setTimeout(()=>setChanged([]),1800);return()=>clearTimeout(timer);},[changed]);
   useEffect(()=>{const media=window.matchMedia("(prefers-reduced-motion: reduce)");const update=()=>setReduced(media.matches);update();media.addEventListener("change",update);return()=>media.removeEventListener("change",update);},[]);
@@ -96,10 +131,10 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
     <div className="production-dashboard__toolbar">{canOpenReporting?<a href={productionReportingHref(productionOrderId??null,factoryDecisionId,orderReturn??displayReturn)!}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={motherOrderId===undefined&&todoReturnPath(window.location.search)?pageUrl(todoReturnPath(window.location.search)!):orderReturn??displayReturn??pageUrl("ui/production-dashboard")}>{motherOrderId===undefined&&todoReturnPath(window.location.search) ? "返回我的待办" : orderReturn?"返回这张订单":displayReturn?"返回实时生产展示":"返回实时看板"}</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
       {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
-      <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
+      <Button variant="secondary" disabled={loading||!searchReady} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
       {root?<Button variant="secondary" aria-expanded={managementOpen} onClick={()=>setManagementOpen(value=>!value)}>管理⌄</Button>:null}
     </div>
-    {root&&managementOpen?<div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/></div>:null}
+    {root&&managementOpen?<div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load(false,true);}}/></div>:null}
     {productionOrderId?<ProductionReceiptSummary factoryDecisionId={factoryDecisionId} productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}
@@ -147,7 +182,7 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
     </>:null}
     {deleting?<div className="production-delete-overlay" role="presentation"><section role="dialog" aria-modal="true" aria-label="删除测试或误建生产订单" className="production-delete-dialog">
       <div className="production-dashboard__toolbar"><h2>删除测试 / 误建记录</h2><Button variant="secondary" onClick={()=>setDeleting(null)}>关闭</Button></div>
-      <ProductionExclusionControls key={deleting} productionOrderId={deleting} onExcluded={()=>{setDeleting(null);setData(null);setDetail(null);last.current=null;void load();}}/>
+      <ProductionExclusionControls key={deleting} productionOrderId={deleting} onExcluded={()=>{setDeleting(null);setData(null);setDetail(null);last.current=null;void load(false,true);}}/>
     </section></div>:null}
     {detail?<>
       <Surface className="sourcing-list-card board-detail"><h2>{detail.detail.order.firstStyleNo} · {detail.detail.order.supplierName}</h2><p>{productionStatusLabels[detail.detail.order.status]} · <PoDateSummary lines={detail.detail.order.poDeliveryDates} legacy={detail.detail.order.deliveryDate}/></p>
