@@ -171,4 +171,45 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
    await page.reload();await page.getByRole('heading',{name:'无权访问此页面',exact:true}).waitFor();expect(await page.locator('.journey-orders tbody tr').count()).toBe(0);
   }finally{await context.close();}
  });
+ it('shows the signed ship-sample task before history, then retries only history without losing the task',async()=>{
+  const f=h.fixture,actor=f.people.merchandiser!,style='TEST-SHIP-TASK-HISTORY-'+randomUUID();
+  const mother=await h.runInScene(async()=>new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-07',primaryMerchandiserId:actor.actorId,
+   lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]
+  }),randomUUID()));
+  const id=(await f.db.query<{task_id:string}>(
+   "SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",
+   [mother.productionOrderId])).rows[0]!.task_id;
+  const endpoint='/api/digital-production/tasks/'+id;
+  let release!:()=>void,taskReads=0,historyReads=0;
+  const delay=new Promise<void>(resolve=>{release=resolve;});
+  const tab=await h.open(actor.actorId,{},1165,1,{path:'/ui/digital-production?task='+id+'&taskView=read',beforeNavigate:async page=>{
+   page.on('request',request=>{if(new URL(request.url()).pathname===endpoint&&request.method()==='GET')taskReads++;});
+   await page.route(url=>url.pathname===endpoint+'/history',async route=>{
+    historyReads++;
+    if(historyReads===1){
+     await delay;
+     await route.fulfill({status:503,json:{error:{code:'UNAVAILABLE',message:'TEST 历史暂不可读'}}});
+    }else await route.continue();
+   });
+  }});
+  try{
+   const {page}=tab,identity=page.locator('.digital-task-identity');
+   await expect.poll(()=>historyReads).toBe(1);
+   await identity.getByRole('heading',{name:style,exact:true}).waitFor();
+   const history=page.locator('details').filter({has:page.getByText('历史记录与核实',{exact:true})}).last();
+   await history.locator('summary').click();
+   await history.getByRole('status').getByText('正在读取历史记录…',{exact:true}).waitFor();
+   expect(taskReads).toBe(1);
+   release();
+   await history.getByRole('alert').getByText('TEST 历史暂不可读',{exact:true}).waitFor();
+   expect(await identity.isVisible()).toBe(true);
+   const reloaded=page.waitForResponse(response=>new URL(response.url()).pathname===endpoint+'/history'&&response.status()===200);
+   await history.getByRole('button',{name:'重试历史记录',exact:true}).click();await reloaded;
+   await history.getByRole('alert').waitFor({state:'detached'});
+   expect(historyReads).toBe(2);expect(taskReads).toBe(1);
+   expect(await identity.isVisible()).toBe(true);
+  }finally{release();await tab.context.close();}
+ });
+
 });

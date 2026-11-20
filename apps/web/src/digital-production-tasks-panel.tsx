@@ -18,6 +18,10 @@ import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import { canWriteDigitalTask, type DigitalTaskView } from "./digital-task-view.js";
 import type { DigitalAccessOptions } from "./digital-production-access-panel.js";
 type History = { events: {eventId:string;kind:string;occurredAt:string|null;recordedAt:string;quality:string;correctsEventId:string|null;payload:{reason?:string;note?:string};actorName:string}[]; revisions:{revisionId:string;policyVersion:number;enteredAt:string|null;dueAt:string|null;reason:string;changedAt:string;warningAt:string|null;hasSla:boolean;deadlineMode?:string;changedByName:string}[] };
+type HistoryRead = {taskId:string} & (
+  {phase:'loading'} | {phase:'ready';value:History} | {phase:'failed';message:string}
+);
+
 const date = (value:string|null) => value ? new Date(value).toLocaleString("zh-CN",{hour12:false,timeZone:"Asia/Shanghai"}) : "未知";
 const taskDeadline = (task:{dueAt:string|null;slaHours?:number|null;hasSla?:boolean;deadlineMode?:string;deadlineExclusive?:boolean}) => {
   if(task.dueAt) return task.deadlineMode==='date_target'||task.deadlineExclusive===true
@@ -27,17 +31,56 @@ const taskDeadline = (task:{dueAt:string|null;slaHours?:number|null;hasSla?:bool
 export function DigitalTasksPanel({options, taskId, compact = false, view = "handle", onChanged,embeddedBusiness=false,feedbackOnly=false,initialTask}:{initialTask?:DigitalTask;options:DigitalAccessOptions;taskId?:string;compact?:boolean;view?:DigitalTaskView;onChanged?:()=>void;embeddedBusiness?:boolean;feedbackOnly?:boolean}) {
   useAcceptanceClockUpdates();
   const [items,setItems]=useState<DigitalTask[]>([]),[selected,setSelected]=useState<DigitalTask|null>(null),[page,setPage]=useState(1);
-  const [policies,setPolicies]=useState<DigitalDeadlinePolicy[]>([]),[history,setHistory]=useState<History|null>(null);
+  const [policies,setPolicies]=useState<DigitalDeadlinePolicy[]>([]),[historyRead,setHistoryRead]=useState<HistoryRead|null>(null);
   const [people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]);
   const [busy,setBusy]=useState(false),[error,setError]=useState(""),[now,setNow]=useState(new Date());
   const pending=useRef<{payload:string;key:string}|null>(null),writing=useRef(false);
   const load=async()=>{setNow(new Date());if(!compact){const result=await digitalRequest<{items:DigitalTask[]}>(`tasks?page=${page}`);setItems(result.items);if(options.manage)setPolicies(await digitalRequest<DigitalDeadlinePolicy[]>("deadline-policies"));}};
   useEffect(()=>{void load().catch(e=>setError(e.message));},[page,options.manage,compact]);
   useEffect(()=>{if(!feedbackOnly && view === "handle" && (options.manage||options.roles.some(role=>["pattern_room_supervisor","development_clerk"].includes(role))))void digitalRequest<typeof people>("access/candidates").then(setPeople).catch(e=>setError(e.message));},[options.manage,options.roles,view,feedbackOnly]);
-  const openVersion=useRef(0);
-  const open=async(id:string,fresh=false)=>{const version=++openVersion.current;setNow(new Date());setError("");try{const [task,events]=await Promise.all([!fresh&&initialTask?.taskId===id?Promise.resolve(initialTask):digitalRequest<DigitalTask>(`tasks/${id}`),digitalRequest<History>(`tasks/${id}/history`)]);if(version!==openVersion.current)return;setSelected(task);setHistory(events);}catch(e){if(version===openVersion.current)setError(e instanceof Error?e.message:"读取失败");}};
-  useEffect(()=>{const id=taskId??new URLSearchParams(window.location.search).get("task");if(id&&/^[0-9a-f-]{36}$/i.test(id))void open(id);return()=>{openVersion.current++;};},[taskId,initialTask]);
-  const save=async(path:string,body:unknown,method="POST")=>{if(!canWriteDigitalTask(view,selected,path)||writing.current)return;writing.current=true;setBusy(true);setError("");const payload=JSON.stringify([path,body,method]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{await digitalRequest(path,method,body,pending.current.key);pending.current=null;await load();if(selected)await open(selected.taskId,true);onChanged?.();}catch(e){setError(e instanceof Error?e.message:unsavedInputLabel);}finally{writing.current=false;setBusy(false);}};
+  const openVersion=useRef(0),openTarget=useRef<string|null>(null);
+  const displayedTask=useRef<string|null>(null);
+  const taskRequest=useRef<AbortController|null>(null);
+  const historyRequest=useRef<{taskId:string;controller:AbortController}|null>(null);
+  const readHistory=async(id:string,refresh=false)=>{
+    if(!refresh&&historyRequest.current?.taskId===id)return;
+    historyRequest.current?.controller.abort();
+    const controller=new AbortController();
+    historyRequest.current={taskId:id,controller};
+    const current=()=>historyRequest.current?.controller===controller;
+    setHistoryRead({taskId:id,phase:'loading'});
+    try{
+      const value=await digitalRequest<History>(`tasks/${id}/history`,'GET',undefined,undefined,{signal:controller.signal});
+      if(current())setHistoryRead({taskId:id,phase:'ready',value});
+    }catch(e){
+      if(current()&&!controller.signal.aborted)setHistoryRead({taskId:id,phase:'failed',message:e instanceof Error?e.message:'读取历史失败'});
+    }finally{if(current())historyRequest.current=null;}
+  };
+  const open=async(id:string,fresh=false)=>{
+    if(!fresh&&openTarget.current===id&&taskRequest.current)return;
+    const version=++openVersion.current;
+    openTarget.current=id;taskRequest.current?.abort();
+    const controller=new AbortController();taskRequest.current=controller;
+    setNow(new Date());setError('');
+    try{
+      const task=!fresh&&initialTask?.taskId===id?initialTask:
+        await digitalRequest<DigitalTask>(`tasks/${id}`,'GET',undefined,undefined,{signal:controller.signal});
+      if(version!==openVersion.current)return;
+      displayedTask.current=task.taskId;
+      setSelected(task);
+      await readHistory(id,true);
+    }catch(e){if(version===openVersion.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'读取失败');}
+    finally{if(version===openVersion.current)taskRequest.current=null;}
+  };
+  useEffect(()=>{
+    const id=taskId??new URLSearchParams(window.location.search).get('task');
+    if(id&&/^[0-9a-f-]{36}$/i.test(id))void open(id);
+    return()=>{++openVersion.current;openTarget.current=null;taskRequest.current?.abort();};
+  },[taskId,initialTask]);
+  useEffect(()=>()=>{historyRequest.current?.controller.abort();historyRequest.current=null;},[]);
+  const selectedHistory=historyRead?.taskId===selected?.taskId?historyRead:null;
+  const history=selectedHistory?.phase==='ready'?selectedHistory.value:null;
+  const save=async(path:string,body:unknown,method="POST")=>{if(!canWriteDigitalTask(view,selected,path)||writing.current)return;writing.current=true;const version=openVersion.current;setBusy(true);setError("");const payload=JSON.stringify([path,body,method]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{await digitalRequest(path,method,body,pending.current.key);pending.current=null;await load();if(selected&&version===openVersion.current&&displayedTask.current===selected.taskId)await open(selected.taskId,true);onChanged?.();}catch(e){setError(e instanceof Error?e.message:unsavedInputLabel);}finally{writing.current=false;setBusy(false);}};
   const timing=(task:DigitalTask)=>{if(task.state==="pending")return pendingTaskTimingLabel;if(task.state==="cancelled")return "已取消";const result=digitalTaskTiming({...task,terminal:task.state==="completed"},acceptanceTaskNow(task,now));const label={unlimited:"无时限",unknown:"时间待核实",normal:task.paused?"原期限内":"办理中",attention:"临期",overdue:"已超时",completed_on_time:"按期完成",completed_overdue:"超时完成"}[result.state];return `${label}${result.elapsedSeconds===null?"":` · 停留 ${(result.elapsedSeconds/3600).toFixed(1)} 小时`}`;};
   const developmentBusinessTask = selected !== null && developmentTaskNeedsBusinessPage(selected.taskKind);
   const genericCompletion = !developmentBusinessTask;
@@ -64,7 +107,10 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
       {!feedbackOnly&&selected.canControl&&selected.state!=="cancelled"&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save(`lifecycle/${selected.orderId?"order":"source"}/${selected.orderId??selected.sourceId}`,{action:String(f.get("action")),reason:String(f.get("reason"))});}}><label>业务状态<select name="action"><option value={selected.paused?"resume":"pause"}>{selected.paused?"恢复":"暂停"}</option><option value="cancel">取消本单后续任务</option></select></label><label>原因 *<input name="reason" required maxLength={1000}/></label><Button type="submit">保存状态</Button></form>}
       </fieldset>}
       {!feedbackOnly&&view === "read" && selected.canCorrect && <a href={correctionUrl.pathname + correctionUrl.search}>进入时间核实</a>}
-      <details><summary>历史记录与核实</summary>{history?.events.map(event=><div key={event.eventId}><p>{({created:"创建",ready:"进入",completed:"完成",cutting_scope_completed:"PO实裁完成",condition:"条件登记",time_corrected:"时间核实",policy_changed:"时效调整",pause:"暂停",resume:"恢复",cancel:"取消",blocked:"阻断",unblocked:"解除阻断",reassigned:"改派",priority_changed:"优先级调整"} as Record<string,string>)[event.kind]??event.kind} · 发生 {date(event.occurredAt)} · 登记 {date(event.recordedAt)} · {event.quality} · {event.actorName}</p>{(event.payload.reason||event.payload.note)&&<p>{event.payload.reason??event.payload.note}</p>}{!feedbackOnly&&view !== "read"&&selected.canCorrect&&['ready','completed','cutting_scope_completed'].includes(event.kind)&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save(`tasks/${selected.taskId}/time-corrections`,{eventId:event.eventId,occurredAt:f.get("at")?new Date(`${String(f.get("at"))}+08:00`).toISOString():null,reason:String(f.get("reason"))});}}><label>核实发生时间（北京时间，留空为未知）<input name="at" type="datetime-local" step="0.001"/></label>{event.occurredAt&&<Button type="button" disabled={busy} onClick={e=>{const input=e.currentTarget.form?.elements.namedItem('at');if(input instanceof HTMLInputElement)input.value=new Date(Date.parse(event.occurredAt!)+8*3600000).toISOString().slice(0,-1);}}>填入原记录时间</Button>}<label>核实原因 *<input name="reason" required maxLength={1000}/></label><Button disabled={busy} type="submit">保存核实</Button></form>}</div>)}<h4>期限修订记录</h4><div className="digital-task-history"><table><thead><tr><th>策略版本</th><th>进入时间</th><th>临期时间</th><th>截止时间</th><th>修订原因</th><th>登记时间</th><th>修改人</th></tr></thead><tbody>{history?.revisions.map(revision=><tr key={revision.revisionId}><td>{revision.policyVersion}</td><td>{date(revision.enteredAt)}</td><td>{date(revision.warningAt)}</td><td>{taskDeadline(revision)}</td><td>{({activation:"进入任务",policy:"时效参数调整",correction:"时间核实",completion:"完成快照"} as Record<string,string>)[revision.reason]??revision.reason}</td><td>{date(revision.changedAt)}</td><td>{revision.changedByName}</td></tr>)}</tbody></table></div></details>
+      <details><summary>历史记录与核实</summary>
+        {selectedHistory?.phase==='loading'&&<p role="status">正在读取历史记录…</p>}
+        {selectedHistory?.phase==='failed'&&<><p role="alert">{selectedHistory.message}</p><Button type="button" onClick={()=>void readHistory(selected.taskId)}>重试历史记录</Button></>}
+        {history?.events.map(event=><div key={event.eventId}><p>{({created:"创建",ready:"进入",completed:"完成",cutting_scope_completed:"PO实裁完成",condition:"条件登记",time_corrected:"时间核实",policy_changed:"时效调整",pause:"暂停",resume:"恢复",cancel:"取消",blocked:"阻断",unblocked:"解除阻断",reassigned:"改派",priority_changed:"优先级调整"} as Record<string,string>)[event.kind]??event.kind} · 发生 {date(event.occurredAt)} · 登记 {date(event.recordedAt)} · {event.quality} · {event.actorName}</p>{(event.payload.reason||event.payload.note)&&<p>{event.payload.reason??event.payload.note}</p>}{!feedbackOnly&&view !== "read"&&selected.canCorrect&&['ready','completed','cutting_scope_completed'].includes(event.kind)&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save(`tasks/${selected.taskId}/time-corrections`,{eventId:event.eventId,occurredAt:f.get("at")?new Date(`${String(f.get("at"))}+08:00`).toISOString():null,reason:String(f.get("reason"))});}}><label>核实发生时间（北京时间，留空为未知）<input name="at" type="datetime-local" step="0.001"/></label>{event.occurredAt&&<Button type="button" disabled={busy} onClick={e=>{const input=e.currentTarget.form?.elements.namedItem('at');if(input instanceof HTMLInputElement)input.value=new Date(Date.parse(event.occurredAt!)+8*3600000).toISOString().slice(0,-1);}}>填入原记录时间</Button>}<label>核实原因 *<input name="reason" required maxLength={1000}/></label><Button disabled={busy} type="submit">保存核实</Button></form>}</div>)}<h4>期限修订记录</h4><div className="digital-task-history"><table><thead><tr><th>策略版本</th><th>进入时间</th><th>临期时间</th><th>截止时间</th><th>修订原因</th><th>登记时间</th><th>修改人</th></tr></thead><tbody>{history?.revisions.map(revision=><tr key={revision.revisionId}><td>{revision.policyVersion}</td><td>{date(revision.enteredAt)}</td><td>{date(revision.warningAt)}</td><td>{taskDeadline(revision)}</td><td>{({activation:"进入任务",policy:"时效参数调整",correction:"时间核实",completion:"完成快照"} as Record<string,string>)[revision.reason]??revision.reason}</td><td>{date(revision.changedAt)}</td><td>{revision.changedByName}</td></tr>)}</tbody></table></div></details>
     </section>}
     {view === "handle"&&!compact&&options.manage&&<details><summary>工序时效设定</summary>{policies.map(p=><form key={`${p.nodeKey}:${p.version}`} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save(`deadline-policies/${p.nodeKey}`,{expectedVersion:p.version,slaHours:f.get("hours")===""?null:Number(f.get("hours")),warningRatio:Number(f.get("ratio"))/100,note:String(f.get("note")??"")},"PUT");}}><strong>{p.label}</strong>{p.applicationScope==="new_orders"&&<small>仅新订单采用</small>}<label>{p.durationRequired?"时限（小时）":"时限（小时，留空无时限）"}<input required={p.durationRequired} readOnly={p.durationEditable===false} name="hours" type="number" min="0.01" max="8760" step="0.01" defaultValue={p.slaHours??""}/></label><label>临期阈值（%） *<input readOnly={p.warningRatioEditable===false} name="ratio" type="number" min="1" max="99" step="1" defaultValue={p.warningRatio*100} required/></label><label>调整原因<input name="note" maxLength={1000}/></label><Button disabled={busy} type="submit">{p.applicationScope==="new_orders"?"保存新单标准":"应用到未完成任务"}</Button></form>)}</details>}
   </details></Surface>;
