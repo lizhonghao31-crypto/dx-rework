@@ -22,6 +22,32 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-pure-create-reload-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true});await prepareRewashSettings(h.f);});
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
+ async function verifyCreationDetail(id:string,name:string,expected:Array<{label:string;at:string}>){
+  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+id);
+  try{
+   const page=tab.page;await page.setViewportSize({width:1165,height:747});
+   const flow=page.getByRole('region',{name:'订单全流程'});await flow.waitFor();
+   expect(await flow.locator('.cockpit-creation-events time').evaluateAll(times=>times.map(time=>time.getAttribute('datetime')))).toEqual(expected.map(row=>row.at));
+   for(const row of expected)expect(await flow.innerText()).toContain(row.label);
+   for(const label of ['创建纯开发','创建正式订单'].filter(label=>!expected.some(row=>row.label===label)))expect(await flow.innerText()).not.toContain(label);
+   const read=()=>page.evaluate(async id=>{
+    const response=await fetch('/api/digital-production/journeys/'+encodeURIComponent(id)+'?view=cockpit');
+    if(!response.ok)throw Error('Cannot verify original time facts: '+response.status);
+    const value=await response.json();
+    return {cockpitCreation:value.cockpitCreation,supervision:value.supervision,fixedSchedule:value.fixedSchedule,visualProgress:value.visualProgress};
+   },id);
+   const before=await read(),nodes=page.getByRole('region',{name:'小流程明细'});
+   await nodes.getByRole('button',{name:'本单全部节点',exact:true}).click();
+   const removed=['创建产品开发','开发资料保存/发布','订购信息'];
+   for(const label of removed)expect(await nodes.locator('.journey-node-toggle').filter({hasText:label}).count()).toBe(0);
+   await nodes.getByRole('button',{name:/查看更多/}).click();
+   const expanded=page.getByRole('dialog',{name:'全部节点明细'});await expanded.waitFor();
+   for(const label of removed)expect(await expanded.locator('.journey-node-toggle').filter({hasText:label}).count()).toBe(0);
+   await page.keyboard.press('Escape');await expanded.waitFor({state:'detached'});
+   expect(await read()).toEqual(before);
+   await page.screenshot({path:join(process.env.DX_COCKPIT_CREATION_EVIDENCE??h.evidence,'creation-flow-'+name+'.png')});
+  }finally{await tab.context.close();}
+ }
  it.each([['development','无确定客户订单'],['certain_order','有确定客户订单'],['preorder','预下单备料']] as const)('restores %s parent intent, raw document/order input and original row identities with no command or writes',async(mode,label)=>{
   const before=Number((await h.db.query('SELECT count(*) FROM digital_production_sources')).rows[0].count),tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer');
   try{
@@ -178,9 +204,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(plan).toBeTruthy();
    return {creation,plan};
   });
+  h.setCollectionScene(scene);
+  await verifyCreationDetail(sourceId,'development',[{label:'创建纯开发',at:publication}]);
   const formal='2026-11-19T06:18:09.789Z';
   await h.f.advance(scene,formal);
-  await h.f.runtime.run(scene,actor,async()=>{
+  const created=await h.f.runtime.run(scene,actor,async()=>{
    const formalInput=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo,temporaryStyleNo:null,
     orderDate:'2026-11-19',contractDeliveryDate:null,requiresColorMatching:false,salesYear:2027,salesSeries:'P03',
     productionPlanning:{craftSteps:[],preshrink:false},lines:[{formalPoNo:designStyleNo+'-PO',color:'黑',
@@ -198,7 +226,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     lines:formalInput.lines.map(line=>({...line,formalPoNo:directStyle+'-PO'}))},randomUUID());
    expect(direct.sourceId).toBeNull();
    expect(await orderTimeCreated(h.db,{kind:'order',id:direct.productionOrderId})).toMatchObject({at:formal});
+   return {converted:order.productionOrderId,direct:direct.productionOrderId};
   });
+  await verifyCreationDetail(created.converted,'converted',[{label:'创建纯开发',at:publication},{label:'创建正式订单',at:formal}]);
+  await verifyCreationDetail(created.direct,'direct',[{label:'创建正式订单',at:formal}]);
  });
  it('applies a real manager approval to publish and confirm a complete draft in one native transaction with both exact clocks',async()=>{
   const designer=h.f.people['sample-designer']!,manager=h.f.root;
@@ -224,7 +255,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   const approvedAt='2026-11-19T04:15:25.555Z';
   await h.f.advance(scene,approvedAt);
-  await h.f.runtime.run(scene,manager,async()=>{
+  const orderId=await h.f.runtime.run(scene,manager,async()=>{
    const review=await requests.read(manager,pending.requestId),key=randomUUID();
    const input={expectedVersion:review.version,fingerprint:review.check.fingerprint,overrides:{},acceptLate:false};
    const applied=await requests.apply(manager,pending.requestId,input,key);
@@ -238,7 +269,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     FROM digital_development_first_publications p JOIN audit_events a ON a.id=p.event_id WHERE p.source_id=$1`,[sourceId])).rows)
     .toEqual([{actor_id:manager.actorId,designer_id:designer.actorId}]);
    expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(1);
+   return orderId!;
   });
+  h.setCollectionScene(scene);
+  await verifyCreationDetail(orderId,'approved-formal',[{label:'创建正式订单',at:approvedAt}]);
+  const detail=await h.f.runtime.run(scene,manager,()=>new DigitalJourneyQuery(h.db).read(manager,orderId,undefined,true));
+  expect(detail.cockpitCreation).toEqual({developmentCreatedAt:approvedAt,orderCreatedAt:approvedAt,developmentPublishedWithOrder:true});
  });
 
  it('reuses a legacy provisional identity without rewriting historical clocks and blocks an already frozen draft',async()=>{

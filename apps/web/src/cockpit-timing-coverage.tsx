@@ -11,7 +11,7 @@ export const cockpitCoverageLabels:Record<JourneyCoverage['key'],string>={custom
 
 function CoverageOrders({context,category,onOpen,onBack}:{context:CockpitContext;category:JourneyCoverage['key'];onOpen:(id:string)=>void;onBack:()=>void}){
  const [page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
- const query={...context,selected:undefined,round:undefined,kpi:'all' as const,missing:category,page};
+ const query={...context,selected:undefined,round:undefined,kpi:context.kpi,missing:category,page};
  const reads=useCockpitReads(query,refresh),data=reads.data,actual=reads.applied??query,busy=['preparing','loading','identity'].includes(reads.listPhase);
  return <div className="cockpit-coverage-orders" aria-busy={busy}>
   <div className="cockpit-coverage-heading"><Button type="button" variant="secondary" onClick={onBack}>返回分类</Button><h3>{cockpitCoverageLabels[category]}</h3><span>{data?.total!==null&&data?`共 ${data.total} 单`:'—'}</span></div>
@@ -25,7 +25,7 @@ function CoverageOrders({context,category,onOpen,onBack}:{context:CockpitContext
 
 export function CockpitTimingCoverage({data,context,onClose,onOpen}:{data:JourneyResult;context:CockpitContext;onClose:()=>void;onOpen:(id:string)=>void}){
  const [category,setCategory]=useState<JourneyCoverage['key']|null>(null);
- return <CockpitHomeDialog title="时效待补充" onClose={onClose}>
+ return <CockpitHomeDialog title="待补资料" onClose={onClose}>
   {category?<CoverageOrders key={category} context={context} category={category} onOpen={onOpen} onBack={()=>setCategory(null)}/>:<ul className="cockpit-coverage-categories">{JOURNEY_COVERAGE_KEYS.map(key=>{
    const count=data.supervision?data.supervision.coverage.find(row=>row.key===key)?.orders??0:null;
    return <li key={key}><button type="button" disabled={count===null||count===0} onClick={()=>setCategory(key)}><span>{cockpitCoverageLabels[key]}</span><strong>{count===null?'—':`${count} 单`}</strong><span aria-hidden>›</span></button></li>;

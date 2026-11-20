@@ -3,7 +3,7 @@ import {JOURNEY_STAGES} from '@dx-rework/contracts/digital-production-journey';
 import {StatusBadge} from '@dx-rework/ui';
 import {CockpitDate} from './cockpit-date.js';
 import {CockpitActualDates,CockpitTargetDifference,observedTargetDelta} from './cockpit-fixed-schedule.js';
-import {cockpitNodeStatus,cockpitNodeTone} from './cockpit-node-rows.js';
+import {cockpitNodeOwner,cockpitNodeStatus,cockpitNodeTone} from './cockpit-node-rows.js';
 import {cockpitResponsibilityResult,cockpitTerminationHistory} from './cockpit-node-summary.js';
 
 export function frameworkResponsibility(node:JourneyNode,asOf:string|undefined){
@@ -24,13 +24,16 @@ export function CockpitPlanDates({node,lines=[]}:{node:JourneyNode;lines?:OrderJ
  return <>{targets.map(target=>{const current=target.progress.currentTarget??{at:target.progress.goalDelta.targetAt,date:target.progress.goalDelta.targetDate,precision:target.progress.goalDelta.targetPrecision};return <span className="cockpit-fixed-target-date" key={target.scopeRef+'|'+target.progress.id}>{targets.length>1&&<small>{lines.find(line=>line.id===target.lineId)?.po??'对应范围'}</small>}<CockpitDate value={current.precision==='date'?current.date:current.at} precision={current.precision} missing="计划待补" short/></span>;})}</>;
 }
 export function CockpitFrameworkNodes({nodes,lines,selectedId,onSelect,asOf}:{nodes:JourneyNode[];lines:OrderJourney['lines'];selectedId:string|undefined;onSelect:(node:JourneyNode)=>void;asOf:string|undefined}){
- return <table className="cockpit-node-summary cockpit-framework-nodes"><thead><tr><th scope="col">阶段</th><th scope="col">节点名称</th><th scope="col">预计完成</th><th scope="col">实际完成</th><th scope="col">日期差异</th><th scope="col">责任</th></tr></thead><tbody>{JOURNEY_STAGES.flatMap(stage=>{
+ let rowNumber=0;
+ return <table className="cockpit-node-summary cockpit-framework-nodes">
+  <colgroup><col/><col/><col/><col/><col/><col/><col/></colgroup><thead><tr><th scope="col">阶段</th><th scope="col">节点</th><th scope="col">计划完成</th><th scope="col">实际完成</th><th scope="col">差异</th><th scope="col">责任</th><th scope="col">状态</th></tr></thead>{JOURNEY_STAGES.map(stage=>{
   const rows=nodes.filter(node=>node.stage===stage.key);
-  return rows.map((node,index)=>{const responsibility=frameworkResponsibility(node,asOf),unfinished=!['completed','inherited'].includes(node.state),before=unfinished&&node.fixedTargets?.length&&node.fixedTargets.every(target=>observedTargetDelta(target.progress,asOf).kind==='on_target');return <tr key={node.instanceId} id={'journey-node-'+node.instanceId} className={selectedId===node.instanceId?'is-focused':undefined}>
-   {index===0&&<th scope="rowgroup" rowSpan={rows.length}>{stage.label}</th>}
-   <td><button type="button" className="journey-node-toggle" aria-pressed={selectedId===node.instanceId} data-cockpit-focus={'node:'+node.instanceId} onClick={()=>onSelect(node)}>{node.label}</button> <StatusBadge tone={cockpitNodeTone(node)}>{cockpitNodeStatus(node)}</StatusBadge>{node.subject&&<small>{node.subject}</small>}{!node.current&&<small>第{node.round??'—'}轮 · 历史</small>}</td>
+  if(!rows.length)return null;
+  return <tbody key={stage.key}>{rows.map((node,index)=>{const responsibility=frameworkResponsibility(node,asOf),unfinished=!['completed','inherited'].includes(node.state),before=unfinished&&node.fixedTargets?.length&&node.fixedTargets.every(target=>observedTargetDelta(target.progress,asOf).kind==='on_target');return <tr key={node.instanceId} id={'journey-node-'+node.instanceId} className={selectedId===node.instanceId?'is-focused':undefined}>
+   {index===0&&<th scope="rowgroup" rowSpan={rows.length}>{stage.label}<small>（{rows.length}项）</small></th>}
+   <td className="cockpit-framework-node-task"><div className="cockpit-framework-node-name"><span>{String(++rowNumber).padStart(2,'0')}</span><button type="button" className="journey-node-toggle" aria-pressed={selectedId===node.instanceId} data-cockpit-focus={'node:'+node.instanceId} onClick={()=>onSelect(node)}>{node.label}</button></div><small>{cockpitNodeOwner(node)}</small>{node.subject&&<small>{node.subject}</small>}{!node.current&&<small>第{node.round??'—'}轮 · 历史</small>}</td>
    <td><CockpitPlanDates node={node} lines={lines}/></td><td>{unfinished&&!node.fixedTargets?.some(target=>target.progress.businessCompleted)?node.state==='cancelled'?'已取消':'未完成':<CockpitActualDates node={node} lines={lines} short/>}</td>
-   <td>{before?'未到期':<CockpitTargetDifference nodes={[node]} lines={lines} asOf={asOf}/>}</td><td className={'cockpit-responsibility is-'+responsibility.tone}>{responsibility.text}</td>
-  </tr>;});
- })}</tbody></table>;
+   <td>{before?'未到期':<CockpitTargetDifference nodes={[node]} lines={lines} asOf={asOf}/>}</td><td className={'cockpit-responsibility is-'+responsibility.tone}>{responsibility.text}</td><td><StatusBadge tone={cockpitNodeTone(node)}>{cockpitNodeStatus(node)}</StatusBadge></td>
+  </tr>;})}</tbody>;
+ })}</table>;
 }

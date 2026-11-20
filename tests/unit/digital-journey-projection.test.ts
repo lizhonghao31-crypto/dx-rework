@@ -140,6 +140,21 @@ describe('cockpit whole-order read facts',()=>{
     expect(selectJourneys([handled],filter,at)).toMatchObject({total:0,summary:{todo:0}});
   });
 
+  it('unites missing facts and actual blockers once, excludes limited and ordinary waiting facts, and pages that same set',()=>{
+    const build=(id:string,coverage?:'customer_date'|'scope',state:'active'|'blocked'|'pending'='active')=>{
+      const result=item(id,[node('prep',{state})],{orderId:id,cockpitCreation:{developmentCreatedAt:null,orderCreatedAt:at}});
+      return {...result,display:{...journeyDisplay(result,at),mainState:'active' as const},
+        actionableTodo:{status:'complete' as const,items:[]},
+        ...(coverage?{supervision:{status:'planned' as const,asOf:at,originalRevision:1,currentRevision:1,nodes:[],coverage:[{key:coverage,message:'original issue'}],customerReminderDate:null}}:{})};
+    };
+    const missingAndBlocked=build('both','customer_date','blocked'),justBlocked=build('blocked',undefined,'blocked'),waiting=build('waiting',undefined,'pending');
+    const closed=build('closed','customer_date');Object.assign(closed.display,{mainState:'completed'});
+    const data=[missingAndBlocked,missingAndBlocked,justBlocked,build('limited','scope'),waiting,closed];
+    const filter=JourneyFilterSchema.parse({scope:'production',kpi:'todo'});
+    expect(selectJourneys(data,filter,at)).toMatchObject({total:2,summary:{all:5,todo:2},supervision:{coverage:[{key:'customer_date',orders:1}]}});
+    expect(selectJourneys(data,{...filter,missing:'customer_date'},at)).toMatchObject({total:1,items:[{id:'both'}]});
+  });
+
   it('keeps no receipt, proven zero, partial coverage and concealed factory lines distinct',()=>{
     const lineA=item('native',[]).lines[0]!,lineB={...lineA,id:'second'};
     const input={orderId:'native',fullOrder:true,lines:[lineA,lineB],sentLineIds:new Set<string>(),

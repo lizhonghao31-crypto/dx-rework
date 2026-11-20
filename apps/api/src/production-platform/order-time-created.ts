@@ -41,3 +41,24 @@ export const cockpitLegacyOrderTimeSql=(order:'o')=>`coalesce((
  WHERE origin.entity_type='digital_production' AND origin.action='digital_order_created'
   AND origin.entity_id=${order}.production_order_id::text
  ORDER BY origin.created_at,origin.id LIMIT 1),${order}.created_at::text)`;
+
+/** The display can collapse two creation labels only when the actual approved
+ * publication produced this formal order and first activated this source. */
+export async function firstDevelopmentPublicationConfirmedOrder(db:Pick<PoolClient,'query'>,sourceId:string,orderId:string){
+ const row=(await db.query(`SELECT EXISTS(
+   SELECT 1 FROM digital_order_time_requests request
+   JOIN digital_order_time_plan_versions adopted ON adopted.plan_version_id=request.applied_plan_id
+   JOIN digital_order_time_plan_versions original ON original.resource_kind='source' AND original.source_id=request.source_id
+     AND original.revision=1 AND original.source_event_ref=adopted.source_event_ref
+   JOIN digital_development_first_publications publication ON publication.source_id=request.source_id
+   JOIN audit_events origin ON origin.id=publication.event_id
+   JOIN audit_events approval ON approval.id=CASE
+     WHEN adopted.source_event_ref~'^audit_events:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' THEN substring(adopted.source_event_ref FROM 14)::uuid END
+   WHERE request.source_id=$1 AND request.result_order_id=$2 AND request.state='applied'
+     AND request.operation_json->>'kind'='development_publish'
+     AND adopted.resource_kind='order' AND adopted.production_order_id=$2
+     AND approval.action='order_time_activated' AND approval.request_id=origin.request_id
+     AND approval.after_state->>'requestId'=request.request_id::text
+ ) AS confirmed`,[sourceId,orderId])).rows[0];
+ return row?.confirmed===true;
+}

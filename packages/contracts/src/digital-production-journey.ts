@@ -235,6 +235,8 @@ export type JourneyVisualProgress = {
 export type CockpitCreationFacts = {
   developmentCreatedAt: string | null;
   orderCreatedAt: string | null;
+  /** Presentation only. The first publication and order were one formal approval. */
+  developmentPublishedWithOrder?: true;
 };
 export type CockpitActionableItem = {
   orderId: string;

@@ -18,7 +18,7 @@
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th{background:linear-gradient(120deg,#edf1f8,#e9eef6);color:#25334a;font-size:15px;font-weight:600;white-space:nowrap}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table td{border-color:#e0e7f2;padding:12px 10px;line-height:1.5}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .journey-order-select{font-size:16px;min-height:26px;color:#17233b;font-weight:650}
-.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-client{text-align:left;justify-items:start;gap:5px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-client{text-align:center;justify-items:center;gap:5px}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-client .cockpit-home-customer{font-weight:650;font-size:15px}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-type{display:inline-block;padding:1px 6px;border-radius:5px;background:#eaf0ff;border:1px solid #d5e2fb;color:#254875;font-size:13px}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-photo{max-width:70px;border-radius:8px}
@@ -69,4 +69,32 @@
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact[data-fact-tone="blue"]{--cockpit-fact-dot:#2475e8}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact[data-fact-tone="green"]{--cockpit-fact-dot:#238f69}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--cockpit-fact-dot);margin-inline-end:4px;vertical-align:middle}
-.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th.cockpit-home-progress-heading{white-space:normal}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th.cockpit-home-progress-heading{white-space:normal;text-align:center}
+
+/* Shared two-row labels and original read-only progress facts. */
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress {display:grid;gap:7px;align-content:center;min-width:0}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-date {display:grid;grid-template-columns:max-content minmax(0,1fr);min-height:20px;align-items:center;text-align:start;font-size:10px;line-height:1.4;margin-inline:-6px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-date>span {color:#4e606f;white-space:nowrap;font-weight:500;letter-spacing:-.05em}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-date :is(.cockpit-home-delivery-date,.cockpit-home-completed-date) {color:#0a1317;font-weight:600;text-align:start}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-date time {white-space:nowrap;font-variant-numeric:tabular-nums}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-row {display:block;margin:0}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-track {position:relative;display:block;box-sizing:border-box;height:15px;border:1px solid #cbd7e6;border-radius:999px;overflow:hidden}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-label {position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);font-size:10px;line-height:1.2;font-weight:600;color:#0a1317;pointer-events:none}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home td.cockpit-home-facts-cell {padding-inline:6px 0}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-line {display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-production-choices>summary {color:#0969e9;cursor:pointer}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi {grid-template-columns:minmax(0,1fr);justify-items:center;text-align:center}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>:is(span,strong) {grid-column:1}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>span {grid-row:1}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-caption {display:inline-flex;gap:4px;align-items:center;justify-content:center}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-caption>svg {color:var(--cockpit-kpi-icon,#26334b)}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-active {--cockpit-kpi-icon:#2475e8}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-due_soon {--cockpit-kpi-icon:#cb8b1b}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-overdue {--cockpit-kpi-icon:#c94343}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-completed {--cockpit-kpi-icon:#238f69}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>strong {grid-row:2}
+@media (min-width:1165px) {
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-line {flex-wrap:nowrap;white-space:nowrap}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status {flex:none;padding-inline:0 1px;gap:0}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status::before {margin-inline-end:2px}
+}
