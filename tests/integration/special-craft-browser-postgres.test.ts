@@ -155,7 +155,11 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
     const dto=await response.json(),node=dto.stages.flatMap((stage:{nodes:JourneyNode[]})=>stage.nodes).find((n:JourneyNode)=>n.instanceId===native.task_id);
     expect(node).toMatchObject({label:index===0?'发绣花（工艺1）':`发${steps[index]!.specialCraft!.definition.name}（工艺${index+1}）`,timing:{actualStart:native.entered_at.toISOString(),target:{at:native.due_at.toISOString()}}});
     const current=tab.page.locator('.journey-current-panel');await current.getByRole('heading',{level:2}).waitFor();expect(await current.getByRole('heading',{level:2}).innerText()).toContain('当前节点：'+node.label);
-    expect(await tab.page.locator('.cockpit-current-summary').innerText()).toContain('自身截止');
+    expect(await tab.page.locator('.cockpit-current-summary').innerText()).not.toContain('自身截止');
+    const currentDates=current.locator('.cockpit-node-current');
+    const cutoff=new Date(native.due_at);
+    expect(await currentDates.evaluate((panel, value)=>panel.innerText.includes(value.label)||[...panel.querySelectorAll('time')].some(time=>time.dateTime===value.at),
+     {at:cutoff.toISOString(),label:cutoff.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})})).toBe(true);
     const link=current.getByRole('link',{name:'查看节点记录',exact:true});expect(await link.count()).toBe(1);expect(await link.getAttribute('href')).toContain(native.task_id);
    }
    await tab.page.screenshot({path:join(h.evidence,'craft-instance-cockpit-1165.png'),fullPage:true});expect(h.errors).toEqual([]);

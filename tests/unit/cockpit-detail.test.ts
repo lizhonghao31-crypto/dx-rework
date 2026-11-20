@@ -97,12 +97,12 @@ it.each([['overdue','danger'],['due_soon','warning'],['normal','neutral'],['unkn
 
 
 it.each([
- [null,'2026-10-19T00:00:00Z','创建正式订单',null,false],
- ['2026-10-17T00:00:00Z',null,'创建纯开发',null,false],
- ['2026-10-17T00:00:00Z','2026-10-19T00:00:00Z','创建纯开发','创建正式订单',false],
- ['2026-10-19T00:00:00Z','2026-10-19T00:00:00Z','创建纯开发','创建正式订单',false],
- ['2026-10-19T00:00:00Z','2026-10-19T00:00:00Z','创建正式订单',null,true],
-] as const)('projects the real creation events %s / %s without duplicate creation work in detail', (developmentCreatedAt,orderCreatedAt,first,second,publishedWithOrder)=>{
+ [null,'2026-10-19T00:00:00Z','创建正式订单',false],
+ ['2026-10-17T00:00:00Z',null,'创建纯开发',false],
+ ['2026-10-17T00:00:00Z','2026-10-19T00:00:00Z','创建正式订单',false],
+ ['2026-10-19T00:00:00Z','2026-10-19T00:00:00Z','创建正式订单',false],
+ ['2026-10-19T00:00:00Z','2026-10-19T00:00:00Z','创建正式订单',true],
+] as const)('projects the real creation events %s / %s without duplicate creation work in detail', (developmentCreatedAt,orderCreatedAt,label,publishedWithOrder)=>{
  const order=fixture(),work=order.stages[1]!.nodes[0]!;
  order.orderId=orderCreatedAt?id:null;
  order.cockpitCreation={developmentCreatedAt,orderCreatedAt,...(publishedWithOrder?{developmentPublishedWithOrder:true}:{})};
@@ -112,10 +112,12 @@ it.each([
  const html=renderToStaticMarkup(createElement(CockpitDetail,{order,asOf:'2026-10-19T00:00:00Z',actions:null,
   context:JourneyReturnContextSchema.parse({selected:id,expanded:'',focus:'order_information',row:'order_information'}),onChange(){}}));
  const flow=html.match(/<section[^>]*cockpit-flow-panel[\s\S]*?<\/section>/)![0];
- expect(flow).toContain(first);
- expect(flow).toContain((first==='创建纯开发'?developmentCreatedAt:orderCreatedAt)!.slice(0,10));
- if(second){expect(flow).toContain(second);expect(flow).toContain('2026-10-19');}
- else expect(flow).not.toContain(first==='创建纯开发'?'创建正式订单':'创建纯开发');
+ expect(flow).toContain(label+'节点明细');
+ expect(flow).not.toContain('cockpit-creation-events');
+ expect(flow).not.toContain(label==='创建纯开发'?'创建正式订单':'创建纯开发');
+ expect(flow).toContain('cockpit-stage-date-colon');
+ expect(html).toMatch(/data-identity-fact="created"[^>]*><dt>创建日期：<\/dt><dd>.*?2026-10-19/);
+ expect(html).not.toContain('自身截止');
  expect(html).not.toContain('重复节点');
  expect(html).not.toContain('journey-node-order_information');
  expect(html).toContain('全部节点（2）');

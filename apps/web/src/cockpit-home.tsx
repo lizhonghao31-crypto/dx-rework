@@ -2,9 +2,7 @@ import {CockpitPlanDates,frameworkResponsibility} from './cockpit-framework-node
 import {CockpitActualDates,CockpitTargetDifference} from './cockpit-fixed-schedule.js';
 import {CockpitOrderDeletion} from './cockpit-order-deletion.js';
 import {Button} from '@dx-rework/ui';
-import {CockpitDate} from './cockpit-date.js';
 import {cockpitScheduleReason} from './cockpit-fixed-schedule.js';
-import {hasDateOnlyTarget,nodeTargetLabel,originalNodeDeadlineLabel} from './journey-sla-details.js';
 import {useEffect,useState} from 'react';
 import {type JourneyNode,type JourneyResult,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {StatusBadge} from '@dx-rework/ui';
@@ -25,7 +23,7 @@ function Task({node,lines,showBlocker=true}:{node:JourneyNode;lines:OrderJourney
  const result=frameworkResponsibility(node,undefined);
  const stopped=nodeTerminationLabel(node);
  const status=stopped??(node.risks.includes('overdue')?'逾期':node.risks.includes('due_soon')?'临期':node.state==='blocked'?'受阻':node.state==='active'?'进行中':'等待前置');
- return <><span className="cockpit-home-task-heading"><strong>{node.label}</strong><StatusBadge tone={stopped?'neutral':node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge></span><small>{cockpitNodeOwner(node)}</small><small className="cockpit-home-task-date"><span>计划</span><CockpitPlanDates node={node} lines={lines}/></small><small className="cockpit-home-task-date"><span>实际</span>{node.state==='completed'?<CockpitActualDates node={node} lines={lines} short/>:'未完成'}</small>{Boolean(node.fixedTargets?.length)&&<small><CockpitTargetDifference nodes={[node]} lines={lines}/> · {result.text}</small>}{(node.fixedTargets?.length?node.fixedTargets.some(target=>target.progress.ownSla.deadlineAt):node.expectedAt||node.nativeWindows?.length)&&<small>自身截止 {node.fixedTargets?.length?originalNodeDeadlineLabel(node):node.nativeWindows?.length||hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/>}</small>}{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
+ return <><span className="cockpit-home-task-heading"><strong>{node.label}</strong><StatusBadge tone={stopped?'neutral':node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge></span><small>{cockpitNodeOwner(node)}</small><small className="cockpit-home-task-date"><span>计划</span><CockpitPlanDates node={node} lines={lines}/></small><small className="cockpit-home-task-date"><span>实际</span>{node.state==='completed'?<CockpitActualDates node={node} lines={lines} short/>:'未完成'}</small>{Boolean(node.fixedTargets?.length)&&<small><CockpitTargetDifference nodes={[node]} lines={lines}/> · {result.text}</small>}{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
 }
 function HomePos({order,onOpen}:{order:OrderJourney;onOpen:()=>void}){
  const lines=sortedCockpitPoLines(order);
