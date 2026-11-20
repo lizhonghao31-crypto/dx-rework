@@ -1,101 +1,83 @@
 {
   "version": 1,
-  "base": "adc8652daad5b1395bc30b197a40bdbf4d7337e9",
-  "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
+  "base": "59a2f4f5488a6762930e4714e83799d4ecb6fcb3",
+  "sourceFingerprint": "a1dc7bf860e79f185959630e3473ead11c21b1c58d0022723e0f49509338043a",
   "rules": [
     {
-      "rule": "角标只共享当前授权身份和会话代次的在途读取。隐藏页暂停定时刷新，恢复可见和已读后的必要刷新继续。",
-      "source": "Eric 审定《达兴全系统性能治理 v7》06A 全局待办角标。",
+      "rule": "直接打开座舱详情时复用授权任务批量读取，原操作日志保持相同 actor、资源、范围和稳定游标。",
+      "source": "Eric 审定达兴全系统性能 v7 的 PR04。",
       "reads": [
-        "apps/web/src/components.tsx",
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/todo-indicator-refresh.ts",
-        "apps/api/src/todos/service.ts"
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-log.ts",
+        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "oldTests": [
-        "tests/unit/responsibility-queue-refresh.test.ts",
-        "tests/acceptance/todo-content-read-browser.mjs"
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "initialization": "同代次只共享当前 Promise。身份或权限变化丢弃旧结果。已读发生在旧读取时，追读标记跟随旧请求，离开页面或换 Shell 不丢。重新可见仍刷新。",
-      "dateAndPermission": "使用当前已验证身份和授权代次、保留角标接口的既有校验及业务时钟，不缓存跨身份或旧代次数据。",
-      "expectation": "两次同身份并发拉取只发一条，隐藏时不自动轮询，恢复可见继续，已读后取新值，旧身份的迟到响应不提交。",
+      "initialization": "先确定原权限范围与业务时钟，再用同一读取上下文初始化页内任务事实；日志使用同一资源读会话与稳定分页快照。",
+      "dateAndPermission": "历史轮次、当前风险和真实日期仍读同一原来源，按既有 Root/管理/PMC/普通身份和任务范围判权；原权限矩阵独立验证。",
+      "expectation": "授权任务 1、15、50 条物化一次读取，保持原任务身份和角色；无关员工不可读。日志首屏和后续页不漏不重，外发关联节点、精确旧轮与被撤授权边界按原契约。",
       "writes": [
-        "apps/web/src/components.tsx",
-        "apps/web/src/todo-indicator-read.ts",
-        "apps/web/src/todo-indicator-refresh.ts",
-        "tests/acceptance/todo-content-read-browser.mjs",
-        "tests/unit/responsibility-queue-refresh.test.ts"
+        "apps/api/src/production-platform/journey-log.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "checks": [
-        "indicator-scheduler",
-        "native-shell-indicator",
-        "indicator-cross-tab-browser"
+        "pg-journey-scope",
+        "permission-unit"
       ]
     }
   ],
   "checks": [
     {
-      "id": "indicator-scheduler",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/responsibility-queue-refresh.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06a/remount-unit.json",
-      "context": "原责任队列仍手动刷新。受控请求覆盖同账号在途合并、隐藏/恢复、会话权限切换、跨页面卸载前到达的已读在新挂载只补一次，旧响应不展示。",
+      "id": "pg-journey-scope",
+      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/digital-journey-postgres.test.ts -t 'batches the authorized task conditions|reads five real log|retains authorized sourcing-task|keeps compact flow dates|reads one populated mother and its frozen SLA as PMC|only exposes|exact read|uses the original assignment|validates read routes' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr04/new-base-roles.json",
+      "context": "已合 10A 的精确基线后复验生产原读、批量任务条件、PMC 只读与越权保护、旧轮次与原日志客服路径。真隔离 PostgreSQL 13.23 与非超级用户角色。同轮合入的待办角标纯 Web 变更不改变任何被测 API 输入。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr06a/remount-unit.json",
-      "logSha256": "e0791b0c2ed8d3bc8319ade7cc48db1df1e4531be5d949f597dd078bf3d3e17b",
-      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
-      "testedHead": "ac539aa9a7121678e9eabbf37d02c62921bfdfd3",
-      "passed": 4,
+      "log": "/tmp/dx-performance-v7/pr04/new-base-roles.json",
+      "logSha256": "456d1ac2f9655167884e4e8330b250447496e918af7e262819c9ff28007bf4ae",
+      "sourceFingerprint": "a1dc7bf860e79f185959630e3473ead11c21b1c58d0022723e0f49509338043a",
+      "testedHead": "957107e6ab92ef898ecb7c4b81a9bd71c7baf6a8",
+      "passed": 7,
       "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T16:04:21.789000Z",
-      "endedAt": "2026-11-20T16:04:22.860251Z",
+      "skipped": 31,
+      "startedAt": "2026-11-20T16:12:24.595000Z",
+      "endedAt": "2026-11-20T16:12:34.905425Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e0791b0c2ed8d3bc8319ade7cc48db1df1e4531be5d949f597dd078bf3d3e17b"
+          "sha256": "456d1ac2f9655167884e4e8330b250447496e918af7e262819c9ff28007bf4ae"
         }
       ]
     },
     {
-      "id": "native-shell-indicator",
-      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=565 M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/dx-perf06a-local-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06a/native-shell-warm.json",
-      "context": "已签名 Chromium 原 App，隔离 PG13.23，跨 Shell 导航的一条共享在途 HTTP 通过。夹具角标数值固定为零，用于实际前端请求调度。",
+      "id": "permission-unit",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr04/final-pmc.json",
+      "context": "PMC 独立只读矩阵与原管理、普通和兼任角色撤回验证。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr06a/native-shell-warm.json",
-      "logSha256": "36945e7160391d41d17f6c986b4e3a702bb918c4f2f67169839e26edf7277919",
-      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
-      "testedHead": "bcaee4488461cc90bf330e07573c31280352039e",
-      "passed": 1,
+      "log": "/tmp/dx-performance-v7/pr04/final-pmc.json",
+      "logSha256": "db61ee911fdb65b0f655b81bb6a9ea4909ea51e686ca22060d8ce959826b7efc",
+      "sourceFingerprint": "a1dc7bf860e79f185959630e3473ead11c21b1c58d0022723e0f49509338043a",
+      "testedHead": "361db3d0a117941f09b9b37315701e3cceb64edc",
+      "passed": 41,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T15:34:45.301000Z",
-      "endedAt": "2026-11-20T15:34:57.108129Z",
+      "startedAt": "2026-11-20T16:24:54.832000Z",
+      "endedAt": "2026-11-20T16:24:58.606690Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "36945e7160391d41d17f6c986b4e3a702bb918c4f2f67169839e26edf7277919"
+          "sha256": "db61ee911fdb65b0f655b81bb6a9ea4909ea51e686ca22060d8ce959826b7efc"
         }
       ]
-    },
-    {
-      "id": "indicator-cross-tab-browser",
-      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=620 TMPDIR=/dev/shm/dxperf-run.BJ5pMC TODO_READ_EVIDENCE=/dev/shm/dxperf-run.BJ5pMC/pr06a-remount-browser PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node tests/acceptance/todo-content-read-browser.mjs",
-      "context": "真实 Chromium、原 Shell 与两标签页 BroadcastChannel。合成 TEST HTTP 的旧响应和已读，保留待办一条，只有一次有效补读，隐藏和异账号不增加请求。全部18项通过。起点以紧邻的本地类型检查结束为下界。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr06a/remount-browser.json",
-      "logSha256": "a52db70b66c4503876d2fe02994313b72de04eb49bb08aca279c59a64132c3ea",
-      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
-      "testedHead": "ac539aa9a7121678e9eabbf37d02c62921bfdfd3",
-      "passed": 18,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T16:06:26.490952Z",
-      "endedAt": "2026-11-20T16:06:51.499322Z"
     }
   ]
 }
