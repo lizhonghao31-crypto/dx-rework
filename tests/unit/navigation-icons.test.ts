@@ -8,7 +8,7 @@ describe("approved navigation icons", () => {
   it("assigns canonical sourcing entries to alias and detail headings", async () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(source).toContain('iconRoute={mode === "pending" ? "/ui/sourcing/pending" : "/ui/sourcing/history"}');
-    expect(source).toContain('<Header iconRoute="/ui/sourcing/pending" title="订单详情"');
+    expect(source).toMatch(/<Header\s+iconRoute="\/ui\/sourcing\/pending"\s+title=\{early\?\.styleNo\?\?"订单详情"\}/);
     expect(source).toMatch(/<Header\s+iconRoute="\/ui\/sourcing\/pending"\s+title=\{item.styleNo\}/);
     expect(navigationIconForRoute("/ui/sourcing/pending")).toBe("FileText");
   });

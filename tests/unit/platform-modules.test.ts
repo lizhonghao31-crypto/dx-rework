@@ -136,9 +136,15 @@ describe("thin platform module routing", () => {
     expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
     expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
     expect(sourcingCss).toContain("grid-column: 1 / -1");
-    // The approved sourcing layout keeps real workflow above the full-width work area.
+    // The loading overview has a separate, read-only projection. Check the
+    // approved fully loaded layout in its own rendering branch.
+    const loadedStart=sourcingPage.indexOf("const needsDecisionReason = sourcingDecisionNeedsReason");
+    expect(loadedStart).toBeGreaterThan(0);
+    const loadedPage=sourcingPage.slice(loadedStart);
+    expect(sourcingPage.slice(0,loadedStart)).not.toContain('<ActionBar className="sourcing-owner-actions"');
+    expect(sourcingPage).toContain('<KeyFacts className="sourcing-key-facts"');
     const regions = [
-      '<KeyFacts className="sourcing-key-facts"',
+      '<SourcingDetailFacts item={item}',
       'className="sourcing-supporting-overview"',
       '<SourcingOrderPhotos',
       '<WorkflowRail className="sourcing-workflow-rail"',
@@ -147,7 +153,7 @@ describe("thin platform module routing", () => {
       '<DecisionSummary title=',
       '{!financialReadView && !quoteEntryView ? orderLineItems : null}',
       '<ActionBar className="sourcing-owner-actions"',
-    ].map(marker => sourcingPage.indexOf(marker));
+    ].map(marker => loadedPage.indexOf(marker));
     expect(regions.every(index => index >= 0)).toBe(true);
     expect(regions).toEqual([...regions].sort((left, right) => left - right));
   });

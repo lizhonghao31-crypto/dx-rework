@@ -1,27 +1,77 @@
 import {useCallback,useEffect,useRef,useState} from "react";
+import {SubmissionRequestError} from "./submission-validation.js";
 import {
-  SourcingCaseSummarySchema,SourcingAttachmentListResponseSchema,SourcingTimelineResponseSchema,
-  SourcingFactoryChangeStateResponseSchema,SourcingContractStateResponseSchema,
+  SourcingCaseSummarySchema,SourcingDetailSectionsSchema,SourcingContractStateResponseSchema,
+  SourcingAttachmentListResponseSchema,SourcingTimelineResponseSchema,SourcingFactoryChangeStateResponseSchema,
+  type SourcingCaseSummary,type SourcingAttachment,type SourcingContractDocument,
   SourcingDispatchStateSchema,SourcingContractReturnResponseSchema,
 } from "@dx-rework/contracts";
 
 export type SourcingDetailRequest = <T>(path:string,schema:{parse(value:unknown):T},init?:RequestInit)=>Promise<T>;
 export type SourcingDetailIdentity = Readonly<{caseId:string;epoch:number}>;
 
-export async function readSourcingDetail(request:SourcingDetailRequest,caseId:string,signal:AbortSignal){
+type ReadOnlySections={attachments?:SourcingAttachment[];contract?:SourcingContractDocument|null};
+type DetailObserver={
+  item?:(item:SourcingCaseSummary)=>void;
+  sections?:(sections:ReadOnlySections)=>void;
+  recordsFailed?:()=>void;
+  denied?:(error:SubmissionRequestError)=>void;
+};
+class SourcingDetailRevisionError extends Error {}
+const isReadDenial=(error:unknown):error is SubmissionRequestError=>error instanceof SubmissionRequestError&&[401,403,404].includes(error.status);
+const sameApprovedRevision=(left:SourcingCaseSummary,right:SourcingCaseSummary)=>
+  left.sourcingCaseId===right.sourcingCaseId&&left.version===right.version&&
+  left.approvalSnapshot?.sourcingApprovalSnapshotId===right.approvalSnapshot?.sourcingApprovalSnapshotId;
+
+export async function readSourcingDetail(request:SourcingDetailRequest,caseId:string,signal:AbortSignal,observer?:DetailObserver,nativeRecords=false){
   const path=`sourcing/cases/${caseId}`,init={signal};
-  const [item,attachments,timeline,factoryChange,contract,dispatch,contractReturn]=await Promise.all([
-    request(path,SourcingCaseSummarySchema,init),
-    request(path+"/attachments",SourcingAttachmentListResponseSchema,init),
-    request(path+"/timeline",SourcingTimelineResponseSchema,init),
-    request(path+"/factory-changes/current",SourcingFactoryChangeStateResponseSchema,init),
-    request(path+"/contract",SourcingContractStateResponseSchema,init),
-    request(path+"/dispatch",SourcingDispatchStateSchema,init),
-    request(path+"/contract-return",SourcingContractReturnResponseSchema,init),
-  ]);
-  if(item.sourcingCaseId!==caseId)throw Error("订单资料与当前页面不一致，请重新读取");
-  return {item,attachments:attachments.items,timeline:timeline.items,factoryChange:factoryChange.item,
-    factoryRemainingLines:factoryChange.remainingLines,contract:contract.item,dispatchState:dispatch,contractReturn};
+  const read=<T>(url:string,schema:{parse(value:unknown):T})=>request(url,schema,init).catch((error:unknown)=>{
+    if(isReadDenial(error))observer?.denied?.(error);
+    throw error;
+  });
+  const summary=read(path,SourcingCaseSummarySchema).then(item=>{
+    if(item.sourcingCaseId!==caseId)throw new SourcingDetailRevisionError("订单资料与当前页面不一致，请重新读取");
+    observer?.item?.(item);
+    return item;
+  });
+  const recordsRead=nativeRecords?summary.then(async item=>{
+    // The ordinary grouped read stays the fast path. On explicit retry,
+    // use the established authorized endpoints and verify the order again.
+    const [attachments,timeline,factoryChange]=await Promise.all([
+      read(path+"/attachments",SourcingAttachmentListResponseSchema),
+      read(path+"/timeline",SourcingTimelineResponseSchema),
+      read(path+"/factory-changes/current",SourcingFactoryChangeStateResponseSchema),
+    ]);
+    const current=await read(path,SourcingCaseSummarySchema);
+    if(current.sourcingCaseId!==item.sourcingCaseId||current.version!==item.version)
+      throw new SourcingDetailRevisionError("本单已更新，请重新读取原订单资料");
+    return {sourcingCaseId:caseId,version:item.version,attachments,timeline,factoryChange};
+  }):read(path+"/detail-sections",SourcingDetailSectionsSchema);
+  const sections=Promise.all([summary,recordsRead]).then(([item,value])=>{
+    if(value.sourcingCaseId!==caseId||value.version!==item.version)throw new SourcingDetailRevisionError("本单已更新，请重新读取原订单资料");
+    observer?.sections?.({attachments:value.attachments.items});
+    return value;
+  }).catch((error:unknown)=>{
+    if(!isReadDenial(error)&&!(error instanceof SourcingDetailRevisionError))observer?.recordsFailed?.();
+    throw error;
+  });
+  const currentContract=Promise.all([summary,read(path+"/contract",SourcingContractStateResponseSchema),
+    read(path+"/contract-return",SourcingContractReturnResponseSchema)]).then(([item,contract,contractReturn])=>{
+    if(contract.item&&contractReturn.currentContractDocumentId&&contract.item.sourcingContractDocumentId!==contractReturn.currentContractDocumentId)
+      throw new SourcingDetailRevisionError("本单已更新，请重新读取原订单资料");
+    if(contract.item&&contractReturn.currentContractDocumentId===contract.item.sourcingContractDocumentId&&
+      item.approvalSnapshot?.sourcingApprovalSnapshotId===contract.item.sourcingApprovalSnapshotId)
+      observer?.sections?.({contract:contract.item});
+    return {contract:contract.item,contractReturn};
+  });
+  const dispatch=read(path+"/dispatch",SourcingDispatchStateSchema);
+  const supporting=Promise.all([sections,currentContract,dispatch]);
+  // An ancillary error cannot take the authorized summary off its own read path.
+  void supporting.catch(()=>undefined);
+  const item=await summary;
+  const [records,contractReads,dispatchState]=await supporting;
+  return {item,attachments:records.attachments.items,timeline:records.timeline.items,factoryChange:records.factoryChange.item,
+    factoryRemainingLines:records.factoryChange.remainingLines,...contractReads,dispatchState};
 }
 export type SourcingDetailSnapshot=Awaited<ReturnType<typeof readSourcingDetail>>;
 
@@ -29,7 +79,8 @@ export type SourcingDetailSnapshot=Awaited<ReturnType<typeof readSourcingDetail>
  * GET results. Refreshing or changing chapters never cancels a business write. */
 export function useSourcingDetailRead(caseId:string,request:SourcingDetailRequest,enabled=true){
   const owner=useRef({caseId,epoch:0,live:false}),sequence=useRef(0),controller=useRef<AbortController|null>(null);
-  const [state,setState]=useState<{caseId:string;snapshot:SourcingDetailSnapshot|null;loading:boolean;error:string}>({caseId,snapshot:null,loading:enabled,error:""});
+  const [state,setState]=useState<{caseId:string;snapshot:SourcingDetailSnapshot|null;overview:SourcingCaseSummary|null;readOnly:ReadOnlySections;loading:boolean;error:string;recordsFailed:boolean}>({caseId,snapshot:null,overview:null,readOnly:{},loading:enabled,error:"",recordsFailed:false});
+  const retryingRecords=useRef(false);
   const capture=useCallback(():SourcingDetailIdentity=>({caseId,epoch:owner.current.epoch}),[caseId]);
   const owns=useCallback((identity:SourcingDetailIdentity)=>owner.current.live
     &&owner.current.caseId===identity.caseId&&owner.current.epoch===identity.epoch,[]);
@@ -39,24 +90,59 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
     return()=>{owner.current.live=false;owner.current.epoch++;sequence.current++;controller.current?.abort();};
   },[caseId]);
 
-  const reload=useCallback(async():Promise<SourcingDetailSnapshot|null>=>{
+  const readAttempt=useCallback(async(nativeRecords:boolean):Promise<SourcingDetailSnapshot|null>=>{
     const identity=capture();if(!owns(identity))return null;
     const version=++sequence.current;
     controller.current?.abort();const current=new AbortController();controller.current=current;
     const accepts=()=>owns(identity)&&sequence.current===version;
-    setState(previous=>accepts()?{caseId,snapshot:previous.snapshot?.item.sourcingCaseId===caseId?previous.snapshot:null,loading:true,error:""}:previous);
+    let accessLost=false;
+    const expose=(patch:Partial<{overview:SourcingCaseSummary;readOnly:ReadOnlySections}>)=>{
+      if(!accepts()||current.signal.aborted||accessLost)return;
+      setState(previous=>{
+        if(!accepts()||accessLost)return previous;
+        const authoritativelyChanged=patch.overview&&previous.snapshot&&!sameApprovedRevision(previous.snapshot.item,patch.overview);
+        return {...previous,...patch,
+          snapshot:authoritativelyChanged?null:previous.snapshot,
+          readOnly:{...previous.readOnly,...patch.readOnly},
+        };
+      });
+    };
+    setState(previous=>accepts()?{caseId,snapshot:previous.snapshot?.item.sourcingCaseId===caseId?previous.snapshot:null,overview:previous.caseId===caseId?previous.overview:null,readOnly:{},loading:true,error:"",recordsFailed:false}:previous);
     try{
-      const snapshot=await readSourcingDetail(request,caseId,current.signal);
+      const snapshot=await readSourcingDetail(request,caseId,current.signal,{
+        item:overview=>expose({overview}),sections:readOnly=>expose({readOnly}),
+        recordsFailed:()=>{
+          if(accepts()&&!current.signal.aborted&&!accessLost)
+            setState(previous=>accepts()?{...previous,recordsFailed:true}:previous);
+        },
+        denied:error=>{
+          if(!accepts()||current.signal.aborted)return;
+          accessLost=true;
+          setState(previous=>accepts()?{...previous,snapshot:null,overview:null,readOnly:{},loading:false,error:error.message,recordsFailed:false}:previous);
+        },
+      },nativeRecords);
       if(!accepts()||current.signal.aborted)return null;
-      setState(previous=>accepts()?{caseId,snapshot,loading:false,error:""}:previous);return snapshot;
+      setState(previous=>accepts()?{caseId,snapshot,overview:snapshot.item,readOnly:{},loading:false,error:"",recordsFailed:false}:previous);return snapshot;
     }catch(error){
       if(!accepts()||current.signal.aborted)return null;
-      setState(previous=>accepts()?{...previous,loading:false,error:error instanceof Error?error.message:"订单加载失败"}:previous);
+      const denied=accessLost||isReadDenial(error);
+      const revisionChanged=error instanceof SourcingDetailRevisionError;
+      accessLost=denied||revisionChanged;
+      setState(previous=>accepts()?{...previous,
+        ...(denied?{overview:null,recordsFailed:false}:{}),
+        ...(accessLost?{snapshot:null,readOnly:{}}:{}),
+        loading:false,error:error instanceof Error?error.message:"订单加载失败"}:previous);
       throw error;
     }finally{
       if(accepts())setState(previous=>accepts()&&previous.loading?{...previous,loading:false}:previous);
     }
   },[caseId,request,capture,owns]);
+  const reload=useCallback(()=>readAttempt(false),[readAttempt]);
+  const retryRecords=useCallback(async()=>{
+    if(retryingRecords.current)return;
+    retryingRecords.current=true;
+    try{await readAttempt(true);}finally{retryingRecords.current=false;}
+  },[readAttempt]);
 
   useEffect(()=>{
     if(enabled)void reload().catch(()=>undefined);
@@ -69,6 +155,6 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
       ?{...previous,snapshot:{...previous.snapshot,...patch}}:previous);
   },[owns]);
   const snapshot=state.snapshot?.item.sourcingCaseId===caseId?state.snapshot:null;
-  return {snapshot,loading:state.caseId!==caseId||state.loading,error:state.caseId===caseId?state.error:"",reload,apply,capture,owns,
+  return {snapshot,overview:state.caseId===caseId?state.overview:null,readOnly:state.caseId===caseId?state.readOnly:{},loading:state.caseId!==caseId||state.loading,error:state.caseId===caseId?state.error:"",recordsFailed:state.caseId===caseId&&state.recordsFailed,reload,retryRecords,apply,capture,owns,
     canSubmit:enabled&&snapshot!==null&&state.caseId===caseId&&!state.loading&&!state.error&&!controller.current?.signal.aborted};
 }

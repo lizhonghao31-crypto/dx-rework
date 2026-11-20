@@ -663,6 +663,14 @@ export type RecordSourcingContract = z.infer<typeof RecordSourcingContractSchema
 export type RequestSourcingFactoryChange = z.infer<typeof RequestSourcingFactoryChangeSchema>;
 export type DecideSourcingFactoryChange = z.infer<typeof DecideSourcingFactoryChangeSchema>;
 export type SourcingFactoryChangeState = z.infer<typeof SourcingFactoryChangeStateSchema>;
+export const SourcingDetailSectionsSchema = z.object({
+  sourcingCaseId:z.string().uuid(),
+  version:z.number().int(),
+  attachments:SourcingAttachmentListResponseSchema,
+  timeline:SourcingTimelineResponseSchema,
+  factoryChange:SourcingFactoryChangeStateResponseSchema,
+});
+
 export type SourcingFactoryChangeStateResponse = z.infer<typeof SourcingFactoryChangeStateResponseSchema>;
 export type RecordSourcingFinanceReconciliation = z.infer<
   typeof RecordSourcingFinanceReconciliationSchema
