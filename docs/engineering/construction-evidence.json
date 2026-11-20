@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "172bc3a42c92447f3b4714669015cb63b7f3353f",
-  "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
+  "sourceFingerprint": "5f26ed3144f63772d0799125dcace78fe83b3ca4e09c562037686d476ab3ef8a",
   "rules": [
     {
       "rule": "外发详情按照原订单授权读取当前资料，主单与已核附件优先呈现；合同与办理仍使用原成功回执及工作单状态。",
@@ -36,32 +36,31 @@
       "checks": [
         "sourcing-detail-native-retained",
         "sourcing-detail-postgres-read-rights",
-        "sourcing-detail-generation-and-role",
-        "sourcing-approved-layout-and-icons"
+        "sourcing-detail-generation-and-role"
       ]
     }
   ],
   "checks": [
     {
       "id": "sourcing-detail-native-retained",
-      "command": "DX_EXACT_NATIVE_ASSETS=/dev/shm/dxperf-recovery.sdNo8V/pr05-latest-assets M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/sourcing-detail-native-local-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/latest-browser.json",
-      "context": "原测试同源码生产构建预先编译，隔离 PG13.23、实际授权会话和 Chromium。合同和照片可先显示；权限、失败回退、幂等和另一订单不污染。",
+      "command": "DX_EXACT_NATIVE_ASSETS=/dev/shm/dxperf-recovery.sdNo8V/pr05-review-assets M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/sourcing-detail-native-local-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/review-browser.json",
+      "context": "原测试同源码生产构建预先编译，隔离 PG13.23、实际授权会话和 Chromium。合同和照片可先显示；权限、失败回退、幂等和另一订单不污染。 使用复审候选生产构建重新执行七项。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr05/latest-browser.json",
-      "logSha256": "c0859f2d9e78b68dc2c425dc640f70e78edb51886a61ca1afeff49e90e914091",
-      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
-      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
+      "log": "/tmp/dx-performance-v7/pr05/review-browser.json",
+      "logSha256": "003c9bd655491c9ca5a713ba7860ac332b78dcabe1d267e500c78e011cf4433c",
+      "sourceFingerprint": "5f26ed3144f63772d0799125dcace78fe83b3ca4e09c562037686d476ab3ef8a",
+      "testedHead": "8aceb3c80dd8baffb215897c5ee7580de78765a8",
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T19:54:28.189000Z",
-      "endedAt": "2026-11-20T19:54:48.941093Z",
+      "startedAt": "2026-11-20T21:08:46.167000Z",
+      "endedAt": "2026-11-20T21:09:06.869418Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c0859f2d9e78b68dc2c425dc640f70e78edb51886a61ca1afeff49e90e914091"
+          "sha256": "003c9bd655491c9ca5a713ba7860ac332b78dcabe1d267e500c78e011cf4433c"
         }
       ]
     },
@@ -74,8 +73,8 @@
       "exitCode": 0,
       "log": "/tmp/dx-performance-v7/pr05/latest-pg.json",
       "logSha256": "66cfb58309fc6cdd4cd6a3b722e3ef3dd281791dc19bb906cd63729ab99ea789",
-      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
-      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
+      "sourceFingerprint": "5f26ed3144f63772d0799125dcace78fe83b3ca4e09c562037686d476ab3ef8a",
+      "testedHead": "8aceb3c80dd8baffb215897c5ee7580de78765a8",
       "passed": 2,
       "failed": 0,
       "skipped": 140,
@@ -90,47 +89,24 @@
     },
     {
       "id": "sourcing-detail-generation-and-role",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-detail-identity.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/digital-pmc-readonly-access.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/latest-unit.json",
-      "context": "保留订单与合同版本关联、原提交回执、只读角色以及请求换代。",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-detail-identity.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/navigation-icons.test.ts tests/unit/platform-modules.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/review-unit-final.json",
+      "context": "保留订单与合同版本关联、原提交回执、只读角色以及请求换代。 增加两例，部分读取或完整旧快照都不能把旧批准合同带入新版本；新版合同读取失败后亦不能继续暴露。原布局、导航与权限保留。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr05/latest-unit.json",
-      "logSha256": "a340a001635acbd955078aa2f0723625c364c5af606d7e2c3246d7f7df100df9",
-      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
-      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
-      "passed": 56,
+      "log": "/tmp/dx-performance-v7/pr05/review-unit-final.json",
+      "logSha256": "55e8d1ee062a7fb56f6167a4144fb1cf16362a7d00d38b16e448d98375ee0c90",
+      "sourceFingerprint": "5f26ed3144f63772d0799125dcace78fe83b3ca4e09c562037686d476ab3ef8a",
+      "testedHead": "8aceb3c80dd8baffb215897c5ee7580de78765a8",
+      "passed": 74,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T19:54:16.774000Z",
-      "endedAt": "2026-11-20T19:54:24.316762Z",
+      "startedAt": "2026-11-20T21:08:33.158000Z",
+      "endedAt": "2026-11-20T21:08:42.726932Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a340a001635acbd955078aa2f0723625c364c5af606d7e2c3246d7f7df100df9"
-        }
-      ]
-    },
-    {
-      "id": "sourcing-approved-layout-and-icons",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/navigation-icons.test.ts tests/unit/platform-modules.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/latest-layout-verified.json",
-      "context": "确认加载中仍沿原规范图标、只读展示无审批操作，完全加载后原订单详情分区有序。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr05/latest-layout-verified.json",
-      "logSha256": "e4a60d00de619f0ad83231a0bed810c4e74f4b17839486aee2a9614e2b35f970",
-      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
-      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
-      "passed": 16,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T20:56:14.171000Z",
-      "endedAt": "2026-11-20T20:56:15.079004Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "e4a60d00de619f0ad83231a0bed810c4e74f4b17839486aee2a9614e2b35f970"
+          "sha256": "55e8d1ee062a7fb56f6167a4144fb1cf16362a7d00d38b16e448d98375ee0c90"
         }
       ]
     }

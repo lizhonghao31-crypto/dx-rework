@@ -173,3 +173,54 @@ it("rejects standalone record retry when the authoritative case revision changes
   expect(routes.filter(path=>path===`sourcing/cases/${id}${group}`)).toHaveLength(1);
  expect(routes.some(path=>path.endsWith("/detail-sections"))).toBe(false);
 });
+
+it.each([false,true])("does not expose the prior approval's contract while reading a newer overview (prior full snapshot: %s)",async hadSnapshot=>{
+ const nextApproval="00000000-0000-4000-8000-000000000003";
+ const approval={
+  sourcingApprovalSnapshotId:id,sourcingDecisionId:id,decisionVersion:1,
+  supplierId:id,supplierCode:"TEST-FACTORY",supplierName:"TEST 厂",quantity:120,totalAmount:"1480.80",
+  estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",processes:[],
+  linePrices:[{position:1,styleNo:item.styleNo,alternateStyleNo:null,color:"蓝色",quantity:120,unitPrice:"12.34",totalAmount:"1480.80"}],
+  approvedBy:id,approvedAt:at,
+ };
+ const oldOverview=SourcingCaseSummarySchema.parse({...item,approvalSnapshot:approval});
+ const newOverview=SourcingCaseSummarySchema.parse({...item,version:hadSnapshot?item.version:item.version+1,styleNo:"NEW-STYLE",approvalSnapshot:{...approval,sourcingApprovalSnapshotId:nextApproval,decisionVersion:2}});
+ const oldContract={
+  sourcingContractDocumentId:id,sourcingApprovalSnapshotId:id,contractNumber:"TEST-OLD-CONTRACT",contractVersion:1,templateVersion:1,
+  status:"ready",missingFields:[],snapshotFingerprint:null,pdfAttachmentId:id,pdfSha256:"a".repeat(64),failureReason:null,
+  preparedAt:at,generatedAt:at,canSupplement:false,
+ };
+ let newer=false;
+ const pendingContract=Promise.withResolvers<never>();
+ const fetchDetail:SourcingDetailRequest=async(path,schema,init)=>{
+  if(path===`sourcing/cases/${id}`)return schema.parse(newer?newOverview:oldOverview);
+  if(path.endsWith("/detail-sections")){
+   if(!hadSnapshot)throw Error("TEST grouped records temporarily unavailable");
+   return schema.parse({sourcingCaseId:id,version:(newer?newOverview:oldOverview).version,
+     attachments:{items:[]},timeline:{items:[]},factoryChange:{item:null}});
+  }
+  if(path.endsWith("/contract"))return newer?await pendingContract.promise:schema.parse({item:oldContract});
+  if(path.endsWith("/contract-return"))return schema.parse({...contractReturn,currentContractDocumentId:newer?nextApproval:id});
+  return request(path,schema,init);
+ };
+ let read!:ReturnType<typeof useSourcingDetailRead>;
+ function Probe(){
+  read=useSourcingDetailRead(id,fetchDetail);
+  return null;
+ }
+ await act(async()=>root.render(createElement(Probe)));
+ expect(read.recordsFailed).toBe(!hadSnapshot);
+ expect((read.snapshot?.contract??read.readOnly.contract)?.sourcingContractDocumentId).toBe(id);
+ newer=true;
+ let done!:Promise<unknown>;
+ await act(async()=>{done=(hadSnapshot?read.reload():read.retryRecords()).catch(error=>error);});
+ expect(read.overview?.version).toBe(newOverview.version);
+ expect(read.overview?.approvalSnapshot?.sourcingApprovalSnapshotId).toBe(nextApproval);
+ expect(read.snapshot).toBeNull();
+ expect(read.readOnly.contract).toBeUndefined();
+ expect(read.canSubmit).toBe(false);
+ await act(async()=>{pendingContract.reject(Error("TEST new contract unavailable"));await done;});
+ expect(read.error).toContain("new contract unavailable");
+ expect(read.readOnly.contract).toBeUndefined();
+ expect(read.canSubmit).toBe(false);
+});

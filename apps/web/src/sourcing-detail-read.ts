@@ -19,6 +19,9 @@ type DetailObserver={
 };
 class SourcingDetailRevisionError extends Error {}
 const isReadDenial=(error:unknown):error is SubmissionRequestError=>error instanceof SubmissionRequestError&&[401,403,404].includes(error.status);
+const sameApprovedRevision=(left:SourcingCaseSummary,right:SourcingCaseSummary)=>
+  left.sourcingCaseId===right.sourcingCaseId&&left.version===right.version&&
+  left.approvalSnapshot?.sourcingApprovalSnapshotId===right.approvalSnapshot?.sourcingApprovalSnapshotId;
 
 export async function readSourcingDetail(request:SourcingDetailRequest,caseId:string,signal:AbortSignal,observer?:DetailObserver,nativeRecords=false){
   const path=`sourcing/cases/${caseId}`,init={signal};
@@ -94,10 +97,17 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
     const accepts=()=>owns(identity)&&sequence.current===version;
     let accessLost=false;
     const expose=(patch:Partial<{overview:SourcingCaseSummary;readOnly:ReadOnlySections}>)=>{
-      if(accepts()&&!current.signal.aborted&&!accessLost)
-        setState(previous=>accepts()&&!accessLost?{...previous,...patch,readOnly:{...previous.readOnly,...patch.readOnly}}:previous);
+      if(!accepts()||current.signal.aborted||accessLost)return;
+      setState(previous=>{
+        if(!accepts()||accessLost)return previous;
+        const authoritativelyChanged=patch.overview&&previous.snapshot&&!sameApprovedRevision(previous.snapshot.item,patch.overview);
+        return {...previous,...patch,
+          snapshot:authoritativelyChanged?null:previous.snapshot,
+          readOnly:{...previous.readOnly,...patch.readOnly},
+        };
+      });
     };
-    setState(previous=>accepts()?{caseId,snapshot:previous.snapshot?.item.sourcingCaseId===caseId?previous.snapshot:null,overview:previous.caseId===caseId?previous.overview:null,readOnly:nativeRecords&&previous.caseId===caseId?previous.readOnly:{},loading:true,error:"",recordsFailed:false}:previous);
+    setState(previous=>accepts()?{caseId,snapshot:previous.snapshot?.item.sourcingCaseId===caseId?previous.snapshot:null,overview:previous.caseId===caseId?previous.overview:null,readOnly:{},loading:true,error:"",recordsFailed:false}:previous);
     try{
       const snapshot=await readSourcingDetail(request,caseId,current.signal,{
         item:overview=>expose({overview}),sections:readOnly=>expose({readOnly}),
