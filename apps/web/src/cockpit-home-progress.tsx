@@ -1,6 +1,6 @@
 import {naturalTimeRatio} from '@dx-rework/domain';
 import {useScheduleObservation} from './cockpit-fixed-schedule.js';
-import type {JourneyBusinessDate,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {JourneyBusinessDate,CockpitHomeOrder} from '@dx-rework/contracts/digital-production-journey';
 import {CockpitDate} from './cockpit-date.js';
 
 function HomeDate({value,missing='—'}:{value:JourneyBusinessDate|undefined;missing?:string}){
@@ -9,7 +9,7 @@ function HomeDate({value,missing='—'}:{value:JourneyBusinessDate|undefined;mis
 }
 
 /** Completion forecast is derived from all authorized PO estimates, never B/H. */
-export function CockpitCompletionEstimate({order}:{order:OrderJourney}){
+export function CockpitCompletionEstimate({order}:{order:CockpitHomeOrder}){
  if(!order.fixedSchedule)return <HomeDate value={order.visualProgress?.expected}/>;
  const scopes=order.fixedSchedule?.scopes??[];
  if(!scopes.length)return <span>—</span>;
@@ -22,7 +22,7 @@ export function CockpitCompletionEstimate({order}:{order:OrderJourney}){
 }
 
 /** Quantity remains a separate native fact, never a progress percentage. */
-export function cockpitReceiptGap(order:OrderJourney){
+export function cockpitReceiptGap(order:CockpitHomeOrder){
  const quantities=order.businessProgress?.quantities?.lines??[];
  const valid=quantities.length>0&&new Set(quantities.map(line=>line.lineId)).size===quantities.length&&quantities.every(line=>order.lines.some(visible=>visible.id===line.lineId)&&[line.demand,line.received,line.remainingReceipt].every(n=>Number.isSafeInteger(n)&&n>=0));
  if(!valid)return null;
@@ -30,7 +30,7 @@ export function cockpitReceiptGap(order:OrderJourney){
 }
 
 /** Presentation only: never substitute old flat n/m or a plan percentage. */
-export function CockpitHomeProgress({order}:{order:OrderJourney}){
+export function CockpitHomeProgress({order}:{order:CockpitHomeOrder}){
  const progress=order.visualProgress,observed=useScheduleObservation(order);
  const stopped=['completed','closed','cancelled'].includes(order.display?.mainState??'');
  const ratio=progress?.delivery&&observed&&!stopped?naturalTimeRatio(progress.startedAt,progress.delivery,observed):progress?.timeRatio;

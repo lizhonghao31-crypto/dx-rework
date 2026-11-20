@@ -133,7 +133,7 @@ export function orderStatus(order: OrderJourney): string {
   return "未启动";
 }
 /** One compact representative; every parallel node remains reachable in the detail work area. */
-export function representativeCockpitNodes(order:OrderJourney,filter:Partial<Pick<CockpitContext,'stage'|'node'|'state'|'risk'>>={}):JourneyNode[]{
+export function representativeCockpitNodes(order:Pick<OrderJourney,'stages'>&{display?:Pick<NonNullable<OrderJourney['display']>,'mainState'>},filter:Partial<Pick<CockpitContext,'stage'|'node'|'state'|'risk'>>={}):JourneyNode[]{
   if(order.display&&['closed','completed','cancelled'].includes(order.display.mainState))return [];
   const stages=new Map(order.stages.map((stage,index)=>[stage.key,index]));
   const nodeOrder=new Map(JOURNEY_NODES.map((node,index)=>[node.key,index]));
@@ -183,7 +183,7 @@ export function journeyDocumentGroups(order: OrderJourney) {
   return [...groups].map(([domain, entries]) => ({domain, entries}));
 }
 
-export function matchingPoDeliveryRisks(order:OrderJourney,context:CockpitContext) {
+export function matchingPoDeliveryRisks(order:Pick<OrderJourney,'stages'|'deliveryRisks'>,context:CockpitContext) {
   return (order.deliveryRisks??[]).filter(risk=>(!["overdue","due_soon","blocked"].includes(context.kpi)||risk.risk===context.kpi)
     &&(!context.risk||risk.risk===context.risk)
     &&order.stages.flatMap(stage=>stage.nodes).some(node=>node.current&&node.key===risk.nodeKey&&(!context.stage||node.stage===context.stage)&&(!context.node||node.key===context.node)&&(!context.state||node.state===context.state)));

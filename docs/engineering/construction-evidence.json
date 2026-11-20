@@ -1,53 +1,143 @@
 {
   "version": 1,
-  "base": "2899a92f4f10c1a94af4e990f945596bff307fbf",
-  "sourceFingerprint": "dc27a1022d42db012aaa204c4d4839d1630ee81c02738871c80e431b8e299f48",
+  "base": "72fdb7f2b99d647c8a34b2b3065ba3d5f128e54f",
+  "sourceFingerprint": "3b59a28ad36610733e3a40a320235ca3fc7f38cabfd2cac52dcb3d6bc5eb57e8",
   "rules": [
     {
-      "rule": "只为原生详情请求加载所选任务对应模块；原船样正文沿同权限、时间和任务身份读取。",
-      "source": "Eric 审定达兴全系统性能 v7，PR03B 入口资源与失败隔离分开验收。",
+      "rule": "座舱首页显式请求精简投影，默认 Journeys 查询、详情和原法定业务权限契约保持原样。",
+      "source": "Eric 审定达兴全系统性能 v7，PR10A 首页响应。",
       "reads": [
-        "apps/web/src/lazy-business-page.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/digital-production-tasks-panel.tsx",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts"
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-reads.ts",
+        "packages/contracts/src/digital-production-journey.ts"
       ],
       "oldTests": [
-        "tests/integration/module-bundles-native-browser-postgres.test.ts"
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/integration/terminal-quality-projections-browser-postgres.test.ts"
       ],
-      "initialization": "原权限门禁和入口、样式仍在，任务并行读原权限和任务，已取得的正文供通用面板消费；工作区按真实 kind 延迟载入。",
-      "dateAndPermission": "业务时效、任务读写权限、原路由和回跳保持现有规则。不同任务在切换后不使用旧任务状态，分支模块故障用原手动恢复。",
-      "expectation": "真实生产构建，普通合成跟单冷开船样不加载单据资源，仅一次任务正文查询；单据资源被断开只影响对应合法单据路由，返回原船样仍能打开；无权入口不加载模块。",
+      "initialization": "原服务先计算完整权限与范围事实、全局筛选和 KPI，按现有顺序分页。仅显式 view=home 的已选行在响应边界删除首页不消费的详情与重复排程节点。",
+      "dateAndPermission": "沿用原 scope 查询、完整 PO 覆盖、可信固定目标和正常/失败态时间来源。原详情、办理、撤权和未知条目都沿原边界。",
+      "expectation": "真实浏览器的首页、第二页与回退保持原口径，根、管理、PMC、普通角色同一入口的权限保持；完整/精简响应的当前节点、PO、风险、日期和范围一致；已复核原生撤权。 首次 Full 发现船样旧断言早于正文和终止历史截止落点漂移，保留截止值、终止前超时、原节点无办理权及船样任务与历史的请求计数。",
       "writes": [
-        "apps/web/src/digital-production-page.tsx",
-        "tests/integration/module-bundles-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/journey-home-projection.ts",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-home-fact-links.tsx",
+        "apps/web/src/cockpit-home-progress.tsx",
+        "apps/web/src/cockpit-home-risks.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-reads.ts",
+        "apps/web/src/cockpit-timing-coverage.tsx",
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "apps/web/src/po-delivery-dates.tsx",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/terminal-quality-projections-browser-postgres.test.ts"
       ],
       "checks": [
-        "browser"
+        "browser",
+        "permission-unit",
+        "ship-native-delayed",
+        "terminal-native-deadline"
       ]
     }
   ],
   "checks": [
     {
       "id": "browser",
-      "command": "NODE_ENV=test M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs NODE_OPTIONS=--max-old-space-size=900 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13.mjs tests/integration/module-bundles-native-browser-postgres.test.ts -t 'loads only the original ship-sample branch|keeps the original access gate' --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr03b/fault.json",
-      "context": "原应用生产构建与签名 Chromium、独立 PG13.23。切断单据模块并核船样可读、单据仅自身失败和返回，另核原无授权保护。同一已验证产品树用于新合并基线。",
+      "command": "NODE_ENV=test M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs NODE_OPTIONS=--max-old-space-size=900 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13.mjs tests/integration/journey-page-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10a/native-full.json",
+      "context": "签名真实 Chromium 原生应用，PG13.23。28 项通过，覆盖真实权限、同会话撤权、整单选择、下钻、分页返回、失败重试和首页响应对应。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr03b/fault.json",
-      "logSha256": "67a54c3bf210afb63a012c0abbef05b51ec2f9e69e0cdff78f4b08e7f1e6b582",
-      "sourceFingerprint": "dc27a1022d42db012aaa204c4d4839d1630ee81c02738871c80e431b8e299f48",
-      "testedHead": "06bfd1b11e9659da578f6285e4fe33d7f10380cb",
-      "passed": 2,
+      "log": "/tmp/dx-performance-v7/pr10a/native-full.json",
+      "logSha256": "c935f81296c40d4422db2b54f957755a8da7cc89f39bc09033f6765dea6c3f72",
+      "sourceFingerprint": "3b59a28ad36610733e3a40a320235ca3fc7f38cabfd2cac52dcb3d6bc5eb57e8",
+      "testedHead": "939e050e5fcf68b869f7f33047e4c82fa7bb66ad",
+      "passed": 28,
       "failed": 0,
-      "skipped": 8,
-      "startedAt": "2026-11-20T13:46:12.663000Z",
-      "endedAt": "2026-11-20T13:46:37.076454Z",
+      "skipped": 0,
+      "startedAt": "2026-11-20T13:49:40.127000Z",
+      "endedAt": "2026-11-20T13:54:18.569732Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "67a54c3bf210afb63a012c0abbef05b51ec2f9e69e0cdff78f4b08e7f1e6b582"
+          "sha256": "c935f81296c40d4422db2b54f957755a8da7cc89f39bc09033f6765dea6c3f72"
+        }
+      ]
+    },
+    {
+      "id": "permission-unit",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/production-reporting-link.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10a/permission-unit.json",
+      "context": "83 项单测覆盖 PMC/管理、普通和非关联、首页状态、冻结排程和原生产导航。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr10a/permission-unit.json",
+      "logSha256": "befd196abfe01ea1f96791688089e554e762ecefdccef73b4cb59b73d579891a",
+      "sourceFingerprint": "3b59a28ad36610733e3a40a320235ca3fc7f38cabfd2cac52dcb3d6bc5eb57e8",
+      "testedHead": "939e050e5fcf68b869f7f33047e4c82fa7bb66ad",
+      "passed": 83,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-20T13:43:47.139000Z",
+      "endedAt": "2026-11-20T13:43:53.631826Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "befd196abfe01ea1f96791688089e554e762ecefdccef73b4cb59b73d579891a"
+        }
+      ]
+    },
+    {
+      "id": "ship-native-delayed",
+      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=600 M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13.mjs tests/integration/journey-page-native-browser-postgres-cached-local.test.ts -t 'shows the signed ship-sample task before history' --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10a/ship-cached.json",
+      "context": "首次 Full 44754536320 已失效的两处真回归之一。同应用真实 Chromium、隔离 PG13.23，只运行具体失败场景。保留原数值、权限与请求断言。 本机并行构建与浏览器触及内存限制，复用同候选已生成的完整原生应用 JS/CSS；临时夹具仅跳过重复打包，业务服务、浏览器、数据库及断言原样走实际入口。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr10a/ship-cached.json",
+      "logSha256": "4ef4c41faa098fd4d4c3ed049bd65153bd1009a83bf61e7fdcbcb2d28682ac14",
+      "sourceFingerprint": "3b59a28ad36610733e3a40a320235ca3fc7f38cabfd2cac52dcb3d6bc5eb57e8",
+      "testedHead": "2f79770026943320f31215a0cca8ebaae8643b85",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 9,
+      "startedAt": "2026-11-20T15:17:08.109000Z",
+      "endedAt": "2026-11-20T15:17:37.836947Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "4ef4c41faa098fd4d4c3ed049bd65153bd1009a83bf61e7fdcbcb2d28682ac14"
+        }
+      ]
+    },
+    {
+      "id": "terminal-native-deadline",
+      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=600 M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13.mjs tests/integration/terminal-quality-projections-browser-postgres-cached-local.test.ts -t 'retains cancelled source material verification responsibility' --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10a/terminal-cached-fixed.json",
+      "context": "首次 Full 44754536320 已失效的两处真回归之一。同应用真实 Chromium、隔离 PG13.23，只运行具体失败场景。保留原数值、权限与请求断言。 本机并行构建与浏览器触及内存限制，复用同候选已生成的完整原生应用 JS/CSS；临时夹具仅跳过重复打包，业务服务、浏览器、数据库及断言原样走实际入口。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr10a/terminal-cached-fixed.json",
+      "logSha256": "b2ac748cdd21f3211847406de643fe74217cbc4d761ecb3e22708311e21ce896",
+      "sourceFingerprint": "3b59a28ad36610733e3a40a320235ca3fc7f38cabfd2cac52dcb3d6bc5eb57e8",
+      "testedHead": "2f79770026943320f31215a0cca8ebaae8643b85",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 5,
+      "startedAt": "2026-11-20T15:18:40.119000Z",
+      "endedAt": "2026-11-20T15:18:53.758670Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "b2ac748cdd21f3211847406de643fe74217cbc4d761ecb3e22708311e21ce896"
         }
       ]
     }

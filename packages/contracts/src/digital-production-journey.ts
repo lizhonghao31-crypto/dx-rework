@@ -1,4 +1,4 @@
-import type {FixedScheduleProgress,ScheduleNodeProgress,ScheduleGoalDelta} from './fixed-schedule-progress.js';
+import type {FixedScheduleProgress,ScheduleNodeProgress,ScheduleGoalDelta,ScheduleScopeProgress} from './fixed-schedule-progress.js';
 import { z } from "zod";
 import type {QcProgressClock} from './qc-production-progress.js';
 import type { PoDeliveryDate,PoDeliveryRisk } from "./po-delivery-dates.js";
@@ -54,6 +54,7 @@ export const JourneyFilterSchema = z.object({
   if (value.startDate && value.endDate && value.startDate > value.endDate) context.addIssue({code:"custom", message:"开始日期不能晚于结束日期", path:["endDate"]});
 });
 export type JourneyFilter = z.infer<typeof JourneyFilterSchema>;
+export const JourneyListFilterSchema = JourneyFilterSchema.safeExtend({view:z.literal('home').optional()});
 export type JourneyRecord = { domain: string; id: string; url: string | null; mode: "read" | "handle"; version: number | null; lineId: string | null };
 /** Read-only, action-specific material evidence. It never grants or blocks an operation. */
 export type NodeMaterialState='missing'|'present'|'partial'|'effective'|'stale'|'unknown'|'not_applicable';
@@ -278,6 +279,25 @@ export type JourneyResult=Omit<JourneyCompleteResult,'total'|'summary'>&{
  total:number|null;summary:JourneyCompleteResult['summary']|null;
  freshness?:{pending:number;failed:number;retryIds?:string[];detailsOnly?:true};
 };
+
+/** Page-only projection. Detail, export and other Journey consumers retain the full contract. */
+export type CockpitHomeSchedule = Pick<FixedScheduleProgress,'asOf'|'observationMode'|'state'> & {
+  clockCanAdvance: boolean;
+  scopes: Array<Pick<ScheduleScopeProgress,'lineId'|'state'|'customerDuePassed'|'completionEstimate'>>;
+  framework?: {scopes: Array<Pick<NonNullable<FixedScheduleProgress['framework']>['scopes'][number],'customerDate'>>};
+};
+export type CockpitHomeOrder = Pick<OrderJourney,
+  'id'|'orderId'|'designStyleNo'|'styleImageUrl'|'styleName'|'identity'|'customer'|'merchandisers'|'lines'|
+  'poDeliveryDates'|'deliveryRisks'|'stages'|'cockpitFacts'
+> & {
+  display?: Pick<JourneyDisplay,'mainState'>;
+  fixedSchedule?: FixedScheduleProgress | CockpitHomeSchedule;
+  visualProgress?: Pick<JourneyVisualProgress,'delivery'|'startedAt'|'timeRatio'|'actualRatio'|'actual'|'expected'>;
+  businessProgress?: Pick<JourneyBusinessProgress,'quantities'>;
+};
+export type CockpitHomeResult = Omit<JourneyResult,'items'> & {items:CockpitHomeOrder[]};
+export const scheduleCanAdvance = (schedule:FixedScheduleProgress) =>
+  schedule.scopes.some(scope=>scope.nodes.some(node=>!node.businessCompleted&&!['unknown','terminated'].includes(node.goalDelta.kind)));
 
 export type JourneyDisplay = {
   ruleVersion: "cockpit-display-v1";
