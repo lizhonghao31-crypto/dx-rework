@@ -7,7 +7,8 @@ import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journe
 import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint,journeyValueFingerprint} from '../../apps/api/src/production-platform/journey-fact-model.js';
-import {businessScopeKey} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {ContextBusinessClock,businessScopeKey} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {evaluateSlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {readJourneySelectionAccess,readTaskAccessForPage} from '../../apps/api/src/production-platform/journey-selection-access.js';
@@ -295,6 +296,28 @@ function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:reado
   const asOf=(await f.runtime.repository.view(scene)).now,client=await f.db.connect(),differences:unknown[]=[];
   try{
    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const preparation=new BulkPreparationService(f.db),resource={kind:'order' as const,id:ready.id};
+   const complete=await preparation.read(f.root,ready.id,client);
+   expect(complete.readiness).toBeDefined();
+   const {time}=await new ContextBusinessClock(f.db,client).readObservation(resource,{now:()=>new Date(asOf),mode:'live'});
+   const transport=vi.spyOn(client,'query');
+   try{
+    const {sheet}=await preparation.readJourneyFactsWithClient(ready.id,client,time,f.root);
+    expect(sheet.instructionVersion).toBe(complete.instructionVersion);
+    expect(sheet.sourceRound).toBe(complete.sourceRound);
+    expect(sheet.instructionValid).toBe(complete.instructionValid);
+    expect(sheet.customerConfirmed).toBe(complete.customerConfirmed);
+    expect(sheet.ownerApproved).toBe(complete.ownerApproved);
+    expect(sheet.tasks.map(task=>task.taskId)).toEqual(complete.tasks.map(task=>task.taskId));
+    expect(sheet.reasons).toEqual(complete.reasons);
+    expect(sheet.cutting.completed).toBe(complete.cutting.completed);
+    expect(sheet.cutting.lines).toEqual(complete.cutting.lines.map(({lineId,cuttingOrderId})=>({lineId,cuttingOrderId})));
+    expect(sheet.preshrink).toBe(complete.preshrink);
+    expect(sheet.readiness?.responsibility).toEqual(complete.readiness?.responsibility);
+    const statements=transport.mock.calls.map(([sql])=>typeof sql==='string'?sql:sql.text);
+    expect(statements.some(sql=>sql.includes('digital_instruction_deliveries'))).toBe(false);
+    expect(statements.some(sql=>sql.includes("event_kind='bulk_materials_dispatched'"))).toBe(false);
+   }finally{transport.mockRestore();}
    const actors=[f.root,...['production-management','sample-designer','merchandiser','pattern-room-worker','warehouse','qc','development-clerk'].flatMap(key=>f.people[key]?[f.people[key]!]:[]),
     ...['production-management','merchandiser'].map(key=>({...f.people[key]!,authorizationCapabilities:[],authorizationCapability:'digital_production:view'}))];
    for(const actor of actors){

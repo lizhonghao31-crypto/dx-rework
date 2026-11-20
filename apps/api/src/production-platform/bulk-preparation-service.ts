@@ -155,17 +155,24 @@ export class BulkPreparationService {
   for(const row of (await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1 ORDER BY production_order_id",[sourceId])).rows)await this.sync(db,actor,row.production_order_id);
  }
  /** Internal facts for one mother only. No task DTO/action permission is persisted. */
- async readJourneyFactsWithClient(id:string,db:PoolClient,time:BusinessTime){
+ async readJourneyFactsWithClient(id:string,db:PoolClient,time:BusinessTime,actor?:TrustedActorContext|null){
+  if(actor)await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');
   const g=await this.gates(db,id),prep=await this.current(db,id,g);
   const rows=(await db.query(`SELECT po.line_id AS "lineId",l.child_id AS "cuttingOrderId",r.actual_cut_count AS "actualCutCount"
    FROM digital_production_po_lines po LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id
    LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1 ORDER BY po.position`,[id])).rows;
-  const tasks=prep?[...(await journeyTaskSummaries(db,(await this.routeTasks(db,prep.preparation_id)).map(t=>t.task_id),time)).values()]:[];
-  const responsibility=await preparationResponsibility(db,await preparationContext(db,{kind:'order',id}));
-  return {instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,
+  const taskIds=prep?(await this.routeTasks(db,prep.preparation_id)).map(task=>task.task_id):[];
+  const tasks=taskIds.length
+   ?actor?await this.tasks().readAuthorized(actor,taskIds,db):[...(await journeyTaskSummaries(db,taskIds,time)).values()]
+   :[];
+  const resource={kind:'order' as const,id};
+  const responsibility=actor
+   ?await preparationAdoption(db,resource)?await new ProductionReadinessService(this.database).readResponsibility(actor,resource,db):null
+   :await preparationResponsibility(db,await preparationContext(db,resource));
+  return {gates:g,sheet:{instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,
    customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,tasks,
    preshrink:(await readBulkPreshrinkRequirement(db,prep,g.instruction?.document)).requirement,
-   cutting:{completed:rows.length>0&&rows.every(r=>r.actualCutCount!==null),lines:rows.map(r=>({lineId:r.lineId as string,cuttingOrderId:r.cuttingOrderId as string|null}))},readiness:{responsibility}};
+   cutting:{completed:rows.length>0&&rows.every(r=>r.actualCutCount!==null),lines:rows.map(r=>({lineId:r.lineId as string,cuttingOrderId:r.cuttingOrderId as string|null}))},readiness:responsibility?{responsibility}:undefined}};
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<BulkPreparationSheet>{
   const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);
