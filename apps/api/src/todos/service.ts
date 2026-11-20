@@ -324,8 +324,9 @@ export class TodoService {
       throw new ApplicationError("VALIDATION_ERROR", "页码无效", 400);
     }
 
+    const contextSql=await this.contextSql();
     const countResult = await this.database.query<TodoCountRow>(
-      `WITH todo_view AS (${await this.contextSql()})
+      `WITH todo_view AS (${contextSql})
        SELECT todo_module,COUNT(*) todo_count
        FROM todo_view
        WHERE recipient_user_id=$1
@@ -349,7 +350,7 @@ export class TodoService {
       ?? TODO_MODULES.find((module) => (moduleCounts[module] ?? 0) > 0)
       ?? "rework";
     if(normalizedQuery){
-      const result=await globalTodoSearch(this.database,await this.contextSql(),actor.actorId,normalizedQuery,requestedPage,[
+      const result=await globalTodoSearch(this.database,contextSql,actor.actorId,normalizedQuery,requestedPage,[
         ...productionTodos.map(item=>({module:"production",todo:item.key})),...digitalTodos.map(item=>({module:"digital_production",todo:item.key})),
       ]);
       const providers=new Map([...productionTodos,...digitalTodos].map(item=>[item.key.todoId,item]));
@@ -372,7 +373,7 @@ export class TodoService {
     }
 
     const totalResult = await this.database.query<{ total_count: number | string }>(
-      `WITH todo_view AS (${await this.contextSql()})
+      `WITH todo_view AS (${contextSql})
        SELECT COUNT(*) total_count
        FROM todo_view
        WHERE recipient_user_id=$1
@@ -397,7 +398,7 @@ export class TodoService {
     const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
 
     const result = await this.database.query<TodoPageRow>(
-      `WITH todo_view AS (${await this.contextSql()})
+      `WITH todo_view AS (${contextSql})
        SELECT todo_view.*
        FROM todo_view
        WHERE recipient_user_id=$1

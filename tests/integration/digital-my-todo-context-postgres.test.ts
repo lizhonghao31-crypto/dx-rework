@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { TodoListResponseSchema } from "@dx-rework/contracts";
 import { loadConfig } from "@dx-rework/config";
 import { buildApp } from "../../apps/api/src/app.js";
@@ -64,8 +64,8 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await db.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','OWN-TODO') ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id='OWN-TODO'");
   }, testExecutionConfig.correctnessTimeoutMs);
   afterAll(async () => { await db.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end(); });
-  const sourceTask = async (assignee: string | null = ids.clerk, pending = false) => {
-    const style = `TEST-DOC-SOURCE-${randomUUID()}`;
+  const sourceTask = async (assignee: string | null = ids.clerk, pending = false, stylePrefix = "TEST-DOC-SOURCE-") => {
+    const style = `${stylePrefix}${randomUUID()}`;
     const source = await new DigitalProductionIdentityService(db, true).createSource(root, { developmentType: "头版", designStyleNo: style, temporaryStyleNo: null, customerCode: "PD" }, randomUUID());
     const task = await tx(c => tasks.createWithClient(c, root, { resource: { kind: "source", id: source.sourceId }, kind: "development_materials", routeId: randomUUID(), routeVersion: 1, occurrence: 1, assigneeId: assignee, ...(pending ? { conditions: ["washing_finished" as const] } : {}) }));
     return { style, sourceId: source.sourceId, taskId: task.taskId };
@@ -222,6 +222,57 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect((await notices.todos(actors.tech!)).find(t => t.todoId === f.taskId)?.orderContext?.styleNo).toBe(f.style);
     await db.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1", [ids.clerk]);
     expect((await list(actors.clerk!, f.style)).todos).toHaveLength(1);
+  });
+  it("keeps each native task's own context and receipt in a multi-result search", async () => {
+    const search = `TEST-TODO-COHORT-${randomUUID().slice(0, 8)}-`;
+    const first = await sourceTask(ids.clerk, false, search);
+    const second = await sourceTask(ids.clerk, false, search);
+    const other = await sourceTask(ids.peer, false, search);
+    const expectedIds = [first.taskId, second.taskId].sort();
+
+    const result = await list(actors.clerk!, search);
+    expect(result.totalCount).toBe(2);
+    expect(result.todos.map(todo => todo.entityId).sort()).toEqual(expectedIds);
+
+    for (const task of [first, second]) {
+      const selected = result.todos.find(todo => todo.entityId === task.taskId)!;
+      const native = await notices.todo(actors.clerk!, task.taskId);
+      expect(selected.orderContext?.styleNo).toBe(task.style);
+      expect(selected.route).toMatchObject({ entityId: task.taskId, developmentRound: 1 });
+      expect(selected.contentToken).toMatch(/^[a-f0-9]{64}$/);
+      expect(selected.contentToken).toBe(native?.contentToken);
+    }
+
+    const unrelated = await list(actors.peer!, search);
+    expect(unrelated.todos.map(todo => [todo.entityId, todo.orderContext?.styleNo])).toEqual([[other.taskId, other.style]]);
+    expect(await notices.todo(actors.peer!, first.taskId)).toBeNull();
+  });
+  it("keeps native search query growth bounded across 1, 15 and 50 task candidates", async () => {
+    const search = `TEST-TODO-GROWTH-${randomUUID().slice(0, 8)}-`;
+    const contextCalls: number[] = [];
+    const candidateIds = new Set<string>();
+    const connection = await db.connect();
+    const prototype = Object.getPrototypeOf(connection) as pg.PoolClient;
+    connection.release();
+
+    // Observe physical requests including those issued by the snapshot client.
+    const query = vi.spyOn(prototype, "query");
+    try {
+      for (const size of [1, 15, 50]) {
+        while (candidateIds.size < size) candidateIds.add((await sourceTask(ids.clerk, false, search)).taskId);
+        query.mockClear();
+        const result = await list(actors.clerk!, search);
+        contextCalls.push(query.mock.calls.filter(([sql]) => typeof sql === "string" &&
+          sql.includes("SELECT * FROM digital_production_task_access WHERE task_id=")).length);
+        expect(result.totalCount).toBe(size);
+        expect(result.todos).toHaveLength(Math.min(15, size));
+        expect(result.todos.every(todo => candidateIds.has(todo.entityId))).toBe(true);
+      }
+      expect(contextCalls[0]).toBeGreaterThan(0);
+      // Hold the displayed page size constant and allow bounded cohort overhead.
+      // A dedicated lookup for each of the added 35 candidates fails this check.
+      expect(contextCalls[2]! - contextCalls[1]!).toBeLessThan(10);
+    } finally { query.mockRestore(); }
   });
   it("serves Acceptance search URLs through the real HTTP and PostgreSQL path for Root and ordinary users", async () => {
     const config = loadConfig({

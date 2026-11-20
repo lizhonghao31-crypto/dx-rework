@@ -1,107 +1,120 @@
 {
   "version": 1,
-  "base": "7e38a5fa4ea748000aed782a39c6e9927b5b978f",
-  "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
+  "base": "02c863a61f8ad1efb1afd69d917fe732e0303c68",
+  "sourceFingerprint": "8f8c864611e1fff8c9fdcac0d6cda460d555757423fd5acccaf8d5f2077f4a5c",
   "rules": [
     {
-      "rule": "座舱只装配本次会消费的原产前节点事实。全范围待办与权限判定仍复用原时效规则。",
-      "source": "Eric 审定《达兴全系统性能治理 v7》10B 座舱服务端读取与装配。",
+      "rule": "待办搜索对完整授权候选按同一只读快照批量准备原上下文。翻页前仍按原事实匹配，页内按原次序读取内容及回执。",
+      "source": "Eric 审定《达兴全系统性能治理 v7》08 待办候选与搜索，依赖 06B。",
       "reads": [
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "tests/integration/journey-fact-model-postgres.test.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/journey-snapshot-reads.ts",
+        "apps/api/src/todos/service.ts",
+        "tests/integration/digital-my-todo-context-postgres.test.ts",
+        "tests/integration/todo-global-search-postgres.test.ts"
       ],
       "oldTests": [
-        "tests/integration/journey-fact-model-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/integration/digital-my-todo-context-postgres.test.ts",
+        "tests/integration/todo-global-search-postgres.test.ts"
       ],
-      "initialization": "沿用旧产前门槛、截面的业务时间、真实制单和任务事实。管理角色仍用同一技术与任务授权，历史和工作台入口继续读各自完整详情。",
-      "dateAndPermission": "全范围权限、当前责任、已采用计划和历史首次时间沿原来源，Root、管理、PMC 与原相关普通员工范围保留。",
-      "expectation": "原生有权任务、裁片、责任、时效、待办、风险、汇总和分页完整相同。不重复组装无消费者的领料历史与工作台回执。 只更新实际变动的位点，逐字段保留已批准的 P02 冻结和审计边界以及原人工证据。",
+      "initialization": "使用原活动员工、当前任务、技术授权、主办与缺主办逻辑，沿既有候选批量读法查询每条上下文。计数与单条详情不扩大元数据读取，保留原读取与命令入口。无迁移或历史回填。",
+      "dateAndPermission": "沿原 actor 与活跃身份权限判断，source 可见不推出正式母单或 PO 可见。保持时效规则、期限及单条业务时钟。只读范围内没有新写入。",
+      "expectation": "按 1、15、50 个授权任务确认逐项主体、排序、分页、总量、权限和内容令牌。保持跨人员、旧主办、取消、缺主办与回执拒绝，查询增长不按候选逐条叠加。",
       "writes": [
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/journey-fact-model-postgres.test.ts"
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/todos/service.ts",
+        "tests/integration/digital-my-todo-context-postgres.test.ts"
       ],
       "checks": [
-        "pg-native-facts",
-        "permission-unit",
-        "inventory-annotation-parity"
+        "todo-search-native",
+        "todo-search-query-comparison",
+        "todo-search-eslint",
+        "todo-pmc-scope"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pg-native-facts",
-      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=700 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/journey-fact-model-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/digital-journey-postgres.test.ts -t 'keeps linked native preparation|preserves approved PO goal evidence|projects the complete first adopted serial craft route|batches the authorized task conditions|reads five real log' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10b/post-1063-pg.json",
-      "context": "隔离低权限 PostgreSQL 13.23，实际含 10A 与 04 的候选。双 PO 冻结及特种工艺、管理和部分角色、原直达和游标都通过。后续基线只变更独立风险投影。",
+      "id": "todo-search-native",
+      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.glOR0X NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.glOR0X node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/digital-my-todo-context-postgres.test.ts tests/integration/todo-global-search-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr08/final-native.json",
+      "context": "隔离 TCP PostgreSQL 13.23 非超级用户，两套既有原生集成测试。新增两个授权身份和正式待办内容读回验证，以及 1、15、50 候选的物理查询增长检查。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr10b/post-1063-pg.json",
-      "logSha256": "8eb3a07a671b45d0b25c625eec1c8846795cf702b2171ffbe3c149e561ead4e0",
-      "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
-      "testedHead": "fa14d8e7b731b19808b48e1bb483649981ad5a5c",
-      "passed": 5,
-      "failed": 0,
-      "skipped": 88,
-      "startedAt": "2026-11-20T17:05:19.658000Z",
-      "endedAt": "2026-11-20T17:05:49.850769Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8eb3a07a671b45d0b25c625eec1c8846795cf702b2171ffbe3c149e561ead4e0"
-        }
-      ]
-    },
-    {
-      "id": "permission-unit",
-      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=700 node_modules/.bin/vitest run tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10b/final-pmc.json",
-      "context": "PMC 只读、管理与无关身份回归，保持原能力断言。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr10b/final-pmc.json",
-      "logSha256": "039cb671901762e99e0b52f44467436cbeb0d529084eadda2fb38e15cccfb291",
-      "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
-      "testedHead": "e026dee70a87f497218c4f2a40a728af5f8a31eb",
-      "passed": 41,
+      "log": "/tmp/dx-performance-v7/pr08/final-native.json",
+      "logSha256": "3765bb9834fb2be8dd51e23c82c5eae6d19522e78098f80f784c7e09049349c2",
+      "sourceFingerprint": "8f8c864611e1fff8c9fdcac0d6cda460d555757423fd5acccaf8d5f2077f4a5c",
+      "testedHead": "02c863a61f8ad1efb1afd69d917fe732e0303c68",
+      "passed": 16,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T17:29:21.736000Z",
-      "endedAt": "2026-11-20T17:29:25.428918Z",
+      "startedAt": "2026-11-20T18:21:24.577000Z",
+      "endedAt": "2026-11-20T18:21:36.302154Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "039cb671901762e99e0b52f44467436cbeb0d529084eadda2fb38e15cccfb291"
+          "sha256": "3765bb9834fb2be8dd51e23c82c5eae6d19522e78098f80f784c7e09049349c2"
         }
       ]
     },
     {
-      "id": "inventory-annotation-parity",
-      "command": "node --test /tmp/dx-performance-v7/pr10b/time-inventory-retains-review.test.mjs",
-      "context": "基线对照实际仓库文件，验证原 P02 注记和批准来源完全一致，只更新本次影响的源文本位点；同时核对正常生成器校验。",
+      "id": "todo-search-query-comparison",
+      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=700 TMPDIR=/dev/shm/dxperf-run.BJ5pMC DX_TODO08_MEASURE=/tmp/dx-performance-v7/pr08/search-scale-fixed-result.json node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/todo-search-scale-local.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr08/search-scale-fixed-test.json",
+      "context": "新增永久测试前以相同的候选业务源码在同 PG13.23、同角色和固定观察时钟逐字段比较父版、候选，临时对照夹具及报告留在独立目录。50 项第二页 SQL 126→31；全量计数、页序、任务身份和回执令牌全等。原不固定观察时钟夹具的时间字段差异单独留存。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr10b/inventory-proof.log",
-      "logSha256": "d8db703284701170d80970d9c6e735552774ad4c76995b6e40b3aea92790511d",
-      "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
-      "testedHead": "ee8ae871fb9dd59dfdfeb90dabdb0d129b3c42ce",
+      "log": "/tmp/dx-performance-v7/pr08/search-scale-fixed-test.json",
+      "logSha256": "5e1ba3632ce3d268b7bc5caf7ac83c7d8268bfb8b436c907c9a0d8d78da25afe",
+      "sourceFingerprint": "8f8c864611e1fff8c9fdcac0d6cda460d555757423fd5acccaf8d5f2077f4a5c",
+      "testedHead": "02c863a61f8ad1efb1afd69d917fe732e0303c68",
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T17:34:56.757Z",
-      "endedAt": "2026-11-20T17:34:57.457Z",
+      "startedAt": "2026-11-20T17:42:32.504000Z",
+      "endedAt": "2026-11-20T17:42:41.413120Z",
       "resultReports": [
         {
-          "format": "node-tap",
-          "sha256": "d8db703284701170d80970d9c6e735552774ad4c76995b6e40b3aea92790511d"
+          "format": "vitest-json",
+          "sha256": "5e1ba3632ce3d268b7bc5caf7ac83c7d8268bfb8b436c907c9a0d8d78da25afe"
+        }
+      ]
+    },
+    {
+      "id": "todo-search-eslint",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=500 node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/notification-service.ts apps/api/src/todos/service.ts tests/integration/digital-my-todo-context-postgres.test.ts --max-warnings=0",
+      "context": "候选三份源文件及回归文件定向 ESLint。",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr08/lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceFingerprint": "8f8c864611e1fff8c9fdcac0d6cda460d555757423fd5acccaf8d5f2077f4a5c",
+      "testedHead": "02c863a61f8ad1efb1afd69d917fe732e0303c68",
+      "startedAt": "2026-11-20T17:50:46Z",
+      "endedAt": "2026-11-20T17:50:48Z"
+    },
+    {
+      "id": "todo-pmc-scope",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.glOR0X node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr08/final-pmc.json",
+      "context": "最终集成基线上的 PMC 只读、既有管理岗位、无关人员、不可写及撤权范围测试。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr08/final-pmc.json",
+      "logSha256": "fb940d992a060a528e84cfb8967e424511947f357749dd29d17f87e1702ce156",
+      "sourceFingerprint": "8f8c864611e1fff8c9fdcac0d6cda460d555757423fd5acccaf8d5f2077f4a5c",
+      "testedHead": "02c863a61f8ad1efb1afd69d917fe732e0303c68",
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-20T18:23:21.695000Z",
+      "endedAt": "2026-11-20T18:23:25.442932Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "fb940d992a060a528e84cfb8967e424511947f357749dd29d17f87e1702ce156"
         }
       ]
     }
