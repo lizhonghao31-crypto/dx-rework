@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "53f0ef0c74800b4e2594fa614aabbbf574049de4",
-  "sourceFingerprint": "00bf146f6dd0b9c863a0781974bf56d718c55291b22e7ea4b5670282f6158d1a",
+  "sourceFingerprint": "384edb31db3127b62ded51f9aa10dc21512394b18cedd2169c1ed57fdb856e31",
   "rules": [
     {
       "rule": "首页按定稿显示客户交货日期、实况日期和两条细进度，并在原位置打开有权的生产看板。",
@@ -104,39 +104,39 @@
   "checks": [
     {
       "id": "unit",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-journey-cockpit.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1-legacy-final/unit.json --no-color",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-journey-cockpit.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1-review-final/unit.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T05:52:50Z",
-      "endedAt": "2026-11-20T05:52:58Z",
-      "testedHead": "20e424bbcb5be1e6bd07724fcfd855b6931b37ac",
-      "sourceFingerprint": "00bf146f6dd0b9c863a0781974bf56d718c55291b22e7ea4b5670282f6158d1a",
+      "startedAt": "2026-11-20T06:28:55Z",
+      "endedAt": "2026-11-20T06:29:03Z",
+      "testedHead": "30c9986a2c489f5cb42cab88db4e3f09917b2d08",
+      "sourceFingerprint": "384edb31db3127b62ded51f9aa10dc21512394b18cedd2169c1ed57fdb856e31",
       "context": "实际 release 基线工作树上的候选源码及测试，Node 22、npm 10、项目锁定依赖。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-legacy-final/unit.log",
-      "logSha256": "dfae39ef1e7b6c93a002049197c5a9958fd3018b0ff1d648fd2a30988ea11831",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-review-final/unit.log",
+      "logSha256": "bd88983687a61176b53a4e661764b7ec30e92befb0e0b1f6bf6533ef3b2a5314",
       "kind": "tests",
-      "passed": 119,
+      "passed": 120,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "586b4e79252f1d53b2ae1220ca14dbfcef0b20523d58f1213302bb5a913e8c45"
+          "sha256": "2c7f49a100431a08f3f9d5d6ea3c3c03b15ae30c86b7676aee814ec6304c1fde"
         }
       ]
     },
     {
       "id": "browser",
-      "command": "bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dx-cockpit-repair.rzZPJC/pr1-legacy-final-proof tests/integration/digital-journey-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts -t reads\\ native\\ task\\ and\\ receiving\\ evidence\\ for\\ an\\ unenrolled\\ legacy\\ mother\\|opens\\ only\\ actionable\\ coverage\\ categories\\|original\\ full\\ Shell\\|labelled\\ shared-projection\\ fixture\\|reduces\\ full-scope\\ current\\ native\\ selections\\|R5-08\\ opens\\ actual\\|R5-09\\ follows\\ one\\ new\\ order\\|keeps\\ customer\\ delivery\\|uses\\ \\[AB\\]\\ milestones\\|starts\\ one\\ effective\\ clock\\|applies\\ a\\ real\\ manager\\ approval\\|opens\\ the\\ original\\ live\\ production --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1-legacy-final/browser.json",
+      "command": "bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dx-cockpit-repair.rzZPJC/pr1-review-final-proof tests/integration/digital-journey-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts -t reads\\ native\\ task\\ and\\ receiving\\ evidence\\ for\\ an\\ unenrolled\\ legacy\\ mother\\|opens\\ only\\ actionable\\ coverage\\ categories\\|original\\ full\\ Shell\\|labelled\\ shared-projection\\ fixture\\|reduces\\ full-scope\\ current\\ native\\ selections\\|R5-08\\ opens\\ actual\\|R5-09\\ follows\\ one\\ new\\ order\\|keeps\\ customer\\ delivery\\|uses\\ \\[AB\\]\\ milestones\\|starts\\ one\\ effective\\ clock\\|applies\\ a\\ real\\ manager\\ approval\\|opens\\ the\\ original\\ live\\ production --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1-review-final/browser.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T05:49:24Z",
-      "endedAt": "2026-11-20T05:52:00Z",
-      "testedHead": "20e424bbcb5be1e6bd07724fcfd855b6931b37ac",
-      "sourceFingerprint": "00bf146f6dd0b9c863a0781974bf56d718c55291b22e7ea4b5670282f6158d1a",
+      "startedAt": "2026-11-20T06:25:34Z",
+      "endedAt": "2026-11-20T06:28:02Z",
+      "testedHead": "30c9986a2c489f5cb42cab88db4e3f09917b2d08",
+      "sourceFingerprint": "384edb31db3127b62ded51f9aa10dc21512394b18cedd2169c1ed57fdb856e31",
       "context": "同树真实 App、原签名 Chromium、仅新建回环 PostgreSQL 16 低权限测试角色和合成数据。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-legacy-final/browser.log",
-      "logSha256": "08e6444bd5bd88ab4229211522b4dabd19ef55c70b95426950ea099a06ce4028",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-review-final/browser.log",
+      "logSha256": "20645c2efe09b8f46d2c16453a59b2fac6f62131087f71af63108b1ec1ad2746",
       "kind": "tests",
       "passed": 14,
       "failed": 0,
@@ -144,7 +144,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6bc33299a80e820f85992ea2141cc8c7dd18cdbe0339ef1817e8257d802c535e"
+          "sha256": "973d32d2921b66a940a864c9a40e200dbb25e66818f2772d28b6ef6e9dd06d83"
         }
       ]
     },
@@ -153,12 +153,12 @@
       "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-projection.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/order-time-created.ts apps/web/src/cockpit-detail.tsx apps/web/src/cockpit-framework-nodes.tsx apps/web/src/cockpit-home-fact-links.tsx apps/web/src/cockpit-home-progress.tsx apps/web/src/cockpit-home.tsx apps/web/src/cockpit-milestones.tsx apps/web/src/cockpit-stage-progress.tsx apps/web/src/cockpit-timing-coverage.tsx apps/web/src/digital-journey-cockpit-model.ts apps/web/src/digital-journey-cockpit.tsx packages/contracts/src/digital-production-journey.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/digital-journey-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-home.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T05:52:00Z",
-      "endedAt": "2026-11-20T05:52:02Z",
-      "testedHead": "20e424bbcb5be1e6bd07724fcfd855b6931b37ac",
-      "sourceFingerprint": "00bf146f6dd0b9c863a0781974bf56d718c55291b22e7ea4b5670282f6158d1a",
+      "startedAt": "2026-11-20T06:28:02Z",
+      "endedAt": "2026-11-20T06:28:05Z",
+      "testedHead": "30c9986a2c489f5cb42cab88db4e3f09917b2d08",
+      "sourceFingerprint": "384edb31db3127b62ded51f9aa10dc21512394b18cedd2169c1ed57fdb856e31",
       "context": "实际 release 基线工作树上的候选源码及测试，Node 22、npm 10、项目锁定依赖。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-legacy-final/lint.log",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-review-final/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "kind": "command"
     },
@@ -167,12 +167,12 @@
       "command": "npm run typecheck --workspace @dx-rework/web --workspace @dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T05:52:02Z",
-      "endedAt": "2026-11-20T05:52:50Z",
-      "testedHead": "20e424bbcb5be1e6bd07724fcfd855b6931b37ac",
-      "sourceFingerprint": "00bf146f6dd0b9c863a0781974bf56d718c55291b22e7ea4b5670282f6158d1a",
+      "startedAt": "2026-11-20T06:28:05Z",
+      "endedAt": "2026-11-20T06:28:55Z",
+      "testedHead": "30c9986a2c489f5cb42cab88db4e3f09917b2d08",
+      "sourceFingerprint": "384edb31db3127b62ded51f9aa10dc21512394b18cedd2169c1ed57fdb856e31",
       "context": "实际 release 基线工作树上的候选源码及测试，Node 22、npm 10、项目锁定依赖。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-legacy-final/type.log",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-review-final/type.log",
       "logSha256": "f0f1ba213cb13be15fe64467e899f10de367c2d3c577bdbf98844a1f57d6da10",
       "kind": "command"
     }

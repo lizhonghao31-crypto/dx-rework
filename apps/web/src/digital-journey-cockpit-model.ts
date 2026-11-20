@@ -199,7 +199,7 @@ export function journeyDetailSelection(order: OrderJourney, context: CockpitCont
   const explicitNode = nodes.find(node => node.instanceId === context.focus)
     ?? (context.expanded === undefined ? nodes.find(node => node.key === context.node && node.current) : undefined);
   const historicalRow = nodes.find(node => node.instanceId === context.row);
-  const requested = (context.expanded ?? "").split(",").filter(key => order.stages.some(stage => stage.key === key));
+  const requested = (context.expanded ?? "").split(",").filter(key => nodes.some(node => node.stage === key));
   const current = nodes.filter(node => node.current && node.state !== "not_applicable");
   const working = current.filter(nodeIsInProgress);
   const completed = current.filter(node => node.state === "completed");

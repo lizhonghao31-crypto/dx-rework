@@ -168,11 +168,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const firstTrigger=page.locator('.cockpit-stage-select').first();
    await firstTrigger.hover();await firstTrigger.focus();await page.mouse.move(0,0);
    expect(await firstTrigger.evaluate(el=>el===document.activeElement)).toBe(true);expect(await page.getByRole('tooltip').count()).toBe(0);
+   const heading=page.getByRole('region',{name:'当前节点详情'}).getByRole('heading');
+   const previousHeading=await heading.innerText();
+   expect(previousHeading).not.toContain('暂无可见节点');
    await page.keyboard.press('Space');expect(await firstTrigger.getAttribute('aria-pressed')).toBe('true');
    const removed=['创建产品开发','开发资料保存/发布','订购信息'];
-   const heading=page.getByRole('region',{name:'当前节点详情'}).getByRole('heading');
+   expect(await heading.innerText()).toBe(previousHeading);
    for(const label of removed)expect(await heading.innerText()).not.toContain(label);
    const nodes=page.getByRole('region',{name:'小流程明细'});
+   expect(await nodes.locator('tbody tr').count()).toBeGreaterThan(0);
    await nodes.getByRole('button',{name:/查看更多/}).click();
    const expanded=page.getByRole('dialog',{name:'全部节点明细'});await expanded.waitFor();
    for(const label of removed)expect(await expanded.innerText()).not.toContain(label);

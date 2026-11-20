@@ -122,3 +122,16 @@ it.each([
  expect(html).toContain('进入该节点办理');
  expect(order).toEqual(snapshot);
 });
+
+it('keeps original work reachable from a saved display-only creation stage',()=>{
+ const order=fixture(),work=order.stages[1]!.nodes[0]!;
+ order.cockpitCreation={developmentCreatedAt:null,orderCreatedAt:'2026-10-19T00:00:00Z'};
+ order.stages[0]!.nodes=[{...work,stage:'creation',key:'order_information',instanceId:'old-creation',label:'订购信息',records:[]}];
+ const context=JourneyReturnContextSchema.parse({selected:order.id,expanded:'creation',focus:'old-creation'});
+ const html=renderToStaticMarkup(createElement(CockpitDetail,{order,context,asOf:'2026-10-19T00:00:00Z',actions:null,onChange(){}}));
+ expect(html).toContain('当前节点：'+work.label);
+ expect(html).toContain('进入该节点办理');
+ expect(html).toContain('aria-pressed="true" data-cockpit-focus="stage:creation"');
+ expect(html).not.toContain('订购信息');
+ expect(html).toContain('2026-10-19');
+});
