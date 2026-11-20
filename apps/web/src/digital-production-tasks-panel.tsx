@@ -39,6 +39,7 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
   useEffect(()=>{void load().catch(e=>setError(e.message));},[page,options.manage,compact]);
   useEffect(()=>{if(!feedbackOnly && view === "handle" && (options.manage||options.roles.some(role=>["pattern_room_supervisor","development_clerk"].includes(role))))void digitalRequest<typeof people>("access/candidates").then(setPeople).catch(e=>setError(e.message));},[options.manage,options.roles,view,feedbackOnly]);
   const openVersion=useRef(0),openTarget=useRef<string|null>(null);
+  const displayedTask=useRef<string|null>(null);
   const taskRequest=useRef<AbortController|null>(null);
   const historyRequest=useRef<{taskId:string;controller:AbortController}|null>(null);
   const readHistory=async(id:string,refresh=false)=>{
@@ -65,6 +66,7 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
       const task=!fresh&&initialTask?.taskId===id?initialTask:
         await digitalRequest<DigitalTask>(`tasks/${id}`,'GET',undefined,undefined,{signal:controller.signal});
       if(version!==openVersion.current)return;
+      displayedTask.current=task.taskId;
       setSelected(task);
       await readHistory(id,true);
     }catch(e){if(version===openVersion.current&&!controller.signal.aborted)setError(e instanceof Error?e.message:'读取失败');}
@@ -78,7 +80,7 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
   useEffect(()=>()=>{historyRequest.current?.controller.abort();historyRequest.current=null;},[]);
   const selectedHistory=historyRead?.taskId===selected?.taskId?historyRead:null;
   const history=selectedHistory?.phase==='ready'?selectedHistory.value:null;
-  const save=async(path:string,body:unknown,method="POST")=>{if(!canWriteDigitalTask(view,selected,path)||writing.current)return;writing.current=true;const version=openVersion.current;setBusy(true);setError("");const payload=JSON.stringify([path,body,method]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{await digitalRequest(path,method,body,pending.current.key);pending.current=null;await load();if(selected&&version===openVersion.current)await open(selected.taskId,true);onChanged?.();}catch(e){setError(e instanceof Error?e.message:unsavedInputLabel);}finally{writing.current=false;setBusy(false);}};
+  const save=async(path:string,body:unknown,method="POST")=>{if(!canWriteDigitalTask(view,selected,path)||writing.current)return;writing.current=true;const version=openVersion.current;setBusy(true);setError("");const payload=JSON.stringify([path,body,method]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{await digitalRequest(path,method,body,pending.current.key);pending.current=null;await load();if(selected&&version===openVersion.current&&displayedTask.current===selected.taskId)await open(selected.taskId,true);onChanged?.();}catch(e){setError(e instanceof Error?e.message:unsavedInputLabel);}finally{writing.current=false;setBusy(false);}};
   const timing=(task:DigitalTask)=>{if(task.state==="pending")return pendingTaskTimingLabel;if(task.state==="cancelled")return "已取消";const result=digitalTaskTiming({...task,terminal:task.state==="completed"},acceptanceTaskNow(task,now));const label={unlimited:"无时限",unknown:"时间待核实",normal:task.paused?"原期限内":"办理中",attention:"临期",overdue:"已超时",completed_on_time:"按期完成",completed_overdue:"超时完成"}[result.state];return `${label}${result.elapsedSeconds===null?"":` · 停留 ${(result.elapsedSeconds/3600).toFixed(1)} 小时`}`;};
   const developmentBusinessTask = selected !== null && developmentTaskNeedsBusinessPage(selected.taskKind);
   const genericCompletion = !developmentBusinessTask;
