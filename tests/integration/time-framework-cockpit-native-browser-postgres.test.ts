@@ -63,6 +63,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    const page=tab.page,flow=page.locator('.cockpit-milestones');await flow.waitFor();
    expect(await flow.locator('.cockpit-stage').count()).toBe(route==='A'?9:8);
+   expect(await page.locator('.cockpit-flow-panel .cockpit-creation-events, .cockpit-flow-panel .cockpit-stage-date-colon').count()).toBe(0);
+   await page.locator('[data-identity-fact="created"] time').waitFor();
    expect(await page.getByRole('heading',{name:route==='A'?'要对色':'无需对色',exact:true}).count()).toBe(1);
    const fit=await flow.locator('.cockpit-stage').evaluateAll(stages=>stages.every(stage=>{
     const box=stage.getBoundingClientRect(),viewport=stage.closest('.cockpit-flow-scroll')!.getBoundingClientRect();

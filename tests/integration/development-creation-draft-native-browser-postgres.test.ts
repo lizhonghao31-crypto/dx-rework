@@ -27,9 +27,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    const page=tab.page;await page.setViewportSize({width:1165,height:747});
    const flow=page.getByRole('region',{name:'订单全流程'});await flow.waitFor();
-   expect(await flow.locator('.cockpit-creation-events time').evaluateAll(times=>times.map(time=>time.getAttribute('datetime')))).toEqual(expected.map(row=>row.at));
-   for(const row of expected)expect(await flow.innerText()).toContain(row.label);
-   for(const label of ['创建纯开发','创建正式订单'].filter(label=>!expected.some(row=>row.label===label)))expect(await flow.innerText()).not.toContain(label);
+   expect(await flow.locator('.cockpit-creation-events').count()).toBe(0);
+   await page.locator('[data-identity-fact="created"] time').waitFor();
    const read=()=>page.evaluate(async id=>{
     const response=await fetch('/api/digital-production/journeys/'+encodeURIComponent(id)+'?view=cockpit');
     if(!response.ok)throw Error('Cannot verify original time facts: '+response.status);
@@ -37,6 +36,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     return {cockpitCreation:value.cockpitCreation,supervision:value.supervision,fixedSchedule:value.fixedSchedule,visualProgress:value.visualProgress};
    },id);
    const before=await read(),nodes=page.getByRole('region',{name:'小流程明细'});
+   for(const row of expected){
+    const key=row.label==='创建纯开发'?'developmentCreatedAt':'orderCreatedAt';
+    expect(before.cockpitCreation[key]).toBe(row.at);
+   }
    await nodes.getByRole('button',{name:'本单全部节点',exact:true}).click();
    const removed=['创建产品开发','开发资料保存/发布','订购信息'];
    for(const label of removed)expect(await nodes.locator('.journey-node-toggle').filter({hasText:label}).count()).toBe(0);

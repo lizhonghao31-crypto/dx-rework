@@ -98,3 +98,11 @@
  .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status {flex:none;padding-inline:0 1px;gap:0}
  .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status::before {margin-inline-end:2px}
 }
+
+/* Let existing left-side homepage facts wrap without clipping their values. */
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home :is(.journey-order-select,.cockpit-home-style,.cockpit-home-person,.cockpit-home-pos strong) {
+ display:block;max-height:none;white-space:normal;overflow:visible;overflow-wrap:anywhere
+}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home :is(.cockpit-schedule-reason,.cockpit-home-customer) {
+ min-width:0;white-space:normal;overflow:visible;overflow-wrap:anywhere
+}

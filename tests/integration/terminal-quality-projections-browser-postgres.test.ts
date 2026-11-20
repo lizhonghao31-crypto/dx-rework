@@ -142,8 +142,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    try{
     const current=tab.page.locator('.cockpit-current-summary');await current.waitFor();
     await expect.poll(()=>current.innerText()).toContain('终止前超时4小时');
-    expect(await current.innerText()).toContain(new Date(original.dueAt!).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));
-    expect(await current.innerText()).toContain('自身截止');
+    expect(await current.innerText()).not.toContain('自身截止');
+    const currentDates=tab.page.locator('.cockpit-node-current');
+    const cutoff=new Date(original.dueAt!);
+    expect(await currentDates.evaluate((panel, value)=>panel.innerText.includes(value.label)||[...panel.querySelectorAll('time')].some(time=>time.dateTime===value.at),
+     {at:cutoff.toISOString(),label:cutoff.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})})).toBe(true);
     await tab.page.getByRole('button',{name:'本单全部节点',exact:true}).click();
     const row=tab.page.locator(`[id="journey-node-${nodeId}"]`);await row.waitFor();
     expect(await row.innerText()).toContain('终止前超时4小时');expect(await row.innerText()).not.toContain('按时完成');

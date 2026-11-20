@@ -58,8 +58,6 @@
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-current-additional[open] {font-size:14px}
 .digital-journey-cockpit[data-view="order"] .cockpit-node-heading-actions{display:flex;align-items:center;gap:4px}
 .digital-journey-cockpit[data-view="order"] .cockpit-node-heading-actions .dx-cockpit-astryx-badge{padding:2px 5px;font-size:12px;line-height:1.35}
-.digital-journey-cockpit[data-view="order"] .cockpit-creation-events{display:flex;flex-wrap:wrap;gap:4px 8px;min-width:0}
-.digital-journey-cockpit[data-view="order"] .cockpit-creation-events time{white-space:nowrap}
 .digital-journey-cockpit[data-view="order"] .cockpit-node-blockers ul{display:flex;flex-wrap:wrap;gap:4px 8px;margin:4px 0;padding:0;list-style:none}
 .digital-journey-cockpit[data-view="order"] .cockpit-node-blockers li{min-width:0;overflow-wrap:anywhere}
 .digital-journey-cockpit[data-view="order"] .cockpit-node-blockers li details{display:inline}
@@ -142,12 +140,11 @@
  .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-node-current dt {min-width:0;white-space:normal;overflow-wrap:anywhere}
 }
 
-/* Keep dates and creation events inside their own flow cell. */
-.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-stage-dates-with-delta>.cockpit-creation-events {grid-column:1/-1;min-width:0}
-.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-creation-events {display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:3px}
-.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-creation-events>small {white-space:normal}
-.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-creation-events time {display:inline-block;white-space:nowrap}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates>div {grid-template-columns:2em minmax(0,1fr);white-space:normal}
+
+/* Keep both legacy date values aligned after spacing the expected-date colon. */
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta>.cockpit-stage-dates>div {grid-template-columns:3.5em minmax(0,1fr);white-space:normal}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta>.cockpit-stage-dates .cockpit-stage-date-colon {display:inline-block;margin-inline:.25em}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates time {white-space:nowrap}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name {display:flex;gap:8px;align-items:baseline}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name>span {font-variant-numeric:tabular-nums}

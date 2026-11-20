@@ -88,6 +88,65 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'viewport-home-390.png')});
   }finally{await context.close();}
  });
+ it('wraps complete homepage facts and keeps the original legacy stage dates and keyboard entry',async()=>{
+  const {context,page}=await h.open(undefined,{search:h.prefix+'02'});try{
+   const sample='TEST-'+'完整的长名称字段'.repeat(5);
+   await page.route(url=>url.pathname==='/api/digital-production/journeys',async route=>{
+    const response=await route.fetch(),data=await response.json();
+    expect(data.items).toHaveLength(1);
+    const [order]=data.items;
+    await route.fulfill({response,json:{...data,items:[{...order,styleName:sample,designStyleNo:sample+'-款号',
+     customer:sample+'-客户',merchandisers:[{...order.merchandisers[0],name:sample+'-跟单'}],
+     lines:order.lines.map((line:object,index:number)=>({...line,po:sample+'-PO-'+index})),
+     fixedSchedule:{state:'unknown',scopes:[]}}]}});
+   });
+   // Replace text in the authorized rendering fixture only. The server still chooses the same order.
+   await page.reload();await homeReady(page);
+   const row=page.locator('.journey-orders tbody tr').first(),reason=row.locator('.cockpit-schedule-reason');
+   const fields=row.locator('.cockpit-schedule-reason,.journey-order-select,.cockpit-home-style,.cockpit-home-person,.cockpit-home-customer,.cockpit-home-pos strong');
+   await expect.poll(()=>reason.innerText()).toBe('计划待核');
+   for(const width of [1165,1440]){
+    await page.setViewportSize({width,height:850});
+    expect(await fields.count()).toBe(7);
+    expect(await fields.evaluateAll(elements=>elements.every(element=>{
+     const shape=element.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(element);
+     return shape.width>0&&shape.height>0&&[...range.getClientRects()].every(rect=>rect.right<=shape.right+1&&rect.bottom<=shape.bottom+1);
+    }))).toBe(true);
+    expect(await row.locator('.cockpit-home-task-cell').innerText()).not.toContain('自身截止');
+    await page.screenshot({path:join(h.evidence,'home-readable-left-'+width+'.png')});
+   }
+   const narrow=await reason.evaluate(element=>{
+    const status=element as HTMLElement;status.style.inlineSize='45px';
+    const style=getComputedStyle(status),range=document.createRange();range.selectNodeContents(status);
+    const box=status.getBoundingClientRect(),rects=[...range.getClientRects()];
+    status.style.removeProperty('inline-size');
+    return {width:box.width,wraps:rects.length>1,fits:rects.every(rect=>rect.right<=box.right+1&&rect.bottom<=box.bottom+1),overflow:style.overflow};
+   });
+   expect(narrow).toEqual({width:45,wraps:true,fits:true,overflow:'visible'});
+   await row.getByRole('button',{name:sample,exact:true}).click();
+   await page.getByRole('region',{name:'订单全景详情'}).waitFor();
+   expect(await page.locator('.cockpit-flow-panel .cockpit-creation-events').count()).toBe(0);
+   await page.locator('[data-identity-fact="created"] time').waitFor();
+   for(const width of [1165,1440]){
+    await page.setViewportSize({width,height:850});
+    const fits=await page.locator('.cockpit-stage-dates').evaluateAll(stages=>stages.every(stage=>{
+     const rows=[...stage.children],label=rows[0]!.children[0]!,colon=label.querySelector('.cockpit-stage-date-colon')!;
+     const box=label.getBoundingClientRect(),date=rows[0]!.children[1]!.getBoundingClientRect();
+     const actual=rows[1]!.children[1]!.getBoundingClientRect(),right=colon.getBoundingClientRect().right;
+     const margin=getComputedStyle(colon).marginInlineEnd;
+     return right<=box.right+.5&&box.right<=date.left+.5&&Math.abs(date.left-actual.left)<1&&parseFloat(margin)>0;
+    }));
+    expect(fits).toBe(true);
+   }
+   const first=page.locator('.cockpit-stage-select').first();
+   const current=page.getByRole('region',{name:'当前节点详情'}).getByRole('heading');
+   const previous=await current.innerText();
+   expect(previous).not.toContain('暂无可见节点');
+   await first.focus();await page.keyboard.press('Space');
+   expect(await first.getAttribute('aria-pressed')).toBe('true');
+   expect(await current.innerText()).toBe(previous);
+  }finally{await context.close();}
+ });
  it('matches the six current KPI cards to their authorized whole-range counts, including zero and unavailable',async()=>{
   const {context,page}=await h.open();try{const source=await h.read(page);
    const stats=page.getByRole('region',{name:'订单状态统计',exact:true});

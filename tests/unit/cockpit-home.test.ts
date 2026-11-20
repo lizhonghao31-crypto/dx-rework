@@ -11,13 +11,16 @@ const order=(nodes:JourneyNode[]):OrderJourney=>({id:"00000000-0000-4000-8000-00
 const missingDate=()=>({at:null,precision:'unknown' as const,quality:'unknown' as const,status:'unknown' as const,covered:0,total:0,reasons:[]});
 const visual=(actualRatio:number|null,timeRatio:number|null=null):NonNullable<OrderJourney['visualProgress']>=>({ruleVersion:'journey-visual-v1',asOf:'2026-10-19T00:00:00Z',actualRatio,timeRatio,startedAt:null,applicableStages:7,completedStages:0,unknownStages:0,expected:missingDate(),actual:missingDate(),stages:[]});
 const home=(o:OrderJourney)=>renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:'journey-v2.0',asOf:'2026-11-07T00:00:00Z',page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:'',context:JourneyReturnContextSchema.parse({scope:'production'}),onChange(){}}));
-it('R3 Review preserves original date-target exclusive and native batch deadline semantics in the homepage and all-risk modal',()=>{
+it('keeps plan and actual in the homepage row and exact original deadlines in all risks',()=>{
  const n=node('TEST-date-target',{expectedAt:'2026-11-07T16:00:00.000Z',expectedPrecision:'date',expectedKind:'sla',deadlineMode:'date_target',deadlineExclusive:true,risks:['overdue'],records:[{domain:'task',id:'TEST-date-target',url:'/ui/digital-production?task=TEST-date-target',mode:'read',version:1,lineId:null}]}),o=order([n]),context=JourneyReturnContextSchema.parse({scope:'production'});
  const modal=()=>renderToStaticMarkup(createElement(CockpitHomeRisks,{order:o,context,onClose(){},onNode(){},onOrder(){}}));
- for(const html of [home(o),modal()]){expect(html).toContain('2026/11/7 当天结束');expect(html).not.toContain('2026-11-07T16:00');expect(html).not.toContain('2026/11/8');}
+ const row=home(o);expect(row).toContain('TEST-date-target');expect(row).toContain('<span>计划</span>');expect(row).toContain('<span>实际</span>');
+ expect(row).not.toContain('自身截止');
+ const dateRisk=modal();expect(dateRisk).toContain('2026/11/7 当天结束');expect(dateRisk).not.toContain('2026-11-07T16:00');expect(dateRisk).not.toContain('2026/11/8');
  const noDeadline=home(order([node('TEST-original-unset')]));expect(noDeadline).not.toContain('尚无可信截止');expect(noDeadline).not.toContain('原截止待核');
  n.nativeWindows=[{evidence:'TEST-original-batch',scopeLabel:'PO TEST',startedAt:null,deadline:'2026-11-06T03:35:00Z',warningAt:null,completedAt:null,complete:false}];
- for(const html of [home(o),modal()]){expect(html).toContain('2026/11/6 11:35:00');expect(html).not.toContain('2026/11/7 当天结束');}
+ const batchRisk=modal();expect(batchRisk).toContain('2026/11/6 11:35:00');expect(batchRisk).not.toContain('2026/11/7 当天结束');
+ expect(home(o)).not.toContain('自身截止');
 });
 it('R3 Review retains every original series planning risk without adding planning nodes to execution progress',()=>{
  const o=order([node('series_material_ready',{stage:'preparation',planningOnly:true,countsInProgress:false,risks:['overdue']}),node('series_processing_dispatch',{stage:'post_cutting',planningOnly:true,countsInProgress:false,risks:['overdue']}),node('series_done',{planningOnly:true,countsInProgress:false,state:'completed',risks:['overdue']})]),before=structuredClone(o),context=JourneyReturnContextSchema.parse({scope:'production'});
