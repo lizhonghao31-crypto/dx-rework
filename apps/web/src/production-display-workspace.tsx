@@ -19,22 +19,18 @@ import { ProductionProgressBars } from './production-dashboard-page.js';
 import './production-display-workspace.css';
 const urls=createWebUrls(import.meta.env.BASE_URL);
 const date=(value:string|null)=>value?shanghaiBusinessTime(value):'未登记';
-function initialQuery():ProductionDashboardQuery {
- const params=new URLSearchParams(window.location.search);
- const scoped=params.has('motherOrderId');
- return {page:Math.max(1,Number(params.get('page'))||1),q:params.get('q')??'',supplierId:params.get('supplierId')||undefined,
-  status:(params.get('status')||undefined) as ProductionDashboardQuery['status'],
-  progressState:(params.get('progressState')||undefined) as ProductionDashboardQuery['progressState'],
-  risk:(params.get('risk')||undefined) as ProductionDashboardQuery['risk'],
-  ...(scoped?{motherOrderId:params.getAll('motherOrderId').length===1?params.get('motherOrderId')!:''}:{}),
- };
-}
+function initialQuery():ProductionDashboardQuery {const params=new URLSearchParams(window.location.search);return {page:Math.max(1,Number(params.get('page'))||1),q:params.get('q')??'',supplierId:params.get('supplierId')||undefined,status:(params.get('status')||undefined) as ProductionDashboardQuery['status'],progressState:(params.get('progressState')||undefined) as ProductionDashboardQuery['progressState'],risk:(params.get('risk')||undefined) as ProductionDashboardQuery['risk']};}
 function queryParameters(query:ProductionDashboardQuery){
  return new URLSearchParams(Object.entries(query).filter(([key,value])=>value!==undefined&&(value!==''||key==='motherOrderId')).map(([key,value])=>[key,String(value)]));
 }
 async function read<T>(path:string,schema:z.ZodType<T>):Promise<T>{const response=await fetch(urls.apiUrl('production-dashboard'+path),{credentials:'include',cache:'no-store'}),body=await response.json();if(!response.ok)throw new Error(body?.error?.message??'生产事实读取失败');return schema.parse(body);}
 export function ProductionDisplayWorkspace(){
- const [query,setQuery]=useState(initialQuery),[data,setData]=useState<ProductionDashboard|null>(null),[detail,setDetail]=useState<z.infer<typeof ProductionDashboardDetailSchema>|null>(null),[selected,setSelected]=useState(()=>new URLSearchParams(window.location.search).get('selected')??''),[search,setSearch]=useState(query.q??''),[error,setError]=useState(''),[detailError,setDetailError]=useState(''),[refresh,setRefresh]=useState(0);
+ const [query,setQuery]=useState(()=>{
+  const params=new URLSearchParams(window.location.search);
+  if(!params.has('motherOrderId'))return initialQuery();
+  const ids=params.getAll('motherOrderId');
+  return {...initialQuery(),motherOrderId:ids.length===1?ids[0]!:''};
+ }),[data,setData]=useState<ProductionDashboard|null>(null),[detail,setDetail]=useState<z.infer<typeof ProductionDashboardDetailSchema>|null>(null),[selected,setSelected]=useState(()=>new URLSearchParams(window.location.search).get('selected')??''),[search,setSearch]=useState(query.q??''),[error,setError]=useState(''),[detailError,setDetailError]=useState(''),[refresh,setRefresh]=useState(0);
  const [canReport,setCanReport]=useState(false);
  useEffect(()=>{let live=true;void verifySession().then(session=>{if(live)setCanReport(session!=='denied'&&canAccessProductionReporting(session.user));}).catch(()=>{if(live)setCanReport(false);});return()=>{live=false;};},[refresh]);
  const [selectedFactory,setSelectedFactory]=useState(()=>new URLSearchParams(window.location.search).get('factoryDecisionId')??null);

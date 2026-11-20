@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "1771d861fa440e86de4900da8bd09f2898197d7f",
-  "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+  "sourceFingerprint": "5fb5f5c95fa6e4b84a20d08836cbdb80f8a6967cc8df35f4f76b5d26707fe112",
   "rules": [
     {
       "rule": "由座舱按已授权正式母单进入实时生产展示，零记录和原厂全部转出不读取其它订单。",
@@ -53,19 +53,19 @@
       "exitCode": 0,
       "kind": "tests",
       "log": "/tmp/dx-performance-v7/pr02/unit.json",
-      "logSha256": "68b868bc99d4b65668faf80fe7889d11edf8e1b818ebf3c6d298cda12a35dea8",
-      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "logSha256": "c8acd2a1d0123108448ab79f58e537f89c71c6fe68a00ea00c86cf95bf7082eb",
+      "sourceFingerprint": "5fb5f5c95fa6e4b84a20d08836cbdb80f8a6967cc8df35f4f76b5d26707fe112",
       "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
       "context": "锁定 Node 22 与依赖，对首页读投影、权限入口和严格的本地返回链接执行单测。",
-      "startedAt": "2026-11-20T12:52:33Z",
-      "endedAt": "2026-11-20T12:52:37Z",
+      "startedAt": "2026-11-20T13:07:03Z",
+      "endedAt": "2026-11-20T13:07:07Z",
       "passed": 31,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "68b868bc99d4b65668faf80fe7889d11edf8e1b818ebf3c6d298cda12a35dea8"
+          "sha256": "c8acd2a1d0123108448ab79f58e537f89c71c6fe68a00ea00c86cf95bf7082eb"
         }
       ]
     },
@@ -76,42 +76,42 @@
       "exitCode": 0,
       "kind": "tests",
       "log": "/tmp/dx-performance-v7/pr02/browser13.json",
-      "logSha256": "6b63180f6c42524d9d929e604c88b424e978a21c4cb89ced826bb6dadb9eb752",
-      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "logSha256": "6467473a67e5ace91bd67850ff3527505359dc582669d84c1d35a88a69ad1336",
+      "sourceFingerprint": "5fb5f5c95fa6e4b84a20d08836cbdb80f8a6967cc8df35f4f76b5d26707fe112",
       "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
       "context": "真实 Chromium 原认证与新隔离库 PostgreSQL 13.23。覆盖转厂、空态、父单删除、范围和历史无 transition。",
-      "startedAt": "2026-11-20T13:02:13Z",
-      "endedAt": "2026-11-20T13:03:05Z",
+      "startedAt": "2026-11-20T13:08:02Z",
+      "endedAt": "2026-11-20T13:09:03Z",
       "passed": 4,
       "failed": 0,
       "skipped": 15,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6b63180f6c42524d9d929e604c88b424e978a21c4cb89ced826bb6dadb9eb752"
+          "sha256": "6467473a67e5ace91bd67850ff3527505359dc582669d84c1d35a88a69ad1336"
         }
       ]
     },
     {
       "id": "browser16",
-      "command": "NODE_OPTIONS=--max-old-space-size=900 bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dxperf-run.BJ5pMC/pr02-evidence16 tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t opens\\ the\\ original\\ live\\ production\\ dashboard\\|opens\\ a\\ signed\\ empty\\ dashboard --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr02/browser16.json",
+      "command": "NODE_OPTIONS=--max-old-space-size=900 bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dxperf-run.BJ5pMC/pr02-evidence16-final tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t opens\\ the\\ original\\ live\\ production\\ dashboard\\|opens\\ a\\ signed\\ empty\\ dashboard --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr02/browser16.json",
       "status": "passed",
       "exitCode": 0,
       "kind": "tests",
       "log": "/tmp/dx-performance-v7/pr02/browser16.json",
-      "logSha256": "c6ed24c987a5f9e0b212d15880d34f8519612565422bec144ad9cff24a7271e8",
-      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "logSha256": "1b3d34c8d208979cf2964f23ecde448292e072c98fe8d15b5cbd69e9a1cdcb0c",
+      "sourceFingerprint": "5fb5f5c95fa6e4b84a20d08836cbdb80f8a6967cc8df35f4f76b5d26707fe112",
       "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
       "context": "原配置隔离 PostgreSQL 16.16、签名 Chromium。覆盖两组转厂、空态、父单删除和跨单防护。",
-      "startedAt": "2026-11-20T12:59:13Z",
-      "endedAt": "2026-11-20T12:59:54Z",
+      "startedAt": "2026-11-20T13:09:03Z",
+      "endedAt": "2026-11-20T13:09:48Z",
       "passed": 3,
       "failed": 0,
-      "skipped": 15,
+      "skipped": 16,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c6ed24c987a5f9e0b212d15880d34f8519612565422bec144ad9cff24a7271e8"
+          "sha256": "1b3d34c8d208979cf2964f23ecde448292e072c98fe8d15b5cbd69e9a1cdcb0c"
         }
       ]
     },
@@ -123,11 +123,11 @@
       "kind": "command",
       "log": "/tmp/dx-performance-v7/pr02/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "sourceFingerprint": "5fb5f5c95fa6e4b84a20d08836cbdb80f8a6967cc8df35f4f76b5d26707fe112",
       "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
       "context": "候选独立工作区对所有变更的 TypeScript/TSX 执行原 ESLint 配置。",
-      "startedAt": "2026-11-20T13:03:06Z",
-      "endedAt": "2026-11-20T13:03:07Z"
+      "startedAt": "2026-11-20T13:08:00Z",
+      "endedAt": "2026-11-20T13:08:02Z"
     },
     {
       "id": "type",
@@ -137,11 +137,11 @@
       "kind": "command",
       "log": "/tmp/dx-performance-v7/pr02/type.log",
       "logSha256": "5e7fcf7d3c5a4aa620dbff8a6e1b7cf30f1cc507376f050dcec53ac25a3d49e1",
-      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "sourceFingerprint": "5fb5f5c95fa6e4b84a20d08836cbdb80f8a6967cc8df35f4f76b5d26707fe112",
       "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
       "context": "候选独立工作区的 Web 与 API 工作区类型检查，执行已重新构建的候选合约。",
-      "startedAt": "2026-11-20T12:58:16Z",
-      "endedAt": "2026-11-20T12:59:11Z"
+      "startedAt": "2026-11-20T13:07:07Z",
+      "endedAt": "2026-11-20T13:08:00Z"
     }
   ]
 }
