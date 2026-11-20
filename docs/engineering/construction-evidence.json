@@ -1,92 +1,136 @@
 {
   "version": 1,
-  "base": "d4a31dd5d95300c595136d2363376b990cf51e84",
-  "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
+  "base": "172bc3a42c92447f3b4714669015cb63b7f3353f",
+  "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
   "rules": [
     {
-      "rule": "大货板房卡片读取沿原有效制单、本人任务和母单授权口径，只取当前 15 项的纸样与唛架事实。",
-      "source": "Eric 审定《达兴全系统性能治理 v7》07 大货板房。",
+      "rule": "外发详情按照原订单授权读取当前资料，主单与已核附件优先呈现；合同与办理仍使用原成功回执及工作单状态。",
+      "source": "Eric 审定《达兴全系统性能治理 v7》05 外发详情。",
       "reads": [
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/journey-selection-access.ts",
-        "apps/api/src/production-platform/journey-snapshot-reads.ts"
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/web/src/sourcing-detail-read.ts",
+        "apps/web/src/sourcing-workspace-page.tsx"
       ],
       "oldTests": [
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts"
+        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/sourcing-detail-identity.test.ts"
       ],
-      "initialization": "先由原板房筛选取页及全范围计数，再沿同一只读快照判断原母单和纸样任务授权，按页批量读取 PO 和实际工序事实。",
-      "dateAndPermission": "原纸样任务责任、当前轮次、已采用的时效值与验收观测时点照旧。保留原计划和人工批准的时间来源记录。普通纸样师不取得全员范围。",
-      "expectation": "管理与本人卡片、纸样及唛架事实、排序计数及原入口保真。完整办理页仍使用原工作单接口。",
+      "initialization": "取得已授权母单后用只读事务投影同版本附件、时间线和转厂状态。组合读取失败，重试沿原入口重新核同母单和合同版本。",
+      "dateAndPermission": "原订单、转厂工厂、绑定角色和不可见历史保持原授权。初始主单与先读事实不会启用业务提交，不改 SLA 或日期。",
+      "expectation": "正常读取资料开请求较少；失败有原授权查证和重试，不冒用旧订单、合同或回执。",
       "writes": [
-        "apps/api/src/production-platform/bulk-preparation-routes.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/web/src/acceptance-business-time.ts",
-        "apps/web/src/bulk-pattern-card.tsx",
-        "apps/web/src/bulk-pattern-model.ts",
-        "apps/web/src/bulk-pattern-workspace.tsx",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "packages/contracts/src/bulk-preparation.ts",
-        "tests/fixtures/bulk-board-containment.tsx",
-        "tests/fixtures/bulk-pattern-card-response.ts",
-        "tests/fixtures/bulk-workroom-customer.tsx",
-        "tests/fixtures/erp-digital-layout.tsx",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/unit/r2-pattern-boards.test.ts"
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/web/src/sourcing-detail-read.ts",
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "packages/contracts/src/sourcing.ts",
+        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/navigation-icons.test.ts",
+        "tests/unit/platform-modules.test.ts",
+        "tests/unit/sourcing-detail-identity.test.ts",
+        "tests/unit/sourcing-transfer-submit-feedback.test.ts"
       ],
       "checks": [
-        "bulk-pattern-native-parity",
-        "bulk-pattern-role-boundary"
+        "sourcing-detail-native-retained",
+        "sourcing-detail-postgres-read-rights",
+        "sourcing-detail-generation-and-role",
+        "sourcing-approved-layout-and-icons"
       ]
     }
   ],
   "checks": [
     {
-      "id": "bulk-pattern-native-parity",
-      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.jAtWCw NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/bulk-washing-postgres.test.ts -t 'keeps authorized bulk-pattern cards' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-native-card-contract.json",
-      "context": "隔离 PG13.23，同角色同页新旧真实处理对照，含多 PO、外裁、完成与办理中，核纸样师没有全员范围。",
+      "id": "sourcing-detail-native-retained",
+      "command": "DX_EXACT_NATIVE_ASSETS=/dev/shm/dxperf-recovery.sdNo8V/pr05-latest-assets M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/sourcing-detail-native-local-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/latest-browser.json",
+      "context": "原测试同源码生产构建预先编译，隔离 PG13.23、实际授权会话和 Chromium。合同和照片可先显示；权限、失败回退、幂等和另一订单不污染。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr07/final-native-card-contract.json",
-      "logSha256": "e43e362595191ebcd99c21b7abd7b6c42d3a1f16ddc915654dd8b9ed6241bb4d",
-      "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
-      "testedHead": "b0df140eff01e64511e502fe6993cec93cf8c655",
-      "passed": 1,
+      "log": "/tmp/dx-performance-v7/pr05/latest-browser.json",
+      "logSha256": "c0859f2d9e78b68dc2c425dc640f70e78edb51886a61ca1afeff49e90e914091",
+      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
+      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
+      "passed": 7,
       "failed": 0,
-      "skipped": 12,
-      "startedAt": "2026-11-20T19:59:08.239000Z",
-      "endedAt": "2026-11-20T19:59:22.511137Z",
+      "skipped": 0,
+      "startedAt": "2026-11-20T19:54:28.189000Z",
+      "endedAt": "2026-11-20T19:54:48.941093Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e43e362595191ebcd99c21b7abd7b6c42d3a1f16ddc915654dd8b9ed6241bb4d"
+          "sha256": "c0859f2d9e78b68dc2c425dc640f70e78edb51886a61ca1afeff49e90e914091"
         }
       ]
     },
     {
-      "id": "bulk-pattern-role-boundary",
-      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node node_modules/vitest/vitest.mjs run tests/unit/r2-pattern-boards.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-development-workspace.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-unit-card-contract.json",
-      "context": "原 PMC 只读、授权与撤权、岗位与可见范围、任务时间值及现有舱页展示测试，保留全部原断言。 原卡片特殊结案和缺前置断言继续按新摘要契约验证。",
+      "id": "sourcing-detail-postgres-read-rights",
+      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/sourcing-pr03-postgres.test.ts -t 'creates once, records an exact IE quote|lets only Root logically delete' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/latest-pg.json",
+      "context": "原 PostgreSQL 两项业务路径，组合读取字段与既有单项接口一致，保归档不可见。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr07/final-unit-card-contract.json",
-      "logSha256": "ee2426995065d76ba3699dc2788f49e55fc4b03ba75f16ea1a6bb2390997433c",
-      "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
-      "testedHead": "b0df140eff01e64511e502fe6993cec93cf8c655",
-      "passed": 89,
+      "log": "/tmp/dx-performance-v7/pr05/latest-pg.json",
+      "logSha256": "66cfb58309fc6cdd4cd6a3b722e3ef3dd281791dc19bb906cd63729ab99ea789",
+      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
+      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
+      "passed": 2,
       "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T19:57:01.020000Z",
-      "endedAt": "2026-11-20T19:57:06.512780Z",
+      "skipped": 140,
+      "startedAt": "2026-11-20T19:54:51.183000Z",
+      "endedAt": "2026-11-20T19:55:01.027347Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ee2426995065d76ba3699dc2788f49e55fc4b03ba75f16ea1a6bb2390997433c"
+          "sha256": "66cfb58309fc6cdd4cd6a3b722e3ef3dd281791dc19bb906cd63729ab99ea789"
+        }
+      ]
+    },
+    {
+      "id": "sourcing-detail-generation-and-role",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing-detail-identity.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/digital-pmc-readonly-access.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/latest-unit.json",
+      "context": "保留订单与合同版本关联、原提交回执、只读角色以及请求换代。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr05/latest-unit.json",
+      "logSha256": "a340a001635acbd955078aa2f0723625c364c5af606d7e2c3246d7f7df100df9",
+      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
+      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-20T19:54:16.774000Z",
+      "endedAt": "2026-11-20T19:54:24.316762Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a340a001635acbd955078aa2f0723625c364c5af606d7e2c3246d7f7df100df9"
+        }
+      ]
+    },
+    {
+      "id": "sourcing-approved-layout-and-icons",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/navigation-icons.test.ts tests/unit/platform-modules.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr05/latest-layout-verified.json",
+      "context": "确认加载中仍沿原规范图标、只读展示无审批操作，完全加载后原订单详情分区有序。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr05/latest-layout-verified.json",
+      "logSha256": "e4a60d00de619f0ad83231a0bed810c4e74f4b17839486aee2a9614e2b35f970",
+      "sourceFingerprint": "4613d5ca91aed03d74c73ab1c5cd0818559cf88b3f3c9e2afdc7dc7905f6261f",
+      "testedHead": "172bc3a42c92447f3b4714669015cb63b7f3353f",
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-20T20:56:14.171000Z",
+      "endedAt": "2026-11-20T20:56:15.079004Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e4a60d00de619f0ad83231a0bed810c4e74f4b17839486aee2a9614e2b35f970"
         }
       ]
     }

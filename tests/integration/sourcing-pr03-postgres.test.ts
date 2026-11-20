@@ -741,6 +741,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       items: [{ attachmentId: evidenceId, filename: "款式照片.jpg", mimeType: "image/jpeg" }],
     });
 
+    const grouped=await service.readDetailSections(readerActor(),created.value.sourcingCaseId);
+    expect(grouped).toEqual({
+      sourcingCaseId:created.value.sourcingCaseId,
+      version:created.value.version,
+      attachments:await service.listAttachments(readerActor(),created.value.sourcingCaseId),
+      timeline:await service.listTimeline(readerActor(),created.value.sourcingCaseId),
+      factoryChange:await service.getCurrentFactoryChange(readerActor(),created.value.sourcingCaseId),
+    });
+
     const quoteKey = randomUUID();
     const quoted = await service.quoteIePrice(
       ieActor(),
@@ -1998,6 +2007,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
     await expect(service.listTimeline(readerActor(), created.value.sourcingCaseId))
       .rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    await expect(service.readDetailSections(readerActor(),created.value.sourcingCaseId))
+      .rejects.toMatchObject({code:'NOT_FOUND',statusCode:404});
     await expect(service.quoteIePrice(
       ieActor(),
       created.value.sourcingCaseId,

@@ -1200,6 +1200,28 @@ const sourcingWorkflowNodeHref = (
   return `${pageUrl(`ui/sourcing/orders/${sourcingCaseId}`)}?${params}`;
 };
 
+function sourcingDetailPriceDelta(item:SourcingCaseSummary){
+  const comparableIeTotal=item.ieQuote&&item.decision?.sourceType==='factory_change'
+    ?item.ieQuote.linePrices.length?linesTotalPreview(item.ieQuote.linePrices.filter(price=>item.decision!.linePrices.some(line=>line.position===price.position)),item.lineItems.map(line=>({...line,quantity:item.decision!.linePrices.find(price=>price.position===line.position)?.quantity??0}))):totalPreview(item.ieQuote.unitPrice,item.decision.quantity)
+    :item.ieQuote?.totalAmount;
+  return item.decision&&comparableIeTotal&&comparableIeTotal!=='—'?subtractFixedPoint(item.decision.totalAmount,comparableIeTotal,2,fixedBusinessCurrency):null;
+}
+
+function SourcingDetailFacts({item,ownerTotalDelta}:{item:SourcingCaseSummary;ownerTotalDelta:string|null}){
+  return (
+        <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
+          <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
+          <div className="sourcing-key-facts__factory"><dt>当前方案工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
+          <div><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
+          <div><dt>当前方案生产总额</dt><dd>{item.decision ? fixedBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
+          <div><dt>IE 总额</dt><dd>{item.ieQuote ? fixedBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
+          <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
+          <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
+          <SourcingOrderDateFacts item={item} />
+        </KeyFacts>
+  );
+}
+
 function OrderDetailPage({
   sourcingCaseId,
   user,
@@ -1212,7 +1234,7 @@ function OrderDetailPage({
     &&!(requestedHistory==="finance"&&isMerchandiserOnly(user?.businessRoles,user?.isRoot))?requestedHistory:null;
   const read=useSourcingDetailRead(sourcingCaseId,request,!historyNode);
   const item=read.snapshot?.item??null;
-  const attachments=read.snapshot?.attachments??[];
+  const attachments=read.snapshot?.attachments??read.readOnly.attachments??[];
   const timeline=read.snapshot?.timeline??[];
   const factoryChange=read.snapshot?.factoryChange??null;
   const factoryRemainingLines=read.snapshot?.factoryRemainingLines;
@@ -1541,8 +1563,51 @@ function OrderDetailPage({
   if(historyNode)return <SourcingNodeHistoryPage key={`${sourcingCaseId}:${historyNode}:${new URLSearchParams(window.location.search).get("entryId")??""}`} sourcingCaseId={sourcingCaseId} node={historyNode}
     returnTo={todoReturnPath(window.location.search)??sourcingReturnPath(window.location.search)??cockpitReturnPath(window.location.search)} />;
 
+  const todoBackPath = todoReturnPath(window.location.search);
+  const listBackPath = sourcingReturnPath(window.location.search);
+  const detailReturnPath = todoBackPath ?? listBackPath ?? cockpitReturnPath(window.location.search);
+
+  const imageDialog=attachments.some(file=>file.attachmentId===selectedImage?.attachmentId)&&(selectedImage ? <div className="rework-image-modal" role="presentation" onMouseDown={() => setSelectedImage(null)}>
+        <section className="rework-image-modal__content" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="rework-image-modal__heading"><strong>{selectedImage.filename}</strong><button type="button" onClick={() => setSelectedImage(null)}>关闭</button></div>
+          <ImageViewer src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
+          <div className="rework-image-modal__actions">
+            <button type="button" disabled={attachments[0]?.attachmentId === selectedImage.attachmentId} onClick={() => setSelectedImage(attachments[Math.max(0, attachments.findIndex(image => image.attachmentId === selectedImage.attachmentId) - 1)] ?? selectedImage)}>上一张</button>
+            <span>{attachments.findIndex(image => image.attachmentId === selectedImage.attachmentId) + 1} / {attachments.length}</span>
+            <button type="button" disabled={attachments.at(-1)?.attachmentId === selectedImage.attachmentId} onClick={() => setSelectedImage(attachments[Math.min(attachments.length - 1, attachments.findIndex(image => image.attachmentId === selectedImage.attachmentId) + 1)] ?? selectedImage)}>下一张</button>
+            <a href={attachmentUrl(selectedImage.attachmentId, "download")} target="_blank" rel="noreferrer">下载原图</a>
+          </div>
+        </section>
+      </div> : null);
+
   if (!item) {
-    return <div className="sourcing-workspace"><Header iconRoute="/ui/sourcing/pending" title="订单详情" subtitle={message} badge="外发定价&选厂" />{read.error?<button type="button" disabled={read.loading} onClick={()=>void read.reload().catch(()=>undefined)}>重新读取订单</button>:null}</div>;
+    const early=read.overview,earlyContract=read.readOnly.contract;
+    return <div className="sourcing-workspace sourcing-order-detail sourcing-module-layout" data-legacy-ui="sourcing">
+      <div className="sourcing-order-heading">
+        <a className="sourcing-order-back" href={pageUrl(detailReturnPath ?? (early?.status==="closed"?"/ui/sourcing/history":"/ui/sourcing/pending"))}>{todoBackPath ? "返回我的待办" : listBackPath?.startsWith("/ui/digital-production?") ? "返回来源" : "返回订单列表"}</a>
+      <Header iconRoute="/ui/sourcing/pending"
+        title={early?.styleNo??"订单详情"}
+        subtitle={early?`${early.gender??"历史未维护"} · ${early.styleName??"历史未维护"}`:message}
+        badge={early?STATUS_LABELS[early.status]:"外发定价&选厂"} badgePlacement="subtitle" />
+      </div>
+      {early?<div className="sourcing-detail-layout sourcing-reference-layout">
+        <SourcingDetailFacts item={early} ownerTotalDelta={sourcingDetailPriceDelta(early)} />
+        {read.readOnly.attachments?<SourcingOrderPhotos attachments={attachments} previewUrl={attachment=>attachmentUrl(attachment.attachmentId,"preview")} onPreview={setSelectedImage}/>:null}
+        {earlyContract?.status==="ready"&&earlyContract.pdfAttachmentId&&canReadContractData?<section className="sourcing-contract-bar" aria-label="系统合同">
+          <h2>系统合同</h2>
+          <p>{earlyContract.contractNumber} · V{earlyContract.contractVersion}</p>
+          <div className="sourcing-contract-bar__actions">
+            <a className="dx-button dx-button--primary" href={attachmentUrl(earlyContract.pdfAttachmentId,"preview")} target="_blank" rel="noreferrer">预览合同 PDF</a>
+            <a className="dx-button dx-button--secondary" href={attachmentUrl(earlyContract.pdfAttachmentId,"download")} target="_blank" rel="noreferrer">下载合同</a>
+          </div>
+        </section>:null}
+        <section className="sourcing-workflow-section" aria-label="订单资料">
+          <p role={read.error?"alert":"status"}>{read.error||(read.readOnly.attachments||earlyContract?"正在读取其余业务记录…":"正在读取图片、合同与业务记录…")}</p>
+        </section>
+      </div>:null}
+      {read.error?<button type="button" disabled={read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reload()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
+      {imageDialog}
+    </div>;
   }
 
   const needsDecisionReason = sourcingDecisionNeedsReason(decision.linePrices, item.ieQuote?.linePrices ?? []);
@@ -1595,10 +1660,7 @@ function OrderDetailPage({
   const selectedState: SourcingWorkflowNodeState = item.status === "closed" || selectedIndex < step
     ? "completed"
     : selectedIndex === step ? "current" : "future";
-  const comparableIeTotal=item.ieQuote&&item.decision?.sourceType==='factory_change'
-    ?item.ieQuote.linePrices.length?linesTotalPreview(item.ieQuote.linePrices.filter(price=>item.decision!.linePrices.some(line=>line.position===price.position)),item.lineItems.map(line=>({...line,quantity:item.decision!.linePrices.find(price=>price.position===line.position)?.quantity??0}))):totalPreview(item.ieQuote.unitPrice,item.decision.quantity)
-    :item.ieQuote?.totalAmount;
-  const ownerTotalDelta=item.decision&&comparableIeTotal&&comparableIeTotal!=='—'?subtractFixedPoint(item.decision.totalAmount,comparableIeTotal,2,fixedBusinessCurrency):null;
+  const ownerTotalDelta=sourcingDetailPriceDelta(item);
   const transferQuantity=factoryRemainingLines?.reduce((sum,line)=>sum+line.quantity,0)??item.orderQuantity;
   const transferTotal=factoryChangeTotalPreview(factoryChangeDraft.unitPrice,factoryRemainingLines?factoryRemainingLines.filter(line=>line.quantity>0).map(line=>line.quantity):[item.orderQuantity]);
   const ownerCraftSummary = <span className="sourcing-owner-craft-summary">承包内容包括 <strong>{item.processes.length ? item.processes.join("、") : "未填写"}</strong>；裁床工序为 <strong>{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? `其它：${item.decision.cuttingProcessOther ?? "未填写"}` : "未填写"}</strong>。</span>;
@@ -1621,9 +1683,6 @@ function OrderDetailPage({
     ? subtractFixedPoint(factoryChangeDraft.unitPrice, item.decision.unitPrice, 4)
     : null;
   const selectedFactory = factories.find((factory) => factory.supplierId === decision.supplierId);
-  const todoBackPath = todoReturnPath(window.location.search);
-  const listBackPath = sourcingReturnPath(window.location.search);
-  const detailReturnPath = todoBackPath ?? listBackPath ?? cockpitReturnPath(window.location.search);
   const contractMissingLabels: Readonly<Record<string, string>> = {
     address: "地址",
     contractEntityName: "合同主体",
@@ -1716,18 +1775,9 @@ function OrderDetailPage({
       </section> : null}
       {!item.decision && item.processes.length > 0 ? <p className="sourcing-order-meta">工艺及承包范围：{item.processes.join("、")}</p> : null}
       <div className="sourcing-detail-layout sourcing-reference-layout">
-        <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
-          <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
-          <div className="sourcing-key-facts__factory"><dt>当前方案工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
-          <div><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
-          <div><dt>当前方案生产总额</dt><dd>{item.decision ? fixedBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
-          <div><dt>IE 总额</dt><dd>{item.ieQuote ? fixedBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
-          <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
-          <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          <SourcingOrderDateFacts item={item} />
-        </KeyFacts>
+        <SourcingDetailFacts item={item} ownerTotalDelta={ownerTotalDelta} />
         <div className="sourcing-supporting-overview">
-          <SourcingOrderPhotos attachments={attachments} previewUrl={attachment => attachmentUrl(attachment.attachmentId, "preview")} onPreview={setSelectedImage} uploadControl={canSupplementImages ? <SourcingImageSupplementUploader sourcingCaseId={sourcingCaseId} currentAttachmentCount={attachments.length} onUploaded={load} /> : null} />
+          <SourcingOrderPhotos attachments={attachments} previewUrl={attachment => attachmentUrl(attachment.attachmentId, "preview")} onPreview={setSelectedImage} uploadControl={canSupplementImages&&!writeBlocked ? <SourcingImageSupplementUploader sourcingCaseId={sourcingCaseId} currentAttachmentCount={attachments.length} onUploaded={load} /> : null} />
           <section className="sourcing-workflow-section" aria-label="订单流程">
                 <div className="sourcing-order-panel-heading">
                   <h2>订单流程</h2><span className="rework-workflow__step-count">{hideFinanceForMerchandiser ? "审批环节" : "当前步骤"} {Math.min(step + 1, visibleWorkflow.length)} / {visibleWorkflow.length}</span>
@@ -1764,7 +1814,7 @@ function OrderDetailPage({
             {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
             <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
                 {!returnOpen&&!budgetCorrectionOpen&&!financeDifferenceOpen?<SubmissionFeedback feedback={feedback} busy={busy||contractUploading}/>:null}
-                {read.error?<button type="button" disabled={busy||read.loading} onClick={()=>void read.reload().catch(()=>undefined)}>重新读取订单</button>:null}
+                {read.error?<button type="button" disabled={busy||read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reload()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
                 {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
                   <h2>IE 给价</h2>
                   <p>逐款核定加工单价；每行金额独立四舍五入到分后汇总。</p>
@@ -1850,7 +1900,7 @@ function OrderDetailPage({
                         {contractReturn.canUpload ? <>
                           <input disabled={writeBlocked} ref={contractFileInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple hidden
                             onChange={event=>{void uploadContractReturn(event.target.files);event.target.value="";}} />
-                          <button className="dx-button dx-button--secondary" type="button" disabled={contractUploading || busy}
+                          <button className="dx-button dx-button--secondary" type="button" disabled={writeBlocked}
                             onClick={()=>contractFileInput.current?.click()}>
                             {contractUploading?"正在上传…":(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>0?"补传回签合同":"上传回签合同"}
                           </button>
@@ -2047,18 +2097,7 @@ function OrderDetailPage({
         </div>
       </div>
 
-      {selectedImage ? <div className="rework-image-modal" role="presentation" onMouseDown={() => setSelectedImage(null)}>
-        <section className="rework-image-modal__content" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-          <div className="rework-image-modal__heading"><strong>{selectedImage.filename}</strong><button type="button" onClick={() => setSelectedImage(null)}>关闭</button></div>
-          <ImageViewer src={attachmentUrl(selectedImage.attachmentId, "preview")} alt={selectedImage.filename} />
-          <div className="rework-image-modal__actions">
-            <button type="button" disabled={attachments[0]?.attachmentId === selectedImage.attachmentId} onClick={() => setSelectedImage(attachments[Math.max(0, attachments.findIndex(image => image.attachmentId === selectedImage.attachmentId) - 1)] ?? selectedImage)}>上一张</button>
-            <span>{attachments.findIndex(image => image.attachmentId === selectedImage.attachmentId) + 1} / {attachments.length}</span>
-            <button type="button" disabled={attachments.at(-1)?.attachmentId === selectedImage.attachmentId} onClick={() => setSelectedImage(attachments[Math.min(attachments.length - 1, attachments.findIndex(image => image.attachmentId === selectedImage.attachmentId) + 1)] ?? selectedImage)}>下一张</button>
-            <a href={attachmentUrl(selectedImage.attachmentId, "download")} target="_blank" rel="noreferrer">下载原图</a>
-          </div>
-        </section>
-      </div> : null}
+      {imageDialog}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {AuthService} from "../../apps/api/src/auth/service.js";
 import {PostgresAuthStore} from "../../apps/api/src/auth/postgres-store.js";
 import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from "../../apps/api/src/auth/acceptance-provider.js";
 import {RootAuthority} from "../../apps/api/src/access/root-authority.js";
+import {ExportJobService} from "../../apps/api/src/tools/exports.js";
 import {SourcingProductionService} from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import {SourcingContractReturnService} from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
@@ -34,7 +35,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const auth=new AuthService(new AcceptanceDingTalkProvider(f.db,"anchor-test",secret),new PostgresAuthStore(f.db,"anchor-test","uat-root"),"anchor-test",3600000,secret);
   const config=loadConfig({NODE_ENV:"test",DATABASE_URL:url!,DINGTALK_CORP_ID:"anchor-test",DINGTALK_H5_APP_KEY:"TEST",DINGTALK_H5_APP_SECRET:secret,DINGTALK_WEB_CLIENT_ID:"TEST",DINGTALK_WEB_CLIENT_SECRET:secret,DINGTALK_QR_REDIRECT_URI:"https://architecture.invalid/auth/qr/callback",APP_BASE_PATH:"/",SESSION_SECRET:secret});
   const authenticate:typeof auth.authenticate=(token,context)=>auth.authenticate(token,context);
-  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},sourcing:{authenticate,root,service:f.sourcing,contracts:f.contracts,production:new SourcingProductionService(f.db),contractReturns:new SourcingContractReturnService(f.db)}});
+  const photoGrants=new Map<string,{key:string;expiresAt:string}>();
+  const grant=f.storage.createDownloadGrant.bind(f.storage);
+  f.storage.createDownloadGrant=async(key,options)=>{
+   const original=await grant(key,options),id=randomUUID();
+   photoGrants.set(id,{key,expiresAt:original.expiresAt});
+   return {...original,downloadUrl:base+"/api/__sourcing-photo-test-storage/"+id};
+  };
+  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},
+   sourcing:{authenticate,root,service:f.sourcing,contracts:f.contracts,production:new SourcingProductionService(f.db),contractReturns:new SourcingContractReturnService(f.db)},
+   tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:f.attachments,exports:new ExportJobService(f.db),
+    canDownloadBoundAttachment:(actor,binding)=>Promise.resolve(f.sourcing.canDownloadBoundAttachment({
+     actorId:actor.actorId,actorRoles:actor.actorRoles,authorizationCapability:"sourcing:view",
+     authorizationCapabilities:actor.capabilities,requestId:"TEST-sourcing-attachment-download",
+    },binding)),
+   },
+  });
   await app.ready();token=(await auth.loginMobile(mintAcceptanceLoginCode("root",secret))).token;
   for(let index=0;index<3;index++){
    const style="TEST-ARCH-C-"+index+"-"+randomUUID();styles.push(style);
@@ -47,6 +63,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const html=await readFile(join(output,"index.html"));
   server=createServer(async(request,response)=>{try{
    const path=request.url??"/";
+   const photoPath="/api/__sourcing-photo-test-storage/";
+   if(path.startsWith(photoPath)){
+    const grant=photoGrants.get(path.slice(photoPath.length));
+    if(!grant||Date.parse(grant.expiresAt)<=Date.now()){response.writeHead(403);response.end();return;}
+    const metadata=await f.storage.head(grant.key),bytes=await f.storage.readBytes(grant.key,1000000);
+    response.writeHead(200,{"content-type":metadata.mimeType,"cache-control":"no-store"});
+    response.end(Buffer.from(bytes));return;
+   }
    if(path.startsWith("/api/")){
     const chunks:Buffer[]=[];for await(const chunk of request)chunks.push(Buffer.from(chunk));const payload=Buffer.concat(chunks);
     const headers={...request.headers,host:"architecture.invalid",origin:"https://architecture.invalid"};delete headers["content-length"];
@@ -59,6 +83,89 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {chromium}:{chromium:typeof Chromium}=await import(process.env.PLAYWRIGHT_IMPORT??"playwright-core");browser=await chromium.launch({headless:true,...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{}),args:["--no-sandbox"]});await mkdir(evidence,{recursive:true});
  });
  afterAll(async()=>{await browser?.close();if(server){server.closeAllConnections();await new Promise<void>(done=>server.close(()=>done()));}await app?.close();await f?.dispose();if(output)await rm(output,{recursive:true,force:true});});
+ it("shows authorized sourcing facts while records are pending or failed, then recovers without writes",async()=>{
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  await context.addCookies([{name:"dx_rework_session",value:token,url:base}]);
+  const page=await context.newPage();
+  page.setDefaultTimeout(12000);
+  const casePath="/api/sourcing/cases/"+ids[1];
+  const reads:string[]=[],writes:string[]=[];
+  page.on("request",request=>{
+   const path=new URL(request.url()).pathname;
+   if(path!==casePath&&!path.startsWith(casePath+"/"))return;
+   if(request.method()==="GET")reads.push(path.slice(casePath.length));else writes.push(request.method());
+  });
+  let release!:()=>void;
+  const delay=new Promise<void>(done=>{release=done;});
+  await page.route("**"+casePath+"/detail-sections",async route=>{
+   await delay;
+   await route.fulfill({status:503,contentType:"application/json",
+    body:JSON.stringify({error:{message:"TEST 附属记录暂不可用"}})});
+  });
+  try{
+   await page.goto(base+"/ui/sourcing/orders/"+ids[1]);
+   const facts=page.getByLabel("外发定价选厂订单核心信息");
+   await facts.waitFor();
+   expect(await facts.textContent()).toContain("10 件");
+   expect(await facts.textContent()).toContain("2026-12-20");
+   expect(await page.getByRole("link",{name:"返回订单列表",exact:true}).isVisible()).toBe(true);
+   expect(await page.getByRole("button",{name:"提交 IE 逐款价格",exact:true}).count()).toBe(0);
+   release();
+   await page.getByRole("alert").filter({hasText:"TEST 附属记录暂不可用"}).waitFor();
+   expect(await facts.isVisible()).toBe(true);
+   expect(await page.getByRole("button",{name:"提交 IE 逐款价格",exact:true}).count()).toBe(0);
+   await page.getByRole("button",{name:"重新读取图片、时间线和转厂记录",exact:true}).click();
+   await page.locator("fieldset.sourcing-submission-fields:enabled").waitFor();
+   expect(await facts.isVisible()).toBe(true);
+   expect(reads.filter(path=>path==="")).toHaveLength(3);
+   for(const endpoint of ["/contract","/dispatch","/contract-return"]){
+    expect(reads.filter(path=>path===endpoint)).toHaveLength(2);
+   }
+   for(const endpoint of ["/detail-sections","/attachments","/timeline","/factory-changes/current"]){
+    expect(reads.filter(path=>path===endpoint)).toHaveLength(1);
+   }
+   expect(writes).toEqual([]);
+  }finally{release();await context.close();}
+ });
+ it("shows only the current order photo before dispatch finishes and keeps actions unavailable",async()=>{
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  await context.addCookies([{name:"dx_rework_session",value:token,url:base}]);
+  const page=await context.newPage();
+  page.setDefaultTimeout(12000);
+  const casePath="/api/sourcing/cases/"+ids[1];
+  const otherCase=ids[2]!;
+  const photos=await f.db.query<{attachment_id:string;entity_id:string}>(
+   "SELECT attachment_id,entity_id FROM attachments WHERE entity_type='sourcing_case' AND entity_id=ANY($1::text[])",
+   [[ids[1],otherCase]],
+  );
+  const currentPhoto=photos.rows.find(row=>row.entity_id===ids[1])!;
+  const otherPhoto=photos.rows.find(row=>row.entity_id===otherCase)!;
+  expect(currentPhoto.attachment_id).not.toBe(otherPhoto.attachment_id);
+  let release!:()=>void;
+  const delayed=new Promise<void>(done=>{release=done;});
+  const writes:string[]=[];
+  page.on("request",request=>{
+   if(new URL(request.url()).pathname.startsWith(casePath)&&request.method()!=="GET")writes.push(request.method());
+  });
+  await page.route("**"+casePath+"/dispatch",async route=>{await delayed;await route.continue();});
+  try{
+   await page.goto(base+"/ui/sourcing/orders/"+ids[1]);
+   const gallery=page.getByLabel("订单图片",{exact:true});
+   await gallery.waitFor();
+   const image=gallery.getByRole("img");
+   expect(await image.getAttribute("src")).toContain(currentPhoto.attachment_id);
+   expect(await image.getAttribute("src")).not.toContain(otherPhoto.attachment_id);
+   await expect.poll(()=>image.evaluate(element=>(element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+   await gallery.getByRole("button",{name:/放大查看/}).click();
+   const dialog=page.getByRole("dialog").filter({has:page.getByRole("link",{name:"下载原图",exact:true})});
+   await dialog.waitFor();
+   expect(await dialog.getByRole("img").getAttribute("src")).toContain(currentPhoto.attachment_id);
+   expect(await page.locator("fieldset.sourcing-submission-fields:enabled").count()).toBe(0);
+   release();
+   await page.locator("fieldset.sourcing-submission-fields:enabled").waitFor();
+   expect(writes).toEqual([]);
+  }finally{release();await context.close();}
+ });
  it("preserves manual prices on the natural current to history to current path with no writable history forms",async()=>{
   const {context,page}=await open(0,1440);try{
    const input=page.locator('[aria-label="供应链总监逐款价格"] input').first();await input.focus();await input.fill("");expect(await input.inputValue()).toBe("");const timeOrigin=await page.evaluate(()=>performance.timeOrigin);await page.getByLabel("选厂/调价说明",{exact:false}).fill("TEST保留人工意见");

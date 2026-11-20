@@ -297,6 +297,9 @@ export function registerSourcingRoutes(
     ),
   );
 
+  app.get<{Params:{sourcingCaseId:string}}>('/sourcing/cases/:sourcingCaseId/detail-sections',async request =>
+    dependencies.service.readDetailSections(await readActor(request),caseId(request.params.sourcingCaseId)));
+
   app.delete<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId",
     async (request, reply) => {

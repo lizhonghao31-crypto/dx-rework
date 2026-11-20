@@ -280,6 +280,25 @@ export class SourcingService {
     return this.readCase(this.database, sourcingCaseId, actor);
   }
 
+  /** Reuse the original authorized case basis within one read-only snapshot. */
+  async readDetailSections(actor:TrustedActorContext,sourcingCaseId:string){
+    this.assertReader(actor);
+    if(!UUID_PATTERN.test(sourcingCaseId))fail("报价选厂询价标识无效");
+    const client=await this.database.connect();
+    try{
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const source=await this.readCase(client,sourcingCaseId,actor);
+      const attachments=await this.readAttachments(client,sourcingCaseId);
+      const timeline=await this.readTimeline(client,sourcingCaseId);
+      const factoryChange=await this.readFactoryChange(client,sourcingCaseId,source);
+      await client.query('COMMIT');
+      return {sourcingCaseId,version:source.version,attachments,timeline,factoryChange};
+    }catch(error){
+      await client.query('ROLLBACK');
+      throw error;
+    }finally{client.release();}
+  }
+
   async deleteByRoot(
     actor: TrustedActorContext,
     sourcingCaseId: string,
@@ -364,7 +383,11 @@ export class SourcingService {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     await this.readCase(this.database, sourcingCaseId, actor);
-    const result = await this.database.query<{
+    return this.readAttachments(this.database,sourcingCaseId,historical);
+  }
+
+  private async readAttachments(client:Pick<PoolClient,'query'>,sourcingCaseId:string,historical=false):Promise<SourcingAttachmentListResponse>{
+    const result = await client.query<{
       attachment_id: string;
       original_filename: string;
       mime_type: "image/jpeg" | "image/png" | "image/webp";
@@ -376,7 +399,7 @@ export class SourcingService {
        ORDER BY created_at,attachment_id`,
       [sourcingCaseId],
     );
-    const revision = historical ? null : (await this.database.query<{ids:string[]}>(
+    const revision = historical ? null : (await client.query<{ids:string[]}>(
       `SELECT after_state->'attachmentIds' AS ids FROM operation_events
        WHERE entity_type='sourcing_case' AND entity_id=$1 AND action IN ('sourcing.case.correct','sourcing.attachments.supplement','sourcing.case.create')
        AND jsonb_typeof(after_state->'attachmentIds')='array'
@@ -567,7 +590,11 @@ export class SourcingService {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     await this.readCase(this.database, sourcingCaseId, actor);
-    const result = await this.database.query<{
+    return this.readTimeline(this.database,sourcingCaseId);
+  }
+
+  private async readTimeline(client:Pick<PoolClient,'query'>,sourcingCaseId:string):Promise<SourcingTimelineResponse>{
+    const result = await client.query<{
       entry_id: string;
       pdf_attachment_id: string | null;
       kind: "created" | "style_revision" | "ie_quote" | "management_decision" | "owner_decision"
@@ -812,8 +839,12 @@ export class SourcingService {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     const source=await this.readCase(this.database,sourcingCaseId,actor);
-    const remainingLines=source.decision?(await this.database.query<{position:number;planned_quantity:number;completed_quantity:number;quantity:number}>("SELECT * FROM sourcing_factory_remaining_lines($1,$2) ORDER BY position",[sourcingCaseId,source.decision.sourcingDecisionId])).rows.map(line=>({position:line.position,plannedQuantity:line.planned_quantity,completedQuantity:line.completed_quantity,quantity:line.quantity})):undefined;
-    const result = await this.database.query<{
+    return this.readFactoryChange(this.database,sourcingCaseId,source);
+  }
+
+  private async readFactoryChange(client:Pick<PoolClient,'query'>,sourcingCaseId:string,source:SourcingCaseSummary):Promise<SourcingFactoryChangeStateResponse>{
+    const remainingLines=source.decision?(await client.query<{position:number;planned_quantity:number;completed_quantity:number;quantity:number}>("SELECT * FROM sourcing_factory_remaining_lines($1,$2) ORDER BY position",[sourcingCaseId,source.decision.sourcingDecisionId])).rows.map(line=>({position:line.position,plannedQuantity:line.planned_quantity,completedQuantity:line.completed_quantity,quantity:line.quantity})):undefined;
+    const result = await client.query<{
       factory_change_request_id: string;
       from_decision_id: string;
       initiator_role: "order_merchandiser" | "production_management" | "owner_group";

@@ -38,9 +38,11 @@ async function setup(postFails:boolean|"unknown"){
  let posted=false,postCount=0;
  const fetchMock=vi.fn(async(input:string,init?:RequestInit)=>{
   if(init?.method==="POST"){posted=true;postCount++;if(postFails==="unknown"&&postCount===1)return Response.json({error:{message:"TEST unknown receipt",code:"TEST_RECEIPT_LOST"}},{status:503});return postFails===true?Response.json({error:{message:"TEST-转厂提交被拒绝",code:"INVALID_STATE_TRANSITION",requestId:"TEST-submit-refused"}},{status:409}):Response.json({...item,decision:{...item.decision!,supplierId:id(5),supplierName:"TEST新工厂"}},{status:201});}
-  if(input.endsWith("/timeline"))return posted?Response.json({error:{message:"TEST-订单页面刷新失败"}},{status:500}):Response.json({items:[]});
+  if(input.endsWith("/detail-sections"))return posted
+    ?Response.json({error:{message:"TEST-订单页面刷新失败"}},{status:500})
+    :Response.json({sourcingCaseId:item.sourcingCaseId,version:item.version,
+      attachments:{items:[]},timeline:{items:[]},factoryChange:{item:null}});
   if(input.endsWith(`/cases/${id(100)}`))return Response.json(item);
-  if(input.endsWith("/attachments"))return Response.json({items:[]});
   if(input.endsWith("/dispatch"))return Response.json({item:null,canDispatch:false});
   if(input.endsWith("/contract-return"))return Response.json(contractReturn);
   if(input.endsWith("/factories"))return Response.json({items:[{supplierId:id(5),supplierCode:"TEST-NEW",supplierName:"TEST新工厂"}]});
@@ -68,7 +70,9 @@ describe("actual transfer submission and refresh feedback",()=>{
   await act(async()=>{await vi.waitFor(()=>expect(host.textContent).toContain("提交已成功，但页面更新未完成"));});
   expect(host.textContent).toContain("老板发起的转厂已直接生效");expect(host.textContent).toContain("TEST-订单页面刷新失败");
   expect(fetchMock.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
-  expect(fetchMock.mock.calls.length-before).toBe(8);expect(button("提交转厂").disabled).toBe(true);
+  expect(fetchMock.mock.calls.slice(before+1).map(([path])=>path.split(`/cases/${item.sourcingCaseId}`).at(-1)).sort())
+    .toEqual(["","/contract","/contract-return","/detail-sections","/dispatch"]);
+  expect(button("提交转厂").disabled).toBe(true);
   // A failed refresh is not permission to submit against a stale snapshot.
   expect(host.textContent).not.toContain("核对上次提交结果");
  });
