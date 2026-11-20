@@ -1,14 +1,8 @@
-import {ShortLeadWorkspace} from './short-lead-workspace.js';
-import {OrderTimeRequestPage} from './order-time-request-page.js';
+import {lazyBusinessPage} from './lazy-business-page.js';
 import {CurrentProductionReturn} from './development-workspace-return.js';
 import {AcceptanceClockPanel} from './acceptance-clock-panel.js';
 import {TodoReadBoundary} from './todo-content-read.js';
-import {DevelopmentArrangementPage} from "./development-arrangement-page.js";
 import {customerPoDateLabel} from "./digital-workspace-copy.js";
-import {BulkTaskWorkbench} from "./bulk-task-workbench.js";
-import {OrderDocumentContainer} from "./order-document-container.js";
-import {TaskWorkbenchSample} from "./task-workbench-sample.js";
-import { DigitalPatternWorkspace } from "./digital-pattern-workspace.js";
 import type { DigitalTask } from "@dx-rework/contracts/digital-production-tasks";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
@@ -18,9 +12,6 @@ import { createWebUrls } from "../url-contract.js";
 import { verifySession } from "./auth.js";
 import { canAccessDigitalProduction } from "./platform-modules.js";
 import { navigateInternalPage } from "./internal-navigation.js";
-import { OrderClosurePanel } from "./order-closure-panel.js";
-import { FactoryFlowPanel } from "./factory-flow-panel.js";
-import { BulkPreparationPanel } from "./bulk-preparation-panel.js";
 import { DigitalTasksPanel } from "./digital-production-tasks-panel.js";
 import { digitalTaskView } from "./digital-task-view.js";
 import { digitalRequest } from "./digital-production-api.js";
@@ -32,6 +23,17 @@ import "./digital-production.css";
 import "./digital-detail.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
+const ShortLeadWorkspace=lazyBusinessPage(()=>import('./short-lead-workspace.js').then(module=>({default:module.ShortLeadWorkspace})),{shellOnError:false});
+const OrderTimeRequestPage=lazyBusinessPage(()=>import('./order-time-request-page.js').then(module=>({default:module.OrderTimeRequestPage})),{shellOnError:false});
+const DevelopmentArrangementPage=lazyBusinessPage(()=>import('./development-arrangement-page.js').then(module=>({default:module.DevelopmentArrangementPage})),{shellOnError:false});
+const BulkTaskWorkbench=lazyBusinessPage(()=>import('./bulk-task-workbench.js').then(module=>({default:module.BulkTaskWorkbench})),{shellOnError:false});
+const OrderDocumentContainer=lazyBusinessPage(()=>import('./order-document-container.js').then(module=>({default:module.OrderDocumentContainer})),{shellOnError:false});
+const TaskWorkbenchSample=lazyBusinessPage(()=>import('./task-workbench-sample.js').then(module=>({default:module.TaskWorkbenchSample})),{shellOnError:false});
+const DigitalPatternWorkspace=lazyBusinessPage(()=>import('./digital-pattern-workspace.js').then(module=>({default:module.DigitalPatternWorkspace})),{shellOnError:false});
+const OrderClosurePanel=lazyBusinessPage(()=>import('./order-closure-panel.js').then(module=>({default:module.OrderClosurePanel})),{shellOnError:false});
+const FactoryFlowPanel=lazyBusinessPage(()=>import('./factory-flow-panel.js').then(module=>({default:module.FactoryFlowPanel})),{shellOnError:false});
+const BulkPreparationPanel=lazyBusinessPage(()=>import('./bulk-preparation-panel.js').then(module=>({default:module.BulkPreparationPanel})),{shellOnError:false});
+
 export function DigitalProductionEntry() {
   const [available, setAvailable] = useState(false);
   useEffect(() => { let live = true; void verifySession().then(session => { if (live) setAvailable(session !== "denied" && canAccessDigitalProduction(session.user)); }); return () => { live = false; }; }, []);
@@ -155,7 +157,7 @@ function DigitalProductionPageContent() {
     case "order": detail = <OrderDetail id={route.id} />; break;
     case "arrangement": detail = <DevelopmentArrangementPage sourceId={route.id} round={route.version} onClose={() => void closeDetail()} />; break;
     case "development": detail = <OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
-    case "task": detail = <TaskDetail id={route.id} />; break;
+    case "task": detail = <TaskDetail key={route.id} id={route.id} />; break;
   }
   return <div className="pattern-orders digital-production"><CurrentProductionReturn/>{route.kind!=="landing"&&route.kind!=="invalid"&&route.kind!=='timeRequest'&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;
 }

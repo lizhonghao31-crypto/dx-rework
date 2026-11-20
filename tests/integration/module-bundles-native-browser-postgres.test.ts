@@ -1,5 +1,7 @@
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {gzipSync} from 'node:zlib';
@@ -137,6 +139,36 @@ function expectStyledShell(frames:Awaited<ReturnType<typeof shellFrames>>){
   }
   await writeFile(join(h.evidence,'cockpit-astryx-comparison.json'),JSON.stringify({baseline:baseline?'Separate frozen frontend, same TEST data and application API':'DX component fallback in the same build',observed},null,2));
  });
+ it('loads only the original ship-sample branch, and isolates an unrelated document chunk failure',async()=>{
+  const person=h.fixture.people.merchandiser!,style='TEST-SHIP-BUNDLE-'+randomUUID();
+  const order=await h.runInScene(()=>new DigitalProductionIdentityService(h.fixture.db,true).createOrder(h.fixture.root,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-07',primaryMerchandiserId:person.actorId,
+   lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}],
+  }),randomUUID()));
+  const task=(await h.fixture.db.query<{task_id:string}>("SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[order.productionOrderId])).rows[0]!.task_id;
+  const documentChunk=Object.values(h.assetManifest!).find(entry=>/^assets\/order-document-container-.*\.js$/.test(entry.file))?.file;
+  expect(documentChunk).toBeTruthy();
+  const shipUrl='/ui/digital-production?task='+task+'&taskView=read';
+  let blocked=0,shipReads=0;
+  const {context,page}=await h.open(person.actorId,{},1165,1,{path:shipUrl,beforeNavigate:async page=>{
+   page.on('request',request=>{if(new URL(request.url()).pathname==='/api/digital-production/tasks/'+task)shipReads++;});
+   await page.route(url=>url.pathname==='/'+documentChunk,async route=>{blocked++;await route.abort();});
+  }});
+  const ship=page.locator('.digital-task-identity').getByRole('heading',{name:style,exact:true});
+  try{
+   await ship.waitFor();
+   expect(blocked).toBe(0);
+   expect(shipReads).toBe(1);
+   await page.goto(h.base+'/ui/digital-production?budget='+order.productionOrderId);
+   await page.getByRole('alert').filter({hasText:'页面暂时未能打开，请刷新重试。'}).waitFor();
+   expect(blocked).toBe(1);
+   expect(await page.locator('.app-shell>aside').isVisible()).toBe(true);
+   await page.goBack();
+   await ship.waitFor();
+   expect(blocked).toBe(1);
+  }finally{await context.close();}
+ });
+
  it('keeps the original access gate ahead of an unauthorized module import',async()=>{
   const {context,page}=await h.open(h.pmcId);try{
    const start=h.resources.length;await page.goto(h.base+'/ui/employee-access');await page.getByRole('heading',{name:'无权访问此页面',exact:true}).waitFor();
