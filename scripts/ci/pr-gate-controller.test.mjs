@@ -184,6 +184,15 @@ test('cheap CI preflight includes the shared time-source inventory and explicit 
  assert.ok(entry.semanticReview);assert.ok(entry.evidence);
 });
 
+test('keeps the reviewed responsibility sources when task display loading changes',async()=>{
+ const inventory=JSON.parse(await readFile('docs/engineering/acceptance-time-sites-20261027.json','utf8'));
+ const entry=inventory.entries.find(e=>e.path==='apps/web/src/digital-production-tasks-panel.tsx');
+ assert.equal(entry?.semanticStatus,'reviewed-responsibility-provenance');
+ assert.match(entry?.semanticReview??'',/original business clock stay authoritative/);
+ assert.match(entry?.evidence??'',/development-responsibility-provenance.md/);
+ assert.deepEqual(await checkTimeSiteInventory(),[]);
+});
+
 for(const lightState of ['running','failed','absent'])test(`Review observation is independent of initial Light: ${lightState}`,async()=>{
  const{api,state}=fixture();
  state.comments=[request,summary('running')];

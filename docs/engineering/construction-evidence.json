@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "939e050e5fcf68b869f7f33047e4c82fa7bb66ad",
-  "sourceFingerprint": "5122a5a4d6e80127e5a3b2f5fdec2197c6f86d65bb593a2bf301c5fb81760d9e",
+  "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
   "rules": [
     {
       "rule": "船样等原生任务的已授权正文在任务读取成功后就可显示，独立附属历史的等待和失败不会阻止正文。",
@@ -9,7 +9,8 @@
       "writes": [
         "apps/web/src/digital-production-tasks-panel.tsx",
         "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/journey-page-native-browser-postgres.test.ts"
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "scripts/ci/pr-gate-controller.test.mjs"
       ],
       "reads": [
         "apps/web/src/digital-production-api.ts",
@@ -20,10 +21,11 @@
         "tests/integration/journey-page-native-browser-postgres.test.ts"
       ],
       "initialization": "继续使用数字生产页原权限和已读取的任务正文。历史独立加载并按当前任务取消旧读，不以空数组充成功。",
-      "dateAndPermission": "权限、截止、轮次、历史与核实沿原接口。保留原本地显示时间来源，更新清单对应拆行指纹；同任务收到读取权限后才显示。",
+      "dateAndPermission": "权限、截止、轮次、历史与核实沿原接口。保留原本地显示时间来源、责任起钟人工注记与证据，更新唯一的显示加载行指纹；同任务收到读取权限后才显示。",
       "expectation": "正文无需等历史；历史失败保留可用正文和重试，仅请求正确任务历史。旧请求不能替换新任务；保留清单原时间来源与读回。",
       "checks": [
         "browser-final",
+        "inventory",
         "type-final",
         "lint"
       ]
@@ -38,7 +40,7 @@
       "kind": "tests",
       "log": "/tmp/dx-performance-v7/pr03a/browser-final.json",
       "logSha256": "52e8fe6619f981c921a2e1addd53c2c9f4b11f9333fe1b8edef03cd8f7fe5e26",
-      "sourceFingerprint": "5122a5a4d6e80127e5a3b2f5fdec2197c6f86d65bb593a2bf301c5fb81760d9e",
+      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
       "testedHead": "831c5a2a1431ba5526c85189bfaf2dc32a9fd8fc",
       "context": "隔离 PostgreSQL 13.23、低权限运行角色和真实 Chromium，原应用签名身份。历史请求暂停后返回503，已授权任务正文按时显示，重试仅重新读取目标任务历史。",
       "startedAt": "2026-11-20T13:22:23Z",
@@ -54,6 +56,29 @@
       ]
     },
     {
+      "id": "inventory",
+      "command": "node --test scripts/ci/pr-gate-controller.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "kind": "tests",
+      "log": "/tmp/dx-performance-v7/pr03a/inventory.tap",
+      "logSha256": "16567987810f501566033419ea19db7bdcca96942c48725a47d936a2816f6af1",
+      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
+      "testedHead": "c49be9201717e4c70054be00dd514511dc8afce1",
+      "context": "本地运行原门禁协议并核本文件的责任起钟注记、证据和当前时间来源行均可读取。",
+      "startedAt": "2026-11-20T13:27:58Z",
+      "endedAt": "2026-11-20T13:27:59Z",
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "16567987810f501566033419ea19db7bdcca96942c48725a47d936a2816f6af1"
+        }
+      ]
+    },
+    {
       "id": "type-final",
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
@@ -61,7 +86,7 @@
       "kind": "command",
       "log": "/tmp/dx-performance-v7/pr03a/type-final.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef",
-      "sourceFingerprint": "5122a5a4d6e80127e5a3b2f5fdec2197c6f86d65bb593a2bf301c5fb81760d9e",
+      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
       "testedHead": "831c5a2a1431ba5526c85189bfaf2dc32a9fd8fc",
       "context": "在独立候选工作树运行 Web 工作区原类型检查。",
       "startedAt": "2026-11-20T13:23:13Z",
@@ -75,7 +100,7 @@
       "kind": "command",
       "log": "/tmp/dx-performance-v7/pr03a/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "sourceFingerprint": "5122a5a4d6e80127e5a3b2f5fdec2197c6f86d65bb593a2bf301c5fb81760d9e",
+      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
       "testedHead": "831c5a2a1431ba5526c85189bfaf2dc32a9fd8fc",
       "context": "使用仓库 ESLint 检查组件和原生回归。",
       "startedAt": "2026-11-20T13:20:10Z",
