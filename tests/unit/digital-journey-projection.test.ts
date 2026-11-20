@@ -149,10 +149,15 @@ describe('cockpit whole-order read facts',()=>{
     });
     const receipts=[lineA,lineB].map(line=>({lineId:line.id,demand:100,received:0,recorded:true}));
     expect(cockpitHomeFacts({...input,receipts})).toMatchObject({receiving:{status:'not_started',tone:'gray',received:0,demand:200}});
-    expect(cockpitHomeFacts({...input,receipts:[{...receipts[0]!,received:100}],sentLineIds:new Set([lineA.id]),
-      factories:[{lineId:lineA.id,quantity:100,status:'production_completed',visible:true},{lineId:lineB.id,quantity:100,status:'production_completed',visible:false}]
-    })).toMatchObject({production:{status:'partial',scope:'visible'},receiving:{status:'partial',scope:'visible',received:100,demand:100},
+    const factory={productionId:'production',factoryDecisionId:'replacement',factoryName:'可见厂',quantity:100,status:'production_completed',reportedWork:true};
+    const partial=cockpitHomeFacts({...input,receipts:[{...receipts[0]!,received:100}],sentLineIds:new Set([lineA.id]),
+      factories:[{...factory,lineId:lineA.id,visible:true},{...factory,lineId:lineB.id,visible:false,factoryDecisionId:null,factoryName:'范围外厂'}]
+    });
+    expect(partial).toMatchObject({production:{status:'partial',scope:'visible'},receiving:{status:'partial',scope:'visible',received:100,demand:100},
       shipSample:{status:'partial',tone:'blue'}});
+    expect(partial.production.dashboardLinks).toEqual([
+      {factoryName:'可见厂',record:{domain:'production',id:'production',url:'/ui/production-dashboard/production?factoryDecisionId=replacement',mode:'read',version:null,lineId:null}}
+    ]);
     expect(cockpitHomeFacts({...input,fullOrder:false,receipts})).toMatchObject({receiving:{status:'unavailable',received:null,demand:null}});
     expect(cockpitHomeFacts({...input,sampleApplicable:false})).toMatchObject({shipSample:{status:'not_applicable',tone:'neutral'}});
   });
