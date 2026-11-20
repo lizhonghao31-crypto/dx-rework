@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "90556cd0270f3e568f269578fec5e50e3315e778",
-  "sourceFingerprint": "09eb22fca7aba5cc43bbb6817f15360a82b80a8764e4714c33cc60c0d63a552e",
+  "sourceFingerprint": "f04dba538901dcb3294bf0827ba95ba6610211fa8b5e9b89e0f33c9d4deda255",
   "rules": [
     {
       "rule": "生产看板先以完整已授权工厂执行计算排序、筛选、全范围统计和事件，再按精确双键装配当前页对象。刷新以相同筛选的上一有效数据时间为依据。",
@@ -39,24 +39,24 @@
   "checks": [
     {
       "id": "dashboard-factory-snapshot-pg13",
-      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.3ML5Y5 NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.3ML5Y5 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/production-closure-postgres.test.ts tests/integration/qc-progress-retirement-postgres.test.ts -t 'keeps events and supplier concentration|projects multiple authorized production risks|retains both factory scopes|requires exact assigned scope|revalidates the same real session' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr09/final-native.json",
-      "context": "已合入座舱优化基线上的 PostgreSQL 13.23 隔离非超级用户，真实报数与全范围事件、原风险事务、授权双厂、旁单和同会话撤权共五项。",
+      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.3ML5Y5 NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.3ML5Y5 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/production-closure-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr09/full-closure-recheck.json",
+      "context": "隔离 PG13.23 生产交接整文件 22 项通过。保留未变化的风险待办与生产排除断言，以独立试点厂验证新增16单跨页数据。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr09/final-native.json",
-      "logSha256": "b427cf24972a017777d63d3ed07a100e4184ada7d08e5429a672464a098d0b43",
-      "sourceFingerprint": "09eb22fca7aba5cc43bbb6817f15360a82b80a8764e4714c33cc60c0d63a552e",
-      "testedHead": "90556cd0270f3e568f269578fec5e50e3315e778",
-      "passed": 5,
+      "log": "/tmp/dx-performance-v7/pr09/full-closure-recheck.json",
+      "logSha256": "29f2d7470b4a259d371b57c387a8c761d58ac3572f3c440db571386e435786f7",
+      "sourceFingerprint": "f04dba538901dcb3294bf0827ba95ba6610211fa8b5e9b89e0f33c9d4deda255",
+      "testedHead": "51241b64a08693b116853b1377a9b1154f109bc2",
+      "passed": 22,
       "failed": 0,
-      "skipped": 27,
-      "startedAt": "2026-11-20T18:52:20.105000Z",
-      "endedAt": "2026-11-20T18:52:54.662134Z",
+      "skipped": 0,
+      "startedAt": "2026-11-20T19:15:06.060000Z",
+      "endedAt": "2026-11-20T19:15:25.982312Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b427cf24972a017777d63d3ed07a100e4184ada7d08e5429a672464a098d0b43"
+          "sha256": "29f2d7470b4a259d371b57c387a8c761d58ac3572f3c440db571386e435786f7"
         }
       ]
     },
@@ -69,8 +69,8 @@
       "exitCode": 0,
       "log": "/tmp/dx-performance-v7/pr09/final-unit.json",
       "logSha256": "b1d0d1aeee7094969327cf138c74947f8961dfb817661f47e0ffa0a8baee85d2",
-      "sourceFingerprint": "09eb22fca7aba5cc43bbb6817f15360a82b80a8764e4714c33cc60c0d63a552e",
-      "testedHead": "90556cd0270f3e568f269578fec5e50e3315e778",
+      "sourceFingerprint": "f04dba538901dcb3294bf0827ba95ba6610211fa8b5e9b89e0f33c9d4deda255",
+      "testedHead": "51241b64a08693b116853b1377a9b1154f109bc2",
       "passed": 76,
       "failed": 0,
       "skipped": 0,
