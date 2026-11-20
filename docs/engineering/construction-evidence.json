@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "d4a31dd5d95300c595136d2363376b990cf51e84",
-  "sourceFingerprint": "c9135fb233a02bf8377a7aaa4342608b3a32a6e26f2fd05af0b201f9a69539f0",
+  "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
   "rules": [
     {
       "rule": "大货板房卡片读取沿原有效制单、本人任务和母单授权口径，只取当前 15 项的纸样与唛架事实。",
@@ -29,7 +29,13 @@
         "apps/web/src/bulk-pattern-workspace.tsx",
         "docs/engineering/acceptance-time-sites-20261027.json",
         "packages/contracts/src/bulk-preparation.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
+        "tests/fixtures/bulk-board-containment.tsx",
+        "tests/fixtures/bulk-pattern-card-response.ts",
+        "tests/fixtures/bulk-workroom-customer.tsx",
+        "tests/fixtures/erp-digital-layout.tsx",
+        "tests/fixtures/production-readiness-ui.tsx",
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/unit/r2-pattern-boards.test.ts"
       ],
       "checks": [
         "bulk-pattern-native-parity",
@@ -40,47 +46,47 @@
   "checks": [
     {
       "id": "bulk-pattern-native-parity",
-      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.jAtWCw NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/bulk-washing-postgres.test.ts -t 'keeps authorized bulk-pattern cards' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-native-corrected.json",
+      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.jAtWCw NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/bulk-washing-postgres.test.ts -t 'keeps authorized bulk-pattern cards' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-native-card-contract.json",
       "context": "隔离 PG13.23，同角色同页新旧真实处理对照，含多 PO、外裁、完成与办理中，核纸样师没有全员范围。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr07/final-native-corrected.json",
-      "logSha256": "911c890812c4d5edc1a0163315b15a60d118ee45a21fd5a510dd2b0dd5f86221",
-      "sourceFingerprint": "c9135fb233a02bf8377a7aaa4342608b3a32a6e26f2fd05af0b201f9a69539f0",
-      "testedHead": "44389d745768eabb2167bf7564db0fb08621b195",
+      "log": "/tmp/dx-performance-v7/pr07/final-native-card-contract.json",
+      "logSha256": "e43e362595191ebcd99c21b7abd7b6c42d3a1f16ddc915654dd8b9ed6241bb4d",
+      "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
+      "testedHead": "b0df140eff01e64511e502fe6993cec93cf8c655",
       "passed": 1,
       "failed": 0,
       "skipped": 12,
-      "startedAt": "2026-11-20T19:52:35.148000Z",
-      "endedAt": "2026-11-20T19:52:47.822330Z",
+      "startedAt": "2026-11-20T19:59:08.239000Z",
+      "endedAt": "2026-11-20T19:59:22.511137Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "911c890812c4d5edc1a0163315b15a60d118ee45a21fd5a510dd2b0dd5f86221"
+          "sha256": "e43e362595191ebcd99c21b7abd7b6c42d3a1f16ddc915654dd8b9ed6241bb4d"
         }
       ]
     },
     {
       "id": "bulk-pattern-role-boundary",
-      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-development-workspace.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-unit-corrected.json",
-      "context": "原 PMC 只读、授权与撤权、岗位与可见范围、任务时间值及现有舱页展示测试，保留全部原断言。",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node node_modules/vitest/vitest.mjs run tests/unit/r2-pattern-boards.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-development-workspace.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-unit-card-contract.json",
+      "context": "原 PMC 只读、授权与撤权、岗位与可见范围、任务时间值及现有舱页展示测试，保留全部原断言。 原卡片特殊结案和缺前置断言继续按新摘要契约验证。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr07/final-unit-corrected.json",
-      "logSha256": "1440c4553d2237a4d830111908fcd1e0655995c5112db247356a42162e922b8a",
-      "sourceFingerprint": "c9135fb233a02bf8377a7aaa4342608b3a32a6e26f2fd05af0b201f9a69539f0",
-      "testedHead": "44389d745768eabb2167bf7564db0fb08621b195",
-      "passed": 82,
+      "log": "/tmp/dx-performance-v7/pr07/final-unit-card-contract.json",
+      "logSha256": "ee2426995065d76ba3699dc2788f49e55fc4b03ba75f16ea1a6bb2390997433c",
+      "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
+      "testedHead": "b0df140eff01e64511e502fe6993cec93cf8c655",
+      "passed": 89,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T19:52:49.305000Z",
-      "endedAt": "2026-11-20T19:52:54.037835Z",
+      "startedAt": "2026-11-20T19:57:01.020000Z",
+      "endedAt": "2026-11-20T19:57:06.512780Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1440c4553d2237a4d830111908fcd1e0655995c5112db247356a42162e922b8a"
+          "sha256": "ee2426995065d76ba3699dc2788f49e55fc4b03ba75f16ea1a6bb2390997433c"
         }
       ]
     }

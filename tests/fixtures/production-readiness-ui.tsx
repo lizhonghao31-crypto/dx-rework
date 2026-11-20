@@ -1,3 +1,4 @@
+import {bulkPatternFixtureResponse} from "./bulk-pattern-card-response.js";
 // Actual existing components; test-only HTTP fault injection, not live application acceptance.
 import {BulkPatternWorkspace} from '../../apps/web/src/bulk-pattern-workspace.js';
 import {createRoot} from 'react-dom/client';
@@ -31,7 +32,7 @@ Reflect.set(window,'preparationRequests',requests);Reflect.set(window,'preparati
 window.fetch=async(path,init)=>{
  const url=String(path),method=init?.method??'GET',payload=init?.body?JSON.parse(String(init.body)):null;
  if(url.includes('/access/candidates'))return Response.json(input.people);
- if(url.includes('/workspaces/bulk-pattern'))return Response.json({page:1,pageSize:15,total:1,items:[{orderId:input.bulk.orderId,designStyleNo:input.bulk.reference.designStyleNo,customer:'TEST',sheet:input.bulk}]});
+ if(url.includes('/workspaces/bulk-pattern'))return Response.json(bulkPatternFixtureResponse({page:1,pageSize:15,total:1,items:[{orderId:input.bulk.orderId,designStyleNo:input.bulk.reference.designStyleNo,customer:'TEST',sheet:input.bulk}]},new URL(url,location.href).searchParams));
  if(method!=='GET'){
   const headers=new Headers(init?.headers),key=headers.get('Idempotency-Key')??'';requests.push({path:url,key,body:payload});
   if(['conflict','label-conflict','range-conflict'].includes(mode))return Response.json({error:{code:'PREPARATION_CONFLICT',message:'TEST资料已更新，请刷新；原输入保留'}},{status:409});
