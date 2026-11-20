@@ -42,7 +42,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.getByRole('progressbar',{name:'整单自然时间进度',exact:true}).count()).toBe(2);
    expect(await page.getByRole('progressbar',{name:'整单实际进度',exact:true}).count()).toBe(2);
    expect(await page.locator('.cockpit-home-delivery-date').allTextContents()).toEqual(['2027-02-20','2027-02-20']);
-   expect(await page.getByRole('columnheader',{name:'交货日期',exact:true}).count()).toBe(1);
+   const deliveryHeading=page.locator('th.cockpit-home-progress-heading[scope=col]');
+   await deliveryHeading.waitFor({state:'visible'});
+   expect(await deliveryHeading.allTextContents()).toEqual(['交货日期']);
    for(const meter of await page.locator('.cockpit-home-progress').all()){
     expect(await meter.evaluate(element=>{
      const [expected,time,actual,done]=Array.from(element.children);

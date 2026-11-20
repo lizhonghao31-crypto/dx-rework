@@ -56,7 +56,7 @@ it("renders the eight approved columns and never substitutes old 80% for unavail
   expect(html.indexOf('data-progress-kind="time"')).toBeLessThan(html.indexOf('data-progress-kind="actual"'));expect(html).not.toContain('预计完成');expect(html).not.toContain('实际完成');
   const heading=html.match(/<thead>[\s\S]*?<\/thead>/)?.[0];
   const rows=html.match(/<tbody>[\s\S]*?<\/tbody>/)?.[0];
-  expect(heading).toContain('<th class="cockpit-home-progress-heading">交货日期</th>');
+  expect(heading).toContain('<th scope="col" class="cockpit-home-progress-heading">交货日期</th>');
   expect(rows).toContain('实际进度：');expect(rows).toContain('预计日期：');expect(rows).not.toContain('交货日期');
 });
 it("keeps a real zero distinct from unavailable progress and uses the server's main state",()=>{

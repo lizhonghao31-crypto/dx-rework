@@ -143,13 +143,12 @@
 }
 
 /* Keep dates and creation events inside their own flow cell. */
-.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta {grid-template-columns:minmax(0,1fr);align-items:start}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-stage-dates-with-delta>.cockpit-creation-events {grid-column:1/-1;min-width:0}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-creation-events {display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:3px}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-creation-events>small {white-space:normal}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-creation-events time {display:inline-block;white-space:nowrap}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates>div {grid-template-columns:2em minmax(0,1fr);white-space:normal}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates time {white-space:nowrap}
-.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta>.cockpit-target-difference {padding:0;border:0}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name {display:flex;gap:8px;align-items:baseline}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name>span {font-variant-numeric:tabular-nums}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name .journey-node-toggle {color:#0969e9;min-height:0;padding:0}

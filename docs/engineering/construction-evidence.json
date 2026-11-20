@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "53f0ef0c74800b4e2594fa614aabbbf574049de4",
-  "sourceFingerprint": "d4e67089d87d026c5c5e1c453871a4439d067347595dac3fb2a0889efd17f144",
+  "sourceFingerprint": "10ac2d7d51600a4050e011bf295c98d4dfbed6c058e413056bb716f2dff5eddb",
   "rules": [
     {
       "rule": "首页按定稿显示客户交货日期、实况日期和两条细进度，并在原位置打开有权的生产看板。",
@@ -39,7 +39,8 @@
         "apps/api/src/production-platform/journey-projection.ts",
         "apps/web/src/digital-journey-cockpit.tsx",
         "apps/web/src/cockpit-timing-coverage.tsx",
-        "tests/unit/digital-journey-projection.test.ts"
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-query.ts",
@@ -75,7 +76,8 @@
         "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
         "tests/unit/cockpit-detail.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts"
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/order-time-request-service.ts",
@@ -85,8 +87,7 @@
       "oldTests": [
         "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/unit/cockpit-framework.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts"
+        "tests/unit/cockpit-framework.test.ts"
       ],
       "initialization": "旧单缺有效固定计划仍沿用旧阶段；原审批同时发布和转正式时仅展示原正式创建条目。",
       "dateAndPermission": "只在已授权座舱详情读首次发布、原采用计划和确切申请。保留两个真实业务时钟、计算、已有权限及可读历史。",
@@ -102,16 +103,16 @@
   "checks": [
     {
       "id": "unit",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-journey-cockpit.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1-gate-repair/unit.json --no-color",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-journey-cockpit.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1-full-repair/unit.json --no-color",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T04:56:05Z",
-      "endedAt": "2026-11-20T04:56:12Z",
-      "testedHead": "7817c2f7bfe4655cac0ec72bfe3ecb37925682db",
-      "sourceFingerprint": "d4e67089d87d026c5c5e1c453871a4439d067347595dac3fb2a0889efd17f144",
+      "startedAt": "2026-11-20T05:28:15Z",
+      "endedAt": "2026-11-20T05:28:23Z",
+      "testedHead": "d5741418a9c818c2eb0cb928700f5cb9f7f3671d",
+      "sourceFingerprint": "10ac2d7d51600a4050e011bf295c98d4dfbed6c058e413056bb716f2dff5eddb",
       "context": "实际 release 基线工作树上的候选源码及测试，Node 22、npm 10、项目锁定依赖。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-gate-repair/unit.log",
-      "logSha256": "2b74d620c07c01bf6dae77cf7df1f018ab6d91fa7bdef4ba94b7b50cf0d2fe2d",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-full-repair/unit.log",
+      "logSha256": "0b93d6b760d894bd32ec887ed99b3aa60d141c3cd955f36c4630ae85f090a60b",
       "kind": "tests",
       "passed": 119,
       "failed": 0,
@@ -119,32 +120,22 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3ffad14a38faf473172d0548c7bbc4be5c8e5696215e7297c3eadee78eba3c93"
+          "sha256": "7e70c239f37223f45e9eccd05be18b97bf00e8f7af183a6cada49d5da2862f1d"
         }
       ]
     },
     {
       "id": "browser",
-      "command": "bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dx-cockpit-repair.rzZPJC/pr1-approval-proof tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t keeps\\ customer\\ delivery\\|uses\\ \\[AB\\]\\ milestones\\|starts\\ one\\ effective\\ clock\\|applies\\ a\\ real\\ manager\\ approval\\|opens\\ the\\ original\\ live\\ production\\|original\\ full\\ App\\ dashboard\\|labelled\\ shared-projection\\ fixture --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1/browser.json",
+      "command": "bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dx-cockpit-repair.rzZPJC/pr1-full-repair-proof tests/integration/journey-fact-model-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts -t original\\ full\\ Shell\\|labelled\\ shared-projection\\ fixture\\|reduces\\ full-scope\\ current\\ native\\ selections\\|R5-08\\ opens\\ actual\\|R5-09\\ follows\\ one\\ new\\ order\\|keeps\\ customer\\ delivery\\|uses\\ \\[AB\\]\\ milestones\\|starts\\ one\\ effective\\ clock\\|applies\\ a\\ real\\ manager\\ approval\\|opens\\ the\\ original\\ live\\ production --reporter=json --outputFile.json=/dev/shm/dx-cockpit-repair.rzZPJC/records1-full-repair/browser.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T04:35:28Z",
-      "endedAt": "2026-11-20T04:36:37Z",
-      "testedHead": "53f0ef0c74800b4e2594fa614aabbbf574049de4",
-      "sourceFingerprint": "1447abfc0bd59b411c085a05a3d693e120481e526c04edbd7cec53bee7b86251",
-      "context": "同树真实 App、原签名 Chromium、仅新建回环 PostgreSQL 16 低权限测试角色和合成数据。 后继提交只修改不被该命令导入的座舱单测断言；实际应用、集成夹具和工具输入逐字未变。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1/browser.log",
-      "logSha256": "5bdf8e08c295b61468d25c4f131590e7c5b5dc63f5e5fdb3fa4a9675753db26e",
-      "kind": "tests",
-      "passed": 8,
-      "failed": 0,
-      "skipped": 25,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "dfe8d7664eaf963709a013dfc104c6857771c19de1340dd87ef60b0beeac434d"
-        }
-      ],
+      "startedAt": "2026-11-20T05:23:40Z",
+      "endedAt": "2026-11-20T05:25:37Z",
+      "testedHead": "d5741418a9c818c2eb0cb928700f5cb9f7f3671d",
+      "sourceFingerprint": "bbf0612c46128e819730ee12f6f3d1cce16c3ef0029d027106f75eb892c059d0",
+      "context": "同树真实 App、原签名 Chromium、仅新建回环 PostgreSQL 16 低权限测试角色和合成数据。 之后仅更新同名列的单测标记，浏览器、后端和工具实测输入逐字不变。",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-full-repair/browser.log",
+      "logSha256": "93518ca5cbebcac3e85143ab5f8eb3bf2dad573da1994d247c936c1f829e43e5",
       "inputPaths": [
         "apps",
         "packages",
@@ -159,19 +150,29 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "cb8b46850b7c6cb40dc5df4a81fd7ffa678f4b265226830ae3a7c6c591a49db8"
+      "inputFingerprint": "dae1874b2a3e82a6ea36911a2b7611fd97f5a809ed115006d236def6a1e51da6",
+      "kind": "tests",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 56,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "5a3be4e98edc234fa33d6bea404d4bedb88a486b7fcd3fe2a2b2716c0033d709"
+        }
+      ]
     },
     {
       "id": "lint",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-projection.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/order-time-created.ts apps/web/src/cockpit-detail.tsx apps/web/src/cockpit-framework-nodes.tsx apps/web/src/cockpit-home-fact-links.tsx apps/web/src/cockpit-home-progress.tsx apps/web/src/cockpit-home.tsx apps/web/src/cockpit-milestones.tsx apps/web/src/cockpit-stage-progress.tsx apps/web/src/cockpit-timing-coverage.tsx apps/web/src/digital-journey-cockpit-model.ts apps/web/src/digital-journey-cockpit.tsx packages/contracts/src/digital-production-journey.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-home.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/journey-projection.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/order-time-created.ts apps/web/src/cockpit-detail.tsx apps/web/src/cockpit-framework-nodes.tsx apps/web/src/cockpit-home-fact-links.tsx apps/web/src/cockpit-home-progress.tsx apps/web/src/cockpit-home.tsx apps/web/src/cockpit-milestones.tsx apps/web/src/cockpit-stage-progress.tsx apps/web/src/cockpit-timing-coverage.tsx apps/web/src/digital-journey-cockpit-model.ts apps/web/src/digital-journey-cockpit.tsx packages/contracts/src/digital-production-journey.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-home.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T04:56:49Z",
-      "endedAt": "2026-11-20T04:56:52Z",
-      "testedHead": "7817c2f7bfe4655cac0ec72bfe3ecb37925682db",
-      "sourceFingerprint": "d4e67089d87d026c5c5e1c453871a4439d067347595dac3fb2a0889efd17f144",
+      "startedAt": "2026-11-20T05:27:23Z",
+      "endedAt": "2026-11-20T05:27:25Z",
+      "testedHead": "d5741418a9c818c2eb0cb928700f5cb9f7f3671d",
+      "sourceFingerprint": "10ac2d7d51600a4050e011bf295c98d4dfbed6c058e413056bb716f2dff5eddb",
       "context": "实际 release 基线工作树上的候选源码及测试，Node 22、npm 10、项目锁定依赖。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-gate-repair/lint.log",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-full-repair/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "kind": "command"
     },
@@ -180,29 +181,14 @@
       "command": "npm run typecheck --workspace @dx-rework/web --workspace @dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-20T04:36:39Z",
-      "endedAt": "2026-11-20T04:37:31Z",
-      "testedHead": "53f0ef0c74800b4e2594fa614aabbbf574049de4",
-      "sourceFingerprint": "1447abfc0bd59b411c085a05a3d693e120481e526c04edbd7cec53bee7b86251",
-      "context": "实际 release 基线工作树上的候选源码及测试，Node 22、npm 10、项目锁定依赖。 后继提交只修改不被该命令导入的座舱单测断言；实际应用、集成夹具和工具输入逐字未变。",
-      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1/type.log",
+      "startedAt": "2026-11-20T05:27:25Z",
+      "endedAt": "2026-11-20T05:28:15Z",
+      "testedHead": "d5741418a9c818c2eb0cb928700f5cb9f7f3671d",
+      "sourceFingerprint": "10ac2d7d51600a4050e011bf295c98d4dfbed6c058e413056bb716f2dff5eddb",
+      "context": "实际 release 基线工作树上的候选源码及测试，Node 22、npm 10、项目锁定依赖。",
+      "log": "/dev/shm/dx-cockpit-repair.rzZPJC/records1-full-repair/type.log",
       "logSha256": "f0f1ba213cb13be15fe64467e899f10de367c2d3c577bdbf98844a1f57d6da10",
-      "kind": "command",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration",
-        "tests/helpers",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "cb8b46850b7c6cb40dc5df4a81fd7ffa678f4b265226830ae3a7c6c591a49db8"
+      "kind": "command"
     }
   ]
 }
