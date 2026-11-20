@@ -3,6 +3,7 @@ import { addProductionChase, readProductionDays } from "./production-chase.js";
 import { ProductionAnalysisQuerySchema,poDeliveryRisks } from "@dx-rework/contracts";
 import { readProductionAnalysis } from "./production-analysis.js";
 import { productionNotExcluded } from "./production-visibility.js";
+import { readProductionDashboardScope } from "./production-dashboard-scope.js";
 import type { Pool, PoolClient } from "pg";
 import { calculateProductionProgress, productionProgressRank, shanghaiDay, type ProductionProgressFacts } from "@dx-rework/domain";
 import { ProductionDashboardQuerySchema, ProductionDashboardSchema, ProductionDashboardDetailSchema,
@@ -106,7 +107,14 @@ export class ProductionDashboardService {
     input=parsed.data;
     return this.read(actor,async(client,asOf)=>{
       if(input.previousAsOf&&input.previousAsOf>asOf)throw new ApplicationError("VALIDATION_ERROR","上次刷新时间不能晚于当前时间",400);
-      const result=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibilityFor(actor)}`,productionVisibilityArgs(actor));
+      const scope=input.motherOrderId?await readProductionDashboardScope(client,actor,input.motherOrderId,asOf):undefined;
+      const scopeFilter=scope?` AND EXISTS (
+        SELECT 1 FROM jsonb_to_recordset($5::jsonb) AS factory("productionOrderId" uuid,"factoryDecisionId" uuid)
+        WHERE factory."productionOrderId"=production.production_order_id
+          AND factory."factoryDecisionId" IS NOT DISTINCT FROM production.factory_decision_id
+      )`:"";
+      const result=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibilityFor(actor)}${scopeFilter}`,
+        [...productionVisibilityArgs(actor),...(scope?[JSON.stringify(scope.factories)]:[])]);
       const orders=result.rows.map(toOrder),ids=orders.map(o=>o.productionOrderId);
       const current=await readFactoryProductionProgressFacts(client,ids,asOf);
       const items=addProductionChase(orders.filter(o=>current.has(executionKey(o.productionOrderId,o.factoryDecisionId))).map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),await readProductionDays(client,ids,asOf,true),asOf);
@@ -127,12 +135,17 @@ export class ProductionDashboardService {
         }
       }
       events.sort((a,b)=>b.recordedAt.localeCompare(a.recordedAt)||a.id.localeCompare(b.id));
-      return ProductionDashboardSchema.parse({asOf,items:deliveryRiskFilter?selected.items:selected.items.map(withDeliveryRisks),page:selected.page,pageSize:15,totalCount:selected.totalCount,
+      return ProductionDashboardSchema.parse({asOf,...(scope?{scope}:{}),items:deliveryRiskFilter?selected.items:selected.items.map(withDeliveryRisks),page:selected.page,pageSize:15,totalCount:selected.totalCount,
         counts:selected.counts,chaseCounts:selected.chaseCounts,suppliers,events:events.slice(0,20)});
     });
   }
-  async detail(actor:TrustedActorContext,id:string,factoryDecisionId:string|null=null) {
+  async detail(actor:TrustedActorContext,id:string,factoryDecisionId:string|null=null,motherOrderId?:string) {
     return this.read(actor,async(client,asOf)=>{
+      if(motherOrderId){
+        const scope=await readProductionDashboardScope(client,actor,motherOrderId,asOf);
+        if(!scope.factories.some(factory=>factory.productionOrderId===id&&factory.factoryDecisionId===factoryDecisionId&&factory.detailAvailable))
+          throw new ApplicationError("NOT_FOUND","找不到该母单下可查看的生产明细",404);
+      }
       const detail=await this.reporting.detail(actor,id,client,factoryDecisionId);
       const facts=await readFactoryProductionProgressFacts(client,[id],asOf);
       return ProductionDashboardDetailSchema.parse({asOf,detail,progress:facts.get(executionKey(id,factoryDecisionId)),deliveryRisks:poDeliveryRisks(detail.order.poDeliveryDates??[],shanghaiDay(asOf),{finished:Boolean(detail.order.poDeliveryClosed),factoryFinished:detail.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')});

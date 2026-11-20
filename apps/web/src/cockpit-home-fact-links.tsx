@@ -10,8 +10,8 @@ const badgeTones={gray:'neutral',blue:'info',green:'success',neutral:'neutral'} 
 export function CockpitHomeFactLinks({order,context,onReceipts}:{order:OrderJourney;context:CockpitContext;onReceipts:()=>void}){
  const facts=order.cockpitFacts,nodes=order.stages.flatMap(stage=>stage.nodes);
  const dashboard=facts?.production.dashboardLinks??[];
- const productionRecord=dashboard.length===1?dashboard[0]?.record:undefined;
- const productionChoices=dashboard.length>1?<details className="cockpit-production-choices">
+ const productionRecord=facts?.production.dashboardRecord??(dashboard.length===1?dashboard[0]?.record:undefined);
+ const productionChoices=!productionRecord&&dashboard.length>1?<details className="cockpit-production-choices">
   <summary>生产进度</summary>
   {dashboard.map(({factoryName,record})=><div key={record.url}><CockpitRecordLink record={record} context={context}>{factoryName}</CockpitRecordLink></div>)}
  </details>:null;

@@ -326,7 +326,7 @@ function AppRoutes() {
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/contract-template") page = <Shell active="合同模板设置"><ContractTemplateSettingsPage /></Shell>;
-  else if (path === "/ui/production-dashboard" || /^\/ui\/production-dashboard\/[0-9a-f-]+$/i.test(path)) page = path === "/ui/production-dashboard" && new URLSearchParams(search).get("workspace") === "display" ? <ProductionDisplayWorkspace key={search}/> : <ProductionDashboardPage productionOrderId={path.split("/")[3]} />;
+  else if (path === "/ui/production-dashboard" || /^\/ui\/production-dashboard\/[0-9a-f-]+$/i.test(path)) page = path === "/ui/production-dashboard" && (new URLSearchParams(search).get("workspace") === "display" || new URLSearchParams(search).has("motherOrderId")) ? <ProductionDisplayWorkspace key={search}/> : <ProductionDashboardPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/production-reporting" || /^\/ui\/production-reporting\/[0-9a-f-]+$/i.test(path)) page = <ProductionReportingPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/suppliers/requests") page = <SupplierOnboardingPage key="requests" />;
   else if (/^\/ui\/suppliers\/requests\/(new|[0-9a-f-]{36})$/i.test(path)) page = <SupplierOnboardingPage key={path} requestId={path.split("/")[4]!} />;

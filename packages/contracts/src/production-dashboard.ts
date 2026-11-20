@@ -23,7 +23,7 @@ export const ProductionDashboardQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).optional(), q: z.string().max(100).optional(),
   supplierId: z.string().uuid().optional(), status: SourcingProductionStatusSchema.optional(), progressState: ProductionProgressStateSchema.optional(),
   risk: z.enum(["attention", "stale", "due_pressure","po_deadline"]).optional(),
-  previousAsOf: z.string().datetime().optional(),
+  previousAsOf: z.string().datetime().optional(), motherOrderId: z.string().uuid().optional(),
 }).strict();
 export const ProductionDashboardEventSchema = z.object({
   id: z.string(), productionOrderId: z.string().uuid(), factoryDecisionId:z.string().uuid().nullable().optional(), firstStyleNo: z.string(), supplierName: z.string(),
@@ -32,7 +32,15 @@ export const ProductionDashboardEventSchema = z.object({
   previousState: ProductionProgressStateSchema.nullable(), progressState: ProductionProgressStateSchema.nullable(),
   daysWithoutUpdate: z.number().int().nonnegative().nullable(),
 }).strict();
+const ProductionDashboardScopeSchema = z.object({
+  motherOrderId: z.string().uuid(),
+  factories: z.array(z.object({
+    productionOrderId: z.string().uuid(), factoryDecisionId: z.string().uuid().nullable(),
+    factoryName: z.string(), detailAvailable: z.boolean(),
+  }).strict()),
+}).strict();
 export const ProductionDashboardSchema = z.object({
+  scope: ProductionDashboardScopeSchema.optional(),
   asOf: z.string().datetime(), items: z.array(ProductionDashboardItemSchema).max(15), page: z.number().int().positive(), pageSize: z.literal(15), totalCount: z.number().int().nonnegative(),
   counts: z.object({inProduction:z.number().int().nonnegative(),completed:z.number().int().nonnegative(),shipped:z.number().int().nonnegative(),attention:z.number().int().nonnegative()}).strict(),
   chaseCounts: z.object({attention: z.number().int().nonnegative(), stale: z.number().int().nonnegative(), duePressure: z.number().int().nonnegative()}).optional(),
@@ -43,6 +51,7 @@ export const ProductionDashboardDetailSchema = z.object({
   asOf: z.string().datetime(), progress: ProductionProgressSchema, detail: ProductionReportingDetailSchema,deliveryRisks:z.array(PoDeliveryRiskSchema).optional(),
 }).strict();
 export type ProductionDashboard = z.infer<typeof ProductionDashboardSchema>;
+export type ProductionDashboardScope = z.infer<typeof ProductionDashboardScopeSchema>;
 export type ProductionDashboardItem = z.infer<typeof ProductionDashboardItemSchema>;
 export type ProductionDashboardQuery = z.infer<typeof ProductionDashboardQuerySchema>;
 export type ProductionDashboardEvent = z.infer<typeof ProductionDashboardEventSchema>;

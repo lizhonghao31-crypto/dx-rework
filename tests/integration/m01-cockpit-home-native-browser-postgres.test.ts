@@ -6,11 +6,14 @@ import {randomUUID} from 'node:crypto';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {vi} from 'vitest';
 import {CreateSupplierSchema} from '@dx-rework/contracts';
-import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
+import {beijingCalendarDate,DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {WholeOrderDeletionService} from '../../apps/api/src/production-platform/whole-order-deletion-service.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
+import {ProductionDashboardService} from '../../apps/api/src/sourcing/production-dashboard-service.js';
 import {sourcingSlaEvidence} from '../../apps/api/src/production-platform/sourcing-sla-evidence.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {cockpitHomeBrowser,homeReady,coverageReady} from '../acceptance/m01-cockpit-home-native-browser.js';
@@ -353,27 +356,46 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    ]));
    const row=tab.page.locator(`[data-order-id="${journey.id}"]`);
    const progress=row.locator('.cockpit-home-fact').filter({hasText:'生产进度'});
-   const links=progress.getByRole('link');
-   if(reported){
-    expect(await links.count()).toBe(0);
-    await progress.locator('summary').click();
-   }
-   const target=reported?progress.getByRole('link',{name:factoryName,exact:true}):progress.getByRole('link',{name:/生产进度/});
-   expect(await links.count()).toBe(reported?2:1);
+   const target=progress.getByRole('link',{name:/生产进度/});
+   expect(journey.cockpitFacts?.production.dashboardRecord?.id).toBe(id);
+   expect(await progress.getByRole('link').count()).toBe(1);
    const href=new URL((await target.getAttribute('href'))!,h.base);
-   expect(href.pathname).toBe('/ui/production-dashboard/'+productionId);
-   expect(href.searchParams.get('factoryDecisionId')).toBe(decision);
-   if(reported){
-    const targets=await links.evaluateAll(elements=>elements.map(element=>{
-     const url=new URL((element as HTMLAnchorElement).href);
-     return {path:url.pathname,decision:url.searchParams.get('factoryDecisionId')};
-    }));
-    expect(targets).toEqual(expect.arrayContaining([null,decision].map(factoryDecisionId=>({path:'/ui/production-dashboard/'+productionId,decision:factoryDecisionId}))));
-   }
-   const loaded=tab.page.waitForResponse(response=>new URL(response.url()).pathname==='/api/production-dashboard/'+productionId&&new URL(response.url()).searchParams.get('factoryDecisionId')===decision);
-   await target.click();expect((await loaded).status()).toBe(200);
-   expect(new URL(tab.page.url()).pathname).toBe('/ui/production-dashboard/'+productionId);
+   expect(href.pathname).toBe('/ui/production-dashboard');
+   expect(href.searchParams.get('motherOrderId')).toBe(id);
+   expect(href.searchParams.get('workspace')).toBe('display');
+   const loaded=tab.page.waitForResponse(response=>new URL(response.url()).pathname==='/api/production-dashboard'&&new URL(response.url()).searchParams.get('motherOrderId')===id);
+   await target.click();const response=await loaded;expect(response.status(),response.status()===200?undefined:await response.text()).toBe(200);
+   expect(new URL(tab.page.url()).searchParams.get('motherOrderId')).toBe(id);
+   const scope=(await response.json()).scope;
+   const permitted=reported?[null,decision]:[decision];
+   expect(scope.motherOrderId).toBe(id);
+   expect(scope.factories.map((factory:{productionOrderId:string;factoryDecisionId:string|null})=>[factory.productionOrderId,factory.factoryDecisionId]))
+    .toEqual(expect.arrayContaining(permitted.map(factory=>[productionId,factory])));
+   expect(scope.factories).toHaveLength(permitted.length);
+   const board=tab.page.locator(`[data-mother-order-id="${id}"]`);await board.waitFor();
+   const currentFactory=board.getByRole('row').filter({hasText:factoryName});
+   await currentFactory.getByRole('button',{name:'查看',exact:true}).click();
+   await board.getByRole('heading',{name:/订单详情/}).waitFor();
+   const detailHref=new URL((await board.getByRole('link',{name:/查看原生产详情/}).getAttribute('href'))!,h.base);
+   expect(detailHref.searchParams.get('motherOrderId')).toBe(id);
+   expect(detailHref.searchParams.get('factoryDecisionId')).toBe(decision);
+   await board.getByRole('link',{name:/查看原生产详情/}).click();
    await tab.page.locator('.production-dashboard').getByText(factoryName,{exact:false}).first().waitFor();
+   await tab.page.getByRole('link',{name:'返回实时生产展示',exact:true}).click();
+   await board.waitFor();
+   if(!reported){
+    const oldFactory=await tab.page.request.get(h.base+'/api/production-dashboard/'+productionId+'?motherOrderId='+id);
+    expect(oldFactory.status()).toBe(404);
+    const similarStyle=await h.runInScene(async()=>new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({
+     customerCode:'PD',productGroup:'男装',designStyleNo:journey.designStyleNo+'-OTHER',orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:f.people.merchandiser!.actorId,
+     lines:[{formalPoNo:'TEST-OTHER-MOTHER-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]
+    }),randomUUID()));
+    const unrelated=similarStyle.productionOrderId;
+    const other=await tab.page.request.get(h.base+'/api/production-dashboard?'+new URLSearchParams({motherOrderId:unrelated,q:journey.designStyleNo}));
+    expect(other.status()).toBe(200);
+    expect(await other.json()).toMatchObject({scope:{motherOrderId:unrelated,factories:[]},items:[],suppliers:[],events:[],totalCount:0});
+    expect((await tab.page.request.get(h.base+'/api/production-dashboard/'+productionId+'?factoryDecisionId='+decision+'&motherOrderId='+unrelated)).status()).toBe(404);
+   }
 
    await tab.page.goto(h.base+'/ui/digital-production?factory='+id);const link=tab.page.getByRole('link',{name:'打开原实时生产',exact:true});
    await expect.poll(()=>link.count()).toBe(1);if(!await link.isVisible())await link.locator('xpath=ancestor::details[1]').locator('summary').first().click();
@@ -392,10 +414,70 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const readOnlyOrder=list.items.find(item=>item.orderId===id);
     expect(readOnlyOrder?.cockpitFacts?.production).toMatchObject({status:'unavailable'});
     expect(readOnlyOrder?.cockpitFacts?.production.dashboardLinks).toBeUndefined();
+    expect(readOnlyOrder?.cockpitFacts?.production.dashboardRecord).toBeUndefined();
+    expect((await denied.page.request.get(h.base+'/api/production-dashboard?motherOrderId='+id)).status()).toBe(403);
     await denied.page.locator('.digital-journey-cockpit[data-view="overview"][aria-busy="false"]').waitFor();
     expect(await denied.page.getByRole('link',{name:/生产进度/}).count()).toBe(0);
    }finally{await denied.context.close();}
   }
+ });
+
+ it('opens a signed empty dashboard for only the selected mother and preserves the scope through reset and return',async()=>{
+  const f=h.fixture,style=h.prefix+'EMPTY-MOTHER-'+randomUUID();
+  const mother=await h.runInScene(async()=>new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:f.people.merchandiser!.actorId,
+   lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]
+  }),randomUUID()));
+  const id=mother.productionOrderId;
+  const {page,context}=await h.open(f.people.merchandiser!.actorId,{search:style});
+  try{
+   const target=page.locator('.cockpit-home-facts').getByRole('link',{name:/生产进度/});
+   const first=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/production-dashboard'&&new URL(response.url()).searchParams.get('motherOrderId')===id);
+   await target.click();const response=await first;expect(response.status(),response.status()===200?undefined:await response.text()).toBe(200);
+   expect(await response.json()).toMatchObject({scope:{motherOrderId:id,factories:[]},items:[],totalCount:0,
+    counts:{inProduction:0,completed:0,shipped:0,attention:0},suppliers:[],events:[]});
+   await page.getByText('本单在当前条件下暂无生产记录',{exact:true}).waitFor();
+   await page.getByRole('button',{name:'重置',exact:true}).click();
+   expect(new URL(page.url()).searchParams.get('motherOrderId')).toBe(id);
+   const dashboard=page.locator(`[data-mother-order-id="${id}"]`);await dashboard.waitFor();
+   const missing=await page.request.get(h.base+'/api/production-dashboard?motherOrderId='+randomUUID());
+   expect(missing.status()).toBe(404);
+   const malformed=await page.request.get(h.base+'/api/production-dashboard?motherOrderId=');
+   expect(malformed.status()).toBe(400);
+   await page.getByRole('link',{name:'返回生产管理座舱',exact:true}).click();
+   await homeReady(page);
+   expect(new URL(page.url()).searchParams.get('search')).toBe(style);
+   await h.runInScene(async()=>{
+    const deletion=new WholeOrderDeletionService(f.db),preview=await deletion.preview(f.root,{ids:[id]});
+    expect(await deletion.remove(f.root,{orders:preview.orders.map(({id,revision})=>({id,revision}))},randomUUID()))
+     .toEqual({results:[{id,status:'deleted'}]});
+   });
+   expect((await page.request.get(h.base+'/api/production-dashboard?motherOrderId='+id)).status()).toBe(404);
+  }finally{await context.close();}
+ });
+
+ it('identifies the authorized factory with no transition without fabricating a production detail',async()=>{
+  const f=h.fixture,search=h.prefix+'MISSING-PRODUCTION-STATUS-';
+  await f.advance(h.scene,new Date(Date.now()+86400000).toISOString());
+  const {id,productionId}=await h.runInScene(async()=>{
+   const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stylePrefix:search});
+   const cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows;
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   for(const cut of cuts)await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,ready.id);
+   await flow.dispatch(f.people.warehouse!,ready.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST missing historical transition'},randomUUID());
+   const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.production_order_id;
+   return {id:ready.id,productionId};
+  });
+  const before=(await f.db.query<{observed_at:Date}>(
+   "SELECT min(created_at) - interval '1 millisecond' AS observed_at FROM sourcing_production_transitions WHERE production_order_id=$1",[productionId])).rows[0]!.observed_at;
+  // Observe the authentic allocation before its first recorded production transition.
+  const dashboard=new ProductionDashboardService(f.db,new ProductionReportingService(f.db),()=>before);
+  const actor=f.people.merchandiser!;
+  expect(await dashboard.list(actor,{motherOrderId:id})).toMatchObject({scope:{motherOrderId:id,factories:[{
+   productionOrderId:productionId,factoryDecisionId:null,factoryName:'TEST anchor factory',detailAvailable:false
+  }]},items:[],events:[],totalCount:0});
+  await expect(dashboard.detail(actor,productionId,null,id)).rejects.toMatchObject({statusCode:404});
  });
 
 });

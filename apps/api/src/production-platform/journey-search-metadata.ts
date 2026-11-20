@@ -25,7 +25,12 @@ export function journeyCandidateClock({source,order}:JourneyCandidate):BusinessT
  return order?{kind:'order',id:order.production_order_id}:{kind:'source',id:source!.source_id};
 }
 
-export async function readJourneyCandidateVisibility(policy:DigitalProductionAccessPolicy,actor:TrustedActorContext|null,{source,order}:JourneyCandidate):Promise<Visibility>{
+type VisibilityCandidate = {
+ source: Pick<NonNullable<JourneyCandidate['source']>, 'source_id'> | null;
+ order: Pick<NonNullable<JourneyCandidate['order']>, 'production_order_id' | 'created_by' | 'primary_merchandiser_id'> | null;
+};
+
+export async function readJourneyCandidateVisibility(policy:DigitalProductionAccessPolicy,actor:TrustedActorContext|null,{source,order}:VisibilityCandidate):Promise<Visibility>{
  const sourceAccess=Boolean(source&&(!actor||await policy.allowed(actor,'source',source.source_id,'technical')));
  const orderAccess=Boolean(order&&(!actor||await policy.allowed(actor,'order',order.production_order_id,'technical')));
  // An assigned technical task may grant a view without the other order tasks.
