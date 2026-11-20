@@ -164,6 +164,41 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const legacy=await journeys.list(actor(),JourneyFilterSchema.parse({search:base.search}));expect(legacy.summary.blocked).toBe(1);
     await expect(journeys.list(actor(stranger),JourneyFilterSchema.parse(base))).resolves.toMatchObject({total:0});
   });
+  it("batches the authorized task conditions for direct Journey details at one, fifteen and fifty tasks",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-DIRECT-DETAIL-SCALE',temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const routeId=randomUUID();
+    const ids:string[]=[];
+    const statements:Array<{sql:string;args:unknown[]|undefined}>=[];
+    const traced=new Proxy(db,{get(target,name){
+      if(name==='connect')return async()=>{
+        const real=await target.connect();
+        return new Proxy(real,{get(client,key){
+          if(key==='query')return (sql:string,args?:unknown[])=>{statements.push({sql,args});return client.query(sql,args);};
+          const value:unknown=Reflect.get(client,key);
+          return typeof value==='function'?value.bind(client):value;
+        }});
+      };
+      const value:unknown=Reflect.get(target,name);
+      return typeof value==='function'?value.bind(target):value;
+    }});
+    const direct=new DigitalJourneyQuery(traced);
+    for(const scale of [1,15,50]){
+      for(let index=ids.length;index<scale;index++){
+        const task=await createTask({resource:{kind:'source',id:sourceId},kind:'development_pattern',routeId,routeVersion:1,occurrence:index+1,assigneeId:worker});
+        ids.push(task.taskId);
+      }
+      statements.length=0;
+      const detail=await direct.read(actor(),sourceId,undefined,true);
+      const patternNodes=detail.stages.flatMap(stage=>stage.nodes).filter(node=>ids.includes(node.instanceId));
+      expect(patternNodes.map(node=>node.instanceId).sort()).toEqual([...ids].sort());
+      expect(patternNodes.every(node=>node.round===1&&node.records.some(record=>record.domain==='task'&&record.mode==='read'))).toBe(true);
+      const batched=statements.filter(({sql})=>sql.includes('task_id,condition_key,stage,satisfied FROM digital_production_task_conditions'));
+      expect(batched).toHaveLength(1);
+      expect(batched[0]!.args?.[0]).toEqual(expect.arrayContaining(ids));
+      expect(statements.some(({sql})=>sql.includes("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND stage='completion'"))).toBe(false);
+    }
+    await expect(direct.read(actor(stranger),sourceId,undefined,true)).rejects.toMatchObject({statusCode:404});
+  });
   it("reads five real log events first and cursor-pages every scoped event without ties, new events or foreign cursors leaking",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-LOG",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
