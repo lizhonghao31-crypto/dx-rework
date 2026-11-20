@@ -53,7 +53,11 @@ it("renders the eight approved columns and never substitutes old 80% for unavail
   const o=order([node("work")]);o.styleImageUrl="/TEST.png";
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
   expect(html.match(/<th(?:\s|>)/g)).toHaveLength(8);expect(html).not.toContain("时间规则待完善");expect(html).toContain('aria-label="整单自然时间进度"');expect(html).toContain('aria-label="整单实际进度"');expect(html).not.toContain('aria-valuenow=');expect(html).toContain("预览TEST-HOME款图");expect(html).not.toContain("80%");expect(html).not.toContain("<small>0%</small>");expect(html).not.toContain(">详情<");expect(html).toContain('订单ID：—');
-  expect(html.indexOf('data-progress-kind="time"')).toBeLessThan(html.indexOf('data-progress-kind="actual"'));expect(html).not.toContain('预计完成');expect(html).not.toContain('实际完成');expect(html).not.toContain('交货日期');expect(html).toContain('实际进度 —');
+  expect(html.indexOf('data-progress-kind="time"')).toBeLessThan(html.indexOf('data-progress-kind="actual"'));expect(html).not.toContain('预计完成');expect(html).not.toContain('实际完成');
+  const heading=html.match(/<thead>[\s\S]*?<\/thead>/)?.[0];
+  const rows=html.match(/<tbody>[\s\S]*?<\/tbody>/)?.[0];
+  expect(heading).toContain('<th class="cockpit-home-progress-heading">交货日期 / 实际进度</th>');
+  expect(rows).toContain('实际进度 —');expect(rows).not.toContain('交货日期');
 });
 it("keeps a real zero distinct from unavailable progress and uses the server's main state",()=>{
   const o=order([node("local-risk",{risks:["overdue"]})]);o.display={ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:"2026-11-30",missingShipmentDates:0,closedAt:null,actualRatio:0,actualLabel:"0.0%",awaitingClosure:false,stages:[],timeRatio:null,timeLabel:"时间规则待完善"};

@@ -1,170 +1,52 @@
 {
   "version": 1,
-  "base": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-  "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
+  "base": "4730b986664dad1d839cad6370c292e1c6fa21b3",
+  "sourceFingerprint": "edf0444af13a76eb60f6a63f31a94d07c71c062e6afca96c75d5d67abc553e93",
   "rules": [
     {
-      "rule": "座舱首页生产进度按真正可见的正数厂单一击直达原实时生产看板。",
-      "source": "Eric 授权的 #1050 后续修复，复用原生产看板角色与厂单读取权限。",
+      "rule": "首页原表头为「交货日期 / 实际进度」，订单行内不重复「交货日期」。",
+      "source": "Eric 对 #1050 座舱首页表头的纠正。",
       "writes": [
-        "apps/api/src/production-platform/cockpit-home-facts.ts",
-        "apps/web/src/cockpit-home-fact-links.tsx",
-        "packages/contracts/src/digital-production-journey.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/unit/digital-journey-projection.test.ts"
+        "apps/web/src/cockpit-home.tsx",
+        "tests/unit/cockpit-home.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/sourcing/production-dashboard-routes.ts",
-        "apps/api/src/sourcing/production-reporting-service.ts",
-        "apps/web/src/production-dashboard-page.tsx",
-        "apps/web/src/cockpit-record-link.tsx",
-        "apps/web/src/factory-flow-panel.tsx",
-        "apps/web/src/cockpit-detail.tsx"
+        "apps/web/src/cockpit-home-progress.tsx",
+        "apps/web/src/cockpit-home-r5.css"
       ],
       "oldTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
         "tests/unit/cockpit-home.test.ts",
-        "tests/unit/digital-journey-projection.test.ts"
+        "tests/unit/cockpit-framework.test.ts"
       ],
-      "initialization": "只在原有座舱批量现状查询附带厂单键和名称；链接按实际正数厂单去重，无迁移、seed 或业务写入。",
-      "dateAndPermission": "沿同一观察时点、原看板访问谓词及正数分配；转厂需要原详情读取所要求的 factoryDecisionId，无权仅显示原状态。",
-      "expectation": "在同单两种原记录同时存在时，首页直达实时生产，详情保留 QC；整单转厂排除零份额老厂，部分转厂分别指向对应的实际厂单。",
+      "initialization": "表头渲染的单处文本改动，无新初始化逻辑。",
+      "dateAndPermission": "保留实际客户日期、两条进度轨与原来的权限读写。",
+      "expectation": "表头精确恢复，订单行不重复表头字样，原实际进度和日期断言继续通过。",
       "checks": [
-        "candidate-build",
-        "candidate-api-types",
-        "candidate-web-types",
-        "candidate-lint",
-        "candidate-time-inventory",
-        "candidate-unit",
-        "candidate-pg"
+        "cockpit-heading-unit"
       ]
     }
   ],
   "checks": [
     {
-      "id": "candidate-build",
-      "kind": "command",
-      "command": "npm run build:packages",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-      "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
-      "context": "固定 release 基线上应用本次精确变更的源码快照，Node 22 和 lockfile 依赖，原仓库检查入口。",
-      "startedAt": "2026-11-20T00:43:01Z",
-      "endedAt": "2026-11-20T00:43:11Z",
-      "log": "/tmp/dx-production-link.5X301d/candidate-build.log",
-      "logSha256": "42534bd96daa66688e58109269730dbaebe1e74278e8d2362cb7be3a3483b40d"
-    },
-    {
-      "id": "candidate-api-types",
-      "kind": "command",
-      "command": "npm run typecheck --workspace @dx-rework/api",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-      "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
-      "context": "固定 release 基线上应用本次精确变更的源码快照，Node 22 和 lockfile 依赖，原仓库检查入口。",
-      "startedAt": "2026-11-20T00:43:11Z",
-      "endedAt": "2026-11-20T00:43:30Z",
-      "log": "/tmp/dx-production-link.5X301d/candidate-api-types.log",
-      "logSha256": "a60952951e358fe1fe89d47449fa248d2b71109f571c5d99ef89fd7fdb92f795"
-    },
-    {
-      "id": "candidate-web-types",
-      "kind": "command",
-      "command": "npm run typecheck --workspace @dx-rework/web",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-      "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
-      "context": "固定 release 基线上应用本次精确变更的源码快照，Node 22 和 lockfile 依赖，原仓库检查入口。",
-      "startedAt": "2026-11-20T00:43:30Z",
-      "endedAt": "2026-11-20T00:44:01Z",
-      "log": "/tmp/dx-production-link.5X301d/candidate-web-types.log",
-      "logSha256": "146744e03abb37696a2f8a2e16af79de20c515cadf82a282f02645837b1348db"
-    },
-    {
-      "id": "candidate-lint",
-      "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/cockpit-home-facts.ts apps/web/src/cockpit-home-fact-links.tsx packages/contracts/src/digital-production-journey.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/unit/digital-journey-projection.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-      "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
-      "context": "固定 release 基线上应用本次精确变更的源码快照，Node 22 和 lockfile 依赖，原仓库检查入口。",
-      "startedAt": "2026-11-20T00:44:01Z",
-      "endedAt": "2026-11-20T00:44:03Z",
-      "log": "/tmp/dx-production-link.5X301d/candidate-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "id": "candidate-time-inventory",
+      "id": "cockpit-heading-unit",
       "kind": "tests",
-      "command": "node --test --test-reporter=tap --test-name-pattern='time.source inventory' scripts/ci/pr-gate-controller.test.mjs",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-framework.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-cockpit-heading.cn9WFU/after.json --silent --no-color",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-      "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
-      "context": "固定 release 基线上应用本次精确变更的源码快照，Node 22 和 lockfile 依赖，原仓库检查入口。",
-      "startedAt": "2026-11-20T00:44:03Z",
-      "endedAt": "2026-11-20T00:44:04Z",
-      "log": "/tmp/dx-production-link.5X301d/candidate-time-inventory.log",
-      "logSha256": "5889873a91145308ddb6c9f0c5f375bacf2b99a20d2a808b86cd5826603a49db",
-      "passed": 1,
+      "passed": 17,
       "failed": 0,
       "skipped": 0,
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "5889873a91145308ddb6c9f0c5f375bacf2b99a20d2a808b86cd5826603a49db"
-        }
-      ]
-    },
-    {
-      "id": "candidate-unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/journey-snapshot-reads.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-production-link.5X301d/candidate-unit.json --silent --no-color",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-      "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
-      "context": "固定 release 基线上应用本次精确变更的源码快照，Node 22 和 lockfile 依赖，原仓库检查入口。",
-      "startedAt": "2026-11-20T00:44:04Z",
-      "endedAt": "2026-11-20T00:44:11Z",
-      "log": "/tmp/dx-production-link.5X301d/candidate-unit.log",
-      "logSha256": "0cd978e97a793e776ad4b5c853d68b9dd15db28409cdfddfc04c4622b8dde4ef",
-      "passed": 91,
-      "failed": 0,
-      "skipped": 0,
+      "testedHead": "4730b986664dad1d839cad6370c292e1c6fa21b3",
+      "sourceFingerprint": "edf0444af13a76eb60f6a63f31a94d07c71c062e6afca96c75d5d67abc553e93",
+      "context": "实际 release 合并点的全源码快照加本次表头和测试变更，以固定 Node 22 与锁定依赖渲染首页及独立进度单元。",
+      "startedAt": "2026-11-20T01:22:52Z",
+      "endedAt": "2026-11-20T01:22:54Z",
+      "log": "/tmp/dx-cockpit-heading.cn9WFU/after.log",
+      "logSha256": "5add66e6b9965f5cd2895ea031a3e983aebfd49ce449536e9af2ebf0cf35d5a6",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6e4538f9541d6beca10a4f3b14d6ca8df3b5a724b511115d1e2a2fbde8a5a532"
-        }
-      ]
-    },
-    {
-      "id": "candidate-pg",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 -t 'opens the original live production dashboard' --reporter=verbose --reporter=json --outputFile=/tmp/dx-production-link.5X301d/candidate-pg.json --silent --no-color",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "529c6a94f6a0470a3be1a046521187cc5c33180f",
-      "sourceFingerprint": "11861d63ea5b8c31d882e1f769ac41c0dea8c7a41c56dffefd50a80c5d367052",
-      "context": "固定 release 基线上应用本次精确变更的源码快照，Node 22 和 lockfile 依赖。真实浏览器用例使用只供合成夹具的 PostgreSQL 16.16 和原签名登录，账号权限、原派单及转厂命令均真实执行。",
-      "startedAt": "2026-11-20T00:44:13Z",
-      "endedAt": "2026-11-20T00:44:45Z",
-      "log": "/tmp/dx-production-link.5X301d/candidate-pg.log",
-      "logSha256": "73f7286a53ef5bc32b95c21b4267836b80ad8cdd337cfe88bf83f5a018afdce8",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 14,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "d3a1a4fd0c3ec9dd825d91e259c815844fd8ef576f954e033c1d742563114a3c"
+          "sha256": "cf6775771e22145696c587d819a16f82981cd47496ed978f1057bf8269ee36a7"
         }
       ]
     }
