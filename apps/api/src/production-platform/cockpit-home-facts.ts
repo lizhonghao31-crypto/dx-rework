@@ -19,12 +19,17 @@ export function cockpitFact(kind:FactKind,status:CockpitFactStatus,scope:Cockpit
  return {status,tone:tone[status],label,scope};
 }
 
-type FactoryScope = {lineId:string;quantity:number;visible:boolean;status:string|null;reportedWork:boolean};
+type FactoryScope = {
+ lineId:string;quantity:number;visible:boolean;status:string|null;reportedWork:boolean;
+ productionId:string;factoryDecisionId:string|null;factoryName:string;
+};
 
 export async function readCockpitFactoryScopes(db:PoolClient,actor:TrustedActorContext,orders:readonly {id:string;asOf:string}[]){
  const result=new Map<string,FactoryScope[]>();
  if(!orders.length||!canReadProductionReporting(actor))return result;
  const rows=(await db.query<FactoryScope&{mother:string}>(`SELECT link.production_order_id AS mother,map.line_id AS "lineId",allocation.quantity,
+  production.production_order_id AS "productionId",production.factory_decision_id AS "factoryDecisionId",
+  production.supplier_name_snapshot AS "factoryName",
   coalesce(${factoryProductionVisibilityFor(actor)},false) AS visible,
   current.status,coalesce(reports.quantity>0,false) AS "reportedWork"
   FROM jsonb_to_recordset($5::jsonb) AS requested(id uuid,"asOf" timestamptz)
@@ -70,6 +75,18 @@ export function cockpitProductionFact(lines:OrderJourney['lines'],scopes:readonl
  return fact('no_record',completeScope?'whole':'visible');
 }
 
+function dashboardLinks(scopes:readonly FactoryScope[]|undefined){
+ const links=new Map<string,NonNullable<CockpitHomeFacts['production']['dashboardLinks']>[number]>();
+ for(const scope of scopes??[]){
+  if(!scope.visible||!scope.status)continue;
+  const id=scope.productionId,decision=scope.factoryDecisionId;
+  const query=decision?'?'+new URLSearchParams({factoryDecisionId:decision}):'';
+  const url=`/ui/production-dashboard/${id}${query}`;
+  links.set(url,{factoryName:scope.factoryName,record:{domain:'production',id,url,mode:'read',version:null,lineId:null}});
+ }
+ return [...links.values()].sort((a,b)=>a.factoryName.localeCompare(b.factoryName)||a.record.url!.localeCompare(b.record.url!));
+}
+
 export function cockpitHomeFacts(input:{
  orderId:string|null;fullOrder:boolean;lines:OrderJourney['lines'];factories?:readonly FactoryScope[]|undefined;
  receipts?:ReadonlyArray<{lineId:string;demand:number;received:number;recorded:boolean}>|undefined;
@@ -91,8 +108,9 @@ export function cockpitHomeFacts(input:{
  const sent=lines.filter(line=>sentLineIds.has(line.id)).length;
  const sampleStatus:CockpitFactStatus=sampleApplicable===false?'not_applicable':lines.length>0&&sent===lines.length?'complete':
   sent?'partial':sampleApplicable===true&&sampleWaiting?'not_started':'no_record';
+ const links=dashboardLinks(factories),productionNavigation=links.length?{dashboardLinks:links}:{};
  return {
-  production:cockpitProductionFact(lines,factories),
+  production:{...cockpitProductionFact(lines,factories),...productionNavigation},
   receiving:{...cockpitFact('receiving',receiptStatus,receiptScope),
    received:receivingRows.length?receivingRows.reduce((sum,line)=>sum+line.received,0):null,
    demand:receivingRows.length?receivingRows.reduce((sum,line)=>sum+line.demand,0):null},

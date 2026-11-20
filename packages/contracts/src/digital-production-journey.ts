@@ -256,7 +256,7 @@ export type CockpitFact = {
   scope: 'whole'|'visible'|'unknown';
 };
 export type CockpitHomeFacts = {
-  production: CockpitFact;
+  production: CockpitFact & {dashboardLinks?: Array<{factoryName: string; record: JourneyRecord}>};
   receiving: CockpitFact & {received: number | null; demand: number | null};
   shipSample: CockpitFact;
 };

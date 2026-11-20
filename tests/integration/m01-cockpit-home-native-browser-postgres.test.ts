@@ -6,9 +6,11 @@ import {randomUUID} from 'node:crypto';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {vi} from 'vitest';
 import {CreateSupplierSchema} from '@dx-rework/contracts';
+import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {sourcingSlaEvidence} from '../../apps/api/src/production-platform/sourcing-sla-evidence.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {cockpitHomeBrowser,homeReady,coverageReady,JOURNEY_COVERAGE_KEYS} from '../acceptance/m01-cockpit-home-native-browser.js';
@@ -240,32 +242,73 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await approval.context.close();}
  });
 
- it('R5 opens the actual current factory production page after the original factory allocation reaches zero',async()=>{
+ it.each([0,4])('opens the original live production dashboard directly after transfer with %i pieces retained by the old factory',async reported=>{
   const f=h.fixture;await f.advance(h.scene,new Date(Date.now()+86400000).toISOString());
   let id='',productionId='',decision='';
+  const search=h.prefix+'CURRENT-FACTORY-'+reported+'-',factoryName='TEST-R509 current factory '+reported;
   await h.runInScene(async()=>{
-   const r=await f.bulkReady('无',undefined,1,f.sourcing,{stylePrefix:h.prefix+'CURRENT-FACTORY-'});id=r.id;
+   const r=await f.bulkReady('无',undefined,1,f.sourcing,{stylePrefix:search});id=r.id;
    const cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[r.caseId])).rows;
    const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
    for(const cut of cuts)await r.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
    const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,id);await flow.dispatch(f.people.warehouse!,id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST current factory navigation'},randomUUID());
    productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id;
-   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:'TEST-'+randomUUID().slice(0,8).toUpperCase(),supplierType:'factory',supplierName:'TEST-R509 current factory',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST original factory no remaining share'}));
+   if(reported)await new ProductionReportingService(f.db).report(f.root,productionId,{position:1,businessDate:beijingCalendarDate(businessNow()),quantity:reported},randomUUID());
+   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:'TEST-'+randomUUID().slice(0,8).toUpperCase(),supplierType:'factory',supplierName:factoryName,address:'TEST',contractEntityName:factoryName,partyBRepresentative:'TEST',payeeName:factoryName,bankAccount:'TEST000'+reported,bankName:'TEST',changeReason:'TEST original factory no remaining share'}));
    await f.sourcing.requestFactoryChange(f.people['production-management']!,r.caseId,{supplierId:supplier.supplierId,unitPrice:'6',changeReason:'TEST transfer all unstarted production'},randomUUID());
    const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
    decision=(await f.sourcing.decideFactoryChange(f.people.owner!,r.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST current factory scope'},randomUUID())).value.decision!.sourcingDecisionId;
    const scopes=(await f.db.query('SELECT factory_decision_id,quantity::int FROM sourcing_production_factory_orders WHERE production_order_id=$1 ORDER BY factory_decision_id NULLS FIRST',[productionId])).rows;
-   expect(scopes).toEqual([{factory_decision_id:null,quantity:0},{factory_decision_id:decision,quantity:10}]);
+   expect(scopes).toEqual([{factory_decision_id:null,quantity:reported},{factory_decision_id:decision,quantity:10-reported}]);
   });
-  const tab=await h.open();try{
+  const tab=await h.open(reported?undefined:f.people.merchandiser!.actorId,{search});try{
+   const journey=(await h.read(tab.page,{search})).items.find(item=>item.orderId===id)!;
+   const node=journey.stages.flatMap(stage=>stage.nodes).find(node=>node.current&&node.key==='production_reporting');
+   expect(node?.records).toEqual(expect.arrayContaining([
+    expect.objectContaining({domain:'factory',url:'/ui/digital-production?factory='+id+'&factoryAction=productionProgress'}),
+    expect.objectContaining({domain:'production',url:'/ui/production-dashboard/'+productionId})
+   ]));
+   const row=tab.page.locator(`[data-order-id="${journey.id}"]`);
+   const progress=row.locator('.cockpit-home-fact').filter({hasText:'生产进度'});
+   const links=progress.getByRole('link');
+   const target=reported?progress.getByRole('link',{name:factoryName,exact:true}):progress.getByRole('link',{name:/生产进度/});
+   expect(await links.count()).toBe(reported?2:1);
+   const href=new URL((await target.getAttribute('href'))!,h.base);
+   expect(href.pathname).toBe('/ui/production-dashboard/'+productionId);
+   expect(href.searchParams.get('factoryDecisionId')).toBe(decision);
+   if(reported){
+    const targets=await links.evaluateAll(elements=>elements.map(element=>{
+     const url=new URL((element as HTMLAnchorElement).href);
+     return {path:url.pathname,decision:url.searchParams.get('factoryDecisionId')};
+    }));
+    expect(targets).toEqual(expect.arrayContaining([null,decision].map(factoryDecisionId=>({path:'/ui/production-dashboard/'+productionId,decision:factoryDecisionId}))));
+   }
+   const loaded=tab.page.waitForResponse(response=>new URL(response.url()).pathname==='/api/production-dashboard/'+productionId&&new URL(response.url()).searchParams.get('factoryDecisionId')===decision);
+   await target.click();expect((await loaded).status()).toBe(200);
+   expect(new URL(tab.page.url()).pathname).toBe('/ui/production-dashboard/'+productionId);
+   await expect.poll(()=>tab.page.locator('.production-dashboard').innerText()).toContain(factoryName);
+
    await tab.page.goto(h.base+'/ui/digital-production?factory='+id);const link=tab.page.getByRole('link',{name:'打开原实时生产',exact:true});
    await expect.poll(()=>link.count()).toBe(1);if(!await link.isVisible())await link.locator('xpath=ancestor::details[1]').locator('summary').first().click();
    expect(new URL((await link.getAttribute('href'))!,h.base).searchParams.get('factoryDecisionId')).toBe(decision);
    await link.click();await expect.poll(()=>new URL(tab.page.url()).searchParams.get('factoryDecisionId')).toBe(decision);
-   await expect.poll(()=>tab.page.locator('.production-dashboard').innerText()).toContain('TEST-R509 current factory');
+   await expect.poll(()=>tab.page.locator('.production-dashboard').innerText()).toContain(factoryName);
    expect((await tab.page.request.get(h.base+'/api/production-dashboard/'+productionId+'?factoryDecisionId='+decision)).status()).toBe(200);
-   await tab.page.screenshot({path:join(h.evidence,'r509-current-factory-production.png'),fullPage:true});
+   await tab.page.screenshot({path:join(h.evidence,`r509-current-factory-production-${reported}.png`),fullPage:true});
   }finally{await tab.context.close();}
+  if(!reported){
+   const denied=await h.open(f.people['development-clerk']!.actorId,{},1584,1,{path:h.path({search})});
+   try{
+    const dashboard=await denied.page.request.get(h.base+'/api/production-dashboard/'+productionId+'?factoryDecisionId='+decision);
+    expect(dashboard.status()).toBe(403);
+    const list=await h.read(denied.page,{search});
+    const readOnlyOrder=list.items.find(item=>item.orderId===id);
+    expect(readOnlyOrder?.cockpitFacts?.production).toMatchObject({status:'unavailable'});
+    expect(readOnlyOrder?.cockpitFacts?.production.dashboardLinks).toBeUndefined();
+    await denied.page.locator('.digital-journey-cockpit[data-view="overview"][aria-busy="false"]').waitFor();
+    expect(await denied.page.getByRole('link',{name:/生产进度/}).count()).toBe(0);
+   }finally{await denied.context.close();}
+  }
  });
 
 });
