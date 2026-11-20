@@ -15,9 +15,11 @@ describe("master-data process catalog pagination", () => {
     expect(source).toContain('const loadAllProcesses = () => json<Process[]>("master-data/processes?includeInactive=true")');
     expect(source).toContain("previewProcessImport(file.name, rows, await loadAllProcesses())");
     expect(source).toContain("row.process.processId");
-    expect(source).toContain("if (processPageLoading || busy) return;");
+    expect(source).toContain('busy&&busy!=="process-page"||processRead.current?.target===target');
+    expect(source).toContain("processRead.current?.abort.abort()");
+    expect(source).toContain("if(processRead.current===work)");
     expect(source).toContain('setBusy("process-page")');
-    expect(source).toContain('setProcessPageLoading(false);\n      setBusy("");');
+    expect(source).toContain('setBusy(current=>current==="process-page"?"":current)');
   });
 
   it("uses the My Todos pager on desktop and mobile", async () => {

@@ -1,3 +1,5 @@
+import {beginForegroundWait} from "./foreground-loading.js";
+import {registerSessionInvalidator} from "./auth-session.js";
 import { SourcingPriceReapplicationPanel,emptySourcingPriceReapplicationDraft } from "./sourcing-price-reapplication.js";
 import { SourcingPriceReapplicationStateSchema } from "@dx-rework/contracts";
 import {uploadAttachmentWithRecovery,toolsAttachmentApi,localFileScope} from "./attachment-upload-recovery.js";
@@ -942,6 +944,13 @@ function OrderListPage({
   const [page, setPage] = useState(initial.page);
   const [totalPages, setTotalPages] = useState(1);
   const loadVersion = useRef(0);
+  const [loadedPage,setLoadedPage]=useState(initial.page),[loadedMode,setLoadedMode]=useState<typeof mode|null>(null);
+  const [loading,setLoading]=useState(true);
+  const activeRead=useRef<AbortController|null>(null),queuedRetry=useRef(false),quietRefresh=useRef(false);
+  const retryList=()=>{
+    if(activeRead.current||queuedRetry.current)return;
+    queuedRetry.current=true;setReloadRevision(value=>value+1);
+  };
   const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const [messagePath, setMessagePath] = useState<string | null>(null);
   const [summary, setSummary] = useState({ totalCount: 0, totalOrderQuantity: 0 });
@@ -958,8 +967,8 @@ function OrderListPage({
   };
   const listPath = sourcingListPath(mode, listState);
 
-  const load = async (state: SourcingListQuery): Promise<void> => {
-    const version = ++loadVersion.current;
+  const load = async (state: SourcingListQuery,signal:AbortSignal): Promise<void> => {
+    const version = ++loadVersion.current;setLoading(true);
     setMessagePath(sourcingListPath(mode, state));
     setMessage("正在加载订单…");
     try {
@@ -974,7 +983,7 @@ function OrderListPage({
       if (state.contractReturn != null) params.set("contractReturn",state.contractReturn);
       const body = await request(
         `sourcing/cases?${params.toString()}`,
-        SourcingCaseListResponseSchema,
+        SourcingCaseListResponseSchema,{signal},
       );
       if (version !== loadVersion.current) return;
       if (body.page > body.totalPages) {
@@ -983,13 +992,18 @@ function OrderListPage({
       }
       setItems(body.items);
       setSummary({ totalCount: body.totalCount, totalOrderQuantity: body.totalOrderQuantity });
-      setLoadedPath(sourcingListPath(mode, state));
+      setLoadedPath(sourcingListPath(mode, state));setLoadedMode(mode);setLoadedPage(body.page);
       setPage(body.page);
       setTotalPages(body.totalPages);
       setMessage("");
     } catch (error) {
-      if (version !== loadVersion.current) return;
+      if (version !== loadVersion.current||signal.aborted) return;
+      if(error instanceof SubmissionRequestError&&[401,403,404].includes(error.status)){
+        setItems([]);setLoadedPath(null);setLoadedMode(null);
+      }
       setMessage(error instanceof Error ? error.message : "订单列表加载失败");
+    }finally{
+      if(version===loadVersion.current&&!signal.aborted)setLoading(false);
     }
   };
 
@@ -997,10 +1011,25 @@ function OrderListPage({
     window.history.replaceState(window.history.state, "", pageUrl(listPath));
   }, [listPath]);
 
-  useEffect(() => {
-    void load(listState);
-    return () => { loadVersion.current += 1; };
-  }, [debouncedSearch, debouncedStyleName, stage, gender, contractReturn, page, mode, reloadRevision]);
+  const inputsSettled = search.trim() === debouncedSearch && styleName.trim() === debouncedStyleName;
+  useEffect(()=>registerSessionInvalidator(()=>{
+    activeRead.current?.abort();++loadVersion.current;
+    setItems([]);setLoadedPath(null);setLoadedMode(null);
+    quietRefresh.current=true;setReloadRevision(value=>value+1);
+  }),[]);
+  useEffect(()=>{
+    if(!inputsSettled)return;
+    const read=new AbortController(),finish=quietRefresh.current?()=>{}:beginForegroundWait();
+    quietRefresh.current=false;queuedRetry.current=false;activeRead.current=read;
+    void load(listState,read.signal).finally(()=>{
+      finish();
+      if(activeRead.current===read)activeRead.current=null;
+    });
+    return()=>{
+      finish();read.abort();++loadVersion.current;
+      if(activeRead.current===read)activeRead.current=null;
+    };
+  },[listPath,inputsSettled,reloadRevision]);
 
   const changeStage = (value: SourcingStageFilter): void => {
     setStage(value);
@@ -1011,16 +1040,17 @@ function OrderListPage({
     setPage(1);
   };
 
-  const inputsSettled = search.trim() === debouncedSearch && styleName.trim() === debouncedStyleName;
-  const currentResult = loadedPath === listPath && inputsSettled;
-  const listMessage = !inputsSettled || messagePath !== listPath
-    ? "正在加载订单…" : message || (!currentResult ? "正在加载订单…" : "");
-  const visible = useMemo(
-    () => listMessage ? [] : items.filter((item) => mode === "history" ? item.status === "closed" : item.status !== "closed"),
-    [items, mode, listMessage],
+  const hasResult=loadedMode===mode&&loadedPath!==null;
+  const waiting=loading||!inputsSettled||messagePath!==listPath;
+  const currentResult=hasResult&&loadedPath===listPath&&!waiting&&!message;
+  const readError=!waiting&&message?message:"";
+  const visible=useMemo(
+    ()=>hasResult?items.filter(item=>mode==="history"?item.status==="closed":item.status!=="closed"):[],
+    [items,mode,hasResult],
   );
 
   const remove = async (item: SourcingCaseSummary): Promise<void> => {
+    if(!currentResult)return;
     if (!(await confirmInApp(
       sourcingDeleteConfirmation(item),
     ))) return;
@@ -1035,8 +1065,8 @@ function OrderListPage({
           headers: { "idempotency-key": createClientRequestId() },
         },
       );
-      setLoadedPath(null);
-      setReloadRevision(current => current + 1);
+      setItems(current=>current.filter(row=>row.sourcingCaseId!==item.sourcingCaseId));
+      quietRefresh.current=true;setReloadRevision(current=>current+1);
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : "删除失败");
     } finally {
@@ -1130,24 +1160,25 @@ function OrderListPage({
             </select>
           </label>
         </div>
-        {!listMessage ? <p className="sourcing-list-summary" role="status" aria-label="筛选结果汇总">
+        {hasResult ? <p className="sourcing-list-summary" role="status" aria-label="筛选结果汇总">
           共 {summary.totalCount.toLocaleString("zh-CN")} 张订单 <span aria-hidden="true">｜</span> 订单数量合计 <strong>{summary.totalOrderQuantity.toLocaleString("zh-CN")}</strong> 件
         </p> : null}
         {deleteError ? <p className="sourcing-delete-error" role="alert">{deleteError}</p> : null}
-        {listMessage ? <p className="sourcing-list-message" role="status">{listMessage}</p> : null}
-        {!listMessage && visible.length === 0 ? <p className="sourcing-list-message">暂无符合条件的订单</p> : null}
-        <div className="sourcing-order-list">
+        {waiting&&!hasResult?<p className="sourcing-list-message" role="status">正在加载订单…</p>:null}
+        {readError?<p className="sourcing-list-message" role="alert">{readError} <Button onClick={retryList}>重试读取</Button></p>:null}
+        {currentResult&&visible.length===0?<p className="sourcing-list-message">暂无符合条件的订单</p>:null}
+        <div className="sourcing-order-list" aria-busy={waiting}>
           {visible.map((item) => <SourcingOrderCard
             item={item}
-            returnTo={listPath}
+            returnTo={loadedPath??listPath}
             key={item.sourcingCaseId}
-            canDelete={user?.isRoot === true}
+            canDelete={currentResult&&user?.isRoot===true}
             deleting={deletingCaseId === item.sourcingCaseId}
             onDelete={(order) => { void remove(order); }}
           />)}
         </div>
-        {!listMessage ? <ListPagination
-          page={page}
+        {hasResult ? <ListPagination
+          page={loadedPage}
           totalPages={totalPages}
           ariaLabel="订单列表分页"
           onPageChange={setPage}
@@ -1605,7 +1636,7 @@ function OrderDetailPage({
           <p role={read.error?"alert":"status"}>{read.error||(read.readOnly.attachments||earlyContract?"正在读取其余业务记录…":"正在读取图片、合同与业务记录…")}</p>
         </section>
       </div>:null}
-      {read.error?<button type="button" disabled={read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reload()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
+      {read.error?<button type="button" disabled={read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reloadForeground()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
       {imageDialog}
     </div>;
   }
@@ -1814,7 +1845,7 @@ function OrderDetailPage({
             {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
             <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
                 {!returnOpen&&!budgetCorrectionOpen&&!financeDifferenceOpen?<SubmissionFeedback feedback={feedback} busy={busy||contractUploading}/>:null}
-                {read.error?<button type="button" disabled={busy||read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reload()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
+                {read.error?<button type="button" disabled={busy||read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reloadForeground()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
                 {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
                   <h2>IE 给价</h2>
                   <p>逐款核定加工单价；每行金额独立四舍五入到分后汇总。</p>

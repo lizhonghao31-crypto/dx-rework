@@ -5,6 +5,7 @@ const guards = new Set<LeaveGuard>();
 let asking = false;
 const POSITION = "dxInternalNavigationPosition";
 type NavigateOptions = { replace?: boolean };
+type NavigationPreparation={ready:Promise<void>;finish():void};
 let activeNavigate: ((href: string, options?: NavigateOptions) => Promise<boolean>) | undefined;
 
 export async function navigateInternalPage(href: string, options?: NavigateOptions): Promise<boolean> {
@@ -37,13 +38,15 @@ export function navigationRollbackDelta(current: unknown, target: unknown): numb
 }
 
 /** Shared by App and the offline navigation regression fixture. */
-export function installInternalNavigation(basePath: string, sync: () => void): () => void {
+export function installInternalNavigation(basePath:string,sync:()=>void,prepare?:(target:URL)=>NavigationPreparation|undefined):()=>void{
   const appPath = (pathname: string) => basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`)) ? pathname.slice(basePath.length) || "/" : pathname;
   let current = { href: window.location.href, state: window.history.state };
   let position = Number.isSafeInteger(current.state?.[POSITION]) ? Number(current.state[POSITION]) : 0;
   window.history.replaceState({ ...current.state, [POSITION]: position }, "");
   current = { href: window.location.href, state: window.history.state };
-  let generation = 0;
+  let generation=0;
+  let preparing:{href:string;replace:boolean;result:Promise<boolean>;finish():void}|null=null;
+  const releasePreparation=()=>{preparing?.finish();preparing=null;};
   let restoring = false;
   const remember = () => {
     current = { href: window.location.href, state: window.history.state };
@@ -62,9 +65,10 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
   };
   window.history.replaceState=replace;
   const pop = async () => {
+    releasePreparation();
+    const attempt=++generation;
     if (restoring && window.location.href === current.href) { restoring = false; return; }
     if (window.location.href === current.href) { remember(); return; }
-    const attempt = ++generation;
     const target = { href: window.location.href, state: window.history.state };
     if (guards.size && !await canLeaveInternalPage(target.href)) {
       if (attempt !== generation) return;
@@ -80,15 +84,32 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     if (attempt !== generation) return;
     remember();
   };
-  const go = async (href: string, options: NavigateOptions = {}) => {
-    const url = new URL(href, window.location.href);
-    if (url.origin !== window.location.origin) return false;
-    const relativePath = appPath(url.pathname);
-    if (!(relativePath === "/" || relativePath.startsWith("/ui/") || relativePath.startsWith("/system/") || relativePath.startsWith("/auth/"))) return false;
-    const attempt = generation;
-    if (guards.size && !await canLeaveInternalPage(url.href)) return false;
-    if (attempt !== generation) return false;
-    ++generation;
+  const go=(href:string,options:NavigateOptions={}):Promise<boolean>=>{
+    const url=new URL(href,window.location.href);
+    if(url.origin!==window.location.origin)return Promise.resolve(false);
+    const relativePath=appPath(url.pathname);
+    if(!(relativePath==="/"||relativePath.startsWith("/ui/")||relativePath.startsWith("/system/")||relativePath.startsWith("/auth/")))return Promise.resolve(false);
+    const replaceTarget=Boolean(options.replace);
+    if (asking) return Promise.resolve(false);
+    if (preparing?.href === url.href && preparing.replace === replaceTarget) return preparing.result;
+    releasePreparation();
+    const attempt=++generation;
+    const work=prepare?.(url);
+    const navigate=async()=>{
+      if (work) await work.ready;
+      if(attempt!==generation)return false;
+      if(guards.size&&!await canLeaveInternalPage(url.href))return false;
+      if(attempt!==generation)return false;
+      return commitNavigation(url,relativePath,options);
+    };
+    const result=navigate().finally(()=>{
+      work?.finish();
+      if(preparing?.result===result)preparing=null;
+    });
+    preparing={href:url.href,replace:replaceTarget,result,finish:()=>work?.finish()};
+    return result;
+  };
+  const commitNavigation=(url:URL,relativePath:string,options:NavigateOptions)=>{
     const sourcePath = appPath(window.location.pathname);
     const pattern = preparePatternNavigation(`${sourcePath}${window.location.search}`, `${relativePath}${url.search}${url.hash}`, window.history.state?.dxPatternOrigin, window.scrollY);
     const destination = new URL(`${basePath}${pattern.target}`, window.location.origin);
@@ -125,5 +146,5 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
   };
   window.addEventListener("popstate", pop);
   document.addEventListener("click", navigate);
-  return () => { ++generation; if (activeNavigate === go) activeNavigate = undefined; if(window.history.replaceState===replace)window.history.replaceState=originalReplace; window.removeEventListener("popstate", pop); document.removeEventListener("click", navigate); };
+  return () => { ++generation;releasePreparation(); if (activeNavigate === go) activeNavigate = undefined; if(window.history.replaceState===replace)window.history.replaceState=originalReplace; window.removeEventListener("popstate", pop); document.removeEventListener("click", navigate); };
 }

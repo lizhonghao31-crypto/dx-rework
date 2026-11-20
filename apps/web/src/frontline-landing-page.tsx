@@ -1,3 +1,4 @@
+import {useForegroundWait} from "./foreground-loading.js";
 import { LogoutButton } from "./session-exit.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { StatusBadge, Surface } from "@dx-rework/ui";
@@ -45,6 +46,7 @@ export function frontlineEntries(user: AuthorizedUser): readonly Entry[] {
 
 export function FrontlineLandingPage() {
   const [state, setState] = useState<State>({ kind: "loading" });
+  useForegroundWait(state.kind==="loading"?"frontline:entry":undefined);
 
   useEffect(() => {
     let mounted = true;

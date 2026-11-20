@@ -1,6 +1,7 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {productionDisplayDomainHref} from './production-display-context.js';
 import {SUBMISSION_RECOVERY_WINDOW_MS} from "./submission-attempt.js";
-import {feedbackFetch,feedbackJson,unknownWriteResult} from "./request-response-feedback.js";
+import {RequestFeedbackError,feedbackFetch,feedbackJson,unknownWriteResult} from "./request-response-feedback.js";
 import { SearchableSelect } from "./search-select.js";
 import { shanghaiBusinessTime } from "./business-date.js";
 import { productionDisplayReturnUrl } from "./production-display-context.js";
@@ -79,20 +80,54 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   const scopeKey=user?.id??'unverified';
   const scopeRetry=useMemo(()=>({get current(){return scopeAttempts.get(scopeKey)??null;},set current(value:ProductionAttempt|null){if(value)scopeAttempts.set(scopeKey,value);else scopeAttempts.delete(scopeKey);changedAttempts();}}),[scopeKey]);
   const mutation=useRef(false),version=useRef(0);
+  const activeRead=useRef<{target:string;abort:AbortController;finish:()=>void}|null>(null);
+  const query=q.trim(),params=new URLSearchParams({page:String(page)});
+  if(query)params.set("q",query);
+  if(supplier)params.set("supplierId",supplier);
+  if(status)params.set("status",status);
+  const readPath=productionOrderId?`/${productionOrderId}${factoryQuery}`:`?${params}`;
+  const readTarget=JSON.stringify([readKey,readPath]);
   useEffect(()=>{let live=true;const pending=verifySession(),version=sessionCacheVersion();void pending.then(s=>{if(live&&version===sessionCacheVersion())setVerified(s!=="denied"&&s.status==="authorized"?{version,user:s.user}:null);});return()=>{live=false;};},[identityVersion]);
   useEffect(()=>{setError('');setMessage('');setScopeError('');setQuantities({});setCorrecting(null);setScopeUser('');setScopeSupplier('');},[readKey]);
   const load=async()=>{
-    if(!user)return;
-    const startedContext=readKey;
-    const current=++version.current;setLoading(true);setError("");
+    if(!user||activeRead.current?.target===readTarget)return;
+    activeRead.current?.abort.abort();
+    activeRead.current?.finish();
+    const startedContext=readKey,current=++version.current,abort=new AbortController();
+    const work={target:readTarget,abort,finish:beginForegroundWait()};
+    activeRead.current=work;
+    setLoading(true);setError("");
+    const accepts=()=>!abort.signal.aborted&&current===version.current&&context.current===startedContext;
     try {
-      if(productionOrderId){const result=await request(`/${productionOrderId}${factoryQuery}`,ProductionReportingDetailSchema);if(!sameOrder(result))throw new Error('生产资料与当前订单或工厂版本不一致，请从原订单重新读取');if(current===version.current&&context.current===startedContext)setDetail({key:startedContext,value:result});}
-      else {const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);
-        const result=await request(`?${params}`,ProductionReportingListSchema);if(current===version.current&&context.current===startedContext)setList({key:startedContext,value:result});}
-    }catch(e){if(current===version.current&&context.current===startedContext)setError(e instanceof Error?e.message:"加载失败");}
-    finally{if(current===version.current&&context.current===startedContext)setLoading(false);}
+      if(productionOrderId){
+        const result=await request(readPath,ProductionReportingDetailSchema,{signal:abort.signal});
+        if(!sameOrder(result))throw new Error('生产资料与当前订单或工厂版本不一致，请从原订单重新读取');
+        if(accepts())setDetail({key:startedContext,value:result});
+      }else{
+        const result=await request(readPath,ProductionReportingListSchema,{signal:abort.signal});
+        if(accepts())setList({key:startedContext,value:result});
+      }
+    }catch(error){
+      if(accepts()){
+        if(error instanceof RequestFeedbackError&&[401,403,404].includes(error.status??0)){
+          setDetail(null);setList(null);setDirectory(null);
+        }
+        setError(error instanceof Error?error.message:"加载失败");
+      }
+    }finally{
+      work.finish();
+      if(activeRead.current===work)activeRead.current=null;
+      if(accepts())setLoading(false);
+    }
   };
-  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[readKey,page,q,supplier,status]);
+  useEffect(()=>{
+    const timer=setTimeout(()=>{void load();},query?250:0);
+    return()=>{
+      clearTimeout(timer);version.current++;
+      if(activeRead.current?.target!==readTarget)return;
+      activeRead.current.abort.abort();activeRead.current.finish();activeRead.current=null;
+    };
+  },[readTarget]);
   const write=async(path:string,body:unknown,success:string,recover=false)=>{
     const startedContext=readKey;
     if(!user||!detail||context.current!==startedContext)return;
@@ -139,7 +174,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     {message?<p role="status">{message}</p>:null}
     {productionOrderId?<a href={orderReturn??productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))??pageUrl("ui/production-reporting")}>{orderReturn?"返回这张订单":productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))?"返回实时生产展示":"返回生产订单"}</a>:null}
     <Button disabled={busy||loading} variant="secondary" onClick={()=>{void load();}}>刷新</Button>
-    {loading?<p role="status">正在加载…</p>:null}
+    {loading&&!list&&!detail?<p role="status">正在加载…</p>:null}
     {!productionOrderId?<>
       <Surface className="sourcing-list-card"><div className="sourcing-form-grid">
         <label>关键词<input aria-label="搜索生产订单" value={q} onChange={e=>{setQ(e.target.value);setPage(1);}} placeholder="款号或供应商" maxLength={100}/></label>
@@ -152,7 +187,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
           {order.reportingState?<span>待首次上报</span>:null}{order.sourceCaseArchived?<span>原外发单已删除 · 生产记录保留</span>:null}
         </a></Surface>)}
         {!loading&&list?.items.length===0?<p>暂无负责范围内的生产订单</p>:null}
-      </div>{list?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(list.totalCount/15))} onPageChange={setPage} busy={loading} ariaLabel="生产订单分页"/>:null}</Surface>
+      </div>{list?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(list.totalCount/15))} onPageChange={setPage} ariaLabel="生产订单分页"/>:null}</Surface>
     </>:null}
     {detail&&selectedLine.error?<p role="alert">{selectedLine.error}</p>:detail?<>
       <Surface className="sourcing-list-card"><h2>{detail.order.firstStyleNo} · {detail.order.supplierName}</h2>

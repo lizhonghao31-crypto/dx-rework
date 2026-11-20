@@ -1,17 +1,14 @@
-import type { ManagementDashboardResponse, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
+import {useForegroundWait} from "../foreground-loading.js";
+import {useForegroundRead} from "../use-foreground-read.js";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 
 import { Header, Shell } from "../components.js";
 import { loadManagementDashboard, reportingPageUrl } from "./reporting-client.js";
 import { ManagementOrderCard } from "./management-order-card.js";
 import "./reporting.css";
 
-type State =
-  | { kind: "loading" }
-  | { kind: "ready"; value: ManagementDashboardResponse | SiteDashboardResponse }
-  | { kind: "unavailable"; message: string };
 
 const nodeTarget = (node: string): string => ({
   N01: "ui/tasks?status=draft",
@@ -56,37 +53,10 @@ const NodeQueue = ({ items }: { items: ReadonlyArray<{ node: string; label: stri
 );
 
 export function ManagementDashboardPage({ mode }: { mode: "management" | "site" }) {
-  const [state, setState] = useState<State>({ kind: "loading" });
-  const busy = useRef(false);
-  const mounted = useRef(true);
-  const hasReady = useRef(false);
-  const load = useCallback(async (initial = false) => {
-    if (busy.current) return;
-    busy.current = true;
-    try {
-      const value = await loadManagementDashboard(mode);
-      if (mounted.current) {
-        hasReady.current = true;
-        setState({ kind: "ready", value });
-      }
-    } catch (error: unknown) {
-      if (mounted.current && (initial || !hasReady.current)) {
-        setState({ kind: "unavailable", message: error instanceof Error ? error.message : "Dashboard 加载失败" });
-      }
-    } finally {
-      busy.current = false;
-    }
-  }, [mode]);
-
-  useEffect(() => {
-    mounted.current = true;
-    void load(true);
-    return () => {
-      mounted.current = false;
-    };
-  }, [load]);
-
-  const ready = state.kind === "ready" ? state.value : null;
+  const load=useCallback((signal:AbortSignal)=>loadManagementDashboard(mode,signal),[mode]);
+  const read=useForegroundRead("rework-dashboard",mode,load);
+  useForegroundWait(read.foregroundKey);
+  const ready=read.value;
   const management = ready?.mode === "management" ? ready : null;
   const site = ready?.mode === "site" ? ready : null;
   return (
@@ -97,8 +67,8 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
         action={ready?.availableActions.includes("export_reports") ? "报表中心" : "统一查询"}
         actionHref={ready?.availableActions.includes("export_reports") ? "/ui/reports" : "/ui/tasks"}
       />
-      {state.kind === "loading" && <Surface className="reporting-state">加载中…</Surface>}
-      {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}
+      {read.waiting&&!ready&&<Surface className="reporting-state">加载中…</Surface>}
+      {read.error&&<Surface className="reporting-state"><p role="alert">{read.error.message}</p><Button onClick={read.retry}>重试读取</Button></Surface>}
       {management && (
         <>
           <div className="kpis">

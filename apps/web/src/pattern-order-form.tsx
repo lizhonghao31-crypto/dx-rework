@@ -15,6 +15,7 @@ import { patternRequest, PatternRequestError, uploadPatternOriginal } from "./pa
 import { patternEstimate } from "./pattern-order-query.js";
 import { PatternMaterialInput, PATTERN_MATERIAL_LIMIT } from "./pattern-material-input.js";
 import { usePatternQuote } from "./use-pattern-quote.js";
+import { beginForegroundWait } from "./foreground-loading.js";
 import { usePatternDraftGuard } from "./use-pattern-draft-guard.js";
 
 export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSaved, onCancel,onBusyChange }: {onBusyChange?:(busy:boolean)=>void; order?: PatternOrderDetail; kind?: "pattern" | "misc"; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
@@ -35,8 +36,12 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
   useEffect(() => {
     if (order || misc) return;
     const abort = new AbortController();
-    void patternRequest("category-options", PatternCategoryOptionsSchema, { signal: abort.signal }).then(setCategories).catch(e => { if (!abort.signal.aborted) setError(e.message); });
-    return () => abort.abort();
+    const finish = beginForegroundWait();
+    void patternRequest("category-options", PatternCategoryOptionsSchema, { signal: abort.signal })
+      .then(value => { if (!abort.signal.aborted) setCategories(value); })
+      .catch(error => { if (!abort.signal.aborted) setError(error.message); })
+      .finally(finish);
+    return () => { abort.abort(); finish(); };
   }, [order, misc, refreshPrice]);
   useEffect(()=>{uploadContext.current++;pendingUploads.current=[];uploadingGuard.current=false;setUploading(false);return()=>{uploadContext.current++;};},[order?.orderId,order?.currentRoundId,kind]);
   const upload = async (selected: File[]) => {

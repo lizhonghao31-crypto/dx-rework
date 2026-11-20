@@ -70,7 +70,7 @@ export function OrderBoardPage() {
     startDate,setStartDate,endDate,setEndDate,query,setQuery,
     status,setStatus,debouncedQuery,data,message,pageLoading,
     canReceive,canInitiate,canInitiateFinishing,canExport,canResolveDifferences,canManagePacking,
-    isRoot,setRefreshToken,setPage,expandedRows,readFailed,resetPagination,
+    isRoot,setRefreshToken,retryRead,setPage,expandedRows,readFailed,resetPagination,
     toggleHistory
   } = useReceivingBoardRead(targetBatchId,invalidTarget);
   const {
@@ -223,9 +223,9 @@ export function OrderBoardPage() {
     </div>
 
     <div className="order-board-insights" aria-label="当前筛选异常摘要">
-      <button aria-pressed={status === "pending"} disabled={pageLoading} onClick={() => { resetPagination(); setStatus("pending"); }}>待处理差异 {data?.insights?.pendingCount ?? "—"}</button>
-      <button aria-pressed={status === "missing_packing"} disabled={pageLoading} onClick={() => { resetPagination(); setStatus("missing_packing"); }}>装箱未记录 {data?.insights?.missingPackingCount ?? "—"}</button>
-      <button aria-pressed={status === "stale"} disabled={pageLoading} onClick={() => { resetPagination(); setStatus("stale"); }}>处理后数据变化 {data?.insights?.staleCount ?? "—"}</button>
+      <button aria-pressed={status === "pending"} disabled={pageLoading && status === "pending"} onClick={() => { resetPagination(); setStatus("pending"); }}>待处理差异 {data?.insights?.pendingCount ?? "—"}</button>
+      <button aria-pressed={status === "missing_packing"} disabled={pageLoading && status === "missing_packing"} onClick={() => { resetPagination(); setStatus("missing_packing"); }}>装箱未记录 {data?.insights?.missingPackingCount ?? "—"}</button>
+      <button aria-pressed={status === "stale"} disabled={pageLoading && status === "stale"} onClick={() => { resetPagination(); setStatus("stale"); }}>处理后数据变化 {data?.insights?.staleCount ?? "—"}</button>
       {status !== "all" ? <button onClick={() => { resetPagination(); setStatus("all"); }}>查看全部</button> : null}
     </div>
     <div className="order-board-kpis">
@@ -368,11 +368,10 @@ export function OrderBoardPage() {
         </div>;
       })}
     </div>
-    {message ? <p className="order-board-message" role="status">{message}{readFailed&&<button type="button" disabled={pageLoading} onClick={()=>setRefreshToken(value=>value+1)}>仅重新读取回货记录</button>}</p> : null}
+    {message ? <p className="order-board-message" role="status">{message}{readFailed&&<button type="button" disabled={pageLoading} onClick={retryRead}>仅重新读取回货记录</button>}</p> : null}
     {data ? <ListPagination
       page={data.page}
       totalPages={data.totalPages}
-      busy={pageLoading}
       ariaLabel="订单回货分页"
       onPageChange={setPage}
     /> : null}

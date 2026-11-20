@@ -12,8 +12,8 @@ const receipts={
 export async function receivingBoardWrite(kind:ReceivingBoardMutationKind,path:string,init:RequestInit){
  const response=await feedbackFetch(path,init);return feedbackJson(response,init.method??'POST',value=>{receipts[kind].parse(value);return value;});
 }
-export async function receivingBoardRead<T>(path:string):Promise<T>{
- const response=await feedbackFetch(path,{credentials:'include',cache:'no-store'});
+export async function receivingBoardRead<T>(path:string,signal?:AbortSignal):Promise<T>{
+ const response=await feedbackFetch(path,{credentials:'include',cache:'no-store',...(signal?{signal}:{})});
  return feedbackJson(response,'GET',value=>{z.object({rows:z.array(z.object({receivingBatchId:id,version:z.number().int().positive()})),kpis:z.object({orderCount:quantity,receivedQuantity:quantity,abnormalOrderCount:quantity,differenceQuantity:z.number(),differenceRate:z.number()}),page:z.number().int().positive(),totalPages:quantity,totalCount:quantity}).parse(value);return value as T;});
 }
 /** Only these existing receiving commands: retain the original route/body/headers,

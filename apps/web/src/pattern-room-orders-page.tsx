@@ -1,3 +1,5 @@
+import {useForegroundWait} from "./foreground-loading.js";
+import {registerSessionInvalidator} from "./auth-session.js";
 import {MiscOrderRows} from "./misc-order-rows.js";
 import {DevelopmentAssignmentEntry} from "./development-assignment-table.js";
 import { SearchableSelect } from "./search-select.js";
@@ -95,8 +97,26 @@ export function PatternRoomAssignmentWorkspace({orderId,onChanged,suggestedWorke
 }
 export function PatternRoomExecutionWorkspace({orderId,onChanged,disabled=false,developmentContext}:{orderId:string;onChanged?:()=>void;disabled?:boolean;developmentContext?:DevelopmentTransferContext|undefined}){return <PatternRoomDetailWorkspace orderId={orderId} inlineExecution onChanged={onChanged} disabled={disabled} developmentContext={developmentContext}/>;}
 function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecution=false,disabled=false,onChanged,suggestedWorker,developmentContext }: { orderId: string; assignmentOnly?:boolean;inlineExecution?:boolean;disabled?:boolean;developmentContext?:DevelopmentTransferContext|undefined; onChanged?:((()=>void)|undefined);suggestedWorker?:{id:string;name:string}|undefined }) {
-  const [order, setOrder] = useState<PatternOrderDetail | null>(null), [error, setError] = useState(""), [localBusy, setBusy] = useState(false), [editing, setEditing] = useState(false), [refresh, setRefresh] = useState(0);
-  const busy=localBusy||disabled;
+  const [order, setOrder] = useState<PatternOrderDetail | null>(null), [error, setError] = useState(""), [localBusy, setBusy] = useState(false), [editing, setEditing] = useState(false);
+  const [detailLoading,setDetailLoading]=useState(true),[foregroundKey,setForegroundKey]=useState<string>();
+  const [refresh,setRefresh]=useState({revision:0,silent:false});
+  const detailRequest=useRef<AbortController|null>(null),retrying=useRef(false),started=useRef(false);
+  const session=useRef(0),sessionAtRender=session.current;
+  const busy=localBusy||disabled||detailLoading;
+  const reloadDetail=(silent:boolean)=>setRefresh(current=>({revision:current.revision+1,silent}));
+  const retryDetail=async()=>{
+    if(busy||retrying.current||detailRequest.current)return;
+    retrying.current=true;
+    try {
+      if(await canLeaveInternalPage()){
+        setEditing(false);
+        reloadDetail(false);
+      }else retrying.current=false;
+    }catch(error){
+      retrying.current=false;
+      setError(error instanceof Error ? error.message : "订单读取失败");
+    }
+  };
   const [workers, setWorkers] = useState<z.infer<typeof PatternWorkerOptionsSchema>>([]), [workerSearch, setWorkerSearch] = useState(""), [personId, setPersonId] = useState("");
   const prefillFor=useRef<string|null>(null),personPrefilledFor=useRef<string|null>(null);
   useEffect(()=>{if(assignmentOnly&&suggestedWorker&&prefillFor.current!==orderId){prefillFor.current=orderId;setWorkerSearch(suggestedWorker.name);}},[assignmentOnly,suggestedWorker,orderId]);
@@ -109,21 +129,45 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecu
   const historyRead=!assignmentOnly&&!inlineExecution&&new URLSearchParams(window.location.search).get('readOnly')==='history';
   const staleRound = Boolean(order && requestedRound && requestedRound !== order.currentRoundId);
   const attempt = useRef<{ body: string; action: string; key: string } | null>(null);
+  const historical = new URLSearchParams();
+  if (requestedRound) historical.set("round", requestedRound);
+  if (requestedNode) historical.set("node", requestedNode);
+  const detailTarget=`orders/${orderId}${historical.size ? `?${historical}` : ""}`;
+  useForegroundWait(foregroundKey);
+  useEffect(()=>registerSessionInvalidator(()=>{
+    session.current++;
+    detailRequest.current?.abort();
+    setForegroundKey(undefined);
+    setOrder(null);setWorkers([]);setEditing(false);setException(null);
+    setRefresh(current=>({revision:current.revision+1,silent:true}));
+  }),[]);
   useEffect(() => {
-    const abort = new AbortController(); setError(""); setOrder(null);
-    const historical = new URLSearchParams();
-    if (requestedRound) historical.set("round", requestedRound);
-    if (requestedNode) historical.set("node", requestedNode);
-    void patternRequest(`orders/${orderId}${historical.size ? `?${historical}` : ""}`, PatternOrderDetailSchema, { signal: abort.signal }).then(data => { if (!abort.signal.aborted) { setOrder(data); setException(null); } }).catch(e => { if (!abort.signal.aborted) { setOrder(null); setError(e.message); } });
-    return () => abort.abort();
-  }, [orderId, refresh, requestedRound, requestedNode]);
+    const abort = new AbortController();
+    const foreground=!refresh.silent&&(!started.current||retrying.current);
+    detailRequest.current=abort;
+    started.current=true;
+    retrying.current=false;
+    setForegroundKey(foreground?JSON.stringify([detailTarget,refresh.revision]):undefined);
+    setDetailLoading(true);setError("");
+    void patternRequest(detailTarget, PatternOrderDetailSchema, { signal: abort.signal }).then(data => {
+      if (!abort.signal.aborted) { setOrder(data); setException(null); }
+    }).catch(e => {
+      if (!abort.signal.aborted) { setOrder(null); setError(e.message); }
+    }).finally(()=>{
+      if(detailRequest.current===abort&&!abort.signal.aborted){
+        detailRequest.current=null;setDetailLoading(false);setForegroundKey(undefined);
+      }
+    });
+    return () => {abort.abort();if(detailRequest.current===abort)detailRequest.current=null;};
+  }, [detailTarget,refresh]);
   useEffect(() => {
     if (historyRead || !order?.actions.assign || staleRound) return;
-    const abort = new AbortController();
-    void patternRequest(`workers?q=${encodeURIComponent(search)}`, PatternWorkerOptionsSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setWorkers(result); }).catch(e => { if (!abort.signal.aborted) setError(e.message); });
+    const abort = new AbortController(), epoch=session.current;
+    void patternRequest(`workers?q=${encodeURIComponent(search)}`, PatternWorkerOptionsSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted&&session.current===epoch) setWorkers(result); }).catch(e => { if (!abort.signal.aborted&&session.current===epoch) setError(e.message); });
     return () => abort.abort();
   }, [order?.actions.assign, staleRound, search,historyRead]);
   const showUpdatedOrder = (updated: PatternOrderDetail) => {
+    if(session.current!==sessionAtRender)return;
     if(assignmentOnly||inlineExecution){setOrder(updated);onChanged?.();return;}
     const params = new URLSearchParams(window.location.search);
     params.delete("node");
@@ -166,10 +210,10 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecu
     const segment=new URLSearchParams(window.location.search).get("segment");
     if(segment&&order.rounds.some(round=>round.segments.some(item=>item.segmentId===segment))) document.getElementById(`segment-${segment}`)?.scrollIntoView({block:"center"});
   },[order]);
-  const assignment=order?.actions.assign&&currentWorkspace&&!editing&&!(inlineExecution&&currentRound?.roundType==='initial')?order.developmentSourceId&&currentRound?.roundType!=='rework'?<DevelopmentAssignmentEntry sourceId={order.developmentSourceId} onChanged={()=>{setRefresh(value=>value+1);onChanged?.();}}/>:<div className={`pattern-fields pattern-assignment${currentRound?.roundType === "rework" ? " has-rework-price" : ""}`}><label>板房师傅<div className="rework-v2-control"><SearchSelect options={workers.map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setWorkerSearch} placeholder="输入姓名选择师傅" ariaLabel="板房师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label>{currentRound?.roundType === "rework" ? <InsetField label="本轮返工金额（元）" inputMode="decimal" value={reworkAmount} onChange={e => setReworkAmount(e.target.value)} disabled={busy} /> : null}<div className="rework-v2-actions pattern-single-action"><Button variant="primary" disabled={busy || !personId || (currentRound?.roundType === "rework" && !reworkAmount)} onClick={() => void act("assign")}>{busy ? "提交中…" : assignmentOnly ? "确认分派" : "确认分配"}</Button></div></div>:null;
-  if(assignmentOnly)return <section className="pattern-orders pattern-assignment-workspace" aria-label="主管正式派工"><h3>主管正式派工</h3>{displayRound&&<dl className="pattern-assignment-snapshot"><div><dt>本轮品类</dt><dd>{displayRound.categoryName??"未登记"}</dd></div><div><dt>本轮数量</dt><dd>{displayRound.quantity==null?"未登记":formatBusinessDecimal(displayRound.quantity)}</dd></div><div><dt>原执行单价</dt><dd>{displayRound.unitPrice==null?"无可见价格":assignmentMoney(displayRound.unitPrice)}</dd></div><div><dt>原约定金额</dt><dd>{displayRound.agreedAmount==null?"无可见金额":assignmentMoney(displayRound.agreedAmount)}</dd></div></dl>}{error&&<p role="alert">{error}</p>}{!order&&!error&&<p>正在读取待派工资料…</p>}{assignment}{order&&!assignment&&<p>本轮没有可执行的正式派工操作。</p>}</section>;
+  const assignment=order?.actions.assign&&currentWorkspace&&!editing&&!(inlineExecution&&currentRound?.roundType==='initial')?order.developmentSourceId&&currentRound?.roundType!=='rework'?<DevelopmentAssignmentEntry sourceId={order.developmentSourceId} onChanged={()=>{reloadDetail(true);onChanged?.();}}/>:<div className={`pattern-fields pattern-assignment${currentRound?.roundType === "rework" ? " has-rework-price" : ""}`}><label>板房师傅<div className="rework-v2-control"><SearchSelect options={workers.map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setWorkerSearch} placeholder="输入姓名选择师傅" ariaLabel="板房师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label>{currentRound?.roundType === "rework" ? <InsetField label="本轮返工金额（元）" inputMode="decimal" value={reworkAmount} onChange={e => setReworkAmount(e.target.value)} disabled={busy} /> : null}<div className="rework-v2-actions pattern-single-action"><Button variant="primary" disabled={busy || !personId || (currentRound?.roundType === "rework" && !reworkAmount)} onClick={() => void act("assign")}>{busy ? "提交中…" : assignmentOnly ? "确认分派" : "确认分配"}</Button></div></div>:null;
+  if(assignmentOnly)return <section className="pattern-orders pattern-assignment-workspace" aria-label="主管正式派工"><h3>主管正式派工</h3>{displayRound&&<dl className="pattern-assignment-snapshot"><div><dt>本轮品类</dt><dd>{displayRound.categoryName??"未登记"}</dd></div><div><dt>本轮数量</dt><dd>{displayRound.quantity==null?"未登记":formatBusinessDecimal(displayRound.quantity)}</dd></div><div><dt>原执行单价</dt><dd>{displayRound.unitPrice==null?"无可见价格":assignmentMoney(displayRound.unitPrice)}</dd></div><div><dt>原约定金额</dt><dd>{displayRound.agreedAmount==null?"无可见金额":assignmentMoney(displayRound.agreedAmount)}</dd></div></dl>}{error&&<p role="alert">{error}</p>}{error&&!order&&<Button disabled={busy} onClick={()=>void retryDetail()}>重新读取订单</Button>}{!order&&!error&&<p>正在读取待派工资料…</p>}{assignment}{order&&!assignment&&<p>本轮没有可执行的正式派工操作。</p>}</section>;
   return <div className="pattern-orders pattern-detail" data-dx-ui="governed">{!inlineExecution&&<Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} subtitle={order?.orderNo ?? ""} badge={historyRead||order?.historicalView ? "历史节点 · 只读" : order ? PATTERN_ORDER_STATUS_LABELS[order.status] : "订单打板"} badgePlacement="subtitle" backHref={patternReturnPath(window.location.search)} />}
-    {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={async () => { if (await canLeaveInternalPage()) { setEditing(false); setRefresh(value => value + 1); } }}>重新读取订单</Button></Surface> : null}
+    {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={()=>void retryDetail()}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
       {historyRead&&!order.historicalView&&<div className="pattern-history-notice"><span>历史记录 · 只读</span><a href={currentHref}>返回当前订单</a></div>}

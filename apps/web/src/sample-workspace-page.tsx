@@ -1,14 +1,16 @@
+import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
+import {useForegroundRead} from "./use-foreground-read.js";
 import {LazyHistoryDetails} from "./lazy-history-details.js";
 import { SearchableSelect } from "./search-select.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import {SampleAnalysisPage} from './sample-analysis-page.js';
 import {SampleDisposalActions,SampleArchiveList,SampleFinancialHistory} from "./sample-disposal-page.js";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { z } from "zod";
 import {
   SampleListResponseSchema, SampleDetailResponseSchema, SampleOptionsSchema, SampleAmountsSchema,
   SampleHistoryResponseSchema, type SampleListResponse, type SampleDetailResponse, type SampleOptions,
-  type SampleAmounts, type SampleHistoryResponse, type SampleStatus, type SampleView,
+  type SampleAmounts, type SampleStatus, type SampleView,
 } from "@dx-rework/contracts";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { Header, Shell } from "./components.js";
@@ -42,10 +44,14 @@ const time = (value: string | null) => value ? new Date(value).toLocaleString("z
 export type SamplePageMode = "managed" | "pending" | "disposed" | "amounts" | "detail";
 const titles: Record<SamplePageMode, string> = { managed: "在管样衣", pending: "待确认中心", disposed: "已处置样衣", amounts: "库存金额管理", detail: "样衣详情" };
 
+class SampleReadError extends Error {
+  constructor(message:string, readonly status:number){super(message);}
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, signal: AbortSignal): Promise<T> {
   const response = await fetch(apiUrl(`samples${path}`), { credentials: "include", cache: "no-store", signal });
   const body = await response.json();
-  if (!response.ok) throw new Error(body?.error?.message ?? "样衣资料加载失败，请重试");
+  if (!response.ok) throw new SampleReadError(body?.error?.message ?? "样衣资料加载失败，请重试",response.status);
   return schema.parse(body);
 }
 
@@ -60,18 +66,15 @@ export function SampleCard({ item }: { item: SampleView }) {
 }
 
 export function SampleHistory({ sampleId, kind }: { sampleId: string; kind: "custody" | "disposal" | "audit" }) {
-  const [data, setData] = useState<SampleHistoryResponse | null>(null), [page, setPage] = useState(1);
-  const [error, setError] = useState(""), [busy, setBusy] = useState(false), [retry, setRetry] = useState(0);
-  useEffect(() => {
-    const abort = new AbortController(); setBusy(true); setError("");
-    void request(`/${sampleId}/history?kind=${kind}&page=${page}`, SampleHistoryResponseSchema, abort.signal)
-      .then(value => { if (!abort.signal.aborted) setData(value); })
-      .catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "历史加载失败"); })
-      .finally(() => { if (!abort.signal.aborted) setBusy(false); });
-    return () => abort.abort();
-  }, [sampleId, kind, page, retry]);
+  const [page,setPage]=useState(1);
+  const load=useCallback((signal:AbortSignal)=>request(
+    `/${sampleId}/history?kind=${kind}&page=${page}`,SampleHistoryResponseSchema,signal,
+  ),[sampleId,kind,page]);
+  const read=useForegroundRead(JSON.stringify([sampleId,kind]),String(page),load,true);
+  const data=read.value,error=read.error?.message??"",busy=read.waiting;
+  useForegroundWait(read.foregroundKey);
   return <div aria-busy={busy}>
-    {error ? <p role="alert">{error} <Button onClick={() => setRetry(value => value + 1)}>重试</Button></p> : null}
+    {error ? <p role="alert">{error} <Button onClick={read.retry}>重试</Button></p> : null}
     {data?.items.map(entry => <article className="sample-history-entry" key={entry.id}>
       <strong>{historyLabels[entry.kind] ?? "样衣操作"} · {entry.actorName}</strong>
       <p>{time(entry.occurredAt)}{entry.status ? ` · ${requestStatusLabels[entry.status] ?? entry.status}` : ""}</p>
@@ -83,7 +86,7 @@ export function SampleHistory({ sampleId, kind }: { sampleId: string; kind: "cus
     </article>)}
     {!data && busy ? <p role="status">正在加载记录…</p> : null}
     {data && !data.totalCount ? <p>暂无记录</p> : null}
-    {data ? <ListPagination page={data.page} totalPages={Math.max(1, Math.ceil(data.totalCount / 15))} busy={busy} onPageChange={setPage} ariaLabel="样衣历史分页" /> : null}
+    {data ? <ListPagination page={data.page} totalPages={Math.max(1, Math.ceil(data.totalCount / 15))} onPageChange={setPage} ariaLabel="样衣历史分页" /> : null}
   </div>;
 }
 
@@ -119,8 +122,26 @@ function SampleWorkspaceContents({ mode = "managed", sampleId }: { mode?: Sample
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState("borrowed"), [filters, setFilters] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1), [busy, setBusy] = useState(true), [error, setError] = useState(""), [retry, setRetry] = useState(0);
-  useEffect(() => { const refresh = () => setRetry(value => value + 1); window.addEventListener("sample-updated", refresh); return () => window.removeEventListener("sample-updated", refresh); }, []);
-  const filter = (key: string, value: string) => { setFilters(old => ({ ...old, [key]: value })); setPage(1); };
+  const activeRead=useRef<{abort:AbortController;needsRefresh:boolean}|null>(null);
+  const lastTarget=useRef<string|null>(null),quietRefresh=useRef(false),retryPending=useRef(false);
+  useEffect(()=>{
+    const refresh=()=>{
+      if(activeRead.current){activeRead.current.needsRefresh=true;return;}
+      quietRefresh.current=true;
+      setRetry(value=>value+1);
+    };
+    window.addEventListener("sample-updated",refresh);
+    return()=>window.removeEventListener("sample-updated",refresh);
+  },[]);
+  const retryRead=()=>{
+    if(activeRead.current||retryPending.current)return;
+    retryPending.current=true;quietRefresh.current=false;setRetry(value=>value+1);
+  };
+  const filter=(key:string,value:string)=>{
+    if((filters[key]??"")===value&&page===1)return;
+    setFilters(old=>(old[key]??"")===value?old:{...old,[key]:value});
+    setPage(1);
+  };
   useEffect(() => {
     if (mode === "detail" || mode === "amounts") return;
     const abort = new AbortController();
@@ -128,33 +149,57 @@ function SampleWorkspaceContents({ mode = "managed", sampleId }: { mode?: Sample
       .catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "筛选资料加载失败"); });
     return () => abort.abort();
   }, [mode, retry]);
-  useEffect(() => {
-    const abort = new AbortController(); setBusy(true); setError("");
-    const load = async () => {
-      try {
-        if (mode === "detail" && sampleId) {
-          const value = await request(`/${sampleId}`, SampleDetailResponseSchema, abort.signal);
-          if (!abort.signal.aborted) setDetail(value);
-        } else if (mode === "amounts") {
-          const value = await request("/amounts", SampleAmountsSchema, abort.signal);
-          if (!abort.signal.aborted) setAmounts(value);
-        } else {
-          const params = new URLSearchParams({ page: String(page), view: mode === "managed" ? view : mode });
-          for (const [key, value] of Object.entries(filters)) if (value.trim()) params.set(key, value.trim());
-          const value = await request(`?${params}`, SampleListResponseSchema, abort.signal);
-          if (!abort.signal.aborted) setData(value);
+  const params=new URLSearchParams({page:String(page),view:mode==="managed"?view:mode});
+  for(const [key,value] of Object.entries(filters))if(value.trim())params.set(key,value.trim());
+  const target=mode==="detail"&&sampleId?`/${sampleId}`:mode==="amounts"?"/amounts":`?${params}`;
+  useEffect(()=>{
+    const abort=new AbortController(),work={abort,needsRefresh:false};
+    let finish=()=>{};
+    activeRead.current=work;retryPending.current=false;
+    setBusy(true);setError("");
+    const load=async()=>{
+      if(!quietRefresh.current||lastTarget.current!==target)finish=beginForegroundWait();
+      quietRefresh.current=false;
+      try{
+        if(mode==="detail"&&sampleId){
+          const result=await request(target,SampleDetailResponseSchema,abort.signal);
+          if(!abort.signal.aborted)setDetail(result);
+        }else if(mode==="amounts"){
+          const result=await request(target,SampleAmountsSchema,abort.signal);
+          if(!abort.signal.aborted)setAmounts(result);
+        }else{
+          const result=await request(target,SampleListResponseSchema,abort.signal);
+          if(!abort.signal.aborted)setData(result);
         }
-      } catch (e) { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "资料加载失败"); }
-      finally { if (!abort.signal.aborted) setBusy(false); }
+      }catch(error){
+        if(abort.signal.aborted)return;
+        if(error instanceof SampleReadError&&[401,403,404].includes(error.status)){
+          setData(null);setDetail(null);setAmounts(null);setOptions(null);
+        }
+        setError(error instanceof Error?error.message:"资料加载失败");
+      }finally{
+        finish();
+        if(activeRead.current===work){
+          activeRead.current=null;
+          if(!abort.signal.aborted){
+            lastTarget.current=target;
+            setBusy(false);
+            if(work.needsRefresh){quietRefresh.current=true;setRetry(value=>value+1);}
+          }
+        }
+      }
     };
-    const timer = setTimeout(() => { void load(); }, filters.search ? 250 : 0);
-    return () => { clearTimeout(timer); abort.abort(); };
-  }, [mode, sampleId, view, filters, page, retry]);
+    const timer=setTimeout(()=>void load(),filters.search?.trim()?250:0);
+    return()=>{
+      clearTimeout(timer);abort.abort();finish();
+      if(activeRead.current===work)activeRead.current=null;
+    };
+  },[mode,sampleId,target,retry]);
   const renderRows = (selection?: SampleSelection) => <div className="sample-rows" aria-busy={busy}>{data?.items.map(item => <SampleCatalogRow item={item} badge={<SampleBadge status={item.status} />} selection={selection} key={item.sampleId} />)}</div>;
   return <Shell active={mode === "detail" ? "在管样衣" : titles[mode]}><div className={`rework-v2-page sample-workspace${mode === "amounts" ? "" : " sample-ops"}`}>
     <Header title={titles[mode]} subtitle={mode === "pending" ? "查看轮到你处理或与你相关的样衣事项。" : "查看样衣资料、实际保管状态与历史记录。"} badge="样衣管理" />
-    {error ? <p role="alert">{error} <Button onClick={() => setRetry(value => value + 1)}>重试</Button></p> : null}
-    {busy ? <p role="status">正在加载样衣资料…</p> : null}
+    {error ? <p role="alert">{error} <Button disabled={busy} onClick={retryRead}>重试</Button></p> : null}
+    {busy&&!data&&!detail&&!amounts ? <p role="status">正在加载样衣资料…</p> : null}
     {mode === "detail" && detail && detail.item.sampleId.toLowerCase() === sampleId?.toLowerCase() ? <SampleDetail key={detail.item.sampleId} detail={detail} /> : null}
     {mode === "amounts" && amounts ? <Surface className="rework-v2-core"><dl className="sample-facts">
       {Object.entries({ 累计采购金额: amounts.purchaseTotal, 当前在管原值: amounts.managedOriginalValue,
@@ -187,7 +232,7 @@ function SampleWorkspaceContents({ mode = "managed", sampleId }: { mode?: Sample
         {mode === "managed" && data ? <SampleBatchReturn key={`${view}:${page}:${JSON.stringify(filters)}:${retry}`} items={data.items} loading={busy} selectionScope={`${view}:${page}:${JSON.stringify(filters)}:${retry}`} renderRows={renderRows} /> : renderRows()}
       </Surface>
       {data && !data.items.length ? <p>{data.totalCount ? "本页暂无样衣，请返回第一页。" : "当前筛选暂无样衣"}</p> : null}
-      {data ? <><p>共 {data.totalCount} 件</p><ListPagination page={data.page} totalPages={Math.max(1, Math.ceil(data.totalCount / 15))} busy={busy} onPageChange={setPage} ariaLabel="样衣列表分页" /></> : null}
+      {data ? <><p>共 {data.totalCount} 件</p><ListPagination page={data.page} totalPages={Math.max(1, Math.ceil(data.totalCount / 15))} onPageChange={setPage} ariaLabel="样衣列表分页" /></> : null}
       {mode === "managed" ? <SampleArchiveList /> : null}
     </> : null}
   </div></Shell>;

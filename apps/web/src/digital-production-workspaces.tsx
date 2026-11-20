@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {CockpitRetryUpdates} from './cockpit-retry-updates.js';
 import {cockpitAvailabilityMessage} from './cockpit-reads.js';
 import {useLiveSearch} from "./use-live-search.js";
@@ -9,7 +10,7 @@ import { BusinessTable, Pagination, StatusBadge } from '@dx-rework/ui/production
 import type { JourneyResult, OrderJourney, JourneyStageKey } from '@dx-rework/contracts/digital-production-journey';
 import type { BulkPreparationSheet } from '@dx-rework/contracts/bulk-preparation';
 import type { FactoryFlowSheet } from '@dx-rework/contracts/factory-flow';
-import { digitalRequest } from './digital-production-api.js';
+import { digitalRequest,DigitalRequestError } from './digital-production-api.js';
 import { cockpitContext,cockpitQuery,journeyRecordHref,journeyTime,nodeStatus } from './digital-journey-cockpit-model.js';
 import { journeyReturnUrl } from '@dx-rework/contracts/digital-production-journey';
 import { createWebUrls } from '../url-contract.js';
@@ -20,23 +21,57 @@ export function DigitalProductionWorkspace({kind}:{kind:ProductionWorkspaceKind}
  const stage:JourneyStageKey=kind==='preparation'?'preparation':'post_cutting',title=kind==='preparation'?'大货产前准备':'裁后工艺与发厂';
  const [context,setContext]=useState(()=>({...cockpitContext(window.location.search),stage})),[data,setData]=useState<JourneyResult|null>(null),[order,setOrder]=useState<OrderJourney|null>(null);
  const [bulk,setBulk]=useState<BulkPreparationSheet|null>(null),[factory,setFactory]=useState<FactoryFlowSheet|null>(null),[error,setError]=useState(''),[detailError,setDetailError]=useState(''),[refresh,setRefresh]=useState(0),[search,setSearch]=useState(context.search),[listOpen,setListOpen]=useState(!context.selected);
+ const [listPending,setListPending]=useState(false);
  const contextUrl=(next=context)=>journeyReturnUrl(next)+`&workspace=${kind}`;
  const update=(patch:Partial<typeof context>)=>{const next={...context,...patch};setContext(next);window.history.replaceState(window.history.state,'',urls.pageUrl(contextUrl(next)));};
  const liveSearch=useLiveSearch(search,context.search,value=>{update({search:value,page:1,selected:undefined});setListOpen(true);});
  const query=cockpitQuery(context);
- useEffect(()=>{let live=true;const abort=new AbortController();setData(null);setError('');if(!listOpen||liveSearch.pending)return()=>{live=false;abort.abort();};void digitalRequest<JourneyResult>('journeys?'+query,'GET',undefined,undefined,{signal:abort.signal}).then(value=>{if(live)setData(value);}).catch(reason=>{if(live)setError(reason.message);});return()=>{live=false;abort.abort();};},[query,refresh,listOpen,liveSearch.pending]);
- useEffect(()=>{let live=true;setOrder(null);setBulk(null);setFactory(null);setDetailError('');if(context.selected)void digitalRequest<OrderJourney>('journeys/'+context.selected).then(async value=>{if(!live)return;setOrder(value);if(!value.orderId)return;if(kind==='preparation'){const sheet=await digitalRequest<BulkPreparationSheet>(`orders/${value.orderId}/bulk-preparation`);if(live)setBulk(sheet);}else{const sheet=await digitalRequest<FactoryFlowSheet>(`orders/${value.orderId}/factory-flow`);if(live)setFactory(sheet);}}).catch(reason=>{if(live)setDetailError(reason.message);});return()=>{live=false;};},[context.selected,kind,refresh]);
+ useEffect(()=>{
+  if(!listOpen||liveSearch.pending){setListPending(false);return;}
+  const abort=new AbortController(),finish=beginForegroundWait();
+  setListPending(true);setError('');
+  void digitalRequest<JourneyResult>('journeys?'+query,'GET',undefined,undefined,{signal:abort.signal}).then(value=>{
+   if(!abort.signal.aborted)setData(value);
+  }).catch(reason=>{
+   if(abort.signal.aborted)return;
+   if(reason instanceof DigitalRequestError&&[401,403].includes(reason.status??0))setData(null);
+   setError(reason instanceof Error?reason.message:'订单列表暂时无法读取');
+  }).finally(()=>{if(!abort.signal.aborted)setListPending(false);finish();});
+  return()=>{abort.abort();finish();};
+ },[query,refresh,listOpen,liveSearch.pending]);
+ useEffect(()=>{
+  setOrder(null);setBulk(null);setFactory(null);setDetailError('');
+  if(!context.selected)return;
+  const abort=new AbortController(),finish=beginForegroundWait();
+  const read=async()=>{
+   const value=await digitalRequest<OrderJourney>('journeys/'+context.selected,'GET',undefined,undefined,{signal:abort.signal});
+   if(abort.signal.aborted)return;
+   setOrder(value);
+   if(!value.orderId)return;
+   if(kind==='preparation'){
+    const sheet=await digitalRequest<BulkPreparationSheet>(`orders/${value.orderId}/bulk-preparation`,'GET',undefined,undefined,{signal:abort.signal});
+    if(!abort.signal.aborted)setBulk(sheet);
+   }else{
+    const sheet=await digitalRequest<FactoryFlowSheet>(`orders/${value.orderId}/factory-flow`,'GET',undefined,undefined,{signal:abort.signal});
+    if(!abort.signal.aborted)setFactory(sheet);
+   }
+  };
+  void read().catch(reason=>{
+   if(!abort.signal.aborted)setDetailError(reason instanceof Error?reason.message:'未能读取订单详情');
+  }).finally(finish);
+  return()=>{abort.abort();finish();};
+ },[context.selected,kind,refresh]);
  const groups=productionWorkspaceGroups[kind],nodes=order?.stages.flatMap(value=>value.nodes).filter(node=>node.current)??[];
  const href=(url:string,mode?:'read'|'handle')=>{const original=new URL(journeyRecordHref(url,context,mode),'https://local.invalid');original.searchParams.set('returnTo',contextUrl());return urls.pageUrl(original.pathname+original.search);};
  const reasons=bulk?.reasons??factory?.reasons??[];
  return <div className="production-workspace-page dx-production-refined" data-workspace-kind={kind} data-workspace-ready={Boolean(order&&(kind==='preparation'?bulk:factory)&&(!listOpen||data))}>
   <form className="workspace-global-search" onSubmit={event=>{event.preventDefault();update({search,page:1,selected:undefined});}}><input aria-label="搜索产前与发厂订单" value={search} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} placeholder="搜索母单、客户、款号、PO…" maxLength={100} onChange={event=>setSearch(event.target.value)}/></form>
   <div className="workspace-breadcrumb">生产管理座舱 › <strong>{title}</strong><button onClick={()=>setListOpen(value=>!value)}>{listOpen?'收起订单列表':'选择其它订单'}</button></div>
-  {listOpen&&<section className="dx-production-panel workspace-order-list"><header><h1>{title}</h1><Button variant="secondary" onClick={()=>setRefresh(value=>value+1)}>刷新数据</Button></header>
+  {listOpen&&<section className="dx-production-panel workspace-order-list" aria-busy={listPending}><header><h1>{title}</h1><Button variant="secondary" disabled={listPending} onClick={()=>setRefresh(value=>value+1)}>刷新数据</Button></header>
    <div className="workspace-list-filters"><label>风险<select value={context.risk??''} onChange={event=>update({risk:(event.target.value||undefined) as typeof context.risk,page:1,selected:undefined})}><option value="">全部</option><option value="blocked">受阻</option><option value="overdue">逾期</option><option value="due_soon">即将到期</option><option value="unknown">时间待核实</option></select></label><span>同源订单 · {data?.total??'—'} 张</span></div>
    {error&&<p role="alert">{error}</p>}{data?.freshness&&<p role={data.freshness.failed?'alert':'status'}>{cockpitAvailabilityMessage(data)}</p>}{data?.freshness?.retryIds?.length?<CockpitRetryUpdates key={data.freshness.retryIds.join(',')} ids={data.freshness.retryIds} onUpdated={()=>setRefresh(value=>value+1)}/>:null}<div className="workspace-table-scroll"><BusinessTable><thead><tr><th>母单 / 款号</th><th>客户</th><th>PO / 颜色</th><th>订购量</th><th>PO 双交期</th><th>操作</th></tr></thead><tbody>{data?.items.map(item=><tr key={item.id} className={context.selected===item.id?'is-selected':''}><td>{item.orderNumbers.join(' / ')||item.designStyleNo}<small>{item.designStyleNo}</small></td><td>{item.customer??'未登记'}</td><td>{item.lines.map(line=>`${line.po??'未补号'} / ${line.color}`).join('；')||'未登记'}</td><td>{item.orderId?item.lines.reduce((total,line)=>total+line.orderedQuantity,0).toLocaleString():'尚无确定订单'}</td><td><PoDateSummary lines={item.poDeliveryDates??[]}/></td><td><button onClick={()=>{update({selected:item.id});setListOpen(false);}}>查看</button></td></tr>)}</tbody></BusinessTable></div>{data&&!data.items.length&&!data.freshness&&<p>当前筛选暂无订单</p>}{!data&&!error&&<p role="status">正在读取订单…</p>}{!data?.freshness&&<Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>update({page,selected:undefined})}/>}
   </section>}
-  {detailError&&<p role="alert">原事实读取失败：{detailError}</p>}
+  {detailError&&<p role="alert">原事实读取失败：{detailError} <button type="button" className="r5-link" onClick={()=>setRefresh(value=>value+1)}>重试</button></p>}
   {!order?<section className="dx-production-panel workspace-empty">{context.selected&&!detailError?'正在读取订单详情…':'选择订单，查看完整前置、原办理入口与风险。'}</section>:<>
   <header className="workspace-order-heading"><div><h2>{order.designStyleNo}</h2><p>{order.orderNumbers.length>0&&<>母单编号：{order.orderNumbers.join(' / ')} | </>}客户：{order.customer??'未登记'} | 款号：{order.designStyleNo} | 跟单：{order.merchandisers.map(person=>person.name??person.id).join('、')||'未登记'} | <PoDateSummary lines={order.poDeliveryDates??[]}/></p></div><StatusBadge tone={reasons.length?'danger':'info'}>{reasons.length?`${reasons.length} 项待处理`:detailError?'事实不可用':'同源事实'}</StatusBadge></header>
   <section className="dx-production-panel workspace-flow" aria-label="当前流程">{groups.map((group,index)=>{const members=workspaceGroupNodes(order,group.keys);return <div key={group.label}><span className="workspace-flow-icon">{index+1}</span><strong>{group.label}</strong><span>{workspaceGroupStatus(members,order?.asOf??data?.asOf)}</span></div>;})}</section>

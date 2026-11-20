@@ -1,3 +1,4 @@
+import {useForegroundWait} from "./foreground-loading.js";
 import {useEffect,useState} from 'react';
 import {PageHeader} from '@dx-rework/ui/production';
 import {JOURNEY_NODES} from '@dx-rework/contracts/digital-production-journey';
@@ -14,6 +15,7 @@ export function CockpitProductionSettings(){
  const [access,setAccess]=useState<DigitalAccessOptions|null>(null),[error,setError]=useState('');
  const [isRoot,setIsRoot]=useState(false);
  const [revision,setRevision]=useState(0),[historyOpen,setHistoryOpen]=useState(false);
+ useForegroundWait(revision===0&&!access&&!error?"production-settings:entry":undefined);
  const refreshAuthority=()=>{setAccess(null);setIsRoot(false);setRevision(value=>value+1);};
  useEffect(()=>registerSessionInvalidator(refreshAuthority),[]);
  useEffect(()=>{const controller=new AbortController();setAccess(null);setError('');void(async()=>{const session=revision?(await refreshSessionResult()).session:await verifySession();if(controller.signal.aborted)return;if(session==='denied')throw Error('登录状态尚未确认，请重新登录后读取设置');const value=await digitalRequest<DigitalAccessOptions>('access/options','GET',undefined,undefined,{signal:controller.signal});if(!controller.signal.aborted){setAccess(value);setIsRoot(session.user.isRoot===true);}})().catch(e=>{if(!controller.signal.aborted&&e.name!=='AbortError')setError(e.message);});return()=>controller.abort();},[revision]);

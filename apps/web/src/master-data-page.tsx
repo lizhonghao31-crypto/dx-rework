@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -188,55 +189,84 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   const [processTotalPages, setProcessTotalPages] = useState(1);
   const [processPageLoading, setProcessPageLoading] = useState(false);
   const [canWriteSuppliers, setCanWriteSuppliers] = useState(false);
+  const catalogRead=useRef<AbortController|null>(null);
+  const processRead=useRef<{target:string;abort:AbortController;finish:()=>void}|null>(null);
+  const processVersion=useRef(0);
 
-  const load = async ():Promise<boolean> => {
+  const load=async(silent=false):Promise<boolean>=>{
+    if(catalogRead.current&&!silent)return false;
+    catalogRead.current?.abort();
+    const controller=new AbortController(),init={signal:controller.signal},finish=silent?()=>{}:beginForegroundWait();
+    catalogRead.current=controller;
+    const version=processVersion.current;
     setError("");
     try {
       if (view === "crafts") {
-        setCrafts(await json<Craft[]>("master-data/crafts?includeInactive=true"));
+        const items=await json<Craft[]>("master-data/crafts?includeInactive=true",init);
+        if(controller.signal.aborted)return false;
+        setCrafts(items);
       } else if (view === "suppliers") {
         const [nextSuppliers, session] = await Promise.all([
-          json<Supplier[]>("master-data/suppliers?includeInactive=true"),
+          json<Supplier[]>("master-data/suppliers?includeInactive=true",init),
           verifySession(),
         ]);
+        if(controller.signal.aborted)return false;
         setSuppliers(nextSuppliers);
         setCanWriteSuppliers(session !== "denied" && session.user.isRoot === true);
       } else {
         const [nextProcessPage, nextProcessDefaultWorkerCandidates] = await Promise.all([
-          json<ProcessPage>(processCatalogPath(appliedProcessSearch)),
-          json<ProcessDefaultWorkerCandidate[]>("master-data/process-default-worker-candidates"),
+          json<ProcessPage>(processCatalogPath(appliedProcessSearch),init),
+          json<ProcessDefaultWorkerCandidate[]>("master-data/process-default-worker-candidates",init),
         ]);
-        setProcesses(nextProcessPage.items);
-        setProcessPage(nextProcessPage.page);
-        setProcessTotalPages(nextProcessPage.totalPages);
+        if(controller.signal.aborted)return false;
+        if(version===processVersion.current){
+          setProcesses(nextProcessPage.items);
+          setProcessPage(nextProcessPage.page);
+          setProcessTotalPages(nextProcessPage.totalPages);
+        }
         setProcessDefaultWorkerCandidates(nextProcessDefaultWorkerCandidates);
       }
       return true;
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : view === "crafts" ? "工艺数据库加载失败" : view === "processes" ? "工序数据库加载失败" : "供应商资料加载失败");
+    }catch(loadError){
+      if(!controller.signal.aborted)setError(loadError instanceof Error?loadError.message:view==="crafts"?"工艺数据库加载失败":view==="processes"?"工序数据库加载失败":"供应商资料加载失败");
       return false;
+    }finally{
+      finish();
+      if(catalogRead.current===controller)catalogRead.current=null;
     }
   };
 
-  useEffect(() => { void load(); }, [view]);
+  useEffect(()=>{
+    setBusy(current=>current==="process-page"?"":current);
+    setProcessPageLoading(false);
+    void load();
+    return()=>{
+      catalogRead.current?.abort();catalogRead.current=null;
+      const work=processRead.current;
+      processRead.current=null;work?.abort.abort();work?.finish();
+    };
+  },[view]);
 
-  const showProcessPage = async (query: string, pageNumber: number) => {
-    if (processPageLoading || busy) return;
-    setProcessPageLoading(true);
-    setBusy("process-page");
-    setError("");
-    try {
-      const nextPage = await json<ProcessPage>(processCatalogPath(query, pageNumber));
-      setProcesses(nextPage.items);
-      setProcessPage(nextPage.page);
-      setProcessTotalPages(nextPage.totalPages);
-      setAppliedProcessSearch(query);
-      setEditingProcessRosterId("");
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "工序目录加载失败");
-    } finally {
-      setProcessPageLoading(false);
-      setBusy("");
+  const showProcessPage=async(query:string,pageNumber:number)=>{
+    const target=processCatalogPath(query,pageNumber);
+    if(busy&&busy!=="process-page"||processRead.current?.target===target)return;
+    processRead.current?.abort.abort();processRead.current?.finish();
+    const abort=new AbortController(),work={target,abort,finish:beginForegroundWait()};
+    processRead.current=work;processVersion.current++;
+    setProcessPageLoading(true);setBusy("process-page");setError("");
+    try{
+      const next=await json<ProcessPage>(target,{signal:abort.signal});
+      if(abort.signal.aborted)return;
+      setProcesses(next.items);setProcessPage(next.page);setProcessTotalPages(next.totalPages);
+      setAppliedProcessSearch(query);setEditingProcessRosterId("");
+    }catch(loadError){
+      if(!abort.signal.aborted)setError(loadError instanceof Error?loadError.message:"工序目录加载失败");
+    }finally{
+      work.finish();
+      if(processRead.current===work){
+        processRead.current=null;setProcessPageLoading(false);
+        setBusy(current=>current==="process-page"?"":current);
+      }
     }
   };
 
@@ -257,7 +287,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     try {
       await work();
       setSavedMessage("上次操作已保存");
-      const refreshed=await load();setRefreshPending(!refreshed);if(!refreshed)setSavedMessage("上次操作已保存，最新目录暂未读取。请只重读目录，不要重复新增或修改。");
+      const refreshed=await load(true);setRefreshPending(!refreshed);if(!refreshed)setSavedMessage("上次操作已保存，最新目录暂未读取。请只重读目录，不要重复新增或修改。");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "操作失败");
     } finally {
@@ -614,7 +644,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
         }, (rowNumber, result) => setPreview((current) => current && current.kind === "supplier"
           ? { ...current, rows: current.rows.map((row) => row.rowNumber === rowNumber ? { ...row, result } : row) }
           : current));
-        await load();
+        await load(true);
         return;
       }
       for (const row of actionable) {
@@ -644,7 +674,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
           }
         }
       }
-      await load();
+      await load(true);
       setPreview(null);
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "批量导入失败");
@@ -800,18 +830,17 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
                 </label>
               </div>
             </div>
-            <form className="master-data-process-search" onSubmit={(event) => { event.preventDefault(); applyProcessSearch(); }}>
+            <form aria-busy={processPageLoading} className="master-data-process-search" onSubmit={(event) => { event.preventDefault(); applyProcessSearch(); }}>
               <input
                 type="search"
                 value={processSearch}
                 maxLength={100}
                 placeholder="搜索工序名称或系统编码"
                 aria-label="搜索工序"
-                disabled={processPageLoading}
                 onChange={(event) => setProcessSearch(event.target.value)}
               />
-              <Button type="submit" disabled={Boolean(busy) || processPageLoading}>搜索</Button>
-              {(processSearch || appliedProcessSearch) ? <Button type="button" disabled={Boolean(busy) || processPageLoading} onClick={clearProcessSearch}>清除</Button> : null}
+              <Button type="submit" disabled={Boolean(busy&&busy!=="process-page")}>搜索</Button>
+              {(processSearch || appliedProcessSearch) ? <Button type="button" disabled={Boolean(busy&&busy!=="process-page")} onClick={clearProcessSearch}>清除</Button> : null}
             </form>
             <div className="master-data-create">
               <input
@@ -861,7 +890,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
             <ListPagination
               page={processPage}
               totalPages={processTotalPages}
-              busy={Boolean(busy) || processPageLoading}
+              busy={Boolean(busy&&busy!=="process-page")}
               ariaLabel="公共工序分页"
               onPageChange={(nextPage) => { void showProcessPage(appliedProcessSearch, nextPage); }}
             />

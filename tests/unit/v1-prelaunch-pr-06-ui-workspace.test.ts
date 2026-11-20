@@ -53,7 +53,7 @@ describe("1.0 prelaunch PR-06 UI and workspace clarity", () => {
     expect(detail).toContain("workspaceNode={selected.key}");
     expect(navigation).toContain("scrollIntoView({ block: \"start\" })");
     expect(navigation).toContain("window.requestAnimationFrame");
-    expect(app).toContain("installInternalNavigation(basePath, () => setLocation(readInternalLocation(basePath)))");
+    expect(app).toContain("installInternalNavigation(basePath, () => setLocation(readInternalLocation(basePath)), target =>");
     expect(configuration).toContain('workspaceNode?: "process_configuration" | "ie_review"');
     expect(assignment).toContain('workspaceNode === "ie_review"');
     expect(assignment).toContain("IE 核价已完成");

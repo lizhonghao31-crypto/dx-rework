@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {reworkResultNode} from "./rework-result-node.js";
 import { specialProcessLabel, specialProcessName } from "@dx-rework/contracts";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
@@ -485,6 +486,7 @@ function CurrentReworkDetailPage({
       throw new Error(body?.error?.message ?? `返工单加载失败（${response.status}）`);
     }
     const latest = await response.json() as ReworkBusinessDetail;
+    if(signal?.aborted)return null;
     publishReworkNodeRefresh(latest, selectCurrentNode ? reworkResultNode(latest.status,latest.reworkKind,currentNodeByStatus[latest.status]) : undefined, (nextNode) => {
       const url = new URL(window.location.href);
       url.searchParams.set("node", nextNode);
@@ -529,12 +531,13 @@ function CurrentReworkDetailPage({
       return;
     }
     const controller = new AbortController();
+    const finish=beginForegroundWait();
     void load(controller.signal).catch((error: unknown) => {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
+      if (!controller.signal.aborted) {
         setState({ kind: "error", message: error instanceof Error ? error.message : "返工单加载失败" });
       }
-    });
-    return () => controller.abort();
+    }).finally(finish);
+    return ()=>{controller.abort();finish();};
   }, [load, reworkOrderId]);
 
   const backAction = { backHref: reworkReturnPath(window.location.search, window.history.state?.dxReworkReturnTo, returnToTodos) };

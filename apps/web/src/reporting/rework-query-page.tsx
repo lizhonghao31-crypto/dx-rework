@@ -1,8 +1,9 @@
+import {beginForegroundWait} from "../foreground-loading.js";
 import { BasicReworkBoard, ReworkBoardAccess } from "./basic-rework-board.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Header, Shell } from "../components.js";
 import { verifySession } from "../auth.js";
@@ -46,6 +47,7 @@ function BusinessReworkQueryPage() {
   const [moreFilters,setMoreFilters]=useState(Boolean(initial.get("from")||initial.get("to")||initial.get("overdue")));
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [refresh, setRefresh] = useState(0);
+  const silentReload=useRef(false),mountedRead=useRef(false);
   const [refreshing, setRefreshing] = useState(true);
   const [isRoot, setIsRoot] = useState(false);
   const [canSandbox, setCanSandbox] = useState(false);
@@ -62,16 +64,18 @@ function BusinessReworkQueryPage() {
     window.history.replaceState(window.history.state,"",url);
   }, [q,status,reworkKind,responsibilityType,from,to,overdue,exception,page]);
   useEffect(() => {
-    const controller = new AbortController();
-    setRefreshing(true);
-    setState((current) => current.kind === "ready" ? current : { kind: "loading" });
-    void loadReworkOrders(filters, controller.signal)
-      .then((value) => setState({ kind: "ready", value }))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) setState({ kind: "unavailable", message: error instanceof Error ? error.message : "订单查询失败" });
-      })
-      .finally(() => { if (!controller.signal.aborted) setRefreshing(false); });
-    return () => { controller.abort(); };
+    const controller=new AbortController(),finish=silentReload.current?()=>{}:beginForegroundWait();
+    silentReload.current=false;mountedRead.current=true;setRefreshing(true);
+    setState(current => current.kind === "ready" ? current : { kind: "loading" });
+    void loadReworkOrders(filters,controller.signal).then(value=>{
+      if(!controller.signal.aborted)setState({kind:"ready",value});
+    }).catch((error:unknown)=>{
+      if(!controller.signal.aborted)setState({kind:"unavailable",message:error instanceof Error?error.message:"订单查询失败"});
+    }).finally(()=>{
+      finish();
+      if(!controller.signal.aborted){mountedRead.current=false;setRefreshing(false);}
+    });
+    return()=>{controller.abort();finish();mountedRead.current=false;};
   }, [filters, refresh]);
   useEffect(() => {
     let mounted = true;
@@ -89,7 +93,7 @@ function BusinessReworkQueryPage() {
     setDeletingOrderId(order.reworkOrderId);
     setDeleteError("");
     void deleteReworkOrder(order.reworkOrderId)
-      .then(() => setRefresh((value) => value + 1))
+      .then(()=>{silentReload.current=true;setRefresh(value=>value+1);})
       .catch((error: unknown) => setDeleteError(error instanceof Error ? error.message : "删除失败"))
       .finally(() => setDeletingOrderId(""));
   };
@@ -108,7 +112,7 @@ function BusinessReworkQueryPage() {
       <label>逾期<select value={overdue} onChange={(event) => {setOverdue(event.target.value);resetPage();}}><option value="">全部</option><option value="true">仅逾期</option><option value="false">未逾期</option></select></label>
       </div>
       <label>异常<select value={exception} onChange={(event) => {setException(event.target.value);resetPage();}}><option value="">全部</option><option value="true">仅异常</option><option value="false">无异常</option></select></label>
-      <Button className="reporting-filters__refresh" onClick={() => setRefresh((value) => value + 1)}>刷新</Button>
+      <Button className="reporting-filters__refresh" onClick={()=>{if(!mountedRead.current)setRefresh(value=>value+1);}}>刷新</Button>
     </Surface>
     {state.kind === "loading" && <Surface className="reporting-state">正在查询…</Surface>}
     {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}

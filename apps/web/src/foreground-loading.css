@@ -1,0 +1,17 @@
+.dx-foreground-loading {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 90;
+  pointer-events: none;
+}
+
+.dx-foreground-loading > span {
+  display: block;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--dx-v2-color-text, #202430);
+  color: #fff;
+  font-size: 14px;
+  line-height: 20px;
+}

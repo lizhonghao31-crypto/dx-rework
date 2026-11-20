@@ -1,3 +1,4 @@
+import {useForegroundWait} from "./foreground-loading.js";
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
 import {sameReceiptContent} from './command-receipt-content.js';
 import {SubmissionAttempt} from './submission-attempt.js';
@@ -23,6 +24,7 @@ export function ContractTemplateSettingsPage() {
   const [draft,setDraft] = useState<ContractTemplateContent|null>(null);
   const [busy,setBusy] = useState(false);
   const [message,setMessage] = useState("");
+  useForegroundWait(state===null&&!message?"contract-template:initial":undefined);
   const [preview,setPreview] = useState<{url:string;content:string}|null>(null);
   const [selectedVersion,setSelectedVersion] = useState("");
   const [allowed,setAllowed] = useState(false);

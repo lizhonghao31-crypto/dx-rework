@@ -1,3 +1,4 @@
+import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
 import {SubmissionAttempt} from './submission-attempt.js';
 import {SubmissionRequestError} from './submission-validation.js';
@@ -37,11 +38,26 @@ export function PatternRoomPricesPage() {
   const attempt = useRef<{ body: string; priceId: string; key: string } | null>(null);
   useInternalReturnScroll(data !== null);
   const refresh = async () => { setData(await readPrice("pattern-room/prices", PatternPricesSchema)); setError(""); };
+  useForegroundWait(!data&&!error?"pattern-prices:entry":undefined);
+  const historyRequest=useRef<{id:string;controller:AbortController;finish:()=>void}|null>(null);
+  useEffect(()=>()=>{historyRequest.current?.controller.abort();historyRequest.current?.finish();},[]);
   useEffect(() => { const abort = new AbortController(); void readPrice("pattern-room/prices", PatternPricesSchema, { signal: abort.signal }).then(setData).catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "价格读取失败"); }); return () => abort.abort(); }, []);
   const edit = (item: PatternPriceItem) => {if(uncertain||writing.current)return;submission.current=new SubmissionAttempt(); setEditing(item); setAmount(item.amount ?? ""); setEnabled(item.enabled); setReason(""); setFormError(""); attempt.current = null; };
   const showHistory = async (item: PatternPriceItem) => {
-    try { setHistory({ item, rows: await readPrice(`pattern-room/prices/${item.priceId}/history`, PatternPriceHistorySchema) }); }
-    catch (e) { setError(e instanceof Error ? e.message : "价格记录读取失败"); }
+    if(historyRequest.current?.id===item.priceId)return;
+    historyRequest.current?.controller.abort();
+    historyRequest.current?.finish();
+    const controller=new AbortController(),read={id:item.priceId,controller,finish:beginForegroundWait()};
+    historyRequest.current=read;
+    try {
+      const rows=await readPrice(`pattern-room/prices/${item.priceId}/history`,PatternPriceHistorySchema,{signal:controller.signal});
+      if(historyRequest.current===read&&!controller.signal.aborted)setHistory({item,rows});
+    }catch(e){
+      if(historyRequest.current===read&&!controller.signal.aborted)setError(e instanceof Error?e.message:"价格记录读取失败");
+    }finally{
+      if(historyRequest.current===read)historyRequest.current=null;
+      read.finish();
+    }
   };
   const save = async (recover=false) => {
     if(!editing||busy||writing.current||uncertain&&!recover)return;

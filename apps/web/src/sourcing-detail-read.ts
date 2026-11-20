@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from "react";
+import {useForegroundWait} from "./foreground-loading.js";
 import {SubmissionRequestError} from "./submission-validation.js";
 import {
   SourcingCaseSummarySchema,SourcingDetailSectionsSchema,SourcingContractStateResponseSchema,
@@ -79,7 +80,7 @@ export type SourcingDetailSnapshot=Awaited<ReturnType<typeof readSourcingDetail>
  * GET results. Refreshing or changing chapters never cancels a business write. */
 export function useSourcingDetailRead(caseId:string,request:SourcingDetailRequest,enabled=true){
   const owner=useRef({caseId,epoch:0,live:false}),sequence=useRef(0),controller=useRef<AbortController|null>(null);
-  const [state,setState]=useState<{caseId:string;snapshot:SourcingDetailSnapshot|null;overview:SourcingCaseSummary|null;readOnly:ReadOnlySections;loading:boolean;error:string;recordsFailed:boolean}>({caseId,snapshot:null,overview:null,readOnly:{},loading:enabled,error:"",recordsFailed:false});
+  const [state,setState]=useState<{caseId:string;snapshot:SourcingDetailSnapshot|null;overview:SourcingCaseSummary|null;readOnly:ReadOnlySections;loading:boolean;waitingFor:number|null;error:string;recordsFailed:boolean}>({caseId,snapshot:null,overview:null,readOnly:{},loading:enabled,waitingFor:null,error:"",recordsFailed:false});
   const retryingRecords=useRef(false);
   const capture=useCallback(():SourcingDetailIdentity=>({caseId,epoch:owner.current.epoch}),[caseId]);
   const owns=useCallback((identity:SourcingDetailIdentity)=>owner.current.live
@@ -90,8 +91,9 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
     return()=>{owner.current.live=false;owner.current.epoch++;sequence.current++;controller.current?.abort();};
   },[caseId]);
 
-  const readAttempt=useCallback(async(nativeRecords:boolean):Promise<SourcingDetailSnapshot|null>=>{
+  const readAttempt=useCallback(async(nativeRecords:boolean,foreground=false):Promise<SourcingDetailSnapshot|null>=>{
     const identity=capture();if(!owns(identity))return null;
+    if(foreground&&controller.current&&!controller.current.signal.aborted)return null;
     const version=++sequence.current;
     controller.current?.abort();const current=new AbortController();controller.current=current;
     const accepts=()=>owns(identity)&&sequence.current===version;
@@ -107,7 +109,7 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
         };
       });
     };
-    setState(previous=>accepts()?{caseId,snapshot:previous.snapshot?.item.sourcingCaseId===caseId?previous.snapshot:null,overview:previous.caseId===caseId?previous.overview:null,readOnly:{},loading:true,error:"",recordsFailed:false}:previous);
+    setState(previous=>accepts()?{caseId,snapshot:previous.snapshot?.item.sourcingCaseId===caseId?previous.snapshot:null,overview:previous.caseId===caseId?previous.overview:null,readOnly:{},loading:true,waitingFor:foreground?version:null,error:"",recordsFailed:false}:previous);
     try{
       const snapshot=await readSourcingDetail(request,caseId,current.signal,{
         item:overview=>expose({overview}),sections:readOnly=>expose({readOnly}),
@@ -118,11 +120,11 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
         denied:error=>{
           if(!accepts()||current.signal.aborted)return;
           accessLost=true;
-          setState(previous=>accepts()?{...previous,snapshot:null,overview:null,readOnly:{},loading:false,error:error.message,recordsFailed:false}:previous);
+          setState(previous=>accepts()?{...previous,snapshot:null,overview:null,readOnly:{},loading:false,waitingFor:null,error:error.message,recordsFailed:false}:previous);
         },
       },nativeRecords);
       if(!accepts()||current.signal.aborted)return null;
-      setState(previous=>accepts()?{caseId,snapshot,overview:snapshot.item,readOnly:{},loading:false,error:"",recordsFailed:false}:previous);return snapshot;
+      setState(previous=>accepts()?{caseId,snapshot,overview:snapshot.item,readOnly:{},loading:false,waitingFor:null,error:"",recordsFailed:false}:previous);return snapshot;
     }catch(error){
       if(!accepts()||current.signal.aborted)return null;
       const denied=accessLost||isReadDenial(error);
@@ -131,30 +133,33 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
       setState(previous=>accepts()?{...previous,
         ...(denied?{overview:null,recordsFailed:false}:{}),
         ...(accessLost?{snapshot:null,readOnly:{}}:{}),
-        loading:false,error:error instanceof Error?error.message:"订单加载失败"}:previous);
+        loading:false,waitingFor:null,error:error instanceof Error?error.message:"订单加载失败"}:previous);
       throw error;
     }finally{
-      if(accepts())setState(previous=>accepts()&&previous.loading?{...previous,loading:false}:previous);
+      if(controller.current===current)controller.current=null;
+      if(accepts())setState(previous=>accepts()&&previous.loading?{...previous,loading:false,waitingFor:null}:previous);
     }
   },[caseId,request,capture,owns]);
   const reload=useCallback(()=>readAttempt(false),[readAttempt]);
+  const reloadForeground=useCallback(()=>readAttempt(false,true),[readAttempt]);
   const retryRecords=useCallback(async()=>{
     if(retryingRecords.current)return;
     retryingRecords.current=true;
-    try{await readAttempt(true);}finally{retryingRecords.current=false;}
+    try{await readAttempt(true,true);}finally{retryingRecords.current=false;}
   },[readAttempt]);
 
   useEffect(()=>{
-    if(enabled)void reload().catch(()=>undefined);
+    if(enabled)void reloadForeground().catch(()=>undefined);
     return()=>{sequence.current++;controller.current?.abort();};
-  },[enabled,reload]);
+  },[enabled,reloadForeground]);
 
   const apply=useCallback((identity:SourcingDetailIdentity,patch:Partial<SourcingDetailSnapshot>)=>{
     if(!owns(identity)||patch.item&&patch.item.sourcingCaseId!==identity.caseId)return;
     setState(previous=>owns(identity)&&previous.snapshot?.item.sourcingCaseId===identity.caseId
       ?{...previous,snapshot:{...previous.snapshot,...patch}}:previous);
   },[owns]);
+  useForegroundWait(enabled&&state.caseId===caseId&&state.waitingFor!==null?JSON.stringify([caseId,state.waitingFor]):undefined);
   const snapshot=state.snapshot?.item.sourcingCaseId===caseId?state.snapshot:null;
-  return {snapshot,overview:state.caseId===caseId?state.overview:null,readOnly:state.caseId===caseId?state.readOnly:{},loading:state.caseId!==caseId||state.loading,error:state.caseId===caseId?state.error:"",recordsFailed:state.caseId===caseId&&state.recordsFailed,reload,retryRecords,apply,capture,owns,
+  return {snapshot,overview:state.caseId===caseId?state.overview:null,readOnly:state.caseId===caseId?state.readOnly:{},loading:state.caseId!==caseId||state.loading,error:state.caseId===caseId?state.error:"",recordsFailed:state.caseId===caseId&&state.recordsFailed,reload,reloadForeground,retryRecords,apply,capture,owns,
     canSubmit:enabled&&snapshot!==null&&state.caseId===caseId&&!state.loading&&!state.error&&!controller.current?.signal.aborted};
 }

@@ -1,4 +1,6 @@
 import {PeopleDirectoryPageSchema,type PeopleDirectoryPage} from "@dx-rework/contracts/master-data-pages";
+import {useForegroundWait} from "./foreground-loading.js";
+import {registerSessionInvalidator} from "./auth-session.js";
 import {useLiveSearch} from "./use-live-search.js";
 import {z} from 'zod';
 import {masterDataRequest} from './master-data-page.js';
@@ -49,6 +51,9 @@ export function WorkforceMasterDataPage() {
   const liveSearch=useLiveSearch(query,appliedQuery,value=>{setAppliedQuery(value);setInternalPageNo(1);setTemporaryPageNo(1);});
   const queryRef=useRef({q:appliedQuery,internalPage:internalPageNo,temporaryPage:temporaryPageNo});queryRef.current={q:appliedQuery,internalPage:internalPageNo,temporaryPage:temporaryPageNo};
   const readController=useRef<AbortController|null>(null);
+  const [waitingFor,setWaitingFor]=useState<string|undefined>();
+  const [sessionGeneration,setSessionGeneration]=useState(0),silentSessionRead=useRef(false);
+  useForegroundWait(waitingFor);
 
   const [name, setName] = useState("");
   const [aliases, setAliases] = useState("");
@@ -58,17 +63,37 @@ export function WorkforceMasterDataPage() {
   const [busy, setBusy] = useState(false),[loaded,setLoaded]=useState(false),[reading,setReading]=useState(false),[uncertain,setUncertain]=useState(false),[refreshPending,setRefreshPending]=useState(false);
   const working=useRef(false),version=useRef(0);const locked=busy||uncertain||refreshPending;
 
-  const load = async (): Promise<void> => {
-    const current=++version.current,controller=new AbortController();readController.current?.abort();readController.current=controller;setReading(true);setLoaded(false);
+  const load = async (silent=false): Promise<void> => {
+    const current=++version.current,controller=new AbortController();readController.current?.abort();readController.current=controller;
+    setReading(true);setLoaded(false);setWaitingFor(silent?undefined:`workforce:${current}`);
     const selection=queryRef.current;
-    try{const value=await json<PeopleDirectoryPage>("master-data/people-page?"+new URLSearchParams({q:selection.q,internalPage:String(selection.internalPage),temporaryPage:String(selection.temporaryPage)}),{signal:controller.signal});if(current!==version.current||controller.signal.aborted)return;setDirectory(value);setPeople([...value.internal.items,...value.temporary.items]);setLoaded(true);setRefreshPending(false);}
-    finally{if(current===version.current)setReading(false);}
+    try{
+      const value=await json<PeopleDirectoryPage>("master-data/people-page?"+new URLSearchParams({
+        q:selection.q,internalPage:String(selection.internalPage),temporaryPage:String(selection.temporaryPage),
+      }),{signal:controller.signal});
+      if(current!==version.current||controller.signal.aborted)return;
+      setDirectory(value);setPeople([...value.internal.items,...value.temporary.items]);setLoaded(true);setRefreshPending(false);
+    }catch(error){
+      if(current!==version.current||controller.signal.aborted)return;
+      if(error instanceof RequestFeedbackError&&error.status!==null&&[401,403,404].includes(error.status)){
+        setDirectory(null);setPeople([]);
+      }
+      throw error;
+    }finally{
+      if(current===version.current){setReading(false);setWaitingFor(undefined);}
+    }
   };
 
+  useEffect(()=>registerSessionInvalidator(()=>{
+    version.current++;readController.current?.abort();silentSessionRead.current=true;
+    setDirectory(null);setPeople([]);setLoaded(false);setReading(false);setWaitingFor(undefined);
+    setSessionGeneration(value=>value+1);
+  }),[]);
   useEffect(() => {
-    void load().catch((error: unknown) => {if(!(error instanceof DOMException&&error.name==="AbortError"))setMessage(error instanceof Error ? error.message : "人员资料加载失败");});
+    const silent=silentSessionRead.current;silentSessionRead.current=false;
+    void load(silent).catch((error: unknown) => {if(!(error instanceof DOMException&&error.name==="AbortError"))setMessage(error instanceof Error ? error.message : "人员资料加载失败");});
     return()=>{version.current++;readController.current?.abort();};
-  }, [appliedQuery,internalPageNo,temporaryPageNo]);
+  }, [appliedQuery,internalPageNo,temporaryPageNo,sessionGeneration]);
   useEffect(()=>{if(!loaded||!directory)return;const internalLast=Math.max(1,Math.ceil(directory.internal.totalCount/15)),temporaryLast=Math.max(1,Math.ceil(directory.temporary.totalCount/15));if(internalPageNo>internalLast)setInternalPageNo(internalLast);if(temporaryPageNo>temporaryLast)setTemporaryPageNo(temporaryLast);},[loaded,directory,internalPageNo,temporaryPageNo]);
 
   const run = async (work: () => Promise<void>, success: string,description=""): Promise<void> => {
@@ -79,7 +104,7 @@ export function WorkforceMasterDataPage() {
     let saved=false;
     try {
       await work();saved=true;setRefreshPending(true);
-      await load();
+      await load(true);
       setMessage(success);
     } catch (error: unknown) {
       const unknown=!saved&&unknownWriteResult(error);setUncertain(unknown);setMessage((saved?"修改已保存，但最新目录尚未读取，请仅重读，不重复操作。":unknown?"原操作结果尚未确认，请仅重读并核对原人员历史；未提供原命令回执，不能重复建立档案或别名。":"")+(error instanceof Error ? error.message : "原操作结果尚未确认"));
@@ -154,8 +179,8 @@ export function WorkforceMasterDataPage() {
   };
 
   const internal=people.filter(person=>person.personType==="internal"),temporary=people.filter(person=>person.personType==="temporary");
-  const internalPage={items:internal,page:internalPageNo,totalPages:Math.max(1,Math.ceil((directory?.internal.totalCount??0)/15)),setPage:setInternalPageNo};
-  const temporaryPage={items:temporary,page:temporaryPageNo,totalPages:Math.max(1,Math.ceil((directory?.temporary.totalCount??0)/15)),setPage:setTemporaryPageNo};
+  const internalPage={items:internal,page:directory?.internal.page??internalPageNo,totalPages:Math.max(1,Math.ceil((directory?.internal.totalCount??0)/15)),setPage:setInternalPageNo};
+  const temporaryPage={items:temporary,page:directory?.temporary.page??temporaryPageNo,totalPages:Math.max(1,Math.ceil((directory?.temporary.totalCount??0)/15)),setPage:setTemporaryPageNo};
 
   return (
     <Shell active="人员资料">
@@ -205,40 +230,40 @@ export function WorkforceMasterDataPage() {
             <h2>内部工人</h2>
             <p>授予“工人”角色后自动进入这里；撤销角色、停用账号或离职后不能再被新分配。</p>
             <div className="workforce-list">
-              {!loaded?<p>{reading?"正在读取内部工人…":"内部工人目录尚未读取。"}</p>:internal.length === 0 ? <p>{query.trim() ? "没有匹配的内部工人。" : "暂无已建档内部工人。"}</p> : internalPage.items.map((person) => (
+              {!directory?<p>{reading?"正在读取内部工人…":"内部工人目录尚未读取。"}</p>:internal.length === 0 ? <p>{query.trim() ? "没有匹配的内部工人。" : "暂无已建档内部工人。"}</p> : internalPage.items.map((person) => (
                 <article key={person.personId}>
                   <div><b>{person.displayName}</b><small>内部员工 · 可登录</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "档案有效" : "档案停用"}</StatusBadge>
-                  <Button disabled={locked || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
+                  <Button disabled={locked || !loaded || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
                   {person.aliases.filter((alias) => alias.revokedAt === null).map((alias) => (
-                    <button className="workforce-alias" key={alias.aliasId} disabled={locked} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
+                    <button className="workforce-alias" key={alias.aliasId} disabled={locked || !loaded} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
                   ))}
                 </article>
               ))}
             </div>
-            <ListPagination page={internalPage.page} totalPages={internalPage.totalPages} onPageChange={internalPage.setPage} busy={reading} ariaLabel="内部工人分页" />
+            <ListPagination page={internalPage.page} totalPages={internalPage.totalPages} onPageChange={internalPage.setPage} ariaLabel="内部工人分页" />
           </Surface>
 
           <Surface>
             <h2>临时工</h2>
             <div className="workforce-list">
-              {!loaded?<p>{reading?"正在读取临时工…":"临时工目录尚未读取。"}</p>:temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporaryPage.items.map((person) => (
+              {!directory?<p>{reading?"正在读取临时工…":"临时工目录尚未读取。"}</p>:temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporaryPage.items.map((person) => (
                 <article key={person.personId}>
                   <div><b>{person.displayName}</b><small>临时工 · 不登录 · {person.temporaryCode ?? "历史临时工待补编号"}{person.temporaryRemark ? ` · ${person.temporaryRemark}` : ""}</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "可分配" : "已停用"}</StatusBadge>
                   <div className="workforce-row-actions">
-                    <Button disabled={locked || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
-                    <Button disabled={locked || !person.active} onClick={() => void deactivateTemporary(person)}>停用</Button>
+                    <Button disabled={locked || !loaded || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
+                    <Button disabled={locked || !loaded || !person.active} onClick={() => void deactivateTemporary(person)}>停用</Button>
                   </div>
                   <div className="workforce-aliases">
                     {person.aliases.filter((alias) => alias.revokedAt === null).map((alias) => (
-                      <button className="workforce-alias" key={alias.aliasId} disabled={locked} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
+                      <button className="workforce-alias" key={alias.aliasId} disabled={locked || !loaded} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
                     ))}
                   </div>
                 </article>
               ))}
             </div>
-            <ListPagination page={temporaryPage.page} totalPages={temporaryPage.totalPages} onPageChange={temporaryPage.setPage} busy={reading} ariaLabel="临时工分页" />
+            <ListPagination page={temporaryPage.page} totalPages={temporaryPage.totalPages} onPageChange={temporaryPage.setPage} ariaLabel="临时工分页" />
           </Surface>
         </div>
       </div>

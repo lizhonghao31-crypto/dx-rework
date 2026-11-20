@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {sampleBatchSelection} from './sample-catalog-model.js';
 import type {SampleSelection} from './sample-catalog.js';
 import './sample-operations.css';
@@ -10,6 +10,8 @@ import {SampleImageUpload,SamplePersonPicker} from './sample-create-page.js';
 import {createClientRequestId} from './client-request-id.js';
 import {createWebUrls} from '../url-contract.js';
 import {verifySession} from './auth.js';
+import {useForegroundRead} from './use-foreground-read.js';
+import {useForegroundWait} from './foreground-loading.js';
 import './rework-v2-form.css';
 const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 export async function readSampleAction<T>(path:string,schema:z.ZodType<T>,init:RequestInit={}):Promise<T>{
@@ -50,11 +52,18 @@ export function SampleWorkflowActions({sampleId}:{sampleId:string}){
  </Surface>;
 }
 export function SampleHandoffPage(){
- const token=useRef(window.location.hash.slice(1)),[data,setData]=useState<z.infer<typeof SampleHandoffLookupSchema>|null>(null),[error,setError]=useState(''),[location,setLocation]=useState(''),[confirmed,setConfirmed]=useState(false),action=useSampleSubmit();
- useEffect(()=>{const abort=new AbortController();window.history.replaceState(null,'',window.location.pathname+window.location.search);
-  void readSampleAction('samples/handoff/lookup',SampleHandoffLookupSchema,{method:'POST',body:JSON.stringify({token:token.current}),signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setData(value);}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'交接码无效');});return()=>abort.abort();},[]);
+ const token=useRef(window.location.hash.slice(1)),[location,setLocation]=useState(''),[confirmed,setConfirmed]=useState(false),action=useSampleSubmit();
+ useEffect(()=>{window.history.replaceState(null,'',window.location.pathname+window.location.search);},[]);
+ // Lookup checks the code but does not consume it. Only explicit confirmation writes.
+ const load=useCallback((signal:AbortSignal)=>readSampleAction('samples/handoff/lookup',SampleHandoffLookupSchema,{
+  method:'POST',body:JSON.stringify({token:token.current}),signal,
+ }),[]);
+ const lookup=useForegroundRead('sample-handoff','lookup',load);
+ const data=lookup.value,error=lookup.error?.message;
+ useForegroundWait(lookup.foregroundKey);
  return <Shell active="待确认中心" mobileNavigation="transaction"><main className="rework-v2-page sample-ops sample-form-page"><Header title="样衣实物交接" subtitle="核对申请人和实物后确认。" badge="样衣管理"/>
-  {error||action.error?<p role="alert">{error||action.error}</p>:null}{data?<Surface className="rework-v2-core"><p>申请人：{data.requesterName}</p><p>{data.type==='return'?'归还收货':'借出交付'}</p><a href={pageUrl(`ui/samples/${data.sampleId}`)}>查看样衣资料</a>
+  {error||action.error?<p role="alert">{error||action.error}</p>:null}
+  {error?<Button disabled={lookup.waiting} onClick={lookup.retry}>重新读取交接信息</Button>:null}{data?<Surface className="rework-v2-core"><p>申请人：{data.requesterName}</p><p>{data.type==='return'?'归还收货':'借出交付'}</p><a href={pageUrl(`ui/samples/${data.sampleId}`)}>查看样衣资料</a>
    {confirmed?<p role="status">交接已完成，同一事项的其他行政待办已结束。</p>:<><p>请确认实物已{data.type==='return'?'收到':'交付'}。</p>{data.type==='return'?<label>在库位置<input value={location} disabled={action.busy} onChange={e=>setLocation(e.target.value)}/></label>:null}
    <Button disabled={action.busy||(data.type==='return'&&!location.trim())} onClick={()=>{void action.send(`samples/${data.sampleId}/confirm`,{version:data.version,token:token.current,...(data.type==='return'?{storageLocation:location}:{})},SampleWorkflowResultSchema).then(value=>{if(value)setConfirmed(true);});}}>确认{data.type==='return'?'收到实物':'交付实物'}</Button></>}
   </Surface>:null}</main></Shell>;

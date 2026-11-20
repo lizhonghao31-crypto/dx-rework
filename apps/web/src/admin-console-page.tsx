@@ -1,9 +1,11 @@
+import {useForegroundWait} from "./foreground-loading.js";
+import {useForegroundRead} from "./use-foreground-read.js";
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
 import {AdminAuditEventsPageSchema,AdminAuditExportsPageSchema} from '@dx-rework/contracts';
 import {AdminAttachmentsPageSchema,AdminDelegationsPageSchema,AdminExceptionsPageSchema} from '@dx-rework/contracts/admin-console';
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { AdminAuditEventsPage, AdminAuditExportsPage } from "@dx-rework/contracts";
 import type { AdminAttachmentsPage, AdminDelegationsPage, AdminExceptionsPage } from "@dx-rework/contracts/admin-console";
@@ -43,8 +45,8 @@ const loadError = (error: unknown): LoadError => ({
   requestId: error instanceof AdminRequestError ? error.requestId : null,
 });
 
-async function getJson<T>(path: string): Promise<T> {
-  const response = await feedbackFetch(apiUrl(path), { credentials: "include", headers: { accept: "application/json" } });
+async function getJson<T>(path: string,signal?:AbortSignal): Promise<T> {
+  const response = await feedbackFetch(apiUrl(path), { credentials: "include", ...(signal?{signal}:{}), headers: { accept: "application/json" } });
   let requestId=response.headers.get('x-request-id');if(!response.ok){const envelope=await response.clone().json().catch(()=>null) as {error?:{requestId?:unknown}}|null;if(typeof envelope?.error?.requestId==='string')requestId=envelope.error.requestId;}
   try{return await feedbackJson(response,'GET',value=>{
    const schema=path.startsWith('admin/audit/events')?AdminAuditEventsPageSchema:path.startsWith('admin/audit/exports')?AdminAuditExportsPageSchema:path.startsWith('admin/attachments')?AdminAttachmentsPageSchema:path.startsWith('admin/delegations')?AdminDelegationsPageSchema:AdminExceptionsPageSchema;
@@ -118,30 +120,35 @@ export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab })
   );
 }
 
+function useAdminRead<T>(scope:string,target:string,load:(signal:AbortSignal)=>Promise<T>){
+  const read=useForegroundRead(scope,target,load,true);
+  useForegroundWait(read.foregroundKey);
+  const state:LoadState<T>=read.error?loadError(read.error):read.value===null?{kind:"loading"}:{kind:"ready",data:read.value};
+  return {state,retry:read.retry};
+}
+
 function AuditTab() {
-  const [page, setPage] = useState(1);
-  const [searchVersion, setSearchVersion] = useState(0);
-  const [state, setState] = useState<LoadState<{ events: AdminAuditEventsPage; exports: AdminAuditExportsPage }>>({ kind: "loading" });
-  const [filters, setFilters] = useState({ from: "", to: "", actorId: "", action: "", entityType: "", entityId: "", authorizationCapability: "", requestId: "" });
-  const query = () => new URLSearchParams(Object.entries({ ...filters, page: String(page), limit: "15" }).filter((entry): entry is [string, string] => entry[1] !== "")).toString();
-  useEffect(() => {
-    setState({ kind: "loading" });
-    void Promise.all([
-      getJson<AdminAuditEventsPage>(`admin/audit/events?${query()}`),
-      getJson<AdminAuditExportsPage>("admin/audit/exports?limit=10"),
-    ])
-      .then(([events, exports]) => setState({ kind: "ready", data: { events, exports } }))
-      .catch((error: unknown) => setState(loadError(error)));
-  }, [page, searchVersion]);
-  const submitSearch = () => {
-    setPage(1);
-    setSearchVersion((value) => value + 1);
+  const [page,setPage]=useState(1);
+  const [filters,setFilters]=useState({from:"",to:"",actorId:"",action:"",entityType:"",entityId:"",authorizationCapability:"",requestId:""});
+  const [applied,setApplied]=useState(filters);
+  const query=new URLSearchParams(Object.entries({...applied,page:String(page),limit:"15"}).filter(([,value])=>value!=="")).toString();
+  const load=useCallback(async(signal:AbortSignal)=>{
+    const [events,exports]=await Promise.all([
+      getJson<AdminAuditEventsPage>(`admin/audit/events?${query}`,signal),
+      getJson<AdminAuditExportsPage>("admin/audit/exports?limit=10",signal),
+    ]);
+    return {events,exports};
+  },[query]);
+  const {state,retry}=useAdminRead("audit",query,load);
+  const submitSearch=()=>{
+    if(page===1&&JSON.stringify(applied)===JSON.stringify(filters)){retry();return;}
+    setApplied(filters);setPage(1);
   };
   return (
     <section className="admin-panel">
       <WorkAnalysisPanel kind="diagnostics" />
       <FilterGrid filters={filters} setFilters={setFilters} onSearch={submitSearch} />
-      <State state={state} render={({ events, exports }) => (
+      <State state={state} onRetry={retry} render={({ events, exports }) => (
         <>
           <div className="admin-list">
             {events.items.length === 0 ? <p>暂无审计日志。</p> : events.items.map((event) => (
@@ -180,9 +187,9 @@ function FilterGrid<T extends Record<string, string>>({ filters, setFilters, onS
   );
 }
 
-function State<T>({ state, render }: { state: LoadState<T>; render: (value: T) => ReactNode }) {
+function State<T>({ state, render,onRetry }: { state: LoadState<T>; render: (value: T) => ReactNode;onRetry:()=>void }) {
   if (state.kind === "loading") return <p>加载中…</p>;
-  if (state.kind === "error") return <div className="admin-error" role="alert"><p>{state.message}</p>{state.requestId ? <CopyableRequestId value={state.requestId} /> : null}</div>;
+  if (state.kind === "error") return <div className="admin-error" role="alert"><p>{state.message}</p>{state.requestId ? <CopyableRequestId value={state.requestId} /> : null}<Button onClick={onRetry}>重试读取</Button></div>;
   return render(state.data);
 }
 
@@ -194,28 +201,21 @@ const attachmentStatusLabel: Record<"pending" | "ready" | "rejected", string> = 
 
 function AttachmentsTab() {
   const [page, setPage] = useState(1);
-  const [state, setState] = useState<LoadState<AdminAttachmentsPage>>({ kind: "loading" });
-  useEffect(() => {
-    setState({ kind: "loading" });
-    void getJson<AdminAttachmentsPage>(`admin/attachments?limit=15&page=${page}`)
-      .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) => setState(loadError(error)));
-  }, [page]);
+  const target=`admin/attachments?limit=15&page=${page}`;
+  const load=useCallback((signal:AbortSignal)=>getJson<AdminAttachmentsPage>(target,signal),[target]);
+  const {state,retry}=useAdminRead("attachments",target,load);
   return (
     <section className="admin-panel">
-      <State state={state} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{attachmentStatusLabel[item.status]} · {businessValue("mimeType", item.mimeType)} · {formatFileSize(item.sizeBytes)}</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ? businessEntityLabel(item.entityType) : "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><ListPagination page={data.page} totalPages={data.totalPages} onPageChange={setPage} ariaLabel="附件分页" /></>} />
+      <State state={state} onRetry={retry} render={(data) => <><div className="admin-table">{data.items.length === 0 ? <p>暂无附件。</p> : data.items.map((item) => <article key={item.attachmentId}><h3>{item.filename}</h3><p>{attachmentStatusLabel[item.status]} · {businessValue("mimeType", item.mimeType)} · {formatFileSize(item.sizeBytes)}</p><p>{item.uploaderDisplayName ?? "未知上传人"} · {item.uploadedBy}</p><p>{item.entityType ? businessEntityLabel(item.entityType) : "未绑定"} / {item.entityId ?? "—"}</p><p>SHA-256：{item.sha256}</p><p>{item.rejectionReason ?? "无驳回原因"}</p><Button onClick={() => window.open(apiUrl(`tools/attachments/${item.attachmentId}/download`), "_blank")}>按既有授权申请下载</Button></article>)}</div><ListPagination page={data.page} totalPages={data.totalPages} onPageChange={setPage} ariaLabel="附件分页" /></>} />
     </section>
   );
 }
 
 function DelegationsTab() {
-  const [state, setState] = useState<LoadState<AdminDelegationsPage>>({ kind: "loading" });
-  useEffect(() => {
-    void getJson<AdminDelegationsPage>("admin/delegations?includeRevoked=true&limit=50")
-      .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) => setState(loadError(error)));
-  }, []);
-  return <section className="admin-panel"><State state={state} render={(data) => <DelegationList data={data} />} /></section>;
+  const target="admin/delegations?includeRevoked=true&limit=50";
+  const load=useCallback((signal:AbortSignal)=>getJson<AdminDelegationsPage>(target,signal),[target]);
+  const {state,retry}=useAdminRead("delegations",target,load);
+  return <section className="admin-panel"><State state={state} onRetry={retry} render={(data) => <DelegationList data={data} />} /></section>;
 }
 
 function DelegationList({ data }: { data: AdminDelegationsPage }) {
@@ -224,13 +224,10 @@ function DelegationList({ data }: { data: AdminDelegationsPage }) {
 }
 
 function ExceptionsTab() {
-  const [state, setState] = useState<LoadState<AdminExceptionsPage>>({ kind: "loading" });
-  useEffect(() => {
-    void getJson<AdminExceptionsPage>("admin/exceptions?limit=50")
-      .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) => setState(loadError(error)));
-  }, []);
-  return <section className="admin-panel"><State state={state} render={(data) => <ExceptionList data={data} />} /></section>;
+  const target="admin/exceptions?limit=50";
+  const load=useCallback((signal:AbortSignal)=>getJson<AdminExceptionsPage>(target,signal),[target]);
+  const {state,retry}=useAdminRead("exceptions",target,load);
+  return <section className="admin-panel"><State state={state} onRetry={retry} render={(data) => <ExceptionList data={data} />} /></section>;
 }
 
 function ExceptionList({ data }: { data: AdminExceptionsPage }) {

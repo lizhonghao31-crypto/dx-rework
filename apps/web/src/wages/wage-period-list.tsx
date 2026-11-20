@@ -7,6 +7,7 @@ import { formatBusinessDecimal, isBusinessMoneyField } from "@dx-rework/contract
 import { fixedBusinessCurrency as formatBusinessCurrency } from "../fixed-business-currency.js";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useForegroundWait } from "../foreground-loading.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { useInternalReturnScroll } from "../use-internal-return-scroll.js";
 import { businessFieldLabel, businessValue } from "../business-display.js";
@@ -47,6 +48,7 @@ export function WagePeriodList() {
   const [patternKind, setPatternKind] = useState<string>(initial.patternKind??"");
   const [status, setStatus] = useState<string>(initial.status??"");
   const [refresh, setRefresh] = useState(0);
+  const postWriteRefresh = useRef<string|null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [message, setMessage] = useState("");
@@ -66,6 +68,12 @@ export function WagePeriodList() {
   const queryKey = JSON.stringify([filters,refresh,requestedPage]);
   const currentKey = useRef(queryKey);
   currentKey.current = queryKey;
+  const waiting=report.kind==="loading"||report.kind==="ready"&&report.key!==queryKey;
+  useForegroundWait(waiting&&q.trim()===debouncedQ.trim()&&postWriteRefresh.current!==queryKey?queryKey:undefined);
+  const rereadAfterWrite=()=>{
+    postWriteRefresh.current=JSON.stringify([filters,refresh+1,requestedPage]);
+    setRefresh(refresh+1);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -73,7 +81,7 @@ export function WagePeriodList() {
     void loadReport("wages", {...filters,page:String(requestedPage)}, controller.signal)
       .then((value) => { if (!controller.signal.aborted) setReport({ kind: "ready", value, key: queryKey }); })
       .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) {
           setReport({ kind: "error", message: error instanceof Error ? error.message : "工资查询失败" });
         }
       });
@@ -109,13 +117,13 @@ export function WagePeriodList() {
     try {
       const preview = await previewWageSettlement(filters);
       if (currentKey.current !== keyAtStart) return;
-      if (!preview.lineCount) { setRefresh(n=>n+1); return; }
+      if (!preview.lineCount) { rereadAfterWrite(); return; }
       if (!await confirmInApp(`将当前筛选范围内的 ${formatBusinessDecimal(preview.personCount)} 名工人、${formatBusinessDecimal(preview.lineCount)} 条未结算明细登记为已结算？此操作只记录结算状态。`)) return;
       if (currentKey.current !== keyAtStart) return;
       const result = await markWageSettlement(filters,preview.lineIds);
       setMessage(`已标记 ${formatBusinessDecimal(result.markedCount)} 条工资明细的结算状态。`);
-      setRefresh(n=>n+1);
-    } catch(error) {setMessage(error instanceof Error ? error.message : "工资结算标记失败");setRefresh(n=>n+1);}
+      rereadAfterWrite();
+    } catch(error) {setMessage(error instanceof Error ? error.message : "工资结算标记失败");rereadAfterWrite();}
     finally {busyRef.current=false;setBusy(false);}
   };
   const paginate=<T,>(items:readonly T[],kind:"person"|"detail")=>{
@@ -173,7 +181,8 @@ export function WagePeriodList() {
 
       {message ? <p role="status" className="form-message">{message}</p> : null}
       {report.kind === "loading" ? <Surface>正在查询工资明细…</Surface> : null}
-      {report.kind === "error" ? <Surface><p role="alert" className="form-message">{report.message}</p></Surface> : null}
+      {report.kind === "error" ? <Surface><p role="alert" className="form-message">{report.message}</p>
+        <Button onClick={()=>setRefresh(current=>current+1)}>重新读取工资明细</Button></Surface> : null}
 
       {value ? (
         <>

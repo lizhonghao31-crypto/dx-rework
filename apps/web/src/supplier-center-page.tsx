@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {SupplierDirectoryPageSchema,type SupplierDirectoryPage} from "@dx-rework/contracts/master-data-pages";
 import {useLiveSearch} from "./use-live-search.js";
 import { SearchableSelect } from "./search-select.js";
@@ -32,6 +33,10 @@ import {emptyDraft,draftFromProfile,supplierDraftPayload,type SupplierProfile,ty
 import { SupplierBatchPanel } from "./supplier-batch-panel.js";
 import {SupplierProfileForm} from "./supplier-profile-form.js";
 
+class SupplierReadError extends Error {
+ constructor(message:string,readonly status:number){super(message);}
+}
+
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
     credentials: "include",
@@ -44,7 +49,7 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? `请求失败：${response.status}`);
+    throw new SupplierReadError(body?.error?.message ?? `请求失败：${response.status}`,response.status);
   }
   return response.status === 204 ? undefined as T : await response.json() as T;
 }
@@ -92,12 +97,32 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [directoryPage,setDirectoryPage]=useState({key:filterKey,page:1});
   const requestedPage=directoryPage.key===filterKey?directoryPage.page:1,directoryKey=filterKey+":"+requestedPage;
   const directoryQuery=useRef({key:directoryKey,query:new URLSearchParams()});directoryQuery.current={key:directoryKey,query:new URLSearchParams({...JSON.parse(filterKey),page:String(requestedPage)})};
-  const directoryRead=useRef({version:0,controller:null as AbortController|null});
-  const readDirectory=async()=>{
-    const current=++directoryRead.current.version,controller=new AbortController(),request=directoryQuery.current;directoryRead.current.controller?.abort();directoryRead.current.controller=controller;setDirectoryLoading(true);setDirectoryDataKey("");setDirectoryError("");
-    try{const value=SupplierDirectoryPageSchema.safeParse(await json<unknown>("master-data/supplier-page?"+request.query,{signal:controller.signal}));if(!value.success)throw new Error("供应商目录返回资料不完整，请重新读取。");if(current!==directoryRead.current.version||controller.signal.aborted)return null;setDirectory(value.data);setSuppliers(value.data.items);setDirectoryDataKey(request.key);return value.data;}
-    catch(error){if(controller.signal.aborted)return null;setDirectoryError(error instanceof Error?error.message:"供应商目录尚未读取");throw error;}
-    finally{if(current===directoryRead.current.version)setDirectoryLoading(false);}
+  const directoryRead=useRef<{version:number;controller:AbortController|null;key:string}>({version:0,controller:null,key:""});
+  const readDirectory=async(silent=false)=>{
+    const request=directoryQuery.current;
+    if(!silent&&directoryRead.current.key===request.key&&directoryRead.current.controller&&!directoryRead.current.controller.signal.aborted)return null;
+    const current=++directoryRead.current.version,controller=new AbortController();
+    directoryRead.current.controller?.abort();
+    directoryRead.current.controller=controller;directoryRead.current.key=request.key;
+    const finish=silent?()=>{}:beginForegroundWait();
+    setDirectoryLoading(true);setDirectoryError("");
+    try{
+      const value=SupplierDirectoryPageSchema.safeParse(await json<unknown>("master-data/supplier-page?"+request.query,{signal:controller.signal}));
+      if(!value.success)throw new Error("供应商目录返回资料不完整，请重新读取。");
+      if(current!==directoryRead.current.version||controller.signal.aborted)return null;
+      setDirectory(value.data);setSuppliers(value.data.items);setDirectoryDataKey(request.key);return value.data;
+    }catch(error){
+      if(controller.signal.aborted||current!==directoryRead.current.version)return null;
+      if(error instanceof SupplierReadError&&[401,403,404].includes(error.status)){
+        setDirectory(null);setSuppliers([]);setDirectoryDataKey("");setProfile(null);
+      }
+      setDirectoryError(error instanceof Error?error.message:"供应商目录尚未读取");throw error;
+    }finally{
+      finish();
+      if(current===directoryRead.current.version){
+        directoryRead.current.controller=null;setDirectoryLoading(false);
+      }
+    }
   };
   const directoryReady=directoryDataKey===directoryKey&&!directoryLoading;
   useEffect(()=>{if(directoryReady&&directory&&requestedPage>Math.max(1,Math.ceil(directory.totalCount/15)))setDirectoryPage({key:filterKey,page:Math.max(1,Math.ceil(directory.totalCount/15))});},[directoryReady,directory,requestedPage,filterKey]);
@@ -106,6 +131,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const selectedRef = useRef(selectedId);
   const writeLock = useRef(false);
   const refreshLock = useRef(false);
+  const quietDetail=useRef<string|null>(null);
   const dirty = creating || (editing && profile !== null && JSON.stringify(draft) !== JSON.stringify(draftFromProfile(profile)));
   const detailReady = !detailLoading && profile?.supplierId === selectedId && selectedId !== "";
   const [draftGuard] = useState(() => createSupplierDraftGuard({
@@ -136,7 +162,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const selectSupplier = async (id: string) => {
     if ((!creating && id === selectedRef.current) || !await discardChanges()) return;
     if (writeLock.current || refreshLock.current) return;
-    selectedRef.current = id;
+    selectedRef.current = id;quietDetail.current=null;
     savedSelection.current='';setSavedMessage('');
     setCreating(false);
     setError("");
@@ -212,7 +238,9 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     setEditing(false);
     setDetailLoading(Boolean(selectedId));
     if (!selectedId || refreshing) return () => { mounted = false; };
-    void json<SupplierProfile>(`master-data/suppliers/${selectedId}`).then((nextProfile) => {
+    const abort=new AbortController(),finish=quietDetail.current===selectedId?()=>{}:beginForegroundWait();
+    quietDetail.current=null;
+    void json<SupplierProfile>(`master-data/suppliers/${selectedId}`,{signal:abort.signal}).then((nextProfile) => {
       if (!mounted || selectedRef.current !== selectedId) return;
       if (nextProfile.supplierId !== selectedId) {
         throw new Error("供应商详情与当前选择不一致，请刷新后重试。");
@@ -222,11 +250,14 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       setEditing(mode === "manage" && canWrite && savedSelection.current !== selectedId);
     }).catch((loadError: unknown) => {
       if (mounted && selectedRef.current === selectedId) setError(loadError instanceof Error ? loadError.message : "供应商详情加载失败");
-    }).finally(() => { if (mounted && selectedRef.current === selectedId) setDetailLoading(false); });
-    return () => { mounted = false; };
+    }).finally(() => {
+      finish();
+      if (mounted && selectedRef.current === selectedId) setDetailLoading(false);
+    });
+    return () => { mounted=false;abort.abort();finish(); };
   }, [selectedId, mode, canWrite, reload, refreshing, creating]);
 
-  const page={items:directoryReady?suppliers:[],page:requestedPage,totalPages:Math.max(1,Math.ceil((directory?.totalCount??0)/15)),setPage:(value:number)=>setDirectoryPage({key:filterKey,page:value})};
+  const page={items:directory?suppliers:[],page:directory?.page??requestedPage,totalPages:Math.max(1,Math.ceil((directory?.totalCount??0)/15)),setPage:(value:number)=>setDirectoryPage({key:filterKey,page:value})};
   const crafts=directory?.crafts??[];
   const missingLabels = supplierContractMissingLabels(profile?.contractDataMissing ?? []);
   const contractVisible = profile ? Object.hasOwn(profile, "contractEntityName") : false;
@@ -244,8 +275,8 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       draftGuard.markClean();creationCode.current="";setDraft(emptyDraft());
       savedSelection.current=result.supplierId;setSavedMessage("资料已保存 · 版本 "+result.version);
       selectedRef.current=result.supplierId;setCreating(false);setSelectedId(result.supplierId);setEditing(false);setProfile(null);setDetailLoading(true);
-      setReload(value=>value+1);
-      try{await readDirectory();}
+      quietDetail.current=result.supplierId;setReload(value=>value+1);
+      try{await readDirectory(true);}
       catch{setError("资料已保存，目录刷新失败，请刷新目录核对。");}
     }catch(e){setError(e instanceof Error?e.message:"供应商资料保存失败");}
     finally{writeLock.current=false;setBusy(false);}
@@ -281,10 +312,10 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       {mode === "manage" && !identityLoading && !identityError && !canWrite ? (
         <div className="supplier-center-notice" role="status">当前账号为只读，可查看资料与变更历史。</div>
       ) : null}
-      {batchOpen && canMaintain ? <SupplierBatchPanel onClose={() => setBatchOpen(false)} onChanged={async () => { await readDirectory(); }} /> : <div data-supplier-layout={mode} className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
+      {batchOpen && canMaintain ? <SupplierBatchPanel onClose={() => setBatchOpen(false)} onChanged={async () => { await readDirectory(true); }} /> : <div data-supplier-layout={mode} className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
         <Surface className="supplier-directory">
           <div className="supplier-directory__heading">
-            <div><h2>{mode === "manage" ? "供应商资料" : "供应商列表"}</h2><p>{directoryReady?`共 ${directory?.totalCount??0} 家`:directoryLoading?"正在读取目录…":"目录尚未读取"}</p></div>
+            <div><h2>{mode === "manage" ? "供应商资料" : "供应商列表"}</h2><p>{directory?`共 ${directory.totalCount} 家`:directoryLoading?"正在读取目录…":"目录尚未读取"}</p></div>
             <Button onClick={() => void refreshDirectory()} disabled={busy || refreshing}>刷新</Button>
           </div>
           <div className="supplier-directory__filters">
@@ -306,7 +337,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
             ? <SupplierDirectoryList suppliers={page.items} disabled={busy || refreshing} onSelect={id => void selectSupplier(id)} />
             : <SupplierMaintenanceList suppliers={page.items} canWrite={canMaintain} disabled={busy || refreshing} onSelect={id => void selectSupplier(id)} />
             : <p className="supplier-center-empty">{directoryReady?"没有符合条件的供应商。":directoryLoading?"正在读取供应商…":<>供应商目录尚未读取。<Button onClick={()=>void readDirectory().catch(()=>undefined)}>重新读取目录</Button></>}</p>}
-          <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} busy={directoryLoading||refreshing} ariaLabel={mode === "manage" ? "资料维护分页" : "供应商目录分页"} />
+          <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} busy={refreshing} ariaLabel={mode === "manage" ? "资料维护分页" : "供应商目录分页"} />
         </Surface>
 
         <Surface className="supplier-profile">
@@ -353,7 +384,7 @@ function SupplierDirectoryValue({value}:{value:string|null|undefined}) {
 }
 
 function SupplierVersionHistory({supplierId}:{supplierId:string}){
- const [history,setHistory]=useState<SupplierProfile[]>([]),[error,setError]=useState('');
- useEffect(()=>{const controller=new AbortController();void json<SupplierProfile[]>(`master-data/suppliers/${supplierId}/history`,{signal:controller.signal}).then(items=>{if(items.some(item=>item.supplierId!==supplierId))throw Error('供应商历史与当前选择不一致');if(!controller.signal.aborted)setHistory(items);}).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'供应商历史读取失败');});return()=>controller.abort();},[supplierId]);
- return <>{error&&<p role="alert">{error}</p>}<ol className="supplier-history">{history.map(version=><li key={version.version}><div><b>版本 {version.version}</b><StatusBadge tone={version.active?'success':'warning'}>{version.active?'启用':'停用'}</StatusBadge></div><p>{version.changeReason}</p><small>{new Date(version.changedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})} · 修改人 {version.changedBy}</small></li>)}</ol></>;
+ const [history,setHistory]=useState<SupplierProfile[]>([]),[error,setError]=useState(''),[retry,setRetry]=useState(0);
+ useEffect(()=>{const controller=new AbortController(),finish=beginForegroundWait();setError('');void json<SupplierProfile[]>(`master-data/suppliers/${supplierId}/history`,{signal:controller.signal}).then(items=>{if(items.some(item=>item.supplierId!==supplierId))throw Error('供应商历史与当前选择不一致');if(!controller.signal.aborted)setHistory(items);}).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'供应商历史读取失败');}).finally(finish);return()=>{controller.abort();finish();};},[supplierId,retry]);
+ return <>{error&&<p role="alert">{error} <Button onClick={()=>setRetry(value=>value+1)}>重试历史</Button></p>}<ol className="supplier-history">{history.map(version=><li key={version.version}><div><b>版本 {version.version}</b><StatusBadge tone={version.active?'success':'warning'}>{version.active?'启用':'停用'}</StatusBadge></div><p>{version.changeReason}</p><small>{new Date(version.changedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})} · 修改人 {version.changedBy}</small></li>)}</ol></>;
 }

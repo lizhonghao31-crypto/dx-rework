@@ -15,7 +15,8 @@ describe("sourcing list parity and Root logical deletion", () => {
     expect(page).toContain("<dt>生产单价</dt><dd>");
     expect(page).toContain("<dt>加工厂</dt><dd>");
     expect(page).toContain("<dt>交货日期</dt><dd>");
-    expect(page).toContain('canDelete={user?.isRoot === true}');
+    expect(page).toContain('canDelete={currentResult&&user?.isRoot===true}');
+    expect(page).toContain('if(!currentResult)return;');
     expect(page).toContain("confirmInApp(");
     expect(page).toContain('method: "DELETE"');
   });

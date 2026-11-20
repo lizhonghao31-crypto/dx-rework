@@ -1,3 +1,4 @@
+import {useForegroundWait} from "./foreground-loading.js";
 import {lazyBusinessPage} from './lazy-business-page.js';
 import {CurrentProductionReturn} from './development-workspace-return.js';
 import {AcceptanceClockPanel} from './acceptance-clock-panel.js';
@@ -64,13 +65,22 @@ function LegacyLanding() {
 
 function OrderDetail({ id }: { id: string }) {
   const [order, setOrder] = useState<DigitalOrder | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState("");
-  useEffect(() => {
-    let live = true;
-    void Promise.all([digitalRequest<DigitalOrder>(`orders/${id}`), digitalRequest<DigitalAccessOptions>("access/options")])
-      .then(([next, flags]) => { if (live) { setOrder(next); setAccess(flags); } }).catch(reason => { if (live) setError(reason.message); });
-    return () => { live = false; };
-  }, [id]);
-  if (error) return <><Button onClick={() => void closeDetail()}>返回</Button><p role="alert">{error}</p></>;
+  const [attempt,setAttempt]=useState(0);
+  useForegroundWait((!order||!access)&&!error?`digital-order:${id}:${attempt}`:undefined);
+  useEffect(()=>{
+    const controller=new AbortController(),init={signal:controller.signal};
+    setOrder(null);setAccess(null);setError("");
+    void Promise.all([
+      digitalRequest<DigitalOrder>(`orders/${id}`,"GET",undefined,undefined,init),
+      digitalRequest<DigitalAccessOptions>("access/options","GET",undefined,undefined,init),
+    ]).then(([next,flags])=>{
+      if(!controller.signal.aborted){setOrder(next);setAccess(flags);}
+    }).catch(reason=>{
+      if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:"原订单读取失败");
+    });
+    return()=>controller.abort();
+  },[id,attempt]);
+  if(error)return <><Button onClick={()=>void closeDetail()}>返回</Button><p role="alert">{error}</p><Button onClick={()=>setAttempt(value=>value+1)}>重新读取</Button></>;
   if (!order) return <p role="status">正在读取原订单…</p>;
   if (!access) return <p role="status">正在读取原订单权限…</p>;
   const detailUrl = (kind: string, value: string) => `${urls.pageUrl("ui/digital-production")}?${kind}=${encodeURIComponent(value)}&returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`;
@@ -131,10 +141,24 @@ function HistoricalSourceAttach({ order, onAttached }: { order: DigitalOrder; on
 function TaskDetail({ id }: { id: string }) {
   const [task,setTask]=useState<DigitalTask|null>(null);
   const [access, setAccess] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState("");
-  useEffect(() => { let live = true; setAccess(null);setTask(null);setError("");void Promise.all([digitalRequest<DigitalAccessOptions>("access/options"),digitalRequest<DigitalTask>(`tasks/${id}`)]).then(([next,current]) => { if (live) {setAccess(next);setTask(current);} }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false; }; }, [id]);
+  const [attempt,setAttempt]=useState(0);
+  useForegroundWait((!access||!task)&&!error?`digital-task:${id}:${attempt}`:undefined);
+  useEffect(()=>{
+    const controller=new AbortController(),init={signal:controller.signal};
+    setAccess(null);setTask(null);setError("");
+    void Promise.all([
+      digitalRequest<DigitalAccessOptions>("access/options","GET",undefined,undefined,init),
+      digitalRequest<DigitalTask>(`tasks/${id}`,"GET",undefined,undefined,init),
+    ]).then(([next,current])=>{
+      if(!controller.signal.aborted){setAccess(next);setTask(current);}
+    }).catch(reason=>{
+      if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:"原任务读取失败");
+    });
+    return()=>controller.abort();
+  },[id,attempt]);
   if(task?.orderId&&task.taskKind==='bulk_pattern'&&digitalTaskView(window.location.search)!=='correct')return <BulkTaskWorkbench key={id} task={task} onClose={()=>void closeDetail()}/>;
   if(task?.sourceId&&task.taskKind.startsWith('development_')&&digitalTaskView(window.location.search)!=='correct')return <TaskWorkbenchSample key={id} task={task} onClose={()=>void closeDetail()}/>;
-  return <><div className="pattern-actions"><Button onClick={() => void closeDetail()}>返回</Button></div>{error && <p role="alert">{error}</p>}{access ? task?.taskKind.startsWith("development_") ? <DigitalPatternWorkspace key={id} selectedOnly initialTask={task} initialAccess={access}/> : <DigitalTasksPanel options={access} taskId={id} {...(task?.taskId===id?{initialTask:task}:{})} compact view={digitalTaskView(window.location.search)} /> : !error && <p role="status">正在读取原任务…</p>}</>;
+  return <><div className="pattern-actions"><Button onClick={() => void closeDetail()}>返回</Button></div>{error&&<><p role="alert">{error}</p><Button onClick={()=>setAttempt(value=>value+1)}>重新读取</Button></>}{access ? task?.taskKind.startsWith("development_") ? <DigitalPatternWorkspace key={id} selectedOnly initialTask={task} initialAccess={access}/> : <DigitalTasksPanel options={access} taskId={id} {...(task?.taskId===id?{initialTask:task}:{})} compact view={digitalTaskView(window.location.search)} /> : !error && <p role="status">正在读取原任务…</p>}</>;
 }
 
 /** Native detail consumers; no order/task list or creation state. */

@@ -1,7 +1,7 @@
 import {DigitalJourneyCockpit} from './digital-journey-cockpit.js';
 import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {JourneyReturnContextSchema,journeyReturnUrl} from '@dx-rework/contracts/digital-production-journey';
-import {cockpitContext,type CockpitContext} from './digital-journey-cockpit-model.js';
+import {cockpitContext,cockpitQuery,type CockpitContext} from './digital-journey-cockpit-model.js';
 import {createWebUrls} from '../url-contract.js';
 import {canLeaveInternalPage,registerInternalNavigationGuard} from './internal-navigation.js';
 import {useCockpitReads} from './cockpit-reads.js';
@@ -20,7 +20,9 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  const returnContextUrl=(context:CockpitContext)=>journeyReturnUrl(context)+(calendarReturn?'&'+new URLSearchParams({deliveryReturn:calendarReturn}):'')+(optedOut?'&cockpitAstryx=off':'');
  const [context,setContext]=useState<CockpitContext>(()=>({...cockpitContext(window.location.search),scope:cockpitContext(window.location.search).scope??'production'})),[refresh,setRefresh]=useState(0),[contextError,setContextError]=useState(''),[notice,setNotice]=useState('');
  const [searchDraft,setSearchDraft]=useState({value:context.search,pending:false});
- const reads=useCockpitReads(context,refresh,'home'),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
+ const readKey=context.selected?JSON.stringify([context.selected,context.round]):cockpitQuery(context);
+ const quietRefresh=useRef<{revision:number;key:string}|null>(null);
+ const reads=useCockpitReads(context,refresh,'home',quietRefresh.current?.revision===refresh&&quietRefresh.current.key===readKey),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
  const session=cachedVerifiedSession(),canDelete=Boolean(session&&session!=='denied'&&session.status==='authorized'&&session.user.isRoot);
  const ready=context.selected?Boolean(reads.detail)&&!reads.detailLoading:Boolean(reads.data)&&!['preparing','loading'].includes(reads.listPhase);
  // Live observation advances visible time locally, not the whole query.
@@ -61,6 +63,13 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
   if(patch){const next={...context,...patch};setContext(next);window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(returnContextUrl(next)));setNotice('原节点已变更，已定位到所属阶段');}
  },[reads.detail,reads.detailLoading,context.focus,context.row,context.materialNode]);
  const draftChanged=useCallback((value:string,pending:boolean)=>setSearchDraft(current=>current.value===value&&current.pending===pending?current:{value,pending}),[]);
- const reload=()=>{remember();if(!reads.identity)void verifySession(true);setRefresh(value=>value+1);};
- return <div ref={root} className={astryx?'digital-cockpit dx-cockpit-astryx':'digital-cockpit'} onFocusCapture={remember}><CockpitAstryxScope enabled={astryx}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit canDelete={canDelete} identityKey={reads.identity} data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions">{calendarReturn&&<a className="journey-text-action" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(calendarReturn)}>返回交付点阵图</a>}<CockpitButton variant="secondary" onClick={reload}>刷新数据</CockpitButton></div>}/></CockpitAstryxScope></div>;
+ const reload=(silent=false)=>{
+  const waiting=context.selected?reads.detailLoading:['preparing','loading'].includes(reads.listPhase);
+  if(!silent&&waiting)return;
+  remember();
+  if(!reads.identity)void verifySession(true);
+  quietRefresh.current=silent?{revision:refresh+1,key:readKey}:null;
+  setRefresh(version=>version===refresh?version+1:version);
+ };
+ return <div ref={root} className={astryx?'digital-cockpit dx-cockpit-astryx':'digital-cockpit'} onFocusCapture={remember}><CockpitAstryxScope enabled={astryx}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit canDelete={canDelete} identityKey={reads.identity} data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={()=>reload(true)} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions">{calendarReturn&&<a className="journey-text-action" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(calendarReturn)}>返回交付点阵图</a>}<CockpitButton variant="secondary" onClick={()=>reload()}>刷新数据</CockpitButton></div>}/></CockpitAstryxScope></div>;
 }

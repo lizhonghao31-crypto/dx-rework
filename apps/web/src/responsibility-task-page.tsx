@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import { TodoResponseSchema, type TodoResponse } from "@dx-rework/contracts";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useState } from "react";
@@ -81,12 +82,14 @@ export function ResponsibilityTaskPage() {
       headers: { accept: "application/json" },
       ...(signal ? { signal } : {}),
     });
+    if(signal?.aborted)return;
     if (response.status === 404) {
       setState({ kind: "error", message: "该任务已不再分配给你，请返回我的待办查看当前任务。" });
       return;
     }
     if (!response.ok) throw new Error(`任务加载失败（${response.status}）`);
     const todo = TodoResponseSchema.parse(await response.json());
+    if(signal?.aborted)return;
     if (!isActionTodo(todo)) {
       setState({ kind: "error", message: "该任务暂不支持独立处理，请返回我的待办。" });
       return;
@@ -103,13 +106,13 @@ export function ResponsibilityTaskPage() {
   }, [todoId]);
 
   useEffect(() => {
-    const controller = new AbortController();
+    const controller = new AbortController(),finish=beginForegroundWait();
     void load(controller.signal).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         setState({ kind: "error", message: error instanceof Error ? error.message : "任务加载失败" });
       }
-    });
-    return () => controller.abort();
+    }).finally(finish);
+    return ()=>{controller.abort();finish();};
   }, [load]);
 
   if (state.kind === "loading") {

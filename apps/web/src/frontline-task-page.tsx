@@ -1,3 +1,4 @@
+import {useForegroundWait} from "./foreground-loading.js";
 import { LogoutButton } from "./session-exit.js";
 import {
   FrontlineTasksResponseSchema,
@@ -29,6 +30,7 @@ const requestedKind = (): FrontlineTaskKind | null => {
 export function FrontlineTaskPage() {
   const kind = useMemo(requestedKind, []);
   const [state, setState] = useState<State>({ kind: "loading" });
+  useForegroundWait(kind&&state.kind==="loading"?`frontline:tasks:${kind}`:undefined);
   const [selectedId, setSelectedId] = useState<string | null>(
     () => new URLSearchParams(window.location.search).get("rework"),
   );
@@ -50,7 +52,7 @@ export function FrontlineTaskPage() {
         throw new Error(body?.error?.message ?? "本人任务读取失败，请稍后重试。");
       }
       const result = FrontlineTasksResponseSchema.parse(await response.json());
-      setState({ kind: "ready", items: result.items });
+      if (!controller.signal.aborted) setState({ kind: "ready", items: result.items });
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         setState({ kind: "error", message: error instanceof Error ? error.message : "本人任务读取失败，请稍后重试。" });

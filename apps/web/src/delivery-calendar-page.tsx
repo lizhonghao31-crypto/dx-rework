@@ -1,3 +1,4 @@
+import {beginForegroundWait,useForegroundWait} from './foreground-loading.js';
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {Button} from '@dx-rework/ui';
 import {Pagination} from '@dx-rework/ui/production';
@@ -31,27 +32,39 @@ function PoTable({rows,total,page,value,onPage,orderHref,onOriginal,onHistory}:{
 export function DeliveryCalendarPage(){
  const seed=useRef(initial()),[state,setState]=useState(seed.current.state),[data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(seed.current.error),[refresh,setRefresh]=useState(0),[search,setSearch]=useState(state.search),[notice,setNotice]=useState('');
  const [history,setHistory]=useState<{row:DeliveryPo;data?:InstructionSheet;error?:string}|null>(null),historyGeneration=useRef(0),historyDialog=useRef<HTMLDialogElement>(null),generation=useRef(0),controller=useRef<AbortController|null>(null),heading=useRef<HTMLHeadingElement>(null),latest=useRef({state,data}),restored=useRef(false),pageSnapshot=useRef<{key:string;id:string}|null>(null);
- latest.current={state,data};
+ const loadedState=useRef<DeliveryPageState|null>(null),activeTarget=useRef<string|null>(null),requestedTarget=useRef(deliveryPagePath(seed.current.state)),passiveRefresh=useRef(false);
+ const shownState=data?loadedState.current??state:state;
+ latest.current={state:shownState,data};
  const remember=()=>{if(!latest.current.data)return;try{window.sessionStorage.setItem(returnKey,JSON.stringify({session:verifiedSessionIdentity(cachedVerifiedSession()),path:deliveryPagePath(latest.current.state),scroll:window.scrollY,at:Date.now()}));}catch{/* Returning still works without preference storage. */}};
  const change=(patch:Partial<DeliveryPageState>,paging=false)=>{
-  ++generation.current;controller.current?.abort();
   const next=DeliveryPageStateSchema.parse({...state,...patch,page:patch.page??1});
-  if(paging&&data)pageSnapshot.current={key:deliveryPagePath({...next,page:1}),id:data.snapshotId};else pageSnapshot.current=null;
-  setData(null);setLoading(true);setState(next);setSearch(next.search);setNotice('');setError('');window.history.replaceState(window.history.state,'',urls.pageUrl(deliveryPagePath(next)));
+  const nextPath=deliveryPagePath(next),nextScope=deliveryPagePath({...next,page:1});
+  if(requestedTarget.current===nextPath)return;
+  requestedTarget.current=nextPath;passiveRefresh.current=false;
+  ++generation.current;controller.current?.abort();
+  if(paging&&data&&deliveryPagePath({...shownState,page:1})===nextScope)
+   pageSnapshot.current={key:nextScope,id:data.snapshotId};
+  else pageSnapshot.current=null;
+  setLoading(true);setState(next);setSearch(next.search);setNotice('');setError('');window.history.replaceState(window.history.state,'',urls.pageUrl(nextPath));
  };
  useEffect(()=>registerInternalNavigationGuard(async()=>{remember();return true;}),[]);
- useEffect(()=>registerSessionInvalidator(()=>{++generation.current;++historyGeneration.current;controller.current?.abort();pageSnapshot.current=null;setData(null);setHistory(null);setRefresh(value=>value+1);}),[]);
+ useEffect(()=>registerSessionInvalidator(()=>{++generation.current;++historyGeneration.current;controller.current?.abort();pageSnapshot.current=null;loadedState.current=null;passiveRefresh.current=true;setData(null);setHistory(null);setRefresh(value=>value+1);}),[]);
  useEffect(()=>()=>{++generation.current;++historyGeneration.current;controller.current?.abort();},[]);
  useEffect(()=>{
   if(seed.current.error&&refresh===0)return;
-  const current=++generation.current,abort=new AbortController();controller.current?.abort();controller.current=abort;setLoading(true);setError('');setData(null);const identity=verifiedSessionIdentity(cachedVerifiedSession()),kind=state.view,key=deliveryPagePath({...state,page:1});
+  const current=++generation.current,abort=new AbortController();controller.current?.abort();controller.current=abort;
+  const target=deliveryPagePath(state);
+  activeTarget.current=target;
+  const finish=passiveRefresh.current?()=>{}:beginForegroundWait();
+  passiveRefresh.current=false;
+  setLoading(true);setError('');const identity=verifiedSessionIdentity(cachedVerifiedSession()),kind=state.view,key=deliveryPagePath({...state,page:1});
   void(async()=>{
    try{
     let result:Data;const cached=pageSnapshot.current?.key===key?pageSnapshot.current.id:undefined;
     if(state.page>1&&!cached&&kind!=='year'){
      const first=await digitalRequest<Data>(deliveryApiQuery(state,kind,{page:1}),'GET',undefined,undefined,{signal:abort.signal});
      const count='selectedDay'in first?first.selectedDay?.total??0:'total'in first?first.total:0,max=Math.max(1,Math.ceil(count/15)),page=Math.min(state.page,max);
-     if(page!==state.page){const next={...state,page};setState(next);window.history.replaceState(window.history.state,'',urls.pageUrl(deliveryPagePath(next)));setNotice('原页已无数据，已显示最后一页。');return;}
+     if(page!==state.page){if(current!==generation.current||abort.signal.aborted)return;const next={...state,page};requestedTarget.current=deliveryPagePath(next);setState(next);window.history.replaceState(window.history.state,'',urls.pageUrl(deliveryPagePath(next)));setNotice('原页已无数据，已显示最后一页。');return;}
      result=await digitalRequest<Data>(deliveryApiQuery(state,kind,{snapshotId:first.snapshotId}),'GET',undefined,undefined,{signal:abort.signal});
     }else result=await digitalRequest<Data>(deliveryApiQuery(state,kind,cached?{snapshotId:cached}:{}),'GET',undefined,undefined,{signal:abort.signal});
     if(current!==generation.current||abort.signal.aborted||identity!==verifiedSessionIdentity(cachedVerifiedSession()))return;
@@ -59,18 +72,29 @@ export function DeliveryCalendarPage(){
     if(kind==='year'&&(!('months'in result)||result.months.length!==12)||kind==='month'&&(!('selectedDay'in result)||!result.selectedDay))throw Error('交付视图数据返回不完整，请重新读取');
     const complete=(period:string,days:Array<{date:string}>)=>{const expected=deliveryMonthCells(period).filter(Boolean),found=new Set(days.map(day=>day.date));return expected.length===days.length&&expected.every(date=>found.has(date!));};
     if(kind==='year'&&'months'in result&&(result.year!==Number(state.date.slice(0,4))||result.months.some((month,index)=>month.month!==`${result.year}-${String(index+1).padStart(2,'0')}`||!complete(month.month,month.days)))||kind==='month'&&'monthSummary'in result&&(result.yearMonth!==state.date.slice(0,7)||!complete(result.yearMonth,result.days)||result.selectedDay?.selectedDate!==state.date)||kind==='day'&&'selectedDate'in result&&result.selectedDate!==state.date)throw Error('交付日期数据返回不完整，请重新读取');
-    setData(result);pageSnapshot.current={key,id:result.snapshotId};
+    loadedState.current=state;setData(result);pageSnapshot.current={key,id:result.snapshotId};
    }catch(value){if(current===generation.current&&!abort.signal.aborted){pageSnapshot.current=null;setData(null);setError(value instanceof Error?value.message:'交付读取失败，请重试');if(value instanceof DigitalRequestError&&[401,403].includes(value.status??0))setHistory(null);}}
-   finally{if(current===generation.current&&!abort.signal.aborted)setLoading(false);}
-  })();return()=>{abort.abort();};
+   finally{
+    finish();
+    if(controller.current===abort){controller.current=null;activeTarget.current=null;}
+    if(current===generation.current&&!abort.signal.aborted)setLoading(false);
+   }
+  })();return()=>{abort.abort();finish();if(controller.current===abort){controller.current=null;activeTarget.current=null;}};
  },[state,refresh]);
  useLayoutEffect(()=>{if(!data||restored.current)return;restored.current=true;try{const saved=JSON.parse(window.sessionStorage.getItem(returnKey)??'null');const elapsed=Date.now()-Number(saved?.at);if(saved?.session===verifiedSessionIdentity(cachedVerifiedSession())&&saved.path===deliveryPagePath(state)&&Number.isFinite(elapsed)&&elapsed>=0&&elapsed<30*60*1000){requestAnimationFrame(()=>window.scrollTo({top:Math.max(0,Number(saved.scroll)||0)}));window.sessionStorage.removeItem(returnKey);}}catch{/* No stored reading position. */}},[data,state]);
  useEffect(()=>{if(!history||!historyDialog.current)return;const dialog=historyDialog.current,previous=document.body.style.overflow;dialog.showModal();document.body.style.overflow='hidden';return()=>{dialog.close();document.body.style.overflow=previous;};},[Boolean(history)]);
+ useForegroundWait(history&&!history.data&&!history.error?JSON.stringify(['delivery-history',history.row.orderId,history.row.lineId]):undefined);
  const readHistory=async(row:DeliveryPo)=>{const request=++historyGeneration.current;setHistory({row});try{const result=await digitalRequest<InstructionSheet>(`orders/${row.orderId}/instruction`);if(!Array.isArray(result.dateRequests)||!Array.isArray(result.customerPoDates))throw Error('原交期记录返回不完整，请重试');if(request===historyGeneration.current)setHistory({row,data:result});}catch(value){if(request===historyGeneration.current)setHistory({row,error:value instanceof Error?value.message:'交期历史读取失败'});}};
  const closeHistory=()=>{++historyGeneration.current;setHistory(null);};
- const reload=()=>{++generation.current;controller.current?.abort();pageSnapshot.current=null;setData(null);setLoading(true);setRefresh(value=>value+1);};
+ const reload=()=>{
+  const target=deliveryPagePath(state);
+  if(activeTarget.current===target)return;
+  activeTarget.current=target;
+  ++generation.current;controller.current?.abort();pageSnapshot.current=null;
+  passiveRefresh.current=false;setLoading(true);setRefresh(value=>value+1);
+ };
  const year=data&&'months'in data?data:null,month=data&&'monthSummary'in data?data:null,day=data&&'daySummary'in data?data:month?.selectedDay??null,missing=data&&'kind'in data?data:null,poList=missing??day,values=data?summary(data):null,undated=year?.undatedSummary??month?.undatedSummary;
- const original=(row:DeliveryPo)=>urls.pageUrl('ui/digital-cockpit')+'?'+new URLSearchParams({selected:row.orderId,scope:'production',deliveryReturn:deliveryPagePath(state)});
+ const original=(row:DeliveryPo)=>urls.pageUrl('ui/digital-cockpit')+'?'+new URLSearchParams({selected:row.orderId,scope:'production',deliveryReturn:deliveryPagePath(shownState)});
  const missingView=(kind:DeliveryPageState['missingKind']='undated',all=false)=>change({view:'missing',missingKind:kind,backView:state.view==='year'?'year':state.view==='day'?'day':'month',allMissing:all?'1':undefined,group:'day'});
  const selectDate=(date:string,view:DeliveryPageState['view']=state.view)=>{try{change({date,view,group:'day',allMissing:undefined});}catch(value){setError(value instanceof Error?value.message:'请选择有效日期');}};
  const move=(amount:number)=>{try{if(state.view==='day')selectDate(addCalendarDays(state.date,amount),'day');else selectDate(shiftDeliveryMonth(state.date,amount),state.view);}catch(value){setError(value instanceof Error?value.message:'日期无效');}};
@@ -95,12 +119,12 @@ export function DeliveryCalendarPage(){
    <select aria-label="订单范围" value={state.scope} onChange={event=>change({scope:event.target.value as DeliveryPageState['scope']})}><option value="current">有效订单</option><option value="excluded">取消 / 特殊结案</option><option value="all">全部有权订单</option></select>{(state.search||state.customer||state.status||state.scope!=='current')&&<Button variant="secondary" onClick={()=>change({search:'',customer:undefined,status:undefined,scope:'current'})}>重置</Button>}<span className="delivery-date-role">客户出货交期</span>
   </section>
   {notice&&<p role="status">{notice}</p>}{error&&<section className="delivery-read-error" role="alert"><p>{error}</p><Button variant="secondary" onClick={()=>{seed.current.error='';window.history.replaceState(window.history.state,'',urls.pageUrl(deliveryPagePath(state)));reload();}}>重新读取</Button></section>}
-  <CalendarKpis value={values} period={state.view==='year'?'全年':state.view==='month'?'当月':state.view==='missing'?'本范围':''} poCard={state.view==='day'||state.view==='missing'}/>
+  <CalendarKpis value={values} period={shownState.view==='year'?'全年':shownState.view==='month'?'当月':shownState.view==='missing'?'本范围':''} poCard={shownState.view==='day'||shownState.view==='missing'}/>
   {values&&values.unknownQuantityPoCount>0&&<p className="delivery-missing-note">{values.unknownQuantityPoCount} 个PO数量待核，未按0件计入。<button className="delivery-link" onClick={()=>missingView('quantity')}>查看待核</button></p>}
-  {loading&&<p role="status" className="delivery-loading">正在读取本范围交付数据…</p>}
-  {year&&<div className="delivery-year-layout"><DeliveryYearGrid data={year} selectedDate={state.date} onMonth={value=>selectDate(value+'-01','month')} onDay={date=>selectDate(date,'month')}/><aside className="delivery-focus dx-production-panel"><h2>{year.year===Number(year.asOfBusinessDate.slice(0,4))?'本月重点':year.focusMonth.slice(0,4)+'年'+Number(year.focusMonth.slice(5))+'月重点'}</h2>{year.focusDays.map(value=><button type="button" className="delivery-focus-row" key={value.date} onClick={()=>selectDate(value.date,'month')}><strong>{displayDate(value.date)}</strong><span>应交 {deliveryQtyText(value.summary.orderedQty)} · 待交 {deliveryQtyText(value.summary.pendingQty)}</span><small>{value.summary.poCount} PO{value.summary.overduePoCount>0?` · 已逾期 ${value.summary.overduePoCount} PO`:''}</small></button>)}{!year.focusDays.length&&<p>该月暂无有权交付安排。</p>}<button type="button" className="delivery-focus-row" onClick={()=>missingView('undated')}><strong>未定交期 {undated?.poCount??0} PO</strong>{undated&&<span>{deliveryQtyText(undated.orderedQty)}</span>}</button></aside></div>}
-  {month&&<><div className="delivery-month-meta"><DeliveryStatusLegend/><button className="delivery-link" onClick={()=>missingView('undated')}>未定交期 {month.undatedSummary?.poCount??0} PO ›</button></div><DeliveryMonthGrid data={month} selectedDate={state.date} onSelect={date=>selectDate(date)}/></>}
-  {(day||missing)&&<section className="dx-production-panel delivery-detail-panel"><header className="delivery-section-heading"><h2>{missing?(state.allMissing==='1'?'全范围':'当前期间')+' · '+(missing.kind==='undated'?'未定交期':missing.kind==='quantity'?'数量待核':'待核PO'):displayDate(state.date)+' · '+(day!.listGroup==='overdue'?'截至今日已逾期':day!.listGroup==='before-selected'?'所选日前待交（尚未逾期）':'交付计划')}</h2>{day?.listGroup==='day'&&day.dateChangeSummary.poCount>0&&<small>{day.dateChangeSummary.poCount} 个PO有交期变更</small>}{state.view==='day'&&<Button variant="secondary" onClick={()=>change({view:'month',group:'day'})}>返回{Number(state.date.slice(5,7))}月月历</Button>}{missing&&<Button variant="secondary" onClick={()=>change({view:state.backView,group:'day',allMissing:undefined})}>返回交付视图</Button>}</header>
+  {loading&&!data&&<p role="status" className="delivery-loading">正在读取本范围交付数据…</p>}
+  {year&&<div className="delivery-year-layout"><DeliveryYearGrid data={year} selectedDate={shownState.date} onMonth={value=>selectDate(value+'-01','month')} onDay={date=>selectDate(date,'month')}/><aside className="delivery-focus dx-production-panel"><h2>{year.year===Number(year.asOfBusinessDate.slice(0,4))?'本月重点':year.focusMonth.slice(0,4)+'年'+Number(year.focusMonth.slice(5))+'月重点'}</h2>{year.focusDays.map(value=><button type="button" className="delivery-focus-row" key={value.date} onClick={()=>selectDate(value.date,'month')}><strong>{displayDate(value.date)}</strong><span>应交 {deliveryQtyText(value.summary.orderedQty)} · 待交 {deliveryQtyText(value.summary.pendingQty)}</span><small>{value.summary.poCount} PO{value.summary.overduePoCount>0?` · 已逾期 ${value.summary.overduePoCount} PO`:''}</small></button>)}{!year.focusDays.length&&<p>该月暂无有权交付安排。</p>}<button type="button" className="delivery-focus-row" onClick={()=>missingView('undated')}><strong>未定交期 {undated?.poCount??0} PO</strong>{undated&&<span>{deliveryQtyText(undated.orderedQty)}</span>}</button></aside></div>}
+  {month&&<><div className="delivery-month-meta"><DeliveryStatusLegend/><button className="delivery-link" onClick={()=>missingView('undated')}>未定交期 {month.undatedSummary?.poCount??0} PO ›</button></div><DeliveryMonthGrid data={month} selectedDate={shownState.date} onSelect={date=>selectDate(date)}/></>}
+  {(day||missing)&&<section className="dx-production-panel delivery-detail-panel"><header className="delivery-section-heading"><h2>{missing?(shownState.allMissing==='1'?'全范围':'当前期间')+' · '+(missing.kind==='undated'?'未定交期':missing.kind==='quantity'?'数量待核':'待核PO'):displayDate(shownState.date)+' · '+(day!.listGroup==='overdue'?'截至今日已逾期':day!.listGroup==='before-selected'?'所选日前待交（尚未逾期）':'交付计划')}</h2>{day?.listGroup==='day'&&day.dateChangeSummary.poCount>0&&<small>{day.dateChangeSummary.poCount} 个PO有交期变更</small>}{state.view==='day'&&<Button variant="secondary" onClick={()=>change({view:'month',group:'day'})}>返回{Number(shownState.date.slice(5,7))}月月历</Button>}{missing&&<Button variant="secondary" onClick={()=>change({view:state.backView,group:'day',allMissing:undefined})}>返回交付视图</Button>}</header>
    {related&&<div className="delivery-related">{related.listGroup!=='day'&&<button className="delivery-related-link" onClick={()=>change({group:'day'})}>本日交付计划</button>}<button className="delivery-related-link" onClick={()=>change({view:'day',group:'overdue'})}>截至今日已逾期 <strong>{related.overdueAsOfTodaySummary.poCount} PO</strong> ›</button>{state.date>related.asOfBusinessDate&&<button className="delivery-related-link" onClick={()=>change({view:'day',group:'before-selected'})}>所选日前待交（尚未逾期） <strong>{related.pendingBeforeSelectedNotYetOverdueSummary.poCount} PO</strong> ›</button>}<button className="delivery-related-link" onClick={()=>missingView('undated')}>未定交期 <strong>{related.missingSummary.missingDuePoCount} PO</strong> ›</button></div>}
    {month&&Boolean(month.relatedQuantityUnknownPoCount)&&<p className="delivery-missing-note">另有 {month.relatedQuantityUnknownPoCount} 个此前PO数量待核，未臆算欠交。<button className="delivery-link" onClick={()=>missingView('quantity',true)}>查看全范围数量待核</button></p>}
    {poList&&<PoTable rows={poList.items} total={poList.total} page={poList.page} value={'listSummary'in poList?poList.listSummary:poList.missingSummary} onPage={page=>change({page},true)} orderHref={original} onOriginal={remember} onHistory={row=>void readHistory(row)}/>}

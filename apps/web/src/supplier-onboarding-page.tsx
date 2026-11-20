@@ -1,3 +1,4 @@
+import {beginForegroundWait} from "./foreground-loading.js";
 import {supplierRequestFilters,supplierRequestListPath,supplierRequestReturnPath} from "./supplier-workspace-query.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
@@ -64,6 +65,7 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
   const [initialFilters]=useState(()=>({...supplierRequestFilters(window.location.search),explicitStatus:new URLSearchParams(window.location.search).has("status")}));
   const [query, setQuery] = useState(initialFilters.q), [status, setStatus] = useState<SupplierOnboardingStatus | "all">(initialFilters.status);
   useEffect(()=>{if(!requestId)window.history.replaceState(window.history.state,"",pageUrl(supplierRequestListPath(query,status)));},[query,status,requestId]);
+  const quietReread=useRef(false);
   const lock = useRef(false), alive = useRef(true), operation = useRef<{ fingerprint: string; key: string } | null>(null);
   const creating = requestId === "new", reviewer = user ? canApproveSupplier(user) : false, reader = user ? canReadSupplierApplications(user) : false, applicant = user ? canRequestSupplier(user) : false;
   const baseDraft = detail ? supplierApplicationDraft(detail.profile) : emptyDraft();
@@ -88,10 +90,10 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
   }, [providedUser]);
   useEffect(() => { if(user&&!initialFilters.explicitStatus)setStatus(reviewer ? "pending_approval" : "all"); }, [reviewer,user,initialFilters.explicitStatus]);
   useEffect(() => {
-    if (!user || (!reader && !applicant)) { setLoading(false); return; }
-    const controller = new AbortController(); setError(""); setLoading(true);
+    if(!user||(!reader&&!applicant)||creating){setLoading(false);return;}
+    const controller=new AbortController(),finish=quietReread.current?()=>{}:beginForegroundWait();
+    quietReread.current=false;setError("");setLoading(true);
     const load = async () => {
-      if (creating) { setLoading(false); return; }
       if (requestId) {
         setDetail(null);
         const value = await request<SupplierOnboardingDetail>(`supplier-onboarding/requests/${requestId}`, { signal: controller.signal });
@@ -102,8 +104,13 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
         if (!controller.signal.aborted) setItems(values);
       }
     };
-    void load().catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "加载失败"); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+    void load().catch(error=>{
+      if(!controller.signal.aborted)setError(error instanceof Error?error.message:"加载失败");
+    }).finally(()=>{
+      finish();
+      if(!controller.signal.aborted)setLoading(false);
+    });
+    return()=>{controller.abort();finish();};
   }, [user, requestId, creating, reader, applicant, reload]);
   const filtered = useMemo(() => items.filter(item => (status === "all" || item.status === status)
     && `${item.supplierName} ${item.applicantName} ${SUPPLIER_TYPE_LABELS[item.supplierType]}`.toLocaleLowerCase("zh-CN").includes(query.trim().toLocaleLowerCase("zh-CN"))), [items, status, query]);
@@ -119,11 +126,11 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
       if (!alive.current) return;
       guard.markClean(); operation.current = null; setEditing(false); setReason(""); setMessage(success);
       if (creating) { setDraft(emptyDraft()); lock.current = false; window.location.assign(pageUrl(`ui/suppliers/requests/${result.requestId}`)); }
-      else setReload(value => value + 1);
+      else{quietReread.current=true;setReload(value=>value+1);}
     } catch (e) {
       if (!alive.current) return;
       setError(e instanceof Error ? e.message : "提交失败，请重试");
-      if (reviewer && e instanceof RequestError && e.status === 409) setReload(value => value + 1);
+      if(reviewer&&e instanceof RequestError&&e.status===409){quietReread.current=true;setReload(value=>value+1);}
     } finally { lock.current = false; if (alive.current) setBusy(false); }
   };
   const save = () => {
@@ -155,7 +162,7 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
         <a className="dx-button" href={pageUrl("ui/suppliers/manage")}>资料维护</a><a className="dx-button" href={pageUrl("ui/suppliers")}>供应商目录</a>
       </div></header>
     {message ? <p className="supplier-center-notice" role="status">{message}</p> : null}
-    {error ? <div className="supplier-center-error" role="alert">{error}<Button disabled={busy} onClick={async () => { if (await guard.requestLeave()) { setEditing(false); setReload(v => v + 1); } }}>刷新资料</Button></div> : null}
+    {error ? <div className="supplier-center-error" role="alert">{error}<Button disabled={busy||loading} onClick={async () => { if (await guard.requestLeave()) { setEditing(false); setReload(v => v + 1); } }}>刷新资料</Button></div> : null}
     {loading ? <p role="status">加载申请资料…</p> : creating || editing ? <Surface className="supplier-profile"><h2>{creating ? "新增申请" : "修改退回申请"}</h2>
       {!creating && detail?.decisions.at(-1)?.reason ? <p className="supplier-return-reason">退回原因：{detail.decisions.at(-1)?.reason}</p> : null}
       <SupplierProfileForm draft={draft} onDraft={setDraft} busy={busy} ready={!loading} creating application submitLabel={creating ? "提交申请" : "修改后重新提交"} onSave={save}
