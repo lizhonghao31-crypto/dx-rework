@@ -15,6 +15,31 @@ async function openCockpitNavigation(page:Page,afterNavigate=()=>{}){
  for(const group of await groups.all())if(!await group.evaluate(node=>(node as HTMLDetailsElement).open))await group.locator(':scope > summary').click();
  await link.waitFor();await link.click();afterNavigate();await homeReady(page);
 }
+function observeShellFrames(){
+ const frames:Array<{width:number;height:number;layout:string;background:string;backgroundImage:string;underline:string;logout:string}>=[];
+ Object.assign(window,{dxShellFrames:frames});
+ function frame(){
+  const aside=document.querySelector<HTMLElement>('.app-shell>aside');
+  const link=aside?.querySelector<HTMLElement>('a[href$="/ui/my-tasks"]:has(svg)');
+  const icon=link?.querySelector('svg'),logout=aside?.querySelector('.shell-brand-row button');
+  if(aside&&link&&icon&&logout){
+   const box=icon.getBoundingClientRect(),style=getComputedStyle(aside);
+   if(box.width&&box.height&&style.display!=='none')frames.push({width:box.width,height:box.height,layout:style.display,background:style.backgroundColor,backgroundImage:style.backgroundImage,underline:getComputedStyle(link).textDecorationLine,logout:getComputedStyle(logout).display});
+  }
+  requestAnimationFrame(frame);
+ }
+ requestAnimationFrame(frame);
+}
+const shellFrames=async(page:Page)=>page.evaluate(()=>Reflect.get(window,'dxShellFrames'));
+function expectStyledShell(frames:Awaited<ReturnType<typeof shellFrames>>){
+ expect(frames.length).toBeGreaterThan(0);
+ for(const frame of frames){
+  expect(frame).toMatchObject({width:20,height:20,layout:'flex',underline:'none',logout:'flex'});
+  expect(frame.background==='rgb(23, 44, 60)'||
+   frame.backgroundImage==='linear-gradient(110deg, rgb(17, 31, 54), rgb(21, 37, 62))').toBe(true);
+ }
+}
+
 (url?describe.sequential:describe.skip)('PERF04 real production module graph with original signed PostgreSQL identity',()=>{
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
  const asset=(name:string)=>{const file=Object.entries(h.assetManifest!).find(([id])=>id.endsWith('/'+name))?.[1].file;expect(file,'dynamic production asset for '+name).toBeTruthy();return '/'+file!;};
@@ -117,6 +142,65 @@ async function openCockpitNavigation(page:Page,afterNavigate=()=>{}){
    const start=h.resources.length;await page.goto(h.base+'/ui/employee-access');await page.getByRole('heading',{name:'无权访问此页面',exact:true}).waitFor();
    expect(h.resources.slice(start).some(r=>r.path===asset('employee-access-page.tsx'))).toBe(false);
    expect((await page.request.get(h.base+'/api/auth/me')).status()).toBe(200);
+  }finally{await context.close();}
+ });
+ it('suppresses all unstyled shell frames when built entry CSS is slow or returns 404',async()=>{
+  const {context,page:original}=await h.open();
+  try{
+   const response=await original.request.get(h.base+'/ui/digital-cockpit?workspace=settings');
+   expect(response.ok()).toBe(true);
+   const entry=await original.evaluate(markup=>[...new DOMParser().parseFromString(markup,'text/html').querySelectorAll('link[rel="stylesheet"]')]
+    .map(link=>new URL(link.getAttribute('href')!,location.origin).pathname),await response.text());
+   expect(entry.length).toBeGreaterThan(0);
+   for(const fails of [false,true]){
+    const page=await context.newPage();
+    const requests=new Map<string,number>();
+    await page.addInitScript(observeShellFrames);
+    await page.route('**/assets/*.css',async route=>{
+     const path=new URL(route.request().url()).pathname;
+     if(!entry.includes(path))return route.continue();
+     requests.set(path,(requests.get(path)??0)+1);
+     await new Promise(resolve=>setTimeout(resolve,550));
+     if(fails)await route.fulfill({status:404,contentType:'text/css',body:''});
+     else await route.continue();
+    });
+    try{
+     await page.goto(h.base+'/ui/digital-cockpit?workspace=settings');
+     if(fails){
+      const fallback=page.getByRole('alert').filter({hasText:'页面样式暂时未能加载'});
+      await fallback.waitFor();
+      expect(await fallback.getByRole('button',{name:'刷新页面'}).count()).toBe(1);
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      expect(await page.locator('.app-shell').count()).toBe(0);
+      expect(await shellFrames(page)).toEqual([]);
+     }else{
+      await page.getByRole('tab',{name:'时效设置',exact:true}).waitFor();
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      expectStyledShell(await shellFrames(page));
+     }
+     expect([...requests.keys()].sort()).toEqual([...entry].sort());
+     expect([...requests.values()]).toEqual(entry.map(()=>1));
+     await page.screenshot({path:join(h.evidence,fails?'shell-entry-404.png':'shell-entry-slow.png')});
+    }finally{await page.close();}
+   }
+  }finally{await context.close();}
+ });
+ it('keeps the already styled shell and its original entry sheets throughout a settings CSS failure',async()=>{
+  const {context,page}=await h.open();
+  try{
+   await page.evaluate(observeShellFrames);
+   const stylesheetEntry=Object.entries(h.assetManifest!).find(([id])=>id.endsWith('/cockpit-production-settings.tsx'))?.[1];
+   const settingsCss=stylesheetEntry?.css?.find(name=>name.includes('cockpit-production-settings-'));
+   expect(settingsCss).toBeTruthy();
+   const sheets=await page.evaluateHandle(()=>[...document.head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].map(link=>[link,link.sheet]));
+   let attempts=0;
+   await page.route('**/'+settingsCss,async route=>{attempts++;await route.fulfill({status:404,contentType:'text/css',body:''});});
+   await page.getByRole('link',{name:'生产管理设置',exact:true}).click();
+   await page.getByRole('alert').filter({hasText:'页面暂时未能打开'}).waitFor();
+   await openCockpitNavigation(page);
+   expect(await page.evaluate(found=>found.every(([link,sheet])=>(link as HTMLLinkElement).isConnected&&(link as HTMLLinkElement).sheet===sheet),sheets)).toBe(true);
+   expectStyledShell(await shellFrames(page));
+   expect(attempts).toBe(1);
   }finally{await context.close();}
  });
  it('loads settings on demand and preserves an unsaved edit across the original parent navigation render',async()=>{
