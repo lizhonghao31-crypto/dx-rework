@@ -234,8 +234,10 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
   }});
   try{
    const {page}=tab,identity=page.locator('.digital-task-identity');
-   await expect.poll(()=>historyReads).toBe(1);
+   // This heading is based on the completed task read. The first history
+   // response is still held, so its request can start without gating the body.
    await identity.getByRole('heading',{name:style,exact:true}).waitFor();
+   await expect.poll(()=>historyReads,{timeout:12_000}).toBe(1);
    const history=page.locator('details').filter({has:page.getByText('历史记录与核实',{exact:true})}).last();
    await history.locator('summary').click();
    await history.getByRole('status').getByText('正在读取历史记录…',{exact:true}).waitFor();
