@@ -1,21 +1,21 @@
 import {acceptanceTaskNow,useAcceptanceClockUpdates} from './acceptance-business-time.js';
 import {StatusBadge} from '@dx-rework/ui';
-import type {BulkWorkroomResult} from '@dx-rework/contracts/bulk-preparation';
+import type {BulkPatternCardPage} from '@dx-rework/contracts/bulk-preparation';
 import {digitalTaskTiming} from '@dx-rework/domain/digital-task-deadline';
 import {digitalTaskStateLabels} from './digital-workspace-copy.js';
 
-type Item=BulkWorkroomResult['items'][number];
+type Item=BulkPatternCardPage['items'][number];
 // Existing fixed reason from BulkPreparationService.gates; the DTO has no closure flag.
 const specialClosureReason='母单已特殊结案，原实绩及历史继续保留';
-/** Read-only card projection. Classification, task permissions and completion facts stay on the original sheet. */
+/** Read-only card projection. Classification, task permissions and completion facts stay on the original preparation facts. */
 export function BulkPatternCard({item,href}:{item:Item;href:string}){
  useAcceptanceClockUpdates();
- const {sheet}=item,task=sheet.tasks.find(value=>value.taskKind==='bulk_pattern');
- const speciallyClosed=sheet.reasons.includes(specialClosureReason);
- const paper=sheet.facts.some(f=>f.kind==='纸样完成'),marker=sheet.facts.some(f=>f.kind==='唛架完成');
- const current=task?.state==='cancelled'?'原纸样任务已取消':task?.state==='completed'?'纸样任务已完成':paper&&marker?'纸样、唛架均已完成':task?.state==='blocked'?'纸样与唛架办理受阻':sheet.reasons.length||!sheet.preparationId?'核对大货准备条件':!sheet.facts.some(f=>f.kind==='纸样派交')?'等待纸样派工并交付':paper?'待完成唛架制作':marker?'待完成纸样制作':'制作纸样与唛架';
- const reasons=[...new Set([...sheet.reasons,...(task?.blockedReason?[task.blockedReason]:[])])];
- const lines=sheet.cutting.lines;
+ const {card}=item,task=card.task;
+ const speciallyClosed=card.reasons.includes(specialClosureReason);
+ const paper=card.facts.some(f=>f.kind==='纸样完成'),marker=card.facts.some(f=>f.kind==='唛架完成');
+ const current=task?.state==='cancelled'?'原纸样任务已取消':task?.state==='completed'?'纸样任务已完成':paper&&marker?'纸样、唛架均已完成':task?.state==='blocked'?'纸样与唛架办理受阻':card.reasons.length||!card.preparationId?'核对大货准备条件':!card.facts.some(f=>f.kind==='纸样派交')?'等待纸样派工并交付':paper?'待完成唛架制作':marker?'待完成纸样制作':'制作纸样与唛架';
+ const reasons=[...new Set([...card.reasons,...(task?.blockedReason?[task.blockedReason]:[])])];
+ const lines=card.lines;
  const po=(line:typeof lines[number])=>[line.poNumber||line.formalStyleNo||line.temporaryStyleNo,line.color].filter(Boolean).join(' · ');
  const deadline=!speciallyClosed&&task?.dueAt&&!['completed','cancelled'].includes(task.state)?task.dueAt:null;
  const overdue=deadline&&task?.state!=='pending'&&digitalTaskTiming({...task!,terminal:false},acceptanceTaskNow(task!,new Date())).state==='overdue';
