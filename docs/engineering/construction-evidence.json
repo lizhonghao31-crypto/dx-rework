@@ -1,81 +1,54 @@
 {
   "version": 1,
-  "base": "59a2f4f5488a6762930e4714e83799d4ecb6fcb3",
-  "sourceFingerprint": "a1dc7bf860e79f185959630e3473ead11c21b1c58d0022723e0f49509338043a",
+  "base": "3bcd2292ba779bf2d3a5f6a83098bc18b8ad48ce",
+  "sourceFingerprint": "6c33823d3e21a7e5923a81db169806c117c6866fde1f84f126f26915b0a75a7f",
   "rules": [
     {
-      "rule": "直接打开座舱详情时复用授权任务批量读取，原操作日志保持相同 actor、资源、范围和稳定游标。",
-      "source": "Eric 审定达兴全系统性能 v7 的 PR04。",
+      "rule": "受原工厂试点和读角色限制的生产风险，在同一事务及原排它锁内按订单结束旧提醒，按事实开启新风险；同一次风险保持已读。",
+      "source": "Eric 审定《达兴全系统性能治理 v7》06B 生产风险提醒批量投影。",
       "reads": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-log.ts",
-        "apps/api/src/production-platform/journey-search-metadata.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "apps/api/src/sourcing/production-closure-service.ts",
+        "apps/api/src/sourcing/production-reporting-service.ts",
+        "apps/api/src/todos/service.ts",
+        "tests/integration/production-closure-postgres.test.ts"
       ],
       "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/integration/production-closure-postgres.test.ts"
       ],
-      "initialization": "先确定原权限范围与业务时钟，再用同一读取上下文初始化页内任务事实；日志使用同一资源读会话与稳定分页快照。",
-      "dateAndPermission": "历史轮次、当前风险和真实日期仍读同一原来源，按既有 Root/管理/PMC/普通身份和任务范围判权；原权限矩阵独立验证。",
-      "expectation": "授权任务 1、15、50 条物化一次读取，保持原任务身份和角色；无关员工不可读。日志首屏和后续页不漏不重，外发关联节点、精确旧轮与被撤授权边界按原契约。",
+      "initialization": "试点原事实先按订单收敛，关闭旧风险与插入新风险是同一事务内的两次集合操作。无风险行只需关闭，不产生新风险。",
+      "dateAndPermission": "原 business asOf、能力与收件人范围不变。结束时使用原数据库 clock_timestamp，风险重新出现时按新提醒 ID 单独记录已读。",
+      "expectation": "事务内任一步失败可完整回滚；并发重试一个订单仍只有一期有效风险；已读不跨账号或新风险期。",
       "writes": [
-        "apps/api/src/production-platform/journey-log.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "apps/api/src/sourcing/production-closure-service.ts",
         "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "tests/integration/production-closure-postgres.test.ts"
       ],
       "checks": [
-        "pg-journey-scope",
-        "permission-unit"
+        "risk-episodes-transaction"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pg-journey-scope",
-      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/digital-journey-postgres.test.ts -t 'batches the authorized task conditions|reads five real log|retains authorized sourcing-task|keeps compact flow dates|reads one populated mother and its frozen SLA as PMC|only exposes|exact read|uses the original assignment|validates read routes' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr04/new-base-roles.json",
-      "context": "已合 10A 的精确基线后复验生产原读、批量任务条件、PMC 只读与越权保护、旧轮次与原日志客服路径。真隔离 PostgreSQL 13.23 与非超级用户角色。同轮合入的待办角标纯 Web 变更不改变任何被测 API 输入。",
+      "id": "risk-episodes-transaction",
+      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/production-closure-postgres.test.ts -t 'routes one risk per person|projects multiple authorized production risks' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06b/final-transaction-pg13.json",
+      "context": "本地隔离 PostgreSQL 13.23 非超级用户，真实原单与业务录入，覆盖锁、事务回滚、并发更替、权限和已读状态。首次测试夹具兼容性失败日志独立留存。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr04/new-base-roles.json",
-      "logSha256": "456d1ac2f9655167884e4e8330b250447496e918af7e262819c9ff28007bf4ae",
-      "sourceFingerprint": "a1dc7bf860e79f185959630e3473ead11c21b1c58d0022723e0f49509338043a",
-      "testedHead": "957107e6ab92ef898ecb7c4b81a9bd71c7baf6a8",
-      "passed": 7,
+      "log": "/tmp/dx-performance-v7/pr06b/final-transaction-pg13.json",
+      "logSha256": "0ce4ede5fb4785c2a7d8793077580fe6df2c95f59fcfa696c4f5cb82f9c0ab31",
+      "sourceFingerprint": "6c33823d3e21a7e5923a81db169806c117c6866fde1f84f126f26915b0a75a7f",
+      "testedHead": "59f98979f35c41a6a08a9b339f23b83a4987d042",
+      "passed": 2,
       "failed": 0,
-      "skipped": 31,
-      "startedAt": "2026-11-20T16:12:24.595000Z",
-      "endedAt": "2026-11-20T16:12:34.905425Z",
+      "skipped": 19,
+      "startedAt": "2026-11-20T17:03:52.024000Z",
+      "endedAt": "2026-11-20T17:03:58.974682Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "456d1ac2f9655167884e4e8330b250447496e918af7e262819c9ff28007bf4ae"
-        }
-      ]
-    },
-    {
-      "id": "permission-unit",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr04/final-pmc.json",
-      "context": "PMC 独立只读矩阵与原管理、普通和兼任角色撤回验证。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr04/final-pmc.json",
-      "logSha256": "db61ee911fdb65b0f655b81bb6a9ea4909ea51e686ca22060d8ce959826b7efc",
-      "sourceFingerprint": "a1dc7bf860e79f185959630e3473ead11c21b1c58d0022723e0f49509338043a",
-      "testedHead": "361db3d0a117941f09b9b37315701e3cceb64edc",
-      "passed": 41,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T16:24:54.832000Z",
-      "endedAt": "2026-11-20T16:24:58.606690Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "db61ee911fdb65b0f655b81bb6a9ea4909ea51e686ca22060d8ce959826b7efc"
+          "sha256": "0ce4ede5fb4785c2a7d8793077580fe6df2c95f59fcfa696c4f5cb82f9c0ab31"
         }
       ]
     }

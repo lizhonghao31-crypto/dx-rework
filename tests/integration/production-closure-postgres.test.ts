@@ -1,5 +1,6 @@
 import {vi as correctnessBudget} from 'vitest';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
 // Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
 correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
@@ -59,10 +60,12 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   )`);
   const client=await database.connect();
   try {
+    const serverVersion=Number((await client.query("SHOW server_version_num")).rows[0].server_version_num);
     for(const item of manifest.migrations) {
       await client.query("BEGIN");
       try {
-        await client.query(await readFile(new URL(`../../apps/api/migrations/${item.version}.sql`,import.meta.url),"utf8"));
+        const sql=await readFile(new URL(`../../apps/api/migrations/${item.version}.sql`,import.meta.url),"utf8");
+        await client.query(migrationExecutionSql({...item,sql},serverVersion));
         await client.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[item.version,item.checksum]);
         await client.query("COMMIT");
       } catch(error) { await client.query("ROLLBACK"); throw error; }
@@ -385,6 +388,68 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     [receipt.value.receiptId],
   )).rowCount).toBe(0);
  },testExecutionConfig.correctnessTimeoutMs);
+
+ it("projects multiple authorized production risks with one update and one insert per read",async()=>{
+  const pilot=factories[0]!;
+  await closure.setPilot(root(),{supplierId:pilot,enabled:true});
+  const orders=await Promise.all(['BATCH-LEFT','BATCH-RIGHT'].map(suffix=>create(pilot,suffix)));
+  for(const order of orders)await reporting.report(root(),order.productionOrderId,{position:1,businessDate:today(),quantity:5},randomUUID());
+
+  const sql:string[]=[],transaction:string[]=[];
+  let failInsert=false;
+  const traced=new Proxy(database,{get(target,name){
+   if(name==='connect')return async()=>{
+    const actual=await target.connect();
+    return new Proxy(actual,{get(client,key){
+     if(key==='query')return (statement:string,args?:unknown[])=>{
+      if(/^(?:BEGIN|COMMIT|ROLLBACK|SELECT pg_advisory_xact_lock)/.test(statement))transaction.push(statement);
+      if(/^(?:UPDATE|INSERT INTO) sourcing_production_alerts/.test(statement)){
+       sql.push(statement);transaction.push(statement.split(" ",1)[0]!);
+      }
+      if(failInsert&&statement.startsWith("INSERT INTO sourcing_production_alerts"))throw Error("TEST insert failure after resolution");
+      return client.query(statement,args);
+     };
+     const value:unknown=Reflect.get(client,key);
+     return typeof value==='function'?value.bind(client):value;
+    }});
+   };
+   const value:unknown=Reflect.get(target,name);
+   return typeof value==='function'?value.bind(target):value;
+  }});
+  const counted=new ProductionClosureService(traced);
+  const previous=await closure.todos(merch());
+  const expected=previous.filter(todo=>orders.some(order=>order.productionOrderId===todo.entityId));
+  expect(expected).toHaveLength(2);
+  await closure.markRead(merch(),expected[0]!.todoId);
+  const rows=await counted.todos(merch());
+  expect(sql).toHaveLength(2);
+  expect(sql[0]).toMatch(/^UPDATE/);
+  expect(sql[1]).toMatch(/^INSERT/);
+  expect(rows.find(todo=>todo.todoId===expected[0]!.todoId)).toMatchObject({readAt:expect.any(String),unread:false});
+  expect(rows.find(todo=>todo.todoId===expected[1]!.todoId)).toMatchObject({unread:true});
+
+  const later=()=>new Date(Date.now()+3*86400000),changing=new ProductionClosureService(traced,undefined,later);
+  const ids=orders.map(order=>order.productionOrderId);
+  const snapshot=async()=>(await database.query(
+   "SELECT alert_id,production_order_id,kind,resolved_at FROM sourcing_production_alerts WHERE production_order_id=ANY($1::uuid[]) ORDER BY alert_id",[ids],
+  )).rows;
+  const before=await snapshot();
+  expect(before).toHaveLength(2);
+  transaction.length=0;failInsert=true;
+  await expect(changing.todos(merch())).rejects.toThrow("TEST insert failure after resolution");
+  expect(transaction).toEqual(["BEGIN","SELECT pg_advisory_xact_lock(hashtext('production-closure'))","UPDATE","INSERT","ROLLBACK"]);
+  expect(await snapshot()).toEqual(before);
+
+  failInsert=false;
+  const [merchandiser,owner]=await Promise.all([changing.todos(merch()),changing.todos(boss())]);
+  const replacements=merchandiser.filter(todo=>ids.includes(todo.entityId));
+  expect(replacements).toHaveLength(ids.length);
+  expect(replacements.every(todo=>todo.unread&&todo.category==="production_stale"&&!expected.some(old=>old.todoId===todo.todoId))).toBe(true);
+  expect(owner.filter(todo=>ids.includes(todo.entityId)).map(todo=>todo.todoId)).toEqual(replacements.map(todo=>todo.todoId));
+  const after=await snapshot();
+  expect(after.filter(row=>row.resolved_at)).toHaveLength(ids.length);
+  expect(after.filter(row=>!row.resolved_at)).toHaveLength(ids.length);
+ });
 
  it("excludes only the confirmed production object with Root audit, version protection and replay",async()=>{
   const order=await create(factories[0]!,"EXCLUDE"),id=order.productionOrderId;
