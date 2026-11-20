@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "adc8652daad5b1395bc30b197a40bdbf4d7337e9",
-  "sourceFingerprint": "7e8d84185e19298b0fac09cc6a47efa2d79052bed0112106f5a47d0a15e40ca3",
+  "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
   "rules": [
     {
       "rule": "角标只共享当前授权身份和会话代次的在途读取。隐藏页暂停定时刷新，恢复可见和已读后的必要刷新继续。",
@@ -16,7 +16,7 @@
         "tests/unit/responsibility-queue-refresh.test.ts",
         "tests/acceptance/todo-content-read-browser.mjs"
       ],
-      "initialization": "同代次读取只共享当前 Promise，身份或权限变化清除旧结果。已读若发生在旧读取中排一次刷新。页面回到可见仍刷新。",
+      "initialization": "同代次只共享当前 Promise。身份或权限变化丢弃旧结果。已读发生在旧读取时，追读标记跟随旧请求，离开页面或换 Shell 不丢。重新可见仍刷新。",
       "dateAndPermission": "使用当前已验证身份和授权代次、保留角标接口的既有校验及业务时钟，不缓存跨身份或旧代次数据。",
       "expectation": "两次同身份并发拉取只发一条，隐藏时不自动轮询，恢复可见继续，已读后取新值，旧身份的迟到响应不提交。",
       "writes": [
@@ -36,24 +36,24 @@
   "checks": [
     {
       "id": "indicator-scheduler",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/responsibility-queue-refresh.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06a/on-final-base.json",
-      "context": "Vitest 假时钟及可控请求，验证保留责任列表手动刷新，隐藏/可见、同身份并发、已读的追读、同会话权限代次及换人。无外部服务。",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/responsibility-queue-refresh.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06a/remount-unit.json",
+      "context": "原责任队列仍手动刷新。受控请求覆盖同账号在途合并、隐藏/恢复、会话权限切换、跨页面卸载前到达的已读在新挂载只补一次，旧响应不展示。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr06a/on-final-base.json",
-      "logSha256": "79c92e06307984621f8e9c4f5796dd7c8c18d0d77d7b425bc22b388ed1b551ce",
-      "sourceFingerprint": "7e8d84185e19298b0fac09cc6a47efa2d79052bed0112106f5a47d0a15e40ca3",
-      "testedHead": "eb01f619d0c2ae100a2cfdc9484285352438b3ca",
-      "passed": 3,
+      "log": "/tmp/dx-performance-v7/pr06a/remount-unit.json",
+      "logSha256": "e0791b0c2ed8d3bc8319ade7cc48db1df1e4531be5d949f597dd078bf3d3e17b",
+      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
+      "testedHead": "ac539aa9a7121678e9eabbf37d02c62921bfdfd3",
+      "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T15:58:13.482000Z",
-      "endedAt": "2026-11-20T15:58:14.622915Z",
+      "startedAt": "2026-11-20T16:04:21.789000Z",
+      "endedAt": "2026-11-20T16:04:22.860251Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "79c92e06307984621f8e9c4f5796dd7c8c18d0d77d7b425bc22b388ed1b551ce"
+          "sha256": "e0791b0c2ed8d3bc8319ade7cc48db1df1e4531be5d949f597dd078bf3d3e17b"
         }
       ]
     },
@@ -66,7 +66,7 @@
       "exitCode": 0,
       "log": "/tmp/dx-performance-v7/pr06a/native-shell-warm.json",
       "logSha256": "36945e7160391d41d17f6c986b4e3a702bb918c4f2f67169839e26edf7277919",
-      "sourceFingerprint": "7e8d84185e19298b0fac09cc6a47efa2d79052bed0112106f5a47d0a15e40ca3",
+      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
       "testedHead": "bcaee4488461cc90bf330e07573c31280352039e",
       "passed": 1,
       "failed": 0,
@@ -82,20 +82,20 @@
     },
     {
       "id": "indicator-cross-tab-browser",
-      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=620 TMPDIR=/dev/shm/dxperf-run.BJ5pMC TODO_READ_EVIDENCE=/dev/shm/dxperf-run.BJ5pMC/pr06a-cross-tab PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node tests/acceptance/todo-content-read-browser.mjs",
-      "context": "真实 Chromium、原 Shell 与两标签页 BroadcastChannel。真实前端阅读触发已读写入 TEST HTTP 夹具，延迟已生成的旧回复，再核仅一次追读、待办一条卡片、隐藏与异账号。原脚本所有 18 项无错误。不是数据库业务写入测试。",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=620 TMPDIR=/dev/shm/dxperf-run.BJ5pMC TODO_READ_EVIDENCE=/dev/shm/dxperf-run.BJ5pMC/pr06a-remount-browser PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node tests/acceptance/todo-content-read-browser.mjs",
+      "context": "真实 Chromium、原 Shell 与两标签页 BroadcastChannel。合成 TEST HTTP 的旧响应和已读，保留待办一条，只有一次有效补读，隐藏和异账号不增加请求。全部18项通过。起点以紧邻的本地类型检查结束为下界。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr06a/cross-tab-browser.json",
-      "logSha256": "95a1e54e29af3da0d8b33b29f12e877ca43f0669bdc8b7c70fb63122eb28e87a",
-      "sourceFingerprint": "7e8d84185e19298b0fac09cc6a47efa2d79052bed0112106f5a47d0a15e40ca3",
-      "testedHead": "c7c4c21194c9880111caeb9a138d599937aa7277",
+      "log": "/tmp/dx-performance-v7/pr06a/remount-browser.json",
+      "logSha256": "a52db70b66c4503876d2fe02994313b72de04eb49bb08aca279c59a64132c3ea",
+      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
+      "testedHead": "ac539aa9a7121678e9eabbf37d02c62921bfdfd3",
       "passed": 18,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T15:37:37.862943Z",
-      "endedAt": "2026-11-20T15:38:06.663413Z"
+      "startedAt": "2026-11-20T16:06:26.490952Z",
+      "endedAt": "2026-11-20T16:06:51.499322Z"
     }
   ]
 }

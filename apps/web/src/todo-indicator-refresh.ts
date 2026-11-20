@@ -16,6 +16,7 @@ export function subscribeTodoRead(refresh:()=>void|Promise<void>){
 
 export const installTodoIndicatorRefresh = (
   refresh: () => void | Promise<void>,
+  markReadInFlight?: () => boolean,
 ): (() => void) => {
   let active = false;
   let refreshAfterRead = false;
@@ -44,7 +45,7 @@ export const installTodoIndicatorRefresh = (
   run();
   const interval = window.setInterval(handleVisibility, TODO_INDICATOR_POLL_INTERVAL_MS);
   document.addEventListener("visibilitychange", handleVisibility);
-  const unsubscribe = subscribeTodoRead(() => run(true));
+  const unsubscribe = subscribeTodoRead(() => { if (!markReadInFlight?.()) run(true); });
   return () => {
     stopped = true;
     window.clearInterval(interval);

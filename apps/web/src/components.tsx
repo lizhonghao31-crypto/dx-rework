@@ -27,7 +27,7 @@ import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
-import { isCurrentTodoIndicatorActor, readTodoIndicator } from "./todo-indicator-read.js";
+import { isCurrentTodoIndicatorActor, markTodoIndicatorRead, readTodoIndicator } from "./todo-indicator-read.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
 import { NavigationIcon } from "./navigation-icons.js";
@@ -348,7 +348,8 @@ export function Shell({
       setPendingTodoCount(indicator.pendingCount);
       window.dispatchEvent(new CustomEvent("dx-rework:todo-refresh", { detail: { actorId, unreadCount: indicator.unreadCount } }));
     };
-    const stopRefreshing = installTodoIndicatorRefresh(checkIndicator);
+    const stopRefreshing = installTodoIndicatorRefresh(checkIndicator,
+      () => markTodoIndicatorRead(currentUser.id, sessionCacheVersion()));
     const unsubscribe = registerSessionInvalidator(() => setPendingTodoCount(0));
     return () => {
       mounted = false;

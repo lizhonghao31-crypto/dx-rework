@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invalidateSession, sessionCacheVersion, verifySession } from "../../apps/web/src/auth-session.js";
-import { readTodoIndicator } from "../../apps/web/src/todo-indicator-read.js";
+import { markTodoIndicatorRead, readTodoIndicator } from "../../apps/web/src/todo-indicator-read.js";
 import { installTodoIndicatorRefresh, publishTodoRead } from "../../apps/web/src/todo-indicator-refresh.js";
 
 afterEach(() => {
@@ -136,5 +136,43 @@ describe("todo indicator refresh", () => {
     await expect(readTodoIndicator("second", sessionCacheVersion())).resolves.toBeNull();
     await expect(readTodoIndicator("first", firstEpoch)).resolves.toBeNull();
     expect(fetch).toHaveBeenCalledTimes(6);
+  });
+
+  it("retains one read-triggered refresh when the original Shell unmounts before its response", async () => {
+    vi.useFakeTimers();
+    const held=Promise.withResolvers<Response>();
+    const fetch=vi.fn().mockResolvedValueOnce(authorized("first"))
+      .mockReturnValueOnce(held.promise)
+      .mockResolvedValueOnce(Response.json({pendingCount:1,unreadCount:0},{headers:{"x-dx-rework-actor-id":"first"}}));
+    vi.stubGlobal("fetch",fetch);
+    await verifySession();
+    const tab=new EventTarget(),doc=Object.assign(new EventTarget(),{visibilityState:"visible"});
+    vi.stubGlobal("window",Object.assign(tab,{setInterval,clearInterval}));
+    vi.stubGlobal("document",doc);
+    const epoch=sessionCacheVersion(),seen=vi.fn();
+    const mount=()=>{
+      let mounted=true;
+      const stop=installTodoIndicatorRefresh(async ()=>{
+        const value=await readTodoIndicator("first",epoch);
+        if(mounted)seen(value);
+      },()=>markTodoIndicatorRead("first",epoch));
+      return ()=>{mounted=false;stop();};
+    };
+    const stopFirst=mount();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    publishTodoRead("first");
+    stopFirst();
+    const stopSecond=mount();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      held.resolve(indicator("first",1));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(seen).toHaveBeenCalledExactlyOnceWith({pendingCount:1,unreadCount:0});
+    } finally {
+      stopSecond();
+    }
   });
 });
