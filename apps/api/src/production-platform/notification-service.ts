@@ -38,6 +38,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { digitalTodoTarget } from "./notification-policy.js";
 import {readTaskAccessForPage} from './journey-selection-access.js';
+import {readJourneyCandidateCohort} from './journey-snapshot-reads.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const iso = (value: Date | string) => new Date(value).toISOString();
@@ -198,7 +199,26 @@ export class DigitalProductionNotificationService {
       }
     }
   }
-  private async readyTodoTasks(actor:TrustedActorContext,todoId?:string){
+  private async readTaskContext(db:Pick<Pool|PoolClient,'query'>,actor:TrustedActorContext,task:Task,missing:boolean) {
+    const policy=new DigitalProductionAccessPolicy(db);
+    const ownAction=!missing&&await policy.allowed(actor,"task",task.task_id,"execute");
+    const styleNo=task.production_order_id?task.order_style_no:task.source_id?task.source_style_no:null;
+    const readableAssignment=missing&&await policy.allowed(actor,"task",task.task_id,"technical");
+    const orderContext:TodoResponse['orderContext']=(ownAction||readableAssignment)&&styleNo
+      ?{reworkNo:null,orderNo:null,styleNo,supplierName:null,status:task.state,updatedAt:iso(task.created_at)}:null;
+    if(orderContext&&readableAssignment){
+      const linkedOrder=task.production_order_id??(task.source_id?(await db.query(
+        'SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[task.source_id])).rows[0]?.production_order_id:null);
+      // Source/task visibility alone does not reveal a linked mother's PO list.
+      if(linkedOrder&&await policy.allowed(actor,'order',linkedOrder,'technical'))
+        orderContext.poNumbers=(await db.query('SELECT po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',
+          [linkedOrder])).rows.flatMap(row=>row.po_number?[row.po_number as string]:[]);
+    }
+    const supplement=ownAction&&task.task_kind==='bulk_pattern'?await preparationSupplement(db,task.task_id):null;
+    return {orderContext,supplement};
+  }
+
+  private async readyTodoTasks(actor:TrustedActorContext,todoId:string|undefined,withMetadata:boolean){
     const db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -220,16 +240,20 @@ export class DigitalProductionNotificationService {
       }
       const access=await readTaskAccessForPage(db,viewer,visible.map(row=>row.task.task_id));
       const eligible=visible.filter(row=>access.get(row.task.task_id)?.technical);
+      // Search metadata uses the original actor and native access decisions.
+      // Cohort eligible reads on this one snapshot; count-only paths read none.
+      const contexts=new Map(withMetadata?await readJourneyCandidateCohort(db,eligible,async(client,{task,missing})=>
+        [task.task_id,await this.readTaskContext(client,actor,task,missing)] as const):[]);
       await db.query('COMMIT');
-      return {people,unified,eligible};
+      return {people,unified,eligible,contexts};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   async todos(actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]> {
     let targetSelected=false;
     if(projection?.todoId&&projection.select){const select=projection.select;projection={...projection,select:(key,load)=>{if(key.todoId===projection!.todoId)targetSelected=true;select(key,load);}};}
-    const ready=await this.readyTodoTasks(actor,projection?.todoId);
+    const ready=await this.readyTodoTasks(actor,projection?.todoId,Boolean(projection?.select&&!projection.countOnly));
     if(!ready)return [];
-    const {people,unified,eligible}=ready;
+    const {people,unified,eligible,contexts}=ready;
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor,projection),...await fabricDecisionTodos(this.database,actor,projection)]:[];
     result.push(...await bulkWashingTodos(this.database,actor,projection));
     result.push(...await specialCraftQuotationTodos(this.database,actor,projection));
@@ -238,20 +262,8 @@ export class DigitalProductionNotificationService {
 
     if(!projection?.todoId)result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor,projection));
     for(const {task,missing} of eligible){
-      const readContext=async()=>{
-      const ownAction=!missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"execute");
-      const styleNo=task.production_order_id?task.order_style_no:task.source_id?task.source_style_no:null;
-      const readableAssignment=missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"technical");
-      const orderContext:TodoResponse['orderContext']=(ownAction||readableAssignment)&&styleNo?{reworkNo:null,orderNo:null,styleNo,supplierName:null,status:task.state,updatedAt:iso(task.created_at)}:null;
-      if(orderContext&&readableAssignment){
-        const linkedOrder=task.production_order_id??(task.source_id?(await this.database.query('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[task.source_id])).rows[0]?.production_order_id:null);
-        // Source/task visibility alone does not reveal a linked mother's PO list.
-        if(linkedOrder&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,'order',linkedOrder,'technical'))orderContext.poNumbers=(await this.database.query('SELECT po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[linkedOrder])).rows.flatMap(row=>row.po_number?[row.po_number as string]:[]);
-      }
-      const supplement=ownAction&&task.task_kind==='bulk_pattern'?await preparationSupplement(this.database,task.task_id):null;
-       return {orderContext,supplement};
-      };
-      const metadata=projection?.select&&!projection.countOnly?await readContext():null;
+      const metadata=contexts.get(task.task_id);
+      const readContext=()=>this.readTaskContext(this.database,actor,task,missing);
       const build=async():Promise<TodoResponse>=>{const {orderContext,supplement}=metadata??await readContext();
       const time=await new ContextBusinessClock(this.database).read(task.production_order_id?{kind:'order',id:task.production_order_id}:{kind:'source',id:task.source_id!});
        return {... (supplement?{contentToken:todoContentToken(['preparation-supplement',task.task_id,supplement.version])}:{}),todoId:task.task_id,taskTitle:supplement?`${task.label} · ${supplement.ready?'补料已到，请复核补做':'局部已做，仍待补料'}`:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,timing:todoSlaTiming({dueAt:task.due_at?iso(task.due_at):null,warningAt:task.warning_at?iso(task.warning_at):null,enteredAt:task.entered_at?iso(task.entered_at):null,exclusive:task.source_sla?(task.deadline_exclusive??false):false,asOf:time.now,unlimited:explicitlyUnlimitedSla(task.sla_basis)}),reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)};
