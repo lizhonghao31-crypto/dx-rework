@@ -1,3 +1,6 @@
+/* The app shell is published only after its common styles are available. */
+:root { --dx-entry-shell-css: ready; }
+
 .app-shell {
   grid-template-columns: var(--dx-sidebar-width) minmax(0, 1fr);
 }

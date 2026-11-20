@@ -1,12 +1,6 @@
 import {Component,Suspense,lazy,useContext,type ComponentType,type ReactNode} from 'react';
 import {Shell,ShellPresenceContext} from './components.js';
 
-// The original main styles follow page styles in the cascade. Vite appends
-// lazy CSS links later; retain that original common-style order after a load
-// without downloading every other business module's CSS up front.
-const sharedStyles=typeof document==='undefined'?[]:[...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')];
-const preserveCommonStyleOrder=()=>{for(const sheet of sharedStyles)if(sheet.isConnected)sheet.parentNode?.appendChild(sheet);};
-
 class BusinessModuleLoadError extends Error{
  constructor(cause:unknown){super('Business module load failed',{cause});}
 }
@@ -32,7 +26,7 @@ export function lazyBusinessPage<PageType extends (props:never)=>ReactNode>(load
  type Props=PageProps<PageType>;
  // Keep React component identity stable across parent renders. The local cast
  // only adapts LazyExoticComponent's ref type, never required caller props.
- const Page=lazy(async()=>{try{const module=await load();preserveCommonStyleOrder();return {default:module.default as unknown as ComponentType<Props>};}catch(error){preserveCommonStyleOrder();throw new BusinessModuleLoadError(error);}});
+ const Page=lazy(async()=>{try{const module=await load();return {default:module.default as unknown as ComponentType<Props>};}catch(error){throw new BusinessModuleLoadError(error);}});
  return function DeferredBusinessPage(props:Props){
   const insideShell=useContext(ShellPresenceContext);
   const recoveryShell=!insideShell&&options.shellOnError!==false,loading=<p role="status">正在打开页面…</p>;
