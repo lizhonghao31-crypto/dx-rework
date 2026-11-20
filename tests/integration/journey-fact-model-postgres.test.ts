@@ -283,8 +283,10 @@ function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:reado
   }finally{if(client.query)await client.query('ROLLBACK');client.release();}
   const indexed=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'});
   const filter=JourneyFilterSchema.parse({scope:'production',search:a.designStyleNo,kpi:'todo'});
-  for(const result of await Promise.all([query.list(f.root,filter),indexed.list(f.root,filter)]))
-   expect(result).toMatchObject({total:0,summary:{todo:0},items:[]});
+  for(const result of await Promise.all([query.list(f.root,filter),indexed.list(f.root,filter)])){
+   expect(result).toMatchObject({total:1,summary:{todo:1},items:[{orderId:a.productionOrderId,actionableTodo:{status:'complete',items:[]}}]});
+   expect(result.items[0]!.supervision?.coverage.map(fact=>fact.key)).toEqual(expect.arrayContaining(['factory_date','fabric_date']));
+  }
  }));
  it('keeps linked native preparation and partial-role selection identical without sharing full-manager nodes',()=>run(async()=>{
   const ready=await f.bulkReady('无',undefined,2),candidate={source:{source_id:ready.sourceId},order:{production_order_id:ready.id}};

@@ -32,6 +32,7 @@ import { selectJourneys } from "../../apps/api/src/production-platform/journey-p
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {DigitalPoDateRepository} from '../../apps/api/src/production-platform/po-date-repository.js';
 import { developmentView, patternTasks, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
@@ -909,6 +910,40 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(native).toMatchObject({current:true,state:'completed',actualAt:completed,actualQuality:'verified',enteredAt:entered});
     expect(detail.supervision).toMatchObject({status:'legacy_unenrolled',originalRevision:null,currentRevision:null,nodes:[]});
     expect(detail.supervision!.nativeFacts).toEqual(expect.arrayContaining([expect.objectContaining({id:'receiving_span',completedAt:null,businessCompleted:false})]));
+    const applyDate=async(source:'initial_po'|'approved_factory_change',date:string)=>{
+      const event=randomUUID(),client=await db.connect();
+      try{
+        await client.query('BEGIN');
+        const facts=source==='initial_po'?{lines:[{customerWarehouseArrivalDate:date,sizes:[{size:'M',quantity:10}]}]}:
+          {reason:'TEST native legacy PO date evidence',dateChanges:[{lineId,dateKind:'factory',oldDate:null,date,expectedVersion:0}]};
+        await client.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_production',$5,$6)",
+          [event,rootActor.requestId,rootActor.actorId,source==='initial_po'?'digital_order_created':'digital_po_factory_dates_approved',id,JSON.stringify(facts)]);
+        await new DigitalPoDateRepository(client).applyWithClient(rootActor,id,source,[{lineId,date,expectedVersion:0}],event);
+        await client.query('COMMIT');
+      }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    };
+    const originalFacts=new JourneyFactRepository(db),indexed=new DigitalJourneyQuery(db,{listReadMode:'indexed'});
+    const readList=(query:DigitalJourneyQuery,kpi:'todo'|'all',missing?:'plan'|'factory_date')=>query.list(rootActor,JourneyFilterSchema.parse({scope:'production',search:id,kpi,missing}));
+    const verifyLists=async(withFactoryGap:boolean)=>{
+      await originalFacts.buildOne({kind:'order',id});
+      for(const query of [journeys,indexed]){
+        const pending=await readList(query,'todo');
+        expect(pending.summary?.todo).toBe(withFactoryGap?1:0);
+        expect(pending.items.map(item=>item.orderId)).toEqual(withFactoryGap?[id]:[]);
+        expect(pending.supervision?.coverage.map(fact=>fact.key)).toEqual(withFactoryGap?['factory_date']:[]);
+        expect((await readList(query,'todo','plan')).items).toEqual([]);
+        expect((await readList(query,'all','plan')).items.map(item=>item.orderId)).toEqual([id]);
+        expect((await readList(query,'todo','factory_date')).items.map(item=>item.orderId)).toEqual(withFactoryGap?[id]:[]);
+      }
+    };
+    const day=beijingCalendarDate(new Date());
+    await applyDate('initial_po',addCalendarDays(day,90));
+    await verifyLists(true);
+    await applyDate('approved_factory_change',addCalendarDays(day,60));
+    await verifyLists(false);
+    const finalDetail=await journeys.read(rootActor,id,undefined,true);
+    expect(finalDetail.supervision?.coverage.map(fact=>fact.key)).toEqual(['plan']);
+    expect(finalDetail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId)).toMatchObject({actualAt:completed,enteredAt:entered,expectedAt:native.expectedAt});
     await expect(journeys.read(actor(stranger),id,undefined,true)).rejects.toMatchObject({statusCode:404});
     expect((await db.query('SELECT count(*)::int AS n FROM digital_sla_plans WHERE production_order_id=$1',[id])).rows[0].n).toBe(before);
   },testExecutionConfig.correctnessTimeoutMs);

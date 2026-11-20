@@ -94,3 +94,44 @@ it.each([['overdue','danger'],['due_soon','warning'],['normal','neutral'],['unkn
  const o=fixture();o.visualProgress!.stages=o.visualProgress!.stages.map(stage=>({...stage,risk,startedAt:null,actualRatio:0,timeRatio:null}));
  const html=render(o);expect(html.match(new RegExp(`class="cockpit-stage[^"]* is-${tone}"`,'g'))).toHaveLength(7);expect(html).not.toContain('title="时间');expect(html.match(/title="实际 0%"/g)).toHaveLength(7);expect(html).not.toContain('role="tooltip"');expect(html).not.toContain('cockpit-stage-arc');
 });
+
+
+it.each([
+ [null,'2026-10-19T00:00:00Z','创建正式订单',null,false],
+ ['2026-10-17T00:00:00Z',null,'创建纯开发',null,false],
+ ['2026-10-17T00:00:00Z','2026-10-19T00:00:00Z','创建纯开发','创建正式订单',false],
+ ['2026-10-19T00:00:00Z','2026-10-19T00:00:00Z','创建纯开发','创建正式订单',false],
+ ['2026-10-19T00:00:00Z','2026-10-19T00:00:00Z','创建正式订单',null,true],
+] as const)('projects the real creation events %s / %s without duplicate creation work in detail', (developmentCreatedAt,orderCreatedAt,first,second,publishedWithOrder)=>{
+ const order=fixture(),work=order.stages[1]!.nodes[0]!;
+ order.orderId=orderCreatedAt?id:null;
+ order.cockpitCreation={developmentCreatedAt,orderCreatedAt,...(publishedWithOrder?{developmentPublishedWithOrder:true}:{})};
+ order.stages[0]!.nodes=['product_development','development_publish','order_information'].map(key=>({...work,
+   stage:'creation',key,instanceId:key,label:'重复节点 '+key,records:[]}));
+ const snapshot=structuredClone(order);
+ const html=renderToStaticMarkup(createElement(CockpitDetail,{order,asOf:'2026-10-19T00:00:00Z',actions:null,
+  context:JourneyReturnContextSchema.parse({selected:id,expanded:'',focus:'order_information',row:'order_information'}),onChange(){}}));
+ const flow=html.match(/<section[^>]*cockpit-flow-panel[\s\S]*?<\/section>/)![0];
+ expect(flow).toContain(first);
+ expect(flow).toContain((first==='创建纯开发'?developmentCreatedAt:orderCreatedAt)!.slice(0,10));
+ if(second){expect(flow).toContain(second);expect(flow).toContain('2026-10-19');}
+ else expect(flow).not.toContain(first==='创建纯开发'?'创建正式订单':'创建纯开发');
+ expect(html).not.toContain('重复节点');
+ expect(html).not.toContain('journey-node-order_information');
+ expect(html).toContain('全部节点（2）');
+ expect(html).toContain('进入该节点办理');
+ expect(order).toEqual(snapshot);
+});
+
+it('keeps original work reachable from a saved display-only creation stage',()=>{
+ const order=fixture(),work=order.stages[1]!.nodes[0]!;
+ order.cockpitCreation={developmentCreatedAt:null,orderCreatedAt:'2026-10-19T00:00:00Z'};
+ order.stages[0]!.nodes=[{...work,stage:'creation',key:'order_information',instanceId:'old-creation',label:'订购信息',records:[]}];
+ const context=JourneyReturnContextSchema.parse({selected:order.id,expanded:'creation',focus:'old-creation'});
+ const html=renderToStaticMarkup(createElement(CockpitDetail,{order,context,asOf:'2026-10-19T00:00:00Z',actions:null,onChange(){}}));
+ expect(html).toContain('当前节点：'+work.label);
+ expect(html).toContain('进入该节点办理');
+ expect(html).toContain('aria-pressed="true" data-cockpit-focus="stage:creation"');
+ expect(html).not.toContain('订购信息');
+ expect(html).toContain('2026-10-19');
+});

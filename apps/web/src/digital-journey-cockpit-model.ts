@@ -190,19 +190,23 @@ export function matchingPoDeliveryRisks(order:OrderJourney,context:CockpitContex
 }
 
 /** Display scope only: never feed this selection back into whole-order progress or KPI counts. */
+export function cockpitDetailNodes(order:OrderJourney){
+ const duplicateCreationKeys=new Set(['product_development','development_publish','order_information']);
+ return order.stages.flatMap(stage=>stage.nodes).filter(node=>node.stage!=='creation'||!duplicateCreationKeys.has(node.key));
+}
 export function journeyDetailSelection(order: OrderJourney, context: CockpitContext) {
-  const nodes = order.stages.flatMap(stage => stage.nodes);
+  const nodes = cockpitDetailNodes(order);
   const explicitNode = nodes.find(node => node.instanceId === context.focus)
     ?? (context.expanded === undefined ? nodes.find(node => node.key === context.node && node.current) : undefined);
   const historicalRow = nodes.find(node => node.instanceId === context.row);
-  const requested = (context.expanded ?? "").split(",").filter(key => order.stages.some(stage => stage.key === key));
+  const requested = (context.expanded ?? "").split(",").filter(key => nodes.some(node => node.stage === key));
   const current = nodes.filter(node => node.current && node.state !== "not_applicable");
   const working = current.filter(nodeIsInProgress);
   const completed = current.filter(node => node.state === "completed");
   const fallback = working[0] ?? current.find(node => node.state === "pending" && node.records.length > 0)
     ?? completed.at(-1) ?? current.find(node => node.state !== "unavailable");
   const stages = explicitNode ? requested.includes(explicitNode.stage) ? requested : [explicitNode.stage] : requested.length ? requested
-    : context.expanded === "" ? [] : context.stage ? [context.stage]
+    : context.expanded === "" ? [] : context.stage && nodes.some(node=>node.stage===context.stage) ? [context.stage]
     : context.round ? ["development"] : historicalRow ? [historicalRow.stage] : fallback ? [fallback.stage] : [];
   const inScope = nodes.filter(node => !stages.length || stages.includes(node.stage));
   const visible = inScope.filter(node => node.state !== "not_applicable" || node === explicitNode || node === historicalRow);

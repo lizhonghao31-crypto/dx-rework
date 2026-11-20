@@ -69,7 +69,8 @@ describe("formal Journey cockpit", () => {
     item.progress.bulk = { completed: 4, applicable: 9 };
     const html = renderToStaticMarkup(createElement(DigitalJourneyCockpit, { data: { ruleVersion: "journey-v2.0", asOf: "2026-10-05T00:00:00Z", page: 1, pageSize: 15, total: 1, summary: { all: 1, active: 1, dueSoon: 0, overdue: 0, blocked: 0, completed: 0 }, items: [item] }, detail: item, context: JourneyReturnContextSchema.parse({ selected: id, expanded: "development,preparation" }), error: "", detailError: "", detailLoading: false, onChange: () => undefined, actions: null }));
     for (const stage of JOURNEY_STAGES) expect(html).toContain(stage.label);
-    for (const label of ["并行纸样", "并行预缩", "节点名称", "责任结果", "查看更多", "相关单据", "操作记录", "进入该节点办理"]) expect(html).toContain(label);
+    for (const label of ["并行纸样", "并行预缩", "查看更多", "相关单据", "操作记录", "进入该节点办理"]) expect(html).toContain(label);
+    for (const title of ["阶段", "节点", "计划完成", "实际完成", "差异", "责任", "状态"]) expect(html).toContain(`<th scope="col">${title}</th>`);
     expect(html).not.toContain('aria-label="订单列表"');
     expect(html).toContain("生产管理总览");
     expect(html).toContain("returnTo=");

@@ -11,16 +11,22 @@ export function CockpitHomeFactLinks({order,context,onReceipts}:{order:OrderJour
  const facts=order.cockpitFacts,nodes=order.stages.flatMap(stage=>stage.nodes);
  const dashboard=facts?.production.dashboardLinks??[];
  const productionRecord=dashboard.length===1?dashboard[0]?.record:undefined;
- const productionChoices=dashboard.length>1&&dashboard.map(({factoryName,record})=>
-  <div key={record.url}><CockpitRecordLink record={record} context={context}>{factoryName}</CockpitRecordLink></div>);
+ const productionChoices=dashboard.length>1?<details className="cockpit-production-choices">
+  <summary>生产进度</summary>
+  {dashboard.map(({factoryName,record})=><div key={record.url}><CockpitRecordLink record={record} context={context}>{factoryName}</CockpitRecordLink></div>)}
+ </details>:null;
  const sampleRecord=nodes.find(node=>node.current&&node.key==='bulk_ship_sample')?.records.find(record=>record.url);
  const receipts=facts?.receiving,hasGap=Boolean(cockpitReceiptGap(order)?.gap);
  const receiptRecord=nodes.find(node=>node.current&&node.key==='receipts')?.records.find(record=>record.url);
  const render=(title:string,fact:CockpitFact|undefined,record?:JourneyRecord,quantity?:string,open?:()=>void,choices?:ReactNode)=>{
-  const label=<><span>{title}</span> <CockpitBadge tone={badgeTones[fact?.tone??'neutral']} className="cockpit-home-fact-status">{fact?.label??'暂不可用'}</CockpitBadge>
-   {quantity&&<span className="cockpit-home-fact-quantity"> · {quantity} 件</span>}{fact?.scope==='visible'&&<span> · 可见{title==='生产进度'?'范围':' PO'}</span>}</>;
-  return <div className="cockpit-home-fact" data-fact-tone={fact?.tone??'neutral'}>{open?<button type="button" className="journey-text-action" onClick={open}>{label}</button>
-   :record?<CockpitRecordLink record={record} context={context}>{label}</CockpitRecordLink>:label}{choices}</div>;
+  const line=<><span>{title}</span><CockpitBadge tone={badgeTones[fact?.tone??'neutral']} className="cockpit-home-fact-status">{fact?.label??'暂不可用'}</CockpitBadge></>;
+  const detail=(quantity||fact?.scope==='visible')&&<span className="cockpit-home-fact-quantity">{quantity&&` · ${quantity} 件`}{fact?.scope==='visible'&&` · 可见${title==='生产进度'?'范围':' PO'}`}</span>;
+  const linkBody=<><span className="cockpit-home-fact-line">{line}</span>{detail}</>;
+  return <div className="cockpit-home-fact" data-fact-tone={fact?.tone??'neutral'}>
+   {open?<button type="button" className="journey-text-action" onClick={open}>{linkBody}</button>
+    :record?<CockpitRecordLink record={record} context={context}>{linkBody}</CockpitRecordLink>
+    :<><div className="cockpit-home-fact-line">{choices?<>{choices}<CockpitBadge tone={badgeTones[fact?.tone??'neutral']} className="cockpit-home-fact-status">{fact?.label??'暂不可用'}</CockpitBadge></>:line}</div>{detail}</>}
+  </div>;
  };
  return <div className="cockpit-home-facts">
   {render('生产进度',facts?.production,productionRecord,undefined,undefined,productionChoices)}

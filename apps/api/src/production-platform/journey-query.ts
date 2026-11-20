@@ -5,7 +5,7 @@ import {commentTimeColumns} from './development-comment-time.js';
 import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
-import {cockpitLegacyOrderTimeSql,orderTimeCreated} from './order-time-created.js';
+import {cockpitLegacyOrderTimeSql,firstDevelopmentPublicationConfirmedOrder,orderTimeCreated} from './order-time-created.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -382,6 +382,11 @@ export class DigitalJourneyQuery {
       const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact);if(!item)return digitalNotFound();
       const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact);
       if(compact&&current){
+        const creation=item.cockpitCreation;
+        if(row.source?.draft_reserved===true&&item.sourceId&&item.orderId&&creation?.developmentCreatedAt&&creation.orderCreatedAt
+          &&await firstDevelopmentPublicationConfirmedOrder(db,item.sourceId,item.orderId)){
+          creation.developmentPublishedWithOrder=true;
+        }
         const observation=current.asOf??asOf;
         const actions={...current,cockpitAsOf:observation,
           cockpitActivated:cockpitIsActivated(current.orderId,current.cockpitCreation!),

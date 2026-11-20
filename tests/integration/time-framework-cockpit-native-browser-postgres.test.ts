@@ -42,8 +42,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.getByRole('progressbar',{name:'整单自然时间进度',exact:true}).count()).toBe(2);
    expect(await page.getByRole('progressbar',{name:'整单实际进度',exact:true}).count()).toBe(2);
    expect(await page.locator('.cockpit-home-delivery-date').allTextContents()).toEqual(['2027-02-20','2027-02-20']);
+   const deliveryHeading=page.locator('th.cockpit-home-progress-heading[scope=col]');
+   await deliveryHeading.waitFor({state:'visible'});
+   expect(await deliveryHeading.allTextContents()).toEqual(['交货日期']);
+   for(const meter of await page.locator('.cockpit-home-progress').all()){
+    expect(await meter.evaluate(element=>{
+     const [expected,time,actual,done]=Array.from(element.children);
+     const first=time?.querySelector('[role=progressbar]')?.getBoundingClientRect();
+     const second=done?.querySelector('[role=progressbar]')?.getBoundingClientRect();
+     return [expected?.textContent,actual?.textContent,first?.height,second?.height,first?.width===second?.width];
+    })).toEqual(['预计日期：2027-02-20','实际进度：未完成',15,15,true]);
+   }
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
-   await page.screenshot({path:join(h.evidence,'home-1165.png'),fullPage:true});
+   await page.setViewportSize({width:1165,height:747});await page.screenshot({path:join(h.evidence,'home-1165.png')});
   }finally{await tab.context.close();}
  });
  for(const route of ['A','B'] as const)it('uses '+route+' milestones and original nodes at1165px without duplicate flow cards',async()=>{
@@ -52,6 +63,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    const page=tab.page,flow=page.locator('.cockpit-milestones');await flow.waitFor();
    expect(await flow.locator('.cockpit-stage').count()).toBe(route==='A'?9:8);
+   expect(await page.getByRole('heading',{name:route==='A'?'要对色':'无需对色',exact:true}).count()).toBe(1);
+   const fit=await flow.locator('.cockpit-stage').evaluateAll(stages=>stages.every(stage=>{
+    const box=stage.getBoundingClientRect(),viewport=stage.closest('.cockpit-flow-scroll')!.getBoundingClientRect();
+    return box.left>=viewport.left-1&&box.right<=viewport.right+1&&[...stage.querySelectorAll('time')].every(time=>{
+     const date=time.getBoundingClientRect();
+     return date.left>=box.left-1&&date.right<=box.right+1;
+    });
+   }));
+   expect(fit).toBe(true);
    const dto=await page.evaluate(async id=>{const response=await fetch('/api/digital-production/journeys/'+id+'?view=cockpit');if(!response.ok)throw Error('Journey read failed '+response.status);return response.json();},order.id) as OrderJourney;
    await writeFile(join(h.evidence,'event-target-'+route+'.json'),JSON.stringify(dto,null,2));
    const progress=dto.fixedSchedule!.scopes[0]!,poRow=page.getByRole('row').filter({hasText:order.style+'-PO'}).first();
@@ -78,14 +98,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.locator('.cockpit-flow-panel').count()).toBe(1);
    await flow.getByRole('button',{name:'发加工节点明细',exact:true}).click();
    const panel=page.getByRole('region',{name:'小流程明细',exact:true});
-   await expect.poll(()=>panel.getByRole('columnheader',{name:'预计完成',exact:true}).count()).toBe(1);
+   await expect.poll(()=>panel.getByRole('columnheader',{name:'计划完成',exact:true}).count()).toBe(1);
    expect(await panel.getByRole('columnheader',{name:'实际完成',exact:true}).count()).toBe(1);
    expect(await panel.locator('tbody tr').count()).toBeGreaterThan(0);
    expect(await panel.innerText()).not.toContain('受本目标约束');
    expect(await panel.locator('time').first().innerText()).toMatch(/^20\d{2}-\d{2}-\d{2}$/);
    const boxes=await page.locator('.journey-node-panel,.journey-documents-panel,.journey-activity-panel').evaluateAll(elements=>elements.map(element=>{const r=element.getBoundingClientRect();return {top:r.top,left:r.left,right:r.right,bottom:r.bottom};}));
    expect(boxes[0]!.right).toBeGreaterThan(boxes[1]!.right);expect(boxes[1]!.top).toBeGreaterThan(boxes[0]!.top);expect(Math.abs(boxes[1]!.top-boxes[2]!.top)).toBeLessThan(2);expect(Math.abs(boxes[1]!.bottom-boxes[2]!.bottom)).toBeLessThan(2);
-   await page.screenshot({path:join(h.evidence,'detail-'+route+'-1165.png'),fullPage:true});
+   await page.setViewportSize({width:1165,height:747});await page.screenshot({path:join(h.evidence,'detail-'+route+'-1165.png')});
+   await panel.evaluate(element=>element.scrollIntoView({block:"start",behavior:"instant"}));
+   await page.screenshot({path:join(h.evidence,'nodes-'+route+'-1165.png')});
    await flow.getByRole('button',{name:'设计资料交接节点明细',exact:true}).click();
    await panel.getByRole('button',{name:'设计资料交接',exact:true}).waitFor();
    expect(await panel.locator('tbody tr').count()).toBe(1);
