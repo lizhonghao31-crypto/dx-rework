@@ -1,85 +1,92 @@
 {
   "version": 1,
-  "base": "90556cd0270f3e568f269578fec5e50e3315e778",
-  "sourceFingerprint": "f04dba538901dcb3294bf0827ba95ba6610211fa8b5e9b89e0f33c9d4deda255",
+  "base": "d4a31dd5d95300c595136d2363376b990cf51e84",
+  "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
   "rules": [
     {
-      "rule": "生产看板先以完整已授权工厂执行计算排序、筛选、全范围统计和事件，再按精确双键装配当前页对象。刷新以相同筛选的上一有效数据时间为依据。",
-      "source": "Eric 审定《达兴全系统性能治理 v7》09 实时生产看板，沿用 02 母单定位。",
+      "rule": "大货板房卡片读取沿原有效制单、本人任务和母单授权口径，只取当前 15 项的纸样与唛架事实。",
+      "source": "Eric 审定《达兴全系统性能治理 v7》07 大货板房。",
       "reads": [
-        "apps/api/src/sourcing/production-dashboard-scope.ts",
-        "apps/api/src/sourcing/production-reporting-service.ts",
-        "apps/api/src/sourcing/production-chase.ts",
-        "apps/api/src/sourcing/production-dashboard-service.ts",
-        "apps/api/src/sourcing/sourcing-production-service.ts",
-        "apps/web/src/production-dashboard-page.tsx"
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/journey-selection-access.ts",
+        "apps/api/src/production-platform/journey-snapshot-reads.ts"
       ],
       "oldTests": [
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/qc-progress-retirement-postgres.test.ts",
-        "tests/unit/production-dashboard.test.ts"
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts"
       ],
-      "initialization": "沿原隔离级别，以母单、实际生产单和工厂决定识别源对象。先拿授权轻事实，日报沿筛中聚合范围，已授权厂单的来源与厂名在事件读取中复用，同一事务只富装配当前页。空范围留真实空读。",
-      "dateAndPermission": "保留原 asOf、previousAsOf、工厂交期风险、转厂分量、订单作用域和同一会话撤权。两种厂单的原始决定键保留，不能以空键、款号或第一页冒充全部。",
-      "expectation": "跨页事件、全范围供应商集中度、业务统计和真实历史保持一致；同一规范化搜索只发起必要读取，较旧响应取消且不能覆盖新结果。",
+      "initialization": "先由原板房筛选取页及全范围计数，再沿同一只读快照判断原母单和纸样任务授权，按页批量读取 PO 和实际工序事实。",
+      "dateAndPermission": "原纸样任务责任、当前轮次、已采用的时效值与验收观测时点照旧。保留原计划和人工批准的时间来源记录。普通纸样师不取得全员范围。",
+      "expectation": "管理与本人卡片、纸样及唛架事实、排序计数及原入口保真。完整办理页仍使用原工作单接口。",
       "writes": [
-        "apps/api/src/sourcing/production-chase.ts",
-        "apps/api/src/sourcing/production-dashboard-service.ts",
-        "apps/api/src/sourcing/sourcing-production-service.ts",
-        "apps/web/src/production-dashboard-page.tsx",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/unit/production-dashboard-query.test.ts"
+        "apps/api/src/production-platform/bulk-preparation-routes.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/web/src/acceptance-business-time.ts",
+        "apps/web/src/bulk-pattern-card.tsx",
+        "apps/web/src/bulk-pattern-model.ts",
+        "apps/web/src/bulk-pattern-workspace.tsx",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "packages/contracts/src/bulk-preparation.ts",
+        "tests/fixtures/bulk-board-containment.tsx",
+        "tests/fixtures/bulk-pattern-card-response.ts",
+        "tests/fixtures/bulk-workroom-customer.tsx",
+        "tests/fixtures/erp-digital-layout.tsx",
+        "tests/fixtures/production-readiness-ui.tsx",
+        "tests/integration/bulk-washing-postgres.test.ts",
+        "tests/unit/r2-pattern-boards.test.ts"
       ],
       "checks": [
-        "dashboard-factory-snapshot-pg13",
-        "dashboard-search-generation"
+        "bulk-pattern-native-parity",
+        "bulk-pattern-role-boundary"
       ]
     }
   ],
   "checks": [
     {
-      "id": "dashboard-factory-snapshot-pg13",
-      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.3ML5Y5 NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.3ML5Y5 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/production-closure-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr09/full-closure-recheck.json",
-      "context": "隔离 PG13.23 生产交接整文件 22 项通过。保留未变化的风险待办与生产排除断言，以独立试点厂验证新增16单跨页数据。",
+      "id": "bulk-pattern-native-parity",
+      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.jAtWCw NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/bulk-washing-postgres.test.ts -t 'keeps authorized bulk-pattern cards' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-native-card-contract.json",
+      "context": "隔离 PG13.23，同角色同页新旧真实处理对照，含多 PO、外裁、完成与办理中，核纸样师没有全员范围。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr09/full-closure-recheck.json",
-      "logSha256": "29f2d7470b4a259d371b57c387a8c761d58ac3572f3c440db571386e435786f7",
-      "sourceFingerprint": "f04dba538901dcb3294bf0827ba95ba6610211fa8b5e9b89e0f33c9d4deda255",
-      "testedHead": "51241b64a08693b116853b1377a9b1154f109bc2",
-      "passed": 22,
+      "log": "/tmp/dx-performance-v7/pr07/final-native-card-contract.json",
+      "logSha256": "e43e362595191ebcd99c21b7abd7b6c42d3a1f16ddc915654dd8b9ed6241bb4d",
+      "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
+      "testedHead": "b0df140eff01e64511e502fe6993cec93cf8c655",
+      "passed": 1,
       "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T19:15:06.060000Z",
-      "endedAt": "2026-11-20T19:15:25.982312Z",
+      "skipped": 12,
+      "startedAt": "2026-11-20T19:59:08.239000Z",
+      "endedAt": "2026-11-20T19:59:22.511137Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "29f2d7470b4a259d371b57c387a8c761d58ac3572f3c440db571386e435786f7"
+          "sha256": "e43e362595191ebcd99c21b7abd7b6c42d3a1f16ddc915654dd8b9ed6241bb4d"
         }
       ]
     },
     {
-      "id": "dashboard-search-generation",
-      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=660 TMPDIR=/dev/shm/dxperf-recovery.3ML5Y5 node node_modules/vitest/vitest.mjs run tests/unit/production-dashboard-query.test.ts tests/unit/production-dashboard.test.ts tests/unit/digital-pmc-readonly-access.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr09/final-unit.json",
-      "context": "实际生产看板旧管理页面、现有归类与权限的定向 Vitest。受控延迟和晚响应，核规范化搜索、同目标手动刷新及对应 previousAsOf。真实工厂授权另由 PostgreSQL 验证。",
+      "id": "bulk-pattern-role-boundary",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node node_modules/vitest/vitest.mjs run tests/unit/r2-pattern-boards.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-development-workspace.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-unit-card-contract.json",
+      "context": "原 PMC 只读、授权与撤权、岗位与可见范围、任务时间值及现有舱页展示测试，保留全部原断言。 原卡片特殊结案和缺前置断言继续按新摘要契约验证。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr09/final-unit.json",
-      "logSha256": "b1d0d1aeee7094969327cf138c74947f8961dfb817661f47e0ffa0a8baee85d2",
-      "sourceFingerprint": "f04dba538901dcb3294bf0827ba95ba6610211fa8b5e9b89e0f33c9d4deda255",
-      "testedHead": "51241b64a08693b116853b1377a9b1154f109bc2",
-      "passed": 76,
+      "log": "/tmp/dx-performance-v7/pr07/final-unit-card-contract.json",
+      "logSha256": "ee2426995065d76ba3699dc2788f49e55fc4b03ba75f16ea1a6bb2390997433c",
+      "sourceFingerprint": "37c39b8e781c9385cfcbff81ed985ba03cc691d7996b739fb1a23dbed3d92b4b",
+      "testedHead": "b0df140eff01e64511e502fe6993cec93cf8c655",
+      "passed": 89,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T18:52:56.094000Z",
-      "endedAt": "2026-11-20T18:53:02.510693Z",
+      "startedAt": "2026-11-20T19:57:01.020000Z",
+      "endedAt": "2026-11-20T19:57:06.512780Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b1d0d1aeee7094969327cf138c74947f8961dfb817661f47e0ffa0a8baee85d2"
+          "sha256": "ee2426995065d76ba3699dc2788f49e55fc4b03ba75f16ea1a6bb2390997433c"
         }
       ]
     }

@@ -1,3 +1,4 @@
+import {bulkPatternFixtureResponse} from "./bulk-pattern-card-response.js";
 // Isolated synthetic responses; actual page components and application static CSS, no real service.
 import "../../apps/web/src/App.js";
 import {createRoot} from "react-dom/client";
@@ -55,7 +56,7 @@ if(path.includes(`/tasks/${id(900)}/history`))return Response.json({events:[]});
 if(path.includes(`/tasks/${id(900)}/documents`))return Response.json({development:{state:"published",id:id(901),version:2,label:"本次采用"},instruction:{state:"not_applicable"},budget:{state:"not_applicable"}});
 if(path.endsWith(`/tasks/${id(900)}`))return Response.json(developmentTask);
 if(path.includes("workspaces/pattern?"))return Response.json({...patternResult,page:Number(url.searchParams.get('page')??1),items:empty?[]:patternItems.filter(item=>!url.searchParams.get('lane')||PATTERN_LANES.find(lane=>lane.key===url.searchParams.get('lane'))?.groups.includes(item.group as never)),total:empty?0:148});
-if(path.includes("workspaces/bulk-pattern?"))return Response.json({page:Number(url.searchParams.get('page')??1),pageSize:15,total:empty?0:4,items:empty?[]:bulkItems});
+if(path.includes("workspaces/bulk-pattern?"))return Response.json(bulkPatternFixtureResponse({page:Number(url.searchParams.get('page')??1),pageSize:15,total:empty?0:4,items:empty?[]:bulkItems},url.searchParams));
 if(path.includes("pattern-room/orders?"))return Response.json({items:empty?[]:Array.from({length:4},(_,i)=>({orderId:id(800+i),orderNo:`TEST-MISC-${i+1}`,kind:"misc",taskName:i===0?"TEST 长任务名称：整理秋冬外套原资料并核对附件清单":"TEST 杂事资料整理",status:i===3?"completed":"in_progress",version:1,styleNo:i===1?"":"TEST-DX-2026-秋冬长款外套",creatorId:id(2),creatorName:"TEST 设计师",currentWorkerName:"TEST 张师傅",requiredDate:"2026-10-19",reworkCount:0,submittedAt:now,updatedAt:now})),totalCount:empty?0:4,page:1,pageSize:15,totalPages:1,canCreate:false,canCreateMisc:false,canFilterPeople:false});
 if(path.includes("/journeys?"))return Response.json({ruleVersion:"journey-v2.0",asOf:now,page:1,pageSize:15,total:empty?0:1,summary:{all:empty?0:1,active:empty?0:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:empty?[]:[journey]});
 if(path.includes('/journeys/'))return Response.json(journey);

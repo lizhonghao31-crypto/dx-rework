@@ -14,6 +14,17 @@ export type BulkPreparationSheet={publishedBasis?:PublishedProductionBasis|null;
 export const BulkWorkroomFilterSchema=z.object({page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(""),scope:z.enum(["mine","all"]).default("mine")}).strict();
 export type BulkWorkroomFilter=z.infer<typeof BulkWorkroomFilterSchema>;
 export type BulkWorkroomResult={page:number;pageSize:15;total:number;items:Array<{orderId:string;designStyleNo:string;customer:string|null;sheet:BulkPreparationSheet}>};
+export type BulkPatternCardTask=Pick<DigitalTask,'taskId'|'sourceId'|'orderId'|'assigneeName'|'state'|'blockedReason'|'slaHours'|'enteredAt'|'completedAt'|'dueAt'|'warningAt'|'deadlineExclusive'|'acceptanceBusinessNow'>;
+export type BulkPatternCardSummary={
+ preparationId:string|null;
+ reasons:string[];
+ facts:Array<{kind:string}>;
+ task:BulkPatternCardTask|null;
+ lines:Array<Pick<BulkCuttingProgress['lines'][number],'lineId'|'poNumber'|'formalStyleNo'|'temporaryStyleNo'|'color'>>;
+};
+export type BulkPatternCardPage={page:number;pageSize:15;total:number;items:Array<{
+ orderId:string;designStyleNo:string;customer:string|null;card:BulkPatternCardSummary;
+}>};
 
 export const BulkFabricReportSchema=z.object({expectedReportId:z.string().uuid().nullable(),expectedReceiptVersion:z.number().int().nonnegative().optional(),material:z.string().trim().min(1).max(200),
  arrivedAt:z.iso.datetime({offset:true}).nullable(),inspectedAt:z.iso.datetime({offset:true}).nullable(),result:z.enum(['合格','不合格']).nullable(),note:z.string().trim().min(1).max(1000)

@@ -1,3 +1,4 @@
+import {bulkPatternFixtureResponse} from "./bulk-pattern-card-response.js";
 // Actual workroom component; responses are supplied by the isolated PostgreSQL regression.
 import {createRoot} from "react-dom/client";
 import {BulkPatternWorkspace} from "../../apps/web/src/bulk-pattern-workspace.js";
@@ -16,8 +17,8 @@ window.fetch=async input=>{
  const url=new URL(path,location.href);
  if(!url.pathname.endsWith("/workspaces/bulk-pattern"))throw new Error("Unexpected intercepted read: "+path);
  const search=url.searchParams.get("search")??"";
- if(!search||search===evidence.style)return Response.json(evidence.styleSearch);
- if(search.toLowerCase()===evidence.customer.toLowerCase())return Response.json(evidence.customerSearch);
+ if(!search||search===evidence.style)return Response.json(bulkPatternFixtureResponse(evidence.styleSearch,url.searchParams));
+ if(search.toLowerCase()===evidence.customer.toLowerCase())return Response.json(bulkPatternFixtureResponse(evidence.customerSearch,url.searchParams));
  return Response.json({page:1,pageSize:15,total:0,items:[]});
 };
 createRoot(document.getElementById("root")!).render(<BulkPatternWorkspace orderId={null} canViewAll/>);

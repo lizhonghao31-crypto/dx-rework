@@ -6,7 +6,7 @@ export function observeAcceptanceTime(resourceId:string,now:string|null){
  if(now)current={resourceId,now};else if(current?.resourceId===resourceId)current=null;
 }
 export const acceptanceInputNow=()=>current?new Date(current.now):new Date();
-export function acceptanceTaskNow(task:DigitalTask,fallback:Date){
+export function acceptanceTaskNow(task:Pick<DigitalTask,'taskId'|'sourceId'|'orderId'|'acceptanceBusinessNow'>,fallback:Date){
  if(!task.acceptanceBusinessNow)return fallback;
  return current&&[task.taskId,task.sourceId,task.orderId].includes(current.resourceId)?new Date(current.now):new Date(task.acceptanceBusinessNow);
 }

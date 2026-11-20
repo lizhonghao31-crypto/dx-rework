@@ -15,7 +15,7 @@ import {bulkFabricFacts} from "./bulk-fabric-facts.js";
 import {BulkFabricReportSchema,BulkFabricDecisionSchema,type BulkFabricReport,type BulkFabricDecision} from "@dx-rework/contracts/bulk-preparation";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { BulkDispatch, BulkCompletion, BulkPreparationSheet, BulkWorkroomFilter, BulkWorkroomResult } from "@dx-rework/contracts/bulk-preparation";
+import type { BulkPatternCardPage, BulkPatternCardSummary, BulkPatternCardTask, BulkDispatch, BulkCompletion, BulkPreparationSheet, BulkWorkroomFilter, BulkWorkroomResult } from "@dx-rework/contracts/bulk-preparation";
 import type { InstructionDocument } from "@dx-rework/contracts/production-instruction";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -25,6 +25,8 @@ import { developmentDocumentRow } from "./development-round-repository.js";
 import { resolveDigitalChild } from "./child-link-repository.js";
 import { isRootActor } from "../access/business-authority.js";
 import {journeyTaskSummaries} from './journey-task-summary.js';
+import {readJourneySelectionAccess} from './journey-selection-access.js';
+import {readJourneyCandidateCohort} from './journey-snapshot-reads.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 type DB=Pick<Pool|PoolClient,"query">;
 const fail=(message:string):never=>{throw new ApplicationError("BULK_PREPARATION_CONFLICT",message,409);};
@@ -203,8 +205,8 @@ export class BulkPreparationService {
    facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks};
  }
  async documentHistory(actor:TrustedActorContext,id:string,beforeId?:string){return orderDocumentHistory(this.database,actor,id,'fabric',beforeId);}
- async workroom(actor:TrustedActorContext,filter:BulkWorkroomFilter):Promise<BulkWorkroomResult>{
-  const policy=new DigitalProductionAccessPolicy(this.database);
+ private async workroomPage(db:DB,actor:TrustedActorContext,filter:BulkWorkroomFilter){
+  const policy=new DigitalProductionAccessPolicy(db);
   const root=isRootActor(actor);
   const managementRoles=['owner_group','production_management','pmc','pattern_room_supervisor','development_clerk'];
   let manager=root,worker=false;
@@ -215,11 +217,70 @@ export class BulkPreparationService {
    AND ($3::boolean OR EXISTS(SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) JOIN digital_bulk_preparations p ON p.preparation_id=t.route_instance_id JOIN digital_instruction_documents d ON d.production_order_id=p.production_order_id AND d.published_version=p.instruction_version WHERE a.production_order_id=o.production_order_id AND a.task_kind='bulk_pattern' AND a.assignee_id=$1 AND t.state<>'cancelled' AND p.source_round=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1)))`;
   const args=[actor.actorId,filter.search,filter.scope==='all'];
   const from='FROM digital_production_orders o JOIN digital_production_sources s ON s.source_id=o.source_id';
-  const total=Number((await this.database.query(`SELECT count(*) AS total ${from} WHERE ${where}`,args)).rows[0].total);
-  const rows=(await this.database.query(`SELECT o.production_order_id,s.design_style_no,coalesce(o.customer_code,s.customer_code) AS customer_code ${from} WHERE ${where} ORDER BY o.created_at DESC,o.production_order_id LIMIT 15 OFFSET $4`,[...args,(filter.page-1)*15])).rows;
-  const items=[];
+  const total=Number((await db.query(`SELECT count(*) AS total ${from} WHERE ${where}`,args)).rows[0].total);
+  const rows=(await db.query(`SELECT o.production_order_id,s.design_style_no,coalesce(o.customer_code,s.customer_code) AS customer_code ${from} WHERE ${where} ORDER BY o.created_at DESC,o.production_order_id LIMIT 15 OFFSET $4`,[...args,(filter.page-1)*15])).rows;
+  return {rows,total};
+ }
+ async workroom(actor:TrustedActorContext,filter:BulkWorkroomFilter):Promise<BulkWorkroomResult>{
+  const {rows,total}=await this.workroomPage(this.database,actor,filter);
+  const policy=new DigitalProductionAccessPolicy(this.database),items=[];
   for(const row of rows){if(await policy.allowed(actor,'order',row.production_order_id,'technical'))items.push({orderId:row.production_order_id,designStyleNo:row.design_style_no,customer:row.customer_code,sheet:await this.read(actor,row.production_order_id)});}
   return {page:filter.page,pageSize:15,total,items};
+ }
+
+ /** Card reads are bounded by the already selected and authorized page. */
+ async workroomCards(actor:TrustedActorContext,filter:BulkWorkroomFilter):Promise<BulkPatternCardPage>{
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const {rows,total}=await this.workroomPage(db,actor,filter);
+   const scopes=rows.map(row=>({kind:'order' as const,id:row.production_order_id as string}));
+   const access=await readJourneySelectionAccess(db,actor,scopes);
+   const readable=rows.filter(row=>access.resources.get('order:'+row.production_order_id)?.technical);
+   const ids=readable.map(row=>row.production_order_id as string);
+   const pageEvidence=await readJourneyCandidateCohort(db,ids,async(client,id)=>{
+    const gates=await this.gates(client,id),preparation=await this.current(client,id,gates);
+    return {id,preparationId:preparation?.preparation_id as string|undefined,reasons:gates.reasons};
+   });
+   const preparationIds=new Map(pageEvidence.map(row=>[row.id,row.preparationId]));
+   const reasons=new Map(pageEvidence.map(row=>[row.id,row.reasons]));
+   const preparations=[...preparationIds.values()].flatMap(id=>id?[id]:[]);
+   const lines=new Map<string,BulkPatternCardSummary['lines']>();
+   if(ids.length){
+    const rows=await db.query(`SELECT production_order_id AS "orderId",line_id AS "lineId",po_number AS "poNumber",
+      formal_style_no AS "formalStyleNo",temporary_style_no AS "temporaryStyleNo",color
+      FROM digital_production_po_lines WHERE production_order_id=ANY($1::uuid[]) ORDER BY position`,[ids]);
+    for(const {orderId,...line} of rows.rows){
+     const entries=lines.get(orderId)??[];entries.push(line as BulkPatternCardSummary['lines'][number]);lines.set(orderId,entries);
+    }
+   }
+   const facts=new Map<string,BulkPatternCardSummary['facts']>(),patternTasks=new Map<string,BulkPatternCardTask>();
+   if(preparations.length){
+    const evidence=await db.query<{preparation_id:string;kind:string}>(`SELECT preparation_id,kind
+      FROM digital_bulk_preparation_facts WHERE preparation_id=ANY($1::uuid[]) AND kind IN ('纸样完成','唛架完成','纸样派交')`,[preparations]);
+    for(const {preparation_id,kind} of evidence.rows){
+     const entries=facts.get(preparation_id)??[];entries.push({kind});facts.set(preparation_id,entries);
+    }
+    const taskRows=(await db.query<{route_instance_id:string;task_id:string}>(`SELECT t.route_instance_id,t.task_id
+      FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      WHERE t.route_instance_id=ANY($1::uuid[]) AND a.task_kind='bulk_pattern' ORDER BY t.created_at,t.task_id`,[preparations])).rows;
+    const page=await this.tasks().prepareReadPage(actor,taskRows.map(row=>row.task_id),db);
+    for(const row of taskRows){
+     if(patternTasks.has(row.route_instance_id)||!page.allowed(row.task_id))continue;
+     const {taskId,sourceId,orderId,assigneeName,state,blockedReason,slaHours,enteredAt,completedAt,dueAt,warningAt,deadlineExclusive,acceptanceBusinessNow}=await page.read(row.task_id);
+     patternTasks.set(row.route_instance_id,{taskId,sourceId,orderId,assigneeName,state,blockedReason,slaHours,enteredAt,completedAt,dueAt,warningAt,
+      ...(deadlineExclusive===undefined?{}:{deadlineExclusive}),
+      ...(acceptanceBusinessNow===undefined?{}:{acceptanceBusinessNow})});
+    }
+   }
+   const items=readable.map(row=>{
+    const orderId=row.production_order_id as string,preparationId=preparationIds.get(orderId)??null;
+    return {orderId,designStyleNo:row.design_style_no,customer:row.customer_code,card:{preparationId,
+     reasons:reasons.get(orderId)??[],facts:preparationId?facts.get(preparationId)??[]:[],
+     task:preparationId?patternTasks.get(preparationId)??null:null,lines:lines.get(orderId)??[]}};
+   });
+   await db.query('COMMIT');return {page:filter.page,pageSize:15,total,items};
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  private async command(actor:TrustedActorContext,id:string,action:string,input:unknown,key:string,work:(db:PoolClient)=>Promise<void>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');const db=await this.database.connect();try{

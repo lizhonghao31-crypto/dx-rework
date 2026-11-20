@@ -1,3 +1,4 @@
+import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {packingSlaEvidence} from '../../apps/api/src/production-platform/packing-sla-evidence.js';
 import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
@@ -41,6 +42,28 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  afterAll(async()=>{await f?.dispose();});
  const body=async()=>{const scope=(await service.read(logistics.actor,orderId)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:new Date().toISOString(),note:'TEST original batch'};};
+ it('keeps authorized bulk-pattern cards equal to the original preparation sheet for the same role and page',async()=>{
+  const bulk=new BulkPreparationService(f.db),style=(await f.db.query('SELECT s.design_style_no FROM digital_production_orders o JOIN digital_production_sources s ON s.source_id=o.source_id WHERE o.production_order_id=$1',[orderId])).rows[0].design_style_no as string;
+  const unfinished=await f.bulkReady('印花',undefined,2,undefined,{cuttingProcess:'outsourced',stopBeforeCompletion:true});
+  const worker=f.people['pattern-room-worker']!;
+  for(const [actor,scope] of [[f.root,'all'],[worker,'mine']] as const){
+   const filter={page:1,search:'TEST-ANCHOR-',scope};
+   const original=await bulk.workroom(actor,filter),page=await bulk.workroomCards(actor,filter);
+   expect(page).toMatchObject({page:original.page,pageSize:original.pageSize,total:original.total});
+   expect(page.items.map(item=>item.orderId)).toEqual(original.items.map(item=>item.orderId));
+   expect(page.items.map(item=>item.orderId)).toEqual(expect.arrayContaining([orderId,unfinished.id]));
+   for(const {orderId:id,sheet} of original.items){
+    const card=page.items.find(row=>row.orderId===id)!.card;
+    expect(card.preparationId).toBe(sheet.preparationId);expect(card.reasons).toEqual(sheet.reasons);
+    expect(card.facts.map(fact=>fact.kind).sort()).toEqual(sheet.facts.filter(fact=>['纸样完成','唛架完成','纸样派交'].includes(fact.kind)).map(fact=>fact.kind).sort());
+    expect(card.lines).toEqual(sheet.cutting.lines.map(({lineId,poNumber,formalStyleNo,temporaryStyleNo,color})=>({lineId,poNumber,formalStyleNo,temporaryStyleNo,color})));
+    const task=sheet.tasks.find(task=>task.taskKind==='bulk_pattern');expect(Boolean(card.task)).toBe(Boolean(task));
+    if(task)expect(card.task).toMatchObject({taskId:task.taskId,assigneeName:task.assigneeName,state:task.state,blockedReason:task.blockedReason,
+     slaHours:task.slaHours,enteredAt:task.enteredAt,completedAt:task.completedAt,dueAt:task.dueAt,warningAt:task.warningAt});
+   }
+  }
+  await expect(bulk.workroomCards(worker,{page:1,search:style,scope:'all'})).rejects.toMatchObject({statusCode:403});
+ });
  let sendId:string,returnId:string;
  it('sends only received/qualified30, keeps wash return20 partial and does not disclose budget to logistics',async()=>{
   const before=(await service.read(logistics.actor,orderId)).scopes[0]!;expect((await readPackingQualityCoverage(f.db,[orderId])).get(lineId)?.qualified).toBe(0);expect(before.quantity).toBe(30);expect(before.fee).toBeUndefined();

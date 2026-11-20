@@ -1,3 +1,4 @@
+import {bulkPatternFixtureResponse} from "./bulk-pattern-card-response.js";
 // Synthetic read-only containment regression. Reuses the frozen PR795 host fixture shape; product imports are current workspace sources, not a G3 backport.
 import "../../apps/web/src/App.js";
 import {createRoot} from "react-dom/client";
@@ -50,7 +51,7 @@ if(scenario==="failure")return Response.json({error:{message:"TEST 本地合成�
 const empty=scenario==="empty";
 if(path.includes(`/orders/${detailItem.orderId}/bulk-preparation`))return Response.json(detailItem.sheet);
 if(path.includes("workspaces/pattern?"))return Response.json({...patternResult,page:Number(url.searchParams.get('page')??1),items:empty?[]:patternItems.filter(item=>!url.searchParams.get('lane')||PATTERN_LANES.find(lane=>lane.key===url.searchParams.get('lane'))?.groups.includes(item.group as never)),total:empty?0:148});
-if(path.includes("workspaces/bulk-pattern?"))return Response.json({page:Number(url.searchParams.get('page')??1),pageSize:15,total:empty?0:15,items:empty?[]:bulkItems});
+if(path.includes("workspaces/bulk-pattern?"))return Response.json(bulkPatternFixtureResponse({page:Number(url.searchParams.get('page')??1),pageSize:15,total:empty?0:15,items:empty?[]:bulkItems},url.searchParams));
 if(path.includes("/journeys?"))return Response.json({ruleVersion:"journey-v2.0",asOf:now,page:1,pageSize:15,total:empty?0:1,summary:{all:empty?0:1,active:empty?0:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:empty?[]:[journey]});
 if(path.includes('/journeys/'))return Response.json(journey);
 if(path.includes('/analysis?')){const filters=DigitalAnalysisFilterSchema.parse(Object.fromEntries(url.searchParams)),page=Number(url.searchParams.get('page')??1),rows=empty?[]:Array.from({length:24},(_,i)=>analysisRow(i)).slice((page-1)*15,page*15);return Response.json({ruleVersion:"TEST",asOf:now,filters,canExport:false,canRecord:params.has("fixtureCanRecord"),page,total:empty?0:24,summary:{newStyles:18,materialPending:0,handoverPending:0,tasks:24,cancelled:0,completed:24,slaDenominator:24,onTime:24,measurable:24,handlingSeconds:345600,waitingSeconds:86400,unknownWaiting:0,missingTime:0,unverifiedTime:0,correctedTasks:0},overview:{period:{newStyles:18,shippedRounds:11,completed:24,slaDenominator:24,onTime:24,measurable:24,missingTime:0,unverifiedTime:0,handlingSeconds:345600,waitingSeconds:86400,unknownWaiting:0,cycleBuckets:[]},snapshot:{active:12,pending:2,unassigned:2,blocked:0,overdue:0,materialPending:0,handoverPending:0,otherBlocked:0},nodes:Array.from({length:8},(_,i)=>({key:`TEST-node-${i}`,label:i===7?"TEST 开发核配委派（长节点名称与原资料核对）":`TEST 工序${i+1}`,overdue:i,completed:24,slaDenominator:24,onTime:24}))},rounds:[],rows,people:[{id:id(1),name:"TEST 张师傅（板房制作）"}],notes:[]});}
