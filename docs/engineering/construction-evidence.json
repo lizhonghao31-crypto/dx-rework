@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "d4a31dd5d95300c595136d2363376b990cf51e84",
-  "sourceFingerprint": "6083393ddce65ac6a2b0b506a8912f8fae8b26adb1fd700b6bb3bf6ea332e0b2",
+  "sourceFingerprint": "c9135fb233a02bf8377a7aaa4342608b3a32a6e26f2fd05af0b201f9a69539f0",
   "rules": [
     {
       "rule": "大货板房卡片读取沿原有效制单、本人任务和母单授权口径，只取当前 15 项的纸样与唛架事实。",
@@ -40,47 +40,47 @@
   "checks": [
     {
       "id": "bulk-pattern-native-parity",
-      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.jAtWCw NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/bulk-washing-postgres.test.ts -t 'keeps authorized bulk-pattern cards' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-native.json",
+      "command": "NODE_ENV=test DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.jAtWCw NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/bulk-washing-postgres.test.ts -t 'keeps authorized bulk-pattern cards' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-native-corrected.json",
       "context": "隔离 PG13.23，同角色同页新旧真实处理对照，含多 PO、外裁、完成与办理中，核纸样师没有全员范围。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr07/final-native.json",
-      "logSha256": "854631ed4cbd395527cd442436087d02d247f62f961d02abe0bf9febeca0cf95",
-      "sourceFingerprint": "6083393ddce65ac6a2b0b506a8912f8fae8b26adb1fd700b6bb3bf6ea332e0b2",
-      "testedHead": "d4a31dd5d95300c595136d2363376b990cf51e84",
+      "log": "/tmp/dx-performance-v7/pr07/final-native-corrected.json",
+      "logSha256": "911c890812c4d5edc1a0163315b15a60d118ee45a21fd5a510dd2b0dd5f86221",
+      "sourceFingerprint": "c9135fb233a02bf8377a7aaa4342608b3a32a6e26f2fd05af0b201f9a69539f0",
+      "testedHead": "44389d745768eabb2167bf7564db0fb08621b195",
       "passed": 1,
       "failed": 0,
       "skipped": 12,
-      "startedAt": "2026-11-20T19:45:12.759000Z",
-      "endedAt": "2026-11-20T19:45:25.121394Z",
+      "startedAt": "2026-11-20T19:52:35.148000Z",
+      "endedAt": "2026-11-20T19:52:47.822330Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "854631ed4cbd395527cd442436087d02d247f62f961d02abe0bf9febeca0cf95"
+          "sha256": "911c890812c4d5edc1a0163315b15a60d118ee45a21fd5a510dd2b0dd5f86221"
         }
       ]
     },
     {
       "id": "bulk-pattern-role-boundary",
-      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-development-workspace.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-unit.json",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 TMPDIR=/dev/shm/dxperf-recovery.jAtWCw node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-development-workspace.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr07/final-unit-corrected.json",
       "context": "原 PMC 只读、授权与撤权、岗位与可见范围、任务时间值及现有舱页展示测试，保留全部原断言。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr07/final-unit.json",
-      "logSha256": "8b8e8c48f265c33cb5ee07c75710a906c3aab13e2e5a078f07d132a93635aee7",
-      "sourceFingerprint": "6083393ddce65ac6a2b0b506a8912f8fae8b26adb1fd700b6bb3bf6ea332e0b2",
-      "testedHead": "d4a31dd5d95300c595136d2363376b990cf51e84",
+      "log": "/tmp/dx-performance-v7/pr07/final-unit-corrected.json",
+      "logSha256": "1440c4553d2237a4d830111908fcd1e0655995c5112db247356a42162e922b8a",
+      "sourceFingerprint": "c9135fb233a02bf8377a7aaa4342608b3a32a6e26f2fd05af0b201f9a69539f0",
+      "testedHead": "44389d745768eabb2167bf7564db0fb08621b195",
       "passed": 82,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T19:45:26.318000Z",
-      "endedAt": "2026-11-20T19:45:30.945916Z",
+      "startedAt": "2026-11-20T19:52:49.305000Z",
+      "endedAt": "2026-11-20T19:52:54.037835Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8b8e8c48f265c33cb5ee07c75710a906c3aab13e2e5a078f07d132a93635aee7"
+          "sha256": "1440c4553d2237a4d830111908fcd1e0655995c5112db247356a42162e922b8a"
         }
       ]
     }

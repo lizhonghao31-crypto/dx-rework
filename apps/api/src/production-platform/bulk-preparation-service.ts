@@ -15,7 +15,7 @@ import {bulkFabricFacts} from "./bulk-fabric-facts.js";
 import {BulkFabricReportSchema,BulkFabricDecisionSchema,type BulkFabricReport,type BulkFabricDecision} from "@dx-rework/contracts/bulk-preparation";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { BulkDispatch, BulkCompletion, BulkPreparationSheet, BulkWorkroomFilter, BulkWorkroomResult } from "@dx-rework/contracts/bulk-preparation";
+import type { BulkPatternCardPage, BulkPatternCardSummary, BulkPatternCardTask, BulkDispatch, BulkCompletion, BulkPreparationSheet, BulkWorkroomFilter, BulkWorkroomResult } from "@dx-rework/contracts/bulk-preparation";
 import type { InstructionDocument } from "@dx-rework/contracts/production-instruction";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -268,7 +268,9 @@ export class BulkPreparationService {
     for(const row of taskRows){
      if(patternTasks.has(row.route_instance_id)||!page.allowed(row.task_id))continue;
      const {taskId,sourceId,orderId,assigneeName,state,blockedReason,slaHours,enteredAt,completedAt,dueAt,warningAt,deadlineExclusive,acceptanceBusinessNow}=await page.read(row.task_id);
-     patternTasks.set(row.route_instance_id,{taskId,sourceId,orderId,assigneeName,state,blockedReason,slaHours,enteredAt,completedAt,dueAt,warningAt,deadlineExclusive,acceptanceBusinessNow});
+     patternTasks.set(row.route_instance_id,{taskId,sourceId,orderId,assigneeName,state,blockedReason,slaHours,enteredAt,completedAt,dueAt,warningAt,
+      ...(deadlineExclusive===undefined?{}:{deadlineExclusive}),
+      ...(acceptanceBusinessNow===undefined?{}:{acceptanceBusinessNow})});
     }
    }
    const items=readable.map(row=>{
