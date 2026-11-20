@@ -17,16 +17,36 @@ export function subscribeTodoRead(refresh:()=>void|Promise<void>){
 export const installTodoIndicatorRefresh = (
   refresh: () => void | Promise<void>,
 ): (() => void) => {
-  const run = () => void refresh();
+  let active = false;
+  let refreshAfterRead = false;
+  let stopped = false;
+  const run = (afterRead = false) => {
+    if (stopped) return;
+    if (active) {
+      // A request started before the read was saved may still contain the old count.
+      if (afterRead) refreshAfterRead = true;
+      return;
+    }
+
+    active = true;
+    const finish = () => {
+      active = false;
+      if (!refreshAfterRead) return;
+      refreshAfterRead = false;
+      run();
+    };
+    void Promise.resolve().then(() => { if (!stopped) return refresh(); }).then(finish, finish);
+  };
   const handleVisibility = () => {
     if (document.visibilityState === "visible") run();
   };
 
   run();
-  const interval = window.setInterval(run, TODO_INDICATOR_POLL_INTERVAL_MS);
+  const interval = window.setInterval(handleVisibility, TODO_INDICATOR_POLL_INTERVAL_MS);
   document.addEventListener("visibilitychange", handleVisibility);
-  const unsubscribe=subscribeTodoRead(run);
+  const unsubscribe = subscribeTodoRead(() => run(true));
   return () => {
+    stopped = true;
     window.clearInterval(interval);
     document.removeEventListener("visibilitychange", handleVisibility);
     unsubscribe();

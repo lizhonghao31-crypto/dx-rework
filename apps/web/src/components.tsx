@@ -4,7 +4,6 @@ import { canAccessPatternRoom, canAccessPatternRoomPrices, canAccessPatternRoomO
 import { financeNavigationEntries } from "./finance-access.js";
 import { canAccessCutting } from "./cutting-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
 import { createContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Button,
@@ -13,9 +12,8 @@ import {
   StatusBadge,
   Surface,
 } from "@dx-rework/ui";
-import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
-import { cachedVerifiedSession, sessionCacheVersion } from "./auth-session.js";
+import { registerSessionInvalidator, sessionCacheVersion } from "./auth-session.js";
 import { LogoutButton } from "./session-exit.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
@@ -29,11 +27,11 @@ import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
+import { isCurrentTodoIndicatorActor, readTodoIndicator } from "./todo-indicator-read.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
 import { NavigationIcon } from "./navigation-icons.js";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
 export const ShellPresenceContext=createContext(false);
@@ -337,39 +335,25 @@ export function Shell({
     }
 
     setPendingTodoCount(0);
-    const controller = new AbortController();
-    const indicatorSessionVersion=sessionCacheVersion();
-    let checking = false;
+    let mounted = true;
     const checkIndicator = async () => {
-      if (checking) return;
-      checking = true;
-      try {
-        const response = await fetch(apiUrl("todos/mine/indicator"), {
-          credentials: "include",
-          headers: { accept: "application/json" },
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const responseActorId = response.headers.get("x-dx-rework-actor-id");
-        if (responseActorId !== currentUser.id) {
-          window.location.reload();
-          return;
-        }
-        const indicator = TodoCountIndicatorSchema.parse(await response.json());
-        const session=cachedVerifiedSession();
-        if(controller.signal.aborted||indicatorSessionVersion!==sessionCacheVersion()||!session||session==='denied'||session.user.id!==currentUser.id)return;
-        setPendingTodoCount(indicator.pendingCount);
-        window.dispatchEvent(new CustomEvent("dx-rework:todo-refresh",{detail:{actorId:currentUser.id,unreadCount:indicator.unreadCount}}));
-      } catch (error: unknown) {
-        if (!controller.signal.aborted) console.warn("Todo indicator refresh failed", error);
-      } finally {
-        checking = false;
+      const epoch = sessionCacheVersion();
+      const actorId = currentUser.id;
+      const indicator = await readTodoIndicator(actorId, epoch);
+      if (!mounted || !isCurrentTodoIndicatorActor(actorId, epoch) || !indicator) return;
+      if (indicator === "actor_changed") {
+        window.location.reload();
+        return;
       }
+      setPendingTodoCount(indicator.pendingCount);
+      window.dispatchEvent(new CustomEvent("dx-rework:todo-refresh", { detail: { actorId, unreadCount: indicator.unreadCount } }));
     };
     const stopRefreshing = installTodoIndicatorRefresh(checkIndicator);
+    const unsubscribe = registerSessionInvalidator(() => setPendingTodoCount(0));
     return () => {
-      controller.abort();
+      mounted = false;
       stopRefreshing();
+      unsubscribe();
     };
   }, [currentUser]);
 
