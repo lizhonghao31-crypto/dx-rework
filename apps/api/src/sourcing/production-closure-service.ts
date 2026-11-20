@@ -79,11 +79,20 @@ export class ProductionClosureService {
   return {orders,facts,ids:selectedIds};
  }
  private async project(client:PoolClient,ids:string[],facts:Awaited<ReturnType<typeof readFactoryProductionProgressFacts>>) {
-  for(const id of ids){const kind=productionRiskKind(productionAlertState(facts.get(id)));
-   await client.query(`UPDATE sourcing_production_alerts SET resolved_at=clock_timestamp() WHERE production_order_id=$1 AND resolved_at IS NULL AND kind IS DISTINCT FROM $2`,[id,kind]);
-   if(kind)await client.query(`INSERT INTO sourcing_production_alerts(alert_id,production_order_id,kind) VALUES($1,$2,$3)
-    ON CONFLICT(production_order_id) WHERE resolved_at IS NULL DO NOTHING`,[randomUUID(),id,kind]);
-  }
+  if(!ids.length)return;
+  const kinds=ids.map(id=>productionRiskKind(productionAlertState(facts.get(id))));
+  await client.query(`UPDATE sourcing_production_alerts alert SET resolved_at=clock_timestamp()
+   FROM unnest($1::uuid[],$2::text[]) AS observed(order_id,kind)
+   WHERE alert.production_order_id=observed.order_id AND alert.resolved_at IS NULL
+     AND alert.kind IS DISTINCT FROM observed.kind`,[ids,kinds]);
+
+  const opening=ids.flatMap((id,index)=>{const kind=kinds[index];return kind?[{alertId:randomUUID(),id,kind}]:[];});
+  if(!opening.length)return;
+  // Keep this separate from resolution so the partial index observes a closed episode.
+  await client.query(`INSERT INTO sourcing_production_alerts(alert_id,production_order_id,kind)
+   SELECT alert_id,order_id,kind FROM unnest($1::uuid[],$2::uuid[],$3::text[]) AS observed(alert_id,order_id,kind)
+   ON CONFLICT(production_order_id) WHERE resolved_at IS NULL DO NOTHING`,
+   [opening.map(row=>row.alertId),opening.map(row=>row.id),opening.map(row=>row.kind)]);
  }
  // Record report-driven recovery in the same transaction, even if nobody opens a todo between reports.
  async refreshOrder(client:PoolClient,id:string) {

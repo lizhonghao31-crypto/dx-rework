@@ -386,6 +386,41 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   )).rowCount).toBe(0);
  },testExecutionConfig.correctnessTimeoutMs);
 
+ it("projects multiple authorized production risks with one update and one insert per read",async()=>{
+  const pilot=factories[0]!;
+  await closure.setPilot(root(),{supplierId:pilot,enabled:true});
+  const orders=await Promise.all(['BATCH-LEFT','BATCH-RIGHT'].map(suffix=>create(pilot,suffix)));
+  for(const order of orders)await reporting.report(root(),order.productionOrderId,{position:1,businessDate:today(),quantity:5},randomUUID());
+
+  const sql:string[]=[];
+  const traced=new Proxy(database,{get(target,name){
+   if(name==='connect')return async()=>{
+    const actual=await target.connect();
+    return new Proxy(actual,{get(client,key){
+     if(key==='query')return (statement:string,args?:unknown[])=>{
+      if(/^(?:UPDATE|INSERT INTO) sourcing_production_alerts/.test(statement))sql.push(statement);
+      return client.query(statement,args);
+     };
+     const value:unknown=Reflect.get(client,key);
+     return typeof value==='function'?value.bind(client):value;
+    }});
+   };
+   const value:unknown=Reflect.get(target,name);
+   return typeof value==='function'?value.bind(target):value;
+  }});
+  const counted=new ProductionClosureService(traced);
+  const previous=await closure.todos(merch());
+  const expected=previous.filter(todo=>orders.some(order=>order.productionOrderId===todo.entityId));
+  expect(expected).toHaveLength(2);
+  await closure.markRead(merch(),expected[0]!.todoId);
+  const rows=await counted.todos(merch());
+  expect(sql).toHaveLength(2);
+  expect(sql[0]).toMatch(/^UPDATE/);
+  expect(sql[1]).toMatch(/^INSERT/);
+  expect(rows.find(todo=>todo.todoId===expected[0]!.todoId)).toMatchObject({readAt:expect.any(String),unread:false});
+  expect(rows.find(todo=>todo.todoId===expected[1]!.todoId)).toMatchObject({unread:true});
+ });
+
  it("excludes only the confirmed production object with Root audit, version protection and replay",async()=>{
   const order=await create(factories[0]!,"EXCLUDE"),id=order.productionOrderId;
   const exclusions=new ProductionExclusionService(database),dashboard=new ProductionDashboardService(database,reporting);
