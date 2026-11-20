@@ -36,7 +36,91 @@ try{
  // Ignore a signal from another identity and keep own body/count.
  const before=requests.filter(r=>r.scenario==='multitab'&&r.path==='/api/todos/mine').length;await reader.evaluate(()=>{const ch=new BroadcastChannel('dx-rework:todo-read-v1');ch.postMessage({type:'todo-read',actorId:'00000000-0000-4000-8000-000000000008'});ch.close();});await list.waitForTimeout(120);assert.equal(requests.filter(r=>r.scenario==='multitab'&&r.path==='/api/todos/mine').length,before);
  for(const width of [390,1024,1440]){await list.setViewportSize({width,height:900});await list.evaluate(()=>document.fonts.ready);assert.equal(await list.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);const titleGap=await list.locator('.my-todo-title').evaluate(el=>getComputedStyle(el).columnGap);assert.equal(titleGap,'10px');assert.ok((await list.locator('.my-todos-page').boundingBox()).width>Math.min(width-64,320),'body uses the available workspace');if(evidence)await list.screenshot({path:join(evidence,`list-${width}.png`),fullPage:true});}
- results.push({scenario:'multitab-persistence-identity-filter',pendingStillVisible:true});await context.close();assert.deepEqual(errors,[]);
+ results.push({scenario:'multitab-persistence-identity-filter',pendingStillVisible:true});await context.close();
+
+ // Let the backend capture the old indicator before the second tab marks real content read.
+ const pendingContext=await browser.newContext();
+ const pendingList=await pendingContext.newPage(),pendingReader=await pendingContext.newPage();
+ current=pendingList;
+ const raceScenario='multitab-indicator-in-flight',indicatorPath='/api/todos/mine/indicator';
+ const listPath='/api/todos/mine',indicatorResponses=[];
+ let releaseOld,resolveOld;
+ const release=new Promise(done=>{releaseOld=done;});
+ const firstResponse=new Promise(done=>{resolveOld=done;});
+ const counts=()=>pendingList.evaluate(([indicator,list])=>({
+   indicator:window.todoFixture.requests.filter(request=>request.path===indicator).length,
+   list:window.todoFixture.requests.filter(request=>request.path===list).length,
+ }),[indicatorPath,listPath]);
+ const visibility=state=>pendingList.evaluate(value=>{
+  Object.defineProperty(document,'visibilityState',{configurable:true,value});
+  document.dispatchEvent(new Event('visibilitychange'));
+ },state);
+ const unread=count=>pendingList.getByText('开发与大货、生产风险未读：'+count+' 项',{exact:true});
+ const pendingOne=pendingList.locator('.todo-count-badge[aria-label="1项待办提示"]').first();
+ const checkCard=async label=>{
+  await pendingList.locator('.my-todo-card').getByText(label,{exact:true}).waitFor();
+  assert.equal(await pendingList.locator('.my-todo-card').count(),1);
+  await pendingOne.waitFor({state:'attached'});
+ };
+ try{
+  pendingList.on('pageerror',error=>errors.push(error.message));
+  pendingReader.on('pageerror',error=>errors.push(error.message));
+  await pendingList.clock.install();
+  await pendingList.goto(url(raceScenario,'list'));
+  await unread(1).waitFor();
+  await checkCard('未读');
+  await pendingList.route(target=>target.pathname===indicatorPath,async route=>{
+   const response=await route.fetch(),snapshot=await response.json();
+   indicatorResponses.push(snapshot);
+   if(indicatorResponses.length===1){
+    resolveOld(snapshot);
+    await release;
+   }
+   await route.fulfill({response});
+  });
+  const initial=await counts();
+  await visibility('hidden');
+  await pendingList.clock.fastForward(61_000);
+  assert.deepEqual(await counts(),initial,'hidden tab does not issue a polling request');
+
+  await visibility('visible');
+  await pendingList.waitForFunction(initialGets=>window.todoFixture.requests.filter(request=>request.path==='/api/todos/mine/indicator').length>initialGets,initial.indicator);
+  const snapshot=await Promise.race([firstResponse,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(Error('Old indicator did not reach the TEST API')),6000);timer.unref();})]);
+  assert.deepEqual(snapshot,{pendingCount:1,unreadCount:1});
+  const acknowledged=pendingReader.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/read')&&response.request().method()==='POST'&&response.status()===200);
+  await pendingReader.goto(url(raceScenario));
+  await pendingReader.getByText('TEST真实主体已展示',{exact:true}).waitFor();
+  assert.equal((await (await acknowledged).json()).read,true);
+  assert.equal(reads.get(raceScenario+':'+id(1)),at);
+  await checkCard('已读');
+  assert.equal((await counts()).indicator,initial.indicator+1,'read is queued behind the held response');
+  await unread(1).waitFor();
+  releaseOld();
+  await unread(0).waitFor();
+  await checkCard('已读');
+  assert.deepEqual(indicatorResponses,[{pendingCount:1,unreadCount:1},{pendingCount:1,unreadCount:0}]);
+  const settled=await counts();
+  assert.equal(settled.indicator,initial.indicator+2,'one new refresh after releasing the previously in-flight GET');
+
+  await pendingList.evaluate(()=>{
+   const channel=new BroadcastChannel('dx-rework:todo-read-v1');
+   channel.onmessage=()=>{window.__testForeignReadReceived=true;channel.close();};
+  });
+  await pendingReader.evaluate(actorId=>{
+   const channel=new BroadcastChannel('dx-rework:todo-read-v1');
+   channel.postMessage({type:'todo-read',actorId});
+   channel.close();
+  },id(8));
+  await pendingList.waitForFunction(()=>window.__testForeignReadReceived===true);
+  await pendingList.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+  assert.deepEqual(await counts(),settled,'another actor causes neither list nor indicator refresh');
+  await unread(0).waitFor();
+  await checkCard('已读');
+  if(evidence)await pendingList.screenshot({path:join(evidence,'multitab-indicator-in-flight.png'),fullPage:true});
+  results.push({scenario:raceScenario,indicatorResponses,refreshesAfterOld:1,hiddenPollingRequests:0,otherActorRefreshes:0,pendingStillVisible:true});
+ }finally{releaseOld();}
+ await pendingContext.close();
+ assert.deepEqual(errors,[]);
 }catch(error){if(evidence&&current&&!current.isClosed()){await current.screenshot({path:join(evidence,'failure.png'),fullPage:true});await writeFile(join(evidence,'failure.txt'),await current.locator('body').innerText());}throw error;}
 finally{if(evidence)await writeFile(join(evidence,'result.json'),JSON.stringify({results,errors,requests,limits:['Actual React read boundary, callback and MyTodosPage; synthetic HTTP content and receipts. Actual authorization, content token and database uniqueness tested separately against PostgreSQL. Not ECS or production acceptance.']},null,2));await browser?.close();if(server)await new Promise(done=>server.close(done));await rm(out,{recursive:true,force:true});}
 console.log(JSON.stringify({passed:results.length,errors}));
