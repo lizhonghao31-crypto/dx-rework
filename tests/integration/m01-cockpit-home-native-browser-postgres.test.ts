@@ -13,7 +13,8 @@ import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {sourcingSlaEvidence} from '../../apps/api/src/production-platform/sourcing-sla-evidence.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs});
-import {cockpitHomeBrowser,homeReady,coverageReady,JOURNEY_COVERAGE_KEYS} from '../acceptance/m01-cockpit-home-native-browser.js';
+import {cockpitHomeBrowser,homeReady,coverageReady} from '../acceptance/m01-cockpit-home-native-browser.js';
+import {JOURNEY_PENDING_COVERAGE_KEYS} from '@dx-rework/contracts/digital-production-journey';
 async function openPendingCoverage(page:Parameters<typeof homeReady>[0]){
  const current=new URL(page.url()).searchParams.get('kpi');
  if(current!=='todo'){
@@ -102,10 +103,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }
   }finally{await context.close();}
  });
- it('opens seven vertical categories first and drills every authorized page with counts matching full candidates',async()=>{
-  const {context,page}=await h.open();try{const actual=await h.read(page,{kpi:'todo'}),trigger=await openPendingCoverage(page),originalUrl=page.url();const dialog=page.getByRole('dialog',{name:'待补资料'});await dialog.waitFor();expect(await dialog.locator('.cockpit-coverage-categories li').count()).toBe(7);expect(await dialog.locator('.cockpit-coverage-order-list').count()).toBe(0);
-   for(const [i,key]of JOURNEY_COVERAGE_KEYS.entries()){const category=actual.supervision!.coverage.find(row=>row.key===key),button=dialog.locator('.cockpit-coverage-categories button').nth(i);expect(await button.innerText()).toContain(`${category?.orders??0} 单`);if(!category?.orders){expect(await button.isDisabled()).toBe(true);continue;}await button.click();await coverageReady(page);expect(await dialog.locator('.cockpit-coverage-heading').innerText()).toContain(`共 ${category.orders} 单`);await dialog.getByRole('button',{name:'返回分类',exact:true}).click();}
-   const category=actual.supervision!.coverage.find(row=>row.orders>15)!;expect(category).toBeTruthy();const index=JOURNEY_COVERAGE_KEYS.indexOf(category.key);await dialog.locator('.cockpit-coverage-categories button').nth(index).click();await coverageReady(page);
+ it('opens only actionable coverage categories first and drills every authorized page with matching counts',async()=>{
+  const {context,page}=await h.open();try{const actual=await h.read(page,{kpi:'todo'}),trigger=await openPendingCoverage(page),originalUrl=page.url();const dialog=page.getByRole('dialog',{name:'待补资料'});await dialog.waitFor();expect(await dialog.locator('.cockpit-coverage-categories li').count()).toBe(JOURNEY_PENDING_COVERAGE_KEYS.length);expect(await dialog.getByText('时效计划待补充',{exact:true}).count()).toBe(0);expect(await dialog.locator('.cockpit-coverage-order-list').count()).toBe(0);
+   for(const [i,key]of JOURNEY_PENDING_COVERAGE_KEYS.entries()){const category=actual.supervision!.coverage.find(row=>row.key===key),button=dialog.locator('.cockpit-coverage-categories button').nth(i);expect(await button.innerText()).toContain(`${category?.orders??0} 单`);if(!category?.orders){expect(await button.isDisabled()).toBe(true);continue;}await button.click();await coverageReady(page);expect(await dialog.locator('.cockpit-coverage-heading').innerText()).toContain(`共 ${category.orders} 单`);await dialog.getByRole('button',{name:'返回分类',exact:true}).click();}
+   const category=actual.supervision!.coverage.find(row=>row.orders>15)!;expect(category).toBeTruthy();const index=JOURNEY_PENDING_COVERAGE_KEYS.findIndex(key=>key===category.key);expect(index).toBeGreaterThanOrEqual(0);await dialog.locator('.cockpit-coverage-categories button').nth(index).click();await coverageReady(page);
    const ids=new Set<string>();let total=0;
    for(let i=1;i<=Math.ceil(category.orders/15);i++){
     const result=await h.read(page,{kpi:'todo',missing:category.key,page:String(i)});expect(result.total).toBe(category.orders);
@@ -122,7 +123,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      await dialog.getByRole('button',{name:'下一页',exact:true}).click();expect((await response).status()).toBe(200);await coverageReady(page);
     }
    }
-   expect(total).toBe(category.orders);expect(ids.size).toBe(category.orders);await dialog.getByRole('button',{name:'返回分类',exact:true}).click();expect(await dialog.locator('.cockpit-coverage-categories li').count()).toBe(7);await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});expect(page.url()).toBe(originalUrl);expect(await trigger.evaluate(el=>el===document.activeElement)).toBe(true);
+   expect(total).toBe(category.orders);expect(ids.size).toBe(category.orders);await dialog.getByRole('button',{name:'返回分类',exact:true}).click();expect(await dialog.locator('.cockpit-coverage-categories li').count()).toBe(JOURNEY_PENDING_COVERAGE_KEYS.length);await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});expect(page.url()).toBe(originalUrl);expect(await trigger.evaluate(el=>el===document.activeElement)).toBe(true);
    await page.goto(h.base+h.path({search:'',missing:'factory_date'}));await homeReady(page);const full=await h.read(page,{search:''});expect(await page.locator('.cockpit-applied-coverage').count()).toBe(1);await page.getByRole('button',{name:/订单总数/}).first().click();await homeReady(page);expect(new URL(page.url()).searchParams.has('missing')).toBe(false);expect(await page.locator('.cockpit-applied-coverage').count()).toBe(0);expect(await page.locator('.journey-orders [aria-label="分页"]').innerText()).toContain(`共 ${full.summary.all} 条`);
   }finally{await context.close();}
  });
@@ -309,13 +310,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const loaded=tab.page.waitForResponse(response=>new URL(response.url()).pathname==='/api/production-dashboard/'+productionId&&new URL(response.url()).searchParams.get('factoryDecisionId')===decision);
    await target.click();expect((await loaded).status()).toBe(200);
    expect(new URL(tab.page.url()).pathname).toBe('/ui/production-dashboard/'+productionId);
-   await expect.poll(()=>tab.page.locator('.production-dashboard').innerText()).toContain(factoryName);
+   await tab.page.locator('.production-dashboard').getByText(factoryName,{exact:false}).first().waitFor();
 
    await tab.page.goto(h.base+'/ui/digital-production?factory='+id);const link=tab.page.getByRole('link',{name:'打开原实时生产',exact:true});
    await expect.poll(()=>link.count()).toBe(1);if(!await link.isVisible())await link.locator('xpath=ancestor::details[1]').locator('summary').first().click();
    expect(new URL((await link.getAttribute('href'))!,h.base).searchParams.get('factoryDecisionId')).toBe(decision);
    await link.click();await expect.poll(()=>new URL(tab.page.url()).searchParams.get('factoryDecisionId')).toBe(decision);
-   await expect.poll(()=>tab.page.locator('.production-dashboard').innerText()).toContain(factoryName);
+   await tab.page.locator('.production-dashboard').getByText(factoryName,{exact:false}).first().waitFor();
    expect((await tab.page.request.get(h.base+'/api/production-dashboard/'+productionId+'?factoryDecisionId='+decision)).status()).toBe(200);
    await tab.page.screenshot({path:join(h.evidence,`r509-current-factory-production-${reported}.png`),fullPage:true});
   }finally{await tab.context.close();}

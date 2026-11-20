@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {JOURNEY_COVERAGE_KEYS,type JourneyCoverage,type JourneyResult} from '@dx-rework/contracts/digital-production-journey';
+import {JOURNEY_COVERAGE_KEYS,JOURNEY_PENDING_COVERAGE_KEYS,type JourneyCoverage,type JourneyResult} from '@dx-rework/contracts/digital-production-journey';
 import {Button} from '@dx-rework/ui';
 import {Pagination} from '@dx-rework/ui/production';
 import {CockpitHomeDialog} from './cockpit-home-dialog.js';
@@ -25,8 +25,9 @@ function CoverageOrders({context,category,onOpen,onBack}:{context:CockpitContext
 
 export function CockpitTimingCoverage({data,context,onClose,onOpen}:{data:JourneyResult;context:CockpitContext;onClose:()=>void;onOpen:(id:string)=>void}){
  const [category,setCategory]=useState<JourneyCoverage['key']|null>(null);
+ const keys=context.kpi==='todo'?JOURNEY_PENDING_COVERAGE_KEYS:JOURNEY_COVERAGE_KEYS;
  return <CockpitHomeDialog title="待补资料" onClose={onClose}>
-  {category?<CoverageOrders key={category} context={context} category={category} onOpen={onOpen} onBack={()=>setCategory(null)}/>:<ul className="cockpit-coverage-categories">{JOURNEY_COVERAGE_KEYS.map(key=>{
+  {category?<CoverageOrders key={category} context={context} category={category} onOpen={onOpen} onBack={()=>setCategory(null)}/>:<ul className="cockpit-coverage-categories">{keys.map(key=>{
    const count=data.supervision?data.supervision.coverage.find(row=>row.key===key)?.orders??0:null;
    return <li key={key}><button type="button" disabled={count===null||count===0} onClick={()=>setCategory(key)}><span>{cockpitCoverageLabels[key]}</span><strong>{count===null?'—':`${count} 单`}</strong><span aria-hidden>›</span></button></li>;
   })}</ul>}

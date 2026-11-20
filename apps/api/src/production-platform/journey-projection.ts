@@ -1,4 +1,4 @@
-import { JOURNEY_COVERAGE_KEYS, JOURNEY_STAGES, isJourneyPlanningNode, type CockpitActionableTodo, type JourneyCoverage, type JourneyFilter, type JourneyNode, type JourneyCompleteResult, type OrderJourney, type JourneyState } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_COVERAGE_KEYS, JOURNEY_PENDING_COVERAGE_KEYS, JOURNEY_STAGES, isJourneyPlanningNode, type CockpitActionableTodo, type JourneyCoverage, type JourneyFilter, type JourneyNode, type JourneyCompleteResult, type OrderJourney, type JourneyState } from "@dx-rework/contracts/digital-production-journey";
 import {compareCockpitOrders,journeyDisplay} from "./journey-display.js";
 import {journeyObservedDay} from './journey-risk-clock.js';
 
@@ -113,15 +113,17 @@ function selectCockpitSelections<T extends JourneySelection>(items:T[],filter:Jo
   // drill-down. Overlapping categories still count one mother in the KPI.
   const missing=(item:JourneySelection,key:JourneyCoverage['key'])=>(key==='fact_time'||!['completed','closed','cancelled'].includes(item.display!.mainState))&&Boolean(item.supervision?.coverage.some(c=>c.key===key));
   const isOpen=(item:JourneySelection)=>!["completed","closed","cancelled"].includes(item.display!.mainState);
-  const pendingCoverage=(item:JourneySelection,key:JourneyCoverage['key'])=>isOpen(item)&&key!=='scope'&&missing(item,key);
+  const pendingKeys:readonly JourneyCoverage['key'][]=JOURNEY_PENDING_COVERAGE_KEYS;
+  const pendingCoverage=(item:JourneySelection,key:JourneyCoverage['key'])=>isOpen(item)&&pendingKeys.includes(key)&&missing(item,key);
+  const filteredCoverage=filter.kpi==='todo'?pendingCoverage:missing;
   const needsAttention=(item:typeof scoped[number])=>isOpen(item)&&(
-    Boolean(item.actionableTodo?.items.length)||blocked(item)||JOURNEY_COVERAGE_KEYS.some(key=>pendingCoverage(item,key)));
+    Boolean(item.actionableTodo?.items.length)||blocked(item)||pendingKeys.some(key=>pendingCoverage(item,key)));
   const todoComplete=scoped.every(item=>!isOpen(item)||item.actionableTodo?.status==='complete');
   const summary={todo:todoComplete?scoped.filter(needsAttention).length:null,all:scoped.length,active:count("active"),dueSoon:count("due_soon"),overdue:count("overdue"),completed:count("completed"),blocked:scoped.filter(blocked).length,timingMissing:scoped.filter(item=>JOURNEY_COVERAGE_KEYS.some(key=>missing(item,key))).length,...(scoped.some(item=>journeyScheduleSelection(item))?{scheduleLag:scoped.filter(item=>journeyScheduleSelection(item)?.state==='late').length,customerDuePassed:scoped.filter(item=>(journeyScheduleSelection(item)?.dueLineIds.length??0)>0).length,scheduleUnknown:scoped.filter(item=>journeyScheduleSelection(item)?.state==='unknown').length}:{})};
   const active=scoped.filter(isOpen);
   const inProgress=(item:JourneySelection)=>scopeNodes(item).filter(n=>!["completed","inherited","cancelled","not_applicable","unavailable"].includes(n.state));
   const supervision={overdue:active.filter(item=>item.selectionSignals?.scopedOverdue??inProgress(item).some(n=>n.risks.includes("overdue"))).length,dueSoon:active.filter(item=>item.selectionSignals?.scopedDueSoon??inProgress(item).some(n=>n.risks.includes("due_soon"))).length,
-    coverage:JOURNEY_COVERAGE_KEYS.flatMap(key=>{const affected=scoped.filter(item=>filter.kpi==="todo"?pendingCoverage(item,key):missing(item,key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};
-  const filtered=scoped.filter(item=>scheduleMatches(item,filter)&&(!filter.missing||missing(item,filter.missing))&&(filter.kpi==="all"||filter.kpi==="blocked"&&blocked(item)||filter.kpi==="todo"&&todoComplete&&needsAttention(item)||item.display.mainState===filter.kpi));
+    coverage:JOURNEY_COVERAGE_KEYS.flatMap(key=>{const affected=scoped.filter(item=>filteredCoverage(item,key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};
+  const filtered=scoped.filter(item=>scheduleMatches(item,filter)&&(!filter.missing||filteredCoverage(item,filter.missing))&&(filter.kpi==="all"||filter.kpi==="blocked"&&blocked(item)||filter.kpi==="todo"&&todoComplete&&needsAttention(item)||item.display.mainState===filter.kpi));
   return {ruleVersion:"journey-v2.0",asOf,page:filter.page,pageSize:15,total:filtered.length,summary,supervision,scopeCounts,items:paginate?filtered.slice((filter.page-1)*15,filter.page*15):filtered};
 }

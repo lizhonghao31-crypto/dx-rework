@@ -33,6 +33,8 @@ export const JourneyStateSchema = z.enum(["uncreated", "pending", "active", "blo
 export const isJourneyPlanningNode=(node:{key:string;planningOnly?:boolean})=>Boolean(node.planningOnly||JOURNEY_NODES.find(d=>d.key===node.key)?.planningOnly);
 export type JourneyState = z.infer<typeof JourneyStateSchema>;
 export const JOURNEY_COVERAGE_KEYS = ['customer_date','factory_date','fabric_date','cutting_time','plan','scope','fact_time'] as const;
+// Legacy plan absence and restricted visibility are coverage notices, not current gaps.
+export const JOURNEY_PENDING_COVERAGE_KEYS = JOURNEY_COVERAGE_KEYS.filter(key=>key!=='plan'&&key!=='scope');
 export const JourneyFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   scope: z.enum(["production", "development"]).optional(),
