@@ -1,54 +1,82 @@
 {
   "version": 1,
-  "base": "3bcd2292ba779bf2d3a5f6a83098bc18b8ad48ce",
-  "sourceFingerprint": "6c33823d3e21a7e5923a81db169806c117c6866fde1f84f126f26915b0a75a7f",
+  "base": "7e38a5fa4ea748000aed782a39c6e9927b5b978f",
+  "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
   "rules": [
     {
-      "rule": "受原工厂试点和读角色限制的生产风险，在同一事务及原排它锁内按订单结束旧提醒，按事实开启新风险；同一次风险保持已读。",
-      "source": "Eric 审定《达兴全系统性能治理 v7》06B 生产风险提醒批量投影。",
+      "rule": "座舱只装配本次会消费的原产前节点事实。全范围待办与权限判定仍复用原时效规则。",
+      "source": "Eric 审定《达兴全系统性能治理 v7》10B 座舱服务端读取与装配。",
       "reads": [
-        "apps/api/src/sourcing/production-closure-service.ts",
-        "apps/api/src/sourcing/production-reporting-service.ts",
-        "apps/api/src/todos/service.ts",
-        "tests/integration/production-closure-postgres.test.ts"
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts"
       ],
       "oldTests": [
-        "tests/integration/production-closure-postgres.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "initialization": "试点原事实先按订单收敛，关闭旧风险与插入新风险是同一事务内的两次集合操作。无风险行只需关闭，不产生新风险。",
-      "dateAndPermission": "原 business asOf、能力与收件人范围不变。结束时使用原数据库 clock_timestamp，风险重新出现时按新提醒 ID 单独记录已读。",
-      "expectation": "事务内任一步失败可完整回滚；并发重试一个订单仍只有一期有效风险；已读不跨账号或新风险期。",
+      "initialization": "沿用旧产前门槛、截面的业务时间、真实制单和任务事实。管理角色仍用同一技术与任务授权，历史和工作台入口继续读各自完整详情。",
+      "dateAndPermission": "全范围权限、当前责任、已采用计划和历史首次时间沿原来源，Root、管理、PMC 与原相关普通员工范围保留。",
+      "expectation": "原生有权任务、裁片、责任、时效、待办、风险、汇总和分页完整相同。不重复组装无消费者的领料历史与工作台回执。",
       "writes": [
-        "apps/api/src/sourcing/production-closure-service.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
         "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/production-closure-postgres.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts"
       ],
       "checks": [
-        "risk-episodes-transaction"
+        "pg-native-facts",
+        "permission-unit"
       ]
     }
   ],
   "checks": [
     {
-      "id": "risk-episodes-transaction",
-      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=690 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/production-closure-postgres.test.ts -t 'routes one risk per person|projects multiple authorized production risks' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06b/final-transaction-pg13.json",
-      "context": "本地隔离 PostgreSQL 13.23 非超级用户，真实原单与业务录入，覆盖锁、事务回滚、并发更替、权限和已读状态。首次测试夹具兼容性失败日志独立留存。",
+      "id": "pg-native-facts",
+      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=700 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/journey-fact-model-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/digital-journey-postgres.test.ts -t 'keeps linked native preparation|preserves approved PO goal evidence|projects the complete first adopted serial craft route|batches the authorized task conditions|reads five real log' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10b/post-1063-pg.json",
+      "context": "隔离低权限 PostgreSQL 13.23，实际含 10A 与 04 的候选。双 PO 冻结及特种工艺、管理和部分角色、原直达和游标都通过。后续基线只变更独立风险投影。",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/pr06b/final-transaction-pg13.json",
-      "logSha256": "0ce4ede5fb4785c2a7d8793077580fe6df2c95f59fcfa696c4f5cb82f9c0ab31",
-      "sourceFingerprint": "6c33823d3e21a7e5923a81db169806c117c6866fde1f84f126f26915b0a75a7f",
-      "testedHead": "59f98979f35c41a6a08a9b339f23b83a4987d042",
-      "passed": 2,
+      "log": "/tmp/dx-performance-v7/pr10b/post-1063-pg.json",
+      "logSha256": "8eb3a07a671b45d0b25c625eec1c8846795cf702b2171ffbe3c149e561ead4e0",
+      "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
+      "testedHead": "fa14d8e7b731b19808b48e1bb483649981ad5a5c",
+      "passed": 5,
       "failed": 0,
-      "skipped": 19,
-      "startedAt": "2026-11-20T17:03:52.024000Z",
-      "endedAt": "2026-11-20T17:03:58.974682Z",
+      "skipped": 88,
+      "startedAt": "2026-11-20T17:05:19.658000Z",
+      "endedAt": "2026-11-20T17:05:49.850769Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0ce4ede5fb4785c2a7d8793077580fe6df2c95f59fcfa696c4f5cb82f9c0ab31"
+          "sha256": "8eb3a07a671b45d0b25c625eec1c8846795cf702b2171ffbe3c149e561ead4e0"
+        }
+      ]
+    },
+    {
+      "id": "permission-unit",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=700 node_modules/.bin/vitest run tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr10b/final-pmc.json",
+      "context": "PMC 只读、管理与无关身份回归，保持原能力断言。",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-performance-v7/pr10b/final-pmc.json",
+      "logSha256": "039cb671901762e99e0b52f44467436cbeb0d529084eadda2fb38e15cccfb291",
+      "sourceFingerprint": "d6a419a19f73ef44d331d541abcd6285f7870165706ac3a822959354fe86af9d",
+      "testedHead": "e026dee70a87f497218c4f2a40a728af5f8a31eb",
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-20T17:29:21.736000Z",
+      "endedAt": "2026-11-20T17:29:25.428918Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "039cb671901762e99e0b52f44467436cbeb0d529084eadda2fb38e15cccfb291"
         }
       ]
     }
