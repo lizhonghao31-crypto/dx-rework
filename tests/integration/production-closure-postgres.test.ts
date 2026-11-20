@@ -517,4 +517,41 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await contracts.getCurrent(root(),order.sourcingCaseId)).item?.contractVersion).toBe(2);
  });
 
+ // The 16-order case comes after the earlier checks of the shared dashboard and todo population.
+ it('keeps events and supplier concentration over all matching executions when only one page is assembled',async()=>{
+  const access=new AccessMasterDataService(database,"corp");
+  const eventFactories=await Promise.all([1,2].map(index=>access.createSupplier(
+   root("supplier_profile:write"),
+   CreateSupplierSchema.parse({
+    supplierCode:`SSP09-DASH-SCOPE-${index}`,supplierType:"factory",supplierName:`看板分页试点厂${index}`,
+    active:true,changeReason:"SSP09看板分页合成验收",address:`试点路${index}号`,contractEntityName:`看板分页试点厂${index}`,
+    partyBRepresentative:"试点代表",payeeName:"试点收款人",bankAccount:`62221${index}`,bankName:"测试银行",
+   }),
+  )));
+  const early=(await database.query<{now:Date}>('SELECT clock_timestamp() AS now')).rows[0]!.now.toISOString();
+  const orders=[];
+  for(let i=0;i<16;i++){
+   const order=await create(eventFactories[i%2]!.supplierId,`TEST-DASH-SCOPE-${i.toString().padStart(2,'0')}`);
+   await reporting.report(root(),order.productionOrderId,{position:1,businessDate:today(),quantity:1},randomUUID());
+   orders.push(order);
+  }
+  const time=new Date(),dashboard=new ProductionDashboardService(database,reporting,()=>time);
+  const query={q:'TEST-DASH-SCOPE-',previousAsOf:early};
+  const first=await dashboard.list(root(),{...query,page:1}),next=await dashboard.list(root(),{...query,page:2});
+  expect(first.totalCount).toBe(16);expect(next.totalCount).toBe(16);
+  expect(first.items).toHaveLength(15);expect(next.items).toHaveLength(1);
+  expect(first.events).toEqual(next.events);expect(first.counts).toEqual(next.counts);expect(first.suppliers).toEqual(next.suppliers);
+  expect(first.events.some(event=>event.productionOrderId===next.items[0]!.order.productionOrderId&&event.kind==='report')).toBe(true);
+  const orderById=new Map(orders.map(order=>[order.productionOrderId,order]));
+  for(const event of first.events){
+   const original=orderById.get(event.productionOrderId)!;
+   expect(event).toMatchObject({factoryDecisionId:original.factoryDecisionId??null,
+    supplierName:original.supplierName,firstStyleNo:original.firstStyleNo});
+  }
+  const one=await dashboard.list(root(),{q:'TEST-DASH-SCOPE-00',previousAsOf:early});
+  expect(one.totalCount).toBe(1);expect(one.items[0]?.order.productionOrderId).toBe(orders[0]!.productionOrderId);
+  expect(one.items[0]?.chase?.supplierOpenCount).toBe(8);
+  expect(one.events.every(event=>event.productionOrderId===orders[0]!.productionOrderId)).toBe(true);
+  expect(await dashboard.list(root(),{q:'TEST-DASH-SCOPE-NO-MATCH',previousAsOf:early})).toMatchObject({items:[],events:[],totalCount:0});
+ });
 });

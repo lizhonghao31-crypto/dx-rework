@@ -10,20 +10,30 @@ import { ProductionDashboardQuerySchema, ProductionDashboardSchema, ProductionDa
   type ProductionDashboardItem, type ProductionDashboardQuery, type ProductionDashboardEvent } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { selectFactoryProduction, toOrder, type ProductionRow } from "./sourcing-production-service.js";
+import { selectFactoryDashboardCandidates, selectFactoryDashboardPage, selectFactoryProduction, toOrder, type ProductionRow } from "./sourcing-production-service.js";
 import { type ProductionReportingService, canReadProductionReporting, factoryProductionVisibilityFor, productionVisibilityArgs } from "./production-reporting-service.js";
 
 type FactsRow = {id:string;status:ProductionProgressFacts["status"];quantity:number;completed_quantity:number;first_on:string|null;due:string|null;last_at:Date|null;completed_on:string|null};
 const iso = (date:Date|string) => new Date(date).toISOString();
 const progress = (row:FactsRow, asOf:string) => calculateProductionProgress({status:row.status,quantity:row.quantity,
   completedQuantity:row.completed_quantity,firstReportedOn:row.first_on,deliveryDate:row.due,lastUpdatedAt:row.last_at?iso(row.last_at):null,completedOn:row.completed_on},asOf);
+type SelectionOrder=Pick<ProductionDashboardItem['order'],'productionOrderId'|'factoryDecisionId'|'sourcingCaseId'|'supplierId'|'supplierName'|'status'|'deliveryDate'|'quantity'|'firstStyleNo'|'poDeliveryDates'|'poDeliveryClosed'>
+ & {lines:Array<{styleNo:string}>};
+type DashboardSelection={order:SelectionOrder;progress:ProductionDashboardItem['progress'];chase?:ProductionDashboardItem['chase'];deliveryRisks?:ProductionDashboardItem['deliveryRisks']};
+type CandidateRow={
+ production_order_id:string;factory_decision_id:string|null;sourcing_case_id:string;quantity:number;supplier_id:string;
+ supplier_name_snapshot:string;delivery_date:string|null;status:SelectionOrder['status'];
+ first_style_no:string|null;po_delivery_dates?:SelectionOrder['poDeliveryDates'];po_delivery_closed?:boolean|null;
+};
+function matchesDashboardOrder(order:SelectionOrder,input:ProductionDashboardQuery,q=input.q?.trim().toLocaleLowerCase()??"") {
+ return (!input.supplierId||order.supplierId===input.supplierId)&&(!input.status||order.status===input.status)
+  &&(!q||[order.supplierName,...order.lines.map(line=>line.styleNo)].some(value=>value.toLocaleLowerCase().includes(q)));
+}
 // One shared calculator serves listing, filtering, sorting, detail and future todo consumers.
-export function selectDashboardPage(items:ProductionDashboardItem[],input:ProductionDashboardQuery) {
+export function selectDashboardPage<T extends DashboardSelection>(items:T[],input:ProductionDashboardQuery) {
   const q=input.q?.trim().toLocaleLowerCase()??"";
-  const filtered=items.filter(({order,progress:p,chase,deliveryRisks})=>(!input.supplierId||order.supplierId===input.supplierId)
-    &&(!input.status||order.status===input.status)&&(!input.progressState||p.progressState===input.progressState)
-    &&(!input.risk||(input.risk==="attention" ? p.attention||chase?.deliveryPressure : input.risk==="stale" ? p.progressState==="stale" : input.risk==='po_deadline'?Boolean(deliveryRisks?.length):chase?.deliveryPressure&&chase.dueThisWeek))
-    &&(!q||[order.supplierName,...order.lines.map(l=>l.styleNo)].some(s=>s.toLocaleLowerCase().includes(q))));
+  const filtered=items.filter(({order,progress:p,chase,deliveryRisks})=>matchesDashboardOrder(order,input,q)&&(!input.progressState||p.progressState===input.progressState)
+    &&(!input.risk||(input.risk==="attention" ? p.attention||chase?.deliveryPressure : input.risk==="stale" ? p.progressState==="stale" : input.risk==='po_deadline'?Boolean(deliveryRisks?.length):chase?.deliveryPressure&&chase.dueThisWeek)));
   filtered.sort((a,b)=>productionProgressRank(a.progress.progressState)-productionProgressRank(b.progress.progressState)
     ||(a.order.deliveryDate??"9999").localeCompare(b.order.deliveryDate??"9999")||a.order.productionOrderId.localeCompare(b.order.productionOrderId));
   const page=input.page??1;
@@ -113,13 +123,39 @@ export class ProductionDashboardService {
         WHERE factory."productionOrderId"=production.production_order_id
           AND factory."factoryDecisionId" IS NOT DISTINCT FROM production.factory_decision_id
       )`:"";
-      const result=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibilityFor(actor)}${scopeFilter}`,
-        [...productionVisibilityArgs(actor),...(scope?[JSON.stringify(scope.factories)]:[])]);
-      const orders=result.rows.map(toOrder),ids=orders.map(o=>o.productionOrderId);
-      const current=await readFactoryProductionProgressFacts(client,ids,asOf);
-      const items=addProductionChase(orders.filter(o=>current.has(executionKey(o.productionOrderId,o.factoryDecisionId))).map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),await readProductionDays(client,ids,asOf,true),asOf);
-      const day=shanghaiDay(asOf),withDeliveryRisks=(item:ProductionDashboardItem)=>({...item,deliveryRisks:poDeliveryRisks(item.order.poDeliveryDates??[],day,{finished:Boolean(item.order.poDeliveryClosed),factoryFinished:item.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')});
       const deliveryRiskFilter=input.risk==='po_deadline';
+      const result=await client.query<CandidateRow>(`${selectFactoryDashboardCandidates(deliveryRiskFilter,!!input.previousAsOf)} WHERE ${factoryProductionVisibilityFor(actor)}${scopeFilter}`,
+        [...productionVisibilityArgs(actor),...(scope?[JSON.stringify(scope.factories)]:[])]);
+      const orders:SelectionOrder[]=result.rows.map(row=>({productionOrderId:row.production_order_id,factoryDecisionId:row.factory_decision_id,
+        sourcingCaseId:row.sourcing_case_id,quantity:Number(row.quantity),supplierName:row.supplier_name_snapshot,supplierId:row.supplier_id,deliveryDate:row.delivery_date,
+        status:row.status,firstStyleNo:row.first_style_no??"",lines:[],
+        ...(row.po_delivery_dates?{poDeliveryDates:row.po_delivery_dates}:{}),
+        ...(row.po_delivery_closed!==null&&row.po_delivery_closed!==undefined?{poDeliveryClosed:row.po_delivery_closed}:{})}));
+      const ids=[...new Set(orders.map(order=>order.productionOrderId))];
+      const current=await readFactoryProductionProgressFacts(client,ids,asOf);
+      const comparable=orders.filter(order=>current.has(executionKey(order.productionOrderId,order.factoryDecisionId)));
+      const q=input.q?.trim().toLocaleLowerCase()??"";
+      if(q){
+        const styleCandidates=comparable.filter(order=>matchesDashboardOrder(order,input,"")&&!order.supplierName.toLocaleLowerCase().includes(q));
+        const styleIds=[...new Set(styleCandidates.map(order=>order.productionOrderId))];
+        const styles=styleIds.length?await client.query<{production_order_id:string;style_numbers:string[]}>(`
+          SELECT line.production_order_id,array_agg(identity.style_no) AS style_numbers
+          FROM sourcing_production_lines line
+          JOIN sourcing_production_orders parent USING(production_order_id)
+          JOIN current_sourcing_case_lines identity
+            ON identity.sourcing_case_id=parent.sourcing_case_id AND identity.position=line.position
+          WHERE line.production_order_id=ANY($1::uuid[])
+          GROUP BY line.production_order_id`,[styleIds]):null;
+        const lines=new Map(styles?.rows.map(row=>[row.production_order_id,row.style_numbers.map(styleNo=>({styleNo}))]));
+        for(const order of styleCandidates)order.lines=lines.get(order.productionOrderId)??[];
+      }
+      // Concentration is based on all authorized executions as before. Daily
+      // reports are needed only for executions that pass invariant filters.
+      const matches=comparable.filter(order=>matchesDashboardOrder(order,input,q));
+      const matchIds=[...new Set(matches.map(order=>order.productionOrderId))];
+      const days=matchIds.length?await readProductionDays(client,matchIds,asOf,true):new Map();
+      const items=addProductionChase(matches.map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),days,asOf,comparable);
+      const day=shanghaiDay(asOf),withDeliveryRisks=<T extends DashboardSelection>(item:T)=>({...item,deliveryRisks:poDeliveryRisks(item.order.poDeliveryDates??[],day,{finished:Boolean(item.order.poDeliveryClosed),factoryFinished:item.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')});
       const selected=selectDashboardPage(deliveryRiskFilter?items.map(withDeliveryRisks):items,input),selectedIds=selected.filtered.map(i=>i.order.productionOrderId);
       const suppliers=[...new Map(orders.map(o=>[o.supplierId,{supplierId:o.supplierId,supplierName:o.supplierName}])).values()]
         .sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
@@ -135,7 +171,28 @@ export class ProductionDashboardService {
         }
       }
       events.sort((a,b)=>b.recordedAt.localeCompare(a.recordedAt)||a.id.localeCompare(b.id));
-      return ProductionDashboardSchema.parse({asOf,...(scope?{scope}:{}),items:deliveryRiskFilter?selected.items:selected.items.map(withDeliveryRisks),page:selected.page,pageSize:15,totalCount:selected.totalCount,
+      const rich=new Map<string,ProductionDashboardItem['order']>();
+      if(selected.items.length){
+        const keys=selected.items.map(({order})=>({productionOrderId:order.productionOrderId,factoryDecisionId:order.factoryDecisionId??null}));
+        // These exact compound keys already passed the actor and mother checks
+        // in this same read-only snapshot. Never use a caller-supplied identity here.
+        const values=keys.flatMap(key=>[key.productionOrderId,key.factoryDecisionId]);
+        const predicate=keys.map((_,index)=>`(production.production_order_id=$${index*2+1}::uuid
+          AND production.factory_decision_id IS NOT DISTINCT FROM $${index*2+2}::uuid)`).join(' OR ');
+        const pageRows=await client.query<ProductionRow>(`WITH dashboard_page AS MATERIALIZED (
+          SELECT production.* FROM sourcing_production_factory_orders production
+          WHERE ${predicate}
+        ) ${selectFactoryDashboardPage}`,values);
+        for(const row of pageRows.rows){
+          const order=toOrder(row);rich.set(executionKey(order.productionOrderId,order.factoryDecisionId),order);
+        }
+      }
+      const pageItems=selected.items.map(item=>{
+        const order=rich.get(executionKey(item.order.productionOrderId,item.order.factoryDecisionId));
+        if(!order)throw new ApplicationError("CONFLICT","所选生产明细暂不可读取，请重试",409);
+        return withDeliveryRisks({...item,order});
+      });
+      return ProductionDashboardSchema.parse({asOf,...(scope?{scope}:{}),items:pageItems,page:selected.page,pageSize:15,totalCount:selected.totalCount,
         counts:selected.counts,chaseCounts:selected.chaseCounts,suppliers,events:events.slice(0,20)});
     });
   }
@@ -151,10 +208,14 @@ export class ProductionDashboardService {
       return ProductionDashboardDetailSchema.parse({asOf,detail,progress:facts.get(executionKey(id,factoryDecisionId)),deliveryRisks:poDeliveryRisks(detail.order.poDeliveryDates??[],shanghaiDay(asOf),{finished:Boolean(detail.order.poDeliveryClosed),factoryFinished:detail.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')});
     });
   }
-  private async events(client:PoolClient,orders:Pick<ProductionDashboardItem["order"],"productionOrderId"|"factoryDecisionId">[]):Promise<ProductionDashboardEvent[]> {
+  private async events(client:PoolClient,orders:Pick<SelectionOrder,"productionOrderId"|"factoryDecisionId"|"sourcingCaseId"|"supplierName">[]):Promise<ProductionDashboardEvent[]> {
+    if(!orders.length)return [];
     const ids=orders.map(order=>order.productionOrderId),factories=orders.map(order=>order.factoryDecisionId??null);
+    // These names and source identities come from the already authorized
+    // factory executions in this same snapshot, across the entire filter.
+    const sources=orders.map(order=>order.sourcingCaseId),suppliers=orders.map(order=>order.supplierName);
     const result=await client.query<{id:string;production_order_id:string;first_style_no:string;supplier_name_snapshot:string;kind:"report"|"correct"|"complete"|"ship";business_date:string;created_at:Date;quantity:number|null;factory_decision_id:string|null}>(`
-      SELECT activity.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot FROM (
+      SELECT activity.*,sourcing_current_first_style(selected.sourcing_case_id) AS first_style_no,selected.supplier_name_snapshot FROM (
         SELECT report.report_id::text AS id,report.production_order_id,report.factory_decision_id,CASE WHEN revision=1 THEN 'report' ELSE 'correct' END AS kind,
           business_date::text,created_at,quantity FROM sourcing_production_reports report WHERE production_order_id=ANY($1::uuid[])
         UNION ALL
@@ -163,9 +224,9 @@ export class ProductionDashboardService {
         FROM sourcing_production_transitions transition JOIN operation_events event ON event.event_id=transition.operation_event_id
         LEFT JOIN sourcing_production_progress_snapshots snapshot ON snapshot.production_order_id=transition.production_order_id AND snapshot.factory_decision_id IS NOT DISTINCT FROM transition.factory_decision_id
         WHERE transition.production_order_id=ANY($1::uuid[]) AND status<>'in_production'
-      ) activity JOIN unnest($1::uuid[],$2::uuid[]) selected(production_order_id,factory_decision_id)
+      ) activity JOIN unnest($1::uuid[],$2::uuid[],$3::uuid[],$4::text[]) selected(production_order_id,factory_decision_id,sourcing_case_id,supplier_name_snapshot)
         ON selected.production_order_id=activity.production_order_id AND selected.factory_decision_id IS NOT DISTINCT FROM activity.factory_decision_id
-      JOIN sourcing_production_factory_orders production ON production.production_order_id=activity.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM activity.factory_decision_id ORDER BY activity.created_at DESC,activity.id LIMIT 20`,[ids,factories]);
+      ORDER BY activity.created_at DESC,activity.id LIMIT 20`,[ids,factories,sources,suppliers]);
     return result.rows.map(r=>({id:r.id,productionOrderId:r.production_order_id,factoryDecisionId:r.factory_decision_id,firstStyleNo:r.first_style_no,supplierName:r.supplier_name_snapshot,
       kind:r.kind,businessDate:r.business_date,recordedAt:iso(r.created_at),quantity:r.quantity,previousState:null,progressState:null,daysWithoutUpdate:null}));
   }

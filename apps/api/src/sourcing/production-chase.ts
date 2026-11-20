@@ -3,11 +3,13 @@ import { inclusiveWorkdays, shanghaiDay } from '@dx-rework/domain';
 import type { ProductionDashboardItem } from '@dx-rework/contracts';
 export type ProductionDay = { day: string; quantity: number };
 const shift = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
-export function addProductionChase(items: ProductionDashboardItem[], days: Map<string, ProductionDay[]>, asOf: string): ProductionDashboardItem[] {
+type ChaseOrder=Pick<ProductionDashboardItem['order'],'productionOrderId'|'factoryDecisionId'|'supplierId'|'status'|'quantity'|'deliveryDate'>;
+export function addProductionChase<T extends {order:ChaseOrder;progress:ProductionDashboardItem['progress']}>(items:T[], days: Map<string, ProductionDay[]>, asOf: string,
+ fullRange:readonly ChaseOrder[]=items.map(item=>item.order)) {
   const today = shanghaiDay(asOf), weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
   const weekStart = shift(today, -((weekday + 6) % 7)), weekEnd = shift(weekStart, 6);
   const suppliers = new Map<string, { open: number; due: number }>();
-  for (const {order} of items) if (order.status === 'in_production') {
+  for (const order of fullRange) if (order.status === 'in_production') {
     const value = suppliers.get(order.supplierId) ?? {open: 0, due: 0}; value.open++;
     if (order.deliveryDate && order.deliveryDate >= weekStart && order.deliveryDate <= weekEnd) value.due++;
     suppliers.set(order.supplierId, value);
