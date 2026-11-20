@@ -39,7 +39,7 @@ import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
 import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
 import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,journeyMatchesMetadata,journeyMatchesSearch,type JourneySelection } from "./journey-projection.js";
-import {journeyCandidateClock,readJourneyCandidateVisibility,readJourneyCommercialMetadata,readJourneySearchMetadata,readJourneyStyleIdentity,type JourneyCandidate as Candidate,type JourneySearchMetadata} from './journey-search-metadata.js';
+import {journeyCandidateClock,readJourneyCandidateVisibility,readJourneyCommercialMetadata,readJourneySearchMetadata,readJourneyStyleIdentity,readJourneyDisplayId,type JourneyCandidate as Candidate,type JourneySearchMetadata} from './journey-search-metadata.js';
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
 import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
@@ -379,8 +379,12 @@ export class DigitalJourneyQuery {
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf,transaction)=>{
       const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
-      const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact);if(!item)return digitalNotFound();
-      const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact);
+      const selection=await this.nativeTaskSelection(db,new DigitalProductionAccessPolicy(db),actor,row,null);
+      const ids=selection.tasks.filter(task=>journeyDefinition(task.task_kind)).map(task=>task.task_id);
+      const taskPage=await new DigitalProductionTaskService(this.database).prepareReadPage(actor,ids,db,!compact);
+      const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact,undefined,undefined,taskPage,selection);
+      if(!item)return digitalNotFound();
+      const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact,undefined,undefined,undefined,selection);
       if(compact&&current){
         const creation=item.cockpitCreation;
         if(row.source?.draft_reserved===true&&item.sourceId&&item.orderId&&creation?.developmentCreatedAt&&creation.orderCreatedAt
@@ -406,7 +410,7 @@ export class DigitalJourneyQuery {
         item.currentDeliveryRisks=current.deliveryRisks??[];
         const authorized=this.authorizedTasks.get(current)??[];
         item.riskHistory=await readJourneyRiskHistory(db,authorized);
-        item.operationLog=await readJourneyLog(db,current,asOf,actor.actorId,authorized,undefined,5);
+        item.operationLog=await readJourneyLog(db,current.id,asOf,actor.actorId,authorized,undefined,5);
       }
       return item;
     });
@@ -415,9 +419,11 @@ export class DigitalJourneyQuery {
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf)=>{
       const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
-      const current=await this.project(db,actor,row,asOf,undefined,true);
-      if(!current)return digitalNotFound();
-      return readJourneyLog(db,current,asOf,actor.actorId,this.authorizedTasks.get(current)??[],cursor,20);
+      await this.observeCandidate(db,row,asOf);
+      const {visibility,tasks}=await this.nativeTaskSelection(db,new DigitalProductionAccessPolicy(db),actor,row,null);
+      if(!visibility.sourceAccess&&!visibility.orderAccess&&!tasks.length)return digitalNotFound();
+      const displayId=await readJourneyDisplayId(db,row);
+      return readJourneyLog(db,displayId,asOf,actor.actorId,tasks.map(task=>({id:task.task_id})),cursor,20);
     });
   }
   /** Read the original pending assignment fact without exposing its prices or altering digital tasks. */
@@ -515,17 +521,22 @@ export class DigitalJourneyQuery {
     const visibility=await readJourneyCandidateVisibility(policy,actor,row);
     return {visibility,tasks:await this.visibleTaskRows(db,policy,actor,row,visibility,patternKinds)};
   }
+  private async observeCandidate(db:PoolClient,row:Candidate,asOf:string,prepared?:PreparedJourneySearch['observation']){
+    const scope=journeyCandidateClock(row);
+    // Guarded context and actual reader results precede the SQL snapshot fallback.
+    const observation=prepared??await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).readObservation(scope,{now:()=>new Date(asOf),mode:'live'}));
+    if(observation.time.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observation.time});
+    return observation;
+  }
+
   private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch,taskPage?:Awaited<ReturnType<DigitalProductionTaskService['prepareReadPage']>>,nativeSelection?:Awaited<ReturnType<DigitalJourneyQuery['nativeTaskSelection']>>):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
     const scope=journeyCandidateClock(row);
-    // Use SQL snapshot time only as the ordinary fallback. Guarded context and
-    // actual reader results (including null scenario IDs) retain precedence.
-    const observation=prepared?.observation??await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).readObservation(scope,{now:()=>new Date(asOf),mode:'live'}));
+    const observation=await this.observeCandidate(db,row,asOf,prepared?.observation);
     const observed=observation.time;
     capture?.time?.(observed);
-    if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     asOf=observed.now;
     const visibility=nativeSelection?.visibility??prepared?.metadata.visibility??await readJourneyCandidateVisibility(policy,actor,row);
     const {sourceAccess,orderAccess,fullOrder}=visibility;

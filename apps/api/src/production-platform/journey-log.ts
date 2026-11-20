@@ -1,6 +1,6 @@
 import type {PoolClient} from "pg";
 import {z} from "zod";
-import {JOURNEY_NODES,type JourneyLogEntry,type JourneyLogPage,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
+import {JOURNEY_NODES,type JourneyLogEntry,type JourneyLogPage} from "@dx-rework/contracts/digital-production-journey";
 import {ApplicationError} from "../platform/errors.js";
 import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
 
@@ -15,8 +15,8 @@ export function parseJourneyLogCursor(value:string,order:string,asOf:string,acto
   }catch{throw new ApplicationError("INVALID_JOURNEY_CURSOR","记录页已失效，请重新打开操作记录",400);}
 }
 /** Use the authorized original scope, independent of replaceable display records. No payload/price leakage. */
-export async function readJourneyLog(db:Pick<PoolClient,"query">,order:OrderJourney,asOf:string,actor:string,authorized:readonly JourneyAuthorizedTask[],cursor?:string,limit:5|20=20):Promise<JourneyLogPage>{
-  const after=cursor?parseJourneyLogCursor(cursor,order.id,asOf,actor):null;
+export async function readJourneyLog(db:Pick<PoolClient,"query">,orderId:string,asOf:string,actor:string,authorized:readonly Pick<JourneyAuthorizedTask,'id'>[],cursor?:string,limit:5|20=20):Promise<JourneyLogPage>{
+  const after=cursor?parseJourneyLogCursor(cursor,orderId,asOf,actor):null;
   const cutoff=after?.asOf??asOf;
   const taskIds=[...new Set(authorized.map(task=>task.id))];
   const cte=`WITH authorized_events AS (
@@ -30,10 +30,9 @@ export async function readJourneyLog(db:Pick<PoolClient,"query">,order:OrderJour
       AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='reassigned' AND e.recorded_at=a.created_at AND e.actor_id=a.actor_id)
   )`;
   const args=[taskIds,cutoff,after?.at??null,after?.id??null];
-  const rows=(await db.query(`${cte} SELECT *,to_char(event_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS stamp FROM authorized_events
-    WHERE ($3::timestamptz IS NULL OR (event_at,id)<($3::timestamptz,$4::text)) ORDER BY event_at DESC,id DESC LIMIT ${limit}`,args)).rows;
-  const last=rows.at(-1);
-  const more=last?Boolean((await db.query(`${cte} SELECT EXISTS(SELECT 1 FROM authorized_events WHERE (event_at,id)<($3::timestamptz,$4::text)) AS more`,[taskIds,cutoff,last.stamp,last.id])).rows[0]?.more):false;
+  const remaining=(await db.query(`${cte} SELECT *,to_char(event_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS stamp FROM authorized_events
+    WHERE ($3::timestamptz IS NULL OR (event_at,id)<($3::timestamptz,$4::text)) ORDER BY event_at DESC,id DESC LIMIT ${limit+1}`,args)).rows;
+  const rows=remaining.slice(0,limit),last=rows.at(-1),more=remaining.length>limit;
   const items:JourneyLogEntry[]=rows.map(row=>({id:row.id,at:row.stamp,actor:row.actor_id?{id:row.actor_id,name:row.actor_name}:null,action:labels[row.action]??"更新节点记录",object:JOURNEY_NODES.find(node=>node.key===row.node_key)?.label??"业务节点",nodeKey:row.node_key,source:row.source}));
-  return {items,asOf:cutoff,coverage,nextCursor:more&&last?Buffer.from(JSON.stringify({v:1,order:order.id,actor,asOf:cutoff,at:last.stamp,id:last.id})).toString("base64url"):null};
+  return {items,asOf:cutoff,coverage,nextCursor:more&&last?Buffer.from(JSON.stringify({v:1,order:orderId,actor,asOf:cutoff,at:last.stamp,id:last.id})).toString("base64url"):null};
 }

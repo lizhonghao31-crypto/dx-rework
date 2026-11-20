@@ -41,12 +41,18 @@ export async function readJourneyCandidateVisibility(policy:DigitalProductionAcc
  return {sourceAccess,orderAccess,fullOrder};
 }
 
-export async function readJourneyStyleIdentity(db:PoolClient,{source,order}:JourneyCandidate,orderAccess:boolean){
+export async function readJourneyDisplayId(db:PoolClient,{source,order}:JourneyCandidate){
  const sid=source?.source_id??null,oid=order?.production_order_id??null;
  const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
+ return attached?oid!:(sid??oid!);
+}
+
+export async function readJourneyStyleIdentity(db:PoolClient,{source,order}:JourneyCandidate,orderAccess:boolean){
+ const sid=source?.source_id??null,oid=order?.production_order_id??null;
+ const id=await readJourneyDisplayId(db,{source,order});
  const chosen=orderAccess?order!:(source??order!),creator=source?.created_by??order!.created_by;
  const designer=(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[creator])).rows[0]?.display_name??null;
- return {id:attached?oid!:(sid??oid!),sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosen.design_style_no,
+ return {id,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosen.design_style_no,
   temporaryStyleNo:chosen.temporary_style_no,customer:chosen.customer_code,creator,designer};
 }
 
