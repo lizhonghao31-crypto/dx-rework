@@ -7,7 +7,7 @@ import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
 import { FilterBar, KpiCard, PageHeader } from "@dx-rework/ui/production";
-import { JOURNEY_NODES, JOURNEY_STAGES, type JourneyResult, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_NODES, JOURNEY_STAGES, type CockpitHomeResult, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { cockpitQuery,cockpitFilterPatch,journeyRiskLabels,journeyStateLabels,type CockpitContext } from "./digital-journey-cockpit-model.js";
 import "./digital-journey-cockpit.css";
 import {CockpitTimingCoverage,cockpitCoverageLabels} from './cockpit-timing-coverage.js';
@@ -25,7 +25,7 @@ const kpis = [
   {key:"todo",label:"待处理",field:"todo",tone:"warning",icon:"ClipboardCheck"},
 ] as const;
 
-function CockpitFilters({ context, data, onChange, onSearchDraft }: { context: CockpitContext; data: JourneyResult | null; onChange: (patch: Partial<CockpitContext>) => void; onSearchDraft?:((value:string,pending:boolean)=>void)|undefined }) {
+function CockpitFilters({ context, data, onChange, onSearchDraft }: { context: CockpitContext; data: CockpitHomeResult | null; onChange: (patch: Partial<CockpitContext>) => void; onSearchDraft?:((value:string,pending:boolean)=>void)|undefined }) {
   const [more, setMore] = useState(Boolean(context.progress||context.scope==='development'||context.merchandiserId||context.category||context.stage || context.node || context.state || context.risk || context.startDate || context.endDate));
   const [draft, setDraft] = useState(context),composing=useRef(false);
   useEffect(() => setDraft(current=>({...context,search:current.search.trim()===context.search?current.search:context.search})), [context]);
@@ -52,7 +52,7 @@ function CockpitFilters({ context, data, onChange, onSearchDraft }: { context: C
     </div>}
   </FilterBar>;
 }
-export function cockpitConditionsLabel(context:CockpitContext,data?:JourneyResult|null){
+export function cockpitConditionsLabel(context:CockpitContext,data?:CockpitHomeResult|null){
  const pieces=[context.scope==='development'?'纯开发未下单':'生产订单',context.search?`搜索“${context.search}”`:'全部搜索词',context.stage?JOURNEY_STAGES.find(stage=>stage.key===context.stage)?.label??'阶段待核':'全流程'];
  if(context.progress)pieces.push(({schedule_lag:'进度落后',customer_due_passed:'客户交期已过',unknown:'计划待核'} as const)[context.progress]);
  if(context.customer)pieces.push(`客户 ${context.customer}`);if(context.category)pieces.push(`品类 ${context.category}`);
@@ -60,7 +60,7 @@ export function cockpitConditionsLabel(context:CockpitContext,data?:JourneyResul
  if(context.node)pieces.push(JOURNEY_NODES.find(node=>node.key===context.node)?.label??'所选节点');if(context.state)pieces.push(journeyStateLabels[context.state]);if(context.risk)pieces.push(journeyRiskLabels[context.risk]);
  if(context.startDate||context.endDate)pieces.push(`创建日期 ${context.startDate??'不限'} 至 ${context.endDate??'不限'}`);if(context.kpi!=='all')pieces.push(kpis.find(kpi=>kpi.key===context.kpi)?.label??'受阻订单');if(context.missing)pieces.push('已应用原时效缺项筛选');pieces.push(`第${context.page}页`);return pieces.join('；');
 }
-type Props = { canDelete?:boolean;identityKey?:string; data: JourneyResult | null; error: string; detail: OrderJourney | null; detailError: string; detailLoading: boolean; context: CockpitContext; appliedContext?:CockpitContext|null;readPhase?:string;searchDraft?:{value:string;pending:boolean};onSearchDraft?:((value:string,pending:boolean)=>void)|undefined;onChange: (patch: Partial<CockpitContext>, preserveSelection?: boolean) => void; actions: ReactNode;onPlanCommitted?:(()=>void)|undefined;restoreReading?:boolean };
+type Props = { canDelete?:boolean;identityKey?:string; data: CockpitHomeResult | null; error: string; detail: OrderJourney | null; detailError: string; detailLoading: boolean; context: CockpitContext; appliedContext?:CockpitContext|null;readPhase?:string;searchDraft?:{value:string;pending:boolean};onSearchDraft?:((value:string,pending:boolean)=>void)|undefined;onChange: (patch: Partial<CockpitContext>, preserveSelection?: boolean) => void; actions: ReactNode;onPlanCommitted?:(()=>void)|undefined;restoreReading?:boolean };
 export function DigitalJourneyCockpit({ data, error, detail, detailError, detailLoading, context, appliedContext,readPhase,searchDraft,onSearchDraft,onChange,actions,onPlanCommitted,restoreReading=false,canDelete=false,identityKey }: Props) {
  const actual=appliedContext??context,query=cockpitQuery(actual);
  const [coverage,setCoverage]=useState<{query:string;context:CockpitContext}|null>(null);

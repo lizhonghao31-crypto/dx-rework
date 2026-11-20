@@ -1,110 +1,101 @@
 {
   "version": 1,
-  "base": "939e050e5fcf68b869f7f33047e4c82fa7bb66ad",
-  "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
+  "base": "adc8652daad5b1395bc30b197a40bdbf4d7337e9",
+  "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
   "rules": [
     {
-      "rule": "船样等原生任务的已授权正文在任务读取成功后就可显示，独立附属历史的等待和失败不会阻止正文。",
-      "source": "本轮 Eric 审定全系统性能治理 v7 的 PR03A 船样任务接口及历史依赖方案 §5、§10.4，保留正式业务权限和原时钟。",
-      "writes": [
-        "apps/web/src/digital-production-tasks-panel.tsx",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/journey-page-native-browser-postgres.test.ts",
-        "scripts/ci/pr-gate-controller.test.mjs"
-      ],
+      "rule": "角标只共享当前授权身份和会话代次的在途读取。隐藏页暂停定时刷新，恢复可见和已读后的必要刷新继续。",
+      "source": "Eric 审定《达兴全系统性能治理 v7》06A 全局待办角标。",
       "reads": [
-        "apps/web/src/digital-production-api.ts",
-        "apps/web/src/todo-content-read.tsx",
-        "apps/api/src/production-platform/task-service.ts"
+        "apps/web/src/components.tsx",
+        "apps/web/src/auth-session.ts",
+        "apps/web/src/todo-indicator-refresh.ts",
+        "apps/api/src/todos/service.ts"
       ],
       "oldTests": [
-        "tests/integration/journey-page-native-browser-postgres.test.ts"
+        "tests/unit/responsibility-queue-refresh.test.ts",
+        "tests/acceptance/todo-content-read-browser.mjs"
       ],
-      "initialization": "继续使用数字生产页原权限和已读取的任务正文。历史独立加载并按当前任务取消旧读，不以空数组充成功。",
-      "dateAndPermission": "权限、截止、轮次、历史与核实沿原接口。保留原本地显示时间来源、责任起钟人工注记与证据，更新唯一的显示加载行指纹；同任务收到读取权限后才显示。",
-      "expectation": "正文无需等历史；历史失败保留可用正文和重试，仅请求正确任务历史。旧请求不能替换新任务；保留清单原时间来源与读回。",
+      "initialization": "同代次只共享当前 Promise。身份或权限变化丢弃旧结果。已读发生在旧读取时，追读标记跟随旧请求，离开页面或换 Shell 不丢。重新可见仍刷新。",
+      "dateAndPermission": "使用当前已验证身份和授权代次、保留角标接口的既有校验及业务时钟，不缓存跨身份或旧代次数据。",
+      "expectation": "两次同身份并发拉取只发一条，隐藏时不自动轮询，恢复可见继续，已读后取新值，旧身份的迟到响应不提交。",
+      "writes": [
+        "apps/web/src/components.tsx",
+        "apps/web/src/todo-indicator-read.ts",
+        "apps/web/src/todo-indicator-refresh.ts",
+        "tests/acceptance/todo-content-read-browser.mjs",
+        "tests/unit/responsibility-queue-refresh.test.ts"
+      ],
       "checks": [
-        "browser-final",
-        "inventory",
-        "type-final",
-        "lint"
+        "indicator-scheduler",
+        "native-shell-indicator",
+        "indicator-cross-tab-browser"
       ]
     }
   ],
   "checks": [
     {
-      "id": "browser-final",
-      "command": "NODE_ENV=test NODE_OPTIONS=--max-old-space-size=900 M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13.mjs tests/integration/journey-page-native-browser-postgres.test.ts -t \"signed ship-sample task before history\" --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr03a/browser-final.json",
+      "id": "indicator-scheduler",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/responsibility-queue-refresh.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06a/remount-unit.json",
+      "context": "原责任队列仍手动刷新。受控请求覆盖同账号在途合并、隐藏/恢复、会话权限切换、跨页面卸载前到达的已读在新挂载只补一次，旧响应不展示。",
+      "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "kind": "tests",
-      "log": "/tmp/dx-performance-v7/pr03a/browser-final.json",
-      "logSha256": "52e8fe6619f981c921a2e1addd53c2c9f4b11f9333fe1b8edef03cd8f7fe5e26",
-      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
-      "testedHead": "831c5a2a1431ba5526c85189bfaf2dc32a9fd8fc",
-      "context": "隔离 PostgreSQL 13.23、低权限运行角色和真实 Chromium，原应用签名身份。历史请求暂停后返回503，已授权任务正文按时显示，重试仅重新读取目标任务历史。",
-      "startedAt": "2026-11-20T13:22:23Z",
-      "endedAt": "2026-11-20T13:23:13Z",
-      "passed": 1,
+      "log": "/tmp/dx-performance-v7/pr06a/remount-unit.json",
+      "logSha256": "e0791b0c2ed8d3bc8319ade7cc48db1df1e4531be5d949f597dd078bf3d3e17b",
+      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
+      "testedHead": "ac539aa9a7121678e9eabbf37d02c62921bfdfd3",
+      "passed": 4,
       "failed": 0,
-      "skipped": 8,
+      "skipped": 0,
+      "startedAt": "2026-11-20T16:04:21.789000Z",
+      "endedAt": "2026-11-20T16:04:22.860251Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "52e8fe6619f981c921a2e1addd53c2c9f4b11f9333fe1b8edef03cd8f7fe5e26"
+          "sha256": "e0791b0c2ed8d3bc8319ade7cc48db1df1e4531be5d949f597dd078bf3d3e17b"
         }
       ]
     },
     {
-      "id": "inventory",
-      "command": "node --test scripts/ci/pr-gate-controller.test.mjs",
+      "id": "native-shell-indicator",
+      "command": "NODE_ENV=test NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=565 M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13-process.mjs tests/integration/dx-perf06a-local-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr06a/native-shell-warm.json",
+      "context": "已签名 Chromium 原 App，隔离 PG13.23，跨 Shell 导航的一条共享在途 HTTP 通过。夹具角标数值固定为零，用于实际前端请求调度。",
+      "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "kind": "tests",
-      "log": "/tmp/dx-performance-v7/pr03a/inventory.tap",
-      "logSha256": "16567987810f501566033419ea19db7bdcca96942c48725a47d936a2816f6af1",
-      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
-      "testedHead": "c49be9201717e4c70054be00dd514511dc8afce1",
-      "context": "本地运行原门禁协议并核本文件的责任起钟注记、证据和当前时间来源行均可读取。",
-      "startedAt": "2026-11-20T13:27:58Z",
-      "endedAt": "2026-11-20T13:27:59Z",
-      "passed": 39,
+      "log": "/tmp/dx-performance-v7/pr06a/native-shell-warm.json",
+      "logSha256": "36945e7160391d41d17f6c986b4e3a702bb918c4f2f67169839e26edf7277919",
+      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
+      "testedHead": "bcaee4488461cc90bf330e07573c31280352039e",
+      "passed": 1,
       "failed": 0,
       "skipped": 0,
+      "startedAt": "2026-11-20T15:34:45.301000Z",
+      "endedAt": "2026-11-20T15:34:57.108129Z",
       "resultReports": [
         {
-          "format": "node-tap",
-          "sha256": "16567987810f501566033419ea19db7bdcca96942c48725a47d936a2816f6af1"
+          "format": "vitest-json",
+          "sha256": "36945e7160391d41d17f6c986b4e3a702bb918c4f2f67169839e26edf7277919"
         }
       ]
     },
     {
-      "id": "type-final",
-      "command": "npm run typecheck --workspace @dx-rework/web",
+      "id": "indicator-cross-tab-browser",
+      "command": "NODE_DISABLE_COMPILE_CACHE=1 NODE_OPTIONS=--max-old-space-size=620 TMPDIR=/dev/shm/dxperf-run.BJ5pMC TODO_READ_EVIDENCE=/dev/shm/dxperf-run.BJ5pMC/pr06a-remount-browser PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node tests/acceptance/todo-content-read-browser.mjs",
+      "context": "真实 Chromium、原 Shell 与两标签页 BroadcastChannel。合成 TEST HTTP 的旧响应和已读，保留待办一条，只有一次有效补读，隐藏和异账号不增加请求。全部18项通过。起点以紧邻的本地类型检查结束为下界。",
+      "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "kind": "command",
-      "log": "/tmp/dx-performance-v7/pr03a/type-final.log",
-      "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef",
-      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
-      "testedHead": "831c5a2a1431ba5526c85189bfaf2dc32a9fd8fc",
-      "context": "在独立候选工作树运行 Web 工作区原类型检查。",
-      "startedAt": "2026-11-20T13:23:13Z",
-      "endedAt": "2026-11-20T13:23:47Z"
-    },
-    {
-      "id": "lint",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/web/src/digital-production-tasks-panel.tsx tests/integration/journey-page-native-browser-postgres.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "kind": "command",
-      "log": "/tmp/dx-performance-v7/pr03a/lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "sourceFingerprint": "d8fe41d84f9d1912211d6dbecb74d394a154ec4c215b62b6f0ac99f02703eedc",
-      "testedHead": "831c5a2a1431ba5526c85189bfaf2dc32a9fd8fc",
-      "context": "使用仓库 ESLint 检查组件和原生回归。",
-      "startedAt": "2026-11-20T13:20:10Z",
-      "endedAt": "2026-11-20T13:20:12Z"
+      "log": "/tmp/dx-performance-v7/pr06a/remount-browser.json",
+      "logSha256": "a52db70b66c4503876d2fe02994313b72de04eb49bb08aca279c59a64132c3ea",
+      "sourceFingerprint": "f6985e546a7acbe493bba3c6bdafb0bd0fabd5ab127ff0ccaae56b6ed37b834c",
+      "testedHead": "ac539aa9a7121678e9eabbf37d02c62921bfdfd3",
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-20T16:06:26.490952Z",
+      "endedAt": "2026-11-20T16:06:51.499322Z"
     }
   ]
 }

@@ -7,7 +7,7 @@ import "./po-delivery-dates.css";
 
 export const poDeliveryKindLabels={factory:"加工厂交货日",customer:customerPoDateLabel,sample:"船样目标日"};
 const poNaturalOrder=new Intl.Collator('zh-CN',{numeric:true,sensitivity:'base'});
-export function sortedCockpitPoLines(order:OrderJourney){
+export function sortedCockpitPoLines(order:Pick<OrderJourney,'lines'|'poDeliveryDates'>){
  const dates=new Map(order.poDeliveryDates?.map(line=>[line.lineId,line.customerWarehouseArrivalDate]));
  return [...order.lines].sort((a,b)=>(dates.get(a.id)||'\uffff').localeCompare(dates.get(b.id)||'\uffff')||poNaturalOrder.compare(a.po??'',b.po??'')||a.id.localeCompare(b.id));
 }
