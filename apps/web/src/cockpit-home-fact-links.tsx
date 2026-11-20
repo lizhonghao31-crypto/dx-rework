@@ -1,5 +1,5 @@
 import type {ReactNode} from 'react';
-import type {CockpitFact,JourneyRecord,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {CockpitFact,JourneyRecord,CockpitHomeOrder} from '@dx-rework/contracts/digital-production-journey';
 import {CockpitBadge} from './cockpit-astryx.js';
 import {CockpitRecordLink} from './cockpit-record-link.js';
 import {cockpitReceiptGap} from './cockpit-home-progress.js';
@@ -7,7 +7,7 @@ import type {CockpitContext} from './digital-journey-cockpit-model.js';
 
 const badgeTones={gray:'neutral',blue:'info',green:'success',neutral:'neutral'} as const;
 
-export function CockpitHomeFactLinks({order,context,onReceipts}:{order:OrderJourney;context:CockpitContext;onReceipts:()=>void}){
+export function CockpitHomeFactLinks({order,context,onReceipts}:{order:CockpitHomeOrder;context:CockpitContext;onReceipts:()=>void}){
  const facts=order.cockpitFacts,nodes=order.stages.flatMap(stage=>stage.nodes);
  const dashboard=facts?.production.dashboardLinks??[];
  const productionRecord=facts?.production.dashboardRecord??(dashboard.length===1?dashboard[0]?.record:undefined);

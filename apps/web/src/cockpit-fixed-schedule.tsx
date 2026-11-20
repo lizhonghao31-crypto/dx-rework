@@ -4,7 +4,7 @@ import {CockpitDate} from './cockpit-date.js';
 import {nodeTerminationLabel} from './digital-journey-cockpit-model.js';
 import {scopedDeadlineFallback} from './journey-sla-details.js';
 import {useEffect,useRef,useState} from 'react';
-import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {scheduleCanAdvance,type CockpitHomeOrder,type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {ScheduleGoalDelta,ScheduleNodeProgress,ScheduleRange,ScheduleScopeProgress} from '@dx-rework/contracts';
 const minute=60000,day=86400000;
 export function cockpitDuration(value:number|null|undefined){
@@ -16,9 +16,9 @@ export function cockpitDuration(value:number|null|undefined){
 export function cockpitDurationRange(value:ScheduleRange|null|undefined){return !value?'—':value.minimum===value.maximum?cockpitDuration(value.minimum):cockpitDuration(value.minimum)+'～'+cockpitDuration(value.maximum);}
 /** A visible unfinished number follows the server's proven live clock only.
  * Frozen TEST clocks, stale reads and completed/terminated evidence never tick. */
-export function useScheduleObservation(order:OrderJourney,stale=false){
+export function useScheduleObservation(order:Pick<CockpitHomeOrder,'fixedSchedule'>,stale=false){
  const schedule=order.fixedSchedule,origin=useRef(performance.now()),[elapsed,setElapsed]=useState(0);
- useEffect(()=>{origin.current=performance.now();setElapsed(0);if(stale||schedule?.observationMode!=='live'||!schedule.scopes.some(s=>s.nodes.some(n=>!n.businessCompleted&&!['unknown','terminated'].includes(n.goalDelta.kind))))return;
+ useEffect(()=>{origin.current=performance.now();setElapsed(0);if(stale||schedule?.observationMode!=='live'||!('clockCanAdvance' in schedule?schedule.clockCanAdvance:scheduleCanAdvance(schedule)))return;
   const update=()=>{if(!document.hidden)setElapsed(performance.now()-origin.current);};const timer=setInterval(update,30000);document.addEventListener('visibilitychange',update);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',update);};
  },[schedule,stale]);
  const base=schedule?.asOf?Date.parse(schedule.asOf):NaN;return Number.isFinite(base)?new Date(base+(stale?0:elapsed)).toISOString():undefined;
@@ -116,7 +116,7 @@ export function CockpitNodeForecast({node,order}:{node:JourneyNode;order:OrderJo
   return <div key={target.scopeRef+'|'+target.progress.canonicalWorkRef} className="cockpit-node-forecast" data-forecast-scope={target.scopeRef}><dt>{label}预测：</dt><dd>{value.text}{value.coverage.map(reason=><small key={reason}>{reason}</small>)}</dd></div>;
  })}</>;
 }
-export function cockpitScheduleReason(order:OrderJourney){
+export function cockpitScheduleReason(order:Pick<CockpitHomeOrder,'fixedSchedule'|'display'|'lines'>){
  if(!order.fixedSchedule||['completed','closed','cancelled'].includes(order.display?.mainState??''))return null;
  const scope=order.fixedSchedule.scopes.find(scope=>scope.customerDuePassed===true)??order.fixedSchedule.scopes.find(scope=>scope.state==='late');
  if(!scope)return order.fixedSchedule.state==='unknown'?{text:'计划待核',tone:'neutral'}:null;
