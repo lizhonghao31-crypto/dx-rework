@@ -1,5 +1,5 @@
 import type {PoolClient} from 'pg';
-import type {CockpitFact,CockpitFactStatus,CockpitHomeFacts,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {CockpitFact,CockpitFactStatus,CockpitHomeFacts,JourneyRecord,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {canReadProductionReporting,factoryProductionVisibilityFor,productionVisibilityArgs} from '../sourcing/production-reporting-service.js';
 
@@ -108,7 +108,12 @@ export function cockpitHomeFacts(input:{
  const sent=lines.filter(line=>sentLineIds.has(line.id)).length;
  const sampleStatus:CockpitFactStatus=sampleApplicable===false?'not_applicable':lines.length>0&&sent===lines.length?'complete':
   sent?'partial':sampleApplicable===true&&sampleWaiting?'not_started':'no_record';
- const links=dashboardLinks(factories),productionNavigation=links.length?{dashboardLinks:links}:{};
+ const links=dashboardLinks(factories);
+ const dashboardRecord:JourneyRecord|undefined=factories&&{
+  domain:'production',id:orderId,url:'/ui/production-dashboard?'+new URLSearchParams({workspace:'display',motherOrderId:orderId}),
+  mode:'read',version:null,lineId:null,
+ };
+ const productionNavigation={...(dashboardRecord?{dashboardRecord}:{}),...(links.length?{dashboardLinks:links}:{})};
  return {
   production:{...cockpitProductionFact(lines,factories),...productionNavigation},
   receiving:{...cockpitFact('receiving',receiptStatus,receiptScope),

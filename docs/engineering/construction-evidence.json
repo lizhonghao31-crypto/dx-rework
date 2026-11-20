@@ -1,90 +1,45 @@
 {
   "version": 1,
-  "base": "fb599fd0948ede06cc9224769c7cdf05ac5af7f5",
-  "sourceFingerprint": "19a6c5cde6aea17f0efce896d3cd24c8ceb2d32a922a5ba7b3980dd5acd0734e",
+  "base": "1771d861fa440e86de4900da8bd09f2898197d7f",
+  "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
   "rules": [
     {
-      "rule": "首页左侧状态、款名款号、跟单、客户及多 PO 文案可完整阅读。",
-      "source": "Eric 批准的 v7 全系统性能治理方案 §5.2、§5.4、§5.5 与 PR01 最新施工交接。",
+      "rule": "由座舱按已授权正式母单进入实时生产展示，零记录和原厂全部转出不读取其它订单。",
+      "source": "Eric 批准的 v7 全系统性能治理方案 §5.1、PR02 门槛与母单范围施工交接。",
       "writes": [
-        "apps/web/src/cockpit-home-r5.css",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/cockpit-home-facts.ts",
+        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "apps/api/src/sourcing/production-dashboard-routes.ts",
+        "apps/api/src/sourcing/production-dashboard-scope.ts",
+        "apps/api/src/sourcing/production-dashboard-service.ts",
+        "apps/web/src/App.tsx",
+        "apps/web/src/cockpit-home-fact-links.tsx",
+        "apps/web/src/production-dashboard-page.tsx",
+        "apps/web/src/production-display-context.ts",
+        "apps/web/src/production-display-workspace.tsx",
+        "packages/contracts/src/digital-production-journey.ts",
+        "packages/contracts/src/production-dashboard.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/unit/production-reporting-link.test.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-home.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/unit/cockpit-home.test.ts"
-      ],
-      "initialization": "沿原座舱表格、列序、行高计算和原业务入口渲染。",
-      "dateAndPermission": "不改客户、PO、交期、计划或角色判断，仅放开本区文本换行。",
-      "expectation": "浏览器覆盖 45 像素可用宽度及 1165、1440 两个桌面视口，保持原订单链接可点击。",
-      "checks": [
-        "unit",
-        "browser",
-        "lint",
-        "type"
-      ]
-    },
-    {
-      "rule": "旧七阶段与 A/B 里程碑移除重复创建展示，原日期、创建事实、首卡与点击保留。",
-      "source": "Eric 批准的 v7 全系统性能治理方案 §5.2、§5.4、§5.5 与 PR01 最新施工交接。",
-      "writes": [
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-detail-r5.css",
-        "apps/web/src/cockpit-stage-progress.tsx",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
-        "tests/unit/cockpit-detail.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/cockpit-milestones.tsx",
-        "apps/web/src/cockpit-date.tsx",
+        "apps/api/src/production-platform/whole-order-visibility.ts",
+        "apps/api/src/sourcing/production-reporting-service.ts",
+        "apps/web/src/production-reporting-page.tsx",
         "apps/api/src/production-platform/journey-query.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/unit/cockpit-detail.test.ts"
+        "tests/unit/production-reporting-link.test.ts",
+        "tests/unit/digital-journey-projection.test.ts"
       ],
-      "initialization": "旧阶段、A 九点、B 八点、原日期和首卡选择从同一个旧事实读模型初始化。",
-      "dateAndPermission": "原生首次发布、转单、原生审批及真实创建时钟保持；预计冒号仅限旧七阶段日期网格。",
-      "expectation": "原创建时间在订单身份区及真实响应中保留，流程中重复行消失，预计和实际日期同轨对齐，首卡键盘可用。",
+      "initialization": "复用真实整单读取、原生产权限及当前有效的工厂/PO 分配；页面空态来自授权范围响应。",
+      "dateAndPermission": "原整单删除、母单完整权限、当前工厂范围和原明细授权依次限制；并行只读，同一快照，原回报与写入权限不扩张。",
+      "expectation": "链接、URL、请求、响应与看板标识绑定同一母单；重置/返回原范围，空态不串单，转出旧厂、其它母单和外部回跳拒绝。",
       "checks": [
         "unit",
-        "browser",
-        "lint",
-        "type"
-      ]
-    },
-    {
-      "rule": "首页当前任务和详情摘要仅去重复自身截止。",
-      "source": "Eric 批准的 v7 全系统性能治理方案 §5.2、§5.4、§5.5 与 PR01 最新施工交接。",
-      "writes": [
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-current-summary.tsx",
-        "tests/unit/cockpit-home.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/cockpit-home-risks.tsx",
-        "apps/web/src/cockpit-node-dates.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/cockpit-home.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts"
-      ],
-      "initialization": "沿当前任务、取消历史、特殊工艺和责任结果的已授权原读取。",
-      "dateAndPermission": "详细期限、已冻结的截止时间、计划和实际值保持。",
-      "expectation": "原风险弹窗、详情责任截止、取消前迟时与特殊工艺实例准确时点继续可查。",
-      "checks": [
-        "unit",
-        "browser",
+        "browser13",
+        "browser16",
         "lint",
         "type"
       ]
@@ -93,77 +48,100 @@
   "checks": [
     {
       "id": "unit",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-journey-cockpit.test.ts --maxWorkers=1 --reporter=verbose --no-color --reporter=json --outputFile.json=/dev/shm/dxperf-run.BJ5pMC/unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/production-reporting-link.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/cockpit-home.test.ts tests/unit/platform-permission-navigation-hub.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr02/unit.json --no-color",
       "status": "passed",
       "exitCode": 0,
       "kind": "tests",
-      "log": "/dev/shm/dxperf-run.BJ5pMC/unit.json",
-      "logSha256": "ed93282bd8c9d2943e87c12e8c0a402fc304f1c4a0f06731e3edf0c0b22f5258",
-      "testedHead": "fb599fd0948ede06cc9224769c7cdf05ac5af7f5",
-      "sourceFingerprint": "19a6c5cde6aea17f0efce896d3cd24c8ceb2d32a922a5ba7b3980dd5acd0734e",
-      "startedAt": "2026-11-20T12:33:16Z",
-      "endedAt": "2026-11-20T12:33:22Z",
-      "context": "release 基线上的对应候选源码，Node 22、npm 10，按锁定依赖执行；浏览器验证使用真实签名 Chromium 与新建隔离 PostgreSQL 16.16，长文本用标注明确的渲染夹具。",
-      "passed": 63,
+      "log": "/tmp/dx-performance-v7/pr02/unit.json",
+      "logSha256": "68b868bc99d4b65668faf80fe7889d11edf8e1b818ebf3c6d298cda12a35dea8",
+      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
+      "context": "锁定 Node 22 与依赖，对首页读投影、权限入口和严格的本地返回链接执行单测。",
+      "startedAt": "2026-11-20T12:52:33Z",
+      "endedAt": "2026-11-20T12:52:37Z",
+      "passed": 31,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ed93282bd8c9d2943e87c12e8c0a402fc304f1c4a0f06731e3edf0c0b22f5258"
+          "sha256": "68b868bc99d4b65668faf80fe7889d11edf8e1b818ebf3c6d298cda12a35dea8"
         }
       ]
     },
     {
-      "id": "browser",
-      "command": "NODE_OPTIONS=--max-old-space-size=900 bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dxperf-run.BJ5pMC/native-narrow tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts -t wraps\\ complete\\ homepage\\|uses\\ A\\ milestones\\|uses\\ B\\ milestones\\|keeps\\ customer\\ delivery\\|starts\\ one\\ effective\\ clock\\|applies\\ a\\ real\\ manager\\ approval\\|retains\\ the\\ exact\\ cancelled\\ cutting\\|keeps\\ ordered\\ frozen\\ craft\\ labels --reporter=json --outputFile.json=/dev/shm/dxperf-run.BJ5pMC/browser.json",
+      "id": "browser13",
+      "command": "NODE_ENV=test NODE_OPTIONS=--max-old-space-size=900 node /dev/shm/dxperf-measure.C5fSMT/scripts/ci/local-performance-pg13.mjs tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t opens\\ the\\ original\\ live\\ production\\ dashboard\\|opens\\ a\\ signed\\ empty\\ dashboard\\|identifies\\ the\\ authorized\\ factory\\ with\\ no\\ transition --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr02/browser13.json",
       "status": "passed",
       "exitCode": 0,
       "kind": "tests",
-      "log": "/dev/shm/dxperf-run.BJ5pMC/browser.json",
-      "logSha256": "bfe48d0036b858b49342c059f9b5c6b62d757b7ecf954ebdb450c09b04dc17a6",
-      "testedHead": "fb599fd0948ede06cc9224769c7cdf05ac5af7f5",
-      "sourceFingerprint": "19a6c5cde6aea17f0efce896d3cd24c8ceb2d32a922a5ba7b3980dd5acd0734e",
-      "startedAt": "2026-11-20T12:38:54Z",
-      "endedAt": "2026-11-20T12:40:42Z",
-      "context": "release 基线上的对应候选源码，Node 22、npm 10，按锁定依赖执行；浏览器验证使用真实签名 Chromium 与新建隔离 PostgreSQL 16.16，长文本用标注明确的渲染夹具。",
-      "passed": 8,
+      "log": "/tmp/dx-performance-v7/pr02/browser13.json",
+      "logSha256": "6b63180f6c42524d9d929e604c88b424e978a21c4cb89ced826bb6dadb9eb752",
+      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
+      "context": "真实 Chromium 原认证与新隔离库 PostgreSQL 13.23。覆盖转厂、空态、父单删除、范围和历史无 transition。",
+      "startedAt": "2026-11-20T13:02:13Z",
+      "endedAt": "2026-11-20T13:03:05Z",
+      "passed": 4,
       "failed": 0,
-      "skipped": 38,
+      "skipped": 15,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bfe48d0036b858b49342c059f9b5c6b62d757b7ecf954ebdb450c09b04dc17a6"
+          "sha256": "6b63180f6c42524d9d929e604c88b424e978a21c4cb89ced826bb6dadb9eb752"
+        }
+      ]
+    },
+    {
+      "id": "browser16",
+      "command": "NODE_OPTIONS=--max-old-space-size=900 bash /tmp/dx-cockpit-approved-repair/pg-native.sh /dev/shm/dxperf-run.BJ5pMC/pr02-evidence16 tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t opens\\ the\\ original\\ live\\ production\\ dashboard\\|opens\\ a\\ signed\\ empty\\ dashboard --reporter=json --outputFile.json=/tmp/dx-performance-v7/pr02/browser16.json",
+      "status": "passed",
+      "exitCode": 0,
+      "kind": "tests",
+      "log": "/tmp/dx-performance-v7/pr02/browser16.json",
+      "logSha256": "c6ed24c987a5f9e0b212d15880d34f8519612565422bec144ad9cff24a7271e8",
+      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
+      "context": "原配置隔离 PostgreSQL 16.16、签名 Chromium。覆盖两组转厂、空态、父单删除和跨单防护。",
+      "startedAt": "2026-11-20T12:59:13Z",
+      "endedAt": "2026-11-20T12:59:54Z",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 15,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "c6ed24c987a5f9e0b212d15880d34f8519612565422bec144ad9cff24a7271e8"
         }
       ]
     },
     {
       "id": "lint",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/web/src/cockpit-current-summary.tsx apps/web/src/cockpit-detail.tsx apps/web/src/cockpit-home.tsx apps/web/src/cockpit-stage-progress.tsx tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts tests/integration/terminal-quality-projections-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-home.test.ts",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/cockpit-home-facts.ts apps/api/src/production-platform/journey-search-metadata.ts apps/api/src/sourcing/production-dashboard-routes.ts apps/api/src/sourcing/production-dashboard-scope.ts apps/api/src/sourcing/production-dashboard-service.ts apps/web/src/App.tsx apps/web/src/cockpit-home-fact-links.tsx apps/web/src/production-dashboard-page.tsx apps/web/src/production-display-context.ts apps/web/src/production-display-workspace.tsx packages/contracts/src/digital-production-journey.ts packages/contracts/src/production-dashboard.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/unit/production-reporting-link.test.ts",
       "status": "passed",
       "exitCode": 0,
       "kind": "command",
-      "log": "/dev/shm/dxperf-run.BJ5pMC/lint.log",
+      "log": "/tmp/dx-performance-v7/pr02/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "testedHead": "fb599fd0948ede06cc9224769c7cdf05ac5af7f5",
-      "sourceFingerprint": "19a6c5cde6aea17f0efce896d3cd24c8ceb2d32a922a5ba7b3980dd5acd0734e",
-      "startedAt": "2026-11-20T12:39:06Z",
-      "endedAt": "2026-11-20T12:39:08Z",
-      "context": "release 基线上的对应候选源码，Node 22、npm 10，按锁定依赖执行；浏览器验证使用真实签名 Chromium 与新建隔离 PostgreSQL 16.16，长文本用标注明确的渲染夹具。"
+      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
+      "context": "候选独立工作区对所有变更的 TypeScript/TSX 执行原 ESLint 配置。",
+      "startedAt": "2026-11-20T13:03:06Z",
+      "endedAt": "2026-11-20T13:03:07Z"
     },
     {
       "id": "type",
-      "command": "npm run typecheck --workspace @dx-rework/web",
+      "command": "npm run typecheck --workspace @dx-rework/api --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
       "kind": "command",
-      "log": "/dev/shm/dxperf-run.BJ5pMC/type.log",
-      "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef",
-      "testedHead": "fb599fd0948ede06cc9224769c7cdf05ac5af7f5",
-      "sourceFingerprint": "19a6c5cde6aea17f0efce896d3cd24c8ceb2d32a922a5ba7b3980dd5acd0734e",
-      "startedAt": "2026-11-20T12:35:06Z",
-      "endedAt": "2026-11-20T12:35:39Z",
-      "context": "release 基线上的对应候选源码，Node 22、npm 10，按锁定依赖执行；浏览器验证使用真实签名 Chromium 与新建隔离 PostgreSQL 16.16，长文本用标注明确的渲染夹具。"
+      "log": "/tmp/dx-performance-v7/pr02/type.log",
+      "logSha256": "5e7fcf7d3c5a4aa620dbff8a6e1b7cf30f1cc507376f050dcec53ac25a3d49e1",
+      "sourceFingerprint": "7e9890f5ed81f21f3c4a577d3a8154f184996b7c0698445f00982b5821bb018b",
+      "testedHead": "1771d861fa440e86de4900da8bd09f2898197d7f",
+      "context": "候选独立工作区的 Web 与 API 工作区类型检查，执行已重新构建的候选合约。",
+      "startedAt": "2026-11-20T12:58:16Z",
+      "endedAt": "2026-11-20T12:59:11Z"
     }
   ]
 }

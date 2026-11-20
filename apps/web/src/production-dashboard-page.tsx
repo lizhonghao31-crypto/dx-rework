@@ -2,7 +2,7 @@ import {TodoReadBoundary,useTodoContentRead} from './todo-content-read.js';
 import { SearchableSelect } from "./search-select.js";
 import { PoDateSummary,PoDateDetails,PoDateRisks,PoDeadline } from "./po-delivery-dates.js";
 import { shanghaiBusinessTime } from "./business-date.js";
-import { productionDisplayReturnUrl,productionDisplayDomainHref,productionReportingHref } from "./production-display-context.js";
+import { productionDisplayReturnUrl,productionDisplayDomainHref,productionReportingHref,productionDashboardDetailSearch } from "./production-display-context.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -42,8 +42,10 @@ export function ProductionProgressBars({item,motion=false}:{item:ProductionDashb
 }
 export function ProductionDashboardPage(props:{productionOrderId?:string|undefined}){return <TodoReadBoundary><ProductionDashboardContent {...props}/></TodoReadBoundary>;}
 function ProductionDashboardContent({productionOrderId}:{productionOrderId?:string|undefined}) {
-  const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
-  const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';
+  const params=new URLSearchParams(window.location.search);
+  const factoryDecisionId=params.get('factoryDecisionId');
+  const motherOrderId=params.has('motherOrderId')?(params.getAll('motherOrderId').length===1?params.get('motherOrderId')!:''):undefined;
+  const factoryQuery=productionDashboardDetailSearch(factoryDecisionId,motherOrderId);
   const [data,setData]=useState<ProductionDashboard|null>(null),[detail,setDetail]=useState<z.infer<typeof ProductionDashboardDetailSchema>|null>(null);
   const readRef=useTodoContentRead({routeName:'production_detail',entityId:productionOrderId??'',factoryDecisionId},Boolean(detail&&detail.detail.order.productionOrderId===productionOrderId));
   const [q,setQ]=useState(""),[supplier,setSupplier]=useState(""),[status,setStatus]=useState(""),[progressState,setProgressState]=useState("");
@@ -68,7 +70,8 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
     }catch(e){if(version===sequence.current)setError(e instanceof Error?e.message:"加载失败");}finally{if(version===sequence.current)setLoading(false);}
   };
   // Only initial load, explicit filter/page changes and the refresh button request data.
-  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);sequence.current++;};},[productionOrderId,factoryDecisionId,page,q,supplier,status,progressState,risk]);
+  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);sequence.current++;};},[productionOrderId,factoryQuery,page,q,supplier,status,progressState,risk]);
+  useEffect(()=>{if(productionOrderId)setDetail(null);},[productionOrderId,factoryQuery]);
   useEffect(()=>{if(!changed.length)return;const timer=setTimeout(()=>setChanged([]),1800);return()=>clearTimeout(timer);},[changed]);
   useEffect(()=>{const media=window.matchMedia("(prefers-reduced-motion: reduce)");const update=()=>setReduced(media.matches);update();media.addEventListener("change",update);return()=>media.removeEventListener("change",update);},[]);
   useEffect(()=>{const update=()=>{setVisible(!document.hidden);setNow(Date.now());};document.addEventListener("visibilitychange",update);const timer=setInterval(()=>{if(!document.hidden)setNow(Date.now());},60000);return()=>{document.removeEventListener("visibilitychange",update);clearInterval(timer);};},[]);
@@ -83,11 +86,14 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
     };frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);
   },[moving,data?.asOf]);
   const asOf=data?.asOf??detail?.asOf;
-  const orderReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
-  const displayReturn=productionDisplayReturnUrl(new URLSearchParams(window.location.search).get('returnTo'));
+  const orderReturn=motherOrderId===undefined?digitalDetailReturnUrl(params.get("returnTo"),import.meta.env.BASE_URL):null;
+  const requestedDisplayReturn=productionDisplayReturnUrl(params.get('returnTo'));
+  const displayReturn=motherOrderId===undefined?requestedDisplayReturn:
+    requestedDisplayReturn&&new URL(requestedDisplayReturn,'https://local.invalid').searchParams.get('motherOrderId')===motherOrderId?requestedDisplayReturn:
+    pageUrl('ui/production-dashboard')+'?'+new URLSearchParams({workspace:'display',motherOrderId});
   return <Shell active="实时看板"><div ref={readRef} className="sourcing-workspace production-dashboard production-board">
     <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
-    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={productionReportingHref(productionOrderId??null,factoryDecisionId,orderReturn??displayReturn)!}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={todoReturnPath(window.location.search)?pageUrl(todoReturnPath(window.location.search)!):orderReturn??displayReturn??pageUrl("ui/production-dashboard")}>{todoReturnPath(window.location.search) ? "返回我的待办" : orderReturn?"返回这张订单":displayReturn?"返回实时生产展示":"返回实时看板"}</a>:null}
+    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={productionReportingHref(productionOrderId??null,factoryDecisionId,orderReturn??displayReturn)!}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={motherOrderId===undefined&&todoReturnPath(window.location.search)?pageUrl(todoReturnPath(window.location.search)!):orderReturn??displayReturn??pageUrl("ui/production-dashboard")}>{motherOrderId===undefined&&todoReturnPath(window.location.search) ? "返回我的待办" : orderReturn?"返回这张订单":displayReturn?"返回实时生产展示":"返回实时看板"}</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
       {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
