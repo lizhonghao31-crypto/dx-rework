@@ -1,23 +1,21 @@
 {
   "version": 1,
   "base": "59a51cb9580e3840b47b5a2a9b3ca6a510a2ae55",
-  "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
+  "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
   "rules": [
     {
-      "rule": "首次有效创建与创建人按源单或正式单读取，工序与审批写入保持原实现。",
+      "rule": "仅在详情透出同主体的有效创建事实、创建人和已有七组首入口；公共任务事实与版本保持。",
       "source": "Library DX 座舱详情七大流程、创建与投面辅料纠偏 v2 §§4、8、10.1、11.3；docs/ui/ASTRYX_UI_SPEC.md#DXUI-DETAIL-004",
       "writes": [
-        "apps/api/src/production-platform/journey-fact-model.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-search-metadata.ts",
         "apps/api/src/production-platform/order-time-created.ts",
         "apps/web/src/cockpit-detail-r5.css",
         "apps/web/src/cockpit-detail.tsx",
         "docs/ui/ASTRYX_UI_SPEC.md",
         "packages/contracts/src/digital-production-journey.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-source-lifecycle.ts",
@@ -34,10 +32,11 @@
       ],
       "initialization": "沿现有 0296 首次发布和原正式创建事实；旧源单取原第一轮发布，旧正式单无可信业务事件时不由登记时刻冒填；无新迁移。",
       "dateAndPermission": "读同主体的创办归属和业务发生时间，显示姓名取有权对象的当前公开名称；原程序读取范围、命令幂等及审批不变。",
-      "expectation": "核真草稿无正式时钟、分时转换、直接正式、同审批双身份、撤权或无关角色；原 SLA 与客户日期业务分母由现有验收保持。",
+      "expectation": "核纯开发、单独正式创建、同次审批两事实、真实往返、仅源可读、有正式权限以及未关联对照；原九／八布局不加临时按钮，随七组恢复该分支入口。",
       "checks": [
         "native-creation-and-read-model",
         "creation-display-and-role-bounds",
+        "created-date-long-name-layout",
         "formal-order-end-to-end"
       ]
     }
@@ -46,69 +45,92 @@
     {
       "id": "native-creation-and-read-model",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts --reporter=default --reporter=json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-native-final.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 33,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f70927685fb0ea7aee8c5cf7c6ce29f3fac4afec",
-      "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
-      "context": "Node 22.22.2; PostgreSQL 13.23, two marked low-privilege database targets; Chromium process via actual native App and authenticated fixture; one Vitest worker.",
-      "startedAt": "2026-11-21T15:36:42.828Z",
-      "endedAt": "2026-11-21T15:39:14.247Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-browser.log",
-      "logSha256": "c89a655b9c7ead91f504408f383e87341c4d829e577be6e4dabb008358649a01",
+      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
+      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
+      "context": "隔离 PG 13.23、真实 Chromium。实际角色对照、真实创建跳转返回、草稿/审批和原生/索引读取。",
+      "startedAt": "2026-11-21T16:02:44.418Z",
+      "endedAt": "2026-11-21T16:05:37.788Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-native-final.log",
+      "logSha256": "6fae3be57bb17f8b0cd251a86125d967512bbb3c50c0e7a882a6647157fbc915",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dde1cdcdb8cf776b80664faac17ac8018c1885749639ee313fe15aabc2a73af2"
+          "sha256": "645e24f2c49e17e1f3777247973218f5c142522afd39037301cc2f7d43804a06"
         }
       ]
     },
     {
       "id": "creation-display-and-role-bounds",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-framework.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-framework.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-unit.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f70927685fb0ea7aee8c5cf7c6ce29f3fac4afec",
-      "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
-      "context": "Node 22.22.2; existing strict SQL stubs for direct PMC, active/revoked roles and overlapping technical or management capabilities.",
-      "startedAt": "2026-11-21T15:36:42.949Z",
-      "endedAt": "2026-11-21T15:36:49.669Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-unit.log",
-      "logSha256": "8303b4f7148148b6b9f9637d80ea95fcd42125f25fb5040219ebfee7957e8ff9",
+      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
+      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
+      "context": "原 PMC、管理和兼任权限回归，原共享 SQL 无新增替身。",
+      "startedAt": "2026-11-21T15:59:47.032Z",
+      "endedAt": "2026-11-21T15:59:51.851Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-unit.log",
+      "logSha256": "697cb6ed61dde775e1e85890fc7381f3677f1525723d34352507243ca957c052",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e96d6a6bdfdfa570b165e8626f5be3a474818b9a4cf63d55e8caf3ac3d7f0959"
+          "sha256": "c9c88dc379f497fea3cba60b22f1663c41045cb808fbd3ab37794fb1af94df61"
+        }
+      ]
+    },
+    {
+      "id": "created-date-long-name-layout",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t 'keeps long metadata labels' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-layout.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 21,
+      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
+      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
+      "context": "相同原生 App 的具名布局压力样本，保原六组、真实数据入口，1165–1920 及 125% CSS 视口，覆盖长创建人和日期同组。",
+      "startedAt": "2026-11-21T16:00:16.340Z",
+      "endedAt": "2026-11-21T16:00:44.812Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-layout.log",
+      "logSha256": "61fac32a848b9b7eaf52717639dd1e801fc1d2449abbce8b052da0a4427bc50a",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "26073dcb538475c9a9d8939d594b9f474b09194386d10e8d70139a5dca26ba29"
         }
       ]
     },
     {
       "id": "formal-order-end-to-end",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'R5-09 follows one new order' --reporter=default --reporter=json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'R5-09 follows one new order' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-full-path-serial.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 1,
       "failed": 0,
       "skipped": 15,
-      "testedHead": "f70927685fb0ea7aee8c5cf7c6ce29f3fac4afec",
-      "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
-      "context": "Same low-privilege PostgreSQL 13.23 and Chromium; one matching existing end-to-end native order chain, 15 equally existing cases excluded by the target filter.",
-      "startedAt": "2026-11-21T15:39:43.166Z",
-      "endedAt": "2026-11-21T15:40:09.032Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-full-path.log",
-      "logSha256": "cf0fd1b8b0531d6f8dc87d786a2a1574f43e7334b594c8d2869d83cb0dba19c2",
+      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
+      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
+      "context": "同隔离数据库和 Chromium 的原生正式订单全链定向，保原计划及生产。",
+      "startedAt": "2026-11-21T16:07:49.166Z",
+      "endedAt": "2026-11-21T16:08:16.031Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-full-path-serial.log",
+      "logSha256": "e72ddfdd18dce62fca9d7957f208e9157b9cf85d4cafbd65703e50f95984b899",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "73291b44808359f7d840719f8dacbd67c71c02111fb228b9dcfa2865b578eb54"
+          "sha256": "59040d7a898c0a090a5fca2d60af6b4c9cf2325307c56f123cab2f53d5d843d2"
         }
       ]
     }
