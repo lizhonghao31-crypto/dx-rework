@@ -137,7 +137,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
  const handedDocument=input.kind==='design_handover'&&context.sourceId?await developmentDocumentRow(db,context.sourceId):null;
  const directInstruction=input.kind==='design_handover'&&input.orderInstructionVersion!==undefined&&context.orderId
   ?await directInvestmentInstruction(db,context.orderId):null;
- const materialInputs=directInstruction?instructionInvestmentMaterials(directInstruction.document):handedDocument?.document.materials;
+ const materialInputs:readonly InvestmentMaterial[]|undefined=directInstruction?instructionInvestmentMaterials(directInstruction.document):handedDocument?.document.materials;
  const handoverMaterials=materialInputs?.map(m=>({
   materialId:m.materialId,category:m.category,supplier:m.supplier,name:m.name,quantity:m.quantity,color:m.color,specification:m.specification
  }));
