@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "59a51cb9580e3840b47b5a2a9b3ca6a510a2ae55",
-  "sourceFingerprint": "13aabe7b7b65ef02ad467cce8b6d32f742aef520a269a8ccf159c11f66ea9d6d",
+  "sourceFingerprint": "cd33ddfb3cad9e516ea18534fe82d0dc030ddc91d98d3eaa382a253c487333f5",
   "rules": [
     {
       "rule": "在真实预下单依原材料版本交接给指定跟单，并在原准备面板登记；正式转单续用原记录。",
@@ -33,7 +33,7 @@
       "newTests": [
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
-      "expectation": "普通跟单以签名会话从待办进原面板、确认原生回执并返回。无成衣尺寸、纸样或正式 PO，草稿不发布不起钟；改范围后旧凭证拒绝，合法实际可保存。",
+      "expectation": "普通跟单以签名会话从待办进原面板、确认原生回执并返回。无成衣尺寸、纸样或正式 PO，草稿不发布不起钟；改范围后旧凭证拒绝，合法实际可保存；规格变化要求新交接，只失效受影响材料；旧无明细原事实仍保留但不满足新的适用范围。",
       "checks": [
         "preorder-original-pg-and-browser",
         "preorder-schedule-and-authorization"
@@ -125,46 +125,46 @@
     {
       "id": "preorder-original-pg-and-browser",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-final-origin-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-final-physical-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 38,
+      "passed": 41,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3e9fac50d0c339221f00ad29f8a024ce7d08d9f4",
-      "sourceFingerprint": "13aabe7b7b65ef02ad467cce8b6d32f742aef520a269a8ccf159c11f66ea9d6d",
+      "testedHead": "7b11a443fadd5fe542db604a61bea4e02e380dd0",
+      "sourceFingerprint": "cd33ddfb3cad9e516ea18534fe82d0dc030ddc91d98d3eaa382a253c487333f5",
       "context": "低权限隔离 PostgreSQL 13.23、真实 Chromium；普通跟单真草稿，直接正式和后来关联历史源、纯开发转单、预下单转单，保原事实、授权及提醒。",
-      "startedAt": "2026-11-21T17:15:47.186Z",
-      "endedAt": "2026-11-21T17:17:45.799Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-final-origin-pg.log",
-      "logSha256": "c6f4565d25215372b52b09e20ab259f08c61cf6a83f6e7ae72ae10ef506e56e3",
+      "startedAt": "2026-11-21T17:29:53.359Z",
+      "endedAt": "2026-11-21T17:31:53.354Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-final-physical-pg.log",
+      "logSha256": "f8ed29371f0f724332a83c889333fa045734ad13dd13d218b0879cfc25a2237e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fdda0f37dcb4e21ecf7d47411e0dfa2dcea07389c1087a54d95f53ac048a4977"
+          "sha256": "db64e9b39ace215b6509f001a331294cf945c78dd5bd233e9f5fcce5ce6b8f65"
         }
       ]
     },
     {
       "id": "preorder-schedule-and-authorization",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract}.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-final-origin-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract}.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-final-physical-unit.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 106,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3e9fac50d0c339221f00ad29f8a024ce7d08d9f4",
-      "sourceFingerprint": "13aabe7b7b65ef02ad467cce8b6d32f742aef520a269a8ccf159c11f66ea9d6d",
+      "testedHead": "7b11a443fadd5fe542db604a61bea4e02e380dd0",
+      "sourceFingerprint": "cd33ddfb3cad9e516ea18534fe82d0dc030ddc91d98d3eaa382a253c487333f5",
       "context": "同提交的权限矩阵、排程合同、手算采购边界、原固定里程碑和旧版本回归。",
-      "startedAt": "2026-11-21T17:15:41.049Z",
-      "endedAt": "2026-11-21T17:15:46.865Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-final-origin-unit.log",
-      "logSha256": "5f64c075c9d87784b22b3096d1dbec3ee61aaafc2e28fb189ba9db87148dc620",
+      "startedAt": "2026-11-21T17:31:53.687Z",
+      "endedAt": "2026-11-21T17:32:00.430Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-final-physical-unit.log",
+      "logSha256": "c1d21c83bc183065c8289318fc49a782be752e93fe71e49fdf6f8cb06e0d5768",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fc038fcdf3a3488d961fd39c38a1950a5ff1fdcc193c943791c116dfbd81da25"
+          "sha256": "0a36301239f14040e73815643a05246dfc4e0a01b237b204ee4f8fa12801aeba"
         }
       ]
     }
