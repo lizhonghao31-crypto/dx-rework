@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {DIGITAL_SLA_PARAMETERS} from '@dx-rework/contracts/digital-sla';
 import {SlaHistoryQuerySchema,slaHistoryValueEqual,type SlaHistoryQuery,type SlaHistoryRow,type SlaHistoryPage,type SlaVersionDetail,type SlaApplicationCandidatesQuery,type SlaApplicationCandidatesPage} from '@dx-rework/contracts/sla-settings-history';
@@ -17,6 +18,21 @@ export class SlaSettingsHistoryService{
  async list(actor:TrustedActorContext,input:SlaHistoryQuery):Promise<SlaHistoryPage>{
   const query=SlaHistoryQuerySchema.parse(input);return this.read(actor,async db=>{
    const totals=(await db.query<{total:number;current:number|null}>('SELECT count(*)::int AS total,max(version) AS current FROM digital_sla_configurations')).rows[0]!;
+   if(query.page!==undefined){
+    const currentVersion=totals.current??0,browseMaxVersion=query.browseMaxVersion??currentVersion;
+    const scope=(await db.query<{total:number;versions:string}>(`SELECT count(*)::int AS total,
+      md5(coalesce(string_agg(jsonb_build_array(configuration_id,version,created_by,created_at,reason)::text,',' ORDER BY version DESC),'')) AS versions
+      FROM digital_sla_configurations WHERE version<=$1`,[browseMaxVersion])).rows[0]!;
+    const browseToken=createHash('sha256').update(JSON.stringify([actor.actorId,[...actor.actorRoles].sort(),
+      [...(actor.authorizationCapabilities??[])].sort(),query.pageSize,browseMaxVersion,scope.versions])).digest('hex');
+    const metadata={currentVersion,page:query.page,pageSize:query.pageSize,browseMaxVersion,browseToken,
+      newVersionAvailable:currentVersion>browseMaxVersion,total:scope.total,nextBeforeVersion:null};
+    if(query.browseToken!==undefined&&query.browseToken!==browseToken)return {...metadata,items:[],refreshRequired:true};
+    const selected=(await db.query<Row>(`SELECT c.version,c.created_at,c.reason,u.display_name FROM digital_sla_configurations c
+      LEFT JOIN app_users u ON u.id=c.created_by WHERE c.version<=$1 ORDER BY c.version DESC LIMIT $2 OFFSET $3`,
+      [browseMaxVersion,query.pageSize,(query.page-1)*query.pageSize])).rows;
+    return {...metadata,items:selected.map(row)};
+   }
    const rows=(await db.query<Row>(`SELECT c.version,c.created_at,c.reason,u.display_name FROM digital_sla_configurations c LEFT JOIN app_users u ON u.id=c.created_by
     WHERE ($1::integer IS NULL OR c.version<$1) ORDER BY c.version DESC LIMIT $2`,[query.beforeVersion??null,query.pageSize+1])).rows,items=rows.slice(0,query.pageSize).map(row);
    return {currentVersion:totals.current??0,total:totals.total,items,nextBeforeVersion:rows.length>query.pageSize?items.at(-1)!.version:null};

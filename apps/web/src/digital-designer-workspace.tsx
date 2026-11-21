@@ -1,3 +1,4 @@
+import {ListPagination} from './list-pagination.js';
 import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
 import {CockpitRetryUpdates} from './cockpit-retry-updates.js';
 import {useDevelopmentCreationDraft} from './use-development-creation-draft.js';
@@ -24,7 +25,7 @@ import "./digital-development-workspace.css";
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
 type SavedDevelopmentDraft={sourceId:string;designStyleNo:string;version:number;updatedAt:string;approvalState:string|null};
-type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean};
+type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean;total:number};
 const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
   const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "designer", "startDate", "endDate"].includes(key))));
@@ -200,8 +201,7 @@ export function DigitalDesignerWorkspace() {
           :!drafts?<p role="status">正在读取草稿…</p>:drafts.items.length===0?<p>暂无开发草稿</p>:<ul>
             {drafts.items.map(draft=><li key={draft.sourceId}><Button type="button" disabled={creationBusy} onClick={()=>void openSavedDraft(draft.sourceId)}>{draft.designStyleNo}</Button> <span>{draft.version?'最后保存':'已预留款号'} {date(draft.updatedAt)}</span>{draft.approvalState==='pending'&&<span> · 时效待审核</span>}{draft.approvalState==='returned'&&<span> · 时效申请已退回</span>}</li>)}
           </ul>}
-        {drafts&&<><Button type="button" disabled={drafts.page<=1||creationBusy} onClick={()=>setDraftPage(drafts.page-1)}>上一页草稿</Button>
-          <Button type="button" disabled={!drafts.hasNext||creationBusy} onClick={()=>setDraftPage(drafts.page+1)}>下一页草稿</Button></>}
+        {drafts&&<ListPagination page={drafts.page} totalPages={drafts.total===null?null:Math.max(1,Math.ceil(drafts.total/15))} total={drafts.total} busy={creationBusy} onPageChange={setDraftPage} ariaLabel="开发草稿分页"/>}
       </div>}
     </section>}
     <section className="dx-production-panel development-list-panel">

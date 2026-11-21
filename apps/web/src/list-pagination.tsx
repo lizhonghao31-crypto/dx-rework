@@ -1,4 +1,5 @@
 import { LIST_PAGE_SIZE } from "@dx-rework/contracts/reporting";
+import { PageJump } from "@dx-rework/ui/production";
 import { useEffect, useMemo, useState } from "react";
 
 import { todoPageWindow } from "./todo-pagination.js";
@@ -37,10 +38,15 @@ type PaginationItem =
       key: "start-ellipsis" | "end-ellipsis";
     }>;
 
-function PaginationNav({ items, ariaLabel }: Readonly<{ items: readonly PaginationItem[]; ariaLabel: string }>) {
+function PaginationNav({ items, ariaLabel, page, totalPages, total, busy, pendingPage, onPageChange }: Readonly<{
+  items: readonly PaginationItem[]; ariaLabel: string; page: number; totalPages: number | null;
+  total?:number|null|undefined; busy: boolean; pendingPage?:number|undefined; onPageChange(page: number): void;
+}>) {
   return (
     <nav className="my-todos-pagination" aria-label={ariaLabel}>
-      {items.map((item) => item.kind === "ellipsis"
+      {total!=null&&<span>共 {total} 条</span>}
+      <button type="button" disabled={busy || totalPages === null || page <= 1 || pendingPage === page - 1} onClick={() => onPageChange(page - 1)}>上一页</button>
+      {totalPages!==null&&items.map((item) => item.kind === "ellipsis"
         ? <span className="my-todos-pagination__ellipsis" aria-hidden="true" key={item.key}>…</span>
         : <button
             type="button"
@@ -50,20 +56,24 @@ function PaginationNav({ items, ariaLabel }: Readonly<{ items: readonly Paginati
             onClick={item.onClick}
             key={item.page}
           >{item.page}</button>)}
+      <button type="button" disabled={busy || totalPages === null || page >= totalPages || pendingPage === page + 1} onClick={() => onPageChange(page + 1)}>下一页</button>
+      <PageJump page={page} totalPages={totalPages} busy={busy} onPage={onPageChange} />
     </nav>
   );
 }
 
 type ListPaginationProps = Readonly<{
   page: number;
-  totalPages: number;
+  totalPages: number | null;
   onPageChange: (page: number) => void;
   ariaLabel: string;
   busy?: boolean;
+  total?: number | null;
+  pendingPage?: number | undefined;
 }>;
 
-export function ListPagination({ page, totalPages, onPageChange, ariaLabel, busy = false }: ListPaginationProps) {
-  const pageCount = Math.max(1, Math.floor(totalPages));
+export function ListPagination({ page, totalPages, onPageChange, ariaLabel, total, pendingPage, busy = false }: ListPaginationProps) {
+  const pageCount = Math.max(1, Math.floor(totalPages ?? 1));
   const currentPage = Math.min(pageCount, Math.max(1, Math.floor(page)));
   const pages = listPageWindow(currentPage, pageCount);
   const firstPage = pages[0] ?? 1;
@@ -71,7 +81,7 @@ export function ListPagination({ page, totalPages, onPageChange, ariaLabel, busy
   const items: PaginationItem[] = [];
 
   if (firstPage > 1) {
-    items.push({ kind: "page", page: 1, active: currentPage === 1, disabled: busy, onClick: () => onPageChange(1) });
+    items.push({ kind: "page", page: 1, active: currentPage === 1, disabled: busy || pendingPage === 1, onClick: () => onPageChange(1) });
   }
   if (firstPage > 2) items.push({ kind: "ellipsis", key: "start-ellipsis" });
   for (const pageNumber of pages) {
@@ -79,14 +89,15 @@ export function ListPagination({ page, totalPages, onPageChange, ariaLabel, busy
       kind: "page",
       page: pageNumber,
       active: pageNumber === currentPage,
-      disabled: busy,
+      disabled: busy || totalPages === null || pageNumber === currentPage || pendingPage === pageNumber,
       onClick: () => onPageChange(pageNumber),
     });
   }
   if (lastPage < pageCount - 1) items.push({ kind: "ellipsis", key: "end-ellipsis" });
   if (lastPage < pageCount) {
-    items.push({ kind: "page", page: pageCount, active: currentPage === pageCount, disabled: busy, onClick: () => onPageChange(pageCount) });
+    items.push({ kind: "page", page: pageCount, active: currentPage === pageCount, disabled: busy || pendingPage === pageCount, onClick: () => onPageChange(pageCount) });
   }
 
-  return <PaginationNav items={items} ariaLabel={ariaLabel} />;
+  return <PaginationNav items={items} ariaLabel={ariaLabel} page={currentPage} totalPages={totalPages}
+    total={total} busy={busy} pendingPage={pendingPage} onPageChange={onPageChange} />;
 }

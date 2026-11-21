@@ -60,3 +60,5 @@
 .cockpit-documents-dialog>footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;padding-top:12px;flex:none}
 .cockpit-documents-dialog>footer>span{flex:1 1 260px;color:#65758a;font-size:12px}
 @media(max-width:800px){.cockpit-document-filters{grid-template-columns:1fr}.cockpit-documents-dialog{padding:12px;max-height:90dvh}.cockpit-document-priority-row{min-height:40px}.cockpit-document-priority{max-height:330px}}
+
+.cockpit-document-append { display:flex; justify-content:center; }

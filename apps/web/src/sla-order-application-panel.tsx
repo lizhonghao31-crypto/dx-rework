@@ -1,3 +1,4 @@
+import {ListPagination} from './list-pagination.js';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@dx-rework/ui';
 import type {SlaApplicationCandidatesPage} from '@dx-rework/contracts/sla-settings-history';
@@ -67,11 +68,11 @@ export function SlaOrderApplicationPanel({ expanded=false,managedCandidates=fals
     } }; window.addEventListener('beforeunload', listener); return () => window.removeEventListener('beforeunload', listener); }, [unknown, busy]);
     const search = async (nextPage = 1) => { if (running.current)
         return; running.current = true; setBusy(true); setError(''); try {
-        const result = managedCandidates?await digitalRequest<SlaApplicationCandidatesPage>(`sla-settings/orders/candidates?page=${nextPage}&search=${encodeURIComponent(query)}`):await digitalRequest<{items:OrderChoice[]}>(`orders?page=${nextPage}&search=${encodeURIComponent(query)}`);
+        const result = managedCandidates?await digitalRequest<SlaApplicationCandidatesPage>(`sla-settings/orders/candidates?page=${nextPage}&search=${encodeURIComponent(query)}`):await digitalRequest<{items:OrderChoice[];total:number}>(`orders?page=${nextPage}&search=${encodeURIComponent(query)}`);
         const items:OrderChoice[]=managedCandidates?(result as SlaApplicationCandidatesPage).items.map(row=>({productionOrderId:row.orderId,...row})):result.items as OrderChoice[];
         if (live.current) {
             setOrders(items);setLabels(prior=>({...prior,...Object.fromEntries(items.map(row=>[row.productionOrderId,row]))}));
-            setPage(nextPage);setTotal(managedCandidates?(result as SlaApplicationCandidatesPage).total:null);
+            setPage(nextPage);setTotal(result.total);
         }
     }
     catch (e) {
@@ -140,7 +141,7 @@ export function SlaOrderApplicationPanel({ expanded=false,managedCandidates=fals
   {error && <p role="alert">{error}</p>}
   <div className="sla-standard-toolbar"><label>查找订单<input value={query} disabled={locked} onChange={e => setQuery(e.target.value)}/></label><Button variant="secondary" disabled={locked} onClick={() => void search()}>查找</Button></div>
   <ul className="sla-standard-rows">{orders.map(order => <li key={order.productionOrderId}><label><input type="checkbox" disabled={locked || order.selectable===false || selection.length >= 20 && !selection.includes(order.productionOrderId) || rows[order.productionOrderId]?.state === 'applied'} checked={selection.includes(order.productionOrderId)} onChange={e => setSelection(s => e.target.checked ? [...s, order.productionOrderId] : s.filter(id => id !== order.productionOrderId))}/>{order.designStyleNo} · {order.customerCode}{order.pos?.length?` · PO ${order.pos.join('、')}`:''}{order.adoptedVersion?` · 原统一标准 v${order.adoptedVersion}`:''}{managedCandidates&&<small>{order.reason??'待预览核实可调整节点'}</small>}</label></li>)}</ul>
-  {!!orders.length && <div className="sla-standard-toolbar"><Button variant="secondary" disabled={locked || page === 1} onClick={() => void search(page - 1)}>上一页</Button><span>第 {page} 页{total===null?'':` · 共 ${total} 单`}</span><Button variant="secondary" disabled={locked || (total!==null&&page*15>=total)} onClick={() => void search(page + 1)}>下一页</Button></div>}
+  {total!==null&&<ListPagination page={page} totalPages={total===null?null:Math.max(1,Math.ceil(total/15))} total={total} busy={locked} onPageChange={target=>void search(target)} ariaLabel="应用标准订单分页"/>}
   <label className="sla-change-reason">本次应用原因<input value={reason} disabled={locked} maxLength={1000} onChange={e => setReason(e.target.value)}/></label>
   <Button disabled={locked || !selection.length || !parameterKeys.length || !reason.trim()} onClick={() => void run(false)}>预览选定订单（{selection.length}）</Button>
   <p aria-live="polite">已选 {selection.length} 单；预览可调整 {Object.values(rows).filter(row=>row.state==='previewed').length} 单</p>

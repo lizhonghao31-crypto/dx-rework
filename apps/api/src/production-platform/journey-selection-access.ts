@@ -5,6 +5,7 @@ import {acceptanceBusinessContext,businessScopeKey} from '../acceptance-clock/bu
 import {isDigitalManagementReader,isDigitalTechnicalManager} from './access-policy.js';
 import {isRootActor} from '../access/business-authority.js';
 import {wholeOrderActiveSql} from './whole-order-visibility.js';
+import {retiredBulkPreshrinkTaskIds} from './bulk-preshrink-requirement.js';
 
 const activeRole=(roles:ReadonlySet<string>,role:string)=>roles.has(role)||role==='warehouse_receiver'&&roles.has('warehouse_supervisor');
 
@@ -110,4 +111,42 @@ async function authorizeTaskBatch(db:PoolClient,actor:TrustedActorContext,taskId
   const technical=global||clerk&&row.task_kind.startsWith('development_')||assigned||policy?.taskParentTechnical===true;
   result.set(row.task_id,{technical,execute:root||assigned,parentTechnical:policy?.technical??false});
  }
+}
+
+/** Keep the legacy task-list membership and the native task read policy
+ * ahead of pagination. Return empty pages with the same snapshot's total. */
+export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActorContext,page:number){
+ const {liveRoles}=await readJourneySelectionAccess(db,actor,[]);
+ const activeTask=await wholeOrderActiveSql(db,'task','a.task_id');
+ const activeOrder=await wholeOrderActiveSql(db,'order','o.production_order_id');
+ const activeSource=await wholeOrderActiveSql(db,'source','s.source_id');
+ const global=isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor);
+ const owns=actor.actorRoles.includes('sample_designer');
+ const merch=actor.actorRoles.includes('order_merchandiser');
+ const clerk=actor.actorRoles.includes('development_clerk');
+ const {rows}=await db.query<{total:number;ids:string[]}>(`
+  WITH eligible AS (
+    SELECT t.task_id,t.created_at
+    FROM digital_production_tasks t JOIN digital_production_task_access a ON a.task_id=t.task_id
+    LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
+    LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
+    WHERE ${activeTask} AND t.node_key<>'factory_material_count' AND NOT(t.task_id=ANY($8::uuid[]))
+      AND ($1 OR a.assignee_id=$2 OR ($3 AND (o.created_by=$2 OR s.created_by=$2))
+        OR ($4 AND o.primary_merchandiser_id=$2) OR ($5 AND a.task_kind LIKE 'development_%'))
+      AND ($1 OR ($5 AND starts_with(a.task_kind,'development_'))
+        OR (a.assignee_id=$2 AND (a.required_role=ANY($6::text[])
+          OR a.required_role='warehouse_receiver' AND 'warehouse_supervisor'=ANY($6::text[])))
+        OR (o.production_order_id IS NOT NULL AND ${activeOrder}
+          AND ($3 AND o.created_by=$2 OR $4 AND o.primary_merchandiser_id=$2 AND 'order_merchandiser'=ANY($6::text[])
+            OR $5 AND o.source_id IS NOT NULL AND 'development_clerk'=ANY($6::text[])))
+        OR (o.production_order_id IS NULL AND s.source_id IS NOT NULL AND ${activeSource}
+          AND ($3 AND s.created_by=$2 OR $4 AND 'order_merchandiser'=ANY($6::text[]) AND EXISTS(
+            SELECT 1 FROM digital_production_orders linked WHERE linked.source_id=s.source_id AND linked.primary_merchandiser_id=$2))))
+  ), selected AS (
+    SELECT task_id,created_at FROM eligible ORDER BY created_at DESC,task_id DESC LIMIT 15 OFFSET $7
+  )
+  SELECT (SELECT count(*)::int FROM eligible) AS total,
+    coalesce(array_agg(task_id ORDER BY created_at DESC,task_id DESC),'{}'::uuid[]) AS ids
+  FROM selected`,[global,actor.actorId,owns,merch,clerk,[...liveRoles],(page-1)*15,await retiredBulkPreshrinkTaskIds(db)]);
+ return rows[0]!;
 }

@@ -77,6 +77,50 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
+ it('jumps directly to a target page and keeps the centered controls usable at five widths',async()=>{
+  const {context,page}=await h.open();
+  try{
+   const nav=page.locator('.cockpit-home .dx-production-pagination');
+   const input=nav.getByRole('textbox',{name:'跳转页码'});
+   const requests:number[]=[];
+   page.on('request',request=>{
+    const url=new URL(request.url());
+    if(url.pathname.endsWith('/digital-production/journeys')&&url.searchParams.get('view')==='home')
+      requests.push(Number(url.searchParams.get('page')??1));
+   });
+   for(const invalid of ['0','-1','1.5','4','invalid','']){
+    await input.fill(invalid);await input.press('Enter');
+    await nav.getByText('请输入 1 至 3 的整数页码',{exact:true}).waitFor();
+   }
+   await input.fill('1');await nav.getByRole('button',{name:'跳转',exact:true}).click();
+   expect(requests).toEqual([]);
+   for(const width of [1440,1280,768,390,360]){
+    await page.setViewportSize({width,height:747});
+    expect(await nav.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+    expect(await nav.evaluate(element=>getComputedStyle(element).justifyContent)).toBe('center');
+    expect(await input.isVisible()).toBe(true);
+   }
+   await input.fill('3');
+   await input.evaluate(element=>{
+    element.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+    element.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,isComposing:true,cancelable:true}));
+    element.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}));
+   });
+   expect(requests).toEqual([]);
+   await input.press('Enter');
+   await page.waitForURL(url=>url.searchParams.get('page')==='3');
+   await homeReady(page);
+   await expect.poll(()=>requests).toEqual([3]);
+   expect(await page.locator('.cockpit-home tbody tr').count()).toBe(1);
+   const first=await page.locator('.cockpit-home tbody tr').first().getAttribute('data-order-id');
+   await page.setViewportSize({width:1280,height:747});
+   await page.locator('.cockpit-home .journey-order-select').first().click();
+   await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+   await page.getByRole("button",{name:/生产管理总览/}).click();await homeReady(page);
+   expect(new URL(page.url()).searchParams.get('page')).toBe('3');
+   expect(await page.locator('.cockpit-home tbody tr').first().getAttribute('data-order-id')).toBe(first);
+  }finally{await context.close();}
+ });
  it('renders the original full Shell, six peer KPIs, and aligned date/progress rows without changing source facts',async()=>{
   const {context,page}=await h.open(undefined,{},1584);
   try{const actual=await h.read(page);expect(actual.total).toBe(31);for(const width of [1165,1366,1440,1920]){

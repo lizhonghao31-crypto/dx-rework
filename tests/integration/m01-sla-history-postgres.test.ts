@@ -86,4 +86,25 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const id=randomUUID();await f.db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[id,'TEST isolated history PMC']);await f.db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','anchor-test',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,'uat-history-'+id,'uat-history-union-'+id]);await f.access.assignRole({...f.root,authorizationCapability:'access:admin'},{userId:id,roleCode:'pmc',reason:'TEST original history read-only role'});const pmc:TrustedActorContext={actorId:id,actorRoles:['pmc'],authorizationCapability:'digital_production:view',requestId:randomUUID()};expect((await history.list(pmc,{pageSize:10})).items).toHaveLength(10);await expect(history.candidates(pmc,{page:1,search:''})).rejects.toMatchObject({statusCode:403});await expect(drafts.copyVersion(pmc,{sourceVersion:5,expectedVersion:25,expectedDraftRevision:0},randomUUID())).rejects.toMatchObject({statusCode:403});const manager=f.people['production-management']!,assignment=(await f.db.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='production_management' AND revoked_at IS NULL",[manager.actorId])).rows[0];
   await f.access.revokeRole({...f.root,authorizationCapability:'access:admin'},assignment.assignment_id,'TEST this fixture manager loses history and copy authority');await expect(history.list(manager,{pageSize:10})).rejects.toMatchObject({statusCode:403});await expect(drafts.copyVersion(manager,{sourceVersion:5,expectedVersion:25,expectedDraftRevision:0},randomUUID())).rejects.toMatchObject({statusCode:403});
  });
+ it('pins numbered history to its original versions while real publications continue',async()=>{
+  const initial=await history.list(f.root,{page:1,pageSize:5});
+  const binding={browseMaxVersion:initial.browseMaxVersion!,browseToken:initial.browseToken!};
+  expect(initial.items).toHaveLength(5);
+  const latest=(await publish()).version;
+  const second=await history.list(f.root,{...binding,page:2,pageSize:5});
+  expect(second).toMatchObject({currentVersion:latest,browseMaxVersion:binding.browseMaxVersion,total:initial.total,newVersionAvailable:true});
+  const repeated=await history.list(f.root,{...binding,page:1,pageSize:5});
+  expect(repeated.items).toEqual(initial.items);
+  const old=await history.list(f.root,{beforeVersion:initial.items.at(-1)!.version,pageSize:5});
+  expect(second.items).toEqual(old.items);
+  const jump=await history.list(f.root,{...binding,page:3,pageSize:5});
+  expect(jump.items).toHaveLength(5);
+  expect(new Set([...repeated.items,...second.items,...jump.items].map(item=>item.version)).size).toBe(15);
+  const refreshed=await history.list(f.root,{page:1,pageSize:5});
+  expect(refreshed).toMatchObject({browseMaxVersion:latest,total:initial.total+1,newVersionAvailable:false,items:[expect.objectContaining({version:latest}),...initial.items.slice(0,4)]});
+  const stale=await history.list(f.root,{...binding,browseToken:'f'.repeat(64),page:2,pageSize:5});
+  expect(stale).toMatchObject({refreshRequired:true,items:[]});
+  await expect(history.list(f.root,{page:2,beforeVersion:latest,pageSize:5})).rejects.toThrow();
+ });
+
 });

@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Button} from '@dx-rework/ui';
+import {Pagination} from '@dx-rework/ui/production';
 import {DIGITAL_SLA_PARAMETERS,type DigitalSlaValue} from '@dx-rework/contracts/digital-sla';
 import type {SlaCopyVersion,SlaHistoryPage,SlaVersionDetail} from '@dx-rework/contracts/sla-settings-history';
 import {SlaDraftEnvelopeSchema,SlaDraftSavedReplySchema,type SlaDraftEnvelope} from '@dx-rework/contracts/sla-settings-drafts';
@@ -12,18 +13,29 @@ import type {SlaHistoryEditorBridge} from './sla-standard-editor.js';
 const publicationDate=(value:string)=>new Date(value).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'});
 const valueLabel=(value:DigitalSlaValue)=>readableSlaValue(value)+('notificationEnabled'in value&&value.notificationEnabled===false?' · 提醒关闭':'');
 export function SlaHistoryWorkspace({visible,readOnly,blocked,bridge,onBack,onCopied,onPendingChange,onAuthorityChanged}:{visible:boolean;readOnly:boolean;blocked:boolean;bridge():SlaHistoryEditorBridge|null;onBack():void;onCopied():void;onPendingChange(pending:boolean):void;onAuthorityChanged():void}){
- const [tab,setTab]=useState<'history'|'application'>('history'),[page,setPage]=useState<SlaHistoryPage|null>(null),[cursors,setCursors]=useState<(number|null)[]>([null]),[index,setIndex]=useState(0),[head,setHead]=useState<SlaDraftEnvelope|null>(null);
+ const [tab,setTab]=useState<'history'|'application'>('history'),[page,setPage]=useState<SlaHistoryPage|null>(null),[head,setHead]=useState<SlaDraftEnvelope|null>(null);
  const [selected,setSelected]=useState<number|null>(null),[detail,setDetail]=useState<SlaVersionDetail|null>(null),[loading,setLoading]=useState(false),[detailLoading,setDetailLoading]=useState(false),[error,setError]=useState(''),[detailError,setDetailError]=useState(''),[notice,setNotice]=useState('');
  const [copyBusy,setCopyBusy]=useState(false),[copyPending,setCopyPending]=useState(false),[copied,setCopied]=useState(false),[applicationPending,setApplicationPending]=useState(false),[parameterKeys,setParameterKeys]=useState<string[]>([]);
  const command=useRef<{body:SlaCopyVersion;key:string}|null>(null),reading=useRef(0),detailReading=useRef(0),copying=useRef(false),live=useRef(true),scroll=useRef(0);
  useEffect(()=>{live.current=true;return()=>{live.current=false;reading.current++;detailReading.current++;};},[]);
  const authority=(error:unknown)=>{if(error instanceof DigitalRequestError&&[401,403].includes(error.status??0)){setPage(null);setHead(null);setDetail(null);onAuthorityChanged();}};
- const read=async(nextIndex=index,before=cursors[nextIndex]??null)=>{
+ const read=async(nextPage=page?.page??1,refresh=false)=>{
   const generation=++reading.current;setLoading(true);setError('');
-  try{const [result,own]=await Promise.all([digitalRequest<SlaHistoryPage>(`sla-settings/history?pageSize=5${before===null?'':`&beforeVersion=${before}`}`),readOnly?Promise.resolve(null):digitalRequest('sla-settings/drafts?group=unified').then(value=>SlaDraftEnvelopeSchema.parse(value))]);
+  try{
+   const parameters=new URLSearchParams({pageSize:'5',page:String(nextPage)});
+   if(!refresh&&page?.browseMaxVersion!==undefined&&page.browseToken){
+    parameters.set('browseMaxVersion',String(page.browseMaxVersion));parameters.set('browseToken',page.browseToken);
+   }
+   const [result,own]=await Promise.all([digitalRequest<SlaHistoryPage>('sla-settings/history?'+parameters),readOnly?Promise.resolve(null):digitalRequest('sla-settings/drafts?group=unified').then(value=>SlaDraftEnvelopeSchema.parse(value))]);
    if(!Array.isArray(result.items)||!Number.isInteger(result.currentVersion)||!Number.isInteger(result.total))throw Error('历史返回不完整，请重新读取');
    if(own&&own.currentStandardVersion!==result.currentVersion)throw Error('读取期间现行标准已更新，请重新读取');
-   if(live.current&&generation===reading.current){setPage(result);setHead(own);setIndex(nextIndex);}
+   if(result.page!==nextPage||result.pageSize!==5||result.browseMaxVersion===undefined||!result.browseToken)throw Error('历史分页回执不完整');
+   if(live.current&&generation===reading.current){
+    setPage(result);setHead(own);
+    if(result.refreshRequired){
+     detailReading.current++;setSelected(null);setDetail(null);setDetailError('');setDetailLoading(false);
+    }
+   }
   }catch(error){if(live.current&&generation===reading.current){setError((error as Error).message);authority(error);}}
   finally{if(live.current&&generation===reading.current)setLoading(false);}
  };
@@ -50,13 +62,16 @@ export function SlaHistoryWorkspace({visible,readOnly,blocked,bridge,onBack,onCo
  const locked=blocked||pending,copyDisabled=readOnly||blocked||applicationPending||copyBusy||loading||!head||Boolean(error)&&!copyPending&&!copied;
  return <section className="sla-history-workspace" hidden={!visible} aria-label="历史版本与应用范围">
   <header className="sla-history-heading"><Button variant="secondary" disabled={pending} onClick={()=>{scroll.current=window.scrollY;onBack();}}>← 返回设置</Button><h2>历史版本与应用范围</h2></header>
-  <nav className="sla-workspace-tabs" aria-label="历史设置分类"><div role="tablist" aria-label="历史设置类别">{([['history','历史标准'],['application','应用到进行中订单']] as const).map(([key,label])=><button type="button" role="tab" aria-selected={tab===key} key={key} disabled={pending} onClick={()=>setTab(key)}>{label}</button>)}</div><Button variant="secondary" disabled={locked||loading} onClick={()=>void read()}>刷新</Button></nav>
+  <nav className="sla-workspace-tabs" aria-label="历史设置分类"><div role="tablist" aria-label="历史设置类别">{([['history','历史标准'],['application','应用到进行中订单']] as const).map(([key,label])=><button type="button" role="tab" aria-selected={tab===key} key={key} disabled={pending} onClick={()=>setTab(key)}>{label}</button>)}</div><Button variant="secondary" disabled={locked||loading} onClick={()=>void read(1,true)}>刷新</Button></nav>
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {(copyPending||copied)&&<Button disabled={copyBusy} onClick={()=>void copy(command.current?.body.sourceVersion??selected??0)}>{copied?'重新读取已复制草稿':'用原命令确认复制结果'}</Button>}
   <div hidden={tab!=='history'} className="sla-history-grid"><div className="sla-history-main"><div className="sla-history-summary cockpit-settings-node-section"><span>{loading?'核对中：':error?'上次读取：':'当前使用：'}<strong>{page?.currentVersion?`统一标准 v${page.currentVersion}`:loading?'读取中…':page?'尚无已发布标准':'未读取'}</strong></span><span>历史版本：<strong>{page?`共 ${page.total} 个`:'—'}</strong></span><span>{readOnly?'历史标准只读':'可复制为草稿并调整'}</span></div>
    <section className="sla-history-table-card cockpit-settings-node-section" aria-label="已发布历史标准"><div className="sla-history-table-scroll" tabIndex={0}><table><thead><tr><th>版本</th><th>发布日期</th><th>变更摘要</th><th>使用范围</th><th>操作</th></tr></thead><tbody>{page?.items.map(row=><tr key={row.version} aria-selected={selected===row.version}><th scope="row">v{row.version}{row.version===page.currentVersion&&<small className="sla-history-current">当前使用</small>}</th><td>{publicationDate(row.publishedAt)}</td><td><span className="sla-history-reason" title={row.reason}>{row.reason}</span></td><td>{row.version===page.currentVersion?'新订单默认':'原采用保留'}</td><td><button type="button" className="journey-text-action" aria-label={`查看版本 v${row.version}`} disabled={locked} onClick={()=>void view(row.version)}>查看</button>{!readOnly&&<button type="button" className="journey-text-action" aria-label={`复制 v${row.version} 为草稿`} disabled={copyDisabled} onClick={()=>void copy(row.version)}>复制为草稿</button>}</td></tr>)}</tbody></table></div>
-    {loading&&<p role="status">正在读取历史标准…</p>}{page&&!page.items.length&&!loading&&<p>此页没有已发布标准。</p>}
-    <div className="sla-history-pagination"><Button variant="secondary" disabled={locked||loading||index===0} onClick={()=>void read(index-1)}>上一页</Button><span>第 {index+1} 页 · 共 {page?.total??'—'} 个版本</span><Button variant="secondary" disabled={locked||loading||page?.nextBeforeVersion==null} onClick={()=>{if(page?.nextBeforeVersion!=null){const next=page.nextBeforeVersion;setCursors(values=>[...values.slice(0,index+1),next]);void read(index+1,next);}}}>下一页</Button></div>
+    {loading&&<p role="status">正在读取历史标准…</p>}{page&&!page.refreshRequired&&!page.items.length&&!loading&&<p>此页没有已发布标准。</p>}
+    {page?.refreshRequired?<p role="status">历史范围已变化，刷新后从第一页查看。</p>:
+     page?.newVersionAvailable&&<p role="status">有新版本，刷新后查看。</p>}
+    <Pagination className="sla-history-pagination" page={page?.page??1} pageSize={5}
+      total={page&&!page.refreshRequired?page.total:null} busy={locked||loading} onPage={next=>void read(next)}/>
    </section></div>
    <aside className="sla-history-detail cockpit-settings-node-section" aria-label="查看历史版本"><header><h3>{selected?`查看版本 v${selected}`:'查看历史版本'}</h3>{selected!==null&&<button type="button" aria-label="关闭版本详情" className="journey-text-action" disabled={locked} onClick={()=>{detailReading.current++;setSelected(null);setDetail(null);setDetailError('');setDetailLoading(false);}}>×</button>}</header>
     {detailLoading?<p role="status">正在读取此版本…</p>:detailError?<><p role="alert">{detailError}</p><Button variant="secondary" disabled={locked} onClick={()=>selected&&void view(selected)}>重试读取版本</Button></>:detail?<><p className="sla-history-difference-count">与当前 v{detail.currentVersion} 相比：<strong>{detail.differences.length} 项不同</strong></p><dl className="sla-history-differences">{detail.differences.map(change=><div key={change.key}><dt>{change.label}</dt><dd><strong>{valueLabel(change.historical)}</strong><small>当前：{valueLabel(change.current)}</small></dd></div>)}</dl>{!detail.differences.length&&<p>有效标准值一致。</p>}<details><summary>此版本全部标准</summary><dl className="sla-history-differences">{DIGITAL_SLA_PARAMETERS.map(parameter=><div key={parameter.key}><dt>{parameter.label}</dt><dd>{valueLabel(detail.values[parameter.key]!)}</dd></div>)}</dl></details><dl className="sla-history-source"><div><dt>发布时间</dt><dd>{publicationDate(detail.publishedAt)}</dd></div><div><dt>发布人</dt><dd>{detail.publishedBy??'未记录'}</dd></div><div><dt>原因</dt><dd>{detail.reason}</dd></div></dl>{!readOnly&&<Button variant="secondary" disabled={copyDisabled} onClick={()=>void copy(detail.version)}>复制此版本为草稿</Button>}<p className="sla-history-note">历史订单的实际时间不改变</p></>:<p>选择左侧版本，查看与当前标准的差异。</p>}

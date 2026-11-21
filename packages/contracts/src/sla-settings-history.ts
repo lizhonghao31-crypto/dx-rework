@@ -1,9 +1,24 @@
 import {z} from 'zod';
 import type {DigitalSlaValue,DigitalSlaValues} from './digital-sla.js';
-export const SlaHistoryQuerySchema=z.object({beforeVersion:z.coerce.number().int().positive().optional(),pageSize:z.coerce.number().int().min(1).max(50).default(10)}).strict();
+export const SlaHistoryQuerySchema=z.object({
+ beforeVersion:z.coerce.number().int().positive().optional(),
+ pageSize:z.coerce.number().int().min(1).max(50).default(10),
+ page:z.coerce.number().int().min(1).max(100000).optional(),
+ browseMaxVersion:z.coerce.number().int().nonnegative().optional(),
+ browseToken:z.string().regex(/^[0-9a-f]{64}$/).optional(),
+}).strict().superRefine((query,context)=>{
+ const hasBrowse=query.browseMaxVersion!==undefined||query.browseToken!==undefined;
+ if(query.page===undefined&&hasBrowse||query.page!==undefined&&query.beforeVersion!==undefined){
+  context.addIssue({code:'custom',message:'版本游标和页码浏览不可混用'});
+ }else if(hasBrowse&&(query.browseMaxVersion===undefined||query.browseToken===undefined)){
+  context.addIssue({code:'custom',message:'页码浏览上界和回执须同时提供'});
+ }
+});
 export type SlaHistoryQuery=z.infer<typeof SlaHistoryQuerySchema>;
 export type SlaHistoryRow={version:number;publishedAt:string;publishedBy:string|null;reason:string;scope:'new_orders'};
-export type SlaHistoryPage={currentVersion:number;total:number;items:SlaHistoryRow[];nextBeforeVersion:number|null};
+export type SlaHistoryPage={currentVersion:number;total:number;items:SlaHistoryRow[];nextBeforeVersion:number|null;
+ page?:number;pageSize?:number;browseMaxVersion?:number;browseToken?:string;newVersionAvailable?:boolean;refreshRequired?:boolean;
+};
 export type SlaVersionDifference={key:string;label:string;historical:DigitalSlaValue;current:DigitalSlaValue};
 export type SlaVersionDetail=SlaHistoryRow&{currentVersion:number;values:DigitalSlaValues;differences:SlaVersionDifference[]};
 export const SlaCopyVersionSchema=z.object({sourceVersion:z.number().int().positive(),expectedVersion:z.number().int().nonnegative(),expectedDraftRevision:z.number().int().nonnegative()}).strict();

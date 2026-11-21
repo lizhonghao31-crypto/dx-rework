@@ -156,6 +156,10 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     const trusted = await actor(request); const query = parse(DigitalPageSchema, request.query);
     return dependencies.service.sources(trusted, query.page, query.search);
   });
+  app.get("/digital-production/orders/:orderId/source-candidates", async request => {
+    const trusted=await actor(request),query=parse(DigitalPageSchema,request.query);
+    return dependencies.service.sources(trusted,query.page,query.search,id(request,"orderId"));
+  });
   app.get("/digital-production/design-codes/check",async request=>dependencies.service.checkDesignCode(await actor(request),parse(DigitalDesignCodeCheckSchema,request.query).code));
   app.get("/digital-production/sources/drafts",async request=>{
     const trusted=await actor(request),query=parse(DigitalPageSchema,request.query);
