@@ -25,7 +25,7 @@
 - 权限：`docs/requirements/platform-permission-golden-source-v1.0.md`
 - 样衣：`docs/requirements/sample-system-migration-v1.0.md`
 - 外发/供应商/合同/生产：`docs/requirements/sourcing-supplier-production-v1.0.md`
-- UI：`docs/requirements/rework-ui-golden-source-v1.0.md`
+- UI：[达兴 Astryx UI 规范 1.0](../ui/ASTRYX_UI_SPEC.md)
 
 不要为了普通维护任务完整重读所有历史路线。
 

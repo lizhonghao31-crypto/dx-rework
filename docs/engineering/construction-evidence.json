@@ -1,148 +1,58 @@
 {
   "version": 1,
-  "base": "1d163c5e523b09dc455faece3f089695cf59aa8c",
-  "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
+  "base": "e0fa972603ab39764218e55740f31245ae71d61c",
+  "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
+  "risk": "quick",
+  "automaticTestsNotApplicable": "本次仅接入已批准的 UI 规范与 Markdown 导航，不修改应用代码、工作流、数据库或测试逻辑。",
+  "alternativeVerification": {
+    "reason": "直接对照原交付文件的哈希和逐行差异，核验存在的仓库链接、已定义的规则引用以及本次文档差异范围。",
+    "checks": [
+      "astryx-docs-integrity"
+    ]
+  },
   "rules": [
     {
-      "rule": "保留各原生分页协议，直接读取合法目标页。先核资格和授权，SLA 历史固定浏览范围，旧游标仍有原语义",
-      "source": "Eric 批准的 dx-ui-finance-cutting-construction-plan-20261121.md 第5节及附录 A",
-      "reads": [
-        "apps/web/src/list-pagination.tsx#ListPagination",
-        "packages/ui/src/production.tsx#Pagination",
-        "apps/api/src/production-platform/identity-service.ts#DigitalProductionIdentityService",
-        "apps/api/src/production-platform/task-service.ts#DigitalProductionTaskService",
-        "apps/api/src/production-platform/sla-settings-history.ts#SlaSettingsHistoryService"
-      ],
-      "oldTests": [
-        "tests/integration/m01-sla-history-postgres.test.ts",
-        "tests/unit/my-todos-navigation.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
-      ],
-      "initialization": "同一隔离数据库构造真实原角色、带不合格老数据的来源候选与任务，并实际发布统一历史版本。",
-      "dateAndPermission": "同快照内先过滤、再分页与总数，保留角色校验。新发布版本不会进入原浏览上界，旧历史日期和操作权限不变。",
-      "expectation": "每页最多15个丰富结果，前15个不合格后正确返回16个合格结果；第3页直达、无中间请求，保留待办、回货及看板原生入口、翻页和返回。",
+      "rule": "采用达兴 Astryx UI 规范 1.0 为现行 UI 规范，原领域规则和已批准旧页基准按范围保留。",
+      "source": "docs/ui/ASTRYX_UI_SPEC.md §15、§16 与交付的已批准版本。",
       "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/journey-selection-access.ts",
-        "apps/api/src/production-platform/sla-settings-history.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/web/src/auxiliary-catalog-dialog.tsx",
-        "apps/web/src/bulk-task-workbench.tsx",
-        "apps/web/src/cockpit-detail.css",
-        "apps/web/src/cockpit-documents.css",
-        "apps/web/src/cockpit-documents.tsx",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-operation-log.tsx",
-        "apps/web/src/customer-default-merchandisers.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-journey-cockpit.tsx",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/digital-production-tasks-panel.tsx",
-        "apps/web/src/digital-production-workspaces.tsx",
-        "apps/web/src/list-pagination.tsx",
-        "apps/web/src/my-todos-page.tsx",
-        "apps/web/src/my-todos.css",
-        "apps/web/src/order-board-page.tsx",
-        "apps/web/src/order-time-calculator.tsx",
-        "apps/web/src/order-time-standard-editor.tsx",
-        "apps/web/src/production-dashboard-page.tsx",
-        "apps/web/src/receiving-board-read.ts",
-        "apps/web/src/sla-history-workspace.tsx",
-        "apps/web/src/sla-independent-calculator.tsx",
-        "apps/web/src/sla-order-application-panel.tsx",
-        "apps/web/src/sla-settings-set-editor.tsx",
-        "apps/web/src/task-workbench-sample.tsx",
-        "packages/contracts/src/sla-settings-history.ts",
-        "packages/ui/src/page-jump.tsx",
-        "packages/ui/src/production.css",
-        "packages/ui/src/production.tsx",
-        "packages/ui/tsconfig.json",
-        "tests/integration/digital-technical-pagination-postgres.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/m01-sla-history-postgres.test.ts",
-        "tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts",
-        "tests/unit/list-pagination.test.ts",
-        "tests/unit/my-todos-navigation.test.ts",
-        "tests/unit/order-centered-workflow-ui.test.ts"
+        "AGENTS.md",
+        "README.md",
+        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
+        "docs/requirements/rework-ui-golden-source-v1.0.md",
+        "docs/requirements/sourcing-supplier-production-v1.0.md",
+        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
+        "docs/ui/ASTRYX_UI_SPEC.md"
       ],
+      "reads": [
+        "AGENTS.md",
+        "README.md",
+        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
+        "docs/ui/ASTRYX_UI_SPEC.md"
+      ],
+      "oldTests": [],
+      "noExistingTestsReason": "文档中的规范入口和迁移引用没有对应页面行为变更，采用原稿、规则 ID 和文件链接检查。",
+      "initialization": "以 #1074 合并后的 release/digital-production-v1 干净树为基准；由校验过哈希的 Library 原稿开始。",
+      "dateAndPermission": "页面权限、生命周期和各类真实日期的来源仍按现有业务实现执行，本次没有这些层面的改动。",
+      "expectation": "新主文完整且仅有批准状态、导航和等效换行变化；各入口链接、规则引用、既有领域界限和文档范围通过检查。",
       "checks": [
-        "paging-unit",
-        "paging-native-pg",
-        "paging-native-browser"
+        "astryx-docs-integrity"
       ]
     }
   ],
   "checks": [
     {
-      "id": "paging-unit",
-      "command": "Vitest list, to-do, receiving, sourcing, SLA history and PMC permission scoped tests",
-      "kind": "tests",
+      "id": "astryx-docs-integrity",
+      "command": "python3 check-astryx-docs.py (isolated task worktree, against the actual release base)",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
-      "testedHead": "3face51d0b00780f1b6542dce4a5581ccfd446d8",
-      "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
-      "passed": 63,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-21T07:22:56.180000Z",
-      "endedAt": "2026-11-21T07:23:02.561204Z",
-      "log": "/dev/shm/dx-finance.IUos5D/c-exact-unit.json",
-      "logSha256": "ceed5f36c6f3df6c0dcf0dd900b7d680a9e8b1c6d6ff306d119f4a0befede49f",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "ceed5f36c6f3df6c0dcf0dd900b7d680a9e8b1c6d6ff306d119f4a0befede49f"
-        }
-      ]
-    },
-    {
-      "id": "paging-native-pg",
-      "command": "PostgreSQL 13.23 production source candidates, task list and unified SLA history tests",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
-      "testedHead": "3face51d0b00780f1b6542dce4a5581ccfd446d8",
-      "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
-      "passed": 13,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-21T07:23:03.830000Z",
-      "endedAt": "2026-11-21T07:23:24.717569Z",
-      "log": "/dev/shm/dx-finance.IUos5D/c-exact-pg.json",
-      "logSha256": "902c10ca882e40d748fad6dfd0dc45ec7219ed05fd2314b5ae51d7f815069a9a",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "902c10ca882e40d748fad6dfd0dc45ec7219ed05fd2314b5ae51d7f815069a9a"
-        }
-      ]
-    },
-    {
-      "id": "paging-native-browser",
-      "command": "Chromium and PostgreSQL 13.23 exact cockpit page jump, original receiving and production board browser paths",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
-      "testedHead": "3face51d0b00780f1b6542dce4a5581ccfd446d8",
-      "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
-      "passed": 8,
-      "failed": 0,
-      "skipped": 27,
-      "startedAt": "2026-11-21T07:23:26.266000Z",
-      "endedAt": "2026-11-21T07:26:08.168255Z",
-      "log": "/dev/shm/dx-finance.IUos5D/c-exact-browser.json",
-      "logSha256": "160ce302c1bc4aad2eaec703376d3e26cff626f5ba3055fe7f4800d6f73e47fd",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "160ce302c1bc4aad2eaec703376d3e26cff626f5ba3055fe7f4800d6f73e47fd"
-        }
-      ]
+      "kind": "command",
+      "testedHead": "78f0ca35c456a76ad5b291d82f6b7d16a41b4f5c",
+      "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
+      "startedAt": "2026-11-21T07:59:28Z",
+      "endedAt": "2026-11-21T07:59:28Z",
+      "logSha256": "dc98680996be0a3483c60c4df6a0075ebdc1948a1ff6817281c82ea3e2d09a8a",
+      "context": "Isolated docs/astryx-ui-spec-v1 worktree, verified approved Library input, release base and Markdown paths.",
+      "log": "/dev/shm/dx-finance.IUos5D/check-astryx-docs.log"
     }
   ]
 }
