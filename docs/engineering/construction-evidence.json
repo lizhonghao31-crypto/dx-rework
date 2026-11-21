@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "59a51cb9580e3840b47b5a2a9b3ca6a510a2ae55",
-  "sourceFingerprint": "0ce8051206cf6ab72004f0ac7d2923f21ef9349b2b05d6e335be17aabe223b8f",
+  "base": "c9dace0c24c6ce1fd0a1d687542fefd469085250",
+  "sourceFingerprint": "cd6c74e139cae741c6ef014652ae5b3c61f0e529d98ffaab9a863ada0946f818",
   "rules": [
     {
       "rule": "在真实预下单依原材料版本交接给指定跟单，并在原准备面板登记；正式转单续用原记录。",
@@ -125,46 +125,46 @@
     {
       "id": "preorder-original-pg-and-browser",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-final-instruction-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-release-combined-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 44,
+      "passed": 58,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "82288dcf89f37ae6e4233d94fdb674791f2f50b7",
-      "sourceFingerprint": "0ce8051206cf6ab72004f0ac7d2923f21ef9349b2b05d6e335be17aabe223b8f",
-      "context": "低权限隔离 PostgreSQL 13.23、真实 Chromium；普通跟单真草稿，直接正式和后来关联历史源、纯开发转单、预下单转单，保原事实、授权及提醒。",
-      "startedAt": "2026-11-21T17:50:29.898Z",
-      "endedAt": "2026-11-21T17:52:32.995Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-final-instruction-pg.log",
-      "logSha256": "d2ea624e462608188178538e9c6783563ad877a51956e2e72b9874f9db3715bb",
+      "testedHead": "d4076858d2844d556b5b556d5617734d004c1248",
+      "sourceFingerprint": "cd6c74e139cae741c6ef014652ae5b3c61f0e529d98ffaab9a863ada0946f818",
+      "context": "低权限隔离 PostgreSQL 13.23、真实 Chromium；普通跟单真草稿，直接正式和后来关联历史源、纯开发转单、预下单转单，保原事实、授权及提醒；精确合入基线验证关联对象仅源可读，以及同单出生证据和原节点保留。",
+      "startedAt": "2026-11-21T18:24:58.252Z",
+      "endedAt": "2026-11-21T18:28:19.928Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-release-combined-pg.log",
+      "logSha256": "c11d65f7c4fdd66db4fb501f485da1b6fe6353cd9ca3fedf4d8b26a1365f2eb5",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f09cc3e888f41248318c0f46a119c73062f670e9ad6d7be5c6ff36a021bcbf6b"
+          "sha256": "a61ce134485ca16da280eeb0f7ca3dfcf7a9ad997127a7a3be24cd4560635d37"
         }
       ]
     },
     {
       "id": "preorder-schedule-and-authorization",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract}.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-final-instruction-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail}.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-release-combined-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 106,
+      "passed": 136,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "82288dcf89f37ae6e4233d94fdb674791f2f50b7",
-      "sourceFingerprint": "0ce8051206cf6ab72004f0ac7d2923f21ef9349b2b05d6e335be17aabe223b8f",
+      "testedHead": "d4076858d2844d556b5b556d5617734d004c1248",
+      "sourceFingerprint": "cd6c74e139cae741c6ef014652ae5b3c61f0e529d98ffaab9a863ada0946f818",
       "context": "同提交的权限矩阵、排程合同、手算采购边界、原固定里程碑和旧版本回归。",
-      "startedAt": "2026-11-21T17:52:33.353Z",
-      "endedAt": "2026-11-21T17:52:39.483Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-final-instruction-unit.log",
-      "logSha256": "89389fbf753d858bfc60990f217b222068724720d776a63018f2f851ee91711c",
+      "startedAt": "2026-11-21T18:28:20.231Z",
+      "endedAt": "2026-11-21T18:28:27.084Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-release-combined-unit.log",
+      "logSha256": "13ac658a149fe5e02ebe27647c97fb981288d5eabc1a40098b3eabc3b2f6702f",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cdcd9d4e68504afbcd351f076b9a0532086a6b9bc624dd01d03f6ee4a7f07e89"
+          "sha256": "25ac1da1cefe5f14bca3db66ed451c8f5fd37763000fb249cd9c18d521c0299c"
         }
       ]
     }
