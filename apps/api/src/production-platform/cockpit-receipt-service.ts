@@ -4,7 +4,6 @@ import {readReceivingDocumentHistory} from '../receiving/receiving-document-hist
 import {readNativeReceivingTotals} from '../receiving/native-receiving-totals.js';
 import {readCockpitReceiptScope} from './cockpit-receipt-scope.js';
 import {authorizedReceivingHistoryBatches,readCockpitScopedReceipts} from './cockpit-receipt-facts.js';
-import {receivingSummary} from './receiving-summary.js';
 
 const numberOrNull = (value: unknown) => value == null ? null : Number(value);
 
@@ -88,11 +87,15 @@ export class CockpitReceiptService {
       const observed=lines.some(row=>row.received!==null);
       const received=observed?lines.reduce((n,row)=>n+(row.received??0),0):null;
       const complete=demand!==null&&received!==null&&lines.every(row=>row.received!==null||row.scope==='whole'&&row.receiptCount===0);
-      const summary=complete?receivingSummary(lines.map(row=>({lineId:row.lineId,orderedQuantity:row.demand!,actualQuantity:row.received??0,packingQuantity:row.packingQuantity}))):null;
-      const status=!observed?'暂无收货记录':!summary?'数量待核':summary.remaining>0?'部分收货':scope.scope==='whole'?'已收齐':'可见数量已达到';
+      // Extra units in one PO never satisfy the obligation of another PO.
+      const differences=complete?lines.reduce((totals,row)=>{
+        const difference=(row.received??0)-row.demand!;
+        return {remaining:totals.remaining+Math.max(0,-difference),excess:totals.excess+Math.max(0,difference)};
+      },{remaining:0,excess:0}):null;
+      const status=!observed?'暂无收货记录':!differences?'数量待核':differences.remaining>0?'部分收货':scope.scope==='whole'?'已收齐':'可见数量已达到';
       const closed=scope.scope==='whole'&&Boolean((await db.query(
         'SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 LIMIT 1',[orderId])).rowCount);
-      return {orderId,scope:scope.scope,status,closed,totals:{demand,received,remaining:summary?.remaining??null,excess:summary?.excess??null},
+      return {orderId,scope:scope.scope,status,closed,totals:{demand,received,remaining:differences?.remaining??null,excess:differences?.excess??null},
         lines,history:history?{receipts:history.receipts,corrections:history.corrections,packing:history.packing,resolutions:history.resolutions}:null,documents};
     });
   }

@@ -293,6 +293,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const whole=await root.page.request.get(h.base+endpoint);
    expect(whole.status()).toBe(200);
    expect(await whole.json()).toMatchObject({scope:'whole',totals:{demand:10,received:6,remaining:4,excess:0},lines:[{received:1},{received:5}]});
+   const receivedOnSecondPo=async(actualQuantity:number)=>h.runInScene(async()=>{
+    const record=proof.receipts[1]!;
+    const latest=(await f.db.query<{style_no:string;version:number}>(
+     'SELECT style_no,version FROM receiving_batches WHERE receiving_batch_id=$1',[record.receivingBatchId])).rows[0]!;
+    await proof.service.correctBatch({...f.root,authorizationCapability:'receiving:correct'},record.receivingBatchId,
+     {styleNo:latest.style_no,expectedVersion:latest.version,documentQuantity:6,actualQuantity,defectiveQuantity:0});
+   });
+   await receivedOnSecondPo(9);
+   const surplus=await root.page.request.get(h.base+endpoint);
+   expect(surplus.status()).toBe(200);
+   expect(await surplus.json()).toMatchObject({status:'部分收货',totals:{demand:10,received:10,remaining:3,excess:3},
+     lines:[{demand:4,received:1},{demand:6,received:9}]});
+   await receivedOnSecondPo(5);
    for(const mode of ['preview','thumbnail','download','intent']){
     const forbidden=await partial.page.request.get(h.base+endpoint+'/attachments/'+proof.files[1]+'?mode='+mode,{maxRedirects:0});
     expect(forbidden.status()).toBe(404);
