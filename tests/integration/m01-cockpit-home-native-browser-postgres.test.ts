@@ -497,7 +497,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const newIdentity=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/me');
    await page.reload();
    expect((await newIdentity).status()).toBe(200);
-   await page.locator('.app-shell').waitFor();
+   await page.getByRole('heading',{name:'无权访问此页面'}).waitFor();
    expect(await page.locator('.cockpit-home input[aria-label="跳转页码"]:enabled').count()).toBe(0);
    expect(await page.getByText('共 31 条',{exact:false}).count()).toBe(0);
    expect(h.hash((await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value)).toBe(before);
