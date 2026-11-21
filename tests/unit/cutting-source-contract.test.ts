@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CUTTING_FINANCE_READ_ROLES,
   CUTTING_RECORD_ROLES,
   CUTTING_VIEW_ROLES,
   CuttingOrderListItemSchema,
@@ -49,9 +50,10 @@ describe("cutting source contract", () => {
       "pmc",
       "order_merchandiser",
       "warehouse_supervisor",
+      ...CUTTING_FINANCE_READ_ROLES,
     ]);
     expect(CUTTING_RECORD_ROLES).toEqual(["cutting_supervisor","cutting_worker"]);
-    for (const excluded of ["warehouse_receiver","warehouse_keeper","pattern_room_supervisor","pattern_room_worker"]) {
+    for (const excluded of ["sample_finance","warehouse_receiver","warehouse_keeper","pattern_room_supervisor","pattern_room_worker"]) {
       expect(CUTTING_VIEW_ROLES).not.toContain(excluded as never);
       expect(CUTTING_RECORD_ROLES).not.toContain(excluded as never);
     }

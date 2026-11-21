@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import {
+  CUTTING_VIEW_ROLES,
   CuttingOrderQuerySchema,
   cuttingAllowedRange,
   cuttingOutOfRange,
@@ -24,25 +25,9 @@ const VIEW_CAPABILITY = "cutting:orders:view";
 const RECORD_CAPABILITY = "cutting:records:create";
 const CORRECT_CAPABILITY = "cutting:records:correct";
 const ROOT_ROLE = "root_superuser";
-const VIEW_ROLES = new Set([
-  "cutting_supervisor",
-  "cutting_worker",
-  "owner_group",
-  "production_management",
-  "pmc",
-  "order_merchandiser",
-  "warehouse_supervisor",
-]);
+const VIEW_ROLES = new Set<string>(CUTTING_VIEW_ROLES);
 const RECORD_ROLES = new Set(["cutting_supervisor", "cutting_worker"]);
-const BROAD_VIEW_ROLES = new Set([
-  ROOT_ROLE,
-  "cutting_supervisor",
-  "cutting_worker",
-  "owner_group",
-  "production_management",
-  "pmc",
-  "warehouse_supervisor",
-]);
+const BROAD_VIEW_ROLES = new Set<string>([ROOT_ROLE, ...CUTTING_VIEW_ROLES.filter(role => role !== "order_merchandiser")]);
 const KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 
@@ -653,7 +638,7 @@ export class CuttingService {
 
   async canDownload(
     actor: TrustedActorContext,
-    binding: Readonly<{ entityType: string; entityId: string; mimeType: string }>,
+    binding: Readonly<{ attachmentId?: string; entityType: string; entityId: string; mimeType: string }>,
   ): Promise<boolean> {
     if (!binding.mimeType.startsWith("image/")) return false;
     try {
@@ -665,15 +650,11 @@ export class CuttingService {
     const merchOnly = this.merchandiserOnly(actor);
     if (binding.entityType === "sourcing_case") {
       const result = await this.database.query(
-        `SELECT 1
-         FROM cutting_orders cutting
-         JOIN sourcing_cases source_case
-           ON source_case.sourcing_case_id=cutting.sourcing_case_id
-          AND source_case.deleted_at IS NULL
-         WHERE cutting.sourcing_case_id=$1::uuid
-           AND ($2::boolean=false OR source_case.created_by=$3::uuid)
+        READ_CTE + `SELECT 1 FROM cutting_read
+         WHERE sourcing_case_id=$1::uuid AND image_attachment_id=$2::uuid
+           AND ($3::boolean=false OR merchandiser_id=$4::uuid)
          LIMIT 1`,
-        [binding.entityId, merchOnly, actor.actorId],
+        [binding.entityId, binding.attachmentId ?? null, merchOnly, actor.actorId],
       );
       return Boolean(result.rowCount);
     }

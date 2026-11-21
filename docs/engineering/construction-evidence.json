@@ -1,321 +1,93 @@
 {
   "version": 1,
-  "base": "372e7970fadb445184152c6dbd31be45260b032e",
-  "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-  "risk": "full",
+  "base": "9c73099c161972c3491fb4e90eec52f7f2caed1b",
+  "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
   "rules": [
     {
-      "rule": "嘉顺专职文员仅通过原外发入口读取当前有效加工厂属于嘉顺三厂的订单，列表、汇总、搜索、订单详情及历史逐条按批准供应商和版本约束。",
-      "source": "用户批准的嘉顺专职文员需求，2026-11-19 独立施工包及复核；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-19 嘉顺专职文员的订单及合同版本边界。",
-      "writes": [
-        "apps/api/src/sourcing/jiashun-contract-clerk-scope.ts",
-        "apps/api/src/sourcing/sourcing-production-service.ts",
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/sourcing-service.ts",
-        "apps/web/src/App.tsx",
-        "apps/web/src/platform-home-page.tsx",
-        "apps/web/src/platform-modules.ts",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "tests/acceptance/jiashun-contract-clerk-browser.mjs",
-        "tests/fixtures/contract-transfer-delivery.tsx",
-        "tests/integration/jiashun-contract-clerk-routes.test.ts",
-        "tests/unit/jiashun-contract-clerk.test.ts"
-      ],
+      "rule": "恰好六个财务岗位新增订单开裁只读；样衣财务不新增授权；保持裁床岗位和原安全投影",
+      "source": "Eric 已审定 dx-ui-finance-cutting-construction-plan-20261121.md 第6节",
       "reads": [
-        "apps/api/src/sourcing/sourcing-service.ts#listCases",
-        "apps/api/src/sourcing/sourcing-service.ts#listTimeline",
-        "apps/api/src/sourcing/sourcing-service.ts#getCurrentFactoryChange",
-        "apps/api/src/sourcing/sourcing-service.ts#nodeHistory",
-        "apps/web/src/sourcing-workspace-page.tsx#OrderDetailPage"
+        "apps/api/src/cutting/cutting-source-service.ts#CuttingService",
+        "apps/api/src/cutting/cutting-routes.ts#registerCuttingRoutes",
+        "apps/web/src/cutting-access.ts#canAccessCutting",
+        "packages/contracts/src/cutting.ts#canUseCutting"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/sourcing-list-pagination.test.ts",
-        "tests/acceptance/contract-transfer-delivery-browser.mjs"
-      ],
-      "initialization": "旧加工厂和嘉顺工厂同时存在；真实订单先审批给外厂，再提交与批准转入；拟转出与正式转出分别读取。没有明确归属的旧合同保守不可读。",
-      "dateAndPermission": "当前生效批准用于订单级授权；历史按记录关联原供应商，首轮报价和决定可早于批准，不提前采用拟转厂。其他岗位原权限和日期照常。",
-      "expectation": "外厂直连与跨厂分析失败；历史非嘉顺合同、附件、报价、审批说明及拟转厂资料均不在授权响应，正常嘉顺资料可见。",
-      "checks": [
-        "focused",
-        "sourcing-pg",
-        "browser",
-        "check-types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "专用回签只在当前可回签合同上处理本人上传的 PDF、JPG 或 PNG，沿用原合同回签流程、首次时刻与每版本额度。",
-      "source": "用户批准的嘉顺专职文员需求，2026-11-19 独立施工包及复核；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-19 嘉顺专职文员的订单及合同版本边界。",
-      "writes": [
-        "apps/api/src/server.ts",
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
-        "apps/api/src/sourcing/sourcing-contract-service.ts",
-        "apps/api/src/tools/attachments.ts",
-        "apps/api/src/tools/routes.ts",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/tools/attachments.ts#finalizePending",
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts#submit",
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts#get",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#getCurrent",
-        "packages/contracts/src/sourcing.ts#SourcingContractReturnResponseSchema"
-      ],
-      "oldTests": [
-        "tests/unit/sourcing-contract-return-upload.test.ts",
-        "tests/unit/sourcing-contract-return-files.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
-      ],
-      "initialization": "低权限应用角色从真实批准及生成合同开始，合成文件走上传意图和内容校验；旧版本和其他上传人使用独立真实记录。",
-      "dateAndPermission": "提交事务在幂等结果前核角色、工厂、合同，文件严格绑定当前版本和本人；保首次监控、历史和并发原额度。",
-      "expectation": "首次与追加读取同版对应附件，原时刻稳定；并发第三份只有一个成功；转出、撤权、换版和旧附件跨版均拒绝。",
-      "checks": [
-        "focused",
-        "sourcing-pg",
-        "browser",
-        "check-types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "只注册独立角色及三个专用能力，依三个已核主数据编码自动绑定并阻止混合角色、Root 或委托提升。迁移由原维护入口验收。",
-      "source": "用户批准的嘉顺专职文员需求，2026-11-19 独立施工包及复核；docs/requirements/sourcing-supplier-production-v1.0.md 2026-11-19 嘉顺专职文员的订单及合同版本边界。",
-      "writes": [
-        "apps/api/migrations/0233_jiashun_contract_clerk.sql",
-        "apps/api/src/access/service.ts",
-        "apps/api/src/platform/migration-manifest.json",
-        "docs/requirements/platform-permission-golden-source-v1.0.md",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "scripts/deploy/main-maintenance-plans.json",
-        "scripts/test-suite-plan.mjs",
-        "tests/integration/jiashun-contract-clerk-postgres.test.ts",
-        "tests/integration/pmc-readonly-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/access/service.ts#assignRole",
-        "apps/api/src/access/service.ts#revokeRole",
-        "scripts/deploy/check-main-maintenance-plan.mjs",
-        "scripts/test-suite-plan.mjs#postgresPlan",
-        "docs/requirements/platform-permission-golden-source-v1.0.md"
-      ],
-      "oldTests": [
-        "tests/unit/main-maintenance-plan.test.ts",
+        "tests/unit/cutting-access.test.ts",
+        "tests/unit/cutting-source-contract.test.ts",
         "tests/integration/pmc-readonly-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts"
       ],
-      "initialization": "低权限迁移角色应用完整历史；只初始化合成公司、用户和主数据，实际写服务授予并撤销合成角色，角色迁移不自动授权员工。",
-      "dateAndPermission": "保留原 0232 及更早 checksum 和应用时戳、其他角色与历史许可，维护计划只检查已存在对象的所需权限。",
-      "expectation": "三厂绑定必须完整，后台并发最多一项互斥授权成功，PMC 无新增授权，维护检查保持原行为。",
+      "initialization": "新增 0234 继承 0232 开裁函数，低权限合成库从既有版本增量迁移并验证再执行；新鲜完整迁移和原授予数据独立核验",
+      "dateAndPermission": "当前会话角色与 capability、单纯样衣财务拒绝、多角色并集和失权失效；预览缩略下载保持真实裁床关联",
+      "expectation": "逐个六岗可用原开裁列表、详情和绑定裁床照片，拒所有写和无关图片。PMC、仓库主管、Root 和纯跟单原权限保持",
+      "writes": [
+        "apps/api/migrations/0234_finance_cutting_readonly.sql",
+        "apps/api/src/cutting/cutting-routes.ts",
+        "apps/api/src/cutting/cutting-source-service.ts",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/tools/attachments.ts",
+        "docs/requirements/platform-permission-golden-source-v1.0.md",
+        "docs/requirements/sourcing-supplier-production-v1.0.md",
+        "packages/contracts/src/cutting.ts",
+        "scripts/deploy/main-maintenance-plans.json",
+        "tests/integration/pmc-readonly-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/cutting-access.test.ts",
+        "tests/unit/cutting-source-contract.test.ts"
+      ],
       "checks": [
-        "role-pg",
-        "sourcing-pg",
-        "pmc-pg",
-        "focused",
-        "check-migrations",
-        "preflight",
-        "seed-and-migrate",
-        "canonical-pg"
+        "finance-unit",
+        "finance-pg"
       ]
     }
   ],
   "checks": [
     {
-      "id": "focused",
+      "id": "finance-unit",
+      "command": "vitest cutting-access cutting-source-contract current-migration-manifest-checksum",
+      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/jiashun-contract-clerk.test.ts tests/integration/jiashun-contract-clerk-routes.test.ts tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-return-files.test.ts tests/unit/main-maintenance-plan.test.ts tests/unit/acceptance-matrix.test.ts tests/unit/platform-modules.test.ts tests/unit/sourcing-role-visibility.test.ts tests/unit/sourcing-list-pagination.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/focused.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Node v22.22.2, locked npm dependencies, Vitest original reports. Scoped permission and HTTP routes, existing return upload/read controls, exact main maintenance-plan policy.",
-      "startedAt": "2026-11-19T09:24:58.004450+00:00",
-      "endedAt": "2026-11-19T09:25:19.010610+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/focused/command.log",
-      "logSha256": "bb894cc8052d6f90587e0d0813279e76154ad8f7cf29461fa45f3b829fa67bad",
-      "passed": 184,
+      "log": "/dev/shm/dx-finance.IUos5D/d-unit.json",
+      "logSha256": "50066f60bc21f8fbff7b1de6c5edaa44b5e3029fa4183677e17fe8becf6b2c8c",
+      "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
+      "testedHead": "b60fb508112735f74cc86728d0225c4fd7e04037",
+      "passed": 9,
       "failed": 0,
       "skipped": 0,
+      "startedAt": "2026-11-21T04:20:45.401000Z",
+      "endedAt": "2026-11-21T04:20:46.640609Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8be62046e67dc9581d439db7a1c3d7e55b2716baacb0eccc0ebb4257f578450c"
+          "sha256": "50066f60bc21f8fbff7b1de6c5edaa44b5e3029fa4183677e17fe8becf6b2c8c"
         }
       ]
     },
     {
-      "id": "role-pg",
+      "id": "finance-pg",
+      "command": "PG13.23 full sourcing-pr03 and pmc-readonly PostgreSQL files, real auth and original HTTP",
+      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/jiashun-contract-clerk-postgres.test.ts --config vitest.postgres-immediate.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/role-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "PostgreSQL 16.16 disposable loopback marked test database, app test schema applies the full migration ledger. Tests automatic binding, no new employee assignment, incompatible role grants and concurrent exclusivity.",
-      "startedAt": "2026-11-19T09:25:10.575538+00:00",
-      "endedAt": "2026-11-19T09:25:16.239807+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/role-pg/command.log",
-      "logSha256": "aa7edc41364b5d50e44e709fa1baf3f08493960bc37ed14651040d71b4f3bd01",
-      "passed": 4,
+      "log": "/dev/shm/dx-finance.IUos5D/d-all-pg.json",
+      "logSha256": "fecb867f4c63759e347253145ecc7ce17a5f282099a156772261534102c83141",
+      "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
+      "testedHead": "b60fb508112735f74cc86728d0225c4fd7e04037",
+      "passed": 98,
       "failed": 0,
       "skipped": 0,
+      "startedAt": "2026-11-21T04:20:47.966000Z",
+      "endedAt": "2026-11-21T04:21:38.477580Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "55b02c8012a6c7726f27d9e040b3cb01ffe297faceae747140ab4ca5b866656b"
+          "sha256": "fecb867f4c63759e347253145ecc7ce17a5f282099a156772261534102c83141"
         }
       ]
-    },
-    {
-      "id": "sourcing-pg",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/sourcing-pg.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "PostgreSQL 16.16 isolated database and the entire original sourcing PR03-PR05 and Work Analysis suite. The new case runs through real contract services with a non-owner application role, using only emulated object storage. Existing Root-only HTTP tests and the new clerk role share the original test Root identity.",
-      "startedAt": "2026-11-19T09:25:16.482007+00:00",
-      "endedAt": "2026-11-19T09:26:20.513878+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/sourcing-pg/command.log",
-      "logSha256": "badf46984d59e5720aa5af97e60f013064e99d8ea8bf4a791ddc2bc4ba7415f8",
-      "passed": 90,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "91ab3ea0465f46d9deb81798c60c329e760be010b5af7ef6863ea544b4410594"
-        }
-      ]
-    },
-    {
-      "id": "pmc-pg",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/pmc-readonly-postgres.test.ts --config vitest.config.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/tmp/dx-jiashun-work.ZEUxKk/proof/pmc-pg.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Disposable PostgreSQL 16.16 using actual staged schema and official pending migrator. Original PMC capability/receipt/user/attachment behavior checked against current schema.",
-      "startedAt": "2026-11-19T09:26:20.742645+00:00",
-      "endedAt": "2026-11-19T09:26:26.105072+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/pmc-pg/command.log",
-      "logSha256": "6687826c4890319c59675030d53d5013fa0c658c8fa38798e52b10895e92962c",
-      "passed": 6,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "f839568fb26a5b06e1418d4fdf2d99d1d926516031f4731780ec38076a1b91f0"
-        }
-      ]
-    },
-    {
-      "id": "browser",
-      "kind": "tests",
-      "command": "env CHROMIUM_PATH=/usr/bin/chromium PLAYWRIGHT_IMPORT=/opt/codex/cua_node/lib/node_modules/playwright/index.mjs node tests/acceptance/jiashun-contract-clerk-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Actual Chromium 151 and Playwright 1.57, desktop and mobile, original sourcing page with emulated loopback HTTP and object storage. Cases cover submit, read-only controls and role revoked response.",
-      "startedAt": "2026-11-19T09:26:26.933119+00:00",
-      "endedAt": "2026-11-19T09:26:32.018076+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/browser/command.log",
-      "logSha256": "6acffb4aa1f1b72ccf0cd2043f39c1301350c84e1e26705eeb71deb190698cca",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "check-types",
-      "kind": "command",
-      "command": "npm run typecheck",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Node v22.22.2 and TypeScript workspace typecheck using the repository package lock.",
-      "startedAt": "2026-11-19T09:24:57.989945+00:00",
-      "endedAt": "2026-11-19T09:25:43.645790+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/check-types/command.log",
-      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
-    },
-    {
-      "id": "check-migrations",
-      "kind": "command",
-      "command": "npm run db:migrate:lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Exact manifest, migration sequence and SQL SHA-256 using repository migration lint.",
-      "startedAt": "2026-11-19T09:24:58.009808+00:00",
-      "endedAt": "2026-11-19T09:24:58.408482+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/check-migrations/command.log",
-      "logSha256": "5edba0b891f3e897ae8f4fb8f22ac9af3483965eadf948e395907349ef73281c"
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "npm run lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "ESLint across repository with maximum warnings zero using locked Node and npm packages.",
-      "startedAt": "2026-11-19T09:24:57.993146+00:00",
-      "endedAt": "2026-11-19T09:25:28.126844+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/lint/command.log",
-      "logSha256": "c515bd0be1f85df3ce7017b7a7ab759a66a3184a30e6b65b5d13a9d4fea39cd7"
-    },
-    {
-      "id": "seed-and-migrate",
-      "kind": "command",
-      "command": "bash -c 'bash scripts/seed-base-migrations.sh && npm run db:migrate:check && DATABASE_URL=\"$TEST_DATABASE_URL\" node scripts/deploy/check-main-maintenance-plan.mjs \"$PWD\"'",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Real isolated PostgreSQL 16: replayed pinned main migration history, applied only 0233, confirmed repeated migration no-op and checksum/removed-history rejection.",
-      "startedAt": "2026-11-19T09:27:29.072391+00:00",
-      "endedAt": "2026-11-19T09:27:31.032960+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/seed-and-migrate/command.log",
-      "logSha256": "86b9c2cf65cf24b22bb42cf194bf9ec82f8dcb985fff3daae27e5feff1412a3f"
-    },
-    {
-      "id": "canonical-pg",
-      "kind": "command",
-      "command": "node scripts/run-business-chain-gate.mjs --full-gate",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Original Full runner with the exact diff-derived 26-suite PostgreSQL plan across its three Vitest profiles, marked disposable PostgreSQL 16 databases, original resource lifecycle and local execution ID. All required local suites and resource cleanup passed. Separate raw receipt is retained locally.",
-      "startedAt": "2026-11-19T09:27:31.244294+00:00",
-      "endedAt": "2026-11-19T09:29:52.623576+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/canonical-pg/command.log",
-      "logSha256": "d73fb1645a50ef77be7725c23f49283369108d7180c5bf4e22fd1d2fc20f6c1f"
-    },
-    {
-      "id": "preflight",
-      "kind": "tests",
-      "command": "npm run test:preflight",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "c110e160014576a21d3885ee12d9901c78ff4379",
-      "sourceFingerprint": "be0ad6faa20047fab4352eb3cc7320c6837f66bc7591b2d97fbae79fe7b86bbe",
-      "context": "Repository unit preflight around initial Light and Full lanes, immutable evidence and managed PostgreSQL resource selection.",
-      "startedAt": "2026-11-19T09:24:58.008102+00:00",
-      "endedAt": "2026-11-19T09:25:12.009302+00:00",
-      "log": "/tmp/dx-jiashun-work.ZEUxKk/proof/preflight/command.log",
-      "logSha256": "9d2691be83a3eb351dd55039f6db0b6f55cbc19a3f656a1a1831194fda0ff905",
-      "passed": 113,
-      "failed": 0,
-      "skipped": 0
     }
   ]
 }
