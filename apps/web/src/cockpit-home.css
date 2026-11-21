@@ -65,7 +65,7 @@
 }
 
 .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th {font-size:14px;line-height:1.4}
-.digital-journey-cockpit[data-view="overview"] .cockpit-home td small>span {color:#243c61}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home td small>span:not(.cockpit-target-difference) {color:#243c61}
 .digital-journey-cockpit .cockpit-photo-trigger img[hidden] {display:none}
 .digital-journey-cockpit .cockpit-order-state {white-space:nowrap}
 .digital-journey-cockpit[data-view="overview"] .dx-production-kpi>span {font-size:14px}
