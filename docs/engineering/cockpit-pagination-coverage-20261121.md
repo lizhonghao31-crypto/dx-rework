@@ -63,3 +63,7 @@
 | `task-workbench-sample.tsx` | 开发/样品任务工作台操作记录 | 1 | 已接入原分页宿主 |
 
 操作记录仍按 cursor 追加，关联单据目录仍按分类追加，按钮区域居中。报表预览、七栏预览及原页大小保持各自边界。
+
+筛选和身份切换时，允许原列表在加载期间留在屏幕上。分页使用当前已应用条件及身份的总数，等待期间跳转按钮和 Enter 均不可提交，旧响应不能覆盖新结果。服务端同一快照先筛资格再取总数与页，主排序值相等时以原唯一 ID 稳定排序。删除使所选页为空时仍返回真实总数。
+
+参考 [TanStack Table 服务端分页](https://tanstack.com/table/v8/docs/guide/pagination) 的结果总数来源和 [GitLab 分页排序](https://docs.gitlab.com/development/database/pagination_performance_guidelines/#tie-breaker-column) 的唯一键规则。继续使用现有分页组件。

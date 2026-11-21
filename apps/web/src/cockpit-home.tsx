@@ -45,7 +45,7 @@ function HomePos({order}:{order:CockpitHomeOrder}){
   {rest.map(row)}
  </details>}</div>;
 }
-export function CockpitHome({data,error,context,onChange,canDelete=false,onDeleted}:{canDelete?:boolean;onDeleted?:(()=>void)|undefined;data:CockpitHomeResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
+export function CockpitHome({data,error,context,onChange,canDelete=false,onDeleted,paginationPending=false}:{paginationPending?:boolean;canDelete?:boolean;onDeleted?:(()=>void)|undefined;data:CockpitHomeResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
  const query=cockpitQuery(context),[riskSelection,setRiskSelection]=useState<{id:string;query:string}|null>(null);
  const [receiptSelection,setReceiptSelection]=useState<{id:string;query:string;trigger:HTMLButtonElement}|null>(null);
  const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[deleting,setDeleting]=useState<string[]|null>(null);
@@ -83,7 +83,7 @@ export function CockpitHome({data,error,context,onChange,canDelete=false,onDelet
    })}</tbody>
   </BusinessTable></div>
   {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&data.total===0&&!data.freshness&&<p role="status">当前授权和筛选范围没有订单。</p>}
-  {(!data?.freshness||data.freshness.detailsOnly)&&<Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>onChange({page})}/>}
+  {(!data?.freshness||data.freshness.detailsOnly)&&<Pagination page={context.page} pageSize={15} total={paginationPending?null:data?.total??null} onPage={page=>onChange({page})}/>}
   {canDelete&&deleting&&<CockpitOrderDeletion ids={deleting} onClose={()=>setDeleting(null)} onCommitted={()=>{setSelected([]);onDeleted?.();}}/>}
   {receiptOrder?.orderId&&receiptSelection&&<CockpitReceiptDialog key={receiptOrder.orderId} orderId={receiptOrder.orderId} returnFocus={receiptSelection.trigger} label={[receiptOrder.styleName||receiptOrder.designStyleNo,receiptOrder.identity?.businessNumber].filter(Boolean).join(' · ')} onClose={()=>setReceiptSelection(null)}/>}
   {riskOrder&&<CockpitHomeRisks order={riskOrder} context={context} onClose={()=>setRiskSelection(null)} onNode={node=>{setRiskSelection(null);enter(riskOrder,node);}} onOrder={()=>{setRiskSelection(null);enter(riskOrder);}}/>}

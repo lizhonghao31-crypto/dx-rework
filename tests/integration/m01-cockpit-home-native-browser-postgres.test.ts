@@ -119,6 +119,55 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole("button",{name:/生产管理总览/}).click();await homeReady(page);
    expect(new URL(page.url()).searchParams.get('page')).toBe('3');
    expect(await page.locator('.cockpit-home tbody tr').first().getAttribute('data-order-id')).toBe(first);
+   const held=Promise.withResolvers<void>(),received=Promise.withResolvers<void>();
+   const staleSearch=h.prefix+'01';
+   const latestSearch=h.prefix+'0';
+   const requested:Array<{search:string|null;page:string|null}>=[];
+   await page.route('**/api/digital-production/journeys?*',async route=>{
+    const url=new URL(route.request().url());
+    const search=url.searchParams.get('search');
+    requested.push({search,page:url.searchParams.get('page')});
+    if(search!==staleSearch)return route.continue();
+    const response=await route.fetch();
+    try{
+     expect(response.status()).toBe(200);
+     received.resolve();
+     await held.promise;
+     await route.fulfill({response}).catch(()=>{});
+    }finally{await response.dispose();}
+   });
+   await page.evaluate(search=>{
+    const fetchOriginal=window.fetch.bind(window);
+    window.fetch=(input,init)=>{
+     const url=new URL(input instanceof Request?input.url:input,location.href);
+     if(url.pathname==='/api/digital-production/journeys'&&url.searchParams.get('search')===search)
+      return fetchOriginal(input,{...init,signal:null}).then(response=>{document.body.dataset.paginationLate=String(response.status);return response;});
+     return fetchOriginal(input,init);
+    };
+   },staleSearch);
+   try{
+    const search=page.getByRole('textbox',{name:'综合搜索',exact:true});
+    await search.fill(staleSearch);
+    await received.promise;
+    expect(await page.locator('.cockpit-home tbody tr').first().getAttribute('data-order-id')).toBe(first);
+    const jump=nav.getByRole('button',{name:'跳转',exact:true});
+    expect(await jump.isDisabled()).toBe(true);
+    expect(await input.isDisabled()).toBe(true);
+    await jump.evaluate((button:HTMLButtonElement)=>button.click());
+    await input.evaluate((field:HTMLInputElement)=>{
+     field.value='2';
+     field.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+    });
+    await search.fill(latestSearch);
+    await homeReady(page);
+    await expect.poll(()=>page.locator('.cockpit-home tbody tr').count()).toBe(9);
+    expect(await nav.innerText()).toContain('共 9 条');
+    held.resolve();
+    await page.waitForFunction(()=>document.body.dataset.paginationLate==='200');
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await nav.innerText()).toContain('共 9 条');
+    expect(requested).toEqual([{search:staleSearch,page:'1'},{search:latestSearch,page:'1'}]);
+   }finally{held.resolve();}
   }finally{await context.close();}
  });
  it('renders the original full Shell, six peer KPIs, and aligned date/progress rows without changing source facts',async()=>{

@@ -34,6 +34,9 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
   const [items,setItems]=useState<DigitalTask[]>([]),[selected,setSelected]=useState<DigitalTask|null>(null),[page,setPage]=useState(1);
   const [total,setTotal]=useState<number|null>(null),[loadingList,setLoadingList]=useState(false);
   const listVersion=useRef(0);
+  const listScope=JSON.stringify([options.actorId,[...options.roles].sort(),options.manage,page]);
+  const [appliedListScope,setAppliedListScope]=useState<string|null>(null);
+  const pageTotal=appliedListScope===listScope?total:null;
   const [policies,setPolicies]=useState<DigitalDeadlinePolicy[]>([]),[historyRead,setHistoryRead]=useState<HistoryRead|null>(null);
   const [people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]);
   const [busy,setBusy]=useState(false),[error,setError]=useState(""),[now,setNow]=useState(new Date());
@@ -48,7 +51,7 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
       const result=await digitalRequest<{items:DigitalTask[];total:number;page:number}>(`tasks?page=${page}`);
       if(version!==listVersion.current)return;
       if(result.page!==page)throw Error("任务页码与本次请求不一致");
-      setItems(result.items);setTotal(result.total);setError("");
+      setItems(result.items);setTotal(result.total);setAppliedListScope(listScope);setError("");
       if(options.manage){
         const next=await digitalRequest<DigitalDeadlinePolicy[]>("deadline-policies");
         if(version===listVersion.current)setPolicies(next);
@@ -60,7 +63,7 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
   useEffect(()=>{
     void load().catch(e=>setError(e.message));
     return()=>{listVersion.current++;};
-  },[page,options.manage,compact]);
+  },[listScope,compact]);
   useEffect(()=>{if(!feedbackOnly && view === "handle" && (options.manage||options.roles.some(role=>["pattern_room_supervisor","development_clerk"].includes(role))))void digitalRequest<typeof people>("access/candidates").then(setPeople).catch(e=>setError(e.message));},[options.manage,options.roles,view,feedbackOnly]);
   const openVersion=useRef(0),openTarget=useRef<string|null>(null);
   const displayedTask=useRef<string|null>(null);
@@ -117,7 +120,7 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
   return <Surface><details open={embeddedBusiness?undefined:compact||selected!==null||Boolean(error)||undefined}><summary>{feedbackOnly?"问题反馈与记录":embeddedBusiness?"任务状态、问题反馈与记录":"任务与交接"}</summary>{error&&<p role="alert">{error}</p>}
     {!compact&&<><div className="pattern-actions"><Button disabled={busy} onClick={()=>void load().catch(e=>setError(e.message))}>刷新任务</Button></div>
     {items.map(task=><div key={task.taskId}><Button onClick={()=>void open(task.taskId)}>{task.label} · 第{task.routeVersion}轮 · {digitalTaskDisplayStatus(task,view === "read")}</Button><span>{task.paused?"已暂停 · ":""}{timing(task)}</span></div>)}
-    {!items.length&&total!==null&&<p>暂无任务</p>}<ListPagination page={page} total={total} totalPages={total===null?null:Math.max(1,Math.ceil(total/15))} busy={busy||loadingList} onPageChange={setPage} ariaLabel="任务列表分页"/></>}
+    {!items.length&&total!==null&&<p>暂无任务</p>}<ListPagination page={page} total={pageTotal} totalPages={pageTotal===null?null:Math.max(1,Math.ceil(pageTotal/15))} busy={busy||loadingList} onPageChange={setPage} ariaLabel="任务列表分页"/></>}
     {selected&&<section ref={readBody}>{!feedbackOnly&&compact && <header className="digital-task-identity" aria-label="任务所属订单">{selected.identity ? <><h2>{selected.identity.designStyleNo}</h2><p>客户：{selected.identity.customerCode ?? "未登记"} · 第 {selected.routeVersion} 轮</p></> : <p>当前无可见订单资料</p>}<p>{view === "read" ? "原任务记录 · 只读" : view === "correct" ? "时间核实 · 审计更正" : "原任务办理"}</p></header>}<h3>{selected.label} · 第{selected.routeVersion}轮</h3>{!embeddedBusiness && view === "handle" && selected.sourceId && <a href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl("ui/digital-production")}?development=${encodeURIComponent(selected.sourceId)}&round=${selected.routeVersion}&task=${selected.taskId}${returnSuffix}`}>{view === "handle" && developmentBusinessTask && selected.canExecute && !["completed", "cancelled"].includes(selected.state) ? "打开开发办理" : "查看开发单"}</a>}<p>{digitalTaskDisplayStatus(selected,view === "read")} · {timing(selected)}</p><p>进入：{date(selected.enteredAt)} · 截止：{taskDeadline(selected)}</p><TaskPlanTargets task={selected}/><p>本轮已完成 {selected.routeProgress.completed} / {selected.routeProgress.applicable} 项</p><p>主办：{selected.assigneeName??"待指派"}</p><p>时间依据：{selected.timeQuality}</p>{selected.blockedReason&&selected.blockedReason!=="前置条件未满足"&&<p>{selected.blockedReason}</p>}<ul aria-label="本轮前置条件">{selected.unmetConditions?.map((item,index)=><li key={`${item.condition}:${index}`}><strong>{item.name}</strong>：{item.missing}；负责岗位：{roleLabel(item.responsibleRole)}{item.action?`；${item.action}`:""}</li>)}</ul>
       {view === "handle"&&selected.orderId&&['process_logistics','bulk_qc','factory_production_qc','warehouse_dispatch','bulk_ship_sample'].includes(selected.taskKind)&&<a href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl("ui/digital-production")}?factory=${selected.orderId}&factoryAction=${factoryTaskAction(selected.taskKind)}${returnSuffix}`}>打开裁后工艺、QC与发厂办理</a>}
       {view === "handle"&&selected.orderId&&['bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external'].includes(selected.taskKind)&&<a href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl(selected.taskKind==="bulk_pattern"?"ui/digital-pattern-room":"ui/digital-production")}?${selected.taskKind==="bulk_pattern"?"section=bulk&bulkOrder":"bulk"}=${selected.orderId}${returnSuffix}`}>{selected.taskKind==="bulk_pattern"?"办理大货纸样与唛架":"打开大货产前办理"}</a>}

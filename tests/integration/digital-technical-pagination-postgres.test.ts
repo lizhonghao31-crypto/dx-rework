@@ -24,13 +24,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.db.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,
     temporary_style_no,customer_code,created_at)
     SELECT id,$2,'头版',$3,CASE WHEN position<=15 THEN 'legacy-other' END,'PD',
-      now()-position*interval '1 minute'
+      now()-(CASE WHEN position<=15 THEN position ELSE 16 END)*interval '1 minute'
     FROM unnest($1::uuid[]) WITH ORDINALITY input(id,position)`,[ids,designer.actorId,style]);
-  for(const [page,expected] of [[1,ids.slice(15,30)],[2,ids.slice(30)],[1,ids.slice(15,30)],[3,[]]] as const){
+  const eligible=ids.slice(15).sort().reverse();
+  for(const [page,expected] of [[1,eligible.slice(0,15)],[2,eligible.slice(15)],[1,eligible.slice(0,15)],[3,[]]] as const){
    const result=await service.sources(designer,page,'',target.productionOrderId);
    expect(result.total).toBe(16);
    expect(result.items.map(row=>row.sourceId)).toEqual(expected);
   }
+  await f.db.query('DELETE FROM digital_production_sources WHERE source_id=$1',[eligible[15]]);
+  expect(await service.sources(designer,2,'',target.productionOrderId)).toEqual({items:[],page:2,total:15});
  });
 
  it('applies task read grants before LIMIT and does not mix snapshots during concurrent reassignment',async()=>{
@@ -41,21 +44,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     SELECT id,$2,'development_material_supply',CASE WHEN position<=15 THEN 'sample_designer' ELSE 'warehouse_receiver' END,$3,$4
     FROM unnest($1::uuid[]) WITH ORDINALITY input(id,position)`,[ids,source.sourceId,warehouse.actorId,designer.actorId]);
   await f.db.query(`INSERT INTO digital_production_tasks(task_id,node_key,route_version,occurrence,route_instance_id,created_at)
-    SELECT id,'development_material_supply',1,1,id,now()-position*interval '1 minute'
+    SELECT id,'development_material_supply',1,1,id,now()-(CASE WHEN position<=15 THEN position ELSE 16 END)*interval '1 minute'
     FROM unnest($1::uuid[]) WITH ORDINALITY input(id,position)`,[ids]);
+  const eligible=ids.slice(15).sort().reverse();
   const tasks=new DigitalProductionTaskService(f.db);
   const first=await tasks.list(warehouse,1),second=await tasks.list(warehouse,2);
   expect(first.total).toBe(16);expect(second.total).toBe(16);
-  expect(first.items.map(task=>task.taskId)).toEqual(ids.slice(15,30));
-  expect(second.items.map(task=>task.taskId)).toEqual(ids.slice(30));
+  expect(first.items.map(task=>task.taskId)).toEqual(eligible.slice(0,15));
+  expect(second.items.map(task=>task.taskId)).toEqual(eligible.slice(15));
   const db=await f.db.connect();
   try{
    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
    expect((await readTaskAccessForPage(db,warehouse,ids)).get(ids[0]!)?.technical).toBe(false);
    expect((await readTaskAccessForPage(db,warehouse,ids)).get(ids[15]!)?.technical).toBe(true);
-   expect(await readTechnicalTaskListPage(db,warehouse,1)).toEqual({total:16,ids:ids.slice(15,30)});
-   await f.db.query('UPDATE digital_production_task_access SET assignee_id=NULL WHERE task_id=$1',[ids[30]]);
-   expect(await readTechnicalTaskListPage(db,warehouse,2)).toEqual({total:16,ids:ids.slice(30)});
+   expect(await readTechnicalTaskListPage(db,warehouse,1)).toEqual({total:16,ids:eligible.slice(0,15)});
+   await f.db.query('UPDATE digital_production_task_access SET assignee_id=NULL WHERE task_id=$1',[eligible[15]]);
+   expect(await readTechnicalTaskListPage(db,warehouse,2)).toEqual({total:16,ids:eligible.slice(15)});
    expect(await readTechnicalTaskListPage(db,warehouse,3)).toEqual({total:16,ids:[]});
    await db.query('COMMIT');
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}

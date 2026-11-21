@@ -156,6 +156,7 @@ export function useReceivingBoardRead(targetBatchId:string|undefined,invalidTarg
   return {
     startDate,setStartDate,endDate,setEndDate,query,setQuery,
     status,setStatus,debouncedQuery,data,message,pageLoading,
+    paginationAvailable:readySearch&&!pageLoading&&!readFailed&&lastQuery.current?.path===path,
     canReceive,canInitiate,canInitiateFinishing,canExport,canResolveDifferences,canManagePacking,
     isRoot,setRefreshToken,retryRead,setPage,expandedRows,readFailed,resetPagination,
     toggleHistory,
