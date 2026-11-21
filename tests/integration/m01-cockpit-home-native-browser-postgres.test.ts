@@ -467,12 +467,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // business quantities, node facts, dates and versions are not replaced.
   for(const scale of [1,1.25]){
    const {context,page}=await h.open(undefined,{search:h.prefix+'01'},1165,scale);try{
-    await page.route('**/api/digital-production/journeys/*',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);const value=await response.json();await route.fulfill({response,json:{...value,customer:'TEST-长客户名称用于资料列对齐检查-'.repeat(2),merchandisers:value.merchandisers.map((person:{name:string|null})=>({...person,name:'TEST-长跟单姓名用于字段自然换行检查'}))}});});
+    await page.route('**/api/digital-production/journeys/*',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);const value=await response.json();await route.fulfill({response,json:{...value,customer:'TEST-长客户名称用于资料列对齐检查-'.repeat(2),cockpitCreationDetails:value.cockpitCreationDetails?.map((entry:Record<string,unknown>)=>({...entry,creator:{name:'TEST-长创建人姓名用于验证原六组与创建日期同时完整显示-'.repeat(2)}})),merchandisers:value.merchandisers.map((person:{name:string|null})=>({...person,name:'TEST-长跟单姓名用于字段自然换行检查'}))}});});
     await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
     for(const width of [1165,1280,1366,1440,1920]){
      await page.setViewportSize({width:Math.round(width/scale),height:Math.round(1003/scale)});
      const layout=await page.evaluate(()=>({width:innerWidth,body:document.documentElement.scrollWidth,dpr:devicePixelRatio,fields:[...document.querySelectorAll<HTMLElement>('.cockpit-identity-facts>div')].map(field=>{const outer=field.getBoundingClientRect(),label=field.querySelector('dt')!.getBoundingClientRect(),value=field.querySelector('dd')!.getBoundingClientRect();return {key:field.dataset.identityFact,label:label.left,value:value.left,right:value.right,outerRight:outer.right,scroll:field.scrollWidth,client:field.clientWidth,overflow:field.scrollWidth>field.clientWidth+1};})}));
      expect(layout.dpr).toBe(scale);expect(layout.body).toBeLessThanOrEqual(layout.width+1);expect(layout.fields).toHaveLength(6);
+     const creation=page.locator('[data-identity-fact="created"]');
+     expect(await creation.innerText()).toContain('TEST-长创建人姓名用于验证原六组与创建日期同时完整显示');
+     expect(await creation.locator('dt').allTextContents()).toEqual(['创建日期：','创建人：']);
+     const created=await creation.evaluate(field=>{
+      const pairs=[...field.querySelectorAll('dd')].map(el=>({outer:el.getBoundingClientRect().right,client:el.clientWidth,scroll:el.scrollWidth}));
+      return {sameGroup:pairs.length===2&&Math.abs(pairs[0]!.outer-pairs[1]!.outer)<=1,fits:pairs.every(el=>el.scroll<=el.client+1)};
+     });
+     expect(created).toEqual({sameGroup:true,fits:true});
      for(let col=0;col<3;col++){expect(Math.abs(layout.fields[col]!.label-layout.fields[col+3]!.label)).toBeLessThanOrEqual(1);expect(Math.abs(layout.fields[col]!.value-layout.fields[col+3]!.value)).toBeLessThanOrEqual(1);}
      await page.screenshot({path:join(h.evidence,`long-metadata-physical-${width}-scale-${scale}.png`),fullPage:true});for(const field of layout.fields){expect(field.right).toBeLessThanOrEqual(field.outerRight+1);expect(field.overflow,JSON.stringify({width,scale,field})).toBe(false);}
      const cards=await page.locator('.cockpit-detail-columns>.dx-production-panel').evaluateAll(elements=>elements.map(el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};}));const [current,nodes,risk,docs,log]=cards;for(const [a,b]of [[current!.left,nodes!.left],[current!.top,risk!.top],[current!.bottom,risk!.bottom],[current!.left,docs!.left],[risk!.right,log!.right],[docs!.top,log!.top],[docs!.bottom,log!.bottom]])expect(Math.abs(a-b)).toBeLessThanOrEqual(1);

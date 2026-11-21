@@ -1,58 +1,164 @@
 {
   "version": 1,
-  "base": "e0fa972603ab39764218e55740f31245ae71d61c",
-  "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
-  "risk": "quick",
-  "automaticTestsNotApplicable": "本次仅接入已批准的 UI 规范与 Markdown 导航，不修改应用代码、工作流、数据库或测试逻辑。",
-  "alternativeVerification": {
-    "reason": "直接对照原交付文件的哈希和逐行差异，核验存在的仓库链接、已定义的规则引用以及本次文档差异范围。",
-    "checks": [
-      "astryx-docs-integrity"
-    ]
-  },
+  "base": "59a51cb9580e3840b47b5a2a9b3ca6a510a2ae55",
+  "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
   "rules": [
     {
-      "rule": "采用达兴 Astryx UI 规范 1.0 为现行 UI 规范，原领域规则和已批准旧页基准按范围保留。",
-      "source": "docs/ui/ASTRYX_UI_SPEC.md §15、§16 与交付的已批准版本。",
+      "rule": "仅在详情透出同主体的有效创建事实、创建人和已有七组首入口；公共任务事实与版本保持。",
+      "source": "Library DX 座舱详情七大流程、创建与投面辅料纠偏 v2 §§4、8、10.1、11.3；docs/ui/ASTRYX_UI_SPEC.md#DXUI-DETAIL-004",
       "writes": [
-        "AGENTS.md",
-        "README.md",
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
-        "docs/requirements/rework-ui-golden-source-v1.0.md",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
-        "docs/ui/ASTRYX_UI_SPEC.md"
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/order-time-created.ts",
+        "apps/web/src/cockpit-detail-r5.css",
+        "apps/web/src/cockpit-detail.tsx",
+        "docs/ui/ASTRYX_UI_SPEC.md",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/cockpit-detail.test.ts"
       ],
       "reads": [
-        "AGENTS.md",
-        "README.md",
-        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
-        "docs/ui/ASTRYX_UI_SPEC.md"
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/web/src/cockpit-record-link.tsx"
       ],
-      "oldTests": [],
-      "noExistingTestsReason": "文档中的规范入口和迁移引用没有对应页面行为变更，采用原稿、规则 ID 和文件链接检查。",
-      "initialization": "以 #1074 合并后的 release/digital-production-v1 干净树为基准；由校验过哈希的 Library 原稿开始。",
-      "dateAndPermission": "页面权限、生命周期和各类真实日期的来源仍按现有业务实现执行，本次没有这些层面的改动。",
-      "expectation": "新主文完整且仅有批准状态、导航和等效换行变化；各入口链接、规则引用、既有领域界限和文档范围通过检查。",
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/cockpit-framework.test.ts",
+        "tests/unit/cockpit-detail.test.ts"
+      ],
+      "initialization": "沿现有 0296 首次发布和原正式创建事实；旧源单取原第一轮发布，旧正式单无可信业务事件时不由登记时刻冒填；无新迁移。",
+      "dateAndPermission": "读同主体的创办归属和业务发生时间，显示姓名取有权对象的当前公开名称；原程序读取范围、命令幂等及审批不变。",
+      "expectation": "核纯开发、单独正式创建、同次审批两事实、真实往返、仅源可读、有正式权限以及未关联对照；首组记录沿用原小流程明细，选中不会替换原当前工作区；真实点击返回并核现行工作。带固定计划覆盖随七组恢复。",
       "checks": [
-        "astryx-docs-integrity"
+        "native-creation-and-read-model",
+        "creation-detail-and-role-bounds",
+        "original-keyboard-current-task",
+        "created-date-long-name-layout",
+        "formal-order-end-to-end"
       ]
     }
   ],
   "checks": [
     {
-      "id": "astryx-docs-integrity",
-      "command": "python3 check-astryx-docs.py (isolated task worktree, against the actual release base)",
+      "id": "native-creation-and-read-model",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-native.json",
       "status": "passed",
       "exitCode": 0,
-      "kind": "command",
-      "testedHead": "78f0ca35c456a76ad5b291d82f6b7d16a41b4f5c",
-      "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
-      "startedAt": "2026-11-21T07:59:28Z",
-      "endedAt": "2026-11-21T07:59:28Z",
-      "logSha256": "dc98680996be0a3483c60c4df6a0075ebdc1948a1ff6817281c82ea3e2d09a8a",
-      "context": "Isolated docs/astryx-ui-spec-v1 worktree, verified approved Library input, release base and Markdown paths.",
-      "log": "/dev/shm/dx-finance.IUos5D/check-astryx-docs.log"
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "低权限隔离 PG 13.23 和真实 Chromium。原生与索引、各角色、三条创建路径、确切日期和原入口往返。",
+      "startedAt": "2026-11-21T17:23:02.950Z",
+      "endedAt": "2026-11-21T17:25:31.443Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-native.log",
+      "logSha256": "5f9b35363c3805beb8f575b7fe748c761ca614ba0757d2993d19cfe59b59ac14",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d3566af79c249faa25861046f36d7072af78aaff2299b0c18e4e67cbd7eb15c7"
+        }
+      ]
+    },
+    {
+      "id": "creation-detail-and-role-bounds",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-unit.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 77,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "原角色矩阵、详情真实创建事实、只读记录、真正工作区和共享事实不变。",
+      "startedAt": "2026-11-21T17:21:38.644Z",
+      "endedAt": "2026-11-21T17:21:44.611Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-unit.log",
+      "logSha256": "a0d98fdf4336a3ce1f78a908a52e18b002fed384b6e23798b85d005914a17c52",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e867d5f4ebf87939525b018681e00188aa2b47a9fdb07efdc9765351b9644aad"
+        }
+      ]
+    },
+    {
+      "id": "original-keyboard-current-task",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'wraps complete homepage facts|Final10 labelled shared-projection fixture|starts one effective clock|starts no production clock|records no effective creation' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-pg.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 33,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "原 Full 失败的两条原生浏览器照原断言运行。首格键盘可选，创建记录位于原小流程明细，进行中的船样与原入口保持。",
+      "startedAt": "2026-11-21T17:21:45.149Z",
+      "endedAt": "2026-11-21T17:22:25.408Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-pg.log",
+      "logSha256": "2c6fbd749ff904e511acda5aadf775bf71b7c8380ff9f06d0b962e501c07174f",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "92bc4cc100fbfe19aa5f8e649b64ad72b2f22518c86a55c13d7a57fab716c2d2"
+        }
+      ]
+    },
+    {
+      "id": "created-date-long-name-layout",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t 'keeps long metadata labels' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-layout.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 21,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "原六组、长创建姓名与日期同组，原有常规和 125% CSS 视口响应。",
+      "startedAt": "2026-11-21T17:25:32.334Z",
+      "endedAt": "2026-11-21T17:25:59.716Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-layout.log",
+      "logSha256": "af11593bc31031469fcf29648efdcf86fcb517cc17a111a1ad5276f1dbc6cb3c",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a7986989c759d64a6a7e4d6e5ad10e4299d33dddb3747cc22049b925eaa61cbc"
+        }
+      ]
+    },
+    {
+      "id": "formal-order-end-to-end",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'R5-09 follows one new order' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-full-path.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 15,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "真实创建到工厂、装箱和原座舱时效，保正式单原生业务。",
+      "startedAt": "2026-11-21T17:26:00.376Z",
+      "endedAt": "2026-11-21T17:26:27.260Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-full-path.log",
+      "logSha256": "000eb968dbf107675437d27000345798ba1f7e711444d224c375f671b122207d",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2d4974fa2fd6dde266da026d58bc1f6be267b37acc8035ea02fb1d21ba1d87d7"
+        }
+      ]
     }
   ]
 }
