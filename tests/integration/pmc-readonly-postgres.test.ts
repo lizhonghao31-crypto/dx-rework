@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import Fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PMC_READ_CAPABILITIES } from "@dx-rework/contracts";
+import { CUTTING_FINANCE_READ_ROLES, PMC_READ_CAPABILITIES } from "@dx-rework/contracts";
 import { applyMigrations, discoverValidatedMigrations } from "../../scripts/migration-lib.mjs";
 import { assertTestDatabaseTarget } from "../../scripts/test-database-safety.mjs";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
@@ -31,6 +31,11 @@ const url = process.env.TEST_DATABASE_URL;
   const pmcMigration = "0232_pmc_readonly_role";
   let laterVersions: string[];
   let oldHistory: unknown[], oldGrants: unknown[], oldCapabilities: unknown[];
+  const financeRead = "cutting:orders:view";
+  const financeRoles = [
+    "finance_director", "finance_read", "factory_payables", "embroidery_washing_payables",
+    "fabric_payables", "wage_month_close_accountant",
+  ];
   const input = (name: string) => ({ supplierCode: `PMC_${randomUUID().slice(0,8).toUpperCase()}`, supplierName: name, supplierType: "factory" as const,
     active: true, notes: "", supportedCrafts: ["车缝"], dailyCapacity: 100, contactPerson: "TEST联系人", contactPhone: "123456789", address: "TEST地址",
     contractEntityName: null, partyBRepresentative: null, payeeName: "TEST收款人", bankAccount: "001234567890", bankName: "TEST银行", changeReason: "隔离测试" });
@@ -77,7 +82,10 @@ const url = process.env.TEST_DATABASE_URL;
     expect(caps).toEqual([...PMC_READ_CAPABILITIES].sort());
     const untouched = await db.query("SELECT * FROM role_capabilities WHERE role_code=ANY($1::text[]) ORDER BY role_code,capability",
       [[...new Set((oldCapabilities as {role_code:string}[]).map(row=>row.role_code))]]);
-    expect(untouched.rows).toEqual(oldCapabilities);
+    const approvedFinance = new Set(financeRoles);
+    const financeCutting = untouched.rows.filter(row => approvedFinance.has(row.role_code) && row.capability === financeRead);
+    expect(financeCutting.map(({role_code,capability})=>({role_code,capability}))).toEqual(financeRoles.toSorted().map(role_code => ({ role_code, capability: financeRead })));
+    expect(untouched.rows.filter(row => !approvedFinance.has(row.role_code) || row.capability !== financeRead)).toEqual(oldCapabilities);
     expect((await db.query("SELECT display_name,enabled FROM business_roles WHERE role_code='pmc'")).rows).toEqual([{display_name:"PMC",enabled:true}]);
     expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
   });
@@ -92,6 +100,39 @@ const url = process.env.TEST_DATABASE_URL;
     }
     for(const [fn,cap] of [["pattern_room_authorized_order_roles","pattern_room:orders:complete"],["pattern_room_authorized_price_roles","pattern_room:prices:write"],["cutting_authorized_roles","cutting:records:create"],["finance_authorized_wage_roles","wage:settlement_mark"],["supplier_onboarding_authorized_roles","approve"]]) await expect(db.query(`SELECT ${fn}($1,$2)`,[ids.pmc,cap])).rejects.toMatchObject({code:"42501"});
     expect((await db.query("SELECT external_responsibility_can_view_all($1) allowed,own_factory_approval_can_view($1,$2) own",[ids.pmc,randomUUID()])).rows[0]).toEqual({allowed:true,own:true});
+  });
+  it("authorizes exactly six new finance cutting readers through real sessions and SQL",async()=>{
+    expect([...CUTTING_FINANCE_READ_ROLES]).toEqual(financeRoles);
+    const idsByRole = new Map<string,string>();
+    for (const role of [...financeRoles, "sample_finance"]) {
+      const id = randomUUID(); ids[role] = id; idsByRole.set(role,id);
+      await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,"TEST "+role]);
+      await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,role]);
+      await access.assignRole({...root(),requestId:randomUUID()},{userId:id,roleCode:role,reason:"TEST finance cutting grant"});
+      const user = await session(role);
+      expect(user.businessRoles).toEqual([role]);
+      if (role === "sample_finance") {
+        expect(user.capabilities).not.toContain(financeRead);
+        await expect(db.query("SELECT cutting_authorized_roles($1,$2)",[id,financeRead])).rejects.toMatchObject({code:"42501"});
+      } else {
+        expect(user.capabilities).toContain(financeRead);
+        expect((await db.query("SELECT cutting_authorized_roles($1,$2) AS roles",[id,financeRead])).rows[0].roles).toEqual([role]);
+      }
+      for (const capability of ["cutting:records:create","cutting:records:correct"]) {
+        expect(user.capabilities).not.toContain(capability);
+        await expect(db.query("SELECT cutting_authorized_roles($1,$2)",[id,capability])).rejects.toMatchObject({code:"42501"});
+      }
+    }
+    const sampleId=idsByRole.get("sample_finance")!;
+    const grant=await access.assignRole({...root(),requestId:randomUUID()},{userId:sampleId,roleCode:"finance_read",reason:"TEST dual-role union"});
+    const store=new PostgresAuthStore(db,"corp"),tokenHash=createHash("sha256").update(randomUUID()).digest("hex");
+    await store.createSession({id:randomUUID(),tokenHash,userId:sampleId,expiresAt:new Date(Date.now()+3600000),revokedAt:null});
+    expect((await store.findSession(tokenHash,new Date()))!.user.capabilities).toContain(financeRead);
+    await access.revokeRole({...root(),requestId:randomUUID()},grant.assignmentId,"TEST revoke temporary finance read");
+    const remaining=(await store.findSession(tokenHash,new Date()))!.user;
+    expect(remaining.businessRoles).toEqual(["sample_finance"]);
+    expect(remaining.capabilities).not.toContain(financeRead);
+    await expect(db.query("SELECT cutting_authorized_roles($1,$2)",[sampleId,financeRead])).rejects.toMatchObject({code:"42501"});
   });
   it("filters delegated writes in real sessions and SQL without revoking other roles or Root",async()=>{
     await access.createDelegation(root(),{grantorUserId:ids.pm!,granteeUserId:ids.pmc!,capability:"sourcing:decision:record",scopeType:"global",validFrom:new Date(Date.now()-1000).toISOString(),validUntil:new Date(Date.now()+3600000).toISOString(),reason:"测试不能升级纯PMC"});

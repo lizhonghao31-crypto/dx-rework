@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+export const CUTTING_FINANCE_READ_ROLES = [
+  "finance_director",
+  "finance_read",
+  "factory_payables",
+  "embroidery_washing_payables",
+  "fabric_payables",
+  "wage_month_close_accountant",
+] as const;
+
 export const CUTTING_VIEW_ROLES = [
   "cutting_supervisor",
   "cutting_worker",
@@ -8,6 +17,7 @@ export const CUTTING_VIEW_ROLES = [
   "pmc",
   "order_merchandiser",
   "warehouse_supervisor",
+  ...CUTTING_FINANCE_READ_ROLES,
 ] as const;
 export const CUTTING_RECORD_ROLES = ["cutting_supervisor", "cutting_worker"] as const;
 export const CUTTING_CAPABILITY_ROLES = {

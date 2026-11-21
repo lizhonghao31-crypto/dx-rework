@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CUTTING_CAPABILITY_ROLES,
+  CUTTING_FINANCE_READ_ROLES,
   canUseCutting,
 } from "@dx-rework/contracts";
 import { canAccessCutting } from "../../apps/web/src/cutting-access.js";
@@ -46,7 +47,15 @@ describe("cutting capability boundaries", () => {
     expect(canAccessCutting({ ...base, businessRoles: ["cutting_worker"], capabilities: ["cutting:orders:view"] })).toBe(true);
     expect(canAccessCutting({ ...base, businessRoles: ["cutting_worker"], capabilities: [] })).toBe(false);
     expect(canAccessCutting({ ...base, businessRoles: ["owner_group"], capabilities: ["cutting:orders:view"] })).toBe(true);
-    expect(canAccessCutting({ ...base, businessRoles: ["finance_director"], capabilities: ["cutting:orders:view"] })).toBe(false);
+    for (const role of CUTTING_FINANCE_READ_ROLES) {
+      expect(canAccessCutting({ ...base, businessRoles: [role], capabilities: ["cutting:orders:view"] })).toBe(true);
+      expect(canAccessCutting({ ...base, businessRoles: [role], capabilities: [] })).toBe(false);
+      expect(canUseCutting([role], ["cutting:records:create"], "cutting:records:create")).toBe(false);
+      expect(canUseCutting([role], ["cutting:records:correct"], "cutting:records:correct")).toBe(false);
+    }
+    expect(canAccessCutting({ ...base, businessRoles: ["sample_finance"], capabilities: ["cutting:orders:view"] })).toBe(false);
+    expect(canAccessCutting({ ...base, businessRoles: ["sample_finance", "finance_read"], capabilities: ["cutting:orders:view"] })).toBe(true);
+    expect(canUseCutting(["sample_finance", "cutting_worker"], ["cutting:records:create"], "cutting:records:create")).toBe(true);
     expect(canAccessCutting({ ...base, businessRoles: [], capabilities: [], isRoot: true })).toBe(true);
   });
 });

@@ -4708,6 +4708,67 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[todos[0].todo_id])).rows[0].status).toBe("completed");
   });
 
+  it("allows the six finance grants through the original cutting routes without exposing unrelated files or writes",async()=>{
+    const caseId=await reviewedContractCase("FINANCE-CUTTING");
+    const order=(await cutting.listSources(cuttingOwnerActor())).items.find(row=>row.sourcingCaseId===caseId)!;
+    const unrelatedCaseImage=await readyCuttingSheet(merchandiserId);
+    await service.supplementImages({...rootActor(),authorizationCapability:"tools:user"},caseId,{attachmentIds:[unrelatedCaseImage]},randomUUID());
+    const recordedImage=await readyCuttingSheet(managerId);
+    const recording=await cutting.record(cuttingWorkerActor(),order.cuttingOrderId,{pieceCount:1,actualCutCount:2020,attachmentIds:[recordedImage]},randomUUID());
+    expect(recording.value.outcome).toBe("created");
+
+    await craftService.ensureOrganizationPolicy();
+    const store=new PostgresAuthStore(database,"corp");
+    const signIn=async(roles:string[])=>{
+      const id=randomUUID();
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST finance cutting',true)",[id]);
+      await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,`TEST-${id}`,`TEST-union-${id}`]);
+      await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+      try{
+        for(const role of roles)await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'TEST finance route fixture')",[randomUUID(),id,role]);
+      }finally{await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
+      return store.upsertIdentity({corpId:"corp",userId:`TEST-${id}`,unionId:`TEST-union-${id}`,active:true,employed:true,displayName:"TEST finance cutting"});
+    };
+    let user=await signIn(["sample_finance"]);
+    const app=Fastify();
+    app.setErrorHandler((error,_request,reply)=>reply.code(error instanceof ApplicationError?error.statusCode:500).send({error:{message:error.message}}));
+    registerCuttingRoutes(app,{authenticate:async()=>user,service:cutting,attachments});
+    const detailUrl=`/cutting/orders/${order.cuttingOrderId}`,fileUrl=(id:string)=>`/cutting/attachments/${id}/download`;
+    const uploadBody={filename:"TEST.png",mimeType:"image/png",sizeBytes:128,sha256:"a".repeat(64)};
+    try{
+      expect((await app.inject({url:detailUrl})).statusCode).toBe(403);
+      expect((await app.inject({url:fileUrl(recordedImage)})).statusCode).toBe(403);
+      for(const role of ["finance_director","finance_read","factory_payables","embroidery_washing_payables","fabric_payables","wage_month_close_accountant"]){
+        user=await signIn([role]);
+        const list=await app.inject({url:"/cutting/orders?q=FINANCE-CUTTING"});
+        expect(list.statusCode,list.body).toBe(200);
+        expect(list.json()).toMatchObject({totalCount:1,items:[{cuttingOrderId:order.cuttingOrderId}]});
+        const detail=await app.inject({url:detailUrl});
+        expect(detail.statusCode,detail.body).toBe(200);
+        expect(detail.json()).toMatchObject({canRecord:false,canCorrect:false,record:{actualCutCount:2020,cuttingSheetPhotos:[{attachmentId:recordedImage}]}});
+        expect(detail.body).not.toMatch(/daxingUnitPrice|unitPrice|totalAmount|bankAccount/);
+        for(const mode of ["preview","thumbnail","download"]){
+          const image=await app.inject({url:fileUrl(recordedImage)+"?mode="+mode});
+          expect(image.statusCode,image.body).toBe(302);
+          expect((await app.inject({url:fileUrl(unrelatedCaseImage)+"?mode="+mode})).statusCode).toBe(403);
+        }
+        for(const [suffix,payload] of [
+          ["records",{pieceCount:1,actualCutCount:2020,attachmentIds:[recordedImage]}],
+          ["corrections",{expectedVersion:1,pieceCount:1,actualCutCount:2020,reason:"TEST finance denied"}],
+          ["attachments/upload-intents",uploadBody],
+        ] as const){
+          expect((await app.inject({method:"POST",url:detailUrl+"/"+suffix,headers:{"idempotency-key":randomUUID()},payload})).statusCode).toBe(403);
+        }
+      }
+      user=await signIn(["order_merchandiser"]);
+      expect((await app.inject({url:detailUrl})).statusCode).toBe(404);
+      user=await signIn(["order_merchandiser","finance_read","sample_finance"]);
+      expect((await app.inject({url:detailUrl})).statusCode).toBe(200);
+      const unbound=await readyCuttingSheet(user.id);
+      expect((await app.inject({url:fileUrl(unbound)})).statusCode).toBe(403);
+    }finally{await app.close();}
+  });
+
   it("enforces warehouse supervisor read-only cutting through HTTP, real grants and database authority while retaining receiving and mixed roles", async () => {
     const caseId = await reviewedContractCase("WAREHOUSE-SUPERVISOR");
     const order = (await cutting.listSources(cuttingOwnerActor())).items.find(item => item.sourcingCaseId === caseId)!;

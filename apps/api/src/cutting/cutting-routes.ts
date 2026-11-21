@@ -129,6 +129,7 @@ export function registerCuttingRoutes(
       (binding) => dependencies.service.canDownload(trusted, binding),
       mode === "download" ? "attachment" : "inline",
       mode === "thumbnail" ? "thumbnail" : undefined,
+      { requireBound: true },
     );
     reply.header("cache-control", "no-store");
     return reply.redirect(grant.downloadUrl);

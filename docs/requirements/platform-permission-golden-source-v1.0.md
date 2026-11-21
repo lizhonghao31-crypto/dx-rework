@@ -482,6 +482,11 @@ main `47a9a1c02f67a62a372caa49054048ae73c6b4d6` 已有该角色的入口、列�
 
 ## 2026-09-18 订单开裁权限增量（APPROVED）
 
+**2026-11-21 财务岗位订单开裁只读（APPROVED）**
+
+- `finance_director`、`finance_read`、`factory_payables`、`embroidery_washing_payables`、`fabric_payables`、`wage_month_close_accountant` 取得 `cutting:orders:view`。可查看有效开裁单、原裁床记录和原关联图片，无登记、资料上传、修正或导出授权。
+- `sample_finance` 本身无本次授权，兼任保留有效岗位的权限并集。纯跟单仍按本人范围，兼任有全范围开裁读取授权的财务角色时使用其合法全范围。撤去最后一个有效授权岗位后，旧会话不保留开裁读取。
+
 **PERM-CUTTING-20260918**：新增独立“裁床主管”角色 `cutting_supervisor` 与“裁床工人”角色 `cutting_worker`，两者均具有裁床基础读取 `cutting:orders:view` 与后续初次登记 `cutting:records:create` 能力。两类角色本期均可处理待登记裁床记录，不引入班组/分派限制。
 
 老板 `owner_group`、生产管理 `production_management`、订单跟单 `order_merchandiser` 获得裁床基础只读能力；订单跟单仍按本人源外发单范围读取。仓管、板房主管、板房工人及其他角色不因本轮获得裁床模块能力。Root既有超级用户通道保持。

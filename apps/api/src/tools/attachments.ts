@@ -351,8 +351,9 @@ export class AttachmentService {
     authorizeBound?: (row: Readonly<{ attachmentId: string; entityType: string; entityId: string; uploadedBy: string; mimeType: string }>) => Promise<boolean>,
     disposition: "attachment" | "inline" = "attachment",
     variant?: "thumbnail",
+    options?: { requireBound?: boolean },
   ): Promise<DownloadIntentResponse> {
-    const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound, isJiashunClerk(actor.actorRoles));
+    const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound, options?.requireBound === true || isJiashunClerk(actor.actorRoles));
     if (row.status !== "ready") throw new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
     if (variant === "thumbnail" && !row.mime_type.startsWith("image/")) throw new ApplicationError("VALIDATION_ERROR", "该文件不是图片", 400);
     const grant = await this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
@@ -550,7 +551,7 @@ export class AttachmentService {
     id: string,
     userId: string,
     authorizeBound?: (row: { attachmentId: string; entityType: string; entityId: string; uploadedBy: string; mimeType: string }) => Promise<boolean>,
-    blockUnboundForClerk = false,
+    requireBound = false,
   ): Promise<AttachmentRow> {
     const result = await this.pool.query<AttachmentRow>(`SELECT * FROM attachments WHERE attachment_id=$1`, [id]);
     const row = result.rows[0];
@@ -559,7 +560,7 @@ export class AttachmentService {
       if (!authorizeBound || !(await authorizeBound({ attachmentId: row.attachment_id, entityType: row.entity_type, entityId: row.entity_id, uploadedBy: row.uploaded_by, mimeType: row.mime_type }))) {
         throw new ApplicationError("FORBIDDEN", "Attachment access denied", 403);
       }
-    } else if (row.uploaded_by !== userId || blockUnboundForClerk) {
+    } else if (row.uploaded_by !== userId || requireBound) {
       throw new ApplicationError("FORBIDDEN", "Attachment access denied", 403);
     }
     return row;

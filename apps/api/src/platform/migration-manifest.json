@@ -232,7 +232,8 @@
     {"version": "0230_sourcing_factory_change_current_quantity", "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf"},
     {"version": "0231_temporary_special_process_proxy_reporting", "checksum": "39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4"},
     {"version": "0232_pmc_readonly_role", "checksum": "31d01d06ce698735c21b2e8b9ab5f2f1da29d2ceb0838a130320e32e2bbe6547"},
-    {"version": "0233_jiashun_contract_clerk", "checksum": "39d8d12d3e70ee7f5b885299e87258c55fbc7ddafbadb198d2e03ac16597d7e2"}
+    {"version": "0233_jiashun_contract_clerk", "checksum": "39d8d12d3e70ee7f5b885299e87258c55fbc7ddafbadb198d2e03ac16597d7e2"},
+    {"version": "0234_finance_cutting_readonly", "checksum": "0b21e9a2494daf623836ebe0c0781936c20ae48391417ed96e0204b73c75d63a"}
   ]
 }
 
