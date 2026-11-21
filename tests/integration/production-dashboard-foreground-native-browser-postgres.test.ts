@@ -7,7 +7,7 @@ import {FactoryFlowService} from '../../apps/api/src/production-platform/factory
 import {cockpitHomeBrowser} from '../acceptance/m01-cockpit-home-native-browser.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
-const database=process.env.TEST_DATABASE_URL;
+const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (database?describe:describe.skip)('real production-dashboard foreground request ownership',()=>{
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
  let staged:[string,string,string];
@@ -70,8 +70,18 @@ const database=process.env.TEST_DATABASE_URL;
      if(query===b)delivered.resolve();
     }finally{await response.dispose();}
    });
+   const firstRead=page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return url.pathname==='/api/production-dashboard'&&url.searchParams.get('q')===a;
+   });
    await filter.fill(a);
-   await expect.poll(()=>rows.allTextContents()).toEqual([a]);
+   const first=await firstRead;
+   expect(first.status()).toBe(200);
+   expect((await first.json()).items.map((item:{order:{firstStyleNo:string}})=>item.order.firstStyleNo)).toEqual([a]);
+   await rows.filter({hasText:b}).waitFor({state:'detached'});
+   await rows.filter({hasText:c}).waitFor({state:'detached'});
+   await rows.filter({hasText:a}).waitFor();
+   expect(await rows.allTextContents()).toEqual([a]);
    await wait.waitFor({state:'hidden'});
    await page.evaluate(target=>{
     const fetchOriginal=window.fetch.bind(window);

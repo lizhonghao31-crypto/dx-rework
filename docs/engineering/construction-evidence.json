@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "1d163c5e523b09dc455faece3f089695cf59aa8c",
-  "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
+  "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
   "rules": [
     {
       "rule": "保留各原生分页协议，直接读取合法目标页。先核资格和授权，SLA 历史固定浏览范围，旧游标仍有原语义",
@@ -81,20 +81,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
-      "testedHead": "aa35bf7754120d91b911ec6f09cc08150096692b",
+      "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
+      "testedHead": "3face51d0b00780f1b6542dce4a5581ccfd446d8",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
       "passed": 63,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T06:55:09.057000Z",
-      "endedAt": "2026-11-21T06:55:15.258195Z",
+      "startedAt": "2026-11-21T07:22:56.180000Z",
+      "endedAt": "2026-11-21T07:23:02.561204Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-unit.json",
-      "logSha256": "7d8add8e5d4435e992edb39d0e3d652b635f14e07d320a207a37d784f4ac7b2c",
+      "logSha256": "ceed5f36c6f3df6c0dcf0dd900b7d680a9e8b1c6d6ff306d119f4a0befede49f",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "7d8add8e5d4435e992edb39d0e3d652b635f14e07d320a207a37d784f4ac7b2c"
+          "sha256": "ceed5f36c6f3df6c0dcf0dd900b7d680a9e8b1c6d6ff306d119f4a0befede49f"
         }
       ]
     },
@@ -104,20 +104,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
-      "testedHead": "aa35bf7754120d91b911ec6f09cc08150096692b",
+      "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
+      "testedHead": "3face51d0b00780f1b6542dce4a5581ccfd446d8",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
       "passed": 13,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T06:55:16.440000Z",
-      "endedAt": "2026-11-21T06:55:37.034555Z",
+      "startedAt": "2026-11-21T07:23:03.830000Z",
+      "endedAt": "2026-11-21T07:23:24.717569Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-pg.json",
-      "logSha256": "63c10de5eb3e89ffe0b56bab2dca5f8dd91c0d4d3fb77d3104a63ce8bc6cf678",
+      "logSha256": "902c10ca882e40d748fad6dfd0dc45ec7219ed05fd2314b5ae51d7f815069a9a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "63c10de5eb3e89ffe0b56bab2dca5f8dd91c0d4d3fb77d3104a63ce8bc6cf678"
+          "sha256": "902c10ca882e40d748fad6dfd0dc45ec7219ed05fd2314b5ae51d7f815069a9a"
         }
       ]
     },
@@ -127,20 +127,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
-      "testedHead": "aa35bf7754120d91b911ec6f09cc08150096692b",
+      "sourceFingerprint": "40d1a92b2fef1f3f9e46a49aec5a7e96323510cfa62c59fce3eb1db5a7767a97",
+      "testedHead": "3face51d0b00780f1b6542dce4a5581ccfd446d8",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
-      "passed": 4,
+      "passed": 8,
       "failed": 0,
-      "skipped": 31,
-      "startedAt": "2026-11-21T06:55:38.692000Z",
-      "endedAt": "2026-11-21T06:58:11.833119Z",
+      "skipped": 27,
+      "startedAt": "2026-11-21T07:23:26.266000Z",
+      "endedAt": "2026-11-21T07:26:08.168255Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-browser.json",
-      "logSha256": "461dbabaa58aa3752c158f83cb3df661ab28edbf2f47f437963381e2b0afbf21",
+      "logSha256": "160ce302c1bc4aad2eaec703376d3e26cff626f5ba3055fe7f4800d6f73e47fd",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "461dbabaa58aa3752c158f83cb3df661ab28edbf2f47f437963381e2b0afbf21"
+          "sha256": "160ce302c1bc4aad2eaec703376d3e26cff626f5ba3055fe7f4800d6f73e47fd"
         }
       ]
     }
