@@ -1,58 +1,116 @@
 {
   "version": 1,
-  "base": "e0fa972603ab39764218e55740f31245ae71d61c",
-  "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
-  "risk": "quick",
-  "automaticTestsNotApplicable": "本次仅接入已批准的 UI 规范与 Markdown 导航，不修改应用代码、工作流、数据库或测试逻辑。",
-  "alternativeVerification": {
-    "reason": "直接对照原交付文件的哈希和逐行差异，核验存在的仓库链接、已定义的规则引用以及本次文档差异范围。",
-    "checks": [
-      "astryx-docs-integrity"
-    ]
-  },
+  "base": "59a51cb9580e3840b47b5a2a9b3ca6a510a2ae55",
+  "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
   "rules": [
     {
-      "rule": "采用达兴 Astryx UI 规范 1.0 为现行 UI 规范，原领域规则和已批准旧页基准按范围保留。",
-      "source": "docs/ui/ASTRYX_UI_SPEC.md §15、§16 与交付的已批准版本。",
+      "rule": "首次有效创建与创建人按源单或正式单读取，工序与审批写入保持原实现。",
+      "source": "Library DX 座舱详情七大流程、创建与投面辅料纠偏 v2 §§4、8、10.1、11.3；docs/ui/ASTRYX_UI_SPEC.md#DXUI-DETAIL-004",
       "writes": [
-        "AGENTS.md",
-        "README.md",
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
-        "docs/requirements/rework-ui-golden-source-v1.0.md",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
-        "docs/ui/ASTRYX_UI_SPEC.md"
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "apps/api/src/production-platform/order-time-created.ts",
+        "apps/web/src/cockpit-detail-r5.css",
+        "apps/web/src/cockpit-detail.tsx",
+        "docs/ui/ASTRYX_UI_SPEC.md",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "reads": [
-        "AGENTS.md",
-        "README.md",
-        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
-        "docs/ui/ASTRYX_UI_SPEC.md"
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/web/src/cockpit-record-link.tsx"
       ],
-      "oldTests": [],
-      "noExistingTestsReason": "文档中的规范入口和迁移引用没有对应页面行为变更，采用原稿、规则 ID 和文件链接检查。",
-      "initialization": "以 #1074 合并后的 release/digital-production-v1 干净树为基准；由校验过哈希的 Library 原稿开始。",
-      "dateAndPermission": "页面权限、生命周期和各类真实日期的来源仍按现有业务实现执行，本次没有这些层面的改动。",
-      "expectation": "新主文完整且仅有批准状态、导航和等效换行变化；各入口链接、规则引用、既有领域界限和文档范围通过检查。",
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/cockpit-framework.test.ts"
+      ],
+      "initialization": "沿现有 0296 首次发布和原正式创建事实；旧源单取原第一轮发布，旧正式单无可信业务事件时不由登记时刻冒填；无新迁移。",
+      "dateAndPermission": "读同主体的创办归属和业务发生时间，显示姓名取有权对象的当前公开名称；原程序读取范围、命令幂等及审批不变。",
+      "expectation": "核真草稿无正式时钟、分时转换、直接正式、同审批双身份、撤权或无关角色；原 SLA 与客户日期业务分母由现有验收保持。",
       "checks": [
-        "astryx-docs-integrity"
+        "native-creation-and-read-model",
+        "creation-display-and-role-bounds",
+        "formal-order-end-to-end"
       ]
     }
   ],
   "checks": [
     {
-      "id": "astryx-docs-integrity",
-      "command": "python3 check-astryx-docs.py (isolated task worktree, against the actual release base)",
+      "id": "native-creation-and-read-model",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts --reporter=default --reporter=json",
       "status": "passed",
       "exitCode": 0,
-      "kind": "command",
-      "testedHead": "78f0ca35c456a76ad5b291d82f6b7d16a41b4f5c",
-      "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
-      "startedAt": "2026-11-21T07:59:28Z",
-      "endedAt": "2026-11-21T07:59:28Z",
-      "logSha256": "dc98680996be0a3483c60c4df6a0075ebdc1948a1ff6817281c82ea3e2d09a8a",
-      "context": "Isolated docs/astryx-ui-spec-v1 worktree, verified approved Library input, release base and Markdown paths.",
-      "log": "/dev/shm/dx-finance.IUos5D/check-astryx-docs.log"
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "f70927685fb0ea7aee8c5cf7c6ce29f3fac4afec",
+      "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
+      "context": "Node 22.22.2; PostgreSQL 13.23, two marked low-privilege database targets; Chromium process via actual native App and authenticated fixture; one Vitest worker.",
+      "startedAt": "2026-11-21T15:36:42.828Z",
+      "endedAt": "2026-11-21T15:39:14.247Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-browser.log",
+      "logSha256": "c89a655b9c7ead91f504408f383e87341c4d829e577be6e4dabb008358649a01",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "dde1cdcdb8cf776b80664faac17ac8018c1885749639ee313fe15aabc2a73af2"
+        }
+      ]
+    },
+    {
+      "id": "creation-display-and-role-bounds",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-framework.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 47,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "f70927685fb0ea7aee8c5cf7c6ce29f3fac4afec",
+      "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
+      "context": "Node 22.22.2; existing strict SQL stubs for direct PMC, active/revoked roles and overlapping technical or management capabilities.",
+      "startedAt": "2026-11-21T15:36:42.949Z",
+      "endedAt": "2026-11-21T15:36:49.669Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-unit.log",
+      "logSha256": "8303b4f7148148b6b9f9637d80ea95fcd42125f25fb5040219ebfee7957e8ff9",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e96d6a6bdfdfa570b165e8626f5be3a474818b9a4cf63d55e8caf3ac3d7f0959"
+        }
+      ]
+    },
+    {
+      "id": "formal-order-end-to-end",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'R5-09 follows one new order' --reporter=default --reporter=json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 15,
+      "testedHead": "f70927685fb0ea7aee8c5cf7c6ce29f3fac4afec",
+      "sourceFingerprint": "88428eacf10c0e06d8433b448ab90f0a22b670c3f1b20a7a805d189d26f1dfc9",
+      "context": "Same low-privilege PostgreSQL 13.23 and Chromium; one matching existing end-to-end native order chain, 15 equally existing cases excluded by the target filter.",
+      "startedAt": "2026-11-21T15:39:43.166Z",
+      "endedAt": "2026-11-21T15:40:09.032Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-full-path.log",
+      "logSha256": "cf0fd1b8b0531d6f8dc87d786a2a1574f43e7334b594c8d2869d83cb0dba19c2",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "73291b44808359f7d840719f8dacbd67c71c02111fb228b9dcfa2865b578eb54"
+        }
+      ]
     }
   ]
 }
