@@ -106,22 +106,34 @@ it.each([
  const order=fixture(),work=order.stages[1]!.nodes[0]!;
  order.orderId=orderCreatedAt?id:null;
  order.cockpitCreation={developmentCreatedAt,orderCreatedAt,...(publishedWithOrder?{developmentPublishedWithOrder:true}:{})};
+ order.cockpitCreationDetails=[
+   ...(developmentCreatedAt?[{subject:'source' as const,at:developmentCreatedAt,creator:{name:'TEST开发创建人'},
+     record:{domain:'development',id:task,url:`/ui/digital-production?source=${task}&round=1`,mode:'read' as const,version:null,lineId:null}}]:[]),
+   ...(orderCreatedAt?[{subject:'order' as const,at:orderCreatedAt,creator:{name:'TEST正式单创建人'},
+     record:{domain:'order',id,url:`/ui/digital-production?instruction=${id}`,mode:'read' as const,version:null,lineId:null}}]:[]),
+ ];
  order.stages[0]!.nodes=['product_development','development_publish','order_information'].map(key=>({...work,
    stage:'creation',key,instanceId:key,label:'重复节点 '+key,records:[]}));
  const snapshot=structuredClone(order);
  const html=renderToStaticMarkup(createElement(CockpitDetail,{order,asOf:'2026-10-19T00:00:00Z',actions:null,
-  context:JourneyReturnContextSchema.parse({selected:id,expanded:'',focus:'order_information',row:'order_information'}),onChange(){}}));
+  context:JourneyReturnContextSchema.parse({selected:id,expanded:'creation',focus:'order_information',row:'order_information'}),onChange(){}}));
  const flow=html.match(/<section[^>]*cockpit-flow-panel[\s\S]*?<\/section>/)![0];
- expect(flow).toContain(label+'节点明细');
+ const current=html.match(/<section[^>]*aria-label="当前节点详情"[\s\S]*?<\/section>/)![0];
+ const identity=html.match(/data-identity-fact="created"[\s\S]*?<\/div>/)![0];
+ expect(flow).toContain('订单创建节点明细');
  expect(flow).not.toContain('cockpit-creation-events');
- expect(flow).not.toContain(label==='创建纯开发'?'创建正式订单':'创建纯开发');
+ expect(flow).not.toContain('创建纯开发');
+ expect(flow).not.toContain('创建正式订单');
  expect(flow).toContain('cockpit-stage-date-colon');
- expect(html).toMatch(/data-identity-fact="created"[^>]*><dt>创建日期：<\/dt><dd>.*?2026-10-19/);
+ expect(current).toContain(label);
+ expect(current.includes('创建纯开发')).toBe(Boolean(developmentCreatedAt&&!publishedWithOrder));
+ expect(current.includes('创建正式订单')).toBe(Boolean(orderCreatedAt));
+ expect(identity).toContain((orderCreatedAt??developmentCreatedAt!).slice(0,10));
+ expect(identity).toContain(orderCreatedAt?'TEST正式单创建人':'TEST开发创建人');
  expect(html).not.toContain('自身截止');
  expect(html).not.toContain('重复节点');
  expect(html).not.toContain('journey-node-order_information');
  expect(html).toContain('全部节点（2）');
- expect(html).toContain('进入该节点办理');
  expect(order).toEqual(snapshot);
 });
 
@@ -135,5 +147,7 @@ it('keeps original work reachable from a saved display-only creation stage',()=>
  expect(html).toContain('进入该节点办理');
  expect(html).toContain('aria-pressed="true" data-cockpit-focus="stage:creation"');
  expect(html).not.toContain('订购信息');
- expect(html).toContain('2026-10-19');
+ const identity=html.match(/data-identity-fact="created"[\s\S]*?<\/div>/)![0];
+ expect(identity).toContain('未记录');
+ expect(identity).not.toContain('2026-10-19');
 });
