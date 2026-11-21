@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "59a51cb9580e3840b47b5a2a9b3ca6a510a2ae55",
-  "sourceFingerprint": "9ca2c809ef61301daccb67fca370980fdc3fb562252d78edd2cefcdd37cde93a",
+  "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
   "rules": [
     {
       "rule": "仅在详情透出同主体的有效创建事实、创建人和已有七组首入口；公共任务事实与版本保持。",
@@ -34,13 +34,13 @@
       ],
       "initialization": "沿现有 0296 首次发布和原正式创建事实；旧源单取原第一轮发布，旧正式单无可信业务事件时不由登记时刻冒填；无新迁移。",
       "dateAndPermission": "读同主体的创办归属和业务发生时间，显示姓名取有权对象的当前公开名称；原程序读取范围、命令幂等及审批不变。",
-      "expectation": "核纯开发、单独正式创建、同次审批两事实、真实往返、仅源可读、有正式权限以及未关联对照；原九／八布局不加临时按钮，随七组恢复该分支入口。",
+      "expectation": "核纯开发、单独正式创建、同次审批两事实、真实往返、仅源可读、有正式权限以及未关联对照；首组记录沿用原小流程明细，选中不会替换原当前工作区；真实点击返回并核现行工作。带固定计划覆盖随七组恢复。",
       "checks": [
         "native-creation-and-read-model",
-        "creation-display-and-role-bounds",
+        "creation-detail-and-role-bounds",
+        "original-keyboard-current-task",
         "created-date-long-name-layout",
-        "formal-order-end-to-end",
-        "cockpit-detail-authorized-creation-fixtures"
+        "formal-order-end-to-end"
       ]
     }
   ],
@@ -48,183 +48,115 @@
     {
       "id": "native-creation-and-read-model",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-native-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-native.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 33,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
-      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
-      "context": "隔离 PG 13.23、真实 Chromium。实际角色对照、真实创建跳转返回、草稿/审批和原生/索引读取。",
-      "startedAt": "2026-11-21T16:02:44.418Z",
-      "endedAt": "2026-11-21T16:05:37.788Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-native-final.log",
-      "logSha256": "6fae3be57bb17f8b0cd251a86125d967512bbb3c50c0e7a882a6647157fbc915",
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "低权限隔离 PG 13.23 和真实 Chromium。原生与索引、各角色、三条创建路径、确切日期和原入口往返。",
+      "startedAt": "2026-11-21T17:23:02.950Z",
+      "endedAt": "2026-11-21T17:25:31.443Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-native.log",
+      "logSha256": "5f9b35363c3805beb8f575b7fe748c761ca614ba0757d2993d19cfe59b59ac14",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "645e24f2c49e17e1f3777247973218f5c142522afd39037301cc2f7d43804a06"
+          "sha256": "d3566af79c249faa25861046f36d7072af78aaff2299b0c18e4e67cbd7eb15c7"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/acceptance",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/cockpit-framework.test.ts",
-        "package.json",
-        "package-lock.json",
-        ".nvmrc",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "3b9bba1e91121ecfb248e1b0c224bbdf6b4db70b8254642f29f0fa74461e4875"
+      ]
     },
     {
-      "id": "creation-display-and-role-bounds",
+      "id": "creation-detail-and-role-bounds",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-framework.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-unit.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 47,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
-      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
-      "context": "原 PMC、管理和兼任权限回归，原共享 SQL 无新增替身。",
-      "startedAt": "2026-11-21T15:59:47.032Z",
-      "endedAt": "2026-11-21T15:59:51.851Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-unit.log",
-      "logSha256": "697cb6ed61dde775e1e85890fc7381f3677f1525723d34352507243ca957c052",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "c9c88dc379f497fea3cba60b22f1663c41045cb808fbd3ab37794fb1af94df61"
-        }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/acceptance",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/cockpit-framework.test.ts",
-        "package.json",
-        "package-lock.json",
-        ".nvmrc",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "3b9bba1e91121ecfb248e1b0c224bbdf6b4db70b8254642f29f0fa74461e4875"
-    },
-    {
-      "id": "created-date-long-name-layout",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t 'keeps long metadata labels' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-layout.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 1,
-      "failed": 0,
-      "skipped": 21,
-      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
-      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
-      "context": "相同原生 App 的具名布局压力样本，保原六组、真实数据入口，1165–1920 及 125% CSS 视口，覆盖长创建人和日期同组。",
-      "startedAt": "2026-11-21T16:00:16.340Z",
-      "endedAt": "2026-11-21T16:00:44.812Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-layout.log",
-      "logSha256": "61fac32a848b9b7eaf52717639dd1e801fc1d2449abbce8b052da0a4427bc50a",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "26073dcb538475c9a9d8939d594b9f474b09194386d10e8d70139a5dca26ba29"
-        }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/acceptance",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/cockpit-framework.test.ts",
-        "package.json",
-        "package-lock.json",
-        ".nvmrc",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "3b9bba1e91121ecfb248e1b0c224bbdf6b4db70b8254642f29f0fa74461e4875"
-    },
-    {
-      "id": "formal-order-end-to-end",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'R5-09 follows one new order' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-review-full-path-serial.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 1,
-      "failed": 0,
-      "skipped": 15,
-      "testedHead": "c8423ccf83f9105342c4e6184289f476b2bcfbae",
-      "sourceFingerprint": "04c9cb9d678176f8c0351bbc0e29c08316ec8898cd65e898ed89bd74f6759dca",
-      "context": "同隔离数据库和 Chromium 的原生正式订单全链定向，保原计划及生产。",
-      "startedAt": "2026-11-21T16:07:49.166Z",
-      "endedAt": "2026-11-21T16:08:16.031Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-review-full-path-serial.log",
-      "logSha256": "e72ddfdd18dce62fca9d7957f208e9157b9cf85d4cafbd65703e50f95984b899",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "59040d7a898c0a090a5fca2d60af6b4c9cf2325307c56f123cab2f53d5d843d2"
-        }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/acceptance",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/cockpit-framework.test.ts",
-        "package.json",
-        "package-lock.json",
-        ".nvmrc",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "3b9bba1e91121ecfb248e1b0c224bbdf6b4db70b8254642f29f0fa74461e4875"
-    },
-    {
-      "id": "cockpit-detail-authorized-creation-fixtures",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-cockpit-detail-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-framework.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-unit.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 77,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "e7f6437c4f574debfa2b2a4d52b88ef3536edc89",
-      "sourceFingerprint": "9ca2c809ef61301daccb67fca370980fdc3fb562252d78edd2cefcdd37cde93a",
-      "context": "旧头 Full 非数据库仅此详情单测文件出错。现用详情事实，不使用列表日期冒充，保留原阶段入口、三个创建路径和真实工作回退。",
-      "startedAt": "2026-11-21T16:29:18.250Z",
-      "endedAt": "2026-11-21T16:29:23.667Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-cockpit-detail-final.log",
-      "logSha256": "ea0210c0fc2b872104eb571c4252a3eaa6a01c0d09e1828db2510cc07ab9e150",
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "原角色矩阵、详情真实创建事实、只读记录、真正工作区和共享事实不变。",
+      "startedAt": "2026-11-21T17:21:38.644Z",
+      "endedAt": "2026-11-21T17:21:44.611Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-unit.log",
+      "logSha256": "a0d98fdf4336a3ce1f78a908a52e18b002fed384b6e23798b85d005914a17c52",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5f9ab4df16becd0b23aba29e29ae57ed55d6d8f90c97748bdde247177c551932"
+          "sha256": "e867d5f4ebf87939525b018681e00188aa2b47a9fdb07efdc9765351b9644aad"
+        }
+      ]
+    },
+    {
+      "id": "original-keyboard-current-task",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'wraps complete homepage facts|Final10 labelled shared-projection fixture|starts one effective clock|starts no production clock|records no effective creation' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-pg.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 33,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "原 Full 失败的两条原生浏览器照原断言运行。首格键盘可选，创建记录位于原小流程明细，进行中的船样与原入口保持。",
+      "startedAt": "2026-11-21T17:21:45.149Z",
+      "endedAt": "2026-11-21T17:22:25.408Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-pg.log",
+      "logSha256": "2c6fbd749ff904e511acda5aadf775bf71b7c8380ff9f06d0b962e501c07174f",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "92bc4cc100fbfe19aa5f8e649b64ad72b2f22518c86a55c13d7a57fab716c2d2"
+        }
+      ]
+    },
+    {
+      "id": "created-date-long-name-layout",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts -t 'keeps long metadata labels' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-layout.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 21,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "原六组、长创建姓名与日期同组，原有常规和 125% CSS 视口响应。",
+      "startedAt": "2026-11-21T17:25:32.334Z",
+      "endedAt": "2026-11-21T17:25:59.716Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-layout.log",
+      "logSha256": "af11593bc31031469fcf29648efdcf86fcb517cc17a111a1ad5276f1dbc6cb3c",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a7986989c759d64a6a7e4d6e5ad10e4299d33dddb3747cc22049b925eaa61cbc"
+        }
+      ]
+    },
+    {
+      "id": "formal-order-end-to-end",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'R5-09 follows one new order' --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-full-path.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 15,
+      "testedHead": "b10c8a882a74de31ffda624d4441bde692abbfd9",
+      "sourceFingerprint": "83fd0d873653c8a1aafcc40b988f2e2042ca6b7439b24bd40acf7b52281c298b",
+      "context": "真实创建到工厂、装箱和原座舱时效，保正式单原生业务。",
+      "startedAt": "2026-11-21T17:26:00.376Z",
+      "endedAt": "2026-11-21T17:26:27.260Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f2-preserve-work-full-path.log",
+      "logSha256": "000eb968dbf107675437d27000345798ba1f7e711444d224c375f671b122207d",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2d4974fa2fd6dde266da026d58bc1f6be267b37acc8035ea02fb1d21ba1d87d7"
         }
       ]
     }
