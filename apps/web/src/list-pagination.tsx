@@ -42,10 +42,11 @@ function PaginationNav({ items, ariaLabel, page, totalPages, total, busy, pendin
   items: readonly PaginationItem[]; ariaLabel: string; page: number; totalPages: number | null;
   total?:number|null|undefined; busy: boolean; pendingPage?:number|undefined; onPageChange(page: number): void;
 }>) {
+  const previousPage = totalPages === null ? page - 1 : Math.min(page - 1, Math.max(1, totalPages));
   return (
     <nav className="my-todos-pagination" aria-label={ariaLabel}>
       {total!=null&&<span>共 {total} 条</span>}
-      <button type="button" disabled={busy || totalPages === null || page <= 1 || pendingPage === page - 1} onClick={() => onPageChange(page - 1)}>上一页</button>
+      <button type="button" disabled={busy || totalPages === null || page <= 1 || pendingPage === previousPage} onClick={() => onPageChange(previousPage)}>上一页</button>
       {totalPages!==null&&items.map((item) => item.kind === "ellipsis"
         ? <span className="my-todos-pagination__ellipsis" aria-hidden="true" key={item.key}>…</span>
         : <button
@@ -74,7 +75,7 @@ type ListPaginationProps = Readonly<{
 
 export function ListPagination({ page, totalPages, onPageChange, ariaLabel, total, pendingPage, busy = false }: ListPaginationProps) {
   const pageCount = Math.max(1, Math.floor(totalPages ?? 1));
-  const currentPage = Math.min(pageCount, Math.max(1, Math.floor(page)));
+  const currentPage = Math.max(1, Math.floor(page));
   const pages = listPageWindow(currentPage, pageCount);
   const firstPage = pages[0] ?? 1;
   const lastPage = pages.at(-1) ?? firstPage;

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "1d163c5e523b09dc455faece3f089695cf59aa8c",
-  "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
+  "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
   "rules": [
     {
       "rule": "保留各原生分页协议，直接读取合法目标页。先核资格和授权，SLA 历史固定浏览范围，旧游标仍有原语义",
@@ -40,6 +40,7 @@
         "apps/web/src/digital-journey-cockpit.tsx",
         "apps/web/src/digital-production-page.tsx",
         "apps/web/src/digital-production-tasks-panel.tsx",
+        "apps/web/src/digital-production-workspaces.tsx",
         "apps/web/src/list-pagination.tsx",
         "apps/web/src/my-todos-page.tsx",
         "apps/web/src/my-todos.css",
@@ -61,6 +62,8 @@
         "tests/integration/digital-technical-pagination-postgres.test.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
         "tests/integration/m01-sla-history-postgres.test.ts",
+        "tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts",
+        "tests/unit/list-pagination.test.ts",
         "tests/unit/my-todos-navigation.test.ts"
       ],
       "checks": [
@@ -77,20 +80,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
-      "testedHead": "74e88f4fdeaa16a99f501972a4ea6ce14725ea99",
+      "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
+      "testedHead": "545fe8c905b41e40a9039c6144c0a406afb1c590",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
-      "passed": 59,
+      "passed": 60,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T06:15:22.956000Z",
-      "endedAt": "2026-11-21T06:15:28.523547Z",
+      "startedAt": "2026-11-21T06:29:16.698000Z",
+      "endedAt": "2026-11-21T06:29:23.457094Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-unit.json",
-      "logSha256": "9511467dfb9ec273777d851ea1444fc0121d04175a31ea99e94cf9327d1cf9d3",
+      "logSha256": "b9721b4850e3a0fbfe17f0597a69db16ff341aefd5dc3f0b084951162f6b3147",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9511467dfb9ec273777d851ea1444fc0121d04175a31ea99e94cf9327d1cf9d3"
+          "sha256": "b9721b4850e3a0fbfe17f0597a69db16ff341aefd5dc3f0b084951162f6b3147"
         }
       ]
     },
@@ -100,20 +103,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
-      "testedHead": "74e88f4fdeaa16a99f501972a4ea6ce14725ea99",
+      "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
+      "testedHead": "545fe8c905b41e40a9039c6144c0a406afb1c590",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
       "passed": 13,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T06:15:30.014000Z",
-      "endedAt": "2026-11-21T06:15:50.379905Z",
+      "startedAt": "2026-11-21T06:29:24.865000Z",
+      "endedAt": "2026-11-21T06:29:45.969452Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-pg.json",
-      "logSha256": "3ddef0be664e95cd4520cacc13807d3b97d1b54a38763b7573532609b0337d86",
+      "logSha256": "35e4ff4b8af2c1377cc8607130fe516b3e970eecd738d00ff90269f50002a544",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3ddef0be664e95cd4520cacc13807d3b97d1b54a38763b7573532609b0337d86"
+          "sha256": "35e4ff4b8af2c1377cc8607130fe516b3e970eecd738d00ff90269f50002a544"
         }
       ]
     },
@@ -123,20 +126,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
-      "testedHead": "74e88f4fdeaa16a99f501972a4ea6ce14725ea99",
+      "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
+      "testedHead": "545fe8c905b41e40a9039c6144c0a406afb1c590",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
       "passed": 4,
       "failed": 0,
       "skipped": 31,
-      "startedAt": "2026-11-21T06:15:51.663000Z",
-      "endedAt": "2026-11-21T06:17:01.905079Z",
+      "startedAt": "2026-11-21T06:29:47.275000Z",
+      "endedAt": "2026-11-21T06:31:10.622822Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-browser.json",
-      "logSha256": "d26057ad7c2b1beedb8b645e06273f592e004416d5dce03bc9e59ed039da256a",
+      "logSha256": "425dd68d5d5041cb4c652e1df1c24c2b42c3e87e8f256d5c2ea7d11df6bf5097",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d26057ad7c2b1beedb8b645e06273f592e004416d5dce03bc9e59ed039da256a"
+          "sha256": "425dd68d5d5041cb4c652e1df1c24c2b42c3e87e8f256d5c2ea7d11df6bf5097"
         }
       ]
     }

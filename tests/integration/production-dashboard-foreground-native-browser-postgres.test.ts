@@ -154,6 +154,8 @@ const database=process.env.TEST_DATABASE_URL;
   const wait=page.locator('.dx-foreground-loading').getByText('请稍等',{exact:true});
   const gate=Promise.withResolvers<void>(),started=Promise.withResolvers<void>();
   try{
+   await table.locator('tbody tr').first().waitFor();
+   await wait.waitFor({state:'hidden'});
    await page.route('**/api/digital-production/journeys?*',async route=>{
     if(new URL(route.request().url()).searchParams.get('search')!==b)return route.continue();
     const response=await route.fetch();
@@ -174,6 +176,9 @@ const database=process.env.TEST_DATABASE_URL;
    await wait.waitFor();
    expect(await table.getAttribute('aria-busy')).toBe('true');
    expect(await rows.allTextContents()).toEqual([a]);
+   const pagination=table.locator('.dx-production-pagination');
+   expect(await pagination.innerText()).not.toContain('共 1 条');
+   expect(await pagination.getByRole('button',{name:'跳转',exact:true}).isDisabled()).toBe(true);
    gate.resolve();
    await expect.poll(()=>rows.allTextContents()).toEqual([b]);
    await wait.waitFor({state:'hidden'});
