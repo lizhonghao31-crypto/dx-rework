@@ -13,7 +13,7 @@ export async function receivingDocumentHistory(database:Pool,batchId:string){
   const ids=(await db.query("SELECT receiving_batch_id FROM receiving_batches WHERE deleted_at IS NULL AND (receiving_batch_id=$1 OR cutting_order_id=$2::uuid AND $2::uuid IS NOT NULL) ORDER BY receiving_batch_id",[batchId,batch.cutting_order_id])).rows.map(row=>row.receiving_batch_id);
   const history=await readReceivingDocumentHistory(db,ids);
   await db.query("COMMIT");
-  return {...history,files:history.files.map(({mimeType: _mimeType,...file})=>file)};
+  return history;
  }catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}
 }
 
@@ -27,7 +27,7 @@ export async function readReceivingDocumentHistory(db:PoolClient,ids:readonly st
     FROM receiving_packing_revisions p LEFT JOIN operation_events event ON event.event_id=p.operation_event_id LEFT JOIN app_users u ON u.id=p.recorded_by WHERE p.receiving_batch_id=ANY($1::uuid[]) ORDER BY p.created_at,p.packing_revision_id`,[ids])).rows;
   const resolutions=(await db.query(`SELECT r.resolution_id AS id,r.difference_type AS "differenceType",r.result,r.created_at AS at,u.display_name AS "by",r.packing_revision_id AS "packingRevisionId"
     FROM receiving_difference_resolutions r LEFT JOIN app_users u ON u.id=r.handled_by WHERE r.receiving_batch_id=ANY($1::uuid[]) ORDER BY r.created_at,r.resolution_id`,[ids])).rows;
-  const files=includeFiles?(await db.query(`SELECT a.attachment_id AS id,a.original_filename AS filename,a.entity_id AS "entityId",a.status,a.mime_type AS "mimeType",a.created_at AS at,u.display_name AS "by",retired.retired_at AS "retiredAt"
+  const files=includeFiles?(await db.query(`SELECT a.attachment_id AS id,a.original_filename AS filename,a.entity_id AS "entityId",a.status,a.created_at AS at,u.display_name AS "by",retired.retired_at AS "retiredAt"
     FROM attachments a LEFT JOIN app_users u ON u.id=a.uploaded_by LEFT JOIN receiving_attachment_retirements retired USING(attachment_id)
     WHERE a.entity_type='receiving_batch' AND a.entity_id=ANY($1::text[]) OR a.entity_type='receiving_difference_resolution' AND a.entity_id=ANY($2::text[]) ORDER BY a.created_at,a.attachment_id`,[ids,resolutions.map(row=>row.id)])).rows:[];
   return {batchIds:ids,receipts:receipts.map(({actualTimeState,...receipt})=>({...receipt,...receiptTime(receipt.receivedAt,actualTimeState)})),corrections,packing:packing.map(({actual_time,...item})=>({...item,actualTime:packingActualTime(actual_time)})),resolutions,files};

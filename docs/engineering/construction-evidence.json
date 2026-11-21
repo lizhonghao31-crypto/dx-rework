@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "e2cd988a59c3978b91ab5030ca5ea44c512e7ee7",
-  "sourceFingerprint": "08b5cb8cbdd373c47afcf0f92ead6ffe20dd093f3e11f0d2ed7f7dd67c9f023e",
+  "sourceFingerprint": "e4bbede0a045831203e4091ee415dcc31ee20f25647a796d58b83c0327fc3039",
   "rules": [
     {
       "rule": "从座舱只读本单当前授权收货数据、历史和凭证，合计按可见 PO 或切单，凭证入口复用同范围复核",
@@ -50,20 +50,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "08b5cb8cbdd373c47afcf0f92ead6ffe20dd093f3e11f0d2ed7f7dd67c9f023e",
-      "testedHead": "c06eaba6472aafb4c9824b9f6cd59e0c2b620adf",
+      "sourceFingerprint": "e4bbede0a045831203e4091ee415dcc31ee20f25647a796d58b83c0327fc3039",
+      "testedHead": "28164b644b73b708977fe8fd97381049d3979145",
       "context": "Node 22.22.2 and locked dependencies; isolated TEST databases and their signed user sessions",
       "passed": 2,
       "failed": 0,
       "skipped": 19,
-      "startedAt": "2026-11-21T05:02:48.635000Z",
-      "endedAt": "2026-11-21T05:03:26.371891Z",
+      "startedAt": "2026-11-21T05:13:06.963000Z",
+      "endedAt": "2026-11-21T05:13:34.245947Z",
       "log": "/dev/shm/dx-finance.IUos5D/b-scope-final.json",
-      "logSha256": "733a8ee07aaa12477d1488eb3af8eb6bb61ab6e71e1d648dafafc745ef9ea6f3",
+      "logSha256": "dd920a9b59f2f910ad291d106cf4d2e9c1db3051c30a64c0c8417c016d1950a7",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "733a8ee07aaa12477d1488eb3af8eb6bb61ab6e71e1d648dafafc745ef9ea6f3"
+          "sha256": "dd920a9b59f2f910ad291d106cf4d2e9c1db3051c30a64c0c8417c016d1950a7"
         }
       ]
     },
@@ -73,20 +73,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "08b5cb8cbdd373c47afcf0f92ead6ffe20dd093f3e11f0d2ed7f7dd67c9f023e",
-      "testedHead": "c06eaba6472aafb4c9824b9f6cd59e0c2b620adf",
+      "sourceFingerprint": "e4bbede0a045831203e4091ee415dcc31ee20f25647a796d58b83c0327fc3039",
+      "testedHead": "28164b644b73b708977fe8fd97381049d3979145",
       "context": "Node 22.22.2 and locked dependencies; isolated TEST databases and their signed user sessions",
       "passed": 58,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T05:03:26.817000Z",
-      "endedAt": "2026-11-21T05:03:31.979978Z",
+      "startedAt": "2026-11-21T05:13:34.754000Z",
+      "endedAt": "2026-11-21T05:13:39.430035Z",
       "log": "/dev/shm/dx-finance.IUos5D/b-unit.json",
-      "logSha256": "482e08c030a92d354cfd097327cae803e761aeb111730c3a11efe14c282748d1",
+      "logSha256": "43c03642aa88fbd0342cf0e7c0a940c9cdb472fadffc87f81028518b19fddb95",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "482e08c030a92d354cfd097327cae803e761aeb111730c3a11efe14c282748d1"
+          "sha256": "43c03642aa88fbd0342cf0e7c0a940c9cdb472fadffc87f81028518b19fddb95"
         }
       ]
     }
