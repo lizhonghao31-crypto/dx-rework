@@ -1,4 +1,7 @@
 import type {ClosureLine} from '@dx-rework/contracts/order-closure';
+export function canOpenOrderReceiving(roles:readonly string[]){
+ return roles.some(role=>['root_superuser','owner_group','production_management','pmc','order_merchandiser','warehouse_receiver','warehouse_supervisor','quality_control'].includes(role));
+}
 /** Projection only: effective native receipts/packing remain the sole quantity source. */
 export function receivingSummary(lines:(Pick<ClosureLine,'lineId'|'orderedQuantity'|'actualQuantity'|'packingQuantity'>&Partial<Pick<ClosureLine,'packingRevisionId'|'effectivePackingQuantity'>>)[]){
  const unique=new Map(lines.map(line=>[line.lineId,line]));

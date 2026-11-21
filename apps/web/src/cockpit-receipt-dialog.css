@@ -1,0 +1,23 @@
+.cockpit-receipt-content {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+.cockpit-receipt-content :is(header,footer) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cockpit-receipt-content footer { justify-content: flex-end; }
+.cockpit-receipt-content :is(p,h2,dl,ul) { margin: 0; }
+.cockpit-receipt-content dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(100px,1fr));
+  gap: 8px;
+}
+.cockpit-receipt-content dl > div,
+.cockpit-receipt-content > ul > li { padding: 8px; border: 1px solid var(--dx-v2-color-border,#d9e2ec); }
+.cockpit-receipt-content dd { margin: 4px 0 0; font-weight: 600; }
+.cockpit-receipt-content > ul { list-style: none; padding: 0; display: grid; gap: 8px; }
+.cockpit-receipt-content img { width: 64px; height: 64px; object-fit: contain; }

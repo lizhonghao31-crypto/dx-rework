@@ -9,6 +9,12 @@ export function registerOrderClosureRoutes(app:FastifyInstance,dependencies:Digi
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError('VALIDATION_ERROR',result.error.issues[0]?.message??'请核对结案资料',400);return result.data;};
  const actor=async(request:FastifyRequest)=>businessActor(dependencies.root,await dependencies.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18)),request.id,'digital_production:view');
  const id=(request:FastifyRequest)=>parse(z.string().uuid(),(request.params as {orderId:unknown}).orderId);
+
+ const receipt='/digital-production/orders/:orderId/receipt-summary';
+ app.get(receipt,async(request,reply)=>{
+  reply.header('Cache-Control','no-store');
+  return service.cockpitReceipts.read(await actor(request),id(request));
+ });
  const base='/digital-production/orders/:orderId/closure';
  app.post(`${base}/quality`,async request=>service.recordQuality(await actor(request),id(request),parse(ReceiptQualitySchema,request.body),typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:''));
  app.post(`${base}/quality/verify-time`,async request=>service.verifyQualityTime(await actor(request),id(request),parse(ReceiptQualityVerificationSchema,request.body),typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:''));

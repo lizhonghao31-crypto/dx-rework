@@ -2,11 +2,12 @@ import { useEffect, useRef, type ReactNode } from "react";
 import "./receiving-dialog.css";
 
 /** Receiving-only dialog; native modal behavior keeps keyboard focus in the active layer. */
-export function ReceivingDialog({ children, title, busy = false, onClose }: {
+export function ReceivingDialog({ children, title, busy = false, onClose, returnFocus }: {
   children: ReactNode;
   title: string;
   busy?: boolean;
   onClose(): void;
+  returnFocus?: HTMLElement;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -17,8 +18,9 @@ export function ReceivingDialog({ children, title, busy = false, onClose }: {
     return () => {
       dialog?.close();
       document.body.style.overflow = previousOverflow;
+      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
     };
-  }, []);
+  }, [returnFocus]);
   return <dialog ref={ref} className="receiving-dialog" aria-label={title}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
     {children}

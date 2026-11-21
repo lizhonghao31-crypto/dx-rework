@@ -12,6 +12,8 @@ import {WholeOrderDeletionService} from '../../apps/api/src/production-platform/
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
+import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionDashboardService} from '../../apps/api/src/sourcing/production-dashboard-service.js';
 import {sourcingSlaEvidence} from '../../apps/api/src/production-platform/sourcing-sla-evidence.js';
@@ -31,7 +33,7 @@ async function openPendingCoverage(page:Parameters<typeof homeReady>[0]){
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R3-02 original full App homepage, authenticated PostgreSQL and bounded browser cases',()=>{
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
- beforeAll(async()=>{h=await cockpitHomeBrowser({databaseUrl:url!,evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??process.env.RUNNER_TEMP??tmpdir(),'m01-cockpit-home-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});},120000);
+ beforeAll(async()=>{h=await cockpitHomeBrowser({databaseUrl:url!,receivingDetails:true,evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??process.env.RUNNER_TEMP??tmpdir(),'m01-cockpit-home-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});},120000);
  afterAll(async()=>{await h?.dispose();});
  it('keeps live-clock reading passive and preserves original dialogs across explicit same-order refreshes',async()=>{
   const {context,page}=await h.open();let journeyReads=0,documentReads=0;
@@ -235,7 +237,87 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{release();await context.close();}
  });
  it('uses original received and packed facts for remaining receipt debt and never promotes a technical order UUID to business ID',async()=>{
-  const {context,page}=await h.open(undefined,{search:h.shortage.designStyleNo});try{const data=await h.read(page,{search:h.shortage.designStyleNo}),order=data.items[0]!;expect(order.businessProgress!.quantities!.lines.map(line=>line.remainingReceipt)).toEqual([2]);const trigger=page.getByRole('button',{name:/收货数量/});expect(await trigger.innerText()).toMatch(/部分收货\s*· 2\/4 件/);expect(await page.locator('.cockpit-home-receipt-gap').count()).toBe(0);const row=page.locator('.journey-orders tbody tr').first(),before=await row.boundingBox();expect(await row.innerText()).toContain('订单ID：—');expect(await row.innerText()).not.toContain(order.id);await page.screenshot({path:join(h.evidence,'full-home-original-receipt-debt.png'),fullPage:true});await trigger.click();const dialog=page.getByRole('dialog',{name:'风险明细'});await dialog.waitFor();expect(await dialog.innerText()).toContain('应收 4件 · 已收 2件 · 欠收 2件');expect(await dialog.locator('[aria-label="回货差额"] button').count()).toBe(1);await page.screenshot({path:join(h.evidence,'full-home-receipt-debt-modal.png'),fullPage:true});await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});expect(await trigger.evaluate(el=>el===document.activeElement)).toBe(true);expect((await row.boundingBox())!.height).toBe(before!.height);}finally{await context.close();}
+  const {context,page}=await h.open(undefined,{search:h.shortage.designStyleNo});try{const data=await h.read(page,{search:h.shortage.designStyleNo}),order=data.items[0]!;expect(order.businessProgress!.quantities!.lines.map(line=>line.remainingReceipt)).toEqual([2]);const trigger=page.getByRole('button',{name:/收货数量/});expect(await trigger.innerText()).toMatch(/部分收货\s*· 2\/4 件/);expect(await page.locator('.cockpit-home-receipt-gap').count()).toBe(0);const row=page.locator('.journey-orders tbody tr').first(),before=await row.boundingBox();expect(await row.innerText()).toContain('订单ID：—');expect(await row.innerText()).not.toContain(order.id);await page.screenshot({path:join(h.evidence,'full-home-original-receipt-debt.png'),fullPage:true});const requested=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith(`/orders/${order.orderId}/receipt-summary`));await trigger.click();const dialog=page.getByRole('dialog',{name:'本单收货明细'});await dialog.waitFor();expect((await requested).status()).toBe(200);await expect.poll(()=>dialog.locator('[data-receipt-quantity]').allTextContents()).toEqual(['4','2','2','0']);expect(await page.getByRole('dialog',{name:'风险明细'}).count()).toBe(0);await dialog.getByText('收货凭证',{exact:true}).click();const preview=dialog.locator('img').first();await expect.poll(()=>preview.evaluate((image:HTMLImageElement)=>image.complete&&image.naturalWidth>0)).toBe(true);expect(await dialog.getByRole('link',{name:'下载',exact:true}).getAttribute('href')).toMatch(/\/tools\/attachments\/[^/]+\/download\?mode=download$/);await page.screenshot({path:join(h.evidence,'full-home-receipt-debt-modal.png'),fullPage:true});await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});await expect.poll(()=>trigger.evaluate(el=>el===document.activeElement)).toBe(true);expect((await row.boundingBox())!.height).toBe(before!.height);}finally{await context.close();}
+ });
+ it('reuses whole-order receiving authority and original attachments for two native POs',async()=>{
+  const f=h.fixture;
+  const proof=await h.runInScene(async()=>{
+   const ready=await f.bulkReady('无',undefined,2,f.sourcing,{poQuantities:[4,6],stylePrefix:'TEST-RECEIPT-SCOPE-'});
+   const cuts=(await f.db.query<{cutting_order_id:string;sourcing_line_position:number}>(
+    'SELECT cutting_order_id,sourcing_line_position FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows;
+   expect(cuts).toHaveLength(2);
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   for(const [index,cut] of cuts.entries())await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:index?6:4,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),start=await flow.read(f.root,ready.id);
+   await flow.dispatch(f.people.warehouse!,ready.id,{expectedRevision:start.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST receiving scope dispatch'},randomUUID());
+   const production=(await f.db.query<{id:string}>('SELECT production_order_id AS id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.id;
+   const reporting=new ProductionReportingService(f.db),businessDate=beijingCalendarDate(businessNow());
+   await reporting.report(f.root,production,{position:1,businessDate,quantity:4},randomUUID());
+   const factoryName='TEST receiving scope hidden factory';
+   const factory=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:'TEST-'+randomUUID().slice(0,8).toUpperCase(),supplierType:'factory',supplierName:factoryName,address:'TEST',contractEntityName:factoryName,partyBRepresentative:'TEST',payeeName:factoryName,bankAccount:'TEST9987',bankName:'TEST',changeReason:'TEST independent PO scope'}));
+   await f.sourcing.requestFactoryChange(f.people['production-management']!,ready.caseId,{supplierId:factory.supplierId,unitPrice:'6',changeReason:'TEST transfer only the second PO'},randomUUID());
+   const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},ready.caseId)).item!;
+   const decision=(await f.sourcing.decideFactoryChange(f.people.owner!,ready.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST separate receiving scopes'},randomUUID())).value.decision!.sourcingDecisionId;
+   await reporting.report(f.root,production,{factoryDecisionId:decision,position:2,businessDate,quantity:6},randomUUID());
+   for(const factoryDecisionId of [null,decision]){
+    const execution={...(factoryDecisionId?{factoryDecisionId}:{}),businessDate,confirmed:true};
+    await reporting.execute(f.root,production,'complete',execution,randomUUID());
+    await reporting.execute(f.root,production,'ship',execution,randomUUID());
+   }
+   const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+   const service=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
+   const files=[await f.image(warehouse),await f.image(warehouse)];
+   const receipts=[];
+   for(const [i,cut] of cuts.entries())receipts.push((await service.create(warehouse,{cuttingOrderId:cut.cutting_order_id,productionOrderId:production,
+    factoryDecisionId:i?decision:null,documentQuantity:i?6:4,actualQuantity:i?5:1,attachmentIds:[files[i]!]},randomUUID())).value);
+   const worker=f.people['pattern-room-worker']!;
+   await f.access.assignRole(f.root,{userId:worker.actorId,roleCode:'production_reporter',reason:'TEST first factory only'});
+   const reportingScope={userId:worker.actorId,scopeType:'supplier' as const,scopeId:f.supplierId};
+   await reporting.setScope(f.root,{...reportingScope,active:true},randomUUID());
+   const mother=(await new DigitalProductionIdentityService(f.db,true).read(f.root,ready.id));
+   return {mother,worker,receipts,files,service};
+  });
+  const endpoint='/api/digital-production/orders/'+proof.mother.productionOrderId+'/receipt-summary';
+  const navigation={path:'/ui/digital-cockpit'};
+  const partial=await h.open(proof.worker.actorId,{},1165,1,navigation);
+  const root=await h.open(undefined,{},1165,1,navigation);
+  const warehouse=await h.open(f.people.warehouse!.actorId,{},1165,1,navigation);
+  try{
+   const denied=await partial.page.request.get(h.base+endpoint);
+   expect(denied.status()).toBe(404);
+   for(const identity of [...proof.mother.lines.map(line=>line.lineId),...proof.files])
+    expect(await denied.text()).not.toContain(identity);
+   const storekeeper=await warehouse.page.request.get(h.base+endpoint);
+   expect(storekeeper.status(),await storekeeper.text()).toBe(200);
+   expect(await storekeeper.json()).toMatchObject({totals:{demand:10,received:6,remaining:4,excess:0},
+    lines:[{received:1},{received:5}],documents:expect.arrayContaining(proof.files.map(id=>({id,filename:expect.any(String)})))});
+   const whole=await root.page.request.get(h.base+endpoint);
+   expect(whole.status()).toBe(200);
+   expect(await whole.json()).toMatchObject({totals:{demand:10,received:6,remaining:4,excess:0},lines:[{received:1},{received:5}]});
+   const receivedOnSecondPo=async(actualQuantity:number)=>h.runInScene(async()=>{
+    const record=proof.receipts[1]!;
+    const latest=(await f.db.query<{style_no:string;version:number}>(
+     'SELECT style_no,version FROM receiving_batches WHERE receiving_batch_id=$1',[record.receivingBatchId])).rows[0]!;
+    await proof.service.correctBatch({...f.root,authorizationCapability:'receiving:correct'},record.receivingBatchId,
+     {styleNo:latest.style_no,expectedVersion:latest.version,documentQuantity:6,actualQuantity,defectiveQuantity:0});
+   });
+   await receivedOnSecondPo(9);
+   const surplus=await root.page.request.get(h.base+endpoint);
+   expect(surplus.status()).toBe(200);
+   expect(await surplus.json()).toMatchObject({status:'部分收货',totals:{demand:10,received:10,remaining:3,excess:3},
+     lines:[{demand:4,received:1},{demand:6,received:9}]});
+   await receivedOnSecondPo(5);
+   for(const mode of ['preview','download']){
+    const original=await warehouse.page.request.get(h.base+'/api/tools/attachments/'+proof.files[0]+'/download?mode='+mode,{maxRedirects:0});
+    expect(original.status(),await original.text()).toBe(302);
+    expect(original.headers().location).toBeTruthy();
+   }
+   const history=await warehouse.page.request.get(h.base+'/api/receiving/batches/'+proof.receipts[0]!.receivingBatchId+'/document-history');
+   expect(history.status()).toBe(200);
+   expect(await history.json()).toMatchObject({receipts:[expect.objectContaining({receiptId:proof.receipts[0]!.receiptId})]});
+   const wrongOrder=await root.page.request.get(h.base+endpoint.replace(proof.mother.productionOrderId,randomUUID()));
+   expect(wrongOrder.status()).toBe(404);
+  }finally{await partial.context.close();await root.context.close();await warehouse.context.close();}
  });
  it('keeps a failed category read distinct from empty orders and retries through the original request path',async()=>{
   const {context,page}=await h.open();try{await page.route('**/api/digital-production/journeys?**',async route=>{if(new URL(route.request().url()).searchParams.has('missing'))await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_HOME_TRANSPORT',message:'TEST category read failed'}})});else await route.continue();});await openPendingCoverage(page);await page.locator('.cockpit-coverage-categories button:enabled').first().click();const dialog=page.getByRole('dialog');await dialog.getByRole('alert').waitFor();expect(await dialog.innerText()).not.toContain('当前条件下没有对应订单');expect(await dialog.locator('.cockpit-coverage-order-list').count()).toBe(0);await page.unroute('**/api/digital-production/journeys?**');await dialog.getByRole('button',{name:'重新读取',exact:true}).click();await coverageReady(page);expect(await dialog.locator('.cockpit-coverage-order-list li').count()).toBeGreaterThan(0);await page.keyboard.press('Escape');await homeReady(page);
@@ -516,5 +598,6 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }]},items:[],events:[],totalCount:0});
   await expect(dashboard.detail(actor,productionId,null,id)).rejects.toMatchObject({statusCode:404});
  });
+
 
 });
