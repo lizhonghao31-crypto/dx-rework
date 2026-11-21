@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "1d163c5e523b09dc455faece3f089695cf59aa8c",
-  "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
+  "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
   "rules": [
     {
       "rule": "保留各原生分页协议，直接读取合法目标页。先核资格和授权，SLA 历史固定浏览范围，旧游标仍有原语义",
@@ -64,7 +64,8 @@
         "tests/integration/m01-sla-history-postgres.test.ts",
         "tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts",
         "tests/unit/list-pagination.test.ts",
-        "tests/unit/my-todos-navigation.test.ts"
+        "tests/unit/my-todos-navigation.test.ts",
+        "tests/unit/order-centered-workflow-ui.test.ts"
       ],
       "checks": [
         "paging-unit",
@@ -80,20 +81,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
-      "testedHead": "545fe8c905b41e40a9039c6144c0a406afb1c590",
+      "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
+      "testedHead": "aa35bf7754120d91b911ec6f09cc08150096692b",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
-      "passed": 60,
+      "passed": 63,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T06:29:16.698000Z",
-      "endedAt": "2026-11-21T06:29:23.457094Z",
+      "startedAt": "2026-11-21T06:55:09.057000Z",
+      "endedAt": "2026-11-21T06:55:15.258195Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-unit.json",
-      "logSha256": "b9721b4850e3a0fbfe17f0597a69db16ff341aefd5dc3f0b084951162f6b3147",
+      "logSha256": "7d8add8e5d4435e992edb39d0e3d652b635f14e07d320a207a37d784f4ac7b2c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b9721b4850e3a0fbfe17f0597a69db16ff341aefd5dc3f0b084951162f6b3147"
+          "sha256": "7d8add8e5d4435e992edb39d0e3d652b635f14e07d320a207a37d784f4ac7b2c"
         }
       ]
     },
@@ -103,20 +104,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
-      "testedHead": "545fe8c905b41e40a9039c6144c0a406afb1c590",
+      "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
+      "testedHead": "aa35bf7754120d91b911ec6f09cc08150096692b",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
       "passed": 13,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T06:29:24.865000Z",
-      "endedAt": "2026-11-21T06:29:45.969452Z",
+      "startedAt": "2026-11-21T06:55:16.440000Z",
+      "endedAt": "2026-11-21T06:55:37.034555Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-pg.json",
-      "logSha256": "35e4ff4b8af2c1377cc8607130fe516b3e970eecd738d00ff90269f50002a544",
+      "logSha256": "63c10de5eb3e89ffe0b56bab2dca5f8dd91c0d4d3fb77d3104a63ce8bc6cf678",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "35e4ff4b8af2c1377cc8607130fe516b3e970eecd738d00ff90269f50002a544"
+          "sha256": "63c10de5eb3e89ffe0b56bab2dca5f8dd91c0d4d3fb77d3104a63ce8bc6cf678"
         }
       ]
     },
@@ -126,20 +127,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2ee5a6e4a493f2aeb5eb7057d91f9ad4d831dd6dd2fbb30013f6dfc9605c5465",
-      "testedHead": "545fe8c905b41e40a9039c6144c0a406afb1c590",
+      "sourceFingerprint": "36a73f6931cba9f30999fe8adf5bc124cd0182beb722e474648559658152c9b1",
+      "testedHead": "aa35bf7754120d91b911ec6f09cc08150096692b",
       "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
       "passed": 4,
       "failed": 0,
       "skipped": 31,
-      "startedAt": "2026-11-21T06:29:47.275000Z",
-      "endedAt": "2026-11-21T06:31:10.622822Z",
+      "startedAt": "2026-11-21T06:55:38.692000Z",
+      "endedAt": "2026-11-21T06:58:11.833119Z",
       "log": "/dev/shm/dx-finance.IUos5D/c-exact-browser.json",
-      "logSha256": "425dd68d5d5041cb4c652e1df1c24c2b42c3e87e8f256d5c2ea7d11df6bf5097",
+      "logSha256": "461dbabaa58aa3752c158f83cb3df661ab28edbf2f47f437963381e2b0afbf21",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "425dd68d5d5041cb4c652e1df1c24c2b42c3e87e8f256d5c2ea7d11df6bf5097"
+          "sha256": "461dbabaa58aa3752c158f83cb3df661ab28edbf2f47f437963381e2b0afbf21"
         }
       ]
     }
