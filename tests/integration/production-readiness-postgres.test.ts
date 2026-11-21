@@ -850,11 +850,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await materialInvestmentRiskHistory(h.db,orderId,completeAt)).toMatchObject([{at:completeAt,deadline:reminder.dueAt,assessment:'late',overdueSeconds:3600}]);
   });
  });
- it.each(['before','after'] as const)('uses the original direct order handover and overdue cutoff when the source is linked %s adoption',async(linkWhen)=>{
+ const directMaterialOrder=async()=>{
   const h=await materialTimerFixture();
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,root=h.f.root,style='TEST-DIRECT-MATERIAL-'+randomUUID();
   const started='2027-04-25T04:00:00.000Z',scene=await h.f.scene(started),requests=h.orderTimeRequests!;
-  const preparation=new ProductionReadinessService(h.db),instruction=new ProductionInstructionService(h.db,true),plans=new OrderTimePlanRepository(h.db);
   const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2027-04-25',
    requiresColorMatching:false,salesYear:2027,salesSeries:'P03',primaryMerchandiserId:merch.actorId,
    lines:[{formalPoNo:style+'-PO',color:'黑',customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:2}]}]});
@@ -868,6 +867,52 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const done=await requests.apply(root,pending.requestId,{expectedVersion:pending.version,fingerprint:pending.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
    expect(done.state).toBe('applied');return done.result!.orderId!;
   });
+  return {h,designer,merch,root,style,started,scene,requests,orderId};
+ };
+ it.each(['composition','fabric remarks'] as const)('requires new direct-order material evidence after %s changes in the saved instruction',async(field)=>{
+  const {h,merch,root,started,scene,orderId}=await directMaterialOrder(),resource={kind:'order' as const,id:orderId};
+  const preparation=new ProductionReadinessService(h.db),instruction=new ProductionInstructionService(h.db,true),fabricId=randomUUID(),accessoryId=randomUUID();
+  const original={...initialInstruction(),secondaryCraft:'无' as const,preshrink:'无需预缩' as const,composition:'100%纯棉',
+   fabrics:[{id:fabricId,name:'TEST主布',part:'本身',colors:{},remarks:'幅宽145cm／克重140g'}],
+   accessories:[{id:accessoryId,group:'车缝' as const,garmentColors:'',materialColor:'黑',name:'TEST纽扣',category:'',part:'门襟',specification:'20mm',consumption:'2枚',remarks:''}]};
+  const save=async(document:typeof original)=>h.f.runtime.run(scene,merch,async()=>{
+   const current=await instruction.read(merch,orderId);
+   return (await instruction.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,document},randomUUID())).version;
+  });
+  const handover=async(expectedVersion:number,orderInstructionVersion:number)=>h.f.runtime.run(scene,root,()=>preparation.record(root,resource,{
+   kind:'design_handover',scopeRef:'whole',expectedVersion,state:'ready',occurredAt:started,note:'TEST 实际制单交接',quantities:[],evidenceIds:[],
+   sourceDocumentVersion:null,orderInstructionVersion,recipientId:merch.actorId},randomUUID()));
+  const purchase={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,note:'TEST 原实际投料',
+   quantities:[{lineId:null,materialId:fabricId,name:'TEST主布',quantity:20,unit:'米'},{lineId:null,materialId:accessoryId,name:'TEST纽扣',quantity:4,unit:'枚'}],
+   evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+  const handed=(await handover(0,await save(original))).facts.find(row=>row.kind==='design_handover')!;
+  const before=(await h.f.runtime.run(scene,merch,()=>preparation.record(merch,resource,purchase,randomUUID()))).facts.find(row=>row.kind==='material_investment')!;
+  expect(before).toMatchObject({state:'ready',version:1});
+  await save({...original,comments:'TEST 非材料正文更正'});
+  expect((await preparation.read(merch,resource)).facts.find(row=>row.kind==='material_investment')).toMatchObject({state:'ready',version:1});
+  const revised=field==='composition'?{...original,composition:'100%聚酯'}:{...original,fabrics:[{...original.fabrics[0]!,remarks:'幅宽155cm／克重155g'}]};
+  const revision=await save(revised);
+  const pending=await preparation.read(merch,resource);
+  expect(pending.facts.find(row=>row.kind==='design_handover')).toMatchObject({recordId:handed.recordId,valid:false});
+  expect(pending.facts.find(row=>row.kind==='material_investment')).toMatchObject({state:'partial',recordId:before.recordId,version:1});
+  const reread=(await readSeriesPlanFacts(h.db,orderId,null,'PD')).facts.find(row=>row.key==='material_investment');
+  expect(reread).toMatchObject({sourceRecordId:before.recordId,completed:false});
+  const renewed=await handover(1,revision),basis=renewed.facts.find(row=>row.kind==='design_handover')!.investmentScopeBasis!;
+  expect(basis.materialFingerprints[fabricId]).not.toBe(handed.investmentScopeBasis!.materialFingerprints[fabricId]);
+  expect(basis.materialFingerprints[accessoryId]).toBe(handed.investmentScopeBasis!.materialFingerprints[accessoryId]);
+  const todos=()=>h.f.runtime.run(scene,merch,()=>materialInvestmentTodos(h.db,merch,{todoId:handed.recordId}));
+  expect(await todos()).toMatchObject([{dueAt:null,route:{entityId:orderId}}]);
+  const result=await h.f.runtime.run(scene,merch,()=>preparation.record(merch,resource,{...purchase,expectedVersion:1,
+   investmentMaterialId:fabricId,quantities:[purchase.quantities[0]!] },randomUUID()));
+  const completed=result.facts.find(row=>row.kind==='material_investment')!;
+  expect(completed).toMatchObject({recordId:before.recordId,version:2,state:'ready'});
+  expect(completed.investmentMaterialOccurrences?.[accessoryId]).toEqual(before.investmentMaterialOccurrences?.[accessoryId]);
+  expect(await todos()).toEqual([]);
+ });
+
+ it.each(['before','after'] as const)('uses the original direct order handover and overdue cutoff when the source is linked %s adoption',async(linkWhen)=>{
+  const {h,designer,merch,root,style,started,scene,requests,orderId}=await directMaterialOrder();
+  const preparation=new ProductionReadinessService(h.db),instruction=new ProductionInstructionService(h.db,true),plans=new OrderTimePlanRepository(h.db);
   const resource={kind:'order' as const,id:orderId},materialId=randomUUID();
   const handover={kind:'design_handover' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,
    note:'TEST 无来源正式单的实际交接',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:merch.actorId};
