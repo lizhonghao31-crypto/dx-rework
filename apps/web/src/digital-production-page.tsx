@@ -19,6 +19,7 @@ import { digitalTaskView } from "./digital-task-view.js";
 import { digitalRequest } from "./digital-production-api.js";
 import type { DigitalAccessOptions } from "./digital-production-access-panel.js";
 import { createClientRequestId } from "./client-request-id.js";
+import {ProductionReadinessPanel} from "./production-readiness-panel.js";
 import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailRoute, digitalLandingPath } from "./digital-detail-route.js";
 import "./pattern-room.css";
 import "./digital-production.css";
@@ -177,6 +178,12 @@ function DigitalProductionPageContent() {
     case "shortLead": detail = <ShortLeadWorkspace key={route.id} sourceId={route.id} onClose={()=>void closeDetail()}/>; break;
     case "closure": detail = <OrderClosurePanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "factory": detail = <FactoryFlowPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
+    case "materialSource":
+    case "materialOrder":
+      detail = <section aria-label="投面辅料办理"><Button variant="secondary" onClick={()=>void closeDetail()}>返回来源</Button>
+        <ProductionReadinessPanel key={`${route.kind}:${route.id}`}
+          resource={{kind:route.kind==='materialSource'?'source':'order',id:route.id}} focusKind="material_investment"/></section>;
+      break;
     case "bulk": detail = <BulkPreparationPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "instruction": detail = <OrderDocumentContainer key={`instruction:${route.id}:${route.version}`} initial={{kind:"instruction",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "budget": detail = <OrderDocumentContainer key={`budget:${route.id}:${route.version}`} initial={{kind:"budget",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;

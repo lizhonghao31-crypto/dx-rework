@@ -1243,6 +1243,10 @@
     {
       "version": "0296_development_first_publication",
       "checksum": "c6ae660cfc41c3f8174df90f9e695c12ddee794f39600bfc765142ae18e297d5"
+    },
+    {
+      "version": "0297_preorder_preparation_material_evidence",
+      "checksum": "f188b2cf2693f61931c82b104f83dc3453434792c11f319491b1abaab7f82a4f"
     }
   ]
 }

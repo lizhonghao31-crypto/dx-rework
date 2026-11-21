@@ -2,7 +2,7 @@ import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framewor
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {buildOrderTimeWork} from './order-time-schedule.js';
 import {fixedTimelineTargets,shiftFixedTimeline,type FixedTimelineTarget} from './fixed-timeline-targets.js';
-import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
+import type {SlaTime} from '@dx-rework/domain/digital-sla-plan';
 import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
 import {orderTimeWorkDefinition} from './fixed-work-definition.js';
 
@@ -38,15 +38,16 @@ export function frameworkNodeTargets(plan:FrozenTimeFramework):Map<string,FixedT
  const constrained=new Set(['design_handover','material_investment','budget','customer_confirmation']);
  const events=plan.input.work.filter(row=>constrained.has(row.parameterKey)&&orderTimeRule(plan.input.plan,row.parameterKey)?.rule.kind==='event');
  if(!events.length)return targets;
- const ends:Record<string,SlaAnchor>={};
+ const ends:Record<string,SlaTime>={};
  for(const milestone of plan.milestones)for(const id of milestone.workIds){
-  const prior=ends[id];if(!prior||prior.precision==='date'&&milestone.date<prior.value)ends[id]={precision:'date',value:milestone.date,source:`本单里程碑:${milestone.key}`};
+  const target=milestone.target,prior=ends[id];
+  if(!prior||target.at&&prior.at&&(Date.parse(target.at)<Date.parse(prior.at)||target.at===prior.at&&target.exclusive&&!prior.exclusive))ends[id]=target;
  }
- const bounds=new Map(fixedTimelineTargets(buildOrderTimeWork(plan.input.plan,plan.input.work.map(row=>({id:row.id,parameterKey:row.parameterKey,stage:row.stage,dependsOn:row.dependsOn,...(row.includedIn?{includedIn:row.includedIn}:{}),...(row.includedPosition?{includedPosition:row.includedPosition}:{}),...(row.canonicalWorkRef?{canonicalWorkRef:row.canonicalWorkRef}:{}),...(row.craftStep?{craftStep:row.craftStep}:{}),...(row.nativeDuration?{nativeDuration:row.nativeDuration}:{})}))),ends,{preserveUnknown:true}).map(row=>[row.id,row]));
+ const bounds=new Map(fixedTimelineTargets(buildOrderTimeWork(plan.input.plan,plan.input.work.map(row=>({id:row.id,parameterKey:row.parameterKey,stage:row.stage,dependsOn:row.dependsOn,...(row.includedIn?{includedIn:row.includedIn}:{}),...(row.includedPosition?{includedPosition:row.includedPosition}:{}),...(row.canonicalWorkRef?{canonicalWorkRef:row.canonicalWorkRef}:{}),...(row.craftStep?{craftStep:row.craftStep}:{}),...(row.nativeDuration?{nativeDuration:row.nativeDuration}:{})}))),{},{endTimes:ends,preserveUnknown:true}).map(row=>[row.id,row]));
  for(const event of events){
   // A direct milestone owns its business date. Budget/commercial preparation
   // uses the necessary downstream boundary, never an invented work duration.
-  const direct=plan.milestones.filter(row=>row.workIds.includes(event.id)).sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const direct=plan.milestones.filter(row=>row.workIds.includes(event.id)).sort((a,b)=>a.target.at===null?-1:b.target.at===null?1:Date.parse(a.target.at)-Date.parse(b.target.at))[0];
   const end=direct?.target??bounds.get(event.id)?.end;
   if(end)targets.set(event.id,{id:event.id,start:structuredClone(end),end:structuredClone(end)});
  }

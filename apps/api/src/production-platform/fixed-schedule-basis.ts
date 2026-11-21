@@ -25,7 +25,7 @@ import {readOrderTimeBasis,attachOrderTimeCoverage} from './order-time-reading.j
 import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
 import {fixedScheduleStages} from './fixed-schedule-stages.js';
 
-export type FixedScheduleBasis={framework?:JourneyFrameworkBasis;version:'fixed-schedule-basis-v1';policyVersion?:'order-time-plan-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean;notApplicableNodes?:Array<'process_logistics'|'bulk_qc'>};
+export type FixedScheduleBasis={materialInvestmentTiming?:{dueAt:string;warningAt:string|null;exclusive:boolean};framework?:JourneyFrameworkBasis;version:'fixed-schedule-basis-v1';policyVersion?:'order-time-plan-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean;notApplicableNodes?:Array<'process_logistics'|'bulk_qc'>};
 type DB=Pick<PoolClient,'query'>;
 const unknown:ScheduleOccurrence={precision:'unknown'};
 const occurrence=(at:unknown):ScheduleOccurrence=>at instanceof Date?{precision:'instant',at:at.toISOString()}:typeof at==='string'&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)&&Number.isFinite(Date.parse(at))?{precision:'instant',at:new Date(at).toISOString()}:unknown;
@@ -222,6 +222,11 @@ export function nextFixedScheduleClassification(basis:FixedScheduleBasis,asOf:st
  if(basis.termination)return null;
  const now=Date.parse(asOf);let next:number|null=null;
  const consider=(at:number)=>{if(at>now&&(next===null||at<next))next=at;};
+ const material=basis.materialInvestmentTiming;
+ if(material){
+  if(material.warningAt)consider(Date.parse(material.warningAt));
+  consider(Date.parse(material.dueAt)+(material.exclusive?0:1));
+ }
  for(const scope of basis.scopes){
   const current=evaluateFixedScheduleScope(scope,asOf);
   for(const milestone of basis.framework?.find(row=>row.scopeRef===scope.scopeRef)?.milestones??[])if(milestone.at&&!milestone.workIds.every(id=>scope.facts[id]?.businessCompleted))consider(Date.parse(milestone.at));

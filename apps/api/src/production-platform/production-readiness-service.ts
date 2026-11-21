@@ -2,7 +2,7 @@ import {BulkPreparationService} from './bulk-preparation-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import {PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,PREPARATION_RULE_VERSION,type PreparationMaterialKind,type PreparationMaterialRecord,type PreparationResource,type ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
+import {CloseMaterialInvestmentReminderSchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,PREPARATION_RULE_VERSION,type PreparationMaterialKind,type PreparationMaterialRecord,type PreparationResource,type ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {isRootActor} from '../access/business-authority.js';
 import {businessNow,acceptanceBusinessContext,observedBusinessTime} from '../acceptance-clock/business-time.js';
@@ -10,6 +10,7 @@ import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {preparationContext,preparationAvailable,preparationAdoption,preparationHash,preparationIso,preparationMaterialHistory,currentPreparationMaterials,preparationResponsibility,appendPreparationMaterial,type PreparationDB} from './preparation-material-repository.js';
+import {materialInvestmentReminder} from './material-investment-reminder.js';
 import {productionReadiness,preparationWindow,refreshPreparationWindows} from './production-readiness-repository.js';
 const conflict=(message:string):never=>{throw new ApplicationError('PREPARATION_CONFLICT',message,409);};
 export class ProductionReadinessService{
@@ -27,7 +28,16 @@ export class ProductionReadinessService{
   const readable=leader||designer||merch||warehouse||color||await policy.allowed(actor,resource.kind,resource.id,'technical');
   if(!readable)digitalForbidden();
   await acceptanceBusinessContext()?.assertScope(resource);
-  return {context,policy,responsibility,history,facts,leader,designer,merch,warehouse,color};
+  // An ordinary preorder recipient reads only the handover and original
+  // investment. The development document remains governed by its own route.
+  const recipientOnly=!context.order&&merch&&!leader&&!designer&&!warehouse&&!color;
+  const sourceDocument=recipientOnly&&context.sourceId?await developmentDocumentRow(db,context.sourceId):null;
+  const investmentOnly=sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true
+    &&sourceDocument.document.customerOrderDraft.stage==='preorder';
+  return {context,policy,responsibility,
+   history:investmentOnly?history.filter(row=>['design_handover','material_investment'].includes(row.kind)):history,
+   facts:investmentOnly?facts.filter(row=>['design_handover','material_investment'].includes(row.kind)):facts,
+   leader,designer,merch,warehouse,color};
  }
  async authorize(actor:TrustedActorContext,resource:PreparationResource){await this.access(this.database,actor,resource);}
  async readResponsibility(actor:TrustedActorContext,resource:PreparationResource,db:PreparationDB){
@@ -47,7 +57,10 @@ export class ProductionReadinessService{
   const deliveries=orderId&&await preparationAvailable(db)?(await db.query('SELECT * FROM digital_instruction_deliveries WHERE production_order_id=$1 ORDER BY recorded_at,event_id',[orderId])).rows:[];
   const ranges=orderId&&await preparationAvailable(db)?(await db.query('SELECT r.* FROM digital_bulk_work_ranges r JOIN digital_bulk_preparations p USING(preparation_id) WHERE p.production_order_id=$1 ORDER BY r.preparation_id,r.kind,r.version,r.range_id',[orderId])).rows:[];
   const sourceDocument=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;
-  return {sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
+  const handover=a.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole'&&f.state==='ready'&&f.valid&&f.investmentScopeBasis);
+  const investment=a.facts.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
+  const reminder=handover&&a.context.sourceId&&investment?.state!=='ready'?await materialInvestmentReminder(db,{sourceId:a.context.sourceId,orderId,handoverId:handover.recordId,scopeFingerprint:handover.investmentScopeBasis!.fingerprint}):null;
+  return {...(reminder?{materialInvestmentReminder:{...reminder,canClose:!reminder.termination&&(a.merch||isRootActor(actor))}}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
    canDeliverInstruction:a.merch||isRootActor(actor),canAcknowledgeAdoption:!enrolled&&Boolean(orderId)&&(a.merch||isRootActor(actor)),canAdopt:!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
    adoptionReason:enrolled?null:'历史单未自动套用；主跟单核对预览后由供应链总监、老板或 Root 明确采用，完成实绩不重算',finalReasons:readiness?.finalReasons??[],technicalRevision:readiness?.technical?.revision??null,
    draftWindow:orderId?await preparationWindow(db,orderId,'draft'): {startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:'正式单形成前保留真实投料及到仓记录',status:'waiting'},
@@ -74,7 +87,7 @@ export class ProductionReadinessService{
      else if(kind==='material_investment'&&a.merch)required='order_merchandiser';
      else if(['fabric_receipt','accessories_ready','style_label_ready'].includes(kind)&&a.warehouse)required=actor.actorRoles.includes('warehouse_supervisor')?'warehouse_supervisor':'warehouse_receiver';
      else if(kind==='color_confirmation'&&a.color)required=a.responsibility.colorConfirmationRole;
-    }else if(action==='deliver'||action==='acknowledge'){if(a.merch)required='order_merchandiser';}
+    }else if(action==='deliver'||action==='acknowledge'||action==='close_material_investment_reminder'){if(a.merch)required='order_merchandiser';}
     else if(a.leader)required=actor.actorRoles.includes('owner_group')?'owner_group':'production_management';
     if(!required||!await a.policy.lockActiveRole(actor.actorId,required))digitalForbidden();
    }
@@ -94,8 +107,9 @@ export class ProductionReadinessService{
  async bindFiles(db:PreparationDB,actor:TrustedActorContext,resource:PreparationResource,ids:string[]){
   const a=await this.access(db,actor,resource);
   const source=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;
-  const handedDraft=source&&a.merch&&a.facts.some(f=>f.kind==='design_handover'&&f.state==='ready'&&f.valid&&f.sourceDocumentVersion===source.version);
-  const sourceFiles=source&&(source.status==='published'||a.designer||isRootActor(actor)||handedDraft)?source.document.files.map((f:{attachmentId:string})=>f.attachmentId):[];
+  const handover=a.merch?a.facts.find(f=>f.kind==='design_handover'&&f.state==='ready'&&f.valid):undefined;
+  const sourceFiles=source&&(source.status==='published'||a.designer||isRootActor(actor))
+   ?source.document.files.map((f:{attachmentId:string})=>f.attachmentId):handover?.evidenceIds??[];
   for(const id of [...ids].sort()){
    const row=(await db.query('SELECT * FROM attachments WHERE attachment_id=$1 FOR UPDATE',[id])).rows[0];
    if(!row||row.status!=='ready')conflict('凭证尚未上传完成或已失效');
@@ -124,10 +138,33 @@ export class ProductionReadinessService{
    for(const q of input.quantities){
     if(q.lineId&&!a.context.lines.some(l=>l.line_id===q.lineId))conflict('物料款色不属于本单');
     if(q.materialId){const d=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;const instruction=a.context.orderId?(await db.query('SELECT document FROM digital_instruction_documents WHERE production_order_id=$1',[a.context.orderId])).rows[0]:null;
-     if(!d?.document.materials.some((m:{materialId:string})=>m.materialId===q.materialId)&&!instruction?.document.accessories.some((m:{id:string})=>m.id===q.materialId))conflict('物料不属于本单当前资料');}
+     const retained=input.kind==='material_investment'&&prior?.investmentScopeBasis&&prior.quantities.some(row=>
+      row.materialId===q.materialId&&row.lineId===q.lineId&&row.unit===q.unit&&row.name===q.name&&row.quantity===q.quantity);
+     if(!d?.document.materials.some((m:{materialId:string})=>m.materialId===q.materialId)&&!instruction?.document.accessories.some((m:{id:string})=>m.id===q.materialId)&&!retained)
+      conflict('物料不属于本单当前资料');}
+   }
+   if(input.kind==='material_investment'&&['ready','partial'].includes(input.state)){
+    const handover=a.facts.find(row=>row.kind==='design_handover'&&row.scopeRef===input.scopeRef&&row.state==='ready'&&row.valid);
+    const materialIds=handover?.investmentScopeBasis?.materialIds;
+    if(materialIds&&input.quantities.some(row=>!prior?.quantities.some(previous=>
+       row.materialId===previous.materialId&&row.lineId===previous.lineId&&row.unit===previous.unit&&row.name===previous.name&&row.quantity===previous.quantity)
+       &&(!row.materialId||!materialIds.includes(row.materialId))))conflict('新增投面辅料须选择本次实际交接的物料');
    }
    await this.bindFiles(db,actor,resource,input.evidenceIds);
    await appendPreparationMaterial(db,a.context,actor.actorId,input);
+  });
+ }
+ async closeMaterialInvestmentReminder(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string){
+  const input=CloseMaterialInvestmentReminderSchema.parse(raw);
+  return this.command(actor,resource,'close_material_investment_reminder',input,key,async(db,a)=>{
+   if(!a.merch&&!isRootActor(actor))digitalForbidden();
+   const current=(await this.read(actor,resource,db)).materialInvestmentReminder;
+   if(!current||current.fingerprint!==input.fingerprint||!current.enabled||!current.warningAt||current.status==='waiting')
+    return conflict('当前没有可关闭的投面辅料提醒，请重新读取');
+   if(current.closed)return;
+   await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
+    VALUES($1,$2,$3,'preparation_material_reminder_closed','digital_material_investment',$4,$5)`,[randomUUID(),actor.requestId,actor.actorId,current.handoverId,
+    JSON.stringify({...current,reason:input.reason,occurredAt:businessNow().toISOString()})]);
   });
  }
  async assign(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string){

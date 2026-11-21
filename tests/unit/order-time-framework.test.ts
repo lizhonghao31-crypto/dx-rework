@@ -7,6 +7,7 @@ import {overlayFrameworkCompletion,retainedFrameworkWork} from '../../apps/api/s
 import {formalRemainingSchedule,type FormalRemainingInputs} from '../../apps/api/src/production-platform/order-time-formal-arrangement.js';
 import type {OrderTimeInput,StoredOrderTimePlan} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {evaluateOrderTimeScenario} from '../../apps/api/src/production-platform/order-time-schedule.js';
+import {materialInvestmentWarningAt} from '../../apps/api/src/production-platform/material-investment-reminder.js';
 import {arrangedOrderTimeTarget} from '../../apps/api/src/production-platform/framework-node-targets.js';
 
 const at=(day:number,hour=8)=>`2026-11-${String(day).padStart(2,'0')}T${String(hour).padStart(2,'0')}:00:00+08:00`;
@@ -28,6 +29,63 @@ function fixture():TimeFrameworkInput{
   milestoneStandard:standard,work,bindings:Object.entries(standard.offsets).filter(([,offset])=>offset!==null).map(([key])=>({key,workIds:[key==='processing_dispatch'?'dispatch':'pack']})),notBefore:{}});
 }
 const version={reference:'TEST plan1',revision:1,previousReference:null,eventRef:'TEST native approval'};
+
+it('uses adopted working time for the 70 percent reminder without treating a zero-credit window as a deadline',()=>{
+ const start='2027-03-19T16:00:00.000Z',due='2027-03-29T16:00:00.000Z';
+ expect(materialInvestmentWarningAt(start,due,'continuous',70)).toBe('2027-03-26T16:00:00.000Z');
+ expect(materialInvestmentWarningAt(start,due,'beijing_sunday_excluded',70)).toBe('2027-03-26T06:24:00.000Z');
+ expect(materialInvestmentWarningAt('2027-03-20T17:00:00.000Z','2027-03-21T15:00:00.000Z','beijing_sunday_excluded',70)).toBeNull();
+ expect(materialInvestmentWarningAt(due,start,'continuous',70)).toBeNull();
+ expect(materialInvestmentWarningAt('2027-03-19T16:00:00.000Z','2027-03-19T16:00:00.003Z','continuous',50)).toBe('2027-03-19T16:00:00.002Z');
+});
+
+
+it('derives only the material investment target from actual procurement branches and retains the adopted version',()=>{
+ const input=fixture(),purchase=(days:number)=>({...rule(days),kind:'forecast' as const});
+ input.customerDelivery.date='2027-04-30';
+ input.milestoneStandard.offsets.material_investment=32;
+ input.milestoneStandard.offsets.fabric_receipt=22;
+ input.milestoneStandard.offsets.accessories_ready=22;
+ input.plan.company.nodes.fabric_receipt_b=purchase(10);
+ input.plan.company.nodes.material_investment={kind:'event',minutes:0,calendar:'continuous',reminder:{enabled:true,percent:70},accessoriesLeadTime:{minutes:5*1440,calendar:'continuous'}};
+ input.materialInvestmentScope={reference:'TEST source material handover',fabric:true,accessories:true};
+ const oldInput={...input,materialInvestmentScope:undefined};
+ const old=evaluateTimeFrameworkCandidate(oldInput,context());
+ const adopted=evaluateTimeFrameworkCandidate(input,context());
+ const original=freezeTimeFrameworkCandidate(adopted,version);
+ const investment=(milestones:typeof adopted.milestones)=>milestones.find(row=>row.key==='material_investment')!;
+ expect(investment(old.milestones).date).toBe('2027-03-29');
+ expect(investment(adopted.milestones)).toMatchObject({date:'2027-03-29',target:{at:'2027-03-29T16:00:00.000Z',exclusive:true},
+  materialInvestmentTargetBasis:{branches:[{kind:'fabric',arrivalDate:'2027-04-08',leadTime:{minutes:14400}},{kind:'accessories',arrivalDate:'2027-04-08',leadTime:{minutes:7200}}]}});
+ const revised={...input,plan:reviseOrderTimePlan(input.plan,{fabric_receipt_b:purchase(14)})};
+ const next=evaluateTimeFrameworkCandidate(revised,context());
+ expect(investment(next.milestones).date).toBe('2027-03-25');
+ expect(next.milestones.filter(row=>row.key!=='material_investment')).toEqual(adopted.milestones.filter(row=>row.key!=='material_investment'));
+ expect(investment(evaluateTimeFrameworkCandidate(revised,{...context(),adoptedMilestones:original.milestones}).milestones)).toEqual(investment(original.milestones));
+ const hourly={...input,plan:reviseOrderTimePlan(input.plan,{fabric_receipt_b:purchase(10.5)})};
+ expect(investment(evaluateTimeFrameworkCandidate(hourly,context()).milestones).target).toMatchObject({at:'2027-03-29T04:00:00.000Z',exclusive:true});
+ input.plan.company.nodes.material_investment={kind:'event',minutes:0,calendar:'continuous',reminder:{enabled:false,percent:70}};
+ expect(investment(evaluateTimeFrameworkCandidate(input,context()).milestones)).toMatchObject({date:null,status:'unknown',target:{at:null,reasons:['待核本单采用的辅料采购周期及备齐目标']}});
+ expect(investment(evaluateTimeFrameworkCandidate({...input,materialInvestmentScope:{...input.materialInvestmentScope,accessories:false}},context()).milestones).date).toBe('2027-03-29');
+ expect(investment(original.milestones).date).toBe('2027-03-29');
+});
+
+
+it('reports conflicting route A targets in the preview without moving the adopted milestones',()=>{
+ const base=fixture(),standard=initialFrameworkMilestoneStandard('A','TEST route A inputs',1);
+ const input={...base,route:'A' as const,milestoneStandard:standard,
+  bindings:[...base.bindings,{key:'color_confirmation' as const,workIds:['pack']}],
+  materialInvestmentScope:{reference:'TEST real material range',fabric:true,accessories:true}};
+ input.plan.company.nodes.fabric_receipt_a={...rule(60),kind:'forecast'};
+ input.plan.company.nodes.material_investment={kind:'event',minutes:0,calendar:'continuous',reminder:{enabled:true,percent:70},
+  accessoriesLeadTime:{minutes:5*1440,calendar:'continuous'}};
+ const original=evaluateTimeFrameworkCandidate({...input,materialInvestmentScope:undefined},context());
+ const candidate=evaluateTimeFrameworkCandidate(input,context());
+ expect(candidate.inputWarnings).toEqual([expect.stringContaining('晚于面料到仓目标'),expect.stringContaining('晚于投面辅料目标截止')]);
+ expect(candidate.milestones.filter(row=>row.key!=='material_investment')).toEqual(original.milestones.filter(row=>row.key!=='material_investment'));
+ const adopted=freezeTimeFrameworkCandidate(original,version);
+ expect(evaluateTimeFrameworkCandidate(input,{...context(),adoptedMilestones:adopted.milestones}).inputWarnings).toEqual([]);
+});
 
 it('separates a formally approved remaining schedule from old evaluation targets and the customer goal',()=>{
  const time={now:'2026-12-06T00:00:00.000Z',scenarioId:null,revision:0}; // 08:00 Beijing

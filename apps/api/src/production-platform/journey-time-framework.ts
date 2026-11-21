@@ -2,10 +2,11 @@ import type {JourneyTimeFramework} from '@dx-rework/contracts/time-framework-jou
 import type {SeriesMilestoneKey,SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import type {ScheduleOccurrence,ScheduleScopeProgress} from '@dx-rework/contracts';
 import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
+import {frameworkTargetPrecision} from './framework-node-targets.js';
 import type {OrderTimePolicyVersion} from './order-time-native-timing.js';
 import {fixedGoalDelta,scheduleOccurrenceBounds,type ScheduleScopeInput,type ScheduleWork,type ScheduleTermination} from './fixed-schedule-progress.js';
 
-type MilestoneBasis={key:SeriesMilestoneKey;date:string;at:string|null;plannedAt:string|null;workIds:string[];relatedWorkIds?:string[];completionTarget?:ScheduleWork['completionTarget']};
+type MilestoneBasis={key:SeriesMilestoneKey;date:string|null;at:string|null;exclusive?:boolean;targetReasons?:string[];plannedAt:string|null;workIds:string[];relatedWorkIds?:string[];completionTarget?:ScheduleWork['completionTarget']};
 export type JourneyFrameworkBasis=Array<{scopeRef:string;lineId:string|null;route:SeriesRoute;reference:string;revision:number;effectiveAt:string;customerDate:string;milestones:MilestoneBasis[]}>;
 const unknown:ScheduleOccurrence={precision:'unknown'};
 /** A whole required set must finish. Unknown timestamps are not sorted last
@@ -31,10 +32,14 @@ export function frameworkJourneyBasis(saved:StoredOrderTimePlan,scopes:readonly 
      if(bounds){const versions=history.filter(v=>v.history?.time.scenarioId===saved.time.scenarioId).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
       const changedDuring=versions.some(v=>Date.parse(v.at)>bounds[0]&&Date.parse(v.at)<=bounds[1]);
       const old=versions.find(v=>Date.parse(v.at)<=bounds[0]),prior=old?.history?.input.frameworkPlans?.[scope.scopeRef]?.milestones.find(row=>row.key===m.key);
-      if(!changedDuring&&prior?.target.at&&prior.workIds.length===m.workIds.length&&prior.workIds.every(id=>m.workIds.includes(id)))completionTarget={end:prior.target.at,targetRevision:old!.id+':'+old!.history!.revision,targetPrecision:'date',targetDate:prior.date};
+      if(!changedDuring&&prior?.target.at&&prior.workIds.length===m.workIds.length&&prior.workIds.every(id=>m.workIds.includes(id))){
+       const precision=prior.materialInvestmentTargetBasis?frameworkTargetPrecision({id:prior.key,start:prior.target,end:prior.target}):{targetPrecision:'date' as const,targetDate:prior.date};
+       completionTarget={end:prior.target.at,targetRevision:old!.id+':'+old!.history!.revision,...precision,
+        ...(precision.targetPrecision==='instant'?{endExclusive:prior.target.exclusive}:{})};
+      }
      }
     }
-    return {key:m.key,date:m.date,at:m.target.at,plannedAt:m.planned.at,workIds:[...m.workIds],relatedWorkIds:related(m.workIds),...(completionTarget!==undefined?{completionTarget}:{})};
+    return {key:m.key,date:m.date,at:m.target.at,...(m.materialInvestmentTargetBasis?{exclusive:m.target.exclusive,targetReasons:m.target.reasons}:{}),plannedAt:m.planned.at,workIds:[...m.workIds],relatedWorkIds:related(m.workIds),...(completionTarget!==undefined?{completionTarget}:{})};
    })}];
  });
 }
@@ -44,7 +49,9 @@ export function evaluateJourneyFramework(basis:JourneyFrameworkBasis,scopes:read
   for(const work of scope.work){if(work.includedIn||work.accountingRole==='event'||work.rewashRound)continue;const key=work.canonicalWorkRef;unique.set(key,(unique.get(key)??true)&&scope.facts[work.id]?.businessCompleted===true);}
   return {...row,milestones:row.milestones.map(m=>{
    const completion=frameworkCompletion(scope,m.workIds,asOf),nodes=m.workIds.map(id=>result.nodes.find(n=>n.id===id));
-   const work:ScheduleWork={id:m.key,canonicalWorkRef:m.key,dependsOn:[],start:null,end:m.at,minutes:0,calendar:'continuous',responsibilitySlaRef:null,targetPrecision:'date',targetDate:m.date,...(m.completionTarget!==undefined?{completionTarget:m.completionTarget}:{})};
+   const precision=m.exclusive===undefined?{targetPrecision:'date' as const,targetDate:m.date}
+    :frameworkTargetPrecision({id:m.key,start:{at:m.at,exclusive:m.exclusive,reasons:[]},end:{at:m.at,exclusive:m.exclusive,reasons:[]}});
+   const work:ScheduleWork={id:m.key,canonicalWorkRef:m.key,dependsOn:[],start:null,end:m.at,minutes:0,calendar:'continuous',responsibilitySlaRef:null,...precision,...(precision.targetPrecision==='instant'&&m.exclusive!==undefined?{endExclusive:m.exclusive}:{}),...(m.completionTarget!==undefined?{completionTarget:m.completionTarget}:{})};
    const delta=fixedGoalDelta(work,{ready:unknown,clockStart:unknown,completed:completion.actual,businessCompleted:completion.completed,waitingForPredecessors:false,evidenceRefs:[]},scope,asOf,termination);
    const known=nodes.length>0&&nodes.every(n=>n?.availabilityBound),lower=nodes.some(n=>n?.estimateKind==='lower_bound');
    const latest=known?new Date(Math.max(...nodes.map(n=>Date.parse(n!.availabilityBound!.latest)))).toISOString():null;
@@ -58,7 +65,7 @@ export function evaluateJourneyFramework(basis:JourneyFrameworkBasis,scopes:read
    const gap=target===null||latestKnownEnd===null?null:Math.max(0,(latestKnownEnd-target+(latestKnownEnd===target&&late.length?1:0))/60000);
    const sufficient=target!==null&&forecast.latest!==null&&(Date.parse(forecast.latest)<target||Date.parse(forecast.latest)===target&&knownBounds.every(bound=>Date.parse(bound.latest)<target||bound.exclusive===true));
    const feasibility=stopped?'terminated' as const:late.length?'insufficient' as const:sufficient?'sufficient' as const:'unknown' as const;
-   return {key:m.key,targetDate:m.date,plannedAt:m.plannedAt,workIds:[...m.workIds],...(m.relatedWorkIds?{relatedWorkIds:[...m.relatedWorkIds]}:{}),...completion,delta,forecast,feasibility,lateMinutes:feasibility==='insufficient'?gap:feasibility==='sufficient'?0:null,coverage:[...new Set(nodes.flatMap(n=>n?.coverage??['里程碑关联工作待核']))]};
+   return {key:m.key,targetDate:m.date,plannedAt:m.plannedAt,workIds:[...m.workIds],...(m.relatedWorkIds?{relatedWorkIds:[...m.relatedWorkIds]}:{}),...completion,delta,forecast,feasibility,lateMinutes:feasibility==='insufficient'?gap:feasibility==='sufficient'?0:null,coverage:[...new Set([...(m.targetReasons??[]),...nodes.flatMap(n=>n?.coverage??['里程碑关联工作待核'])])]};
   })};
  });
  const completedWork=[...unique.values()].filter(Boolean).length;

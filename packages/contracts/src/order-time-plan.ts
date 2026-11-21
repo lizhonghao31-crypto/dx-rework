@@ -4,6 +4,7 @@ import {isSlaDurationMinutes} from './digital-sla.js';
 
 export const OrderTimeCalendarSchema=z.enum(['continuous','natural_days','beijing_sunday_excluded']);
 const minutes=z.number().refine(isSlaDurationMinutes,'请填写有效用时，最长365天');
+export const MaterialInvestmentLeadTimeSchema=z.object({minutes:minutes.refine(value=>value>0,'采购周期必须大于零'),calendar:OrderTimeCalendarSchema}).strict();
 const reminder=z.object({enabled:z.boolean(),percent:z.number().int().min(1).max(99)}).strict();
 const common={calendar:OrderTimeCalendarSchema.nullable(),reminder};
 /** Kind and dependency are business definitions, not editable scheduling tricks. */
@@ -11,7 +12,7 @@ export const OrderTimeRuleSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('work'),minutes:minutes.nullable(),...common}).strict(),
  z.object({kind:z.literal('included'),minutes:minutes.nullable(),...common}).strict(),
  z.object({kind:z.literal('forecast'),minutes:minutes.nullable(),...common}).strict(),
- z.object({kind:z.literal('event'),minutes:z.literal(0),...common}).strict(),
+ z.object({kind:z.literal('event'),minutes:z.literal(0),...common,accessoriesLeadTime:MaterialInvestmentLeadTimeSchema.optional()}).strict(),
  z.object({kind:z.literal('date'),minutes:z.literal(0),...common}).strict(),
  z.object({kind:z.literal('offset'),minutes:z.literal(0),days:z.number().int().min(0).max(365).nullable(),...common}).strict(),
  z.object({kind:z.literal('supervision'),minutes:minutes.nullable(),...common}).strict(),
@@ -26,7 +27,10 @@ export const OrderTimeStandardSchema=z.object({
  revision:z.number().int().positive(),nodes:rules,
  framework:OrderTimeFrameworkConfigurationSchema.optional(),
  stageBufferMinutes:z.number().int().min(0).max(525600),
-}).strict();
+}).strict().superRefine((standard,context)=>{
+ for(const [key,rule] of Object.entries(standard.nodes))if(key!=='material_investment'&&rule.kind==='event'&&rule.accessoriesLeadTime)
+  context.addIssue({code:'custom',path:['nodes',key,'accessoriesLeadTime'],message:'辅料采购周期只用于投面辅料'});
+});
 export type OrderTimeStandard=z.infer<typeof OrderTimeStandardSchema>;
 /** Complete company counterpart stays frozen even when a node is not applicable. */
 export const FrozenOrderTimePlanSchema=z.object({
@@ -36,6 +40,8 @@ export const FrozenOrderTimePlanSchema=z.object({
 }).strict().superRefine((plan,context)=>{
  for(const [key,value]of Object.entries(plan.overrides)){
   const standard=plan.company.nodes[key];
+  if(key!=='material_investment'&&value.kind==='event'&&value.accessoriesLeadTime)
+   context.addIssue({code:'custom',path:['overrides',key,'accessoriesLeadTime'],message:'辅料采购周期只用于投面辅料'});
   if(standard&&standard.kind!==value.kind)context.addIssue({code:'custom',path:['overrides',key,'kind'],message:'本单调整不能改变节点性质'});
  }
  // A per-order adjustment edits only its applicable supervision route. An

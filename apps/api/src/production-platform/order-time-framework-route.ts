@@ -25,6 +25,10 @@ export function frameworkScopeInputs(value:OrderTimeInput,route:SeriesRoute,acce
   const ids=new Set<string>();
   const visit=(id:string)=>{if(ids.has(id))return;const row=byId.get(id);if(!row)throw Error('里程碑缺少原工作身份');ids.add(id);for(const dep of row.dependsOn)visit(dep);};
   for(const id of scope.terminalIds)visit(id);
+  // This order-wide work is shared by its original PO scopes. It has no
+  // physical dependency on fabric arrival, accessories arrival or dispatch.
+  const color=byId.get('color_confirmation');
+  if(route==='A'&&color?.parameterKey==='color_confirmation'&&color.canonicalWorkRef?.startsWith('order:'))visit(color.id);
   const select=(key:string)=>value.work.filter(row=>ids.has(row.id)&&row.parameterKey===key);
   const related:Record<SeriesMilestoneKey,string[]>={
    design_handover:select('design_handover').map(row=>row.id),material_investment:select('material_investment').map(row=>row.id),
@@ -44,6 +48,7 @@ export function frameworkScopeInputs(value:OrderTimeInput,route:SeriesRoute,acce
    for(const row of select(parameter))if(ids.has(row.id)&&!bounds[row.id])bounds[row.id]={precision:'date',value:addCalendarDays(scope.customerGoal.value,-standard.milestoneOffsets[route][key]!),source:'按本单里程碑安排：'+key};
   }
   return TimeFrameworkInputSchema.parse({scopeRef:scope.scopeRef,route,acceptedAt,customerDelivery:{date:scope.customerGoal.value,source:scope.customerGoal.source,revision:scope.customerDateVersion??1},plan:value.plan,
+   ...(value.materialInvestmentScope!==undefined?{materialInvestmentScope:value.materialInvestmentScope}:{}),
    milestoneStandard:{reference:value.plan.company.reference,revision:value.plan.company.revision,offsets:standard.milestoneOffsets[route]},
    work:value.work.filter(row=>ids.has(row.id)).map(row=>({...row,...(row.craftStep?{craftStep:frozenCraftChoice(row.craftStep)}:{})})),bindings,notBefore:bounds});
  });

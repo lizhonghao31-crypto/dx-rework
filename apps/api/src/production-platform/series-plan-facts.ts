@@ -10,7 +10,7 @@ import {factoryBatchLedger,type FactoryScope} from './factory-batch-ledger.js';
 type DB=Pick<PoolClient,'query'>;
 const iso=(v:Date|string|null|undefined)=>v?new Date(v).toISOString():null;
 /** Native records remain authoritative. recorded_at is never substituted for an unknown actual time. */
-export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|null,customerCode:string,sourceRound?:number){
+export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|null,customerCode:string,sourceRound?:number,includePreparationFacts=false){
  const facts:SeriesObservedFact[]=[],revisions:Record<string,unknown>={};
  const events=(await db.query(`SELECT DISTINCT ON(node_key,scope_ref) *,occurred_date::text AS occurred_date
   FROM digital_series_source_events WHERE production_order_id=$1 ORDER BY node_key,scope_ref,source_version DESC`,[orderId])).rows;
@@ -19,7 +19,7 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
  const nativeMaterials=await preparationAvailable(db)?currentPreparationMaterials(await preparationMaterialHistory(db,await preparationContext(db,{kind:'order',id:orderId})),orderId):[];
  revisions.materialValidity=nativeMaterials.map(f=>[f.recordId,f.version,f.valid]);
  for(const e of events)if(!e.voided){const native=nativeMaterials.find(f=>f.recordId===e.source_record_id&&f.version===e.source_version);facts.push({key:e.node_key,scopeRef:e.scope_ref,sourceDomain:e.source_domain,sourceRecordId:e.source_record_id,sourceVersion:e.source_version,
-  completed:e.business_completed!==false&&(!native||native.valid),started:true,occurredAt:iso(e.occurred_at),occurredDate:e.occurred_date?String(e.occurred_date).slice(0,10):null,precision:e.precision,reason:native&&!native.valid?native.invalidReasons.join('；'):e.reason});}
+  completed:e.business_completed!==false&&(!native||native.valid&&(native.kind!=='material_investment'||native.state==='ready')),started:true,occurredAt:iso(e.occurred_at),occurredDate:e.occurred_date?String(e.occurred_date).slice(0,10):null,precision:e.precision,reason:native&&!native.valid?native.invalidReasons.join('；'):e.reason});}
  const fabric=await bulkFabricFacts(db,orderId);revisions.fabric=fabric;
  if(fabric.report&&!instrumented.has('fabric_receipt:whole')){const at=iso(fabric.report.arrivedAt);facts.push({key:'fabric_receipt',scopeRef:'whole',sourceDomain:'bulk-preparation',sourceRecordId:fabric.report.reportId,sourceVersion:1,
   completed:Boolean(at),started:Boolean(at),occurredAt:at,occurredDate:null,precision:at?'instant':'unknown',reason:at?'来自原验布到仓记录':'原验布记录未提供可信到仓时间'});}
@@ -56,7 +56,7 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
  if(sends.length&&!instrumented.has('processing_dispatch:whole')){const last=sends.at(-1)!,at=allDispatched&&sends.every(f=>f.occurred_at)?new Date(Math.max(...sends.map(f=>new Date(f.occurred_at).getTime()))).toISOString():null;
   facts.push({key:'processing_dispatch',scopeRef:'whole',sourceDomain:'factory-flow',sourceRecordId:last.fact_id,sourceVersion:last.sequence,
   completed:allDispatched,started:true,occurredAt:at,occurredDate:null,precision:at?'instant':'unknown',reason:allDispatched&&!at?`${completionReason}；部分实际发出时间未知，不补造完成时刻`:completionReason});}
- return {facts,revisions,document,fabric};
+ return {facts,...(includePreparationFacts?{preparationFacts:nativeMaterials}:{}),revisions,document,fabric};
 }
 /** PR05 native producers call inside their authorized transaction; deliberately not an HTTP command. */
 export async function appendSeriesSourceEvent(db:DB,event:SeriesSourceEvent,actorId:string,businessTime:unknown){

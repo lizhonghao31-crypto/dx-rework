@@ -2260,5 +2260,26 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0297_preorder_preparation_material_evidence": {
+    "checksum": "f188b2cf2693f61931c82b104f83dc3453434792c11f319491b1abaab7f82a4f",
+    "tables": [
+      "digital_production_orders",
+      "digital_production_sources",
+      "digital_development_source_lifecycle",
+      "digital_development_documents",
+      "digital_preparation_material_versions",
+      "audit_events",
+      "digital_development_first_publications"
+    ],
+    "functions": [
+      "guard_preparation_evidence_identity"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

@@ -32,7 +32,11 @@ export function orderTimeSettingsCalculation(raw:OrderTimeCalculation):OrderTime
   washing=BulkWashingArrangementSchema.parse({mode:input.bulkWashing.mode,accounting:input.bulkWashing.mode==='after_receipt'?'additional':input.bulkWashing.accounting,reference:'temporary-calculation',revision:1,washing:duration(prefix),inspection:duration(prefix+'_inspection')});
  }
  const bulk=fixedOrderWork(initial,'temporary-order','temporary-source',1,input.bulk.preshrink?'需要预缩':'不需预缩',bulkSteps.map(s=>({...s,stepId:'temporary-'+craftStepIdentity(s)})),hasBothBuiltinCrafts(bulkSteps),development,input.lines.map(l=>({line_id:l.id,goal:l.customerDate?{precision:'date',value:l.customerDate,source:'本次填写的客户交期'}:{precision:'unknown',reason:'请填写客户交期'},customerDateVersion:0,...(washing?{washing}:{})})),input.frameworkRoute);
- const frameworkInputs=input.values.framework&&input.frameworkRoute&&input.lines.every(line=>line.customerDate)?frameworkScopeInputs(orderTimeInputFromRoute(initial.data.orderTimePlan!,bulk,new Map(bulk.consumers.map(row=>[row.scopeRef,row.ends[row.customerGoalIds![0]!]!])),true),input.frameworkRoute,{precision:'instant',value:input.startAt,source:'本次演算接单时刻'}):[];
+ const material=input.materialInvestmentScope;
+ const frameworkInputs=input.values.framework&&input.frameworkRoute&&input.lines.every(line=>line.customerDate)
+  ?frameworkScopeInputs({...orderTimeInputFromRoute(initial.data.orderTimePlan!,bulk,new Map(bulk.consumers.map(row=>[row.scopeRef,row.ends[row.customerGoalIds![0]!]!])),true),
+   materialInvestmentScope:material?{fabric:material!=='accessories',accessories:material!=='fabric',reference:'本次演算选择的采购范围'}:null},
+   input.frameworkRoute,{precision:'instant',value:input.startAt,source:'本次演算接单时刻'}):[];
  const candidates=new Map(frameworkInputs.map(value=>[value.scopeRef,evaluateTimeFrameworkCandidate(value,{purpose:'settings_preview',observedAt:input.startAt})]));
  const catalog=new Map([...ORDER_TIME_NODES,...FRAMEWORK_TIME_NODES].map(n=>[n.key,n]));
  return {lines:bulk.consumers.map((consumer,index)=>{
@@ -47,6 +51,6 @@ export function orderTimeSettingsCalculation(raw:OrderTimeCalculation):OrderTime
   const difference=expectedEnd&&goal.at?(Date.parse(goal.at)-Date.parse(expectedEnd))/60000:null;
   const closedEnd=ends.some(end=>end.at===expectedEnd&&!end.exclusive);
   const deliveryStatus=difference===null?'unknown' as const:difference<0||difference===0&&goal.exclusive&&closedEnd?'insufficient' as const:'sufficient' as const;
-  return {...(candidate?{milestones:candidate.milestones}:{}),id:input.lines[index]!.id,customerDate:input.lines[index]!.customerDate,totalSpanMinutes:expectedEnd?(Date.parse(expectedEnd)-Date.parse(input.startAt))/60000:null,expectedEnd,marginMinutes:difference,deliveryStatus,stages,rows};
+  return {...(candidate?{milestones:candidate.milestones,inputWarnings:candidate.inputWarnings}:{}),id:input.lines[index]!.id,customerDate:input.lines[index]!.customerDate,totalSpanMinutes:expectedEnd?(Date.parse(expectedEnd)-Date.parse(input.startAt))/60000:null,expectedEnd,marginMinutes:difference,deliveryStatus,stages,rows};
  })};
 }

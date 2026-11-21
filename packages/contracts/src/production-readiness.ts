@@ -3,7 +3,7 @@ import {z} from 'zod';
 export const PREPARATION_RULE_VERSION='production-readiness-20261101';
 export const PREPARATION_MATERIAL_KINDS=['design_handover','material_investment','fabric_receipt','color_confirmation','accessories_ready','style_label_ready'] as const;
 export type PreparationMaterialKind=typeof PREPARATION_MATERIAL_KINDS[number];
-export const preparationMaterialLabels:Record<PreparationMaterialKind,string>={design_handover:'设计交资料',material_investment:'跟单投料',fabric_receipt:'面料实际到仓',color_confirmation:'对色完成',accessories_ready:'辅料实物备齐',style_label_ready:'款号唛实物备齐'};
+export const preparationMaterialLabels:Record<PreparationMaterialKind,string>={design_handover:'设计交资料',material_investment:'投面辅料',fabric_receipt:'面料实际到仓',color_confirmation:'对色完成',accessories_ready:'辅料实物备齐',style_label_ready:'款号唛实物备齐'};
 // These are discrete pieces only; packages/boxes have no implicit conversion.
 export const isStyleLabelPieceUnit=(unit:string)=>['枚','个','件'].includes(unit.trim());
 export const normalizeStyleLabelUnit=(unit:string)=>isStyleLabelPieceUnit(unit)?'枚':null;
@@ -15,7 +15,10 @@ export const PreparationMaterialRecordSchema=z.object({
  quantities:z.array(quantity).max(400).default([]),evidenceIds:z.array(z.uuid()).max(40).default([]),
  sourceDocumentVersion:z.number().int().positive().nullable().default(null),
  recipientId:z.uuid().nullable().default(null),
+ investmentMaterialId:z.uuid().optional(),
 }).strict().transform(x=>({...x,quantities:x.quantities.map(q=>({...q,unit:x.kind==='style_label_ready'?(normalizeStyleLabelUnit(q.unit)??q.unit):q.unit}))})).superRefine((x,c)=>{
+ if(x.investmentMaterialId&&(x.kind!=='material_investment'||!x.quantities.some(row=>row.materialId===x.investmentMaterialId)))
+  c.addIssue({code:'custom',path:['investmentMaterialId'],message:'须选择本次实际登记的投面辅料'});
  if(['ready','partial'].includes(x.state)&&!x.occurredAt)c.addIssue({code:'custom',path:['occurredAt'],message:'实际办理须填写真实发生时间'});
  if(['unknown','withdrawn'].includes(x.state)&&x.occurredAt)c.addIssue({code:'custom',path:['occurredAt'],message:'未知或撤回不填写完成时间'});
  if(x.kind==='style_label_ready'&&x.quantities.some(q=>!isStyleLabelPieceUnit(q.unit)))c.addIssue({code:'custom',path:['quantities'],message:'款号唛须按枚、个或件计数；箱、包和长度单位不能自动折算'});
@@ -26,14 +29,26 @@ export const PreparationMaterialRecordSchema=z.object({
 });
 export type PreparationMaterialRecord=z.infer<typeof PreparationMaterialRecordSchema>;
 export type PreparationResource={kind:'source'|'order';id:string};
-export type PreparationMaterialFact=PreparationMaterialRecord&{handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
+export type MaterialInvestmentScopeBasis={
+  materialIds:string[];materialFingerprints:Record<string,string>;sourceDocumentVersion:number;fingerprint:string;
+  handoverRecordId:string;handoverVersion:number;
+ };
+ export type PreparationMaterialFact=PreparationMaterialRecord&{investmentScopeBasis?:MaterialInvestmentScopeBasis;investmentMaterialOccurrences?:Record<string,{fingerprint:string;occurredAt:string}>;handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string;materialId?:string;category?:'主布'|'配布'|'辅料';supplier?:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
 export const PreparationResponsibilitySchema=z.object({expectedVersion:z.number().int().nonnegative(),warehouseWorkerId:z.uuid().nullable(),colorConfirmationWorkerId:z.uuid().nullable(),colorConfirmationRole:z.string().trim().min(1).max(100).nullable(),reason:z.string().trim().min(1).max(1000)}).strict().refine(x=>Boolean(x.colorConfirmationWorkerId)===Boolean(x.colorConfirmationRole),'对色确认人和现有岗位须同时选择');
 export type PreparationResponsibility=z.infer<typeof PreparationResponsibilitySchema>;
 export const PreparationAdoptionSchema=z.object({previewRevision:z.string().min(1),reason:z.string().trim().min(1).max(1000)}).strict();
 export const InstructionDeliverySchema=z.object({instructionVersion:z.number().int().positive(),recipient:z.string().trim().min(1).max(200),occurredAt:z.iso.datetime({offset:true}),note:z.string().trim().min(1).max(1000),evidenceIds:z.array(z.uuid()).max(40).default([])}).strict();
 export type InstructionDelivery=z.infer<typeof InstructionDeliverySchema>;
 export type PreparationWindow={startedAt:string|null;dueAt:string|null;completedAt:string|null;minutes:number|null;reason:string|null;status:'waiting'|'running'|'overdue'|'completed_on_time'|'completed_late'|'unknown'};
+export const CloseMaterialInvestmentReminderSchema=z.object({fingerprint:z.string().regex(/^[a-f0-9]{64}$/),reason:z.string().trim().min(1).max(1000)}).strict();
+export type MaterialInvestmentReminder={
+ fingerprint:string;handoverId:string;handoverVersion:number|null;adoptedPlanId:string;
+ startedAt:string|null;dueAt:string;warningAt:string|null;exclusive:boolean;
+ calendar:'continuous'|'natural_days'|'beijing_sunday_excluded';percent:number;enabled:boolean;status:'waiting'|'warning'|'overdue';
+ closed:{actorId:string;at:string;reason:string}|null;termination:{at:string|null;kind:'cancelled'|'special_closure'}|null;
+};
 export type ProductionReadinessState={
+ materialInvestmentReminder?:MaterialInvestmentReminder&{canClose:boolean};
  sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;
  facts:PreparationMaterialFact[];history:PreparationMaterialFact[];canRecord:PreparationMaterialKind[];
  responsibility:{version:number;warehouseWorkerId:string|null;colorConfirmationWorkerId:string|null;colorConfirmationRole:string|null};canAssign:boolean;

@@ -35,6 +35,7 @@ import {orderTimeInputFromRoute,orderTimeCheck,orderTimeBegunStates,type OrderTi
 import {formalRemainingSchedule} from './order-time-formal-arrangement.js';
 import {nativeTaskReadiness} from './task-readiness-facts.js';
 import {orderTimeBulkSteps,orderTimeStoredBulkSteps} from './order-time-route-identities.js';
+import {preparationAvailable,preparationHandoverCurrent} from './preparation-material-repository.js';
 import {materialReadiness} from './development-material-readiness.js';
 import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 
@@ -102,7 +103,30 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const dev=built&&round>1?{...built,previous:built.previous?built.previous+':round:'+round:null,route:built.route.map(node=>({...node,nodeId:node.nodeId+':round:'+round})),work:built.work.map(work=>({...work,id:work.id+':round:'+round,dependsOn:work.dependsOn.map(id=>id+':round:'+round),...(work.includedIn?{includedIn:work.includedIn+':round:'+round}:{})}))}:built;
  const publicationOrder=publicationFormalInput(development,{serverToday:beijingCalendarDate(new Date(time.now)),minimumInitialCustomerDate:minimumInitialCustomerDate(new Date(time.now)),orderTimeEnabled:true},Boolean(plan.company.framework));
  const includesProduction=resource?.kind==='order'||operation.kind==='confirm_order'||operation.kind==='direct_order'||Boolean(publicationOrder);
+ let materialInvestmentScope:OrderTimeInput['materialInvestmentScope'];
  if(includesProduction){
+  const priorFramework=saved?.input.frameworkPlans;
+  const priorScope=saved?.input.materialInvestmentScope;
+  let preorder=Boolean(priorScope?.reference.startsWith('preorder:')),handedFingerprint:string|null=null;
+  if(plan.company.framework&&!priorFramework&&sourceId&&await preparationAvailable(db)){
+   const evidence=(await db.query(`SELECT state,body,NOT EXISTS(SELECT 1
+     FROM jsonb_array_elements_text(coalesce(body->'evidenceIds','[]'::jsonb)) file(id)
+     WHERE NOT EXISTS(SELECT 1 FROM attachments WHERE attachment_id::text=file.id AND status='ready')) AS files_ready
+    FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover' AND scope_ref='whole'
+    ORDER BY recorded_at DESC,version DESC LIMIT 1`,[sourceId])).rows[0];
+   if(evidence?.body?.investmentScopeBasis&&evidence.state==='ready'&&evidence.files_ready&&document&&development
+    &&preparationHandoverCurrent(evidence.body,{version:document.version,materials:development.materials})){
+    preorder=true;handedFingerprint=evidence.body.investmentScopeBasis.fingerprint;
+   }
+  }
+  if(plan.company.framework){
+   if(priorFramework)materialInvestmentScope=priorScope;
+   else if(development?.materials.length){
+    const required=development.materials.filter(row=>row.name.trim()&&row.quantity.trim());
+    const fabric=required.some(row=>row.category==='主布'||row.category==='配布'),accessories=required.some(row=>row.category==='辅料');
+    materialInvestmentScope=fabric||accessories?{fabric,accessories,reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+(handedFingerprint?':'+handedFingerprint:'')}:null;
+   }else materialInvestmentScope=null;
+  }
   let lines:Array<{id:string;po:string;date:string|null;customerDateVersion?:number}>;
   if(order){
    const rows=(await db.query('SELECT line_id,coalesce(po_number,formal_style_no) AS po,customer_warehouse_arrival_date::text AS date,customer_date_version,factory_delivery_date::text AS factory_date,factory_date_version,factory_date_source FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[resource!.id])).rows;
@@ -133,7 +157,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   frameworkRoute=colorMatching===true?'A':colorMatching===false?'B':undefined;
   if(plan.company.framework&&!frameworkRoute)throw new ApplicationError('VALIDATION_ERROR','请在原单确认是否需要对色',400);
   for(const line of lines)if(!line.date)missing.push(`${line.po||'本PO'}的客户交期尚未填写`);
-  const bulk=fixedOrderWork(initial,order?.production_order_id??'planned-order',sourceId??'planned-source',round,production?.preshrink?'需要预缩':'无需预缩',declaredSteps,hasBothBuiltinCrafts(declaredSteps),dev,lines.map(line=>({line_id:line.id,goal:line.date?{precision:'date',value:line.date,source:'本单客户交期'}:{precision:'unknown',reason:'请填写本单客户交期'},customerDateVersion:line.customerDateVersion??1,...(washing?.get(line.id)?.document?{washing:washing.get(line.id)!.document!.arrangement}:{})})),frameworkRoute);
+  const bulk=fixedOrderWork(initial,order?.production_order_id??'planned-order',sourceId??'planned-source',round,production?.preshrink?'需要预缩':'无需预缩',declaredSteps,hasBothBuiltinCrafts(declaredSteps),dev,lines.map(line=>({line_id:line.id,goal:line.date?{precision:'date',value:line.date,source:'本单客户交期'}:{precision:'unknown',reason:'请填写本单客户交期'},customerDateVersion:line.customerDateVersion??1,...(washing?.get(line.id)?.document?{washing:washing.get(line.id)!.document!.arrangement}:{})})),frameworkRoute,{preorder,keepLegacyGraph:Boolean(priorFramework&&priorScope===undefined)});
   route={work:bulk.work,consumers:bulk.consumers.map(consumer=>({...consumer,lineId:resource?.kind==='order'?consumer.lineId:null}))};
  }else{
   if(!dev)return conflict('请先保存本单开发资料');
@@ -150,6 +174,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   goals.set(consumer.scopeRef,previous?.precision==='date'&&previous.value===date?structuredClone(previous):{precision:'date',value:date,source:'本单已填写的客户或样板日期'});
  }
  const value=orderTimeInputFromRoute(plan,route,goals,!missing.length,missing,sourceId?{kind:'source',id:sourceId}:resource??undefined);
+ if(materialInvestmentScope!==undefined)value.materialInvestmentScope=materialInvestmentScope;
  if(plan.company.framework){value.factoryCommitments=factoryCommitments;sourceVersion.factoryCommitments=factoryCommitments;}
  if(rewashChanges.length&&(!manager||operation.kind!=='arrangement'||!order||!saved?.input.frameworkPlans))conflict('请由原有权人员在已采用的本单安排中新增返洗工作');
  if(rewashChanges.length&&(Object.keys(changes).length||washingChanges.length))conflict('新增返洗请保留原节点安排，其他调整沿原入口另行办理');
@@ -268,7 +293,11 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    sourceVersion.frameworkFactRevisions=native.revisions;
   }
   value.frameworkContext={route:frameworkRoute,acceptedAt,notBefore,progress:Object.fromEntries(progress)};
-  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs({...value,scopes:datedScopes},frameworkRoute,acceptedAt,notBefore).map(input=>({input,retained:retainedWashingReworkTargets(input,progress,saved?.input.frameworkPlans?.[input.scopeRef],time.now,Boolean(rewashing?.added),value.rewashing)})),observedAt:time.now,mode:'automatic',acceptLate:false});
+  const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs({...value,scopes:datedScopes},frameworkRoute,acceptedAt,notBefore).map(input=>{
+   const prior=saved?.input.frameworkPlans?.[input.scopeRef];
+   return {input,retained:retainedWashingReworkTargets(input,progress,prior,time.now,Boolean(rewashing?.added),value.rewashing),
+    ...(prior&&prior.input.route===input.route&&prior.input.customerDelivery.date===input.customerDelivery.date?{adoptedMilestones:prior.milestones}:{})};
+  }),observedAt:time.now,mode:'automatic',acceptLate:false});
   check.fingerprint=fixedTimelineIdentity({prior:check.fingerprint,sourceVersion,frameworkProgress:[...progress]});
   // The caller already authorized this exact order. Reuse the native scoped
   // receipt ledger and the same transaction; no first receipt is manufactured

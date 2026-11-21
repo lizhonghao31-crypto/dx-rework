@@ -32,6 +32,11 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
       query.set("factoryAction", "productionProgress");
       if(route.factoryDecisionId)query.set("factoryDecisionId",route.factoryDecisionId);
       break;
+    case "digital_source_material_investment":
+    case "digital_order_material_investment":
+      path = "/ui/digital-production";
+      query.set(route.routeName === "digital_source_material_investment" ? "materialSource" : "materialOrder", route.entityId);
+      break;
     case "digital_bulk_preparation":
       path = "/ui/digital-production";
       query.set("bulk", route.entityId);

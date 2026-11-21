@@ -6,6 +6,7 @@ import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,fo
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {cockpitLegacyOrderTimeSql,firstDevelopmentPublicationConfirmedOrder,orderTimeCreated} from './order-time-created.js';
+import {materialInvestmentRiskHistory} from './material-investment-risk-history.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -410,6 +411,9 @@ export class DigitalJourneyQuery {
         item.currentDeliveryRisks=current.deliveryRisks??[];
         const authorized=this.authorizedTasks.get(current)??[];
         item.riskHistory=await readJourneyRiskHistory(db,authorized);
+        if(compact&&current.seriesPlanVisible&&current.orderId&&current.fixedSchedule?.framework){
+          item.riskHistory.push(...await materialInvestmentRiskHistory(db,current.orderId,current.asOf??asOf));
+        }
         item.operationLog=await readJourneyLog(db,current.id,asOf,actor.actorId,authorized,undefined,5);
       }
       return item;

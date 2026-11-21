@@ -15,6 +15,8 @@ export const todoRouteTaskLabels: Readonly<Record<TodoResponse["route"]["routeNa
   digital_bulk_washing: "办理大货洗水",
   digital_factory_progress: "记录QC生产进度与现场照片",
   digital_bulk_preparation: "办理产前准备",
+  digital_source_material_investment: "投面辅料",
+  digital_order_material_investment: "投面辅料",
   digital_development_arrangement: "安排本轮师傅",
   digital_development: "查看开发单",
   digital_short_lead: "办理短交期正式单特批",

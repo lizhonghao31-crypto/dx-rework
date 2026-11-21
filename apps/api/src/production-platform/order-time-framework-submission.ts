@@ -1,7 +1,7 @@
 import type {TimeFrameworkInput} from '@dx-rework/contracts/order-time-framework';
 import {evaluateTimeFrameworkCandidate,type FrameworkCandidateContext} from './order-time-framework.js';
 
-type ScopeProposal={input:TimeFrameworkInput;retained?:FrameworkCandidateContext['retained']};
+type ScopeProposal={input:TimeFrameworkInput;retained?:FrameworkCandidateContext['retained'];adoptedMilestones?:FrameworkCandidateContext['adoptedMilestones']};
 /** Shared submission calculation only: no authority, persistence or actual-event
  * writer. The original command must reread inputs under its transaction, check
  * its own permission/CAS and supply the submission observation. Preview results
@@ -12,9 +12,9 @@ export function evaluateFrameworkSubmission(input:{scopes:readonly ScopeProposal
  if(!input.scopes.length)throw Error('缺少本单适用范围');
  if(new Set(input.scopes.map(scope=>scope.input.scopeRef)).size!==input.scopes.length)throw Error('本单适用范围重复');
  const candidates=input.scopes.map(scope=>evaluateTimeFrameworkCandidate(scope.input,
-  {purpose:'order_proposal',observedAt:input.observedAt,...(scope.retained?{retained:scope.retained}:{})}));
+  {purpose:'order_proposal',observedAt:input.observedAt,...(scope.retained?{retained:scope.retained}:{}),...(scope.adoptedMilestones?{adoptedMilestones:scope.adoptedMilestones}:{})}));
  const gaps=candidates.flatMap(candidate=>candidate.milestones.filter(row=>row.status==='insufficient')
-  .map(row=>({scopeRef:candidate.input.scopeRef,key:row.key,date:row.date,lateMinutes:row.lateMinutes!,workIds:row.blockingWorkIds})));
+  .map(row=>({scopeRef:candidate.input.scopeRef,key:row.key,date:row.date!,lateMinutes:row.lateMinutes!,workIds:row.blockingWorkIds})));
  const missing=candidates.flatMap(candidate=>{
   const work=candidate.arranged.filter(row=>candidate.coverage.includes(row.id)).map(row=>({scopeRef:candidate.input.scopeRef,
    workId:row.id,reasons:[...new Set([...row.start.reasons,...row.end.reasons])]}));
@@ -26,7 +26,7 @@ export function evaluateFrameworkSubmission(input:{scopes:readonly ScopeProposal
  // acceptance of risk erases them. Final delivery is an independent summary.
  const delivery=candidates.map(candidate=>{
   const row=candidate.milestones.find(milestone=>milestone.key==='planned_shipment')!;
-  return {scopeRef:candidate.input.scopeRef,date:row.date,status:row.status,lateMinutes:row.lateMinutes};
+  return {scopeRef:candidate.input.scopeRef,date:row.date!,status:row.status,lateMinutes:row.lateMinutes};
  });
  return {action,candidates,gaps,missing,delivery,riskAccepted:action==='adopt'&&gaps.length>0};
 }
