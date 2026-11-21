@@ -64,11 +64,11 @@
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact + .cockpit-home-fact{margin-block-start:4px}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact :is(a,button){max-inline-size:100%;text-align:start;white-space:normal}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-quantity{font-variant-numeric:tabular-nums}
-.digital-journey-cockpit[data-view="overview"] :is(.cockpit-home-fact-status,.cockpit-home-type){font-size:13px;line-height:1.4;padding:0 4px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-type{font-size:13px;line-height:1.4;padding:0 4px}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact{--cockpit-fact-dot:#7b8798}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact[data-fact-tone="blue"]{--cockpit-fact-dot:#2475e8}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact[data-fact-tone="green"]{--cockpit-fact-dot:#238f69}
-.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--cockpit-fact-dot);margin-inline-end:4px;vertical-align:middle}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--cockpit-fact-dot);flex:none}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th.cockpit-home-progress-heading{white-space:normal;text-align:center}
 
 /* Shared two-row labels and original read-only progress facts. */
@@ -93,10 +93,31 @@
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-overdue {--cockpit-kpi-icon:#c94343}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-kpi-completed {--cockpit-kpi-icon:#238f69}
 .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>strong {grid-row:2}
-@media (min-width:1165px) {
- .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-line {flex-wrap:nowrap;white-space:nowrap}
- .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status {flex:none;padding-inline:0 1px;gap:0}
- .dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status::before {margin-inline-end:2px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status {
+ display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;gap:4px;
+ min-height:24px;padding:2px 8px;max-width:100%;font-size:13px;line-height:1.4;white-space:normal
+}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status:not(.dx-cockpit-astryx-badge) {
+ padding:0;min-height:0;gap:0;position:relative;
+}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status:not(.dx-cockpit-astryx-badge)::before {
+ position:absolute;inset-inline-start:8px;inset-block-start:calc(50% - 2.5px);z-index:1;
+}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact-status>.dx-badge {
+ display:inline-flex;align-items:center;box-sizing:border-box;justify-content:center;font-size:inherit;line-height:inherit;
+ min-height:24px;padding:2px 8px 2px 17px;white-space:normal
+}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact :is(a,button,summary) .cockpit-home-fact-title,
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact summary.cockpit-home-fact-title,
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-po-more>summary {
+ color:var(--production-primary);text-decoration:underline;text-underline-offset:2px;cursor:pointer
+}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-fact :is(a,button):focus-visible,
+.digital-journey-cockpit[data-view="overview"] :is(.cockpit-home-fact,.cockpit-home-po-more) summary:focus-visible {
+ outline:2px solid var(--production-primary);outline-offset:2px
+}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-po-more[open] .cockpit-home-po-line {
+ margin-block-start:4px
 }
 
 /* Let existing left-side homepage facts wrap without clipping their values. */

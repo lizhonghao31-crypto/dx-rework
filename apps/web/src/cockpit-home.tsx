@@ -23,11 +23,26 @@ function Task({node,lines,showBlocker=true}:{node:JourneyNode;lines:CockpitHomeO
  const result=frameworkResponsibility(node,undefined);
  const stopped=nodeTerminationLabel(node);
  const status=stopped??(node.risks.includes('overdue')?'逾期':node.risks.includes('due_soon')?'临期':node.state==='blocked'?'受阻':node.state==='active'?'进行中':'等待前置');
- return <><span className="cockpit-home-task-heading"><strong>{node.label}</strong><StatusBadge tone={stopped?'neutral':node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge></span><small>{cockpitNodeOwner(node)}</small><small className="cockpit-home-task-date"><span>计划</span><CockpitPlanDates node={node} lines={lines}/></small><small className="cockpit-home-task-date"><span>实际</span>{node.state==='completed'?<CockpitActualDates node={node} lines={lines} short/>:'未完成'}</small>{Boolean(node.fixedTargets?.length)&&<small><CockpitTargetDifference nodes={[node]} lines={lines}/> · {result.text}</small>}{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
+ const owner=cockpitNodeOwner(node);
+ const ownTask=node.records.some(record=>record.domain==='task'&&record.id===node.instanceId);
+ const blocker=showBlocker?cockpitVisibleBlockers(node).find(item=>{
+  if(item.label.startsWith('完成办理前'))return false;
+  const matchesOwner=ownTask&&node.ownerStatus==='unassigned'&&!node.owner?.id&&owner==='未指派';
+  return !(matchesOwner&&item.key==='assignee'&&!item.ownerId&&item.record?.domain==='task'&&item.record.id===node.instanceId);
+ }):undefined;
+ return <><span className="cockpit-home-task-heading"><strong>{node.label}</strong><StatusBadge tone={stopped?'neutral':node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge></span><small>{owner}</small><small className="cockpit-home-task-date"><span>计划</span><CockpitPlanDates node={node} lines={lines}/></small><small className="cockpit-home-task-date"><span>实际</span>{node.state==='completed'?<CockpitActualDates node={node} lines={lines} short/>:'未完成'}</small>{Boolean(node.fixedTargets?.length)&&<small><CockpitTargetDifference nodes={[node]} lines={lines}/> · {result.text}</small>}{blocker&&<small className="cockpit-home-blocker">{blocker.label}</small>}</>;
 }
-function HomePos({order,onOpen}:{order:CockpitHomeOrder;onOpen:()=>void}){
- const lines=sortedCockpitPoLines(order);
- return <div className="cockpit-home-pos">{lines.slice(0,2).map(line=><div key={line.id}><strong title={`${line.po||'PO待补'} / ${line.color} / ${line.orderedQuantity.toLocaleString()}件`} tabIndex={0}>{line.po||'PO待补'} / {line.color} / {line.orderedQuantity.toLocaleString()}件</strong><small>出货 <time>{order.poDeliveryDates?.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate??'—'}</time></small></div>)}{lines.length>2&&<button type="button" className="journey-text-action" onClick={onOpen}>另 {lines.length-2} 个PO，查看订单</button>}{!lines.length&&<span>—</span>}</div>;
+function HomePos({order}:{order:CockpitHomeOrder}){
+ const [first,...rest]=sortedCockpitPoLines(order);
+ if(!first)return <div className="cockpit-home-pos">—</div>;
+ const row=(line:typeof first)=><div className="cockpit-home-po-line" key={line.id}>
+  <strong>{line.po||'PO待补'} / {line.color} / {line.orderedQuantity.toLocaleString()}件</strong>
+  <small>出货 <time>{order.poDeliveryDates?.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate??'—'}</time></small>
+ </div>;
+ return <div className="cockpit-home-pos">{row(first)}{rest.length>0&&<details className="cockpit-home-po-more">
+  <summary>另 {rest.length} 个 PO</summary>
+  {rest.map(row)}
+ </details>}</div>;
 }
 export function CockpitHome({data,error,context,onChange,canDelete=false,onDeleted}:{canDelete?:boolean;onDeleted?:(()=>void)|undefined;data:CockpitHomeResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
  const query=cockpitQuery(context),[riskSelection,setRiskSelection]=useState<{id:string;query:string}|null>(null);
@@ -53,7 +68,7 @@ export function CockpitHome({data,error,context,onChange,canDelete=false,onDelet
      <td><CockpitPhoto src={order.styleImageUrl} label={order.designStyleNo} className="cockpit-home-photo"/></td>
      <td><CockpitStack className="cockpit-home-order-title"><button type="button" className="journey-order-select" data-cockpit-focus={`home-order:${order.id}`} onClick={()=>enter(order)}>{order.styleName||order.designStyleNo}</button><CockpitBadge className="cockpit-home-type">{order.orderId?'已下单':'纯开发'}</CockpitBadge></CockpitStack>{order.styleName&&order.styleName!==order.designStyleNo&&<small className="cockpit-home-style" title={order.designStyleNo}>{order.designStyleNo}</small>}<small>{order.orderId?`订单ID：${order.identity?.businessNumber??'—'}`:'尚未下单'}</small><small className="cockpit-home-person" title={order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')}>跟单：{order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')||'未指派'}</small></td>
      <td className="cockpit-home-quantity"><div className="cockpit-home-client"><span className="cockpit-home-customer">{order.customer??'—'}</span><strong aria-label="下单数量">{order.orderId&&order.lines.length?`${order.lines.reduce((sum,line)=>sum+line.orderedQuantity,0).toLocaleString()}件`:'—'}</strong></div></td>
-     <td><HomePos order={order} onOpen={()=>enter(order)}/></td>
+     <td><HomePos key={query} order={order}/></td>
      <td className="cockpit-home-task-cell">{node?<button type="button" className="cockpit-home-task" onClick={()=>enter(order,node)}><Task node={node} lines={order.lines} showBlocker={!gap?.gap}/></button>:<span>{closed?'已完成':display?'暂无在办节点':'—'}</span>}
       {delivery&&<div className="cockpit-home-delivery"><span title={`${delivery.poNumber||'PO待补'} / ${delivery.color}`}>{delivery.poNumber||'PO待补'} / {delivery.color}</span><span>{poDeliveryKindLabels[delivery.kind]} <time>{delivery.date}</time></span><StatusBadge tone={delivery.risk==='overdue'?'danger':'warning'}>{delivery.risk==='overdue'?'约定日期已过':'今天到期'}</StatusBadge></div>}
       {risks.total>0&&data&&<button type="button" className="journey-text-action cockpit-home-risk-trigger" aria-label={`查看${order.designStyleNo}的全部${risks.total}项风险`} onClick={()=>setRiskSelection({id:order.id,query})}>{other>0?`${node||delivery?'另':'查看'} ${other} 项风险`:'查看风险'}</button>}

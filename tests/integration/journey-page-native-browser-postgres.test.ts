@@ -6,6 +6,7 @@ import {writeFile} from 'node:fs/promises';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {cockpitHomeBrowser,homeReady} from '../acceptance/m01-cockpit-home-native-browser.js';
 import {scheduleCanAdvance,type CockpitHomeResult,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
@@ -208,6 +209,76 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
    const response=await page.request.get(h.base+'/api/digital-production/journeys?scope=production');expect([403,404]).toContain(response.status());
    const retry=await page.request.post(h.base+`/api/digital-production/journeys/${h.orders[0]}/refresh`);expect([403,404]).toContain(retry.status());
    await page.reload();await page.getByRole('heading',{name:'无权访问此页面',exact:true}).waitFor();expect(await page.locator('.journey-orders tbody tr').count()).toBe(0);
+  }finally{await context.close();}
+ });
+ it('opens the actual cockpit ship-sample link for this order and returns to its search',async()=>{
+  const fixture=h.fixture,style='TEST-SHIP-HOME-'+randomUUID(),actor=fixture.people.merchandiser!;
+  const created=await h.runInScene(()=>new DigitalProductionIdentityService(fixture.db,true).createOrder(fixture.root,DigitalOrderCreateSchema.parse({
+    customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-07',primaryMerchandiserId:actor.actorId,
+    lines:['黑','白'].map((color,index)=>({formalPoNo:style+'-'+(index+1),color,
+      customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:2}]}))
+  }),randomUUID()));
+  const orderId=created.productionOrderId;
+  const task=(await fixture.db.query<{task_id:string}>(
+    "SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[orderId])).rows[0]!;
+  await new JourneyFactRepository(fixture.db).buildOne({kind:'order',id:orderId});
+  const {page,context}=await h.open(actor.actorId,{search:style},1165);
+  try{
+   const evidence=await h.read(page,{search:style,view:'home'});
+   const item=evidence.items.find(item=>item.orderId===orderId);
+   expect(item?.lines.map(line=>line.orderedQuantity)).toEqual([2,2]);
+   const row=page.locator(`tr[data-order-id="${item!.id}"]`);
+   const link=row.getByRole('link',{name:/船样寄出/});
+   const po=row.locator('.cockpit-home-po-line'),disclosure=row.getByText('另 1 个 PO',{exact:true});
+   expect(await po.first().isVisible()).toBe(true);
+   expect(await po.last().isVisible()).toBe(false);
+   expect(await row.getByLabel('下单数量').innerText()).toBe('4件');
+   await disclosure.focus();await page.keyboard.press('Enter');
+   expect(await po.last().isVisible()).toBe(true);
+   expect(await po.allTextContents()).toEqual([expect.stringContaining('黑 / 2件'),expect.stringContaining('白 / 2件')]);
+   await disclosure.click();expect(await po.last().isVisible()).toBe(false);
+   const layout=[];
+   for(const width of [1440,1280,1165,1164,768,390,360]){
+    await page.setViewportSize({width,height:747});
+    layout.push(await row.locator('.cockpit-home-fact-status').evaluateAll((elements,width)=>({
+     width,badges:elements.map(element=>{
+      const painted=element.querySelector('.dx-badge')??element,style=getComputedStyle(painted);
+      return {height:painted.getBoundingClientRect().height,align:style.alignItems,paddingInlineEnd:style.paddingInlineEnd};
+     })
+    }),width));
+   }
+   for(const {badges} of layout)for(const badge of badges){
+    expect(badge.height).toBeGreaterThanOrEqual(24);expect(badge.align).toBe('center');expect(badge.paddingInlineEnd).toBe('8px');
+   }
+   await page.setViewportSize({width:1165,height:747});
+   await writeFile(join(h.evidence,'cockpit-fact-layout.json'),JSON.stringify(layout,null,2));
+   const persisted=new URL(page.url()).searchParams.get('search');
+   await writeFile(join(h.evidence,'ship-home-before-click.json'),JSON.stringify({records:item!.stages.flatMap(stage=>stage.nodes.filter(node=>node.key==='bulk_ship_sample')).map(node=>({instance:node.instanceId,state:node.state,records:node.records})),href:await link.getAttribute('href',{timeout:2000}).catch(()=>null),body:await row.innerText()},null,2));
+   await expect.poll(()=>link.count()).toBe(1);
+   const href=new URL((await link.getAttribute('href'))!,page.url());
+   expect(href.searchParams.get('task')).toBe(task.task_id);
+   const timing:{path:string;started:number;ended?:number;status?:number}[]=[];
+   const byRequest = new Map<object,(typeof timing)[number]>();
+   page.on('request',request=>{
+    const path=new URL(request.url()).pathname;
+    if(!path.includes('/assets/')&&!path.includes('/options')&&!path.includes('/access')&&!path.includes('/tasks/'))return;
+    const entry={path,started:performance.now()};
+    byRequest.set(request,entry);timing.push(entry);
+   });
+   page.on('response',response=>{const entry=byRequest.get(response.request());if(entry){entry.ended=performance.now();entry.status=response.status();}});
+   const getTask=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/digital-production/tasks/'+task.task_id&&response.request().method()==='GET');
+   const click=performance.now();
+   await link.click();
+   const navigation=performance.now();
+   const response=await getTask;
+   expect(response.status()).toBe(200);
+   await page.locator('.digital-task-identity').getByRole('heading',{name:style,exact:true}).waitFor();
+   await writeFile(join(h.evidence,'ship-home-click-timing.json'),JSON.stringify({click,navigation,body:performance.now(),timing},null,2));
+   expect(new URL(page.url()).searchParams.get('task')).toBe(task.task_id);
+   const returnLink=page.locator('.pattern-actions').getByRole('button',{name:'返回',exact:true}).first();
+   await returnLink.click();await homeReady(page);
+   expect(new URL(page.url()).searchParams.get('search')).toBe(persisted);
+   expect(await row.count()).toBe(1);
   }finally{await context.close();}
  });
  it('shows the signed ship-sample task before history, then retries only history without losing the task',async()=>{

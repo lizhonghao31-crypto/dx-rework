@@ -1,280 +1,82 @@
 {
   "version": 1,
-  "base": "00377afa751ed33f545bb57ea7a03d7acb493062",
-  "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
+  "base": "59c25c8db56a0a7ec9a3e0d36443138138270714",
+  "sourceFingerprint": "d5de839b34c012030c711e6139cd21cf0ed5bd6cfd92e684615103791e991936",
   "rules": [
     {
-      "rule": "网页只为用户当前确实等待的读取延迟显示全局反馈，不覆盖原内容、不阻挡改选或返回。角色权限和业务处理照旧。",
-      "source": "Eric 已批准整套性能 v7，并补充全系统「请稍等」覆盖系统模块、翻页、筛选、详情与返回。",
+      "rule": "座舱首页首条 PO 可展开、同任务未指派去重、天差颜色与事实入口保持原授权",
+      "source": "Eric 已审定 dx-ui-finance-cutting-construction-plan-20261121.md 第3节",
       "reads": [
-        "apps/web/src/App.tsx",
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/auth.tsx",
-        "apps/web/src/production-dashboard-page.tsx",
-        "apps/web/src/todo-indicator-refresh.ts",
-        "apps/web/src/order-board-page.tsx",
-        "apps/web/src/rework-v2-form.tsx"
+        "apps/web/src/cockpit-home.tsx#CockpitHome",
+        "apps/web/src/cockpit-home-fact-links.tsx#CockpitHomeFactLinks",
+        "apps/api/src/production-platform/journey-home-projection.ts#projectCockpitHome"
       ],
       "oldTests": [
-        "tests/unit/internal-navigation-guard.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/integration/module-bundles-native-browser-postgres.test.ts"
-      ],
-      "initialization": "新用户操作在同一授权范围内按真实待读代次归属。慢读延迟250毫秒，旧快照可见到新结果或原错误。后台角标和确认写入后的读取走静默路径。",
-      "dateAndPermission": "复用原角色授权、读取路径、日期和 SLA 事实。旧请求与旧会话不得覆盖当前。模块加载只预取已授权代码，数据授权照旧。",
-      "expectation": "待办计数、原筛选和原办理不变。慢结果、连续操作、失败、返回以及无权读在真实界面须符合原业务。 回货看板原返工和后整链接保留接收同一原 receivingBatchId 的权限门禁、UUID 校验及读取路径。",
-      "writes": [
-        "apps/web/src/App.tsx",
-        "apps/web/src/admin-console-page.tsx",
-        "apps/web/src/auth.tsx",
-        "apps/web/src/auxiliary-catalog-dialog.tsx",
-        "apps/web/src/bulk-pattern-workspace.tsx",
-        "apps/web/src/cockpit-production-settings.tsx",
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/contract-template-settings-page.tsx",
-        "apps/web/src/current-production-page.tsx",
-        "apps/web/src/cutting-page.tsx",
-        "apps/web/src/delivery-calendar-page.tsx",
-        "apps/web/src/digital-analysis-page.tsx",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/digital-production-workspaces.tsx",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "apps/web/src/digital-quotation.css",
-        "apps/web/src/employee-access-page.tsx",
-        "apps/web/src/foreground-loading.css",
-        "apps/web/src/foreground-loading.tsx",
-        "apps/web/src/frontline-landing-page.tsx",
-        "apps/web/src/frontline-task-page.tsx",
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/lazy-business-page.tsx",
-        "apps/web/src/master-data-page.tsx",
-        "apps/web/src/my-todos-page.tsx",
-        "apps/web/src/order-board-page.tsx",
-        "apps/web/src/order-document-container.tsx",
-        "apps/web/src/pattern-history-page.tsx",
-        "apps/web/src/pattern-order-form.tsx",
-        "apps/web/src/pattern-room-orders-page.tsx",
-        "apps/web/src/pattern-room-prices-page.tsx",
-        "apps/web/src/process-worker-assignment-form.tsx",
-        "apps/web/src/production-dashboard-page.tsx",
-        "apps/web/src/production-display-workspace.tsx",
-        "apps/web/src/production-reporting-page.tsx",
-        "apps/web/src/receiving-board-read.ts",
-        "apps/web/src/receiving-board-request.ts",
-        "apps/web/src/receiving-page.tsx",
-        "apps/web/src/reporting/management-dashboard-page.tsx",
-        "apps/web/src/reporting/report-center-page.tsx",
-        "apps/web/src/reporting/rework-query-page.tsx",
-        "apps/web/src/responsibility-task-page.tsx",
-        "apps/web/src/rework-detail-page.tsx",
-        "apps/web/src/rework-v2-form.tsx",
-        "apps/web/src/sample-analysis-page.tsx",
-        "apps/web/src/sample-analysis-view.tsx",
-        "apps/web/src/sample-create-page.tsx",
-        "apps/web/src/sample-workflow-page.tsx",
-        "apps/web/src/sample-workspace-page.tsx",
-        "apps/web/src/sla-settings-workspace.tsx",
-        "apps/web/src/sourcing-detail-read.ts",
-        "apps/web/src/sourcing-node-history-page.tsx",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "apps/web/src/supplier-center-page.tsx",
-        "apps/web/src/supplier-onboarding-page.tsx",
-        "apps/web/src/use-foreground-read.ts",
-        "apps/web/src/use-remote-queue.ts",
-        "apps/web/src/wages/wage-period-detail.tsx",
-        "apps/web/src/wages/wage-period-list.tsx",
-        "apps/web/src/work-reporting-form.tsx",
-        "apps/web/src/workforce-master-data-page.tsx",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/acceptance/auxiliary-catalog-browser.mjs",
-        "tests/fixtures/auxiliary-catalog.tsx",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/unit/cockpit-home.test.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
-        "tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts",
-        "tests/integration/receiving-board-native-browser-postgres.test.ts",
-        "tests/unit/foreground-loading.test.ts",
-        "tests/unit/foreground-read.test.ts",
-        "tests/unit/master-data-process-pagination.test.ts",
-        "tests/unit/my-todos-navigation.test.ts",
-        "tests/unit/process-database-entry.test.ts",
-        "tests/unit/sourcing-feedback-contract.test.ts",
-        "tests/unit/sourcing-list-root-delete-contract.test.ts",
-        "tests/unit/v1-prelaunch-pr-06-ui-workspace.test.ts",
-        "tests/unit/v1-prelaunch-receiving-batch-propagation.test.ts"
+        "tests/integration/journey-page-native-browser-postgres.test.ts"
+      ],
+      "initialization": "沿用实际首页投影、原生任务、既有生产看板与 PostgreSQL 合成读范围",
+      "dateAndPermission": "使用同 PO 的原日期与数量，保留任务所属订单、原访问模式及原时钟和反例",
+      "expectation": "首 PO 和展开逐条可核；整单数量与风险保持；船样从首页进入同任务并返回原搜索；历史延迟不挡正文；PMC 撤权生效",
+      "writes": [
+        "apps/web/src/cockpit-home-fact-links.tsx",
+        "apps/web/src/cockpit-home-r5.css",
+        "apps/web/src/cockpit-home.css",
+        "apps/web/src/cockpit-home.tsx",
+        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
       "checks": [
-        "foreground-navigation-and-read-boundaries",
-        "foreground-authenticated-five-native",
-        "foreground-authenticated-quotation-history",
-        "foreground-authenticated-sourcing-detail",
-        "foreground-authenticated-delivery-history",
-        "foreground-review-keep-original-batch-query",
-        "foreground-review-native-two-receiving-entries"
+        "home-unit",
+        "home-pg"
       ]
     }
   ],
   "checks": [
     {
-      "id": "foreground-navigation-and-read-boundaries",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/internal-navigation-guard.test.ts tests/unit/pattern-navigation-return.test.ts tests/unit/v1-prelaunch-pr-06-ui-workspace.test.ts tests/unit/auth-session-entry.test.ts tests/unit/authorization-policy-closure.test.ts tests/unit/platform-permission-navigation-hub.test.ts tests/unit/acceptance-navigation-state.test.ts tests/unit/workflow-navigation-access-contract.test.ts tests/unit/pattern-history-navigation.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/foreground-loading.test.ts tests/unit/foreground-read.test.ts tests/unit/r2-pattern-boards.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/business-time-write-contract.test.ts tests/unit/sourcing-detail-identity.test.ts tests/unit/work-reporting.test.ts tests/unit/work-assignment-usability.test.ts tests/unit/external-responsibility-entrypoints.test.ts tests/unit/navigation-icons.test.ts tests/unit/platform-modules.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/foreground/release-unit.json",
-      "context": "原导航离开守卫、只读权限、角色模块、板房原卡片及现有时间来源，加共用前台反馈定向。",
+      "id": "home-unit",
+      "command": "vitest cockpit-home cockpit-framework digital-pmc-readonly-access",
+      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/foreground/release-unit.json",
-      "logSha256": "f6edb3782a66e72b9dbe0557137df2a7a251e7b008036695b4258d0301f503eb",
-      "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
-      "testedHead": "27451599ea78dea08fabaa0561d7170510d20f3c",
-      "passed": 150,
+      "log": "/dev/shm/dx-finance.IUos5D/a-unit.json",
+      "logSha256": "7491405523663ed5aa4ced2406de7579748bd79f1dc0533098eb6f28b7dda71b",
+      "sourceFingerprint": "d5de839b34c012030c711e6139cd21cf0ed5bd6cfd92e684615103791e991936",
+      "testedHead": "59c25c8db56a0a7ec9a3e0d36443138138270714",
+      "passed": 58,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-20T21:24:11.664000Z",
-      "endedAt": "2026-11-20T21:24:30.128238Z",
+      "startedAt": "2026-11-21T04:05:44.662000Z",
+      "endedAt": "2026-11-21T04:05:49.083803Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f6edb3782a66e72b9dbe0557137df2a7a251e7b008036695b4258d0301f503eb"
+          "sha256": "7491405523663ed5aa4ced2406de7579748bd79f1dc0533098eb6f28b7dda71b"
         }
       ]
     },
     {
-      "id": "foreground-authenticated-five-native",
-      "command": "NODE_ENV=test M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V NODE_OPTIONS=--max-old-space-size=790 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/foreground/release-native.json",
-      "context": "真实构建、签名 Chromium、隔离 PG13.23。看板三次筛选/后台静默、发厂、跨模块/回退、船样工作单和 PMC 模块权限合计五项。",
+      "id": "home-pg",
+      "command": "PG13.23 two cockpit native browser suites with named targeted cases; Chromium 141",
+      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/foreground/release-native.json",
-      "logSha256": "90132eef156b090faf41cccc2ad465c6ad435cd760501496797e9e8120bfa1bd",
-      "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
-      "testedHead": "27451599ea78dea08fabaa0561d7170510d20f3c",
+      "log": "/dev/shm/dx-finance.IUos5D/a-pp.json",
+      "logSha256": "eff6f926a03c5dff23028d277f1713573bb1fa8ba02b57dea068526a23caee66",
+      "sourceFingerprint": "d5de839b34c012030c711e6139cd21cf0ed5bd6cfd92e684615103791e991936",
+      "testedHead": "59c25c8db56a0a7ec9a3e0d36443138138270714",
       "passed": 5,
       "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T21:24:57.241000Z",
-      "endedAt": "2026-11-20T21:25:28.874210Z",
+      "skipped": 26,
+      "startedAt": "2026-11-21T04:06:13.598000Z",
+      "endedAt": "2026-11-21T04:07:16.632354Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "90132eef156b090faf41cccc2ad465c6ad435cd760501496797e9e8120bfa1bd"
-        }
-      ]
-    },
-    {
-      "id": "foreground-authenticated-quotation-history",
-      "command": "NODE_ENV=test M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V NODE_OPTIONS=--max-old-space-size=790 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/automatic-quotation-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/foreground/release-quotation.json",
-      "context": "签名真浏览器和隔离 PG13.23。保留原报价、实际角色撤权和幂等回执，同时在切换报价版本时验证旧资料可见、旧写入锁定、新版本实际显示后清提示。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/foreground/release-quotation.json",
-      "logSha256": "8f55f54618880294f67000a43bc40d4dfc24cabd04120ac28ad3c778f5180672",
-      "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
-      "testedHead": "27451599ea78dea08fabaa0561d7170510d20f3c",
-      "passed": 3,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T21:24:31.408000Z",
-      "endedAt": "2026-11-20T21:24:54.501814Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8f55f54618880294f67000a43bc40d4dfc24cabd04120ac28ad3c778f5180672"
-        }
-      ]
-    },
-    {
-      "id": "foreground-authenticated-sourcing-detail",
-      "command": "NODE_ENV=test M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V NODE_OPTIONS=--max-old-space-size=790 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/sourcing-detail-foreground-local-postgres.test.ts -t 'keeps the authorized sourcing overview|preserves manual prices' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/foreground/release-sourcing.json",
-      "context": "隔离临时测试复用原外发浏览器夹具。认证实读延迟期间保留合法订单摘要、弃用旧写入口，真实读取完成后释放；原当前到历史再返回保留人工价格与只读隔离。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/foreground/release-sourcing.json",
-      "logSha256": "da317ec56d0fece54ade7046c7383382f5df49e73225b760142f2efed2e956ad",
-      "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
-      "testedHead": "27451599ea78dea08fabaa0561d7170510d20f3c",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 4,
-      "startedAt": "2026-11-20T21:26:33.138000Z",
-      "endedAt": "2026-11-20T21:26:46.113652Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "da317ec56d0fece54ade7046c7383382f5df49e73225b760142f2efed2e956ad"
-        }
-      ]
-    },
-    {
-      "id": "foreground-authenticated-delivery-history",
-      "command": "NODE_ENV=test M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V NODE_OPTIONS=--max-old-space-size=790 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts -t 'reads the original protected published image|keeps a failed request distinct from empty' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/foreground/release-calendar-final.json",
-      "context": "全套原生座舱和日历 26 项通过，一条日历旧测试点击已展开行将其收起。只补当前原生交期历史请求的等待反馈，修订测试沿已展开行查实交比例和欠交，复跑两条真实回归均通过。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/foreground/release-calendar-final.json",
-      "logSha256": "69b33e1150e8820673cae4d444b48c79f46253aeb4edca3d4c0bf996a31d6841",
-      "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
-      "testedHead": "27451599ea78dea08fabaa0561d7170510d20f3c",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 5,
-      "startedAt": "2026-11-20T21:37:48.922000Z",
-      "endedAt": "2026-11-20T21:38:08.585483Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "69b33e1150e8820673cae4d444b48c79f46253aeb4edca3d4c0bf996a31d6841"
-        }
-      ]
-    },
-    {
-      "id": "foreground-review-keep-original-batch-query",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{v1-prelaunch-receiving-batch-propagation,v1-prelaunch-receiving-rework-contract,internal-navigation-guard,pattern-navigation-return,workflow-navigation-access-contract,digital-pmc-readonly-access,business-time-write-contract}.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/foreground/review-route-unit.json",
-      "context": "复审 P1：修前新断言明确失败，原调用仍用 receivingBatchId。恢复旧参数名，相关合同、导航、权限及时钟 72 项通过。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/foreground/review-route-unit.json",
-      "logSha256": "a073accce3d31ccf66b3266e0ff2e45053a2f44f3c234460e30cc3a8ff677d0d",
-      "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
-      "testedHead": "27451599ea78dea08fabaa0561d7170510d20f3c",
-      "passed": 72,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-20T21:46:00.065000Z",
-      "endedAt": "2026-11-20T21:46:07.829303Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "a073accce3d31ccf66b3266e0ff2e45053a2f44f3c234460e30cc3a8ff677d0d"
-        }
-      ]
-    },
-    {
-      "id": "foreground-review-native-two-receiving-entries",
-      "command": "NODE_ENV=test M01_SETTINGS_BROWSER_EXECUTABLE=/workspace/.dx-cloud/playwright/chromium-1194/chrome-linux/chrome DX_PG13_SCRATCH=/dev/shm/dxperf-recovery.sdNo8V NODE_OPTIONS=--max-old-space-size=790 node /tmp/dx-performance-v7/recovery-pg13.mjs tests/integration/receiving-board-native-browser-postgres.test.ts -t 'from the original receiving board with the exact batch id' --reporter=default --reporter=json --outputFile.json=/tmp/dx-performance-v7/foreground/review-route-browser-final.json",
-      "context": "真签名 Chromium、生产构建和隔离 PG13.23。两条原入口打开正确表单、URL 保留同批和 kind，原授权 GET 200 且相同真实批次。",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-performance-v7/foreground/review-route-browser-final.json",
-      "logSha256": "0870b1126083f09a0fd299a7b9b11ac868e09e272f3a8de832cb09a6cfa9be79",
-      "sourceFingerprint": "133615b83e444fb3a484c9faf35ddddac716871a69f456cbc93821a71d794482",
-      "testedHead": "27451599ea78dea08fabaa0561d7170510d20f3c",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 6,
-      "startedAt": "2026-11-20T21:47:14.808000Z",
-      "endedAt": "2026-11-20T21:47:31.479325Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "0870b1126083f09a0fd299a7b9b11ac868e09e272f3a8de832cb09a6cfa9be79"
+          "sha256": "eff6f926a03c5dff23028d277f1713573bb1fa8ba02b57dea068526a23caee66"
         }
       ]
     }
