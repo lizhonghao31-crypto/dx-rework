@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 
 describe("my todos first-entry navigation", () => {
   it("lands todo-capable users on an actionable personal queue", async () => {
-    const [app, landing, components, page] = await Promise.all([
+    const [app, landing, components, page, pagination] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/landing-target.ts", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
       readFile("apps/web/src/my-todos-page.tsx", "utf8"),
+      readFile("apps/web/src/list-pagination.tsx", "utf8"),
     ]);
 
     expect(app).toContain('path === "/ui/my-tasks"');
@@ -27,14 +28,16 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain("maxLength={100}");
     expect(page).not.toContain('type="submit"');
     expect(page).toContain("todos.map");
-    expect(page).toContain("my-todos-pagination");
-    expect(page).toContain("visiblePages.map");
-    expect(page).toContain("Math.max(totalPages, 1)");
+    expect(page).toContain('<ListPagination page={page} totalPages={state.kind==="ready"?totalPages:null}');
+    expect(page).toContain('total={state.kind==="ready"?state.totalCount:null}');
+    expect(page).toContain('pendingPage={busy?requestedPage:undefined}');
+    expect(page).toContain('ariaLabel="待办列表分页" onPageChange={setRequestedPage}');
     expect(page).not.toContain("{totalPages > 1 && <nav");
-    expect(page).not.toContain('aria-label="前五页"');
-    expect(page).not.toContain('aria-label="后五页"');
-    expect(page).toContain("todoPageWindow(page, renderedTotalPages)");
-    expect(page).toContain('className="my-todos-pagination__ellipsis"');
+    expect(pagination).toContain('className="my-todos-pagination"');
+    expect(pagination).toContain("const pages = listPageWindow(currentPage, pageCount)");
+    expect(pagination).toContain('className="my-todos-pagination__ellipsis"');
+    expect(pagination).not.toContain('aria-label="前五页"');
+    expect(pagination).not.toContain('aria-label="后五页"');
     expect(page).toContain("my-todo-index");
     expect(page).toContain("节点停留");
     expect(page).toContain("您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。");
