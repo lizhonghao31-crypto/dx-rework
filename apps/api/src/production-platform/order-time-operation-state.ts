@@ -108,30 +108,32 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   const priorFramework=saved?.input.frameworkPlans;
   const priorScope=saved?.input.materialInvestmentScope;
   let preorder=Boolean(priorScope?.reference.startsWith('preorder:'));
-  const firstDirectTarget=Boolean(order&&!sourceId&&priorScope===null&&operation.kind==='arrangement');
-  if(plan.company.framework&&(!priorFramework||firstDirectTarget)){
-   if(sourceId&&document&&development){
-    const scope=preparationInvestmentScope(development.materials);
-    if(await preparationAvailable(db)){
-     const evidence=(await db.query(`SELECT state,body,NOT EXISTS(SELECT 1
-       FROM jsonb_array_elements_text(coalesce(body->'evidenceIds','[]'::jsonb)) file(id)
-       WHERE NOT EXISTS(SELECT 1 FROM attachments WHERE attachment_id::text=file.id AND status='ready')) AS files_ready
-      FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover' AND scope_ref='whole'
-      ORDER BY recorded_at DESC,version DESC LIMIT 1`,[sourceId])).rows[0];
-     preorder=Boolean(evidence?.body?.investmentScopeBasis?.preorder&&evidence.state==='ready'&&evidence.files_ready
-      &&preparationHandoverCurrent(evidence.body,{version:document.version,materials:development.materials}));
-    }
-    materialInvestmentScope=scope.rows.length?{fabric:scope.fabric,accessories:scope.accessories,
-     reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+':'+scope.fingerprint}:null;
-   }else if(firstDirectTarget&&await preparationAvailable(db)){
-    const instruction=await directInvestmentInstruction(db,order.production_order_id);
-    const handover=instruction?await currentPreparationMaterial(db,order.production_order_id,'design_handover'):null;
-    const scope=instruction?preparationInvestmentScope(instructionInvestmentMaterials(instruction.document),'instruction'):null;
-    materialInvestmentScope=scope?.rows.length&&handover?.state==='ready'&&handover.valid
-     &&handover.investmentScopeBasis?.fingerprint===scope.fingerprint?{fabric:scope.fabric,accessories:scope.accessories,
-      reference:'order:'+order.production_order_id+':'+scope.fingerprint}:null;
-   }else materialInvestmentScope=null;
-  }else if(plan.company.framework)materialInvestmentScope=priorScope;
+  // The original order handover, rather than the current attachment of a
+  // development source, identifies an order-born first material target.
+  const firstOrderTarget=Boolean(order&&priorFramework&&priorScope===null&&operation.kind==='arrangement');
+  if(plan.company.framework&&firstOrderTarget&&await preparationAvailable(db)){
+   const orderId=String(order.production_order_id);
+   const handover=await currentPreparationMaterial(db,orderId,'design_handover');
+   const orderBasis=handover?.resource.kind==='order'&&handover.resource.id===orderId&&handover.state==='ready'&&handover.valid
+    ?handover.investmentScopeBasis:undefined;
+   const instruction=orderBasis?.orderInstructionVersion?await directInvestmentInstruction(db,orderId):null;
+   const scope=instruction?preparationInvestmentScope(instructionInvestmentMaterials(instruction.document),'instruction'):null;
+   materialInvestmentScope=scope?.rows.length&&orderBasis?.fingerprint===scope.fingerprint
+    ?{fabric:scope.fabric,accessories:scope.accessories,reference:'order:'+orderId+':'+scope.fingerprint}:null;
+  }else if(plan.company.framework&&!priorFramework&&sourceId&&document&&development){
+   const scope=preparationInvestmentScope(development.materials);
+   if(await preparationAvailable(db)){
+    const evidence=(await db.query(`SELECT state,body,NOT EXISTS(SELECT 1
+      FROM jsonb_array_elements_text(coalesce(body->'evidenceIds','[]'::jsonb)) file(id)
+      WHERE NOT EXISTS(SELECT 1 FROM attachments WHERE attachment_id::text=file.id AND status='ready')) AS files_ready
+     FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover' AND scope_ref='whole'
+     ORDER BY recorded_at DESC,version DESC LIMIT 1`,[sourceId])).rows[0];
+    preorder=Boolean(evidence?.body?.investmentScopeBasis?.preorder&&evidence.state==='ready'&&evidence.files_ready
+     &&preparationHandoverCurrent(evidence.body,{version:document.version,materials:development.materials}));
+   }
+   materialInvestmentScope=scope.rows.length?{fabric:scope.fabric,accessories:scope.accessories,
+    reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+':'+scope.fingerprint}:null;
+  }else if(plan.company.framework)materialInvestmentScope=priorFramework?priorScope:null;
   let lines:Array<{id:string;po:string;date:string|null;customerDateVersion?:number}>;
   if(order){
    const rows=(await db.query('SELECT line_id,coalesce(po_number,formal_style_no) AS po,customer_warehouse_arrival_date::text AS date,customer_date_version,factory_delivery_date::text AS factory_date,factory_date_version,factory_date_source FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[resource!.id])).rows;

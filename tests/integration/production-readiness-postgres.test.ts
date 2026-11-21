@@ -800,7 +800,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await materialInvestmentRiskHistory(h.db,orderId,completeAt)).toMatchObject([{at:completeAt,deadline:reminder.dueAt,assessment:'late',overdueSeconds:3600}]);
   });
  });
- it('uses the original direct order handover, an explicitly adopted cutoff, and a closable overdue notice without a 70 percent window',async()=>{
+ it.each(['before','after'] as const)('uses the original direct order handover and overdue cutoff when the source is linked %s adoption',async(linkWhen)=>{
   const h=await materialTimerFixture();
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,root=h.f.root,style='TEST-DIRECT-MATERIAL-'+randomUUID();
   const started='2027-04-25T04:00:00.000Z',scene=await h.f.scene(started),requests=h.orderTimeRequests!;
@@ -833,19 +833,33 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return (await instruction.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,
     document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',fabrics:[{id:materialId,name:'TEST 本单原制单主布',part:'本身',colors:{},remarks:''}]}},randomUUID())).version;
   });
+  const linkOriginalSource=async()=>{
+   const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+   const owner=(await identity.read(root,orderId)).createdBy===designer.actorId?designer:root;
+   const {sourceId}=await identity.createSource(owner,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const price=(await h.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const draft=await forms.save(owner,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    files:[{attachmentId:await h.f.image(owner),kind:'款图'}],patternCategoryId:price.price_id}},randomUUID());
+   await forms.publish(root,sourceId,draft.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
+   expect((await identity.attachSource(root,orderId,sourceId,randomUUID())).sourceId).toBe(sourceId);
+  };
   const cutoff=await h.f.runtime.run(scene,root,async()=>{
    await expect(preparation.record(root,resource,{...handover,expectedVersion:1},randomUUID())).rejects.toMatchObject({statusCode:409});
    const authorized=await preparation.record(root,resource,{...handover,expectedVersion:1,orderInstructionVersion:version},randomUUID());
    expect(authorized.facts.find(row=>row.kind==='design_handover')).toMatchObject({resource,recordId:noTarget.handoverId,
     investmentScopeBasis:{orderInstructionVersion:version,materialIds:[materialId]}});
    expect((await preparation.read(merch,resource)).materialInvestmentReminder).toBeUndefined();
+   if(linkWhen==='before'){
+    await linkOriginalSource();
+    expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:null,route:{entityId:orderId}});
+   }
    const check=await requests.check(root,{kind:'arrangement',resource});
    await requests.arrange(root,{resource,fingerprint:check.fingerprint,overrides:{},acceptLate:true},randomUUID());
    const exact=await plans.current(resource),targets=(saved:NonNullable<typeof exact>)=>Object.values(saved.input.frameworkPlans!)[0]!.milestones;
    expect(targets(exact!).filter(row=>row.key!=='material_investment').map(row=>row.target))
     .toEqual(targets(noTarget.original!).filter(row=>row.key!=='material_investment').map(row=>row.target));
    const target=targets(exact!).find(row=>row.key==='material_investment')!;
-   expect(target.materialInvestmentTargetBasis?.scope?.reference).toContain('order:'+orderId+':');
+   expect(target.materialInvestmentTargetBasis).toMatchObject({scope:{reference:expect.stringContaining('order:'+orderId+':')}});
    expect(target.target.at).toBeTruthy();
    return target.target.at!;
   });
@@ -855,14 +869,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff});
    const notify=new DigitalProductionNotificationService(h.db);await notify.runOnce();await notify.runOnce();
    expect((await h.db.query("SELECT count(*)::int AS n FROM digital_production_notification_events WHERE event_kind='material_investment' AND todo_id=$1",[noTarget.handoverId])).rows[0]!.n).toBe(1);
-   const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
-   const owner=(await identity.read(root,orderId)).createdBy===designer.actorId?designer:root;
-   const {sourceId}=await identity.createSource(owner,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
-   const price=(await h.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
-   const draft=await forms.save(owner,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
-    files:[{attachmentId:await h.f.image(owner),kind:'款图'}],patternCategoryId:price.price_id}},randomUUID());
-   await forms.publish(root,sourceId,draft.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
-   expect((await identity.attachSource(root,orderId,sourceId,randomUUID())).sourceId).toBe(sourceId);
+   if(linkWhen==='after')await linkOriginalSource();
    expect((await preparation.read(merch,resource)).materialInvestmentReminder).toMatchObject({fingerprint:reminder.fingerprint,dueAt:cutoff});
    expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff,route:{entityId:orderId}});
    await notify.runOnce();
