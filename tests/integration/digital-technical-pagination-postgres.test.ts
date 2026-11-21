@@ -2,6 +2,7 @@ import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {WholeOrderDeletionService} from '../../apps/api/src/production-platform/whole-order-deletion-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {readTaskAccessForPage,readTechnicalTaskListPage} from '../../apps/api/src/production-platform/journey-selection-access.js';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -32,7 +33,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(result.total).toBe(16);
    expect(result.items.map(row=>row.sourceId)).toEqual(expected);
   }
-  await f.db.query('DELETE FROM digital_production_sources WHERE source_id=$1',[eligible[15]]);
+  const deletion=new WholeOrderDeletionService(f.db);
+  const preview=await deletion.preview(f.root,{ids:[eligible[15]]});
+  await deletion.remove(f.root,{orders:preview.orders.map(({id,revision})=>({id,revision}))},randomUUID());
   expect(await service.sources(designer,2,'',target.productionOrderId)).toEqual({items:[],page:2,total:15});
  });
 

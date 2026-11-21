@@ -494,6 +494,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('rejects the next drill read after real PMC revocation while keeping the same valid original signed session',async()=>{
   const {context,page}=await h.open(h.pmcId);try{const first=await h.read(page);expect(first.total).toBe(31);const token=(await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value,before=h.hash(token);await openPendingCoverage(page);await page.locator('.cockpit-coverage-categories button:enabled').first().click();await coverageReady(page);await h.revokePmc();const read=page.waitForResponse(response=>response.url().includes('/digital-production/journeys?'));await page.getByRole('dialog').getByRole('button',{name:'下一页',exact:true}).click();const response=await read;expect([200,403]).toContain(response.status());const result=await response.json();expect(JSON.stringify(result)).not.toContain(h.prefix);for(const id of h.orders)expect(JSON.stringify(result)).not.toContain(id);if(response.status()===200)expect(result.total).toBe(0);expect(h.hash((await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value)).toBe(before);const user=await h.auth.authenticate(token);expect(user.businessRoles).toContain('finance_read');expect(user.businessRoles).not.toContain('pmc');expect(h.errors).toEqual([]);
+   const newIdentity=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/me');
+   await page.reload();
+   expect((await newIdentity).status()).toBe(200);
+   await page.locator('.app-shell').waitFor();
+   expect(await page.locator('.cockpit-home input[aria-label="跳转页码"]:enabled').count()).toBe(0);
+   expect(await page.getByText('共 31 条',{exact:false}).count()).toBe(0);
+   expect(h.hash((await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value)).toBe(before);
   }finally{await context.close();}
  });
  it('R5 assigns the missing primary in the original order personnel UI, rejects an ordinary merchandiser and continues genuine owner approval',async()=>{
