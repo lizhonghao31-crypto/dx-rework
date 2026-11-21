@@ -131,7 +131,9 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
   (handedDocument.document.materials as DevelopmentMaterial[]).map(m=>({
    materialId:m.materialId,category:m.category,supplier:m.supplier,name:m.name,quantity:m.quantity,color:m.color,specification:m.specification
   })):undefined;
- const target=prior?.resource??(context.sourceId?{kind:'source' as const,id:context.sourceId}:context.resource),recordId=prior?.recordId??randomUUID(),version=input.expectedVersion+1;
+ const investmentHandover=input.kind==='material_investment'?current.find(row=>row.kind==='design_handover'
+  &&row.scopeRef===input.scopeRef&&row.state==='ready'&&row.valid):undefined;
+ const target=prior?.resource??investmentHandover?.resource??(context.sourceId?{kind:'source' as const,id:context.sourceId}:context.resource),recordId=prior?.recordId??randomUUID(),version=input.expectedVersion+1;
  let scopeBasis:MaterialInvestmentScopeBasis|undefined;
  let investmentMaterialOccurrences:PreparationMaterialFact['investmentMaterialOccurrences'];
  const preorder=handedDocument?.status==='draft'&&handedDocument.document.customerOrderDraft?.withOrder===true
@@ -145,8 +147,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
    ...(preorder||prior?.investmentScopeBasis?.preorder?{preorder:true as const}:{})};
  }
  if(input.kind==='material_investment'){
-  const handover=current.find(row=>row.kind==='design_handover'&&row.scopeRef===input.scopeRef&&row.state==='ready'&&row.valid);
-  scopeBasis=handover?.investmentScopeBasis;
+  scopeBasis=investmentHandover?.investmentScopeBasis;
   if(scopeBasis&&(input.state==='ready'||input.state==='partial')){
    const rowKey=(row:PreparationMaterialRecord['quantities'][number])=>JSON.stringify([row.materialId,row.lineId,row.unit,row.materialId?null:row.name]);
    const quantities=[...new Map([...(prior?.quantities??[]),...input.quantities].map(row=>[rowKey(row),row])).values()];
@@ -157,7 +158,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
     const changed=!prior?.quantities.some(previous=>rowKey(previous)===rowKey(row)&&previous.quantity===row.quantity);
     if(changed||input.investmentMaterialId===id)investmentMaterialOccurrences[id]={fingerprint:scopeBasis.materialFingerprints[id]!,occurredAt:input.occurredAt!};
    }
-   const complete=preparationInvestmentComplete(handover,{state:input.state,valid:true,quantities,investmentMaterialOccurrences});
+   const complete=preparationInvestmentComplete(investmentHandover,{state:input.state,valid:true,quantities,investmentMaterialOccurrences});
    const occurredAt=complete?scopeBasis.materialIds.map(id=>investmentMaterialOccurrences![id]!.occurredAt)
     .reduce((last,actual)=>Date.parse(actual)>Date.parse(last)?actual:last):input.occurredAt;
    input={...input,quantities,occurredAt,state:input.state==='ready'&&!complete?'partial':input.state};

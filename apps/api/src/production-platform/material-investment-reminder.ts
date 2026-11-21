@@ -37,7 +37,9 @@ export async function materialInvestmentReminder(db:PreparationDB,basis:{
   ORDER BY occurred_at,version LIMIT 1`,[basis.handoverId,basis.scopeFingerprint,basis.sourceId,basis.orderId])).rows[0];
  const startedAt=preparationIso(origin?.occurred_at),dueAt=first.target.at!,exclusive=first.target.exclusive;
  const warningAt=startedAt&&clock.reminder.enabled?materialInvestmentWarningAt(startedAt,dueAt,clock.calendar,clock.reminder.percent):null;
- const resourceIdentity=basis.sourceId?{sourceId:basis.sourceId}:{orderId:basis.orderId};
+ // A historical source association is a navigation alias for an order-born handover.
+ const orderBorn=first.materialInvestmentTargetBasis!.scope!.reference.startsWith('order:'+basis.orderId+':');
+ const resourceIdentity=orderBorn||!basis.sourceId?{orderId:basis.orderId}:{sourceId:basis.sourceId};
  const fingerprint=preparationHash({...resourceIdentity,handoverId:basis.handoverId,scope:basis.scopeFingerprint,
   startedAt,dueAt,exclusive,calendar:clock.calendar,percent:clock.reminder.percent,enabled:clock.reminder.enabled});
  const closed=(await db.query(`SELECT actor_id,after_state FROM audit_events

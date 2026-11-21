@@ -855,6 +855,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff});
    const notify=new DigitalProductionNotificationService(h.db);await notify.runOnce();await notify.runOnce();
    expect((await h.db.query("SELECT count(*)::int AS n FROM digital_production_notification_events WHERE event_kind='material_investment' AND todo_id=$1",[noTarget.handoverId])).rows[0]!.n).toBe(1);
+   const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+   const owner=(await identity.read(root,orderId)).createdBy===designer.actorId?designer:root;
+   const {sourceId}=await identity.createSource(owner,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const price=(await h.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const draft=await forms.save(owner,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    files:[{attachmentId:await h.f.image(owner),kind:'款图'}],patternCategoryId:price.price_id}},randomUUID());
+   await forms.publish(root,sourceId,draft.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
+   expect((await identity.attachSource(root,orderId,sourceId,randomUUID())).sourceId).toBe(sourceId);
+   expect((await preparation.read(merch,resource)).materialInvestmentReminder).toMatchObject({fingerprint:reminder.fingerprint,dueAt:cutoff});
+   expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff,route:{entityId:orderId}});
+   await notify.runOnce();
+   expect((await h.db.query("SELECT count(*)::int AS n FROM digital_production_notification_events WHERE event_kind='material_investment' AND todo_id=$1",[noTarget.handoverId])).rows[0]!.n).toBe(1);
    await expect(preparation.closeMaterialInvestmentReminder(h.f.people.warehouse!,resource,{fingerprint:reminder.fingerprint,reason:'TEST 不具原权限'},randomUUID())).rejects.toMatchObject({statusCode:403});
    await preparation.closeMaterialInvestmentReminder(merch,resource,{fingerprint:reminder.fingerprint,reason:'TEST 已处理逾期提醒'},randomUUID());
    expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff});

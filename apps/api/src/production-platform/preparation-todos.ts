@@ -60,7 +60,7 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  const tables=await developmentReadTables(db);
  type Handover=Pick<PreparationMaterialFact,'sourceDocumentVersion'|'orderInstructionVersion'|'investmentScopeBasis'>;
  type Candidate={sourceId:string|null;orderId:string|null;styleNo:string;handoverId:string;handoverVersion:number;occurredAt:Date;handover:Handover;
-  documentVersion:number|null;materials:DevelopmentMaterial[]|null;instruction:InstructionDocument|null;investment:Pick<PreparationMaterialFact,'state'|'valid'|'quantities'|'version'|'investmentMaterialOccurrences'>|null};
+  documentVersion:number|null;materials:DevelopmentMaterial[]|null;instruction:InstructionDocument|null;instructionVersion:number|null;orderHandover:boolean;investment:Pick<PreparationMaterialFact,'state'|'valid'|'quantities'|'version'|'investmentMaterialOccurrences'>|null};
  const rows=(await db.query<Candidate>(`WITH resources AS (
   SELECT s.source_id,o.production_order_id,o.primary_merchandiser_id,s.design_style_no
   FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
@@ -71,14 +71,15 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  )
  SELECT res.source_id AS "sourceId",res.production_order_id AS "orderId",res.design_style_no AS "styleNo",
   h.record_id AS "handoverId",h.version AS "handoverVersion",h.occurred_at AS "occurredAt",h.body AS handover,
-  coalesce(r.document_version,d.version,j.version) AS "documentVersion",
+  coalesce(r.document_version,d.version) AS "documentVersion",j.version AS "instructionVersion",
+  (h.resource_kind='order' AND h.body->>'sourceDocumentVersion' IS NULL) AS "orderHandover",
   coalesce(r.document,d.document)->'materials' AS materials,j.document AS instruction,
   CASE WHEN i.record_id IS NOT NULL THEN jsonb_build_object('state',i.state,'version',i.version,'quantities',coalesce(i.body->'quantities','[]'::jsonb),'investmentMaterialOccurrences',i.body->'investmentMaterialOccurrences',
    'valid',NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(coalesce(i.body->'evidenceIds','[]'::jsonb)) f(id)
     WHERE NOT EXISTS(SELECT 1 FROM attachments a WHERE a.attachment_id::text=f.id AND a.status='ready'))) END AS investment
   FROM resources res
   LEFT JOIN ${tables.documents} d ON d.source_id=res.source_id
-  LEFT JOIN digital_instruction_documents j ON res.source_id IS NULL AND j.production_order_id=res.production_order_id AND j.version>0
+  LEFT JOIN digital_instruction_documents j ON j.production_order_id=res.production_order_id AND j.version>0
   LEFT JOIN LATERAL (SELECT round.document,round.document_version FROM ${tables.rounds} round
    WHERE round.source_id=res.source_id ORDER BY round.round_number DESC LIMIT 1) r ON true
   JOIN LATERAL (SELECT native.* FROM digital_preparation_material_versions native
@@ -102,10 +103,12 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  const result:TodoResponse[]=[];
  for(const row of rows){
   const id=row.orderId??row.sourceId,at=preparationIso(row.occurredAt)!;
-  const document=row.documentVersion===null?null:{version:row.documentVersion,
-   materials:row.sourceId?row.materials??[]:row.instruction?instructionInvestmentMaterials(row.instruction):[]};
-  const current=row.sourceId?preparationHandoverCurrent(row.handover,document)
-   :row.handover.orderInstructionVersion===undefined||preparationHandoverCurrent(row.handover,document,'instruction');
+  const source=row.documentVersion===null?null:{version:row.documentVersion,materials:row.materials??[]};
+  const instruction=row.instruction&&row.instructionVersion!==null
+   ?{version:row.instructionVersion,materials:instructionInvestmentMaterials(row.instruction)}:null;
+  const current=row.orderHandover
+   ?row.handover.orderInstructionVersion===undefined||preparationHandoverCurrent(row.handover,instruction,'instruction')
+   :preparationHandoverCurrent(row.handover,source);
   if(!id||!current||!await acceptanceIncludesNative(db,id)||preparationInvestmentComplete(row.handover,row.investment??undefined))continue;
   const now=businessNow();
   const reminder=await materialInvestmentReminder(db,{sourceId:row.sourceId,orderId:row.orderId,handoverId:row.handoverId,
