@@ -355,7 +355,7 @@ export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:O
   evidence.frameworkFacts=series.facts;
   const handover=series.preparationFacts?.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole'&&f.valid&&f.state==='ready');
   const investment=series.preparationFacts?.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
-  if(item.sourceId&&handover?.investmentScopeBasis&&!(investment?.state==='ready'&&investment.valid)){
+  if(handover?.investmentScopeBasis&&!(investment?.state==='ready'&&investment.valid)){
    const timing=await materialInvestmentReminder(db,{sourceId:item.sourceId,orderId:resource.id,handoverId:handover.recordId,
     scopeFingerprint:handover.investmentScopeBasis.fingerprint},new Date(asOf),saved);
    if(timing)evidence.materialInvestmentTiming={dueAt:timing.dueAt,warningAt:timing.warningAt,exclusive:timing.exclusive};

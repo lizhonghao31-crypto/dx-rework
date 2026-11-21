@@ -11,7 +11,7 @@ const investmentUrl=(orderId:string)=>`/ui/digital-production?materialOrder=${or
  * A preorder receipt before any target stays a receipt without a late result. */
 export async function materialInvestmentRiskHistory(db:Pick<PoolClient,'query'>,orderId:string,asOf:string){
  const resource={kind:'order' as const,id:orderId};
- const versions=(await orderTimePolicyHistory(db,resource)).filter(version=>version.history?.input.materialInvestmentScope?.reference.startsWith('preorder:'));
+ const versions=(await orderTimePolicyHistory(db,resource)).filter(version=>version.history?.input.materialInvestmentScope!=null);
  if(!versions.length)return [];
  const context=await preparationContext(db,resource),history=await preparationMaterialHistory(db,context);
  const ready=history.filter(row=>row.kind==='material_investment'&&row.state==='ready'&&row.occurredAt&&row.investmentScopeBasis);

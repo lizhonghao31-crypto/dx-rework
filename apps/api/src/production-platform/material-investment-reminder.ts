@@ -19,7 +19,7 @@ export function materialInvestmentWarningAt(start:string,due:string,calendar:Fix
 /** Only an adopted order and the original native handover can provide a
  * reminder. Opening a page or changing the assigned person never starts it. */
 export async function materialInvestmentReminder(db:PreparationDB,basis:{
- sourceId:string;orderId:string|null;handoverId:string;scopeFingerprint:string|null;
+ sourceId:string|null;orderId:string|null;handoverId:string;scopeFingerprint:string|null;
 },now=businessNow(),adoptedPlan?:StoredOrderTimePlan):Promise<MaterialInvestmentReminder|null>{
  if(!basis.orderId||!basis.scopeFingerprint)return null;
  const saved=adoptedPlan??await new OrderTimePlanRepository(db).current({kind:'order',id:basis.orderId});
@@ -37,13 +37,14 @@ export async function materialInvestmentReminder(db:PreparationDB,basis:{
   ORDER BY occurred_at,version LIMIT 1`,[basis.handoverId,basis.scopeFingerprint,basis.sourceId,basis.orderId])).rows[0];
  const startedAt=preparationIso(origin?.occurred_at),dueAt=first.target.at!,exclusive=first.target.exclusive;
  const warningAt=startedAt&&clock.reminder.enabled?materialInvestmentWarningAt(startedAt,dueAt,clock.calendar,clock.reminder.percent):null;
- const fingerprint=preparationHash({sourceId:basis.sourceId,handoverId:basis.handoverId,scope:basis.scopeFingerprint,
+ const resourceIdentity=basis.sourceId?{sourceId:basis.sourceId}:{orderId:basis.orderId};
+ const fingerprint=preparationHash({...resourceIdentity,handoverId:basis.handoverId,scope:basis.scopeFingerprint,
   startedAt,dueAt,exclusive,calendar:clock.calendar,percent:clock.reminder.percent,enabled:clock.reminder.enabled});
  const closed=(await db.query(`SELECT actor_id,after_state FROM audit_events
   WHERE entity_type='digital_material_investment' AND entity_id=$1 AND action='preparation_material_reminder_closed'
    AND after_state->>'fingerprint'=$2 ORDER BY created_at DESC,id LIMIT 1`,[basis.handoverId,fingerprint])).rows[0];
  const termination=await journeyTermination(db,{kind:'order',id:basis.orderId},now.toISOString())
-  ??await journeyTermination(db,{kind:'source',id:basis.sourceId},now.toISOString());
+  ??(basis.sourceId?await journeyTermination(db,{kind:'source',id:basis.sourceId},now.toISOString()):null);
  const asOf=termination?.at?Date.parse(termination.at):now.getTime(),due=Date.parse(dueAt);
  const status=termination&&!termination.at?'waiting':asOf>due||asOf===due&&exclusive?'overdue':warningAt&&asOf>=Date.parse(warningAt)?'warning':'waiting';
  return {fingerprint,handoverId:basis.handoverId,handoverVersion:origin?.version??null,adoptedPlanId:saved.id,startedAt,dueAt,warningAt,exclusive,

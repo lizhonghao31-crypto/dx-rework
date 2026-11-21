@@ -14,9 +14,12 @@ export const PreparationMaterialRecordSchema=z.object({
  occurredAt:z.iso.datetime({offset:true}).nullable(),note:z.string().trim().min(1).max(1000),
  quantities:z.array(quantity).max(400).default([]),evidenceIds:z.array(z.uuid()).max(40).default([]),
  sourceDocumentVersion:z.number().int().positive().nullable().default(null),
+ orderInstructionVersion:z.number().int().positive().optional(),
  recipientId:z.uuid().nullable().default(null),
  investmentMaterialId:z.uuid().optional(),
 }).strict().transform(x=>({...x,quantities:x.quantities.map(q=>({...q,unit:x.kind==='style_label_ready'?(normalizeStyleLabelUnit(q.unit)??q.unit):q.unit}))})).superRefine((x,c)=>{
+ if(x.orderInstructionVersion!==undefined&&(x.kind!=='design_handover'||x.sourceDocumentVersion!==null))
+  c.addIssue({code:'custom',path:['orderInstructionVersion'],message:'正式单资料版本仅用于无开发来源的设计交接'});
  if(x.investmentMaterialId&&(x.kind!=='material_investment'||!x.quantities.some(row=>row.materialId===x.investmentMaterialId)))
   c.addIssue({code:'custom',path:['investmentMaterialId'],message:'须选择本次实际登记的投面辅料'});
  if(['ready','partial'].includes(x.state)&&!x.occurredAt)c.addIssue({code:'custom',path:['occurredAt'],message:'实际办理须填写真实发生时间'});
@@ -30,8 +33,8 @@ export const PreparationMaterialRecordSchema=z.object({
 export type PreparationMaterialRecord=z.infer<typeof PreparationMaterialRecordSchema>;
 export type PreparationResource={kind:'source'|'order';id:string};
 export type MaterialInvestmentScopeBasis={
-  materialIds:string[];materialFingerprints:Record<string,string>;sourceDocumentVersion:number;fingerprint:string;
-  handoverRecordId:string;handoverVersion:number;
+  materialIds:string[];materialFingerprints:Record<string,string>;sourceDocumentVersion?:number;orderInstructionVersion?:number;fingerprint:string;
+  handoverRecordId:string;handoverVersion:number;preorder?:true;
  };
  export type PreparationMaterialFact=PreparationMaterialRecord&{investmentScopeBasis?:MaterialInvestmentScopeBasis;investmentMaterialOccurrences?:Record<string,{fingerprint:string;occurredAt:string}>;handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string;materialId?:string;category?:'主布'|'配布'|'辅料';supplier?:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
 export const PreparationResponsibilitySchema=z.object({expectedVersion:z.number().int().nonnegative(),warehouseWorkerId:z.uuid().nullable(),colorConfirmationWorkerId:z.uuid().nullable(),colorConfirmationRole:z.string().trim().min(1).max(100).nullable(),reason:z.string().trim().min(1).max(1000)}).strict().refine(x=>Boolean(x.colorConfirmationWorkerId)===Boolean(x.colorConfirmationRole),'对色确认人和现有岗位须同时选择');
@@ -49,7 +52,7 @@ export type MaterialInvestmentReminder={
 };
 export type ProductionReadinessState={
  materialInvestmentReminder?:MaterialInvestmentReminder&{canClose:boolean};
- sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;
+ sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;orderInstructionVersion?:number;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;
  facts:PreparationMaterialFact[];history:PreparationMaterialFact[];canRecord:PreparationMaterialKind[];
  responsibility:{version:number;warehouseWorkerId:string|null;colorConfirmationWorkerId:string|null;colorConfirmationRole:string|null};canAssign:boolean;
  canDeliverInstruction:boolean;canAcknowledgeAdoption:boolean;canAdopt:boolean;adoptionAcknowledged:boolean;adoptionReason:string|null;

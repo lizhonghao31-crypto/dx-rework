@@ -6,7 +6,7 @@ import {publishedTechnicalArtifact} from './development-technical-repository.js'
 import {preparationSupplement} from './preparation-todos.js';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
 import type {PreparationMaterialFact} from '@dx-rework/contracts/production-readiness';
-import {preparationHandoverCurrent,preparationInvestmentComplete,preparationResponsibility} from './preparation-material-repository.js';
+import {preparationHandoverCurrent,preparationInvestmentComplete,preparationResponsibility,instructionInvestmentMaterials} from './preparation-material-repository.js';
 import {DigitalProductionAccessPolicy} from './access-policy.js';
 import {productionReadiness} from './production-readiness-repository.js';
 import {acceptsNewOrderTime} from './order-time-admission.js';
@@ -65,11 +65,11 @@ export async function readCockpitOwnerApprovals(db:PoolClient,candidates:readonl
 
 type MaterialCandidate={id:string;orderId:string|null;sourceId:string|null;asOf:string};
 type MaterialBasis={
- id:string;orderId:string|null;sourceId:string;round:number;
- enrollmentId:string;sourceVersion:number;designer:string|null;merchandiser:string|null;
- materials:DevelopmentMaterial[];
+ id:string;orderId:string|null;sourceId:string|null;round:number;
+ enrollmentId:string;sourceVersion:number|null;designer:string|null;merchandiser:string|null;
+ materials:DevelopmentMaterial[]|null;instruction:InstructionDocument|null;
  materialInvestment:Pick<PreparationMaterialFact,'state'|'quantities'|'valid'|'investmentMaterialOccurrences'>|null;
- designHandover:(Pick<PreparationMaterialFact,'state'|'sourceDocumentVersion'|'investmentScopeBasis'|'recipientId'|'valid'>&{id:string})|null;
+ designHandover:(Pick<PreparationMaterialFact,'state'|'sourceDocumentVersion'|'orderInstructionVersion'|'investmentScopeBasis'|'recipientId'|'valid'>&{id:string})|null;
  hasRequiredFabric:boolean;canChooseRecipient:boolean;
 };
 
@@ -82,11 +82,11 @@ export async function readCockpitMaterialActions(db:PoolClient,candidates:readon
  const tables=await developmentReadTables(db);
  const rows=(await db.query<MaterialBasis>(`SELECT requested.id,requested."orderId",s.source_id AS "sourceId",
   coalesce(round.round_number,1) AS round,adoption.adoption_id AS "enrollmentId",
-  coalesce(round.document_version,d.version) AS "sourceVersion",
+  coalesce(round.document_version,d.version,j.version) AS "sourceVersion",
   CASE WHEN designer.id IS NOT NULL THEN s.created_by END AS designer,
   CASE WHEN merch.id IS NOT NULL AND coalesce((to_jsonb(merch)->>'manual_access_disabled')::boolean,false)=false THEN o.primary_merchandiser_id END AS merchandiser,
   coalesce(jsonb_array_length(jsonb_path_query_array(coalesce(round.document,d.document),'$.materials[*] ? (@.category != "辅料" && @.requiredThisRound == true && @.name != "" && @.quantity != "")'))>0,false) AS "hasRequiredFabric",
-  coalesce(round.document,d.document)->'materials' AS materials,investment.fact AS "materialInvestment",handover.fact AS "designHandover",
+  coalesce(round.document,d.document)->'materials' AS materials,j.document AS instruction,investment.fact AS "materialInvestment",handover.fact AS "designHandover",
   EXISTS(SELECT 1 FROM user_role_assignments role JOIN business_roles r ON r.role_code=role.role_code AND r.enabled
     JOIN app_users person ON person.id=role.user_id AND person.enabled AND NOT coalesce((to_jsonb(person)->>'manual_access_disabled')::boolean,false)
     JOIN identity_mappings i ON i.user_id=person.id AND i.active AND i.employed
@@ -94,9 +94,10 @@ export async function readCockpitMaterialActions(db:PoolClient,candidates:readon
       AND creator_identity.provider=i.provider AND creator_identity.corp_id=i.corp_id
     WHERE role.role_code='order_merchandiser' AND role.revoked_at IS NULL) AS "canChooseRecipient"
   FROM jsonb_to_recordset($1::jsonb) AS requested(id uuid,"orderId" uuid,"sourceId" uuid,"asOf" timestamptz)
-  JOIN digital_production_sources s ON s.source_id=requested."sourceId"
-  LEFT JOIN digital_production_orders o ON o.production_order_id=requested."orderId" AND o.source_id=s.source_id
-  JOIN ${tables.documents} d ON d.source_id=s.source_id AND d.status='published'
+  LEFT JOIN digital_production_sources s ON s.source_id=requested."sourceId"
+  LEFT JOIN digital_production_orders o ON o.production_order_id=requested."orderId" AND o.source_id IS NOT DISTINCT FROM s.source_id
+  LEFT JOIN ${tables.documents} d ON d.source_id=s.source_id AND d.status='published'
+  LEFT JOIN digital_instruction_documents j ON s.source_id IS NULL AND j.production_order_id=o.production_order_id AND j.version>0
   LEFT JOIN LATERAL (SELECT r.round_number,r.document_version,r.document FROM ${tables.rounds} r WHERE r.source_id=s.source_id ORDER BY r.round_number DESC LIMIT 1) round ON true
   JOIN LATERAL (SELECT a.adoption_id FROM digital_preparation_rule_adoptions a WHERE
     (requested."orderId" IS NULL AND a.resource_kind='source' AND a.resource_id=s.source_id)
@@ -116,13 +117,14 @@ export async function readCockpitMaterialActions(db:PoolClient,candidates:readon
    FROM digital_preparation_material_versions m WHERE m.kind='material_investment' AND m.scope_ref='whole'
     AND ((m.resource_kind='order' AND m.resource_id=o.production_order_id) OR (m.resource_kind='source' AND m.resource_id=s.source_id))
    ORDER BY (m.resource_kind='order') DESC,m.recorded_at DESC,m.version DESC,m.record_id LIMIT 1) investment ON true
-  LEFT JOIN LATERAL (SELECT jsonb_build_object('id',m.record_id,'state',m.state,'sourceDocumentVersion',m.body->'sourceDocumentVersion','investmentScopeBasis',m.body->'investmentScopeBasis','recipientId',m.body->>'recipientId',
+  LEFT JOIN LATERAL (SELECT jsonb_build_object('id',m.record_id,'state',m.state,'sourceDocumentVersion',m.body->'sourceDocumentVersion','orderInstructionVersion',m.body->'orderInstructionVersion','investmentScopeBasis',m.body->'investmentScopeBasis','recipientId',m.body->>'recipientId',
    'valid',NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(coalesce(m.body->'evidenceIds','[]'::jsonb)) file(id)
     WHERE NOT EXISTS(SELECT 1 FROM attachments a WHERE a.attachment_id::text=file.id AND a.status='ready'))) AS fact
    FROM digital_preparation_material_versions m WHERE m.kind='design_handover' AND m.scope_ref='whole'
     AND ((m.resource_kind='order' AND m.resource_id=o.production_order_id) OR (m.resource_kind='source' AND m.resource_id=s.source_id))
    ORDER BY (m.resource_kind='order') DESC,m.recorded_at DESC,m.version DESC,m.record_id LIMIT 1) handover ON true
-  WHERE NOT EXISTS (SELECT 1 FROM digital_order_closures closed WHERE closed.production_order_id=o.production_order_id)
+  WHERE (d.source_id IS NOT NULL OR (s.source_id IS NULL AND o.production_order_id IS NOT NULL))
+   AND NOT EXISTS (SELECT 1 FROM digital_order_closures closed WHERE closed.production_order_id=o.production_order_id)
    AND NOT EXISTS (SELECT 1 FROM digital_production_resource_lifecycle l WHERE
     ((l.resource_kind='order' AND l.resource_id=o.production_order_id) OR (l.resource_kind='source' AND l.resource_id=s.source_id)) AND l.state<>'active')
    AND (requested."orderId" IS NOT NULL OR NOT EXISTS(SELECT 1 FROM digital_production_orders linked WHERE linked.source_id=s.source_id))`,
@@ -139,17 +141,22 @@ export async function readCockpitMaterialActions(db:PoolClient,candidates:readon
       :`/ui/digital-production?development=${row.sourceId}&round=${row.round}&materialKind=${kind}`,reason,asOf:asOf.get(row.id)!});
   };
   const handover=row.designHandover;
-  const currentHandover=handover?.state==='ready'&&handover.valid&&preparationHandoverCurrent(handover,{version:row.sourceVersion,materials:row.materials});
+  const direct=!row.sourceId&&Boolean(row.orderId);
+  const document=row.sourceVersion===null?null:{version:row.sourceVersion,
+   materials:row.sourceId?row.materials??[]:row.instruction?instructionInvestmentMaterials(row.instruction):[]};
+  const currentHandover=handover?.state==='ready'&&handover.valid&&(direct
+   ?handover.orderInstructionVersion==null||preparationHandoverCurrent(handover,document,'instruction')
+   :preparationHandoverCurrent(handover,document));
   const primary=row.merchandiser&&(!context||await context.acceptsActor(row.merchandiser))?row.merchandiser:null;
   // The native preparation service authorizes a source-only recipient by the
   // effective handover and a still-active merchandiser role.
   const sourceRecipient=!row.orderId&&currentHandover?handover.recipientId:null;
   const recipient=row.orderId?primary:sourceRecipient&&await new DigitalProductionAccessPolicy(client).activeRole(sourceRecipient,'order_merchandiser')?sourceRecipient:null;
-  const validHandover=currentHandover&&recipient!==null&&handover.recipientId===recipient;
+  const validHandover=currentHandover&&recipient!==null&&(row.orderId!==null||handover.recipientId===recipient);
   const canHandover=row.orderId?Boolean(primary):row.canChooseRecipient&&!context;
   if(canHandover&&!validHandover&&row.designer&&(!context||await context.acceptsActor(row.designer)))
    add('design_handover','sample_designer',row.designer,row.designHandover?.id??row.enrollmentId,'当前已发布资料尚未有效交接给本单跟单');
-  if(recipient&&validHandover&&(row.hasRequiredFabric||Boolean(handover.investmentScopeBasis?.materialIds.length))&&!preparationInvestmentComplete(handover,row.materialInvestment??undefined))
+  if(recipient&&validHandover&&(row.hasRequiredFabric||direct||Boolean(handover.investmentScopeBasis?.materialIds.length))&&!preparationInvestmentComplete(handover,row.materialInvestment??undefined))
    add('material_investment','order_merchandiser',recipient,row.enrollmentId,'本单已交接当前资料，待跟单按原单记录实际投料');
   items.set(row.id,collection);
  });

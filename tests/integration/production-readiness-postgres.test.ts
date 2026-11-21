@@ -1,3 +1,15 @@
+import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
+import {orderTimeCreated} from '../../apps/api/src/production-platform/order-time-created.js';
+import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {materialInvestmentRiskHistory} from '../../apps/api/src/production-platform/material-investment-risk-history.js';
+import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
+import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
+import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
+import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
+import {prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
@@ -692,4 +704,165 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
  });
 
+ const materialTimerFixture=async()=>{
+  await prepareRewashSettings(f);
+  const patternOrders=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
+  return {f,db:f.db,patternOrders,orderTimeRequests:new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,patternOrders))};
+ };
+ it.each([true,false])('keeps the original purchase record and calendar after real formal conversion, preorder=%s',async(preorder)=>{
+  const h=await materialTimerFixture();
+  const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,root=h.f.root,style='TEST-FORMAL-PREORDER-'+randomUUID();
+  const started='2026-11-19T04:00:00.000Z',scene=await h.f.scene(started);
+  const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),
+   preparation=new ProductionReadinessService(h.db),requests=h.orderTimeRequests!,notifications=new DigitalProductionNotificationService(h.db);
+  const photo=await h.f.image(designer);
+  const order=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,
+   orderDate:'2026-11-19',contractDeliveryDate:null,requiresColorMatching:false,salesYear:2027,salesSeries:'P03',primaryMerchandiserId:merch.actorId,
+   lines:[{formalPoNo:style+'-PO',color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:'2'}]}]});
+  const original=await h.f.runtime.run(scene,designer,async()=>{
+   const {sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const category=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const price=await new PatternRoomPriceService(h.db).quote(root,'category',category.price_id);
+   const draft=initialDevelopmentDocument(),material={...draft.materials[0]!,name:'TEST 真预下单材料',quantity:'75米',supplier:'TEST 供应商',specification:'TEST 原布规格'};
+   const secondMaterial={...material,materialId:randomUUID(),name:'TEST 配布原记录',quantity:'20米'};
+   const document={...draft,quantity:1,files:[{attachmentId:photo,kind:'款图' as const}],patternCategoryId:category.price_id,
+    materials:[material,secondMaterial],productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:preorder?{withOrder:true,stage:'preorder' as const,order}:null};
+   const sheet=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID()),resource={kind:'source' as const,id:sourceId};
+   const version=preorder?sheet.version:(await forms.publish(root,sourceId,sheet.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version})).version;
+   const handover=await preparation.record(designer,resource,{kind:'design_handover',scopeRef:'whole',expectedVersion:0,state:'ready',
+    occurredAt:started,note:'TEST 正式前交接',quantities:[],evidenceIds:[],sourceDocumentVersion:version,recipientId:merch.actorId},randomUUID());
+   const fact=handover.facts.find(entry=>entry.kind==='design_handover')!;
+   expect(Boolean(await orderTimeCreated(h.db,resource))).toBe(!preorder);
+   return {sourceId,resource,category,price,document,version,handoverId:fact.recordId,material,secondMaterial};
+  });
+  const actual={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'partial' as const,
+   occurredAt:started,note:'TEST 首批部分投料，保留在同一投料记录',quantities:[{lineId:null,materialId:original.material.materialId,
+    name:original.material.name,quantity:20,unit:'米'}],evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+  const initial=await h.f.runtime.run(scene,merch,async()=>{
+   const result=await preparation.record(merch,original.resource,actual,randomUUID());
+   expect(await materialInvestmentTodos(h.db,merch,{todoId:original.handoverId})).toMatchObject([{dueAt:null,route:{routeName:'digital_source_material_investment'}}]);
+   return result.facts.find(record=>record.kind==='material_investment')!;
+  });
+  await h.f.advance(scene,preorder?'2026-11-20T04:00:00.000Z':'2026-11-19T04:10:00.000Z');
+  const pending=await h.f.runtime.run(scene,designer,async()=>{
+   const operation=preorder?await (async()=>{
+    const sheet=await forms.save(designer,original.sourceId,{expectedVersion:original.version,
+     document:{...original.document,customerOrderDraft:{withOrder:true,stage:'formal',order}}},randomUUID());
+    return {kind:'development_publish' as const,sourceId:original.sourceId,input:{expectedVersion:sheet.version,
+     patternOrder:{categoryId:original.category.price_id,priceVersion:original.price.version}}};
+   })():{kind:'confirm_order' as const,sourceId:original.sourceId,input:DigitalOrderCreateSchema.parse({...order,
+    productionPlanning:{craftSteps:[],preshrink:false},lines:order.lines.map(line=>({...line,sizes:[{size:'M',quantity:2}]}))})};
+   const check=await requests.check(designer,operation);
+   return requests.submit(designer,{operation,fingerprint:check.fingerprint,reason:'TEST 原预下单转正式'},randomUUID());
+  });
+  const orderId=await h.f.runtime.run(scene,root,async()=>{
+   const review=await requests.read(root,pending.requestId);
+   const applied=await requests.apply(root,pending.requestId,{expectedVersion:review.version,fingerprint:review.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   expect(applied.state).toBe('applied');return applied.result!.orderId!;
+  });
+  const resource={kind:'order' as const,id:orderId};
+  const reminder=await h.f.runtime.run(scene,merch,async()=>{
+   const plan=await new OrderTimePlanRepository(h.db).current(resource);
+   const predecessor=plan?.input.work.find(work=>work.parameterKey==='material_investment')?.dependsOn;
+   expect(predecessor).toContain('design_handover');
+   if(preorder)expect(predecessor).toEqual(['design_handover']);
+   const state=await preparation.read(merch,resource);
+   expect(state.facts.find(record=>record.kind==='material_investment')).toMatchObject({recordId:initial.recordId,version:1,state:'partial',occurredAt:started});
+   expect(state.materialInvestmentReminder).toMatchObject({handoverId:original.handoverId,startedAt:started,percent:70,closed:null,status:'waiting'});
+   expect(await materialInvestmentTodos(h.db,merch,{todoId:original.handoverId})).toMatchObject([{todoId:original.handoverId,route:{routeName:'digital_order_material_investment',entityId:orderId}}]);
+   return state.materialInvestmentReminder!;
+  });
+  expect(reminder.warningAt).toBeTruthy();
+  await h.f.advance(scene,reminder.warningAt!);
+  await h.f.runtime.run(scene,root,async()=>{
+   await notifications.runOnce();await notifications.runOnce();
+   expect((await h.db.query("SELECT count(*)::int n FROM digital_production_notification_events WHERE event_kind='material_investment' AND todo_id=$1",[original.handoverId])).rows[0]!.n).toBe(1);
+  });
+  await h.f.runtime.run(scene,merch,async()=>{
+   const close={fingerprint:reminder.fingerprint,reason:'TEST 已和供应商核对，继续领料'},key=randomUUID();
+   const closed=await preparation.closeMaterialInvestmentReminder(merch,resource,close,key);
+   expect(closed.materialInvestmentReminder).toMatchObject({closed:{actorId:merch.actorId,reason:close.reason},status:'warning'});
+   expect((await preparation.closeMaterialInvestmentReminder(merch,resource,close,key)).materialInvestmentReminder).toEqual(closed.materialInvestmentReminder);
+   expect(await materialInvestmentTodos(h.db,merch,{todoId:original.handoverId})).toHaveLength(1);
+  });
+  const completeAt=new Date(Date.parse(reminder.dueAt)+3600000).toISOString();
+  await h.f.advance(scene,completeAt);
+  await h.f.runtime.run(scene,merch,async()=>{
+   const later=await preparation.record(merch,resource,{...actual,expectedVersion:1,occurredAt:completeAt,
+    quantities:[{...actual.quantities[0]!,quantity:75}]},randomUUID());
+   expect(later.facts.find(record=>record.kind==='material_investment')).toMatchObject({recordId:initial.recordId,version:2,state:'partial'});
+   const earlierAt=new Date(Date.parse(reminder.dueAt)-3600000).toISOString();
+   const result=await preparation.record(merch,resource,{...actual,expectedVersion:2,state:'ready',occurredAt:earlierAt,
+    quantities:[{lineId:null,materialId:original.secondMaterial.materialId,name:original.secondMaterial.name,quantity:20,unit:'米'}]},randomUUID());
+   expect(result.facts.find(record=>record.kind==='material_investment')).toMatchObject({recordId:initial.recordId,version:3,state:'ready',occurredAt:completeAt,
+    investmentMaterialOccurrences:{[original.material.materialId]:{occurredAt:completeAt},[original.secondMaterial.materialId]:{occurredAt:earlierAt}}});
+   expect(await materialInvestmentTodos(h.db,merch,{todoId:original.handoverId})).toEqual([]);
+   expect(await materialInvestmentRiskHistory(h.db,orderId,completeAt)).toMatchObject([{at:completeAt,deadline:reminder.dueAt,assessment:'late',overdueSeconds:3600}]);
+  });
+ });
+ it('uses the original direct order handover, an explicitly adopted cutoff, and a closable overdue notice without a 70 percent window',async()=>{
+  const h=await materialTimerFixture();
+  const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,root=h.f.root,style='TEST-DIRECT-MATERIAL-'+randomUUID();
+  const started='2027-04-25T04:00:00.000Z',scene=await h.f.scene(started),requests=h.orderTimeRequests!;
+  const preparation=new ProductionReadinessService(h.db),instruction=new ProductionInstructionService(h.db,true),plans=new OrderTimePlanRepository(h.db);
+  const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2027-04-25',
+   requiresColorMatching:false,salesYear:2027,salesSeries:'P03',primaryMerchandiserId:merch.actorId,
+   lines:[{formalPoNo:style+'-PO',color:'黑',customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:2}]}]});
+  const operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}};
+  const submitted=await h.f.runtime.run(scene,designer,async()=>{
+   const check=await requests.check(designer,operation);
+   return requests.submit(designer,{operation,fingerprint:check.fingerprint,reason:'TEST 由原入口建立无开发来源的正式单'},randomUUID());
+  });
+  const orderId=await h.f.runtime.run(scene,root,async()=>{
+   const pending=await requests.read(root,submitted.requestId);
+   const done=await requests.apply(root,pending.requestId,{expectedVersion:pending.version,fingerprint:pending.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   expect(done.state).toBe('applied');return done.result!.orderId!;
+  });
+  const resource={kind:'order' as const,id:orderId},materialId=randomUUID();
+  const handover={kind:'design_handover' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,
+   note:'TEST 无来源正式单的实际交接',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:merch.actorId};
+  const noTarget=await h.f.runtime.run(scene,root,async()=>{
+   const state=await preparation.record(root,resource,handover,randomUUID()),fact=state.facts.find(row=>row.kind==='design_handover')!;
+   expect(state.sourceId).toBeNull();expect(fact.investmentScopeBasis).toBeUndefined();
+   expect((await materialInvestmentTodos(h.db,merch,{todoId:fact.recordId}))[0]).toMatchObject({dueAt:null,route:{entityId:orderId}});
+   return {original:await plans.current(resource),handoverId:fact.recordId};
+  });
+  const version=await h.f.runtime.run(scene,merch,async()=>{
+   const current=await instruction.read(merch,orderId);
+   expect(current.canEdit).toBe(true);
+   return (await instruction.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,
+    document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',fabrics:[{id:materialId,name:'TEST 本单原制单主布',part:'本身',colors:{},remarks:''}]}},randomUUID())).version;
+  });
+  const cutoff=await h.f.runtime.run(scene,root,async()=>{
+   await expect(preparation.record(root,resource,{...handover,expectedVersion:1},randomUUID())).rejects.toMatchObject({statusCode:409});
+   const authorized=await preparation.record(root,resource,{...handover,expectedVersion:1,orderInstructionVersion:version},randomUUID());
+   expect(authorized.facts.find(row=>row.kind==='design_handover')).toMatchObject({resource,recordId:noTarget.handoverId,
+    investmentScopeBasis:{orderInstructionVersion:version,materialIds:[materialId]}});
+   expect((await preparation.read(merch,resource)).materialInvestmentReminder).toBeUndefined();
+   const check=await requests.check(root,{kind:'arrangement',resource});
+   await requests.arrange(root,{resource,fingerprint:check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   const exact=await plans.current(resource),targets=(saved:NonNullable<typeof exact>)=>Object.values(saved.input.frameworkPlans!)[0]!.milestones;
+   expect(targets(exact!).filter(row=>row.key!=='material_investment').map(row=>row.target))
+    .toEqual(targets(noTarget.original!).filter(row=>row.key!=='material_investment').map(row=>row.target));
+   const target=targets(exact!).find(row=>row.key==='material_investment')!;
+   expect(target.materialInvestmentTargetBasis?.scope?.reference).toContain('order:'+orderId+':');
+   expect(target.target.at).toBeTruthy();
+   return target.target.at!;
+  });
+  await h.f.runtime.run(scene,root,async()=>{
+   const reminder=(await preparation.read(merch,resource)).materialInvestmentReminder!;
+   expect(reminder).toMatchObject({handoverId:noTarget.handoverId,startedAt:started,dueAt:cutoff,warningAt:null,status:'overdue',canClose:true});
+   expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff});
+   const notify=new DigitalProductionNotificationService(h.db);await notify.runOnce();await notify.runOnce();
+   expect((await h.db.query("SELECT count(*)::int AS n FROM digital_production_notification_events WHERE event_kind='material_investment' AND todo_id=$1",[noTarget.handoverId])).rows[0]!.n).toBe(1);
+   await expect(preparation.closeMaterialInvestmentReminder(h.f.people.warehouse!,resource,{fingerprint:reminder.fingerprint,reason:'TEST 不具原权限'},randomUUID())).rejects.toMatchObject({statusCode:403});
+   await preparation.closeMaterialInvestmentReminder(merch,resource,{fingerprint:reminder.fingerprint,reason:'TEST 已处理逾期提醒'},randomUUID());
+   expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff});
+   await preparation.record(merch,resource,{...handover,kind:'material_investment',expectedVersion:0,recipientId:null,
+    quantities:[{lineId:null,materialId,name:'TEST 本单原制单主布',quantity:20,unit:'米'}]},randomUUID());
+   expect(await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId})).toEqual([]);
+   const journey=await new DigitalJourneyQuery(h.db).read(root,orderId,undefined,true);
+   expect(journey.riskHistory).toEqual(expect.arrayContaining([expect.objectContaining({label:'投面辅料',deadline:cutoff,assessment:'late'})]));
+  });
+ });
 });

@@ -78,7 +78,11 @@ export function evaluateTimeFrameworkCandidate(value:TimeFrameworkInput,context:
  const adopted=new Map(context.adoptedMilestones?.map(row=>[row.key,row]));
  const milestones=input.bindings.map(binding=>{
   const prior=adopted.get(binding.key);
-  const basis:InvestmentTarget=prior
+  // An explicit original arrangement may adopt the first evidenced material
+  // target after direct-order intake. The old null was never a date to retain.
+  const firstInvestment=binding.key==='material_investment'&&prior?.materialInvestmentTargetBasis?.scope===null
+   &&prior.target.at===null&&Boolean(input.materialInvestmentScope);
+  const basis:InvestmentTarget=prior&&!firstInvestment
    ?{date:prior.date,target:prior.target,...(prior.materialInvestmentTargetBasis?{materialInvestmentTargetBasis:prior.materialInvestmentTargetBasis}:{})}
    :binding.key==='material_investment'&&input.materialInvestmentScope!==undefined
     ?materialInvestmentTarget(input,original):original[binding.key]!;

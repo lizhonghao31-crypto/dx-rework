@@ -35,7 +35,7 @@ import {orderTimeInputFromRoute,orderTimeCheck,orderTimeBegunStates,type OrderTi
 import {formalRemainingSchedule} from './order-time-formal-arrangement.js';
 import {nativeTaskReadiness} from './task-readiness-facts.js';
 import {orderTimeBulkSteps,orderTimeStoredBulkSteps} from './order-time-route-identities.js';
-import {preparationAvailable,preparationHandoverCurrent} from './preparation-material-repository.js';
+import {preparationAvailable,preparationHandoverCurrent,preparationInvestmentScope,currentPreparationMaterial,directInvestmentInstruction,instructionInvestmentMaterials} from './preparation-material-repository.js';
 import {materialReadiness} from './development-material-readiness.js';
 import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 
@@ -107,26 +107,31 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(includesProduction){
   const priorFramework=saved?.input.frameworkPlans;
   const priorScope=saved?.input.materialInvestmentScope;
-  let preorder=Boolean(priorScope?.reference.startsWith('preorder:')),handedFingerprint:string|null=null;
-  if(plan.company.framework&&!priorFramework&&sourceId&&await preparationAvailable(db)){
-   const evidence=(await db.query(`SELECT state,body,NOT EXISTS(SELECT 1
-     FROM jsonb_array_elements_text(coalesce(body->'evidenceIds','[]'::jsonb)) file(id)
-     WHERE NOT EXISTS(SELECT 1 FROM attachments WHERE attachment_id::text=file.id AND status='ready')) AS files_ready
-    FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover' AND scope_ref='whole'
-    ORDER BY recorded_at DESC,version DESC LIMIT 1`,[sourceId])).rows[0];
-   if(evidence?.body?.investmentScopeBasis&&evidence.state==='ready'&&evidence.files_ready&&document&&development
-    &&preparationHandoverCurrent(evidence.body,{version:document.version,materials:development.materials})){
-    preorder=true;handedFingerprint=evidence.body.investmentScopeBasis.fingerprint;
-   }
-  }
-  if(plan.company.framework){
-   if(priorFramework)materialInvestmentScope=priorScope;
-   else if(development?.materials.length){
-    const required=development.materials.filter(row=>row.name.trim()&&row.quantity.trim());
-    const fabric=required.some(row=>row.category==='主布'||row.category==='配布'),accessories=required.some(row=>row.category==='辅料');
-    materialInvestmentScope=fabric||accessories?{fabric,accessories,reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+(handedFingerprint?':'+handedFingerprint:'')}:null;
+  let preorder=Boolean(priorScope?.reference.startsWith('preorder:'));
+  const firstDirectTarget=Boolean(order&&!sourceId&&priorScope===null&&operation.kind==='arrangement');
+  if(plan.company.framework&&(!priorFramework||firstDirectTarget)){
+   if(sourceId&&document&&development){
+    const scope=preparationInvestmentScope(development.materials);
+    if(await preparationAvailable(db)){
+     const evidence=(await db.query(`SELECT state,body,NOT EXISTS(SELECT 1
+       FROM jsonb_array_elements_text(coalesce(body->'evidenceIds','[]'::jsonb)) file(id)
+       WHERE NOT EXISTS(SELECT 1 FROM attachments WHERE attachment_id::text=file.id AND status='ready')) AS files_ready
+      FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover' AND scope_ref='whole'
+      ORDER BY recorded_at DESC,version DESC LIMIT 1`,[sourceId])).rows[0];
+     preorder=Boolean(evidence?.body?.investmentScopeBasis?.preorder&&evidence.state==='ready'&&evidence.files_ready
+      &&preparationHandoverCurrent(evidence.body,{version:document.version,materials:development.materials}));
+    }
+    materialInvestmentScope=scope.rows.length?{fabric:scope.fabric,accessories:scope.accessories,
+     reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+':'+scope.fingerprint}:null;
+   }else if(firstDirectTarget&&await preparationAvailable(db)){
+    const instruction=await directInvestmentInstruction(db,order.production_order_id);
+    const handover=instruction?await currentPreparationMaterial(db,order.production_order_id,'design_handover'):null;
+    const scope=instruction?preparationInvestmentScope(instructionInvestmentMaterials(instruction.document),'instruction'):null;
+    materialInvestmentScope=scope?.rows.length&&handover?.state==='ready'&&handover.valid
+     &&handover.investmentScopeBasis?.fingerprint===scope.fingerprint?{fabric:scope.fabric,accessories:scope.accessories,
+      reference:'order:'+order.production_order_id+':'+scope.fingerprint}:null;
    }else materialInvestmentScope=null;
-  }
+  }else if(plan.company.framework)materialInvestmentScope=priorScope;
   let lines:Array<{id:string;po:string;date:string|null;customerDateVersion?:number}>;
   if(order){
    const rows=(await db.query('SELECT line_id,coalesce(po_number,formal_style_no) AS po,customer_warehouse_arrival_date::text AS date,customer_date_version,factory_delivery_date::text AS factory_date,factory_date_version,factory_date_source FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[resource!.id])).rows;
