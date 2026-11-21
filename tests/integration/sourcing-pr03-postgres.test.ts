@@ -4720,6 +4720,20 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await craftService.ensureOrganizationPolicy();
     const store=new PostgresAuthStore(database,"corp");
     const signIn=async(roles:string[])=>{
+      // The preceding contract-return test can already own this singleton
+      // appointment. Reuse its pure role instead of creating a second employee.
+      if(roles.length===1&&roles[0]==="factory_payables"){
+        const existing=(await database.query<{provider_user_id:string;union_id:string}>(`SELECT i.provider_user_id,i.union_id
+          FROM user_role_assignments grant_role JOIN identity_mappings i USING(user_id)
+          WHERE grant_role.user_id=$1 AND grant_role.role_code='factory_payables' AND grant_role.revoked_at IS NULL
+            AND i.corp_id='corp' AND i.active AND i.employed`,[financeId])).rows[0];
+        if(existing){
+          const person=await store.upsertIdentity({corpId:"corp",userId:existing.provider_user_id,unionId:existing.union_id,
+            active:true,employed:true,displayName:"TEST finance"});
+          expect(person.businessRoles).toEqual(roles);
+          return person;
+        }
+      }
       const id=randomUUID();
       await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST finance cutting',true)",[id]);
       await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,`TEST-${id}`,`TEST-union-${id}`]);

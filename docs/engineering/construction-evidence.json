@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "9c73099c161972c3491fb4e90eec52f7f2caed1b",
-  "sourceFingerprint": "9fe8fb0a149e1825b6e7358d2c43cdc1c877ac7207eb235df37e45db6ab78638",
+  "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
   "rules": [
     {
       "rule": "恰好六个财务岗位新增订单开裁只读；样衣财务不新增授权；保持裁床岗位和原安全投影",
@@ -38,8 +38,7 @@
       ],
       "checks": [
         "finance-unit",
-        "finance-grant",
-        "finance-http"
+        "finance-pg"
       ]
     }
   ],
@@ -52,64 +51,41 @@
       "status": "passed",
       "exitCode": 0,
       "log": "/dev/shm/dx-finance.IUos5D/d-unit.json",
-      "logSha256": "6f9e72c3e00162df237063649e99de32c69b9404b2afb871e93e84c3cad940d9",
-      "sourceFingerprint": "9fe8fb0a149e1825b6e7358d2c43cdc1c877ac7207eb235df37e45db6ab78638",
-      "testedHead": "9c73099c161972c3491fb4e90eec52f7f2caed1b",
+      "logSha256": "50066f60bc21f8fbff7b1de6c5edaa44b5e3029fa4183677e17fe8becf6b2c8c",
+      "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
+      "testedHead": "b60fb508112735f74cc86728d0225c4fd7e04037",
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T04:05:44.633000Z",
-      "endedAt": "2026-11-21T04:05:46.133447Z",
+      "startedAt": "2026-11-21T04:20:45.401000Z",
+      "endedAt": "2026-11-21T04:20:46.640609Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6f9e72c3e00162df237063649e99de32c69b9404b2afb871e93e84c3cad940d9"
+          "sha256": "50066f60bc21f8fbff7b1de6c5edaa44b5e3029fa4183677e17fe8becf6b2c8c"
         }
       ]
     },
     {
-      "id": "finance-grant",
-      "command": "PG13.23 pmc-readonly-postgres migration upgrade and live finance sessions",
+      "id": "finance-pg",
+      "command": "PG13.23 full sourcing-pr03 and pmc-readonly PostgreSQL files, real auth and original HTTP",
       "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/dev/shm/dx-finance.IUos5D/d-pg.json",
-      "logSha256": "d4e6714e80a064a48156d9b048bdac76b232158b70507d1cbc751b2036c95770",
-      "sourceFingerprint": "9fe8fb0a149e1825b6e7358d2c43cdc1c877ac7207eb235df37e45db6ab78638",
-      "testedHead": "9c73099c161972c3491fb4e90eec52f7f2caed1b",
-      "passed": 7,
+      "log": "/dev/shm/dx-finance.IUos5D/d-all-pg.json",
+      "logSha256": "fecb867f4c63759e347253145ecc7ce17a5f282099a156772261534102c83141",
+      "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
+      "testedHead": "b60fb508112735f74cc86728d0225c4fd7e04037",
+      "passed": 98,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T04:02:02.847000Z",
-      "endedAt": "2026-11-21T04:02:06.982728Z",
+      "startedAt": "2026-11-21T04:20:47.966000Z",
+      "endedAt": "2026-11-21T04:21:38.477580Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d4e6714e80a064a48156d9b048bdac76b232158b70507d1cbc751b2036c95770"
-        }
-      ]
-    },
-    {
-      "id": "finance-http",
-      "command": "PG13.23 sourcing-pr03 original HTTP routes, finance and warehouse scope",
-      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/dev/shm/dx-finance.IUos5D/d-http.json",
-      "logSha256": "263c0daeaa5d61a3f09295b8c02f9df003ef4159391e70e4287d40bcab567bb2",
-      "sourceFingerprint": "9fe8fb0a149e1825b6e7358d2c43cdc1c877ac7207eb235df37e45db6ab78638",
-      "testedHead": "9c73099c161972c3491fb4e90eec52f7f2caed1b",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 89,
-      "startedAt": "2026-11-21T04:05:05.432000Z",
-      "endedAt": "2026-11-21T04:05:09.804610Z",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "263c0daeaa5d61a3f09295b8c02f9df003ef4159391e70e4287d40bcab567bb2"
+          "sha256": "fecb867f4c63759e347253145ecc7ce17a5f282099a156772261534102c83141"
         }
       ]
     }
