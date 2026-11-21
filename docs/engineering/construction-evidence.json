@@ -51,7 +51,8 @@
       "startedAt": "2026-11-21T07:59:28Z",
       "endedAt": "2026-11-21T07:59:28Z",
       "logSha256": "dc98680996be0a3483c60c4df6a0075ebdc1948a1ff6817281c82ea3e2d09a8a",
-      "context": "Isolated docs/astryx-ui-spec-v1 worktree, verified approved Library input, release base and Markdown paths."
+      "context": "Isolated docs/astryx-ui-spec-v1 worktree, verified approved Library input, release base and Markdown paths.",
+      "log": "/dev/shm/dx-finance.IUos5D/check-astryx-docs.log"
     }
   ]
 }
