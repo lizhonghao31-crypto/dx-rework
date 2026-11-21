@@ -46,6 +46,7 @@ import {completeBulkRangeFixture} from '../helpers/production-readiness-fixture.
 import {randomUUID} from 'node:crypto';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
+import {r5RoleFixture} from '../helpers/r5-role-fixture.js';
 import {confirmedTechnicalFixture} from '../helpers/development-technical-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
@@ -616,6 +617,55 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(final).toMatchObject({state:'ready',version:3,recordId:renewed.recordId});
   expect(final.investmentMaterialOccurrences?.[accessoryId]).toEqual(renewed.investmentMaterialOccurrences?.[accessoryId]);
   expect(await materialInvestmentTodos(f.db,p.primary,{todoId:handoverId})).toEqual([]);
+ });
+
+ it('restricts preorder handover files, prior writes and receipts after the actual recipient changes',async()=>{
+  const designer=f.people['sample-designer']!,first=f.people.merchandiser!,second=(await r5RoleFixture(f.db,f.access,f.root,'order_merchandiser')).actor;
+  const style='TEST-PREORDER-RECIPIENT-'+randomUUID(),materialId=randomUUID();
+  const {sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+  const resource={kind:'source' as const,id:sourceId},oldShared=await f.image(designer),currentShared=await f.image(designer),oldReceipt=await f.image(first);
+  const baseDocument=documentFixture(oldShared),draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{
+   ...baseDocument,materials:[{...baseDocument.materials[0]!,materialId,quantity:'20米'}],
+   customerOrderDraft:{withOrder:true,stage:'preorder',order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}}},randomUUID());
+  const at=businessNow().toISOString(),handover=async(version:number,recipientId:string,evidenceIds:string[])=>service.record(designer,resource,{
+   kind:'design_handover',scopeRef:'whole',expectedVersion:version,state:'ready',occurredAt:at,note:'TEST actual handover '+version,
+   quantities:[],evidenceIds,sourceDocumentVersion:draft.version,recipientId},randomUUID());
+  await handover(0,first.actorId,[oldShared]);
+  const purchase={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:at,
+   note:'TEST original purchase',quantities:[{lineId:null,materialId,name:'TEST主布',quantity:20,unit:'米'}],evidenceIds:[oldShared,oldReceipt],sourceDocumentVersion:null,recipientId:null};
+  const key=randomUUID(),receipt=await service.record(first,resource,purchase,key),app=Fastify();
+  const users={first,second};
+  const deps={service:identity,creationEnabled:true,authenticate:async(token:string|undefined)=>{const who=users[token as keyof typeof users];if(!who)throw new ApplicationError('UNAUTHORIZED','TEST login required',401);return {id:who.actorId,displayName:'TEST ordinary merch',businessRoles:who.actorRoles,capabilities:['digital_production:view']};}};
+  app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(e.statusCode??500).send({code:e.code});});
+  registerProductionReadinessRoutes(app,deps,service,f.attachments);await app.ready();
+  const base='/digital-production/sources/'+sourceId+'/production-readiness';
+  const get=(who:keyof typeof users,id?:string)=>app.inject({method:'GET',url:base+(id?'/attachments/'+id:''),headers:{cookie:'dx_rework_session='+who}});
+  try{
+   expect((await get('first',oldShared)).statusCode).toBe(302);
+   expect((await get('first',oldReceipt)).statusCode).toBe(302);
+   await handover(1,second.actorId,[currentShared]);
+   expect((await get('first',oldShared)).statusCode).toBe(403);
+   await expect(service.record(first,resource,purchase,key)).rejects.toMatchObject({statusCode:403});
+   const response=await get('second');
+   expect(response.statusCode).toBe(200);
+   expect(response.body).not.toContain(oldShared);
+   expect(response.body).not.toContain(oldReceipt);
+   expect(response.json().history.filter((row:{kind:string})=>row.kind==='design_handover')).toMatchObject([{version:2,evidenceIds:[currentShared]}]);
+   expect(response.json().facts.find((row:{kind:string})=>row.kind==='material_investment')).toMatchObject({recordId:receipt.facts.find(row=>row.kind==='material_investment')!.recordId,version:1,state:'ready',evidenceIds:[]});
+   expect((await get('second',oldShared)).statusCode).toBe(403);
+   expect((await get('second',oldReceipt)).statusCode).toBe(403);
+   expect((await get('second',currentShared)).statusCode).toBe(302);
+   await expect(service.record(second,resource,{...purchase,expectedVersion:1,evidenceIds:[oldReceipt]},randomUUID())).rejects.toMatchObject({statusCode:403});
+   await handover(2,first.actorId,[currentShared]);
+   const recovered=await service.record(first,resource,purchase,key);
+   expect(JSON.stringify(recovered)).not.toContain(oldShared);
+   expect(recovered.facts.find(row=>row.kind==='material_investment')).toMatchObject({version:1,evidenceIds:[oldReceipt]});
+   expect((await get('first',oldShared)).statusCode).toBe(403);
+   expect((await get('first',oldReceipt)).statusCode).toBe(302);
+   const history=(await service.read(f.root,resource)).history;
+   expect(history.filter(row=>row.kind==='design_handover')).toHaveLength(3);
+   expect(history.find(row=>row.kind==='material_investment')?.evidenceIds).toEqual([oldShared,oldReceipt]);
+  }finally{await app.close();}
  });
 
  it('counts physical labels only as normalized pieces, never as boxes or lengths',async()=>{
