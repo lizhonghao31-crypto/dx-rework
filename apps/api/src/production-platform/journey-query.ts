@@ -5,7 +5,7 @@ import {commentTimeColumns} from './development-comment-time.js';
 import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
-import {cockpitLegacyOrderTimeSql,firstDevelopmentPublicationConfirmedOrder,orderTimeCreated} from './order-time-created.js';
+import {cockpitLegacyOrderBusinessTimeSql,firstDevelopmentPublicationConfirmedOrder,orderTimeCreated} from './order-time-created.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -113,7 +113,7 @@ export class DigitalJourneyQuery {
       WHERE a.user_id=$1 AND a.revoked_at IS NULL AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
       AND a.role_code=ANY($2::text[]) AND EXISTS(SELECT 1 FROM identity_mappings m WHERE m.user_id=u.id AND m.active AND m.employed)
     ) SELECT row_to_json(s) AS source,row_to_json(o) AS "order",
-      ${cockpitLegacyOrderTimeSql('o')} AS cockpit_legacy_order_at,${typedPlan?`EXISTS(SELECT 1 FROM digital_order_time_plan_versions plan
+      ${cockpitLegacyOrderBusinessTimeSql('o')} AS cockpit_legacy_order_at,${typedPlan?`EXISTS(SELECT 1 FROM digital_order_time_plan_versions plan
       WHERE o.production_order_id IS NOT NULL AND plan.resource_kind='order' AND plan.production_order_id=o.production_order_id
        OR o.production_order_id IS NULL AND plan.resource_kind='source' AND plan.source_id=s.source_id)`:'false'} AS has_order_time_plan
     FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
@@ -382,12 +382,15 @@ export class DigitalJourneyQuery {
       const selection=await this.nativeTaskSelection(db,new DigitalProductionAccessPolicy(db),actor,row,null);
       const ids=selection.tasks.filter(task=>journeyDefinition(task.task_kind)).map(task=>task.task_id);
       const taskPage=await new DigitalProductionTaskService(this.database).prepareReadPage(actor,ids,db,!compact);
-      const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact,undefined,undefined,taskPage,selection);
+      const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact,undefined,undefined,taskPage,selection,compact);
       if(!item)return digitalNotFound();
       const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact,undefined,undefined,undefined,selection);
       if(compact&&current){
         const creation=item.cockpitCreation;
-        if(row.source?.draft_reserved===true&&item.sourceId&&item.orderId&&creation?.developmentCreatedAt&&creation.orderCreatedAt
+        const details=item.cockpitCreationDetails??[];
+        if(row.source?.draft_reserved===true&&item.sourceId&&item.orderId&&creation
+          &&details.some(entry=>entry.subject==='source'&&entry.at)
+          &&details.some(entry=>entry.subject==='order'&&entry.at)
           &&await firstDevelopmentPublicationConfirmedOrder(db,item.sourceId,item.orderId)){
           creation.developmentPublishedWithOrder=true;
         }
@@ -529,7 +532,7 @@ export class DigitalJourneyQuery {
     return observation;
   }
 
-  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch,taskPage?:Awaited<ReturnType<DigitalProductionTaskService['prepareReadPage']>>,nativeSelection?:Awaited<ReturnType<DigitalJourneyQuery['nativeTaskSelection']>>):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch,taskPage?:Awaited<ReturnType<DigitalProductionTaskService['prepareReadPage']>>,nativeSelection?:Awaited<ReturnType<DigitalJourneyQuery['nativeTaskSelection']>>,creationDetail=false):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
@@ -610,9 +613,9 @@ export class DigitalJourneyQuery {
     const nativeSourceCreation=sourceAccess&&(source?.order_time_managed||source?.draft_reserved===true)?await orderTimeCreated(db,{kind:'source',id:source.source_id}):null;
     const nativeOrderCreation=orderAccess&&order?.order_time_managed?await orderTimeCreated(db,{kind:'order',id:order.production_order_id}):null;
     const visibleCreation=sourceAccess?nativeSourceCreation:nativeOrderCreation;
-    if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],nativeOrderCreation?.at??iso(order!.created_at),{id:order!.created_by,name:designer});
+    if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],nativeOrderCreation?.at??iso(order!.created_at),{id:order!.created_by,name:identity.orderCreatorName});
     if(!oid)replace("order_information",emptyNode("order_information","uncreated"));
-    if(sourceAccess&&source?.order_time_managed){
+    if(!oid&&sourceAccess&&source?.order_time_managed){
       const created=nativeSourceCreation;
       if(created&&Date.parse(created.at)<=Date.parse(asOf))setFact('order_information','completed',[record('source',source.source_id,developmentUrl(source.source_id))],created.at,{id:source.created_by,name:designer});
     }
@@ -1022,6 +1025,21 @@ export class DigitalJourneyQuery {
         source?.order_time_managed||source?.draft_reserved===true||document?.status!=='published'?null:document.published_at,observed.now):null,
       orderCreatedAt:orderAccess?cockpitCreationTime(nativeOrderCreation?.at,order?.order_time_managed?null:row.cockpit_legacy_order_at??order?.created_at,observed.now):null
     },observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:identity.id,sourceId:identity.sourceId,orderId:identity.orderId,designStyleNo:identity.designStyleNo,temporaryStyleNo:identity.temporaryStyleNo,customer:identity.customer,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:visibleCreation&&Date.parse(visibleCreation.at)<=Date.parse(asOf)?visibleCreation.at:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
+    if(creationDetail){
+      // Preserve the initial round's publication time even for a later
+      // development revision. Legacy registration clocks stay in list metadata.
+      const firstSourceAt=cockpitCreationTime(source?.draft_reserved===true?nativeSourceCreation?.at:null,
+        source?.draft_reserved!==true&&document?.status==='published'?document.published_at:null,asOf);
+      const firstOrderAt=cockpitCreationTime(nativeOrderCreation?.at,order?.order_time_managed?null:row.cockpit_legacy_order_at,asOf);
+      item.cockpitCreationDetails=[
+        ...(sourceAccess&&source?[{subject:'source' as const,at:firstSourceAt,
+          creator:source.created_by?{name:designer}:null,
+          record:firstSourceAt?record('development',source.source_id,developmentUrl(source.source_id,1)):null}]:[]),
+        ...(orderAccess&&order?[{subject:'order' as const,at:firstOrderAt,
+          creator:order.created_by?{name:identity.orderCreatorName}:null,
+          record:firstOrderAt?record('order',order.production_order_id,`/ui/digital-production?instruction=${order.production_order_id}`):null}]:[])
+      ];
+    }
     if(actor&&(compact||supervision)&&!patternKinds&&(orderAccess||!oid&&sourceAccess)){
       this.cockpitRange.set(item,(fullOrder||!oid&&sourceAccess)&&(!sid||sourceAccess));
       const factoryRead=this.cockpitFactories.get(db);

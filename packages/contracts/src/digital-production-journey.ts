@@ -143,6 +143,7 @@ export type JourneyNode = {
 };
 export type OrderJourney = {
   cockpitCreation?: CockpitCreationFacts;
+  cockpitCreationDetails?: CockpitCreationDetail[];
   cockpitFacts?: CockpitHomeFacts;
   actionableTodo?: CockpitActionableTodo;
   observationMode?:'live'|'fixed';
@@ -240,6 +241,13 @@ export type CockpitCreationFacts = {
   orderCreatedAt: string | null;
   /** Presentation only. The first publication and order were one formal approval. */
   developmentPublishedWithOrder?: true;
+};
+/** Detail-only, authorized creation facts. A creator and date always refer to this subject. */
+export type CockpitCreationDetail = {
+  subject: 'source' | 'order';
+  at: string | null;
+  creator: {name: string | null} | null;
+  record: JourneyRecord | null;
 };
 export type CockpitActionableItem = {
   orderId: string;

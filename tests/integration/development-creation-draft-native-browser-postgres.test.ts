@@ -40,6 +40,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const key=row.label==='创建纯开发'?'developmentCreatedAt':'orderCreatedAt';
     expect(before.cockpitCreation[key]).toBe(row.at);
    }
+   const cardDate=page.locator('[data-identity-fact="created"] time');
+   expect(await cardDate.getAttribute('datetime')).toBe(expected.at(-1)?.at);
+   const identity=page.locator('[data-identity-fact="created"]');
+   expect(await identity.getByText('创建人：',{exact:true}).count()).toBe(1);
+   expect(await identity.locator('dd').last().innerText()).not.toMatch(/未记录|姓名未登记/);
+   await flow.getByRole('button',{name:/^订单创建(?:节点明细)?$/}).click();
+   const current=page.getByRole('region',{name:'当前节点详情'});
+   const links=current.locator('.cockpit-creation-records a');
+   expect(await links.allTextContents()).toEqual(expected.map(entry=>entry.label));
+   for(const [index,entry] of expected.entries()){
+    const url=new URL((await links.nth(index).getAttribute('href'))!,page.url());
+    expect(url.searchParams.get(entry.label==='创建纯开发'?'development':'instruction')).toBeTruthy();
+    expect(await current.locator('.cockpit-creation-records time').nth(index).getAttribute('datetime')).toBe(entry.at);
+   }
    await nodes.getByRole('button',{name:'本单全部节点',exact:true}).click();
    const removed=['创建产品开发','开发资料保存/发布','订购信息'];
    for(const label of removed)expect(await nodes.locator('.journey-node-toggle').filter({hasText:label}).count()).toBe(0);
@@ -278,6 +292,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await verifyCreationDetail(orderId,'approved-formal',[{label:'创建正式订单',at:approvedAt}]);
   const detail=await h.f.runtime.run(scene,manager,()=>new DigitalJourneyQuery(h.db).read(manager,orderId,undefined,true));
   expect(detail.cockpitCreation).toEqual({developmentCreatedAt:approvedAt,orderCreatedAt:approvedAt,developmentPublishedWithOrder:true});
+  const name=(await h.db.query<{display_name:string}>('SELECT display_name FROM app_users WHERE id=$1',[designer.actorId])).rows[0]!.display_name;
+  expect(detail.cockpitCreationDetails).toMatchObject([
+   {subject:'source',at:approvedAt,creator:{name},record:{id:sourceId}},
+   {subject:'order',at:approvedAt,creator:{name},record:{id:orderId}}
+  ]);
+  const formal=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='order_information');
+  expect(formal?.records[0]).toMatchObject({domain:'order',id:orderId});
  });
 
  it('reuses a legacy provisional identity without rewriting historical clocks and blocks an already frozen draft',async()=>{
