@@ -371,10 +371,6 @@ function linkedJourneyDatabase(roles: string[]) {
       completion: {actor_id: OTHER, actor_name: 'TEST other worker', recorded_at: completedAt}, later_owner: null, previous_owner_name: null,
     }];
     if (sql.startsWith('SELECT display_name FROM app_users WHERE id=$1')) return [{display_name: 'TEST other worker'}];
-    if (sql.startsWith('SELECT id,display_name FROM app_users WHERE id=ANY')) {
-      expect(values).toEqual([[OTHER]]);
-      return [{id:OTHER,display_name:'TEST other worker'}];
-    }
     if (sql.startsWith('SELECT id,display_name FROM app_users WHERE id=ANY')) return [{id: OTHER, display_name: 'TEST other worker'}];
     if (sql.startsWith('SELECT l.line_id AS id,l.po_number AS po,')) return [{id: ROW, po: 'TEST-PMC-PO', color: '黑', formalStyleNo: null, temporaryStyleNo: 'TEST-PMC-TEMP', orderedQuantity: 10}];
     if (sql.startsWith('SELECT module,child_id FROM digital_production_child_links ')) return [{module: 'receiving', child_id: RECEIPT}, {module: 'rework', child_id: REWORK}];

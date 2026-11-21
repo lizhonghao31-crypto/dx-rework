@@ -51,13 +51,9 @@ export async function readJourneyStyleIdentity(db:PoolClient,{source,order}:Jour
  const sid=source?.source_id??null,oid=order?.production_order_id??null;
  const id=await readJourneyDisplayId(db,{source,order});
  const chosen=orderAccess?order!:(source??order!),creator=source?.created_by??order!.created_by;
- const orderCreator=orderAccess?order?.created_by:null;
- const names=new Map((await db.query<{id:string;display_name:string|null}>(
-  'SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])',[[...new Set([creator,...(orderCreator?[orderCreator]:[])])]]
- )).rows.map(person=>[person.id,person.display_name]));
+ const designer=(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[creator])).rows[0]?.display_name??null;
  return {id,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosen.design_style_no,
-  temporaryStyleNo:chosen.temporary_style_no,customer:chosen.customer_code,creator,designer:names.get(creator)??null,
-  orderCreatorName:orderCreator?names.get(orderCreator)??null:null};
+  temporaryStyleNo:chosen.temporary_style_no,customer:chosen.customer_code,creator,designer};
 }
 
 export async function readJourneyCommercialMetadata(db:PoolClient,actor:TrustedActorContext|null,{order}:JourneyCandidate,{orderAccess,fullOrder}:Visibility,people?:Merchandisers):Promise<Commercial>{

@@ -5,7 +5,7 @@ import {commentTimeColumns} from './development-comment-time.js';
 import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
-import {cockpitLegacyOrderBusinessTimeSql,firstDevelopmentPublicationConfirmedOrder,orderTimeCreated} from './order-time-created.js';
+import {cockpitLegacyOrderBusinessTimeSql,cockpitLegacyOrderTimeSql,firstDevelopmentPublicationConfirmedOrder,orderTimeCreated} from './order-time-created.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -113,7 +113,7 @@ export class DigitalJourneyQuery {
       WHERE a.user_id=$1 AND a.revoked_at IS NULL AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
       AND a.role_code=ANY($2::text[]) AND EXISTS(SELECT 1 FROM identity_mappings m WHERE m.user_id=u.id AND m.active AND m.employed)
     ) SELECT row_to_json(s) AS source,row_to_json(o) AS "order",
-      ${cockpitLegacyOrderBusinessTimeSql('o')} AS cockpit_legacy_order_at,${typedPlan?`EXISTS(SELECT 1 FROM digital_order_time_plan_versions plan
+      ${cockpitLegacyOrderTimeSql('o')} AS cockpit_legacy_order_at,${typedPlan?`EXISTS(SELECT 1 FROM digital_order_time_plan_versions plan
       WHERE o.production_order_id IS NOT NULL AND plan.resource_kind='order' AND plan.production_order_id=o.production_order_id
        OR o.production_order_id IS NULL AND plan.resource_kind='source' AND plan.source_id=s.source_id)`:'false'} AS has_order_time_plan
     FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
@@ -613,9 +613,9 @@ export class DigitalJourneyQuery {
     const nativeSourceCreation=sourceAccess&&(source?.order_time_managed||source?.draft_reserved===true)?await orderTimeCreated(db,{kind:'source',id:source.source_id}):null;
     const nativeOrderCreation=orderAccess&&order?.order_time_managed?await orderTimeCreated(db,{kind:'order',id:order.production_order_id}):null;
     const visibleCreation=sourceAccess?nativeSourceCreation:nativeOrderCreation;
-    if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],nativeOrderCreation?.at??iso(order!.created_at),{id:order!.created_by,name:identity.orderCreatorName});
+    if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],nativeOrderCreation?.at??iso(order!.created_at),{id:order!.created_by,name:designer});
     if(!oid)replace("order_information",emptyNode("order_information","uncreated"));
-    if(!oid&&sourceAccess&&source?.order_time_managed){
+    if(sourceAccess&&source?.order_time_managed){
       const created=nativeSourceCreation;
       if(created&&Date.parse(created.at)<=Date.parse(asOf))setFact('order_information','completed',[record('source',source.source_id,developmentUrl(source.source_id))],created.at,{id:source.created_by,name:designer});
     }
@@ -1030,13 +1030,16 @@ export class DigitalJourneyQuery {
       // development revision. Legacy registration clocks stay in list metadata.
       const firstSourceAt=cockpitCreationTime(source?.draft_reserved===true?nativeSourceCreation?.at:null,
         source?.draft_reserved!==true&&document?.status==='published'?document.published_at:null,asOf);
-      const firstOrderAt=cockpitCreationTime(nativeOrderCreation?.at,order?.order_time_managed?null:row.cockpit_legacy_order_at,asOf);
+      const orderOrigin=orderAccess&&oid?(await db.query<{business_at:string|null;creator_name:string|null}>(`SELECT
+        ${order?.order_time_managed?'NULL':cockpitLegacyOrderBusinessTimeSql('o')} AS business_at,u.display_name AS creator_name
+        FROM digital_production_orders o LEFT JOIN app_users u ON u.id=o.created_by WHERE o.production_order_id=$1`,[oid])).rows[0]:null;
+      const firstOrderAt=cockpitCreationTime(nativeOrderCreation?.at,orderOrigin?.business_at??null,asOf);
       item.cockpitCreationDetails=[
         ...(sourceAccess&&source?[{subject:'source' as const,at:firstSourceAt,
           creator:source.created_by?{name:designer}:null,
           record:firstSourceAt?record('development',source.source_id,developmentUrl(source.source_id,1)):null}]:[]),
         ...(orderAccess&&order?[{subject:'order' as const,at:firstOrderAt,
-          creator:order.created_by?{name:identity.orderCreatorName}:null,
+          creator:order.created_by?{name:orderOrigin?.creator_name??null}:null,
           record:firstOrderAt?record('order',order.production_order_id,`/ui/digital-production?instruction=${order.production_order_id}`):null}]:[])
       ];
     }
