@@ -1,5 +1,5 @@
 import {readWashingCoverage} from './bulk-washing-coverage.js';
-import {readNativePackingHeads,RECEIVING_GROUP_RESOLUTION_SCOPE_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL} from '../receiving/receiving-quantity-query.js';
+import {readNativePackingHeads} from '../receiving/receiving-quantity-query.js';
 import {packingQualityCoverage} from './packing-quality-coverage.js';
 import {packingReadinessEvidence} from './packing-readiness-evidence.js';
 import {readBulkWashing} from './bulk-washing-service.js';
@@ -24,13 +24,15 @@ import type {ClosureLine,OrderClosureSheet,SpecialClosure} from '@dx-rework/cont
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
-import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
+import {readNativeReceivingTotals} from '../receiving/native-receiving-totals.js';
 import {DigitalProductionTaskService} from './task-service.js';
+import {CockpitReceiptService} from './cockpit-receipt-service.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('DIGITAL_CLOSURE_CONFLICT',message,409);};
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export class OrderClosureService{
- constructor(private readonly database:Pool){}
+ readonly cockpitReceipts:CockpitReceiptService;
+ constructor(private readonly database:Pool){this.cockpitReceipts=new CockpitReceiptService(database);}
  private async canClose(db:DB,actor:TrustedActorContext){if(actor.actorRoles.includes('root_superuser')&&(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed)return true;const policy=new DigitalProductionAccessPolicy(db);for(const role of ['production_management','owner_group'])if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))return true;return false;}
  async recordQuality(actor:TrustedActorContext,id:string,input:ReceiptQuality,key:string){return new GarmentQualityService(this.database).record(actor,id,input,key);}
  async verifyQualityTime(actor:TrustedActorContext,id:string,input:ReceiptQualityVerification,key:string){return new GarmentQualityService(this.database).verifyTime(actor,id,input,key);}
@@ -52,15 +54,7 @@ export class OrderClosureService{
   for(const row of original){const scope=cutScopes.get(row.line_id);row.cut_scope=scope?.status??'missing';row.cutting_id=scope?.status==='verified'?scope.cuts[0]!.cuttingOrderId:null;}
   const cutIds=original.map(r=>r.cutting_id).filter(Boolean);
   const heads=new Map((await readNativePackingHeads(db,cutIds)).map(head=>[head.group_key,head]));
-  const totals=cutIds.length?(await db.query(`${DIGITAL_RECEIVING_BASE_SQL}
-   SELECT totals.*,action.receiving_batch_id,packing.packing_revision_id,packing.packing_quantity,coalesce((packing_event.after_state->'acceptanceClock'->>'now')::timestamptz,packing.created_at) AS packing_recorded_at,packing_event.after_state->'packingActualTime' AS packing_actual_time,packing.packing_allocations,
-    receiving.result AS receiving_resolution,receiving.operation_event_id AS receiving_resolution_ref,receiving.occurred_at AS receiving_resolution_at,packed.result AS packing_resolution
-   FROM style_totals totals JOIN LATERAL(SELECT b.receiving_batch_id FROM batch_totals b WHERE b.group_key=totals.group_key ORDER BY b.last_all_received_at DESC,b.receiving_batch_id DESC LIMIT 1) action ON true
-   ${RECEIVING_GROUP_PACKING_JOIN_SQL}
-   LEFT JOIN operation_events packing_event ON packing_event.event_id=packing.operation_event_id
-   LEFT JOIN LATERAL(SELECT resolution.result,resolution.operation_event_id,(SELECT coalesce((event.after_state->'acceptanceClock'->>'now')::timestamptz,event.created_at) FROM operation_events event WHERE event.event_id=resolution.operation_event_id) AS occurred_at FROM receiving_difference_resolutions resolution WHERE ${RECEIVING_GROUP_RESOLUTION_SCOPE_SQL} AND resolution.difference_type='receiving' AND resolution.document_quantity_snapshot=totals.document_quantity AND resolution.actual_quantity_snapshot=totals.current_actual_quantity AND resolution.difference_quantity_snapshot=totals.current_actual_quantity-totals.document_quantity AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event WHERE event.event_id=resolution.operation_event_id)=totals.receiving_quantity_revision,totals.receiving_quantity_changed_at IS NULL OR resolution.created_at>=totals.receiving_quantity_changed_at) ORDER BY resolution.created_at DESC,resolution.resolution_id DESC LIMIT 1) receiving ON true
-   LEFT JOIN LATERAL(SELECT resolution.result FROM receiving_difference_resolutions resolution WHERE ${RECEIVING_GROUP_RESOLUTION_SCOPE_SQL} AND resolution.difference_type='packing' AND resolution.actual_quantity_snapshot=totals.current_actual_quantity AND resolution.packing_revision_id=packing.packing_revision_id AND resolution.packing_quantity_snapshot=packing.packing_quantity AND resolution.difference_quantity_snapshot=packing.packing_quantity-totals.current_actual_quantity AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event WHERE event.event_id=resolution.operation_event_id)=totals.actual_quantity_revision,totals.actual_quantity_changed_at IS NULL OR resolution.created_at>=totals.actual_quantity_changed_at) ORDER BY resolution.created_at DESC,resolution.resolution_id DESC LIMIT 1) packed ON true
-  `,['2000-01-01','2999-12-31','#',cutIds])).rows:[];
+  const totals=await readNativeReceivingTotals(db,cutIds);
   const receipts=(await db.query(`SELECT l.line_id,r.receipt_id,r.received_at,e.after_state,origin.production_order_id AS factory_production_id,origin.factory_decision_id,coalesce(c.actual_quantity,r.actual_quantity) actual_quantity,coalesce(c.document_quantity,r.document_quantity) document_quantity,coalesce(c.defective_quantity,r.defective_quantity) defective_quantity FROM digital_production_child_lines l JOIN receiving_receipts r ON r.receipt_id=l.child_id JOIN receiving_batches b USING(receiving_batch_id) JOIN operation_events e ON e.event_id=r.operation_event_id
    LEFT JOIN sourcing_production_receipt_links origin ON origin.receipt_id=r.receipt_id
    LEFT JOIN LATERAL(SELECT x.actual_quantity,x.defective_quantity,x.document_quantity FROM receiving_receipt_corrections x WHERE x.receipt_id=r.receipt_id ORDER BY x.created_at DESC,x.correction_id DESC LIMIT 1)c ON true

@@ -1,82 +1,92 @@
 {
   "version": 1,
-  "base": "59c25c8db56a0a7ec9a3e0d36443138138270714",
-  "sourceFingerprint": "d5de839b34c012030c711e6139cd21cf0ed5bd6cfd92e684615103791e991936",
+  "base": "e2cd988a59c3978b91ab5030ca5ea44c512e7ee7",
+  "sourceFingerprint": "3aecdddf407535a90e3e192dab29adc6c95a0d0a06352413d89d6c148531b1d3",
   "rules": [
     {
-      "rule": "座舱首页首条 PO 可展开、同任务未指派去重、天差颜色与事实入口保持原授权",
-      "source": "Eric 已审定 dx-ui-finance-cutting-construction-plan-20261121.md 第3节",
+      "rule": "从座舱只读本单当前授权收货数据、历史和凭证，合计按可见 PO 或切单，凭证入口复用同范围复核",
+      "source": "Eric 批准的 dx-ui-finance-cutting-construction-plan-20261121.md 第4节及双 PO、切单补充验收",
       "reads": [
-        "apps/web/src/cockpit-home.tsx#CockpitHome",
-        "apps/web/src/cockpit-home-fact-links.tsx#CockpitHomeFactLinks",
-        "apps/api/src/production-platform/journey-home-projection.ts#projectCockpitHome"
+        "apps/api/src/production-platform/order-closure-service.ts#OrderClosureService",
+        "apps/api/src/production-platform/journey-cut-scopes.ts#journeyCutScopes",
+        "apps/api/src/receiving/receiving-quantity-query.ts#DIGITAL_RECEIVING_BASE_SQL",
+        "apps/api/src/tools/attachments.ts#AttachmentService",
+        "apps/web/src/cockpit-home.tsx#CockpitHome"
       ],
       "oldTests": [
-        "tests/unit/cockpit-home.test.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/journey-page-native-browser-postgres.test.ts"
+        "tests/unit/receiving-summary.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "initialization": "沿用实际首页投影、原生任务、既有生产看板与 PostgreSQL 合成读范围",
-      "dateAndPermission": "使用同 PO 的原日期与数量，保留任务所属订单、原访问模式及原时钟和反例",
-      "expectation": "首 PO 和展开逐条可核；整单数量与风险保持；船样从首页进入同任务并返回原搜索；历史延迟不挡正文；PMC 撤权生效",
+      "initialization": "真实出单、原报价、批准、裁床、原厂及转厂发货、到仓及签名账号进入。历史合并文件与次级切单不明确使用隔离旧形态夹具。",
+      "dateAndPermission": "为当前会话按母单关系与原厂授权在同一只读快照算出 PO／切单范围。旧观察时钟不延长访问，保留实际收货日及时刻精度。",
+      "expectation": "双 PO 部分读 4／1／3，全权限读 10／6／4；正当仓管可读，其他 PO、合并凭证和撤权拒绝；切单需求无确证只显示已证实实收；收货关闭恢复按钮焦点，风险仍独立。",
       "writes": [
+        "apps/api/src/production-platform/cockpit-receipt-facts.ts",
+        "apps/api/src/production-platform/cockpit-receipt-scope.ts",
+        "apps/api/src/production-platform/cockpit-receipt-service.ts",
+        "apps/api/src/production-platform/order-closure-routes.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/receiving/native-receiving-totals.ts",
+        "apps/api/src/receiving/receiving-document-history.ts",
         "apps/web/src/cockpit-home-fact-links.tsx",
-        "apps/web/src/cockpit-home-r5.css",
-        "apps/web/src/cockpit-home.css",
         "apps/web/src/cockpit-home.tsx",
-        "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "apps/web/src/cockpit-receipt-dialog.css",
+        "apps/web/src/cockpit-receipt-dialog.tsx",
+        "apps/web/src/receiving-dialog.tsx",
+        "tests/helpers/business-anchor-fixture.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
       "checks": [
-        "home-unit",
-        "home-pg"
+        "receiving-native",
+        "receiving-unit"
       ]
     }
   ],
   "checks": [
     {
-      "id": "home-unit",
-      "command": "vitest cockpit-home cockpit-framework digital-pmc-readonly-access",
-      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
+      "id": "receiving-native",
+      "command": "PG 13.23 isolated application queries and Chromium, m01-cockpit-home-native-browser-postgres; uses original received and packed facts | authorizes two native receiving PO scopes",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/dev/shm/dx-finance.IUos5D/a-unit.json",
-      "logSha256": "7491405523663ed5aa4ced2406de7579748bd79f1dc0533098eb6f28b7dda71b",
-      "sourceFingerprint": "d5de839b34c012030c711e6139cd21cf0ed5bd6cfd92e684615103791e991936",
-      "testedHead": "59c25c8db56a0a7ec9a3e0d36443138138270714",
-      "passed": 58,
+      "sourceFingerprint": "3aecdddf407535a90e3e192dab29adc6c95a0d0a06352413d89d6c148531b1d3",
+      "testedHead": "e2cd988a59c3978b91ab5030ca5ea44c512e7ee7",
+      "context": "Node 22.22.2 and locked dependencies; isolated TEST databases and their signed user sessions",
+      "passed": 2,
       "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-21T04:05:44.662000Z",
-      "endedAt": "2026-11-21T04:05:49.083803Z",
+      "skipped": 19,
+      "startedAt": "2026-11-21T04:55:05.193000Z",
+      "endedAt": "2026-11-21T04:55:31.132436Z",
+      "log": "/dev/shm/dx-finance.IUos5D/b-scope-final.json",
+      "logSha256": "1794cf243998242ba055fd03bd244b264dcc7ecebea5dd707b3636924915bc36",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "7491405523663ed5aa4ced2406de7579748bd79f1dc0533098eb6f28b7dda71b"
+          "sha256": "1794cf243998242ba055fd03bd244b264dcc7ecebea5dd707b3636924915bc36"
         }
       ]
     },
     {
-      "id": "home-pg",
-      "command": "PG13.23 two cockpit native browser suites with named targeted cases; Chromium 141",
-      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
+      "id": "receiving-unit",
+      "command": "Vitest receiving-summary, receiving-dialog, order-board-receiving-attachments, digital-pmc-readonly-access and cockpit-home",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "log": "/dev/shm/dx-finance.IUos5D/a-pp.json",
-      "logSha256": "eff6f926a03c5dff23028d277f1713573bb1fa8ba02b57dea068526a23caee66",
-      "sourceFingerprint": "d5de839b34c012030c711e6139cd21cf0ed5bd6cfd92e684615103791e991936",
-      "testedHead": "59c25c8db56a0a7ec9a3e0d36443138138270714",
-      "passed": 5,
+      "sourceFingerprint": "3aecdddf407535a90e3e192dab29adc6c95a0d0a06352413d89d6c148531b1d3",
+      "testedHead": "e2cd988a59c3978b91ab5030ca5ea44c512e7ee7",
+      "context": "Node 22.22.2 and locked dependencies; isolated TEST databases and their signed user sessions",
+      "passed": 58,
       "failed": 0,
-      "skipped": 26,
-      "startedAt": "2026-11-21T04:06:13.598000Z",
-      "endedAt": "2026-11-21T04:07:16.632354Z",
+      "skipped": 0,
+      "startedAt": "2026-11-21T04:56:12.123000Z",
+      "endedAt": "2026-11-21T04:56:16.609162Z",
+      "log": "/dev/shm/dx-finance.IUos5D/b-unit.json",
+      "logSha256": "fd2997f98e6052d931814f7f74b269336dd8b44920d26dd1ee7bd0ba0774d617",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "eff6f926a03c5dff23028d277f1713573bb1fa8ba02b57dea068526a23caee66"
+          "sha256": "fd2997f98e6052d931814f7f74b269336dd8b44920d26dd1ee7bd0ba0774d617"
         }
       ]
     }

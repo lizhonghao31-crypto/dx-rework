@@ -14,6 +14,7 @@ import {cockpitVisibleBlockers,cockpitNodeOwner} from './cockpit-node-rows.js';
 import {CockpitHomeProgress,cockpitReceiptGap} from './cockpit-home-progress.js';
 import {CockpitHomeRisks,cockpitHomeRisks} from './cockpit-home-risks.js';
 import {CockpitBadge,CockpitButton,CockpitStack} from './cockpit-astryx.js';
+import {CockpitReceiptDialog} from './cockpit-receipt-dialog.js';
 import {CockpitHomeFactLinks} from './cockpit-home-fact-links.js';
 import './cockpit-home.css';
 import './cockpit-home-r5.css';
@@ -46,10 +47,13 @@ function HomePos({order}:{order:CockpitHomeOrder}){
 }
 export function CockpitHome({data,error,context,onChange,canDelete=false,onDeleted}:{canDelete?:boolean;onDeleted?:(()=>void)|undefined;data:CockpitHomeResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
  const query=cockpitQuery(context),[riskSelection,setRiskSelection]=useState<{id:string;query:string}|null>(null);
+ const [receiptSelection,setReceiptSelection]=useState<{id:string;query:string;trigger:HTMLButtonElement}|null>(null);
  const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[deleting,setDeleting]=useState<string[]|null>(null);
  const pageIds=data?.items.map(item=>item.id)??[];
  const toggle=(id:string)=>setSelected(items=>items.includes(id)?items.filter(value=>value!==id):items.length<200?[...items,id]:items);
  const riskOrder=riskSelection?.query===query?data?.items.find(order=>order.id===riskSelection.id):undefined;
+ const receiptOrder=receiptSelection?.query===query?data?.items.find(order=>order.orderId===receiptSelection.id):undefined;
+ useEffect(()=>{if(!receiptOrder)setReceiptSelection(null);},[receiptOrder]);
  useEffect(()=>{if(!riskOrder)setRiskSelection(null);},[riskOrder]);
  const enter=(order:CockpitHomeOrder,node?:JourneyNode)=>onChange({selected:order.id,...(node?{round:undefined,expanded:node.stage,focus:node.instanceId,row:undefined}:context.stage?{round:undefined,expanded:context.stage,focus:undefined,row:undefined}:{})},true);
  return <section className="dx-production-panel journey-orders cockpit-home" aria-label="订单列表" aria-busy={!data&&!error}>
@@ -73,7 +77,7 @@ export function CockpitHome({data,error,context,onChange,canDelete=false,onDelet
       {delivery&&<div className="cockpit-home-delivery"><span title={`${delivery.poNumber||'PO待补'} / ${delivery.color}`}>{delivery.poNumber||'PO待补'} / {delivery.color}</span><span>{poDeliveryKindLabels[delivery.kind]} <time>{delivery.date}</time></span><StatusBadge tone={delivery.risk==='overdue'?'danger':'warning'}>{delivery.risk==='overdue'?'约定日期已过':'今天到期'}</StatusBadge></div>}
       {risks.total>0&&data&&<button type="button" className="journey-text-action cockpit-home-risk-trigger" aria-label={`查看${order.designStyleNo}的全部${risks.total}项风险`} onClick={()=>setRiskSelection({id:order.id,query})}>{other>0?`${node||delivery?'另':'查看'} ${other} 项风险`:'查看风险'}</button>}
      </td>
-     <td><CockpitHomeProgress order={order}/></td><td className="cockpit-home-facts-cell"><CockpitHomeFactLinks order={order} context={context} onReceipts={()=>setRiskSelection({id:order.id,query})}/></td>
+     <td><CockpitHomeProgress order={order}/></td><td className="cockpit-home-facts-cell"><CockpitHomeFactLinks order={order} context={context} onReceipts={event=>{if(order.orderId)setReceiptSelection({id:order.orderId,query,trigger:event.currentTarget});}}/></td>
      {canDelete&&<td><details className="cockpit-delete-menu"><summary aria-label={`${order.designStyleNo}操作`}>⋯</summary><button onClick={event=>{event.currentTarget.closest("details")?.removeAttribute("open");setDeleting([order.id]);}}>删除整单</button></details></td>}
     </tr>;
    })}</tbody>
@@ -81,6 +85,7 @@ export function CockpitHome({data,error,context,onChange,canDelete=false,onDelet
   {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&data.total===0&&!data.freshness&&<p role="status">当前授权和筛选范围没有订单。</p>}
   {(!data?.freshness||data.freshness.detailsOnly)&&<Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>onChange({page})}/>}
   {canDelete&&deleting&&<CockpitOrderDeletion ids={deleting} onClose={()=>setDeleting(null)} onCommitted={()=>{setSelected([]);onDeleted?.();}}/>}
+  {receiptOrder?.orderId&&receiptSelection&&<CockpitReceiptDialog key={receiptOrder.orderId} orderId={receiptOrder.orderId} returnFocus={receiptSelection.trigger} label={[receiptOrder.styleName||receiptOrder.designStyleNo,receiptOrder.identity?.businessNumber].filter(Boolean).join(' · ')} onClose={()=>setReceiptSelection(null)}/>}
   {riskOrder&&<CockpitHomeRisks order={riskOrder} context={context} onClose={()=>setRiskSelection(null)} onNode={node=>{setRiskSelection(null);enter(riskOrder,node);}} onOrder={()=>{setRiskSelection(null);enter(riskOrder);}}/>}
  </section>;
 }

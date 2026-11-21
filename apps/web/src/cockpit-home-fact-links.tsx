@@ -1,13 +1,12 @@
-import type {ReactNode} from 'react';
+import type {ReactNode,MouseEvent} from 'react';
 import type {CockpitFact,JourneyRecord,CockpitHomeOrder} from '@dx-rework/contracts/digital-production-journey';
 import {CockpitBadge} from './cockpit-astryx.js';
 import {CockpitRecordLink} from './cockpit-record-link.js';
-import {cockpitReceiptGap} from './cockpit-home-progress.js';
 import type {CockpitContext} from './digital-journey-cockpit-model.js';
 
 const badgeTones={gray:'neutral',blue:'info',green:'success',neutral:'neutral'} as const;
 
-export function CockpitHomeFactLinks({order,context,onReceipts}:{order:CockpitHomeOrder;context:CockpitContext;onReceipts:()=>void}){
+export function CockpitHomeFactLinks({order,context,onReceipts}:{order:CockpitHomeOrder;context:CockpitContext;onReceipts:(event:MouseEvent<HTMLButtonElement>)=>void}){
  const facts=order.cockpitFacts,nodes=order.stages.flatMap(stage=>stage.nodes);
  const dashboard=facts?.production.dashboardLinks??[];
  const productionRecord=facts?.production.dashboardRecord??(dashboard.length===1?dashboard[0]?.record:undefined);
@@ -34,9 +33,8 @@ export function CockpitHomeFactLinks({order,context,onReceipts}:{order:CockpitHo
   })}
  </details>:!sampleRecord&&order.orderId&&facts?.shipSample.scope==='whole'&&facts.shipSample.status==='no_record'
   ?<details className="cockpit-production-choices"><summary className="cockpit-home-fact-title">船样寄出</summary><div>本单暂无可查看的船样记录</div></details>:null;
- const receipts=facts?.receiving,hasGap=Boolean(cockpitReceiptGap(order)?.gap);
- const receiptRecord=nodes.find(node=>node.current&&node.key==='receipts')?.records.find(record=>record.url);
- const render=(title:string,fact:CockpitFact|undefined,record?:JourneyRecord,quantity?:string,open?:()=>void,choices?:ReactNode)=>{
+ const receipts=facts?.receiving;
+ const render=(title:string,fact:CockpitFact|undefined,record?:JourneyRecord,quantity?:string,open?:(event:MouseEvent<HTMLButtonElement>)=>void,choices?:ReactNode)=>{
   const line=<><span className="cockpit-home-fact-title">{title}</span><CockpitBadge tone={badgeTones[fact?.tone??'neutral']} className="cockpit-home-fact-status">{fact?.label??'暂不可用'}</CockpitBadge></>;
   const detail=(quantity||fact?.scope==='visible')&&<span className="cockpit-home-fact-quantity">{quantity&&` · ${quantity} 件`}{fact?.scope==='visible'&&` · 可见${title==='生产进度'?'范围':' PO'}`}</span>;
   const linkBody=<><span className="cockpit-home-fact-line">{line}</span>{detail}</>;
@@ -48,7 +46,7 @@ export function CockpitHomeFactLinks({order,context,onReceipts}:{order:CockpitHo
  };
  return <div className="cockpit-home-facts">
   {render('生产进度',facts?.production,productionRecord,undefined,undefined,productionChoices)}
-  {render('收货数量',receipts,receiptRecord,receipts?.received!=null&&receipts.demand!=null?`${receipts.received.toLocaleString()}/${receipts.demand.toLocaleString()}`:undefined,hasGap?onReceipts:undefined)}
+  {render('收货数量',receipts,undefined,receipts?.received!=null&&receipts.demand!=null?`${receipts.received.toLocaleString()}/${receipts.demand.toLocaleString()}`:undefined,order.orderId?onReceipts:undefined)}
   {render('船样寄出',facts?.shipSample,sampleRecord,undefined,undefined,sampleChoices)}
  </div>;
 }
