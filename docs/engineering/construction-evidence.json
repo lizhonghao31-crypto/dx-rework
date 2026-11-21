@@ -1,58 +1,172 @@
 {
   "version": 1,
-  "base": "e0fa972603ab39764218e55740f31245ae71d61c",
-  "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
-  "risk": "quick",
-  "automaticTestsNotApplicable": "本次仅接入已批准的 UI 规范与 Markdown 导航，不修改应用代码、工作流、数据库或测试逻辑。",
-  "alternativeVerification": {
-    "reason": "直接对照原交付文件的哈希和逐行差异，核验存在的仓库链接、已定义的规则引用以及本次文档差异范围。",
-    "checks": [
-      "astryx-docs-integrity"
-    ]
-  },
+  "base": "59a51cb9580e3840b47b5a2a9b3ca6a510a2ae55",
+  "sourceFingerprint": "2dc1f721b88296f703c2c4dca74135214c6ebe43a14c1ed8d03d5da7070d3631",
   "rules": [
     {
-      "rule": "采用达兴 Astryx UI 规范 1.0 为现行 UI 规范，原领域规则和已批准旧页基准按范围保留。",
-      "source": "docs/ui/ASTRYX_UI_SPEC.md §15、§16 与交付的已批准版本。",
+      "rule": "在真实预下单依原材料版本交接给指定跟单，并在原准备面板登记；正式转单续用原记录。",
+      "source": "《座舱详情七大流程、创建与投面辅料纠偏》v2 §§7.4、7.5、10.1；T05–T11。",
       "writes": [
-        "AGENTS.md",
-        "README.md",
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
-        "docs/requirements/rework-ui-golden-source-v1.0.md",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
-        "docs/ui/ASTRYX_UI_SPEC.md"
+        "apps/api/migrations/0297_preorder_preparation_material_evidence.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/production-readiness-panel.tsx",
+        "packages/contracts/src/production-readiness.ts",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "AGENTS.md",
-        "README.md",
-        "docs/roadmap/platform-2.0-rules-index-v1.0.md",
-        "docs/ui/ASTRYX_UI_SPEC.md"
+        "apps/api/src/production-platform/production-readiness-service.ts#canDownload",
+        "apps/web/src/production-readiness-panel.tsx#ProductionReadinessPanel"
       ],
-      "oldTests": [],
-      "noExistingTestsReason": "文档中的规范入口和迁移引用没有对应页面行为变更，采用原稿、规则 ID 和文件链接检查。",
-      "initialization": "以 #1074 合并后的 release/digital-production-v1 干净树为基准；由校验过哈希的 Library 原稿开始。",
-      "dateAndPermission": "页面权限、生命周期和各类真实日期的来源仍按现有业务实现执行，本次没有这些层面的改动。",
-      "expectation": "新主文完整且仅有批准状态、导航和等效换行变化；各入口链接、规则引用、既有领域界限和文档范围通过检查。",
+      "initialization": "创建现有预下单草稿与真实交接，不发布或采纳计划。数据库迁移 0297 追加窄规则保原表、旧触发防线及旧资料。",
+      "dateAndPermission": "交接及实投用各自真实业务时间；跟单只读实际交接，转正式才取本单主跟单。与旧页面共享实际附件窗口，拒绝无权/非现行证据。",
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+      ],
+      "expectation": "普通跟单以签名会话从待办进原面板、确认原生回执并返回。无成衣尺寸、纸样或正式 PO，草稿不发布不起钟；改范围后旧凭证拒绝，合法实际可保存。",
       "checks": [
-        "astryx-docs-integrity"
+        "preorder-original-pg-and-browser",
+        "preorder-schedule-and-authorization"
+      ]
+    },
+    {
+      "rule": "仅新采用的投面辅料目标依当时材料范围与原采购跨度反求，A 对色独立并保第九项。",
+      "source": "v2 §§7.2–7.3、7.8–7.9；T01–T04、T12–T15。",
+      "writes": [
+        "apps/api/src/production-platform/fixed-order-work.ts",
+        "apps/api/src/production-platform/framework-node-targets.ts",
+        "apps/api/src/production-platform/order-time-framework-route.ts",
+        "apps/api/src/production-platform/order-time-framework-submission.ts",
+        "apps/api/src/production-platform/order-time-framework.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/order-time-settings-calculation.ts",
+        "apps/api/src/production-platform/series-plan-facts.ts",
+        "apps/web/src/cockpit-milestones.tsx",
+        "apps/web/src/order-time-calculator.tsx",
+        "apps/web/src/order-time-milestone-fields.tsx",
+        "apps/web/src/order-time-node-fields.tsx",
+        "packages/contracts/src/digital-production-journey.ts",
+        "packages/contracts/src/digital-series-plan.ts",
+        "packages/contracts/src/order-time-framework.ts",
+        "packages/contracts/src/order-time-plan.ts",
+        "packages/contracts/src/order-time-settings.ts",
+        "packages/contracts/src/time-framework-journey.ts",
+        "tests/unit/order-time-framework.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-time-framework.ts#evaluateTimeFrameworkCandidate",
+        "apps/api/src/production-platform/order-time-settings-calculation.ts#orderTimeSettingsCalculation"
+      ],
+      "initialization": "原事件零工时，缺辅料周期/适用性按未知；首次采用或批准改期使用既有事务，普通安排重评但保已冻结目标。",
+      "dateAndPermission": "同一采用范围和各采购日历反求精确边界，原班表、非投料目标、旧记录及实际写入权限不改。",
+      "oldTests": [
+        "tests/unit/order-time-framework.test.ts",
+        "tests/unit/order-time-framework-submission.test.ts"
+      ],
+      "expectation": "03-29/03-25、小时与排他边界对照；A 逆序资料显示具体冲突而不搬目标，明示未知边界且保旧计划。",
+      "checks": [
+        "preorder-original-pg-and-browser",
+        "preorder-schedule-and-authorization"
+      ]
+    },
+    {
+      "rule": "提醒使用原有效交接和匹配采用截止，70%提醒、关闭、完成以及历史逾期各自独立。",
+      "source": "v2 §§7.5–7.7、10.1；T14–T19。",
+      "writes": [
+        "apps/api/src/production-platform/cockpit-actionable.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-framework-events.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-time-framework.ts",
+        "apps/api/src/production-platform/material-investment-reminder.ts",
+        "apps/api/src/production-platform/material-investment-risk-history.ts",
+        "apps/api/src/production-platform/notification-policy.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/todos/deep-link.ts",
+        "packages/contracts/src/todo-destination.ts",
+        "packages/contracts/src/todo-presentation.ts",
+        "packages/contracts/src/todos.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/material-investment-reminder.ts#materialInvestmentReminder",
+        "apps/api/src/production-platform/material-investment-risk-history.ts#materialInvestmentRiskHistory"
+      ],
+      "initialization": "无有效窗口只保普通待办。新的匹配采用首次生效才可发送原通知，保持同原事项身份及单份历史记录。",
+      "dateAndPermission": "现行资格、业务快照和采用日历决定时点。日期无法证明或时点已终止时不新起责任，不用关闭时间冒充实际。",
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/order-time-framework.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+      ],
+      "expectation": "真实批准转单保原记录 ID，精确 70% 时只催一次；关闭提醒后还可真投料，保真实逾期一小时和原截止。旧事实仍读原历史。",
+      "checks": [
+        "preorder-original-pg-and-browser",
+        "preorder-schedule-and-authorization"
       ]
     }
   ],
   "checks": [
     {
-      "id": "astryx-docs-integrity",
-      "command": "python3 check-astryx-docs.py (isolated task worktree, against the actual release base)",
+      "id": "preorder-original-pg-and-browser",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-release-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "kind": "command",
-      "testedHead": "78f0ca35c456a76ad5b291d82f6b7d16a41b4f5c",
-      "sourceFingerprint": "f9be4886ce4b8283f4f1c42bf3d42ea649bd5cdeaa2e0767da7bb7e98f44c16e",
-      "startedAt": "2026-11-21T07:59:28Z",
-      "endedAt": "2026-11-21T07:59:28Z",
-      "logSha256": "dc98680996be0a3483c60c4df6a0075ebdc1948a1ff6817281c82ea3e2d09a8a",
-      "context": "Isolated docs/astryx-ui-spec-v1 worktree, verified approved Library input, release base and Markdown paths.",
-      "log": "/dev/shm/dx-finance.IUos5D/check-astryx-docs.log"
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "97ef3218aafedfd9537b8e4ec7510f6167fa2622",
+      "sourceFingerprint": "2dc1f721b88296f703c2c4dca74135214c6ebe43a14c1ed8d03d5da7070d3631",
+      "context": "低权限隔离 PostgreSQL 13.23、真实 Chromium、真实草稿与转单流程；保同记录、权限、附件、70%及历史。",
+      "startedAt": "2026-11-21T16:30:28.127Z",
+      "endedAt": "2026-11-21T16:32:07.142Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-release-pg.log",
+      "logSha256": "ef2f3641a7b8a2db57bc2847f7d5c48d61bfc8b186458130f9a09f502ee2292b",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9ec21e3ce7d20b7d3741e132543cfb84cfd259a9e4f283e7d1d5ff5e18b788dd"
+        }
+      ]
+    },
+    {
+      "id": "preorder-schedule-and-authorization",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract}.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-release-unit.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 106,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "97ef3218aafedfd9537b8e4ec7510f6167fa2622",
+      "sourceFingerprint": "2dc1f721b88296f703c2c4dca74135214c6ebe43a14c1ed8d03d5da7070d3631",
+      "context": "同提交的权限矩阵、排程合同、手算采购边界、原固定里程碑和旧版本回归。",
+      "startedAt": "2026-11-21T16:32:25.443Z",
+      "endedAt": "2026-11-21T16:32:32.114Z",
+      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-release-unit.log",
+      "logSha256": "167638c65a73400e797a310400529eb6bb55decc6c9f16734ecd0f11a0d886fa",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "7638b47704d71530b1f77a18dd90a57f750c82b31ca9660f068a996b6f72ee8c"
+        }
+      ]
     }
   ]
 }
