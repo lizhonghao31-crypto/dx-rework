@@ -57,9 +57,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    // Only the original seven-stage view already has a creation stage. The
    // unchanged nine/eight view receives this same entry with its F3 grouping.
    if(!before.fixedSchedule?.framework){
-    await flow.getByRole('button',{name:'订单创建节点明细',exact:true}).click();
-    const current=page.getByRole('region',{name:'当前节点详情'});
-    const links=current.locator('.cockpit-creation-records a');
+    const currentHeading=page.getByRole('region',{name:'当前节点详情'}).getByRole('heading',{level:2});
+    const priorHeading=await currentHeading.innerText();
+    const creation=flow.getByRole('button',{name:'订单创建节点明细',exact:true});
+    await creation.focus();await page.keyboard.press('Space');
+    await creation.filter({visible:true}).waitFor();
+    expect(await creation.getAttribute('aria-pressed')).toBe('true');
+    expect(await currentHeading.innerText()).toBe(priorHeading);
+    const records=nodes.locator('.cockpit-creation-records[aria-label="创建记录"]');
+    const links=records.getByRole('link');
     expect(await links.allTextContents()).toEqual(expected.map(entry=>entry.label));
     for(const [index,entry] of expected.entries()){
      const source=entry.label==='创建纯开发',param=source?'development':'instruction';
@@ -69,7 +75,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      await outgoing;
      await page.getByRole('button',{name:'返回来源',exact:true}).click();
      await page.waitForURL(url=>url.searchParams.get('selected')===id&&url.searchParams.get('expanded')==='creation');
-     await current.getByRole('link',{name:entry.label,exact:true}).waitFor();
+     await records.getByRole('link',{name:entry.label,exact:true}).waitFor();
+     expect(await currentHeading.innerText()).toBe(priorHeading);
     }
    }
    await nodes.getByRole('button',{name:'本单全部节点',exact:true}).click();

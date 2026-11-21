@@ -125,9 +125,12 @@ it.each([
  expect(flow).not.toContain('创建纯开发');
  expect(flow).not.toContain('创建正式订单');
  expect(flow).toContain('cockpit-stage-date-colon');
- expect(current).toContain(label);
- expect(current.includes('创建纯开发')).toBe(Boolean(developmentCreatedAt&&!publishedWithOrder));
- expect(current.includes('创建正式订单')).toBe(Boolean(orderCreatedAt));
+ const records=html.match(/<dl[^>]*aria-label="创建记录"[\s\S]*?<\/dl>/)![0];
+ expect(current).toContain('当前节点：'+work.label);
+ expect(current).not.toContain('创建记录');
+ expect(records).toContain(label);
+ expect(records.includes('创建纯开发')).toBe(Boolean(developmentCreatedAt&&!publishedWithOrder));
+ expect(records.includes('创建正式订单')).toBe(Boolean(orderCreatedAt));
  expect(identity).toContain((orderCreatedAt??developmentCreatedAt!).slice(0,10));
  expect(identity).toContain(orderCreatedAt?'TEST正式单创建人':'TEST开发创建人');
  expect(html).not.toContain('自身截止');
