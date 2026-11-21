@@ -1,93 +1,142 @@
 {
   "version": 1,
-  "base": "e2cd988a59c3978b91ab5030ca5ea44c512e7ee7",
-  "sourceFingerprint": "143387f63715c470e99fd9ff1d9a9886a2cdd2e3803dda965f95effa15cf959a",
+  "base": "1d163c5e523b09dc455faece3f089695cf59aa8c",
+  "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
   "rules": [
     {
-      "rule": "座舱原位查看有整单权限的本单收货明细，凭证沿用原入口",
-      "source": "施工方案第4节，按 Eric 最新指示恢复整单授权与原凭证入口",
+      "rule": "保留各原生分页协议，直接读取合法目标页。先核资格和授权，SLA 历史固定浏览范围，旧游标仍有原语义",
+      "source": "Eric 批准的 dx-ui-finance-cutting-construction-plan-20261121.md 第5节及附录 A",
       "reads": [
-        "apps/api/src/production-platform/order-closure-service.ts#OrderClosureService",
-        "apps/api/src/production-platform/journey-cut-scopes.ts#journeyCutScopes",
-        "apps/api/src/receiving/receiving-quantity-query.ts#DIGITAL_RECEIVING_BASE_SQL",
-        "apps/api/src/tools/attachments.ts#AttachmentService",
-        "apps/web/src/cockpit-home.tsx#CockpitHome"
+        "apps/web/src/list-pagination.tsx#ListPagination",
+        "packages/ui/src/production.tsx#Pagination",
+        "apps/api/src/production-platform/identity-service.ts#DigitalProductionIdentityService",
+        "apps/api/src/production-platform/task-service.ts#DigitalProductionTaskService",
+        "apps/api/src/production-platform/sla-settings-history.ts#SlaSettingsHistoryService"
       ],
       "oldTests": [
+        "tests/integration/m01-sla-history-postgres.test.ts",
+        "tests/unit/my-todos-navigation.test.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/unit/receiving-summary.test.ts",
         "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "initialization": "真实出单、原报价、批准、裁床、原厂与转厂发货、真实到仓、异角色签名登录。",
-      "dateAndPermission": "现有订单权限、收货资格与仓管负责关系都在同一个只读快照内核实。真实收货时间和显示精度沿用来源。",
-      "expectation": "Root 和仓管读取双 PO 10／6／4，仅有工厂访问权限或错误订单返回 404；仓管仍可读取原收货历史和访问原凭证接口。各 PO 超收和未收不相抵，实际图像可加载，关闭恢复焦点，风险弹窗独立。",
+      "initialization": "同一隔离数据库构造真实原角色、带不合格老数据的来源候选与任务，并实际发布统一历史版本。",
+      "dateAndPermission": "同快照内先过滤、再分页与总数，保留角色校验。新发布版本不会进入原浏览上界，旧历史日期和操作权限不变。",
+      "expectation": "每页最多15个丰富结果，前15个不合格后正确返回16个合格结果；第3页直达、无中间请求，保留待办、回货及看板原生入口、翻页和返回。",
       "writes": [
-        "apps/api/src/production-platform/cockpit-receipt-facts.ts",
-        "apps/api/src/production-platform/cockpit-receipt-service.ts",
-        "apps/api/src/production-platform/order-closure-routes.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/receiving-summary.ts",
-        "apps/api/src/receiving/native-receiving-totals.ts",
-        "apps/api/src/receiving/receiving-document-history.ts",
-        "apps/web/src/cockpit-home-fact-links.tsx",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/journey-selection-access.ts",
+        "apps/api/src/production-platform/sla-settings-history.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/auxiliary-catalog-dialog.tsx",
+        "apps/web/src/bulk-task-workbench.tsx",
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-documents.css",
+        "apps/web/src/cockpit-documents.tsx",
         "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-receipt-dialog.css",
-        "apps/web/src/cockpit-receipt-dialog.tsx",
-        "apps/web/src/receiving-dialog.tsx",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "apps/web/src/cockpit-operation-log.tsx",
+        "apps/web/src/customer-default-merchandisers.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/digital-production-tasks-panel.tsx",
+        "apps/web/src/list-pagination.tsx",
+        "apps/web/src/my-todos-page.tsx",
+        "apps/web/src/my-todos.css",
+        "apps/web/src/order-board-page.tsx",
+        "apps/web/src/order-time-calculator.tsx",
+        "apps/web/src/order-time-standard-editor.tsx",
+        "apps/web/src/production-dashboard-page.tsx",
+        "apps/web/src/receiving-board-read.ts",
+        "apps/web/src/sla-history-workspace.tsx",
+        "apps/web/src/sla-independent-calculator.tsx",
+        "apps/web/src/sla-order-application-panel.tsx",
+        "apps/web/src/sla-settings-set-editor.tsx",
+        "apps/web/src/task-workbench-sample.tsx",
+        "packages/contracts/src/sla-settings-history.ts",
+        "packages/ui/src/page-jump.tsx",
+        "packages/ui/src/production.css",
+        "packages/ui/src/production.tsx",
+        "packages/ui/tsconfig.json",
+        "tests/integration/digital-technical-pagination-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/m01-sla-history-postgres.test.ts",
+        "tests/unit/my-todos-navigation.test.ts"
       ],
       "checks": [
-        "receiving-native",
-        "receiving-unit"
+        "paging-unit",
+        "paging-native-pg",
+        "paging-native-browser"
       ]
     }
   ],
   "checks": [
     {
-      "id": "receiving-native",
-      "command": "PG 13.23 and Chromium: exact cockpit receipts and whole-order access, original receipt attachments and risk independence",
+      "id": "paging-unit",
+      "command": "Vitest list, to-do, receiving, sourcing, SLA history and PMC permission scoped tests",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "143387f63715c470e99fd9ff1d9a9886a2cdd2e3803dda965f95effa15cf959a",
-      "testedHead": "bd1d49f68cefe820843e6c4c4abbdae5661c7488",
-      "context": "Node 22.22.2 and locked dependencies; isolated TEST databases and their signed user sessions",
-      "passed": 2,
+      "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
+      "testedHead": "74e88f4fdeaa16a99f501972a4ea6ce14725ea99",
+      "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
+      "passed": 59,
       "failed": 0,
-      "skipped": 19,
-      "startedAt": "2026-11-21T05:35:55.607000Z",
-      "endedAt": "2026-11-21T05:36:21.180435Z",
-      "log": "/dev/shm/dx-finance.IUos5D/b-whole-native.json",
-      "logSha256": "02b21e3c8db60ea6cb33eed10846409f4d88ecddc9691fe9f91268cc902faf91",
+      "skipped": 0,
+      "startedAt": "2026-11-21T06:15:22.956000Z",
+      "endedAt": "2026-11-21T06:15:28.523547Z",
+      "log": "/dev/shm/dx-finance.IUos5D/c-exact-unit.json",
+      "logSha256": "9511467dfb9ec273777d851ea1444fc0121d04175a31ea99e94cf9327d1cf9d3",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "02b21e3c8db60ea6cb33eed10846409f4d88ecddc9691fe9f91268cc902faf91"
+          "sha256": "9511467dfb9ec273777d851ea1444fc0121d04175a31ea99e94cf9327d1cf9d3"
         }
       ]
     },
     {
-      "id": "receiving-unit",
-      "command": "Vitest receiving-summary, receiving-dialog, order-board-receiving-attachments, digital-pmc-readonly-access and cockpit-home",
+      "id": "paging-native-pg",
+      "command": "PostgreSQL 13.23 production source candidates, task list and unified SLA history tests",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "143387f63715c470e99fd9ff1d9a9886a2cdd2e3803dda965f95effa15cf959a",
-      "testedHead": "bd1d49f68cefe820843e6c4c4abbdae5661c7488",
-      "context": "Node 22.22.2 and locked dependencies; isolated TEST databases and their signed user sessions",
-      "passed": 58,
+      "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
+      "testedHead": "74e88f4fdeaa16a99f501972a4ea6ce14725ea99",
+      "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
+      "passed": 13,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T05:36:21.653000Z",
-      "endedAt": "2026-11-21T05:36:26.712524Z",
-      "log": "/dev/shm/dx-finance.IUos5D/b-whole-unit.json",
-      "logSha256": "b02776684acc312fa2cb34cdebee2175f4aa283bf18c4c344211b3fda84f27c7",
+      "startedAt": "2026-11-21T06:15:30.014000Z",
+      "endedAt": "2026-11-21T06:15:50.379905Z",
+      "log": "/dev/shm/dx-finance.IUos5D/c-exact-pg.json",
+      "logSha256": "3ddef0be664e95cd4520cacc13807d3b97d1b54a38763b7573532609b0337d86",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b02776684acc312fa2cb34cdebee2175f4aa283bf18c4c344211b3fda84f27c7"
+          "sha256": "3ddef0be664e95cd4520cacc13807d3b97d1b54a38763b7573532609b0337d86"
+        }
+      ]
+    },
+    {
+      "id": "paging-native-browser",
+      "command": "Chromium and PostgreSQL 13.23 exact cockpit page jump, original receiving and production board browser paths",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "sourceFingerprint": "ef2afc47f4ebadce6458a468fa00f8657b657c5f8a9cc801e71ee970d044d184",
+      "testedHead": "74e88f4fdeaa16a99f501972a4ea6ce14725ea99",
+      "context": "Node 22.22.2; exact release base; scoped signed users and owned PostgreSQL schemas",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 31,
+      "startedAt": "2026-11-21T06:15:51.663000Z",
+      "endedAt": "2026-11-21T06:17:01.905079Z",
+      "log": "/dev/shm/dx-finance.IUos5D/c-exact-browser.json",
+      "logSha256": "d26057ad7c2b1beedb8b645e06273f592e004416d5dce03bc9e59ed039da256a",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d26057ad7c2b1beedb8b645e06273f592e004416d5dce03bc9e59ed039da256a"
         }
       ]
     }
