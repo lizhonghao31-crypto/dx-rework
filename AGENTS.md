@@ -18,8 +18,8 @@
 |身份、角色、能力、字段、导出|`docs/requirements/platform-permission-golden-source-v1.0.md`|
 |样衣|`docs/requirements/sample-system-migration-v1.0.md`|
 |外发、供应商、合同、生产|`docs/requirements/sourcing-supplier-production-v1.0.md`|
-|UI|`docs/requirements/rework-ui-golden-source-v1.0.md`|
-|分析与局部UI|`docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md`|
+|UI|[达兴 Astryx UI 规范 1.0](docs/ui/ASTRYX_UI_SPEC.md)|
+|分析业务口径|`docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md`|
 
 已落地职责入口见 [业务模块边界](docs/architecture/business-module-boundaries.md)。触及相应职责时沿实际入口维护；未迁出部分保持现有边界。例外在原 PR 说明原因、成本、风险与回退，不新增架构总门禁。
 
@@ -46,7 +46,7 @@
    角色迁移、真实身份装载、菜单/路由、服务读取范围、历史/附件/导出及验收消费者须同批闭环；数据库存在角色不等于应用已接通。真实多角色业务权限与纯角色测试预期分别验证。
    纯角色验收不得放宽 golden、修改旧账号角色或用 Root 替代；撤权和残留 scope 反例须使用专属 fixture、原认证链及同一有效会话，不能拿 Lab 切换造成的会话失效充当授权收紧证据。
 5. 测试须进入本分支 canonical plan；配置、DB身份、初始化顺序、创建/清理/失败资源一起接入。
-6. UI 复用现有组件、tokens、布局、原入口；按变化检查加载、空、失败、禁用、长文本、键盘及必要尺寸。CI绿不等于视觉或现场验收，模拟数据须标明。
+6. UI 先查规范和组件，能复用就不另造。复用现有组件、tokens、布局、原入口；按变化检查加载、空、失败、禁用、长文本、键盘及必要尺寸。CI绿不等于视觉或现场验收，模拟数据须标明。
 
 仅当生成器或其输入相关变动时，核未变人工注记/语义不被覆盖及必要生成稳定性，运行原协议入口；不要求每个PR重生全量索引。
 

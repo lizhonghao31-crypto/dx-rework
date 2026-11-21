@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-路线 PR-01：独立技术基座。业务需求以 `docs/requirements/startup-requirements-v1.2.md` 为确认基线；已验收的混合工业风页面以 Figma Product 文件为 UI Golden Source，在路线 PR-01A 进入代码。
+业务需求以 `docs/requirements/startup-requirements-v1.2.md` 为确认基线。前端新增、维护、迁移与验收统一查阅[达兴 Astryx UI 规范 1.0](docs/ui/ASTRYX_UI_SPEC.md)。已批准的 Figma 页面作为对应页面的视觉验收证据。
 
 ## 工程结构
 
@@ -14,7 +14,7 @@ apps/api          Fastify API、健康检查和版本证据
 packages/config   类型化配置与启动校验
 packages/contracts 版本化 API 契约
 packages/domain   共用领域规则、审计与事件类型
-packages/ui       UI 代码边界（PR-01A 填充）
+packages/ui       UI 代码边界
 infra             独立 Nginx、PM2、logrotate 模板
 scripts           数据库迁移、备份与安全检查
 ```
