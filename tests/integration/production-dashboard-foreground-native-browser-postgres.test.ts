@@ -7,7 +7,7 @@ import {FactoryFlowService} from '../../apps/api/src/production-platform/factory
 import {cockpitHomeBrowser} from '../acceptance/m01-cockpit-home-native-browser.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
-const database=process.env.TEST_DATABASE_URL;
+const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (database?describe:describe.skip)('real production-dashboard foreground request ownership',()=>{
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
  let staged:[string,string,string];
@@ -70,8 +70,18 @@ const database=process.env.TEST_DATABASE_URL;
      if(query===b)delivered.resolve();
     }finally{await response.dispose();}
    });
+   const firstRead=page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return url.pathname==='/api/production-dashboard'&&url.searchParams.get('q')===a;
+   });
    await filter.fill(a);
-   await expect.poll(()=>rows.allTextContents()).toEqual([a]);
+   const first=await firstRead;
+   expect(first.status()).toBe(200);
+   expect((await first.json()).items.map((item:{order:{firstStyleNo:string}})=>item.order.firstStyleNo)).toEqual([a]);
+   await rows.filter({hasText:b}).waitFor({state:'detached'});
+   await rows.filter({hasText:c}).waitFor({state:'detached'});
+   await rows.filter({hasText:a}).waitFor();
+   expect(await rows.allTextContents()).toEqual([a]);
    await wait.waitFor({state:'hidden'});
    await page.evaluate(target=>{
     const fetchOriginal=window.fetch.bind(window);
@@ -147,13 +157,18 @@ const database=process.env.TEST_DATABASE_URL;
 
  it('retains the factory workspace rows until the actual next filter returns',async()=>{
   const [a,b]=staged;
-  const {page,context}=await h.open(h.fixture.root.actorId,{},1440,1,{path:'/ui/digital-cockpit?workspace=factory'});
+  const initial=new URLSearchParams({workspace:'factory',search:a});
+  const {page,context}=await h.open(h.fixture.root.actorId,{},1440,1,{path:'/ui/digital-cockpit?'+initial});
   const query=page.getByRole('textbox',{name:'搜索产前与发厂订单'});
   const rows=page.locator('.workspace-order-list tbody tr td:first-child small');
   const table=page.locator('.workspace-order-list');
   const wait=page.locator('.dx-foreground-loading').getByText('请稍等',{exact:true});
   const gate=Promise.withResolvers<void>(),started=Promise.withResolvers<void>();
   try{
+   await rows.filter({hasText:a}).waitFor();
+   expect(await rows.allTextContents()).toEqual([a]);
+   expect(await table.getByRole('alert').count()).toBe(0);
+   await wait.waitFor({state:'hidden'});
    await page.route('**/api/digital-production/journeys?*',async route=>{
     if(new URL(route.request().url()).searchParams.get('search')!==b)return route.continue();
     const response=await route.fetch();
@@ -166,14 +181,14 @@ const database=process.env.TEST_DATABASE_URL;
      await route.fulfill({response});
     }finally{await response.dispose();}
    });
-   await query.fill(a);
-   await expect.poll(()=>rows.allTextContents()).toEqual([a]);
-   await wait.waitFor({state:'hidden'});
    await query.fill(b);
    await started.promise;
    await wait.waitFor();
    expect(await table.getAttribute('aria-busy')).toBe('true');
    expect(await rows.allTextContents()).toEqual([a]);
+   const pagination=table.locator('.dx-production-pagination');
+   expect(await pagination.innerText()).not.toContain('共 1 条');
+   expect(await pagination.getByRole('button',{name:'跳转',exact:true}).isDisabled()).toBe(true);
    gate.resolve();
    await expect.poll(()=>rows.allTextContents()).toEqual([b]);
    await wait.waitFor({state:'hidden'});

@@ -1,3 +1,4 @@
+import { ListPagination } from "./list-pagination.js";
 import {beginForegroundWait} from './foreground-loading.js';
 import {cachedVerifiedSession,refreshSession} from './auth-session.js';
 import {subscribeTodoRead} from './todo-indicator-refresh.js';
@@ -18,7 +19,6 @@ import { useEffect, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
 import { todoModuleIdsForUser } from "./platform-access.js";
-import { todoPageWindow } from "./todo-pagination.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { readTodoQuery, todoQueryPath, withTodoReturn } from "./todo-query-state.js";
 import { useInternalReturnScroll } from "./use-internal-return-scroll.js";
@@ -268,11 +268,7 @@ export function MyTodosPage() {
   const page = state.kind === "ready" ? state.page : requestedPage;
   const pageSize = state.kind === "ready" ? state.pageSize : 15;
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
-  const renderedTotalPages = Math.max(totalPages, 1);
   const totalActionable = moduleCounts.rework + moduleCounts.sourcing + (moduleCounts.production ?? 0) + (moduleCounts.samples ?? 0) + (moduleCounts.pattern_room ?? 0) + (moduleCounts.suppliers ?? 0) + (moduleCounts.digital_production ?? 0);
-  const visiblePages = todoPageWindow(page, renderedTotalPages);
-  const pageWindowStart = visiblePages[0] ?? 1;
-  const pageWindowEnd = visiblePages.at(-1) ?? 1;
   const visibleTodoModules = accessibleTodoModules === null
     ? []
     : todoModules.filter((module) => module.id === "digital_production" ? moduleCounts.digital_production !== undefined : accessibleTodoModules.has(module.id));
@@ -392,32 +388,9 @@ export function MyTodosPage() {
           })}
         </div>
       )}
-      <nav className="my-todos-pagination" aria-label="待办列表分页">
-        {pageWindowStart > 1 && <button
-          type="button"
-          className={page === 1 ? "is-active" : ""}
-          aria-current={page === 1 ? "page" : undefined}
-          disabled={busy&&requestedPage===1}
-          onClick={() => setRequestedPage(1)}
-        >1</button>}
-        {pageWindowStart > 2 && <span className="my-todos-pagination__ellipsis" aria-hidden="true">…</span>}
-        {visiblePages.map((pageNumber) => <button
-          type="button"
-          className={pageNumber === page ? "is-active" : ""}
-          aria-current={pageNumber === page ? "page" : undefined}
-          disabled={busy&&requestedPage===pageNumber}
-          onClick={() => setRequestedPage(pageNumber)}
-          key={pageNumber}
-        >{pageNumber}</button>)}
-        {pageWindowEnd < renderedTotalPages - 1 && <span className="my-todos-pagination__ellipsis" aria-hidden="true">…</span>}
-        {pageWindowEnd < renderedTotalPages && <button
-          type="button"
-          className={page === renderedTotalPages ? "is-active" : ""}
-          aria-current={page === renderedTotalPages ? "page" : undefined}
-          disabled={busy&&requestedPage===renderedTotalPages}
-          onClick={() => setRequestedPage(renderedTotalPages)}
-        >{renderedTotalPages}</button>}
-      </nav>
+      <ListPagination page={page} totalPages={state.kind==="ready"?totalPages:null}
+        total={state.kind==="ready"?state.totalCount:null} pendingPage={busy?requestedPage:undefined}
+        ariaLabel="待办列表分页" onPageChange={setRequestedPage} />
       </Surface>}
       </div>
     </Shell>

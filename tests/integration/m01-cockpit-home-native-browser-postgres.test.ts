@@ -77,6 +77,99 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
+ it('jumps directly to a target page and keeps the centered controls usable at five widths',async()=>{
+  const {context,page}=await h.open();
+  try{
+   const nav=page.locator('.cockpit-home .dx-production-pagination');
+   const input=nav.getByRole('textbox',{name:'跳转页码'});
+   const requests:number[]=[];
+   page.on('request',request=>{
+    const url=new URL(request.url());
+    if(url.pathname.endsWith('/digital-production/journeys')&&url.searchParams.get('view')==='home')
+      requests.push(Number(url.searchParams.get('page')??1));
+   });
+   for(const invalid of ['0','-1','1.5','4','invalid','']){
+    await input.fill(invalid);await input.press('Enter');
+    await nav.getByText('请输入 1 至 3 的整数页码',{exact:true}).waitFor();
+   }
+   await input.fill('1');await nav.getByRole('button',{name:'跳转',exact:true}).click();
+   expect(requests).toEqual([]);
+   for(const width of [1440,1280,768,390,360]){
+    await page.setViewportSize({width,height:747});
+    expect(await nav.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+    expect(await nav.evaluate(element=>getComputedStyle(element).justifyContent)).toBe('center');
+    expect(await input.isVisible()).toBe(true);
+   }
+   await input.fill('3');
+   await input.evaluate(element=>{
+    element.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+    element.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,isComposing:true,cancelable:true}));
+    element.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}));
+   });
+   expect(requests).toEqual([]);
+   await input.press('Enter');
+   await page.waitForURL(url=>url.searchParams.get('page')==='3');
+   await homeReady(page);
+   await expect.poll(()=>requests).toEqual([3]);
+   expect(await page.locator('.cockpit-home tbody tr').count()).toBe(1);
+   const first=await page.locator('.cockpit-home tbody tr').first().getAttribute('data-order-id');
+   await page.setViewportSize({width:1280,height:747});
+   await page.locator('.cockpit-home .journey-order-select').first().click();
+   await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+   await page.getByRole("button",{name:/生产管理总览/}).click({noWaitAfter:true});await homeReady(page);
+   expect(new URL(page.url()).searchParams.get('page')).toBe('3');
+   expect(await page.locator('.cockpit-home tbody tr').first().getAttribute('data-order-id')).toBe(first);
+   const held=Promise.withResolvers<void>(),received=Promise.withResolvers<void>();
+   const staleSearch=h.prefix+'01';
+   const latestSearch=h.prefix+'0';
+   const requested:Array<{search:string|null;page:string|null}>=[];
+   await page.route('**/api/digital-production/journeys?*',async route=>{
+    const url=new URL(route.request().url());
+    const search=url.searchParams.get('search');
+    requested.push({search,page:url.searchParams.get('page')});
+    if(search!==staleSearch)return route.continue();
+    const response=await route.fetch();
+    try{
+     expect(response.status()).toBe(200);
+     received.resolve();
+     await held.promise;
+     await route.fulfill({response}).catch(()=>{});
+    }finally{await response.dispose();}
+   });
+   await page.evaluate(search=>{
+    const fetchOriginal=window.fetch.bind(window);
+    window.fetch=(input,init)=>{
+     const url=new URL(input instanceof Request?input.url:input,location.href);
+     if(url.pathname==='/api/digital-production/journeys'&&url.searchParams.get('search')===search)
+      return fetchOriginal(input,{...init,signal:null}).then(response=>{document.body.dataset.paginationLate=String(response.status);return response;});
+     return fetchOriginal(input,init);
+    };
+   },staleSearch);
+   try{
+    const search=page.getByRole('textbox',{name:'综合搜索',exact:true});
+    await search.fill(staleSearch);
+    await received.promise;
+    expect(await page.locator('.cockpit-home tbody tr').first().getAttribute('data-order-id')).toBe(first);
+    const jump=nav.getByRole('button',{name:'跳转',exact:true});
+    expect(await jump.isDisabled()).toBe(true);
+    expect(await input.isDisabled()).toBe(true);
+    await jump.evaluate((button:HTMLButtonElement)=>button.click());
+    await input.evaluate((field:HTMLInputElement)=>{
+     field.value='2';
+     field.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+    });
+    await search.fill(latestSearch);
+    await homeReady(page);
+    await expect.poll(()=>page.locator('.cockpit-home tbody tr').count()).toBe(9);
+    expect(await nav.innerText()).toContain('共 9 条');
+    held.resolve();
+    await page.waitForFunction(()=>document.body.dataset.paginationLate==='200');
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await nav.innerText()).toContain('共 9 条');
+    expect(requested).toEqual([{search:staleSearch,page:'1'},{search:latestSearch,page:'1'}]);
+   }finally{held.resolve();}
+  }finally{await context.close();}
+ });
  it('renders the original full Shell, six peer KPIs, and aligned date/progress rows without changing source facts',async()=>{
   const {context,page}=await h.open(undefined,{},1584);
   try{const actual=await h.read(page);expect(actual.total).toBe(31);for(const width of [1165,1366,1440,1920]){
@@ -400,7 +493,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await context.close();}
  });
  it('rejects the next drill read after real PMC revocation while keeping the same valid original signed session',async()=>{
-  const {context,page}=await h.open(h.pmcId);try{const first=await h.read(page);expect(first.total).toBe(31);const token=(await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value,before=h.hash(token);await openPendingCoverage(page);await page.locator('.cockpit-coverage-categories button:enabled').first().click();await coverageReady(page);await h.revokePmc();const read=page.waitForResponse(response=>response.url().includes('/digital-production/journeys?'));await page.getByRole('dialog').getByRole('button',{name:'下一页',exact:true}).click();const response=await read;expect([200,403]).toContain(response.status());const result=await response.json();expect(JSON.stringify(result)).not.toContain(h.prefix);for(const id of h.orders)expect(JSON.stringify(result)).not.toContain(id);if(response.status()===200)expect(result.total).toBe(0);expect(h.hash((await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value)).toBe(before);const user=await h.auth.authenticate(token);expect(user.businessRoles).toContain('finance_read');expect(user.businessRoles).not.toContain('pmc');expect(h.errors).toEqual([]);
+  const {context,page}=await h.open(h.pmcId);try{const first=await h.read(page);expect(first.total).toBe(31);const token=(await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value,before=h.hash(token);await openPendingCoverage(page);await page.locator('.cockpit-coverage-categories button:enabled').first().click();await coverageReady(page);await h.revokePmc();const read=page.waitForResponse(response=>response.url().includes('/digital-production/journeys?'));await page.getByRole('dialog').getByRole('button',{name:'下一页',exact:true}).click({noWaitAfter:true});const response=await read;expect([200,403]).toContain(response.status());const result=await response.json();expect(JSON.stringify(result)).not.toContain(h.prefix);for(const id of h.orders)expect(JSON.stringify(result)).not.toContain(id);if(response.status()===200)expect(result.total).toBe(0);expect(h.hash((await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value)).toBe(before);const user=await h.auth.authenticate(token);expect(user.businessRoles).toContain('finance_read');expect(user.businessRoles).not.toContain('pmc');expect(h.errors).toEqual([]);
+   const newIdentity=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/me');
+   await page.reload();
+   expect((await newIdentity).status()).toBe(200);
+   await page.getByRole('heading',{name:'无权访问此页面'}).waitFor();
+   expect(await page.locator('.cockpit-home input[aria-label="跳转页码"]:enabled').count()).toBe(0);
+   expect(await page.getByText('共 31 条',{exact:false}).count()).toBe(0);
+   expect(h.hash((await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value)).toBe(before);
   }finally{await context.close();}
  });
  it('R5 assigns the missing primary in the original order personnel UI, rejects an ordinary merchandiser and continues genuine owner approval',async()=>{

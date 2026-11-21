@@ -1,3 +1,4 @@
+import {readTechnicalTaskListPage} from './journey-selection-access.js';
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow} from './development-responsibility-window.js';
 import {readTaskPageFacts,readTaskPageHistory,taskWithParentsSql,effectiveTaskDeadlineSql} from './task-page-read-context.js';
 import {taskReadBatches} from './journey-selection-access.js';
@@ -53,7 +54,7 @@ import {isDeepStrictEqual} from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
-import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader,  isDigitalTechnicalManager } from "./access-policy.js";
 import { createDigitalTaskAccess, reassignDigitalTask, type DigitalTaskKind } from "./task-access-repository.js";
 import { digitalDeadline } from "@dx-rework/domain/digital-task-deadline";
 import { ProductionOrderNodeClockRepository } from "./node-clock-repository.js";
@@ -954,13 +955,10 @@ export class DigitalProductionTaskService {
     const db=await this.database.connect();
     try{
     await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const global = isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor);
-    const result = await db.query<{task_id:string}>(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
-      LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
-      WHERE t.node_key<>'factory_material_count' AND ($1::boolean OR a.assignee_id=$2 OR ($3::boolean AND (o.created_by=$2 OR s.created_by=$2)) OR ($4::boolean AND o.primary_merchandiser_id=$2)
-      OR ($5::boolean AND a.task_kind LIKE 'development_%')) ORDER BY t.created_at DESC,t.task_id DESC LIMIT 15 OFFSET $6`, [global, actor.actorId, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk"), (page-1)*15]);
-    const items=[...(await this.readPage(actor,result.rows.map(row=>row.task_id),db)).values()];
-    await db.query('COMMIT');return {items,page};
+    const target=await readTechnicalTaskListPage(db,actor,page);
+    const items=[...(await this.readPage(actor,target.ids,db)).values()];
+    if(items.length!==target.ids.length)throw new ApplicationError('TASK_SCOPE_CHANGED','任务查看范围已变化，请刷新重试',409);
+    await db.query('COMMIT');return {items,page,total:target.total};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   /** Internal fixed-route audit only; never records receipt, approval or completion. */

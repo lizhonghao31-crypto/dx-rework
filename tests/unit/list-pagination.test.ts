@@ -1,8 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { JSDOM } from "jsdom";
+import { Pagination } from "@dx-rework/ui/production";
 
 import {
   LIST_PAGE_SIZE,
+  ListPagination,
   listPageWindow,
 } from "../../apps/web/src/list-pagination.js";
 
@@ -14,6 +19,24 @@ describe("shared list pagination", () => {
     expect(listPageWindow(1, 30)).toEqual([1, 2, 3, 4, 5]);
     expect(listPageWindow(20, 30)).toEqual([18, 19, 20, 21, 22]);
     expect(listPageWindow(30, 30)).toEqual([26, 27, 28, 29, 30]);
+  });
+
+  it("can recover an out-of-range page without treating the remaining records as empty", () => {
+    const noop = () => {};
+    const list = new JSDOM(renderToStaticMarkup(createElement(ListPagination, {
+      page: 2, totalPages: 1, total: 15, ariaLabel: "测试分页", onPageChange: noop,
+    }))).window.document;
+    const production = new JSDOM(renderToStaticMarkup(createElement(Pagination, {
+      page: 2, pageSize: 15, total: 15, onPage: noop,
+    }))).window.document;
+    for (const view of [list, production]) {
+      const buttons = Array.from(view.querySelectorAll("button"));
+      expect(view.body.textContent).toContain("共 15 条");
+      expect(buttons.find(button => button.textContent === "上一页")?.disabled).toBe(false);
+      expect(buttons.find(button => button.textContent === "下一页")?.disabled).toBe(true);
+    }
+    expect(list.querySelector('[aria-current="page"]')).toBeNull();
+    expect(Array.from(list.querySelectorAll("button")).find(button => button.textContent === "1")?.disabled).toBe(false);
   });
 
   it("is used by every independent business list route", async () => {

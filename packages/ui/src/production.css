@@ -15,7 +15,7 @@ button.dx-production-kpi { cursor: pointer; }
 .dx-production-stage dl > div { display: flex; gap: 10px; margin-top: 8px; font-size: 12px; }
 .dx-production-stage dt { color: var(--production-muted); }
 .dx-production-stage dd { margin: 0; }
-.dx-production-pagination { display: flex; align-items: center; justify-content: end; gap: 12px; padding: 12px 0; }
+.dx-production-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; padding: 12px 0; }
 .dx-production-ui :focus-visible { outline: 3px solid #66a5ff; outline-offset: 2px; }
 .dx-production-ui { min-height: 100dvh; min-width: 0; }
 .dx-production-ui .production-command-main,
@@ -52,3 +52,7 @@ button.dx-production-kpi { cursor: pointer; }
 .dx-production-refined a {color:var(--production-primary);text-decoration:none}
 .dx-production-refined a:hover {text-decoration:underline}
 .dx-production-refined .dx-production-pagination {padding:10px 0 0;font-size:12px}
+
+.dx-page-jump { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.dx-page-jump > input { inline-size: 4rem; max-inline-size: 100%; text-align: center; }
+.dx-page-jump > [role="status"] { flex-basis: 100%; text-align: center; }

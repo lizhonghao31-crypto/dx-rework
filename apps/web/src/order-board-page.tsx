@@ -68,7 +68,7 @@ export function OrderBoardPage() {
   const motherReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
   const {
     startDate,setStartDate,endDate,setEndDate,query,setQuery,
-    status,setStatus,debouncedQuery,data,message,pageLoading,
+    status,setStatus,debouncedQuery,data,message,pageLoading,paginationAvailable,
     canReceive,canInitiate,canInitiateFinishing,canExport,canResolveDifferences,canManagePacking,
     isRoot,setRefreshToken,retryRead,setPage,expandedRows,readFailed,resetPagination,
     toggleHistory
@@ -371,7 +371,7 @@ export function OrderBoardPage() {
     {message ? <p className="order-board-message" role="status">{message}{readFailed&&<button type="button" disabled={pageLoading} onClick={retryRead}>仅重新读取回货记录</button>}</p> : null}
     {data ? <ListPagination
       page={data.page}
-      totalPages={data.totalPages}
+      totalPages={paginationAvailable?data.totalPages:null}
       ariaLabel="订单回货分页"
       onPageChange={setPage}
     /> : null}

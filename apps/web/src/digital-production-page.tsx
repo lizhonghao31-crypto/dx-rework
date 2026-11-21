@@ -1,3 +1,4 @@
+import {ListPagination} from './list-pagination.js';
 import {useForegroundWait} from "./foreground-loading.js";
 import {lazyBusinessPage} from './lazy-business-page.js';
 import {CurrentProductionReturn} from './development-workspace-return.js';
@@ -18,7 +19,7 @@ import { digitalTaskView } from "./digital-task-view.js";
 import { digitalRequest } from "./digital-production-api.js";
 import type { DigitalAccessOptions } from "./digital-production-access-panel.js";
 import { createClientRequestId } from "./client-request-id.js";
-import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailRoute, digitalLandingPath, historicalSourceCandidates } from "./digital-detail-route.js";
+import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailRoute, digitalLandingPath } from "./digital-detail-route.js";
 import "./pattern-room.css";
 import "./digital-production.css";
 import "./digital-detail.css";
@@ -105,20 +106,20 @@ function OrderDetail({ id }: { id: string }) {
         <div><dt>尺码与数量</dt><dd>{line.sizes.map(size => `${size.size}：${size.quantity.toLocaleString()}`).join(" / ")}</dd></div>
       </dl></section>)}
     </Surface>
-    {canAttachHistoricalSource(order, access) && <HistoricalSourceAttach order={order} onAttached={setOrder} />}
+    {canAttachHistoricalSource(order, access) && <HistoricalSourceAttach key={order.productionOrderId} order={order} onAttached={setOrder} />}
   </>;
 }
 
 function HistoricalSourceAttach({ order, onAttached }: { order: DigitalOrder; onAttached(order: DigitalOrder): void }) {
-  const [sources, setSources] = useState<DigitalSource[]>([]), [page, setPage] = useState(1), [search, setSearch] = useState(""), [selected, setSelected] = useState<DigitalSource | null>(null);
+  const [sources, setSources] = useState<DigitalSource[]>([]), [total,setTotal]=useState<number|null>(null), [page, setPage] = useState(1), [search, setSearch] = useState(""), [selected, setSelected] = useState<DigitalSource | null>(null);
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const writing = useRef(false), pending = useRef<{ sourceId: string; key: string } | null>(null), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    let live = true; setLoading(true);
-    const timer = window.setTimeout(() => { void digitalRequest<{ items: DigitalSource[] }>(`sources?page=${page}&search=${encodeURIComponent(search)}`).then(result => { if (live) { setSources(result.items); setError(""); } }).catch(reason => { if (live) setError(reason.message); }).finally(() => { if (live) setLoading(false); }); }, 150);
+    let live = true; setLoading(true); setTotal(null);
+    const timer = window.setTimeout(() => { void digitalRequest<{ items: DigitalSource[]; total:number }>(`orders/${order.productionOrderId}/source-candidates?page=${page}&search=${encodeURIComponent(search)}`).then(result => { if (live) { setSources(result.items); setTotal(result.total); setError(""); } }).catch(reason => { if (live) setError(reason.message); }).finally(() => { if (live) setLoading(false); }); }, 150);
     return () => { live = false; window.clearTimeout(timer); };
-  }, [page, search]);
+  }, [order.productionOrderId,page, search]);
   const attach = async () => {
     if (!selected || writing.current) return;
     writing.current = true; setBusy(true); setError("");
@@ -127,14 +128,15 @@ function HistoricalSourceAttach({ order, onAttached }: { order: DigitalOrder; on
     catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "关联失败"); }
     finally { writing.current = false; if (alive.current) setBusy(false); }
   };
-  const candidates = historicalSourceCandidates(order, sources), displayed = selected && !candidates.some(source => source.sourceId === selected.sourceId) ? [selected, ...candidates] : candidates;
+  const displayed = selected && !sources.some(source => source.sourceId === selected.sourceId) ? [selected, ...sources] : sources;
   return <Surface><h2>关联开发来源</h2><p>此历史单尚无开发来源，可按原规则补关联。</p>{error && <p role="alert">{error}</p>}
     <form onSubmit={event => { event.preventDefault(); void attach(); }}><fieldset disabled={busy}>
       <label>搜索开发来源<input value={search} maxLength={100} onChange={event => { setSearch(event.target.value); setPage(1); }} /></label>
       <label>开发来源 *<select aria-label="开发来源" required value={selected?.sourceId ?? ""} onChange={event => setSelected(displayed.find(source => source.sourceId === event.target.value) ?? null)}><option value="">请选择</option>{displayed.map(source => <option key={source.sourceId} value={source.sourceId}>{source.designStyleNo} · {source.developmentType}</option>)}</select></label>
       {loading && <p role="status">正在读取开发来源…</p>}
-      {!loading && !candidates.length && <p>本页没有符合原关联规则的开发来源</p>}
-      <div className="pattern-actions"><Button type="button" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>上一页</Button><span>{page}</span><Button type="button" disabled={sources.length < 15 || loading} onClick={() => setPage(value => value + 1)}>下一页</Button><Button type="submit" disabled={!selected || loading}>关联</Button></div>
+      {!loading && total!==null && !sources.length && <p>本页没有符合原关联规则的开发来源</p>}
+      <ListPagination page={page} total={total} totalPages={total===null?null:Math.max(1,Math.ceil(total/15))} busy={loading||busy} onPageChange={setPage} ariaLabel="关联开发来源分页"/>
+      <div className="pattern-actions"><Button type="submit" disabled={!selected || loading}>关联</Button></div>
     </fieldset></form></Surface>;
 }
 

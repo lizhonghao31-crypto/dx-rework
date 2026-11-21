@@ -67,6 +67,7 @@ export function DigitalJourneyCockpit({ data, error, detail, detailError, detail
  useEffect(()=>{if(!data||context.selected||coverage&&coverage.query!==query)setCoverage(null);},[data,context.selected,query,coverage]);
  if(context.selected)return <div className="digital-journey-cockpit dx-production-refined" data-view="order" aria-busy={detailLoading}>{detail?<>{detailLoading&&<p role="status">正在重新读取；以下仍是上次数据时点的资料。</p>}{detailError&&<p role="alert">刷新失败：{detailError}。仍显示上次读取资料，请重试刷新。</p>}<CockpitDetail key={detail.id} busy={detailLoading||Boolean(detailError)} order={detail} asOf={detail.asOf??data?.asOf} context={{...context,selected:detail.id}} onChange={patch=>onChange(patch,true)} actions={actions} onPlanCommitted={onPlanCommitted} restoreReading={restoreReading}/></>:<section className="dx-production-panel"><button className="journey-text-action" onClick={()=>onChange({selected:undefined},true)}>‹ 返回订单总览</button>{detailError?<p role="alert">{detailError}</p>:<p role="status">正在读取订单全景…</p>}{actions}</section>}</div>;
  const applyResult=(patch:Partial<CockpitContext>,preserve=false)=>onChange({...cockpitFilterPatch(actual),...patch},preserve),pending=Boolean(searchDraft?.pending)||['preparing','loading'].includes(readPhase??'');
+ const paginationPending=pending||readPhase==='identity'||cockpitQuery(context)!==query;
  const todoUnavailable=data?.summary?.todo==null;
  const renderKpi=(kpi:typeof kpis[number])=><KpiCard key={kpi.key} className={'cockpit-kpi-'+kpi.key}
     label={<span className="cockpit-kpi-caption"><NavigationIcon name={kpi.icon}/>{kpi.label}</span>} value={data?.summary?.[kpi.field]??'—'}
@@ -83,7 +84,7 @@ export function DigitalJourneyCockpit({ data, error, detail, detailError, detail
     :<button type="button" className="journey-text-action" disabled={pending} onClick={()=>setCoverage({query,context:actual})}>查看待补资料</button>)}
   {actual.missing&&<div className="cockpit-applied-coverage"><span>{cockpitCoverageLabels[actual.missing]}</span><Button type="button" variant="secondary" onClick={()=>applyResult({missing:undefined,page:1})}>清除缺项筛选</Button></div>}
   {error&&<p role="alert">读取“{cockpitConditionsLabel(context,data)}”失败：{error}。{data?'仍显示上次读取的订单，可刷新重试。':''}</p>}
-  <CockpitHome key={identityKey} canDelete={canDelete} onDeleted={onPlanCommitted} data={data} error={error} context={actual} onChange={applyResult}/>
+  <CockpitHome key={identityKey} canDelete={canDelete} onDeleted={onPlanCommitted} data={data} error={error} context={actual} onChange={applyResult} paginationPending={paginationPending}/>
   {coverage&&coverage.query===query&&data&&<CockpitTimingCoverage data={data} context={coverage.context} onClose={()=>setCoverage(null)} onOpen={id=>{setCoverage(null);applyResult({selected:id},true);}}/>}
  </div>;
 }

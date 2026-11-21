@@ -45,7 +45,7 @@ const assertCreator = (actor: TrustedActorContext) => {
   if (!isRootActor(actor) && (!actor.actorRoles.includes("sample_designer") || !(actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"))) digitalForbidden();
 };
 const readScope = (kind: "order" | "source", alias: string) => {
-  return `($1::boolean OR ($5::boolean AND ${alias}.created_by=$2) ${kind === "order" ? `OR ($6::boolean AND ${alias}.primary_merchandiser_id=$2) OR ($7::boolean AND ${alias}.source_id IS NOT NULL)` : ""}
+  return `($1::boolean OR ($4::boolean AND ${alias}.created_by=$2) ${kind === "order" ? `OR ($5::boolean AND ${alias}.primary_merchandiser_id=$2) OR ($6::boolean AND ${alias}.source_id IS NOT NULL)` : ""}
     )`;
 };
 export class DigitalProductionIdentityService {
@@ -89,6 +89,21 @@ export class DigitalProductionIdentityService {
     } catch (error) { if(!this.transactionClient)await client.query("ROLLBACK"); throw error; }
     finally { if(!this.transactionClient)client.release(); }
   }
+  private async readSnapshot<T>(read: (db: PoolClient)=>Promise<T>): Promise<T> {
+    if (this.transactionClient) return read(this.transactionClient);
+    const db = await this.database.connect();
+    try {
+      await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const result = await read(db);
+      await db.query("COMMIT");
+      return result;
+    } catch(error) {
+      await db.query("ROLLBACK");
+      throw error;
+    } finally {
+      db.release();
+    }
+  }
   private assertCreation() { if (!this.creationEnabled) fail("新建数字生产订单尚未开放", 403); }
   private async audit(client: PoolClient, actor: TrustedActorContext, action: string, id: string, before: unknown, after: unknown) {
     const eventId = randomUUID();
@@ -111,14 +126,31 @@ export class DigitalProductionIdentityService {
     const orderTimeEnabled=await acceptsNewOrderTime(this.database);
     return {...(orderTimeEnabled||newTimelineAdoptionMode(this.database)==='fixed_v2'?{independentCraftsEnabled:true}:{}),orderTimeEnabled,serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:orderTimeEnabled?beijingCalendarDate(now):minimumInitialCustomerDate(now)};
   }
-  async sources(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalSource[]; page: number }> {
+  async sources(actor: TrustedActorContext, page: number, search: string, attachTo?: string): Promise<{ items: DigitalSource[]; page: number; total: number }> {
     assertIdentityActor(actor);
-    const result = await this.database.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",s.design_style_no AS "designStyleNo",
-      s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",s.created_by AS "createdBy",s.created_at AS "createdAt",o.production_order_id AS "productionOrderId"
-      FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
-      WHERE ${await wholeOrderActiveSql(this.database,"source","s.source_id")} AND ${await effectiveDevelopmentSourceSql(this.database,"s.source_id")} AND ${readScope("source", "s")} AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)
-      AND ($6::boolean OR NOT $6::boolean) ORDER BY s.created_at DESC,s.source_id DESC LIMIT 15 OFFSET $4`, [isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser")]);
-    return { items: result.rows, page };
+    return this.readSnapshot(async db=>{
+      if(attachTo){
+        const order=await this.visibleOrder(db,actor,attachTo);
+        if(!isDigitalLeader(actor)&&!(actor.actorRoles.includes("sample_designer")&&order.created_by===actor.actorId))digitalForbidden();
+        if(order.source_id)return {items:[],page,total:0};
+      }
+      const scope=`FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
+        WHERE ${await wholeOrderActiveSql(db,"source","s.source_id")} AND ${await effectiveDevelopmentSourceSql(db,"s.source_id")}
+        AND ${readScope("source", "s")} AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)
+        AND ($5::uuid IS NULL OR (o.production_order_id IS NULL AND EXISTS (
+          SELECT 1 FROM digital_production_orders target WHERE target.production_order_id=$5
+          AND target.created_by=s.created_by AND target.design_style_no=s.design_style_no
+          AND coalesce(target.temporary_style_no,'')=coalesce(s.temporary_style_no,'')
+          AND (s.customer_code IS NULL OR s.customer_code=target.customer_code)
+        )))`;
+      const params=[isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor),actor.actorId,search,
+        actor.actorRoles.includes("sample_designer"),attachTo??null];
+      const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total ${scope}`,params)).rows[0]!.total;
+      const result=await db.query<DigitalSource>(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",s.design_style_no AS "designStyleNo",
+        s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",s.created_by AS "createdBy",s.created_at AS "createdAt",
+        o.production_order_id AS "productionOrderId" ${scope} ORDER BY s.created_at DESC,s.source_id DESC LIMIT 15 OFFSET $6`,[...params,(page-1)*15]);
+      return {items:result.rows,page,total};
+    });
   }
   // Shared preflight for callers that persist tool state before native creation.
   // Keep the original Root/designer + capability policy in one place.
@@ -164,8 +196,14 @@ export class DigitalProductionIdentityService {
   }
   async developmentDrafts(actor:TrustedActorContext,page:number,search:string){
     this.assertSourceCreation(actor);
-    if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
-    const result=await this.database.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
+    return this.readSnapshot(async db=>{
+    if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
+    const scope=`WHERE lifecycle.is_draft AND ${await wholeOrderActiveSql(db,"source","s.source_id")}
+      AND ($1 OR s.created_by=$2) AND strpos(lower(s.design_style_no),lower($3))>0`;
+    const params=[isRootActor(actor),actor.actorId,search];
+    const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total FROM digital_production_sources s
+      JOIN digital_development_source_lifecycle lifecycle USING(source_id) ${scope}`,params)).rows[0]!.total;
+    const result=await db.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
       s.design_style_no AS "designStyleNo",s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",
       coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState"
       FROM digital_production_sources s JOIN digital_development_source_lifecycle lifecycle USING(source_id)
@@ -175,11 +213,9 @@ export class DigitalProductionIdentityService {
           AND request.operation_json->>'kind'='development_publish'
         ORDER BY request.updated_at DESC,request.request_id DESC LIMIT 1
       ) approval ON true
-      WHERE lifecycle.is_draft AND ${await wholeOrderActiveSql(this.database,"source","s.source_id")}
-        AND ($1 OR s.created_by=$2) AND strpos(lower(s.design_style_no),lower($3))>0
-      ORDER BY coalesce(d.updated_at,s.created_at) DESC,s.source_id DESC LIMIT 16 OFFSET $4`,
-      [isRootActor(actor),actor.actorId,search,(page-1)*15]);
-    return {items:result.rows.slice(0,15),page,hasNext:result.rows.length>15};
+      ${scope} ORDER BY coalesce(d.updated_at,s.created_at) DESC,s.source_id DESC LIMIT 15 OFFSET $4`,[...params,(page-1)*15]);
+    return {items:result.rows,page,total,hasNext:page*15<total};
+    });
   }
   async developmentDraftReceipt(actor:TrustedActorContext,key:string){
     assertIdentityActor(actor);
@@ -319,14 +355,19 @@ export class DigitalProductionIdentityService {
         return {...line,formalPoNo:poIdentityConflict ? null : digitalFormalPoNo(line),poIdentityConflict};
       }) };
   }
-  async orders(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalOrder[]; page: number }> {
+  async orders(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalOrder[]; page: number; total:number }> {
     assertIdentityActor(actor);
-    const rows = await this.database.query(`SELECT production_order_id FROM digital_production_orders o
-      WHERE ${await wholeOrderActiveSql(this.database,"order","o.production_order_id")} AND ${readScope("order", "o")} AND ($3='' OR strpos(lower(design_style_no),lower($3))>0 OR strpos(lower(coalesce(temporary_style_no,'')),lower($3))>0
+    return this.readSnapshot(async db=>{
+    const scope=`FROM digital_production_orders o
+      WHERE ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND ${readScope("order", "o")} AND ($3='' OR strpos(lower(design_style_no),lower($3))>0 OR strpos(lower(coalesce(temporary_style_no,'')),lower($3))>0
         OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND
           (strpos(lower(coalesce(l.formal_style_no,'')),lower($3))>0 OR strpos(lower(coalesce(l.po_number,'')),lower($3))>0)))
-      ORDER BY created_at DESC,production_order_id DESC LIMIT 15 OFFSET $4`, [isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk") && await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,"development_clerk")]);
-    return { items: await Promise.all(rows.rows.map(row => this.readWith(this.database, actor, row.production_order_id))), page };
+      `;
+    const params=[isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser") && await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"order_merchandiser"), actor.actorRoles.includes("development_clerk") && await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"development_clerk")];
+    const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total ${scope}`,params)).rows[0]!.total;
+    const rows=await db.query(`SELECT production_order_id ${scope} ORDER BY created_at DESC,production_order_id DESC LIMIT 15 OFFSET $7`,[...params,(page-1)*15]);
+    return { items: await Promise.all(rows.rows.map(row => this.readWith(db, actor, row.production_order_id))), page,total };
+    });
   }
   async correctNumbers(actor: TrustedActorContext, id: string, lineId: string, input: DigitalNumberCorrection, key: string): Promise<DigitalOrder> {
     const result=await this.command(actor, `numbers:${id}:${lineId}`, key, input, async client => {

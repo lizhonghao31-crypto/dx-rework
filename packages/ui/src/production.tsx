@@ -1,5 +1,6 @@
 import { createElement, type ComponentProps, type ReactNode } from "react";
 import { Button, StatusBadge, type Tone } from "./index.js";
+import { PageJump } from "./page-jump.js";
 import { ResponsiveFactsTable } from "./governed.js";
 
 /** Opt-in visual scope: legacy surfaces never inherit this component stylesheet. */
@@ -30,6 +31,20 @@ export function FlowStageCard({ title, status, tone, expectedAt, actualAt, child
 }
 export function DocumentList({ children }: { children: ReactNode }) { return <section className="dx-production-panel"><h2>相关单据</h2>{children}</section>; }
 export function ActivityLog({ children }: { children: ReactNode }) { return <section className="dx-production-panel"><h2>操作记录</h2>{children}</section>; }
-export function Pagination({ page, pageSize, total, onPage, className = "" }: { page: number; pageSize: number; total: number | null; onPage: (page: number) => void; className?: string }) {
-  return <nav className={`dx-production-pagination ${className}`} aria-label="分页"><span>{total === null ? "读取中" : `共 ${total} 条`} · 第 {page} 页</span><Button disabled={page <= 1} onClick={() => onPage(page - 1)}>上一页</Button><Button disabled={total === null || page * pageSize >= total} onClick={() => onPage(page + 1)}>下一页</Button></nav>;
+export { PageJump } from "./page-jump.js";
+
+export function Pagination({ page, pageSize, total, onPage, className = "", busy = false }: {
+  page: number; pageSize: number; total: number | null; onPage(page: number): void; className?: string; busy?: boolean;
+}) {
+  const totalPages = total === null ? null : Math.ceil(total / pageSize);
+  const disabled = busy || totalPages === null || totalPages === 0;
+  const previousPage = totalPages === null ? page - 1 : Math.min(page - 1, totalPages);
+  return (
+    <nav className={`dx-production-pagination ${className}`} aria-label="分页">
+      <span>{total === null ? "读取中" : `共 ${total} 条`} · 第 {page} 页</span>
+      <Button type="button" disabled={disabled || page <= 1} onClick={() => onPage(previousPage)}>上一页</Button>
+      <Button type="button" disabled={disabled || totalPages === null || page >= totalPages} onClick={() => onPage(page + 1)}>下一页</Button>
+      <PageJump page={page} totalPages={totalPages} onPage={onPage} busy={busy} />
+    </nav>
+  );
 }

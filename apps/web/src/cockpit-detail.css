@@ -371,3 +371,5 @@
 .digital-journey-cockpit .cockpit-fixed-target-date>small{display:block;font-size:12px}
 
 .digital-journey-cockpit .journey-node-table .cockpit-fixed-target-date>small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+
+.digital-journey-cockpit .cockpit-log-dialog footer.cockpit-log-append { justify-content:center; flex-wrap:wrap; }

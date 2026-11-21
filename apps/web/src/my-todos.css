@@ -227,7 +227,7 @@
 
 .my-todos-pagination {
   display: flex;
-  justify-content: center;
+  justify-content: center; flex-wrap: wrap;
   gap: 6px;
   padding: 18px 24px 22px;
   border-top: 1px solid var(--dx-form-control-border);
@@ -423,3 +423,7 @@
 /* P07: approved personal list only; never applies to the cockpit. */
 .my-todos-page .my-todo-title { column-gap:10px; row-gap:8px; flex-wrap:wrap; }
 .my-todos-page .my-todos-intro .my-todos-search { order:-1; margin-left:0; }
+
+.dx-page-jump { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.dx-page-jump > input { inline-size: 4rem; max-inline-size: 100%; text-align: center; }
+.dx-page-jump > [role="status"] { flex-basis: 100%; text-align: center; }

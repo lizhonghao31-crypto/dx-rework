@@ -1,3 +1,4 @@
+import {ListPagination} from './list-pagination.js';
 import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
 import {CockpitRetryUpdates} from './cockpit-retry-updates.js';
 import {useDevelopmentCreationDraft} from './use-development-creation-draft.js';
@@ -24,7 +25,7 @@ import "./digital-development-workspace.css";
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
 type SavedDevelopmentDraft={sourceId:string;designStyleNo:string;version:number;updatedAt:string;approvalState:string|null};
-type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean};
+type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean;total:number};
 const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
   const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "designer", "startDate", "endDate"].includes(key))));
@@ -37,6 +38,7 @@ function StyleImage({item}: {item: DevelopmentWorkspaceItem}) {
 }
 export function DigitalDesignerWorkspace() {
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<DevelopmentWorkspaceResult | null>(null);
+  const [appliedListQuery,setAppliedListQuery]=useState<string|null>(null);
   const [options, setOptions] = useState<{independentCraftsEnabled?:boolean;orderTimeEnabled?:boolean;creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
   const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<DevelopmentWorkspaceItem | null>(null);
   const creation=useDevelopmentCreationDraft();
@@ -85,7 +87,7 @@ export function DigitalDesignerWorkspace() {
     if(latestListScope.current!==scope){latestListScope.current=scope;setResult(null);}
     setError("");
     void digitalRequest<DevelopmentWorkspaceResult>(`workspaces/designer?${listQuery}`,"GET",undefined,undefined,{signal:abort.signal})
-      .then(data=>{if(!abort.signal.aborted)setResult(data);}).catch(error=>{
+      .then(data=>{if(!abort.signal.aborted){setResult(data);setAppliedListQuery(listQuery);}}).catch(error=>{
         if(abort.signal.aborted)return;
         if(error instanceof DigitalRequestError&&[401,403,404].includes(error.status??0))setResult(null);
         setError(error instanceof Error?error.message:"开发档案读取失败");
@@ -200,8 +202,7 @@ export function DigitalDesignerWorkspace() {
           :!drafts?<p role="status">正在读取草稿…</p>:drafts.items.length===0?<p>暂无开发草稿</p>:<ul>
             {drafts.items.map(draft=><li key={draft.sourceId}><Button type="button" disabled={creationBusy} onClick={()=>void openSavedDraft(draft.sourceId)}>{draft.designStyleNo}</Button> <span>{draft.version?'最后保存':'已预留款号'} {date(draft.updatedAt)}</span>{draft.approvalState==='pending'&&<span> · 时效待审核</span>}{draft.approvalState==='returned'&&<span> · 时效申请已退回</span>}</li>)}
           </ul>}
-        {drafts&&<><Button type="button" disabled={drafts.page<=1||creationBusy} onClick={()=>setDraftPage(drafts.page-1)}>上一页草稿</Button>
-          <Button type="button" disabled={!drafts.hasNext||creationBusy} onClick={()=>setDraftPage(drafts.page+1)}>下一页草稿</Button></>}
+        {drafts&&<ListPagination page={drafts.page} totalPages={drafts.total===null?null:Math.max(1,Math.ceil(drafts.total/15))} total={drafts.page===draftPage?drafts.total:null} busy={creationBusy||drafts.page!==draftPage} onPageChange={setDraftPage} ariaLabel="开发草稿分页"/>}
       </div>}
     </section>}
     <section className="dx-production-panel development-list-panel">
@@ -212,7 +213,7 @@ export function DigitalDesignerWorkspace() {
       <div className="development-view-cards">{DEVELOPMENT_VIEWS.filter(view => view.key !== "all").map((view,index) => <KpiCard key={view.key} icon={<NavigationIcon name={(["FileText","History","Users","PackageCheck"] as const)[index]??"FileText"} />} className={`development-kpi development-kpi-${index}`} label={view.label} value={result?.counts?.[view.key] ?? "—"} detail={['待完善资料','正在开发','等待订购确认','已记录订购信息'][index]} selected={filter.view === view.key} onClick={() => update({view:filter.view === view.key ? 'all' : view.key})}/>)}</div>
       <div className="development-table-scroll development-list-viewport"><BusinessTable><thead><tr><th>序号</th><th>款图 / 款号</th><th>款名</th><th>客户</th><th>开发类型</th><th>当前轮次</th><th>状态</th><th>要求完成</th><th>创建日期</th><th>操作</th></tr></thead><tbody>{result?.items.map((item,index) => <tr key={item.journey.id} className={selectedId === item.journey.id ? 'is-selected' : ''}><td>{((result?.page??filter.page)-1)*15+index+1}</td><td><span className="development-row-select"><StyleImage key={`${item.journey.id}:${item.journey.sourceVersion}:${item.journey.selectedRound}:${item.journey.styleImageUrl}`} item={item}/><strong>{item.journey.designStyleNo}</strong></span></td><td>{item.journey.styleName ?? "未登记"}</td><td>{item.journey.customer ?? "通用开发"}</td><td>{item.journey.developmentType ?? "待完善"}</td><td>{item.journey.sourceVersion ? `第 ${item.journey.selectedRound ?? 1} 轮` : "待填写"}</td><td><StatusBadge tone={item.view === 'ordered' ? 'success' : item.view === 'draft' ? 'neutral' : 'info'}>{viewLabel(item)}</StatusBadge></td><td>{date(item.journey.requiredCompletionDate)}</td><td>{date(item.journey.createdAt)}</td><td>{item.journey.sourceId?<a className="development-text-action" id={`development-open-${item.journey.id}`} href={openUrl(item)} onClick={()=>{setSelectedId(item.journey.id);setCollapsed(false);}}>打开开发单</a>:<button className="development-text-action" onClick={() => select(item.journey.id)}>查看原档案</button>}</td></tr>)}</tbody></BusinessTable>
       {result && !result.freshness && !result.detailFailures?.length && !result.items.length && <p className="development-empty">当前视图暂无档案</p>}{!result && !error && <p role="status">正在读取开发档案…</p>}</div>
-      {!result?.freshness&&<Pagination page={filter.page} pageSize={15} total={result?.total ?? null} onPage={page => update({page})}/>}
+      {!result?.freshness&&<Pagination page={filter.page} pageSize={15} total={!liveSearch.pending&&appliedListQuery===listQuery?result?.total??null:null} onPage={page => update({page})}/>}
       </>
     </section>
     {!intent && selected && <section className="dx-production-panel development-selected" aria-label="选中开发档案">

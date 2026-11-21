@@ -130,6 +130,7 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
   useEffect(()=>{const media=window.matchMedia("(prefers-reduced-motion: reduce)");const update=()=>setReduced(media.matches);update();media.addEventListener("change",update);return()=>media.removeEventListener("change",update);},[]);
   useEffect(()=>{const update=()=>{setVisible(!document.hidden);setNow(Date.now());};document.addEventListener("visibilitychange",update);const timer=setInterval(()=>{if(!document.hidden)setNow(Date.now());},60000);return()=>{document.removeEventListener("visibilitychange",update);clearInterval(timer);};},[]);
   useEffect(()=>{const node=belt.current;if(!node)return;const measure=()=>setOverflow(node.scrollWidth>node.clientWidth+1);measure();const observer=new ResizeObserver(measure);observer.observe(node);return()=>observer.disconnect();},[data?.asOf,productionOrderId]);
+  const paginationTotal=searchReady&&!loading&&!error&&last.current?.target===target?data?.totalCount??null:null;
   const motion=!paused&&!reduced&&visible&&!error&&!loading;
   const moving=motion&&overflow&&!touchReading&&canMoveProductionEvents(data?.events.length??0,paused,hovered,focused,reduced);
   useEffect(()=>{
@@ -197,7 +198,7 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
           </div>:null}
         </article>)}
         {data&&!data.items.length?<p>{data.totalCount?"本页暂无订单，请返回第一页。":"当前筛选暂无生产订单"}</p>:null}
-      </div><details><summary>计算口径</summary>剩余工作日包含今天，按周一至周五计算。近3个有效生产日取最近7自然日内有上报的日期；修正取最新版本，无上报不补0，数据不足不推测。</details>{data?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(data.totalCount/15))} onPageChange={setPage} busy={loading} ariaLabel="实时看板分页"/>:null}</Surface>
+      </div><details><summary>计算口径</summary>剩余工作日包含今天，按周一至周五计算。近3个有效生产日取最近7自然日内有上报的日期；修正取最新版本，无上报不补0，数据不足不推测。</details>{data?<ListPagination page={page} totalPages={paginationTotal===null?null:Math.max(1,Math.ceil(paginationTotal/15))} onPageChange={setPage} ariaLabel="实时看板分页"/>:null}</Surface>
     </>:null}
     {deleting?<div className="production-delete-overlay" role="presentation"><section role="dialog" aria-modal="true" aria-label="删除测试或误建生产订单" className="production-delete-dialog">
       <div className="production-dashboard__toolbar"><h2>删除测试 / 误建记录</h2><Button variant="secondary" onClick={()=>setDeleting(null)}>关闭</Button></div>

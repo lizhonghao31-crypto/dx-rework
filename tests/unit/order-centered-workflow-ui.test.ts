@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 
 describe("order-centered workflow UI", () => {
   it("keeps the todo list dense and gives every actionable row an order context", async () => {
-    const [contracts, todos, page] = await Promise.all([
+    const [contracts, todos, page, pagination] = await Promise.all([
       readFile("packages/contracts/src/todos.ts", "utf8"),
       readFile("apps/api/src/todos/service.ts", "utf8"),
       readFile("apps/web/src/my-todos-page.tsx", "utf8"),
+      readFile("apps/web/src/list-pagination.tsx", "utf8"),
     ]);
     expect(contracts).toContain("TodoOrderContextSchema");
     expect(todos).toContain("orderContext:");
@@ -23,9 +24,10 @@ describe("order-centered workflow UI", () => {
     expect(todos).toContain("strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0");
     expect(todos).toContain("LIMIT $4 OFFSET $5");
     expect(page).toContain('params.set("module", module)');
-    expect(page).toContain("visiblePages.map");
-    expect(page).not.toContain('aria-label="后五页"');
-    expect(page).toContain("todoPageWindow(page, renderedTotalPages)");
+    expect(page).toContain('ariaLabel="待办列表分页" onPageChange={setRequestedPage}');
+    expect(pagination).toContain("const pages = listPageWindow(currentPage, pageCount)");
+    expect(pagination).toContain('item.kind === "ellipsis"');
+    expect(pagination).not.toContain('aria-label="后五页"');
     expect(page).toContain("order?.supplierName");
     expect(page).toContain("供应商：");
     expect(page).not.toContain("订单号：");
