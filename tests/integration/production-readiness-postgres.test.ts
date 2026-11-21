@@ -570,7 +570,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await bulk.read(f.root,id)).instructionValid).toBe(true);
  });
 
- it('lets a genuine preorder draft hand over material quantities and invest without publication, formal order, sizes or a full budget',async()=>{
+ it.each([['quantity','120米'],['width','150cm'],['weight','180g/m²'],['composition','100%聚酯']] as const)('lets a genuine preorder draft invest without a formal order and renews evidence after a %s change',async(changedField,changedValue)=>{
   const designer=f.people['sample-designer']!,primary=f.people.merchandiser!,style=`TEST-PREORDER-${randomUUID()}`,source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true),photo=await f.image(designer),unshared=await f.image(designer),materialId=randomUUID(),accessoryId=randomUUID();
   const p={designer,primary,document:documentFixture(photo)};
   const document={...p.document,quantity:null,sampleSize:'',sizes:[],sizeQuantities:[],measurements:[],materials:[{...p.document.materials[0]!,materialId,quantity:'100米，预单投料量'},{...p.document.materials[0]!,materialId:accessoryId,category:'辅料' as const,name:'TEST原辅料',quantity:'15枚'}],files:[{attachmentId:photo,kind:'款图' as const},{attachmentId:unshared,kind:'局部图' as const}],customerOrderDraft:{withOrder:true,stage:'preorder' as const,order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}};
@@ -601,7 +601,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await forms.read(p.designer,source.sourceId)).status).toBe('draft');
   const edited=await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document:{...document,instructions:'TEST非材料文字订正'}},randomUUID());
   expect((await service.read(p.primary,resource)).facts.find(f=>f.kind==='material_investment')).toMatchObject({state:'ready',valid:true});
-  const revised=await forms.save(p.designer,source.sourceId,{expectedVersion:edited.version,document:{...document,materials:document.materials.map(row=>row.materialId===materialId?{...row,quantity:'120米'}:row)}},randomUUID());
+  const revised=await forms.save(p.designer,source.sourceId,{expectedVersion:edited.version,document:{...document,materials:document.materials.map(row=>row.materialId===materialId?{...row,[changedField]:changedValue}:row)}},randomUUID());
   await expect(service.read(p.primary,resource)).rejects.toMatchObject({statusCode:403});
   expect((await service.read(f.root,resource)).history.find(f=>f.kind==='design_handover')?.handoverMaterials?.[0]?.quantity).toBe('100米，预单投料量');
   await service.record(p.designer,resource,{kind:'design_handover',scopeRef:'whole',expectedVersion:2,state:'ready',occurredAt:businessNow().toISOString(),
@@ -609,7 +609,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const renewed=(await service.read(p.primary,resource)).facts.find(f=>f.kind==='material_investment')!;
   expect(renewed).toMatchObject({state:'partial',version:2,recordId:invested.facts.find(f=>f.kind==='material_investment')!.recordId});
   expect(await materialInvestmentTodos(f.db,p.primary,{todoId:handoverId})).toHaveLength(1);
-  const correction={...body,expectedVersion:2,investmentMaterialId:materialId,quantities:[{...body.quantities[0]!,quantity:120}]};
+  const correction={...body,expectedVersion:2,investmentMaterialId:materialId,quantities:[{...body.quantities[0]!,quantity:changedField==='quantity'?120:100}]};
   await expect(service.record(p.primary,resource,correction,randomUUID())).rejects.toMatchObject({statusCode:403});
   const completed=await service.record(p.primary,resource,{...correction,evidenceIds:[]},randomUUID());
   const final=completed.facts.find(f=>f.kind==='material_investment')!;
@@ -827,6 +827,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await materialInvestmentTodos(h.db,merch,{todoId:fact.recordId}))[0]).toMatchObject({dueAt:null,route:{entityId:orderId}});
    return {original:await plans.current(resource),handoverId:fact.recordId};
   });
+  const originalInvestment=await h.f.runtime.run(scene,merch,async()=>{
+   const saved=await preparation.record(merch,resource,{...handover,kind:'material_investment',recipientId:null,
+    quantities:[{lineId:null,materialId:null,name:'TEST 原单无明细的投料',quantity:10,unit:'米'}]},randomUUID());
+   const fact=saved.facts.find(row=>row.kind==='material_investment')!;
+   expect(fact).toMatchObject({state:'ready',version:1});expect(fact.investmentScopeBasis).toBeUndefined();
+   return fact;
+  });
   const version=await h.f.runtime.run(scene,merch,async()=>{
    const current=await instruction.read(merch,orderId);
    expect(current.canEdit).toBe(true);
@@ -848,6 +855,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const authorized=await preparation.record(root,resource,{...handover,expectedVersion:1,orderInstructionVersion:version},randomUUID());
    expect(authorized.facts.find(row=>row.kind==='design_handover')).toMatchObject({resource,recordId:noTarget.handoverId,
     investmentScopeBasis:{orderInstructionVersion:version,materialIds:[materialId]}});
+   expect(authorized.facts.find(row=>row.kind==='material_investment')).toMatchObject({recordId:originalInvestment.recordId,state:'partial',version:1});
+   expect(authorized.history.find(row=>row.recordId===originalInvestment.recordId)).toMatchObject({state:'ready',occurredAt:originalInvestment.occurredAt});
    expect((await preparation.read(merch,resource)).materialInvestmentReminder).toBeUndefined();
    if(linkWhen==='before'){
     await linkOriginalSource();
@@ -877,7 +886,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect(preparation.closeMaterialInvestmentReminder(h.f.people.warehouse!,resource,{fingerprint:reminder.fingerprint,reason:'TEST 不具原权限'},randomUUID())).rejects.toMatchObject({statusCode:403});
    await preparation.closeMaterialInvestmentReminder(merch,resource,{fingerprint:reminder.fingerprint,reason:'TEST 已处理逾期提醒'},randomUUID());
    expect((await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId}))[0]).toMatchObject({dueAt:cutoff});
-   await preparation.record(merch,resource,{...handover,kind:'material_investment',expectedVersion:0,recipientId:null,
+   await preparation.record(merch,resource,{...handover,kind:'material_investment',expectedVersion:1,recipientId:null,
     quantities:[{lineId:null,materialId,name:'TEST 本单原制单主布',quantity:20,unit:'米'}]},randomUUID());
    expect(await materialInvestmentTodos(h.db,merch,{todoId:noTarget.handoverId})).toEqual([]);
    const journey=await new DigitalJourneyQuery(h.db).read(root,orderId,undefined,true);

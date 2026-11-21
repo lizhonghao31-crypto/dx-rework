@@ -29,7 +29,8 @@ export async function enrollPreparation(db:PreparationDB,resource:PreparationRes
  await db.query(`INSERT INTO digital_preparation_rule_adoptions(adoption_id,resource_kind,resource_id,revision,rule_version,basis_revision,reason,standards,acknowledged_by,adopted_by,creation_event_id,business_time)
   VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$8,$9,$10)`,[randomUUID(),resource.kind,resource.id,PREPARATION_RULE_VERSION,`creation:${creationEventId}`,'新建档案采用本次产前规则；没有补造物料、批复或完成事实',JSON.stringify({draftMinutes:1440,finalMinutes:1440}),actorId,creationEventId,JSON.stringify({now:businessNow().toISOString(),scenarioId:acceptanceBusinessContext()?.scenarioId??null})]);
 }
-type InvestmentMaterial=Pick<DevelopmentMaterial,'materialId'|'category'|'name'|'quantity'|'color'|'specification'|'supplier'>;
+type InvestmentMaterial=Pick<DevelopmentMaterial,'materialId'|'category'|'name'|'quantity'|'color'|'specification'|'supplier'>
+ &Partial<Pick<DevelopmentMaterial,'width'|'weight'|'composition'>>;
 
 export function instructionInvestmentMaterials(document:Pick<InstructionDocument,'fabrics'|'accessories'>):InvestmentMaterial[]{
  return [
@@ -47,7 +48,8 @@ export async function directInvestmentInstruction(db:PreparationDB,orderId:strin
 
 export function preparationInvestmentScope(materials:readonly InvestmentMaterial[],origin:'source'|'instruction'='source'){
  const rows=materials.filter(row=>row.name.trim()&&(origin==='instruction'||row.quantity.trim()))
-  .map(row=>[row.materialId,row.category,row.name,row.quantity,row.color,row.specification,row.supplier] as const)
+  .map(row=>[row.materialId,row.category,row.name,row.quantity,row.color,row.specification,row.supplier,
+   ...(origin==='source'?[row.width??'',row.weight??'',row.composition??'']:[])] as const)
   .sort((a,b)=>a[0].localeCompare(b[0],'en'));
  return {rows,fingerprint:preparationHash(rows),fabric:rows.some(row=>row[1]==='主布'||row[1]==='配布'),accessories:rows.some(row=>row[1]==='辅料')};
 }
@@ -102,8 +104,9 @@ export function currentPreparationMaterials(history:PreparationMaterialFact[],or
   if(!prior||row.resource.kind==='order'&&row.resource.id===orderId&&prior.resource.kind!=='order'||row.recordId===prior.recordId&&row.version>prior.version)heads.set(key,row);
  }
  return [...heads.values()].map(row=>{
-  if(row.kind!=='material_investment'||row.state!=='ready'||!row.investmentScopeBasis)return row;
+  if(row.kind!=='material_investment'||row.state!=='ready')return row;
   const handover=heads.get('design_handover:'+row.scopeRef);
+  if(!row.investmentScopeBasis&&!handover?.investmentScopeBasis)return row;
   return handover?.state==='ready'&&handover.valid&&preparationInvestmentComplete(handover,row)
    ?row:{...row,state:'partial' as const};
  });
@@ -140,7 +143,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
   &&handedDocument.document.customerOrderDraft.stage==='preorder';
  if(handoverMaterials&&input.state==='ready'&&input.scopeRef==='whole'
   &&(directInstruction||preorder||prior?.investmentScopeBasis||context.source?.order_time_managed===true)){
-  const scope=preparationInvestmentScope(handoverMaterials,directInstruction?'instruction':'source');
+  const scope=preparationInvestmentScope(directInstruction?handoverMaterials:handedDocument!.document.materials,directInstruction?'instruction':'source');
   if(scope.rows.length)scopeBasis={materialIds:scope.rows.map(row=>row[0]),materialFingerprints:Object.fromEntries(scope.rows.map(row=>[row[0],preparationHash(row)])),
    ...(directInstruction?{orderInstructionVersion:directInstruction.version}:{sourceDocumentVersion:handedDocument!.version}),
    fingerprint:scope.fingerprint,handoverRecordId:recordId,handoverVersion:version,
