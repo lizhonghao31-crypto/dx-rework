@@ -13,6 +13,7 @@ import {initialDevelopmentDocument} from '../../apps/web/src/digital-development
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
 import {orderTimeCreated,orderTimeCreatedMany} from '../../apps/api/src/production-platform/order-time-created.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
@@ -22,7 +23,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-pure-create-reload-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true});await prepareRewashSettings(h.f);});
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
- async function verifyCreationDetail(id:string,name:string,expected:Array<{label:string;at:string}>){
+ async function verifyCreationDetail(id:string,name:string,expected:Array<{label:string;at:string;target:string}>){
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+id);
   try{
    const page=tab.page;await page.setViewportSize({width:1165,height:747});
@@ -33,12 +34,50 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const response=await fetch('/api/digital-production/journeys/'+encodeURIComponent(id)+'?view=cockpit');
     if(!response.ok)throw Error('Cannot verify original time facts: '+response.status);
     const value=await response.json();
-    return {cockpitCreation:value.cockpitCreation,supervision:value.supervision,fixedSchedule:value.fixedSchedule,visualProgress:value.visualProgress};
+    return {cockpitCreation:value.cockpitCreation,creationDetails:value.cockpitCreationDetails,supervision:value.supervision,fixedSchedule:value.fixedSchedule,visualProgress:value.visualProgress};
    },id);
    const before=await read(),nodes=page.getByRole('region',{name:'小流程明细'});
    for(const row of expected){
     const key=row.label==='创建纯开发'?'developmentCreatedAt':'orderCreatedAt';
     expect(before.cockpitCreation[key]).toBe(row.at);
+   }
+   const cardDate=page.locator('[data-identity-fact="created"] time');
+   expect(await cardDate.getAttribute('datetime')).toBe(expected.at(-1)?.at);
+   const identity=page.locator('[data-identity-fact="created"]');
+   expect(await identity.getByText('创建人：',{exact:true}).count()).toBe(1);
+   expect(await identity.locator('dd').last().innerText()).not.toMatch(/未记录|姓名未登记/);
+   for(const entry of expected){
+    const source=entry.label==='创建纯开发';
+    const fact=before.creationDetails.find((detail:{subject:string})=>detail.subject===(source?'source':'order'));
+    expect(fact.at).toBe(entry.at);
+    const url=new URL(fact.record.url,page.url());
+    expect(url.searchParams.get(source?'development':'instruction')).toBe(entry.target);
+    if(source)expect(url.searchParams.get('round')).toBe('1');
+   }
+   // Only the original seven-stage view already has a creation stage. The
+   // unchanged nine/eight view receives this same entry with its F3 grouping.
+   if(!before.fixedSchedule?.framework){
+    const currentHeading=page.getByRole('region',{name:'当前节点详情'}).getByRole('heading',{level:2});
+    const priorHeading=await currentHeading.innerText();
+    const creation=flow.getByRole('button',{name:'订单创建节点明细',exact:true});
+    await creation.focus();await page.keyboard.press('Space');
+    await creation.filter({visible:true}).waitFor();
+    expect(await creation.getAttribute('aria-pressed')).toBe('true');
+    expect(await currentHeading.innerText()).toBe(priorHeading);
+    const records=nodes.locator('.cockpit-creation-records[aria-label="创建记录"]');
+    const links=records.getByRole('link');
+    expect(await links.allTextContents()).toEqual(expected.map(entry=>entry.label));
+    for(const [index,entry] of expected.entries()){
+     const source=entry.label==='创建纯开发',param=source?'development':'instruction';
+     const outgoing=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith(source?'/sources/'+entry.target+'/development':'/orders/'+entry.target+'/instruction')&&response.request().method()==='GET'&&response.ok());
+     await links.nth(index).click();
+     await page.waitForURL(url=>url.searchParams.get(param)===entry.target&&(!source||url.searchParams.get('round')==='1'));
+     await outgoing;
+     await page.getByRole('button',{name:'返回来源',exact:true}).click();
+     await page.waitForURL(url=>url.searchParams.get('selected')===id&&url.searchParams.get('expanded')==='creation');
+     await records.getByRole('link',{name:entry.label,exact:true}).waitFor();
+     expect(await currentHeading.innerText()).toBe(priorHeading);
+    }
    }
    await nodes.getByRole('button',{name:'本单全部节点',exact:true}).click();
    const removed=['创建产品开发','开发资料保存/发布','订购信息'];
@@ -208,7 +247,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return {creation,plan};
   });
   h.setCollectionScene(scene);
-  await verifyCreationDetail(sourceId,'development',[{label:'创建纯开发',at:publication}]);
+  await verifyCreationDetail(sourceId,'development',[{label:'创建纯开发',at:publication,target:sourceId}]);
   const formal='2026-11-19T06:18:09.789Z';
   await h.f.advance(scene,formal);
   const created=await h.f.runtime.run(scene,actor,async()=>{
@@ -231,8 +270,31 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await orderTimeCreated(h.db,{kind:'order',id:direct.productionOrderId})).toMatchObject({at:formal});
    return {converted:order.productionOrderId,direct:direct.productionOrderId};
   });
-  await verifyCreationDetail(created.converted,'converted',[{label:'创建纯开发',at:publication},{label:'创建正式订单',at:formal}]);
-  await verifyCreationDetail(created.direct,'direct',[{label:'创建正式订单',at:formal}]);
+  await verifyCreationDetail(created.converted,'converted',[{label:'创建纯开发',at:publication,target:sourceId},{label:'创建正式订单',at:formal,target:created.converted}]);
+  await verifyCreationDetail(created.direct,'direct',[{label:'创建正式订单',at:formal,target:created.direct}]);
+  await h.f.runtime.run(scene,actor,async()=>{
+   const designer=h.f.people['sample-designer']!,policy=new DigitalProductionAccessPolicy(h.db),query=new DigitalJourneyQuery(h.db);
+   // Preserve a narrowly authorized historical association in this synthetic
+   // schema. Production attachment commands intentionally enforce one creator.
+   const original=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-SOURCE-ONLY-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const origin=await orderTimeCreated(h.db,{kind:'source',id:original.sourceId});
+   expect(origin?.at).toBe(formal);
+   const unlinked=await query.read(designer,original.sourceId,undefined,true);
+   const projection=(journey:typeof unlinked)=>journey.stages.flatMap(stage=>stage.nodes).filter(node=>node.key!=='order_information')
+    .map(node=>[node.instanceId,node.state,node.countsInProgress]);
+   const sourceFact=(journey:typeof unlinked)=>journey.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='order_information');
+   expect(sourceFact(unlinked)).toMatchObject({actualAt:formal,records:[{domain:'source',id:original.sourceId}]});
+   await h.db.query('UPDATE digital_production_orders SET source_id=$2 WHERE production_order_id=$1',[created.direct,original.sourceId]);
+   expect(await policy.allowed(designer,'source',original.sourceId,'technical')).toBe(true);
+   expect(await policy.allowed(designer,'order',created.direct,'technical')).toBe(false);
+   const restricted=await query.read(designer,original.sourceId,undefined,true);
+   expect(restricted.cockpitCreationDetails?.map(entry=>entry.subject)).toEqual(['source']);
+   expect(sourceFact(restricted)).toMatchObject({actualAt:formal,records:[{domain:'source',id:original.sourceId}],countsInProgress:false});
+   const scopedRaw=await query.read(designer,original.sourceId);
+   expect(restricted.progress).toEqual(scopedRaw.progress);
+   expect(projection(restricted)).toEqual(projection(scopedRaw));
+  });
+
  });
  it('applies a real manager approval to publish and confirm a complete draft in one native transaction with both exact clocks',async()=>{
   const designer=h.f.people['sample-designer']!,manager=h.f.root;
@@ -275,9 +337,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return orderId!;
   });
   h.setCollectionScene(scene);
-  await verifyCreationDetail(orderId,'approved-formal',[{label:'创建正式订单',at:approvedAt}]);
+  await verifyCreationDetail(orderId,'approved-formal',[{label:'创建正式订单',at:approvedAt,target:orderId}]);
   const detail=await h.f.runtime.run(scene,manager,()=>new DigitalJourneyQuery(h.db).read(manager,orderId,undefined,true));
   expect(detail.cockpitCreation).toEqual({developmentCreatedAt:approvedAt,orderCreatedAt:approvedAt,developmentPublishedWithOrder:true});
+  const creator=(await h.db.query<{display_name:string}>('SELECT display_name FROM app_users WHERE id=$1',[designer.actorId])).rows[0]!.display_name;
+  expect(designer.actorId).not.toBe(manager.actorId);
+  expect(detail.cockpitCreationDetails?.map(entry=>entry.creator?.name)).toEqual([creator,creator]);
+
+  const name=(await h.db.query<{display_name:string}>('SELECT display_name FROM app_users WHERE id=$1',[designer.actorId])).rows[0]!.display_name;
+  expect(detail.cockpitCreationDetails).toMatchObject([
+   {subject:'source',at:approvedAt,creator:{name},record:{id:sourceId}},
+   {subject:'order',at:approvedAt,creator:{name},record:{id:orderId}}
+  ]);
+  const canonical=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='order_information');
+  expect(canonical?.records[0]).toMatchObject({domain:'source',id:sourceId});
+  expect(detail.cockpitCreationDetails?.find(entry=>entry.subject==='order')?.record)
+   .toMatchObject({domain:'order',id:orderId});
  });
 
  it('reuses a legacy provisional identity without rewriting historical clocks and blocks an already frozen draft',async()=>{
