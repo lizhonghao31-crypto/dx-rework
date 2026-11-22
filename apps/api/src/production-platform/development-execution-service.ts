@@ -198,10 +198,10 @@ export class DevelopmentExecutionService {
       const retainedIssues=await assertReopenedReturnIssues(db,sourceId,input.taskId,input);
       if(await developmentAmendmentsAvailable(db))validateDevelopmentReturn(document,input,retainedIssues);
       if(input.result==="通过"){
-        if(receiptMaterialIds.some(id=>!input.items.some(item=>item.materialId===id&&item.physical&&item.quantity&&item.color&&item.specification)))
-          fail("退回补料须由文员逐项核实实到及相符后才能提交通过");
         if(verification&&required.some(item=>!item.name.trim()))fail("本轮使用材料缺少品名，请设计师在本单资料补齐后由文员复核");
         if(!required.some(item=>item.category==="主布"))fail("请先补齐本轮主布资料，不能无主料通过");
+        if(receiptMaterialIds.some(id=>!input.items.some(item=>item.materialId===id&&item.physical&&item.quantity&&item.color&&item.specification)))
+          fail("退回补料须由文员逐项核实实到及相符后才能提交通过");
         const prior=(await db.query(`SELECT f.payload FROM digital_development_execution_facts f
           JOIN digital_production_tasks t ON t.task_id=f.task_id
           WHERE f.source_id=$1 AND f.kind='缺项退回' AND t.route_version=$2

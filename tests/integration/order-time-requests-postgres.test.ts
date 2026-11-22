@@ -937,8 +937,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const verification=await execution.saveMaterials(clerk,row.sourceId,{taskId,expectedVersion:0,expectedDocumentVersion:published.version,entries:[entry],result:'缺项退回',returnIssues:issues},randomUUID());
    await execution.check(clerk,row.sourceId,{taskId,expectedVerificationVersion:verification.version,result:'缺项退回',returnIssues:issues,note:'TEST return missing material',items:[entry]},randomUUID());
    const supply=(await execution.read(row.actor,row.sourceId)).tasks.find(t=>t.taskKind==='development_material_supply'&&t.state==='ready')!;
-   await forms.materialEvent(row.actor,row.sourceId,materialId,{expectedVersion:published.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST original material arrival'},randomUUID());
+   await expect(forms.materialEvent(row.actor,row.sourceId,materialId,{expectedRound:1,expectedVersion:published.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST designer cannot certify arrival'},randomUUID())).rejects.toMatchObject({statusCode:403});
    const recheck=await execution.resubmit(row.actor,row.sourceId,supply.taskId,randomUUID()) as {taskId:string};
+   expect((await tasks.read(clerk,recheck.taskId)).state).toBe('ready');
+   expect((await forms.read(row.actor,row.sourceId)).materialEvents).toEqual([]);
    return {...row,initialTaskId:taskId,recheckId:recheck.taskId,materialId};
   });
   await f.advance(scene,'2026-11-21T04:00:00.000Z');

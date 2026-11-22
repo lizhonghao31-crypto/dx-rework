@@ -257,13 +257,16 @@ run("development SLA enrollment and legacy isolation",()=>{
     const id=await source(),document=await ready(),materialId=randomUUID();
     document.materials=[{materialId,category:"辅料",label:"纽扣",supplier:"",name:"纽扣",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"18L",quantity:"1",requiredThisRound:true,available:true,expectedDate:"2026-10-21"}];
     const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID()),published=await development.publish(actor(),id,saved.version,randomUUID());
-    await development.materialEvent(actor(),id,materialId,{action:"到货",expectedDate:null,note:"TEST designer reference",expectedVersion:published.version,expectedMaterialRevision:0},randomUUID());
+    await expect(development.materialEvent(actor(),id,materialId,{action:"到货",expectedRound:1,expectedDate:null,note:"TEST 禁止设计师登记实到",expectedVersion:published.version,expectedMaterialRevision:0},randomUUID())).rejects.toMatchObject({statusCode:403});
     expect((await receivedDevelopmentAccessories(database,id,1,document)).has(materialId)).toBe(false);
     const db=await database.connect();try{await db.query('BEGIN');await projectDevelopmentNotices(db,[actor()],new Date('2026-10-23T03:00:00Z'));await db.query('COMMIT');}finally{db.release();}
     const notices=await database.query("SELECT event_id FROM digital_development_notices WHERE source_id=$1 AND material_id=$2",[id,materialId]);expect(notices.rowCount).toBe(1);
     // Existing clerk submission keeps the physical receipt even when a different dimension is returned.
-    const execute=new DevelopmentExecutionService(database,true);
-    await execute.check(actor(root,["root_superuser"]),id,{taskId:published.taskId!,result:"缺项退回",note:"TEST count differs",items:[{materialId,physical:true,quantity:false,color:true,specification:true}]},randomUUID());
+    const execute=new DevelopmentExecutionService(database,true),clerkId=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST reminder clerk',true)",[clerkId]);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'development_clerk')",[clerkId]);
+    await new DigitalProductionTaskService(database).reassign(actor(root,["root_superuser"]),published.taskId!,clerkId,randomUUID());
+    await execute.check(actor(clerkId,["development_clerk"]),id,{taskId:published.taskId!,result:"缺项退回",note:"TEST count differs",items:[{materialId,physical:true,quantity:false,color:true,specification:true}]},randomUUID());
     expect((await receivedDevelopmentAccessories(database,id,1,document)).has(materialId)).toBe(true);
     expect((await database.query("SELECT count(*)::int n FROM digital_development_notices WHERE source_id=$1 AND material_id=$2",[id,materialId])).rows[0].n).toBe(1);
   });
