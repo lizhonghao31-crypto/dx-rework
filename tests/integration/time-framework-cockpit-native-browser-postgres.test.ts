@@ -214,6 +214,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect([firstOnly,secondOnly,shared].every(Boolean)).toBe(true);
    const panel=page.getByRole('region',{name:'小流程明细'});
    const node=(id:string)=>panel.locator(`[data-cockpit-focus="node:${id}"]`);
+   // The overview enters the exact task before it has a PO selector value.
+   await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:pairedOrder.id,
+    expanded:secondOnly.stage,focus:secondOnly.instanceId,row:secondOnly.instanceId}));
+   await page.locator('[data-view=order][aria-busy=false]').waitFor();
+   expect(await selector.inputValue()).toBe(second!.scopeRef);
+   expect(await shownProductionDate.getAttribute('datetime')).toBe(secondDate);
+   expect(await node(secondOnly.instanceId).getAttribute('aria-pressed')).toBe('true');
+   expect(await node(firstOnly.instanceId).count()).toBe(0);
    await selector.selectOption(first!.scopeRef);
    await flow.getByRole('button',{name:'回货与装箱节点明细',exact:true}).click();
    await node(firstOnly.instanceId).waitFor();

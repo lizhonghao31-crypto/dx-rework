@@ -46,8 +46,11 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
   const currentMilestones=milestones.filter(item=>legacySelection.selected&&milestoneContains(item,legacySelection.selected,'direct'));
   const defaultMilestone=context.expanded===undefined&&context.milestone===undefined&&currentMilestones.length===1?currentMilestones[0]:undefined;
   const chosen=linkedMilestone??defaultMilestone;
-  const scope=unavailableMilestone?undefined:scopes.find(item=>item.scopeRef===chosen?.scopeRef)
-   ??explicitlyScoped??scopes.find(item=>item.scopeRef===milestones[0]?.scopeRef)??scopes[0];
+  const focusedNode=scopes.length>1&&context.milestone===undefined&&context.focus
+   ?nodes.find(node=>node.instanceId===context.focus):undefined;
+  const scopeCandidates=focusedNode?scopes.filter(item=>cockpitScopeContains(item,focusedNode)):scopes;
+  const scope=unavailableMilestone?undefined:scopeCandidates.find(item=>item.scopeRef===chosen?.scopeRef)
+   ??explicitlyScoped??scopeCandidates.find(item=>item.scopeRef===milestones[0]?.scopeRef)??scopeCandidates[0];
   const scopeLink=scope?scope.scopeRef+'|':'';
   const scopeMilestones=milestones.filter(item=>item.scopeRef===scope?.scopeRef);
   const scopedDates=scope&&order.cockpitStageDates?.find(item=>item.scopeRef===scope.scopeRef
