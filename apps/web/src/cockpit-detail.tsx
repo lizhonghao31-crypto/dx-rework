@@ -67,7 +67,7 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
    &&(!context.round||node.stage!=='development'||node.round===context.round));
   const selection=framework?{nodes:visible,stages:chosen?[...new Set([...visible,...prerequisites].map(node=>node.stage))]:groupStages,
    selected:[...visible,...prerequisites].find(node=>node.instanceId===context.focus)
-    ??visible.find(node=>node===legacySelection.selected)??visible.find(node=>node.current&&nodeIsInProgress(node))??visible[0]}:legacySelection;
+    ??visible.find(node=>node.current&&nodeIsInProgress(node))??visible[0]}:legacySelection;
   const selected=windowSelection.reference!==null?windowSelection.node:selection.selected;
   const requested=windowSelection.node,filter=context.nodeView??'all';
   const filterMatches=!requested||filter==='all'||filter==='completed'&&['completed','inherited'].includes(requested.state)||filter==='active'&&nodeIsInProgress(requested)||filter==='not_started'&&['uncreated','pending'].includes(requested.state)||filter==='overdue'&&requested.risks.includes('overdue');
