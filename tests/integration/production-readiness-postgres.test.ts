@@ -850,13 +850,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await materialInvestmentRiskHistory(h.db,orderId,completeAt)).toMatchObject([{at:completeAt,deadline:reminder.dueAt,assessment:'late',overdueSeconds:3600}]);
   });
  });
- const directMaterialOrder=async()=>{
+ const directMaterialOrder=async(poCount=1)=>{
   const h=await materialTimerFixture();
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,root=h.f.root,style='TEST-DIRECT-MATERIAL-'+randomUUID();
   const started='2027-04-25T04:00:00.000Z',scene=await h.f.scene(started),requests=h.orderTimeRequests!;
   const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2027-04-25',
    requiresColorMatching:false,salesYear:2027,salesSeries:'P03',primaryMerchandiserId:merch.actorId,
-   lines:[{formalPoNo:style+'-PO',color:'黑',customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:2}]}]});
+   lines:Array.from({length:poCount},(_,index)=>({formalPoNo:style+'-PO-'+(index+1),color:index?'白':'黑',
+    customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:2}]}))});
   const operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}};
   const submitted=await h.f.runtime.run(scene,designer,async()=>{
    const check=await requests.check(designer,operation);
@@ -892,8 +893,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const current=await instruction.read(merch,orderId);
    return (await instruction.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,document},randomUUID())).version;
   });
-  const handover=async(expectedVersion:number,orderInstructionVersion:number)=>h.f.runtime.run(scene,root,()=>preparation.record(root,resource,{
-   kind:'design_handover',scopeRef:'whole',expectedVersion,state:'ready',occurredAt:started,note:'TEST 实际制单交接',quantities:[],evidenceIds:[],
+  const handover=async(expectedVersion:number,orderInstructionVersion:number,occurredAt=started)=>h.f.runtime.run(scene,root,()=>preparation.record(root,resource,{
+   kind:'design_handover',scopeRef:'whole',expectedVersion,state:'ready',occurredAt,note:'TEST 实际制单交接',quantities:[],evidenceIds:[],
    sourceDocumentVersion:null,orderInstructionVersion,recipientId:merch.actorId},randomUUID()));
   const purchase={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,note:'TEST 原实际投料',
    quantities:[{lineId:null,materialId:fabricId,name:'TEST主布',quantity:20,unit:'米'},{lineId:null,materialId:accessoryId,name:'TEST纽扣',quantity:4,unit:'枚'}],
@@ -911,7 +912,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(pending.facts.find(row=>row.kind==='material_investment')).toMatchObject({state:'partial',recordId:before.recordId,version:1});
   const reread=(await readSeriesPlanFacts(h.db,orderId,linked?.sourceId??null,'PD')).facts.find(row=>row.key==='material_investment');
   expect(reread).toMatchObject({sourceRecordId:before.recordId,completed:false});
+  const renewedAt=linked?'2027-04-25T05:00:00.000Z':started;
   if(linked){
+   await h.f.advance(scene,renewedAt);
+   const sourceResource={kind:'source' as const,id:linked.sourceId};
+   const sourceRead=await preparation.read(root,sourceResource);
+   expect.soft(sourceRead.canRecord).not.toContain('design_handover');
+   expect.soft(sourceRead.orderInstructionVersion).toBeUndefined();
+   const originalRequest={...purchase,kind:'design_handover' as const,expectedVersion:1,occurredAt:renewedAt,
+    quantities:[],orderInstructionVersion:revision,recipientId:merch.actorId};
+   await h.f.runtime.run(scene,root,async()=>{
+    await expect(preparation.record(root,sourceResource,originalRequest,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(preparation.record(root,sourceResource,{...originalRequest,orderInstructionVersion:undefined,sourceDocumentVersion:linked.version},randomUUID())).rejects.toMatchObject({statusCode:403});
+   });
    const renewal=await preparation.read(root,resource);
    expect(renewal).toMatchObject({sourceId:linked.sourceId,orderInstructionVersion:revision});
    const historicalDesigner=await preparation.read(designer,resource);
@@ -919,9 +932,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(historicalDesigner.orderInstructionVersion).toBeUndefined();
    await expect(handover(1,handed.orderInstructionVersion!)).rejects.toMatchObject({statusCode:409});
   }
-  const renewed=await handover(1,revision),renewedHandover=renewed.facts.find(row=>row.kind==='design_handover')!,basis=renewedHandover.investmentScopeBasis!;
+  const renewed=await handover(1,revision,renewedAt),renewedHandover=renewed.facts.find(row=>row.kind==='design_handover')!,basis=renewedHandover.investmentScopeBasis!;
   if(linked){
-   expect(renewedHandover).toMatchObject({recordId:handed.recordId,version:2,resource,sourceDocumentVersion:null,orderInstructionVersion:revision,valid:true});
+   expect(renewedHandover).toMatchObject({recordId:handed.recordId,version:2,resource,sourceDocumentVersion:null,orderInstructionVersion:revision,valid:true,occurredAt:renewedAt});
    expect(basis.materialIds).toEqual(expect.arrayContaining([fabricId,accessoryId]));
    const wrongBasis={...purchase,kind:'design_handover' as const,expectedVersion:2,quantities:[],sourceDocumentVersion:linked.version,recipientId:merch.actorId};
    await h.f.runtime.run(scene,root,async()=>{
@@ -934,7 +947,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(basis.materialFingerprints[accessoryId]).toBe(handed.investmentScopeBasis!.materialFingerprints[accessoryId]);
   const todos=()=>h.f.runtime.run(scene,merch,()=>materialInvestmentTodos(h.db,merch,{todoId:handed.recordId}));
   expect(await todos()).toMatchObject([{dueAt:null,route:{entityId:orderId}}]);
-  const result=await h.f.runtime.run(scene,merch,()=>preparation.record(merch,resource,{...purchase,expectedVersion:1,
+  const result=await h.f.runtime.run(scene,merch,()=>preparation.record(merch,resource,{...purchase,expectedVersion:1,occurredAt:renewedAt,
    investmentMaterialId:fabricId,quantities:[purchase.quantities[0]!] },randomUUID()));
   const completed=result.facts.find(row=>row.kind==='material_investment')!;
   expect(completed).toMatchObject({recordId:before.recordId,version:2,state:'ready'});
@@ -942,6 +955,58 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await todos()).toEqual([]);
  });
 
+ it('replaces corrected investment rows without completing a missing material, and retains genuine independent additions',async()=>{
+  const {h,merch,root,scene,started,orderId,requests}=await directMaterialOrder(2);
+  const resource={kind:'order' as const,id:orderId},service=new ProductionReadinessService(h.db),instruction=new ProductionInstructionService(h.db,true);
+  const fabricA=randomUUID(),fabricB=randomUUID();
+  const handover=await h.f.runtime.run(scene,root,async()=>{
+   const current=await instruction.read(merch,orderId);
+   const saved=await instruction.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,
+    document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',
+     fabrics:[{id:fabricA,name:'TEST A布',part:'本身',colors:{},remarks:''},{id:fabricB,name:'TEST B布',part:'本身',colors:{},remarks:''}]}},randomUUID());
+   const state=await service.record(root,resource,{kind:'design_handover',scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:started,
+    note:'TEST 实际交接 A 与 B',quantities:[],evidenceIds:[],sourceDocumentVersion:null,orderInstructionVersion:saved.version,recipientId:merch.actorId},randomUUID());
+   const check=await requests.check(root,{kind:'arrangement',resource});
+   await requests.arrange(root,{resource,fingerprint:check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   return {fact:state.facts.find(row=>row.kind==='design_handover')!,lines:state.lines};
+  });
+  const rowA={lineId:handover.lines[0]!.lineId,materialId:fabricA,name:'TEST A布',quantity:20,unit:'米'};
+  const rowB={lineId:handover.lines[1]!.lineId,materialId:fabricB,name:'TEST B布',quantity:12,unit:'米'};
+  const input={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,
+   note:'TEST 原投料登记',quantities:[rowA],evidenceIds:[],sourceDocumentVersion:null,recipientId:null,investmentMaterialId:fabricA};
+  const record=(value:typeof input&{investmentQuantityCorrection?:{index:number;previous:typeof rowA}})=>
+   h.f.runtime.run(scene,merch,()=>service.record(merch,resource,value,randomUUID()));
+  const first=await record(input),initial=first.facts.find(row=>row.kind==='material_investment')!;
+  expect(initial).toMatchObject({state:'partial',version:1,quantities:[rowA]});
+  expect(first.materialInvestmentReminder?.dueAt).toBeTruthy();
+  const correctionTime='2027-04-25T05:00:00.000Z';await h.f.advance(scene,correctionTime);
+  const correction={...input,expectedVersion:1,occurredAt:correctionTime,note:'TEST 原 A 误记，实际为 B',quantities:[rowB],
+   investmentMaterialId:fabricB,investmentQuantityCorrection:{index:0,previous:rowA}};
+  const corrected=await record(correction),replacement=corrected.facts.find(row=>row.kind==='material_investment')!;
+  expect(replacement).toMatchObject({recordId:initial.recordId,version:2,state:'partial',quantities:[rowB],occurredAt:correctionTime});
+  expect(replacement.investmentMaterialOccurrences?.[fabricA]).toBeUndefined();
+  expect(corrected.history.find(row=>row.recordId===initial.recordId&&row.version===1)).toMatchObject({quantities:[rowA],occurredAt:started});
+  expect(corrected.materialInvestmentReminder?.dueAt).toBe(first.materialInvestmentReminder!.dueAt);
+  expect(await h.f.runtime.run(scene,merch,()=>materialInvestmentTodos(h.db,merch,{todoId:handover.fact.recordId})))
+   .toMatchObject([{dueAt:first.materialInvestmentReminder!.dueAt}]);
+  await expect(record(correction)).rejects.toMatchObject({statusCode:409});
+  await expect(record({...correction,expectedVersion:2})).rejects.toMatchObject({statusCode:409});
+
+  const actualTime='2027-04-25T06:00:00.000Z';await h.f.advance(scene,actualTime);
+  await record({...input,expectedVersion:2,occurredAt:actualTime,note:'TEST 从 B 订正为真实 A',investmentQuantityCorrection:{index:0,previous:rowB}});
+  const added=await record({...input,expectedVersion:3,occurredAt:actualTime,note:'TEST 独立追加真实 B',quantities:[rowB],investmentMaterialId:fabricB});
+  expect(added.facts.find(row=>row.kind==='material_investment')).toMatchObject({recordId:initial.recordId,version:4,state:'ready',quantities:[rowA,rowB]});
+  expect(added.materialInvestmentReminder).toBeUndefined();
+  expect(await h.f.runtime.run(scene,merch,()=>materialInvestmentTodos(h.db,merch,{todoId:handover.fact.recordId}))).toEqual([]);
+  const moved={...rowA,lineId:handover.lines[1]!.lineId,unit:'码',quantity:22};
+  const movedResult=await record({...input,expectedVersion:4,occurredAt:actualTime,note:'TEST 订正 A 的 PO 及单位',quantities:[moved],
+   investmentQuantityCorrection:{index:0,previous:rowA}});
+  const movedInvestment=movedResult.facts.find(row=>row.kind==='material_investment')!;
+  expect(movedInvestment).toMatchObject({version:5,state:'ready',quantities:[moved,rowB]});
+  expect(movedInvestment.investmentMaterialOccurrences?.[fabricB]).toEqual(
+   added.facts.find(row=>row.kind==='material_investment')!.investmentMaterialOccurrences?.[fabricB]);
+  expect(movedResult.history.find(row=>row.recordId===initial.recordId&&row.version===4)).toMatchObject({quantities:[rowA,rowB]});
+ });
  it.each(['before','after'] as const)('uses the original direct order handover and overdue cutoff when the source is linked %s adoption',async(linkWhen)=>{
   const order=await directMaterialOrder(),{h,merch,root,started,scene,requests,orderId}=order;
   const preparation=new ProductionReadinessService(h.db),instruction=new ProductionInstructionService(h.db,true),plans=new OrderTimePlanRepository(h.db);

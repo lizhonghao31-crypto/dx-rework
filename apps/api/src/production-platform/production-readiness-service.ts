@@ -81,7 +81,8 @@ export class ProductionReadinessService{
   const originalHandover=a.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole');
   const instructionHandover=usesInstructionHandover(a.context,originalHandover,a.history);
   const root=isRootActor(actor);
-  if(root||a.designer&&!instructionHandover)canRecord.push('design_handover');
+  const canRecordInstructionHandover=instructionHandover&&resource.kind==='order'&&root;
+  if(canRecordInstructionHandover||!instructionHandover&&(root||a.designer))canRecord.push('design_handover');
   if(a.merch||isRootActor(actor))canRecord.push('material_investment');
   if(a.warehouse||isRootActor(actor))canRecord.push('fabric_receipt','accessories_ready','style_label_ready');
   if(a.color||isRootActor(actor))canRecord.push('color_confirmation');
@@ -92,9 +93,9 @@ export class ProductionReadinessService{
   const handover=a.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole'&&f.state==='ready'&&f.valid&&f.investmentScopeBasis);
   const investment=a.facts.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
   const reminder=handover&&orderId&&!(investment?.state==='ready'&&investment.valid)?await materialInvestmentReminder(db,{sourceId:a.context.sourceId,orderId,handoverId:handover.recordId,scopeFingerprint:handover.investmentScopeBasis!.fingerprint}):null;
-  const orderInstruction=instructionHandover&&root&&orderId?await directInvestmentInstruction(db,orderId):null;
+  const orderInstruction=canRecordInstructionHandover&&orderId?await directInvestmentInstruction(db,orderId):null;
   return {...(reminder?{materialInvestmentReminder:{...reminder,canClose:!reminder.termination&&reminder.enabled
-   &&reminder.status!=='waiting'&&(a.merch||isRootActor(actor))}}:{}),...(instructionHandover&&root?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
+   &&reminder.status!=='waiting'&&(a.merch||isRootActor(actor))}}:{}),...(canRecordInstructionHandover?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
    canDeliverInstruction:a.merch||isRootActor(actor),canAcknowledgeAdoption:!enrolled&&Boolean(orderId)&&(a.merch||isRootActor(actor)),canAdopt:!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
    adoptionReason:enrolled?null:'历史单未自动套用；主跟单核对预览后由供应链总监、老板或 Root 明确采用，完成实绩不重算',finalReasons:readiness?.finalReasons??[],technicalRevision:readiness?.technical?.revision??null,
    draftWindow:orderId?await preparationWindow(db,orderId,'draft'): {startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:'正式单形成前保留真实投料及到仓记录',status:'waiting'},
@@ -113,12 +114,16 @@ export class ProductionReadinessService{
    const inactive=(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)) AND state<>'active'",[a.context.orderId,a.context.sourceId])).rowCount;
    if(inactive)conflict('订单或开发来源已暂停、取消，不能新增办理事实');
    if(a.context.orderId&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[a.context.orderId])).rowCount)conflict('本单已结案，原资料和实际记录保持不变');
+   const record=action==='record'?input as PreparationMaterialRecord:null;
+   const instructionHandover=record?.kind==='design_handover'&&usesInstructionHandover(a.context,
+    a.facts.find(f=>f.kind===record.kind&&f.scopeRef===record.scopeRef),a.history);
+   // The original order route owns both range authorization and write retries.
+   if(instructionHandover&&resource.kind!=='order')digitalForbidden();
    if(!isRootActor(actor)){
     let required:string|null=null;
-    if(action==='record'){
-     const {kind,scopeRef}=input as PreparationMaterialRecord;
-     const prior=kind==='design_handover'?a.facts.find(f=>f.kind===kind&&f.scopeRef===scopeRef):undefined;
-     if(kind==='design_handover'&&a.designer&&!usesInstructionHandover(a.context,prior,a.history))required='sample_designer';
+    if(record){
+     const {kind}=record;
+     if(kind==='design_handover'&&a.designer&&!instructionHandover)required='sample_designer';
      else if(kind==='material_investment'&&a.merch)required='order_merchandiser';
      else if(['fabric_receipt','accessories_ready','style_label_ready'].includes(kind)&&a.warehouse)required=actor.actorRoles.includes('warehouse_supervisor')?'warehouse_supervisor':'warehouse_receiver';
      else if(kind==='color_confirmation'&&a.color)required=a.responsibility.colorConfirmationRole;

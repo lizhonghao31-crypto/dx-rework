@@ -69,8 +69,12 @@ export function ProductionReadinessPanel({resource,sourceDocumentVersion,focusKi
    const value={lineId:lineId||null,materialId:kind==='material_investment'&&materialId?materialId:selected?.name===name&&selected.unit===unit?selected.materialId:null,name,quantity:Number(quantity),unit};
    if(quantityIndex===null)quantities.push(value);else quantities[quantityIndex]=value;
   }else if(selected){setError('原物料明细不能通过清空输入悄然删除，请保留数量或明确追加订正原因');return;}
-  // Replace only the explicitly selected material row; preserve other rows, even within the same color.
-  void send('/materials',{kind,scopeRef:'whole',expectedVersion:editingVersion,...(kind==='material_investment'&&materialId&&['ready','partial'].includes(state)?{investmentMaterialId:materialId}:{}),state,occurredAt:state==='unknown'||state==='withdrawn'?null:instant(at),note,quantities,evidenceIds:evidence,sourceDocumentVersion:kind==='design_handover'&&!usesInstruction?editingDocumentVersion:null,
+  // A correction identifies its original row in the exact version being edited.
+  const correction=kind==='material_investment'&&selected&&quantityIndex!==null&&['ready','partial'].includes(state)
+   ?{index:quantityIndex,previous:selected}:null;
+  const submitted=correction?[quantities[correction.index]!]:quantities;
+  void send('/materials',{kind,scopeRef:'whole',expectedVersion:editingVersion,...(kind==='material_investment'&&materialId&&['ready','partial'].includes(state)?{investmentMaterialId:materialId}:{}),
+   ...(correction?{investmentQuantityCorrection:correction}:{}),state,occurredAt:state==='unknown'||state==='withdrawn'?null:instant(at),note,quantities:submitted,evidenceIds:evidence,sourceDocumentVersion:kind==='design_handover'&&!usesInstruction?editingDocumentVersion:null,
    ...(kind==='design_handover'&&usesInstruction&&editingDocumentVersion?{orderInstructionVersion:editingDocumentVersion}:{}),recipientId:kind==='design_handover'?recipient||null:null});
  };
  const personSelect=(label:string,selected:string,onSelect:(value:string)=>void,filter:(p:typeof people[number])=>boolean,form:Form='materials')=><label>{label}<SearchableSelect aria-label={label} value={selected} onChange={e=>{onSelect(e.target.value);if(form==='responsibility')setResponsibilityDirty(true);else setDirty(true);}}><option value="">待指定</option>{people.filter(filter).map(p=><option key={p.id} value={p.id}>{p.displayName}</option>)}</SearchableSelect></label>;

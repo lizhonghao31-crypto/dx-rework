@@ -129,6 +129,52 @@ export async function preparationResponsibility(db:PreparationDB,context:Awaited
  const dispatch=context.orderId?(await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[context.orderId])).rows[0]:null;
  return {version:row?.version??0,warehouseWorkerId:dispatch?.warehouse_worker_id??row?.warehouse_worker_id??null,colorConfirmationWorkerId:row?.color_confirmation_worker_id??null,colorConfirmationRole:row?.color_confirmation_role??null};
 }
+type Quantity=PreparationMaterialRecord['quantities'][number];
+const investmentRowKey=(row:Quantity)=>JSON.stringify([row.materialId,row.lineId,row.unit,row.materialId?null:row.name]);
+
+function correctedInvestmentQuantities(prior:readonly Quantity[],correction:NonNullable<PreparationMaterialRecord['investmentQuantityCorrection']>,replacement:Quantity){
+ const previous=prior[correction.index],original=correction.previous;
+ if(!previous||investmentRowKey(previous)!==investmentRowKey(original)||previous.name!==original.name||previous.quantity!==original.quantity)
+  throw new ApplicationError('PREPARATION_CONFLICT','所选投面辅料原明细已变化，请读取当前版本',409);
+ if(prior.some((row,index)=>index!==correction.index&&investmentRowKey(row)===investmentRowKey(replacement)))
+  throw new ApplicationError('PREPARATION_CONFLICT','订正后的物料、款色及单位已有实际记录，请核对原明细',409);
+ return prior.map((row,index)=>index===correction.index?replacement:row);
+}
+
+function investmentQuantitiesWithEvidence(input:PreparationMaterialRecord,prior:PreparationMaterialFact|undefined,scope:MaterialInvestmentScopeBasis|undefined,quantities:Quantity[]){
+ const original=prior?.quantities??[],previous=new Map(original.map(row=>[investmentRowKey(row),row]));
+ const evidence={...prior?.investmentQuantityOccurrences};
+ if(!prior?.investmentQuantityOccurrences&&prior?.investmentMaterialOccurrences){
+  const counts=new Map<string,number>();
+  for(const {materialId} of original)if(materialId)counts.set(materialId,(counts.get(materialId)??0)+1);
+  // Old material-level evidence identifies the row only when there is one.
+  for(const row of original){
+   const id=row.materialId,occurrence=id?prior.investmentMaterialOccurrences[id]:undefined;
+   if(id&&occurrence&&counts.get(id)===1)evidence[investmentRowKey(row)]=occurrence;
+  }
+ }
+ const correction=input.investmentQuantityCorrection;
+ if(correction)delete evidence[investmentRowKey(correction.previous)];
+ const selected=input.quantities.filter(row=>row.materialId&&row.materialId===input.investmentMaterialId);
+ for(const row of input.quantities){
+  const fingerprint=row.materialId?scope?.materialFingerprints[row.materialId]:null;
+  if(!fingerprint)continue;
+  const key=investmentRowKey(row);
+  if(correction||previous.get(key)?.quantity!==row.quantity||selected.length===1&&selected[0]===row)
+   evidence[key]={fingerprint,occurredAt:input.occurredAt!};
+ }
+ const rowOccurrences:NonNullable<PreparationMaterialFact['investmentQuantityOccurrences']>={};
+ const materialOccurrences:NonNullable<PreparationMaterialFact['investmentMaterialOccurrences']>={};
+ for(const row of quantities){
+  const key=investmentRowKey(row),occurrence=evidence[key],id=row.materialId;
+  if(!occurrence||!id)continue;
+  rowOccurrences[key]=occurrence;
+  if(scope&&occurrence.fingerprint!==scope.materialFingerprints[id])continue;
+  const current=materialOccurrences[id];
+  if(!current||Date.parse(occurrence.occurredAt)>Date.parse(current.occurredAt))materialOccurrences[id]=occurrence;
+ }
+ return {rowOccurrences,materialOccurrences};
+}
 /** Internal native producer; callers retain original transaction, authorization and optimistic version guards. */
 export async function appendPreparationMaterial(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>,actorId:string,input:PreparationMaterialRecord){
  const current=currentPreparationMaterials(await preparationMaterialHistory(db,context),context.orderId);
@@ -146,6 +192,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
  const target=prior?.resource??investmentHandover?.resource??(context.sourceId?{kind:'source' as const,id:context.sourceId}:context.resource),recordId=prior?.recordId??randomUUID(),version=input.expectedVersion+1;
  let scopeBasis:MaterialInvestmentScopeBasis|undefined;
  let investmentMaterialOccurrences:PreparationMaterialFact['investmentMaterialOccurrences'];
+ let investmentQuantityOccurrences:PreparationMaterialFact['investmentQuantityOccurrences'];
  const preorder=handedDocument?.status==='draft'&&handedDocument.document.customerOrderDraft?.withOrder===true
   &&handedDocument.document.customerOrderDraft.stage==='preorder';
  if(materialInputs&&input.state==='ready'&&input.scopeRef==='whole'
@@ -158,24 +205,28 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
  }
  if(input.kind==='material_investment'){
   scopeBasis=investmentHandover?.investmentScopeBasis;
+  const original=prior?.quantities??[],correction=input.investmentQuantityCorrection;
+  const corrected=correction?correctedInvestmentQuantities(original,correction,input.quantities[0]!):null;
   if(scopeBasis&&(input.state==='ready'||input.state==='partial')){
-   const rowKey=(row:PreparationMaterialRecord['quantities'][number])=>JSON.stringify([row.materialId,row.lineId,row.unit,row.materialId?null:row.name]);
-   const quantities=[...new Map([...(prior?.quantities??[]),...input.quantities].map(row=>[rowKey(row),row])).values()];
-   investmentMaterialOccurrences={...prior?.investmentMaterialOccurrences};
-   for(const row of input.quantities){
-    const id=row.materialId;
-    if(!id||!scopeBasis.materialFingerprints[id])continue;
-    const changed=!prior?.quantities.some(previous=>rowKey(previous)===rowKey(row)&&previous.quantity===row.quantity);
-    if(changed||input.investmentMaterialId===id)investmentMaterialOccurrences[id]={fingerprint:scopeBasis.materialFingerprints[id]!,occurredAt:input.occurredAt!};
-   }
+   const quantities=corrected??[...new Map([...original,...input.quantities].map(row=>[investmentRowKey(row),row])).values()];
+   const {rowOccurrences,materialOccurrences}=investmentQuantitiesWithEvidence(input,prior,scopeBasis,quantities);
+   investmentQuantityOccurrences=rowOccurrences;
+   investmentMaterialOccurrences=materialOccurrences;
    const complete=preparationInvestmentComplete(investmentHandover,{state:input.state,valid:true,quantities,investmentMaterialOccurrences});
    const occurredAt=complete?scopeBasis.materialIds.map(id=>investmentMaterialOccurrences![id]!.occurredAt)
     .reduce((last,actual)=>Date.parse(actual)>Date.parse(last)?actual:last):input.occurredAt;
    input={...input,quantities,occurredAt,state:input.state==='ready'&&!complete?'partial':input.state};
+  }else if(corrected){
+   const {rowOccurrences,materialOccurrences}=investmentQuantitiesWithEvidence(input,prior,undefined,corrected);
+   investmentQuantityOccurrences=rowOccurrences;
+   investmentMaterialOccurrences=materialOccurrences;
+   input={...input,quantities:corrected};
   }
  }
+ const snapshot={...input};
+ delete snapshot.investmentQuantityCorrection;
  await db.query(`INSERT INTO digital_preparation_material_versions(record_id,version,resource_kind,resource_id,kind,scope_ref,state,occurred_at,body,actor_id,recorded_at)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...input,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),materialBasis:await preparationMaterialBasis(db,context,input.kind)}),actorId]);
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...snapshot,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),...(investmentQuantityOccurrences?{investmentQuantityOccurrences}:{}),materialBasis:await preparationMaterialBasis(db,context,input.kind)}),actorId]);
  return {recordId,version};
 }
 
