@@ -273,17 +273,19 @@
       "skipped": 0,
       "testedHead": "43595f39b68657a563bbeaef4389264044ea5023",
       "sourceFingerprint": "74187db232becf0ccb5f4089ae561637f7086f5f3bbc6d742d73c68d2de7eefc",
-      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟、关联历史来源后由正式订单入口按制单再次交接、投料行订正与独立追加、分行实际时间和正式采用首次完整采购截止。执行时的工作树含本次分行实绩时间和首次完整采购截止修复，完整源码指纹绑定实际输入。",
+      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟、关联历史来源后由正式订单入口按制单再次交接、投料行订正与独立追加、分行实际时间和正式采用首次完整采购截止。执行时的工作树含本次分行实绩时间和首次完整采购截止修复，完整源码指纹绑定实际输入。 同一命令的原生 Vitest JSON 作为结果日志，原控制台及原摘要保留。",
       "startedAt": "2026-11-22T17:30:34.221Z",
       "endedAt": "2026-11-22T17:35:13.877Z",
-      "log": "/tmp/dx1077-evidence/settled-candidate-pg.log",
-      "logSha256": "beb85d29fe6d2d4ad0c2a7b08f2302692a7b53b385c898338af9cf0a930f8050",
+      "log": "/tmp/dx1077-evidence/settled-candidate-pg.json",
+      "logSha256": "8dfa1b2f1b63ec9fbc0fcac92e697916fbe71c7abb42e4a06ce0a8ff4a00e794",
       "resultReports": [
         {
           "format": "vitest-json",
           "sha256": "8dfa1b2f1b63ec9fbc0fcac92e697916fbe71c7abb42e4a06ce0a8ff4a00e794"
         }
-      ]
+      ],
+      "consoleLog": "/tmp/dx1077-evidence/settled-candidate-pg.log",
+      "consoleLogSha256": "beb85d29fe6d2d4ad0c2a7b08f2302692a7b53b385c898338af9cf0a930f8050"
     },
     {
       "id": "preorder-schedule-and-authorization",
