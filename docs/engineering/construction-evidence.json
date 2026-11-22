@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-  "sourceFingerprint": "7fbf8f1053f28f1578b6059709065ea9f2b346618506f936eac0db7ef7549596",
+  "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
   "rules": [
     {
       "rule": "分离创建、开发工作区和共享辅料目录，按源单组织六个固定入口并复用原业务表单。",
@@ -45,8 +45,8 @@
       "dateAndPermission": "历史轮只读保原业务日期。正式确认仍通过当前来源原资格、原时间检查与幂等命令，不凭工作台入口授予动作。",
       "expectation": "按款号打开原对象、六区键盘定位，专岗任务返回相同筛选与区域。正式订单只提交一次，成功显示对应订单，保留原来源。 原确认正式单的真实浏览器回执见已复审 a5b98f50；本次集中复跑旧失败、工作区读和原业务时钟。",
       "checks": [
-        "1079-ci-fix-affected",
-        "1079-ci-fix-requests"
+        "1079-readiness-fixed-chain",
+        "1079-readiness-fixed-regular"
       ]
     },
     {
@@ -76,7 +76,8 @@
       "dateAndPermission": "按当前任务角色与执行条件决定可办或只读，草稿数按原创建身份。未覆盖的非任务事项标为待核。",
       "expectation": "同单原生和索引路径返回同一已核办理集合。原角色拒绝仍有效，用户打开等待项仅得到原任务只读入口。",
       "checks": [
-        "1079-ci-fix-affected"
+        "1079-readiness-fixed-regular",
+        "1079-readiness-fixed-chain"
       ]
     },
     {
@@ -102,7 +103,8 @@
         "apps/api/src/production-platform/development-supply.ts",
         "tests/integration/development-sla-enrollment-postgres.test.ts",
         "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-service.ts#materialEvent",
@@ -116,7 +118,10 @@
         "tests/integration/digital-development-execution-postgres.test.ts",
         "tests/integration/development-sla-enrollment-postgres.test.ts",
         "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/development-round-history-clock-postgres.test.ts"
       ],
       "newTests": [
         "tests/integration/development-technical-postgres.test.ts",
@@ -124,57 +129,81 @@
       ],
       "initialization": "同一个合成开发单保面料和两件必要辅料。原复核只在文员提交后才应用事实；保留既有补正草稿和退出保护。",
       "dateAndPermission": "预计日期要求正确轮次、资料及材料记录版本。面料不写辅料预计，普通设计师不写实到；历史轮及 Root 原有路径分别验证。",
-      "expectation": "更新辅料预计不会放行车板。仅核一件及保存两件草稿均继续等待，文员逐件实核提交后原车板人员才可办理。 对原退回补料按准确当前轮、材料与版本用原任务投递给文员。交接和补核草稿不产生实到；文员逐项正式通过才生效。保留旧补料路径及资料问题未改拒绝。 轮次精确绑定预计修改；设计师写实到拒绝，文员提交才生成 Journey 真实完成及解除到料提醒，纸样 R/D 原责任窗口与旧病例年龄不变。",
+      "expectation": "更新辅料预计不会放行车板。仅核一件及保存两件草稿均继续等待，文员逐件实核提交后原车板人员才可办理。 对原退回补料按准确当前轮、材料与版本用原任务投递给文员。交接和补核草稿不产生实到；文员逐项正式通过才生效。保留旧补料路径及资料问题未改拒绝。 轮次精确绑定预计修改；设计师写实到拒绝，文员提交才生成 Journey 真实完成及解除到料提醒，纸样 R/D 原责任窗口与旧病例年龄不变。 #1077 预下单草稿只录材料需求，通过真实交接交原跟单。五例旧夹具带入实到标记，基线五通过、上一候选五拒绝。本次只修两处预下单夹具，草稿断言无实到，原投料、换人、附件、历史和时效验证继续。",
       "checks": [
-        "1079-ci-fix-affected",
-        "1079-ci-fix-requests"
+        "1079-readiness-fixed-chain",
+        "1079-readiness-fixed-regular",
+        "1079-readiness-fixed-execution"
       ]
     }
   ],
   "checks": [
     {
-      "id": "1079-ci-fix-affected",
+      "id": "1079-readiness-fixed-chain",
       "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-chain.json --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/development-round-history-clock-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-ci-fix-affected.json tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/digital-journey-postgres.test.ts tests/integration/development-amendment-postgres.test.ts tests/integration/workspace-page-facts-postgres.test.ts",
-      "context": "隔离低权限 PostgreSQL 16.16、Node 22.22.2，原岗位、真实业务命令和当前分支，用例串行执行。",
-      "passed": 88,
+      "passed": 163,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "a5b98f503b17f87ae9dde0dd50713e17e5bbf1f2",
-      "sourceFingerprint": "7fbf8f1053f28f1578b6059709065ea9f2b346618506f936eac0db7ef7549596",
-      "startedAt": "2026-11-22T22:13:50Z",
-      "endedAt": "2026-11-22T22:15:46Z",
-      "log": "/tmp/dx-designer-workbench-evidence/1079-ci-fix-affected.log",
-      "logSha256": "4d1c07a1385335394f5d238046bbc8146ad0c422ae225fc7bbad5f2b2f6e9975",
+      "testedHead": "8f7c0c2f126d11391bef0698fd0d4cf02a5ba188",
+      "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
+      "context": "本地隔离低权限 PostgreSQL 16.16，Node 22.22.2，单 worker，浏览器套件用签名 Chromium 与原 API，同一合成业务领域。",
+      "startedAt": "2026-11-22T22:55:41.103Z",
+      "endedAt": "2026-11-22T23:02:26.986Z",
+      "log": "/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-chain.log",
+      "logSha256": "ea381e2bf7bdeed2e47c0727140218b26bae9c51ef2c8eaad55f593f54998f12",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e6d7f7d6e741fd4df548a5ac04602d42d6804fbb9bc22f5602e4eef143643eeb"
+          "sha256": "8272cb6ef131b4579371002157b87763bf3a9ab932288112ba84d8d5b00f6d27"
         }
       ]
     },
     {
-      "id": "1079-ci-fix-requests",
+      "id": "1079-readiness-fixed-regular",
       "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-regular.json --config vitest.config.ts tests/integration/digital-journey-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/development-amendment-postgres.test.ts tests/integration/workspace-page-facts-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-ci-fix-requests.json tests/integration/order-time-requests-postgres.test.ts -t 'same-round material recheck'",
-      "context": "隔离低权限 PostgreSQL 16.16、Node 22.22.2，原岗位、真实业务命令和当前分支，用例串行执行。",
-      "passed": 2,
+      "passed": 88,
       "failed": 0,
-      "skipped": 34,
-      "testedHead": "a5b98f503b17f87ae9dde0dd50713e17e5bbf1f2",
-      "sourceFingerprint": "7fbf8f1053f28f1578b6059709065ea9f2b346618506f936eac0db7ef7549596",
-      "startedAt": "2026-11-22T22:15:46Z",
-      "endedAt": "2026-11-22T22:16:00Z",
-      "log": "/tmp/dx-designer-workbench-evidence/1079-ci-fix-requests.log",
-      "logSha256": "b30458347ab0aa99df00fe6284e9e93d31fbb6db5ee698996c2a295b6aacc56b",
+      "skipped": 0,
+      "testedHead": "8f7c0c2f126d11391bef0698fd0d4cf02a5ba188",
+      "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
+      "context": "本地隔离低权限 PostgreSQL 16.16，Node 22.22.2，单 worker，浏览器套件用签名 Chromium 与原 API，同一合成业务领域。",
+      "startedAt": "2026-11-22T23:02:26.998Z",
+      "endedAt": "2026-11-22T23:04:15.011Z",
+      "log": "/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-regular.log",
+      "logSha256": "682805ce31b56bb8e7950dd9ff957dfeb48dec19fea31318dd3a1dfdb43a989c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fee2bb72e06d0baffe31388f49232c917b3855e18b676aaa8f1355a1c98e4857"
+          "sha256": "77a8766d5eb9e3a41d31397518d9b33381d110ec936bea20ed06bde1e84538ab"
+        }
+      ]
+    },
+    {
+      "id": "1079-readiness-fixed-execution",
+      "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-execution.json --config vitest.config.ts tests/integration/digital-development-execution-postgres.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "8f7c0c2f126d11391bef0698fd0d4cf02a5ba188",
+      "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
+      "context": "本地隔离低权限 PostgreSQL 16.16，Node 22.22.2，单 worker，浏览器套件用签名 Chromium 与原 API，同一合成业务领域。",
+      "startedAt": "2026-11-22T23:04:15.915Z",
+      "endedAt": "2026-11-22T23:04:23.943Z",
+      "log": "/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-execution.log",
+      "logSha256": "13a7199786a26a389f287cb04e94151c8e4fa4401703d021e163129a6e5794e4",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ee072cc08c9e147f1520745bc74ad1a688e5a198b8515b75bb3307cb085f5a3a"
         }
       ]
     }
