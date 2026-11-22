@@ -1,24 +1,31 @@
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {afterAll,beforeAll,describe,it,expect,vi} from 'vitest';
+import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest';
 import type {Page} from 'playwright-core';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {cockpitHomeBrowser} from '../acceptance/m01-cockpit-home-native-browser.js';
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
+import {orderTimeCreated} from '../../apps/api/src/production-platform/order-time-created.js';
+import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
+import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('fixed timeline choices through the original production App and AuthService',()=>{
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
  const dismiss=async(page:Page)=>{const notice=page.locator('[aria-label="站内提醒"]');if(await notice.isVisible())await notice.getByRole('button',{name:'我知道了',exact:true}).click();};
- beforeAll(async()=>{
+ beforeEach(async()=>{
   h=await cockpitHomeBrowser({databaseUrl:url!,productionAssets:true,fixtureProfile:'navigation',evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),'fixed-timeline-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});
   configureTimelineAdoption(h.fixture.db,'fixed_v2');
  });
- afterAll(async()=>{if(h){configureTimelineAdoption(h.fixture.db,'legacy');await h.dispose();}});
+ afterEach(async()=>{if(h){configureTimelineAdoption(h.fixture.db,'legacy');await h.dispose();}});
  it('saves the actual chosen craft order as a native draft and restores it at1165px',async()=>{
+  const {db,root}=h.fixture,settings=new OrderTimeSettingsService(db);
+  const current=await settings.read(root);
+  await settings.save(root,{expectedVersion:current.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
   const {context,page}=await h.open(undefined,{},1165);try{
    await page.goto(h.base+'/ui/digital-production?workspace=designer');await page.getByRole('button',{name:'新建开发订单',exact:true}).waitFor();await dismiss(page);await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
    const choices=page.getByRole('group',{name:'工艺',exact:true});await choices.waitFor();
@@ -28,7 +35,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await choices.getByRole('combobox',{name:'工艺先后顺序'}).selectOption('embroidery');
    const saved=page.waitForResponse(response=>/\/sources\/[^/]+\/development$/.test(new URL(response.url()).pathname)&&response.request().method()==='PUT');
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();const response=await saved;expect(response.status()).toBe(200);
-   const sheet=await response.json();expect(sheet.timelineSchemaVersion).toBe(2);expect(sheet.document.craftSteps).toEqual([{craftKind:'embroidery',sequence:1},{craftKind:'printing',sequence:2}]);
+   const sheet=await response.json();
+   expect(sheet).toMatchObject({orderTimeEnabled:true,timelineSchemaVersion:2,status:'draft',productionOrderId:null,publishedAt:null});
+   expect(await orderTimeCreated(db,{kind:'source',id:sheet.sourceId})).toBeNull();
+   expect(sheet.document.craftSteps).toEqual([{craftKind:'embroidery',sequence:1},{craftKind:'printing',sequence:2}]);
    await page.goto(h.base+'/ui/digital-production?development='+sheet.sourceId);
    await page.getByRole('group',{name:'工艺',exact:true}).waitFor();expect(await page.getByRole('combobox',{name:'工艺先后顺序'}).inputValue()).toBe('embroidery');
    await page.screenshot({path:join(h.evidence,'development-independent-craft-1165.png'),fullPage:true});expect(h.errors).toEqual([]);

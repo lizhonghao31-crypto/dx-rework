@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "c9dace0c24c6ce1fd0a1d687542fefd469085250",
-  "sourceFingerprint": "7665f7c9f8a04a442055f5609a1a472d78c66e324a31ac6b6d660c4b451b1e6f",
+  "sourceFingerprint": "3548054f7e76f09637e52a7d80749f97e45720a9cf531618859ce6cd87258432",
   "rules": [
     {
       "rule": "在真实预下单依原材料版本交接给指定跟单，并在原准备面板登记；正式转单续用原记录。",
@@ -120,52 +120,77 @@
         "preorder-original-pg-and-browser",
         "preorder-schedule-and-authorization"
       ]
+    },
+    {
+      "rule": "缺少有效投面辅料交接时无投料日期与责任提醒，启用时效标准的原生草稿仍保工艺顺序且不发布不起钟。",
+      "source": "审定 v2 §§7.5–7.6、10.1 与 #1077 Full 44939451064 两项失败；同时核对 #1076 对草稿时钟的原合同。",
+      "writes": [
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/production-readiness-service.ts#ProductionReadinessService",
+        "apps/api/src/production-platform/journey-fact-repository.ts#readStoredWithClient",
+        "apps/api/src/production-platform/order-time-admission.ts#acceptsNewOrderTime",
+        "apps/api/src/production-platform/order-time-created.ts#orderTimeCreated"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "initialization": "保留真实洗水和旧计划事务；仅浏览器工艺草稿用其独立 schema 的原标准设置服务发布标准，厂务用例不加载该标准。",
+      "dateAndPermission": "缺真实投料范围时不借交接日期充当投料期限，保持其他时间与权限；浏览器用原签名会话保存，仅显式发布才有业务创建时钟。",
+      "expectation": "洗水正向事务及其他目标断言保留，实际投料截止、完成证据、催办和投料历史风险均为空；持久化 JourneyFact 再读，同样不造日期。保 PUT 200、schema 2、绣花后印花、重开排序与草稿未发布、不起钟、无正式单。",
+      "checks": [
+        "preorder-original-pg-and-browser"
+      ]
     }
   ],
   "checks": [
     {
       "id": "preorder-original-pg-and-browser",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-serial-browser-profile-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/order-time-requests-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/f1-candidate-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 58,
+      "passed": 96,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4afc7381a95442d1faa426ea99b14574a774c281",
-      "sourceFingerprint": "7665f7c9f8a04a442055f5609a1a472d78c66e324a31ac6b6d660c4b451b1e6f",
-      "context": "低权限隔离 PostgreSQL 13.23、真实 Chromium；普通跟单真草稿，直接正式和后来关联历史源、纯开发转单、预下单转单，保原事实、授权及提醒；精确合入基线验证关联对象仅源可读，以及同单出生证据和原节点保留。",
-      "startedAt": "2026-11-21T18:55:13.113Z",
-      "endedAt": "2026-11-21T18:58:30.703Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-serial-browser-profile-pg.log",
-      "logSha256": "9eff88699024ad6521739022419980c8ec685e0dcfbd7a8cd83d38050662e262",
+      "testedHead": "7e140c9892c0715b44eeea0a631ea66df0705bb7",
+      "sourceFingerprint": "3548054f7e76f09637e52a7d80749f97e45720a9cf531618859ce6cd87258432",
+      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟。执行时的工作树包含本次两份测试修正，由实际完整源码指纹绑定。",
+      "startedAt": "2026-11-22T16:40:36.906Z",
+      "endedAt": "2026-11-22T16:44:57.532Z",
+      "log": "/tmp/dx1077-evidence/f1-candidate-pg.log",
+      "logSha256": "a2ea2e6860da239d0697b648a25f8731bf01342ce559ec5ab24beda76f533d7e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b9f801eabea6d2074b6f5ddeb30a6a564203e49e4b957cafde20b1c251dbe428"
+          "sha256": "bb1e35911d0a1891743d8c43bac5715f882e5b753e81600f8bd0b9b4f538594f"
         }
       ]
     },
     {
       "id": "preorder-schedule-and-authorization",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail,full-gate-risk-map}.test.ts --reporter=default --reporter=json --outputFile.json=/dev/shm/dx-sla-creation.5c9HNj/f1-correct-browser-profile-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail,full-gate-risk-map}.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/f1-candidate-unit.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 278,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4afc7381a95442d1faa426ea99b14574a774c281",
-      "sourceFingerprint": "7665f7c9f8a04a442055f5609a1a472d78c66e324a31ac6b6d660c4b451b1e6f",
-      "context": "同提交的权限矩阵、排程合同、手算采购边界、原固定里程碑和旧版本回归。",
-      "startedAt": "2026-11-21T18:52:00.612Z",
-      "endedAt": "2026-11-21T18:52:07.880Z",
-      "log": "/dev/shm/dx-sla-creation.5c9HNj/f1-correct-browser-profile-unit.log",
-      "logSha256": "dab896269a8b7f6d3879becc8650079f4802609ecf0615c1dc77e57d9fa2f4a2",
+      "testedHead": "7e140c9892c0715b44eeea0a631ea66df0705bb7",
+      "sourceFingerprint": "3548054f7e76f09637e52a7d80749f97e45720a9cf531618859ce6cd87258432",
+      "context": "Node 22.22.2。现有 PMC 权限矩阵、排程合同、手算采购边界、原固定里程碑、旧版本与 Full 风险映射。执行时的工作树包含本次两份测试修正，由实际完整源码指纹绑定。",
+      "startedAt": "2026-11-22T16:40:45.680Z",
+      "endedAt": "2026-11-22T16:40:54.024Z",
+      "log": "/tmp/dx1077-evidence/f1-candidate-unit.log",
+      "logSha256": "bfe0364f1d7b44880b6466f644654d868600130b035ab47bcb993eb7b092719e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "464ba2efd32a1d2854b8ea73ce12c3bf226c9aa481aeeb10dcd7812db1a421fc"
+          "sha256": "499d6a2adc2250ac3d244bbd96bda6993457ba5e0f2cbb8c24cc0bd061a9d37a"
         }
       ]
     }
