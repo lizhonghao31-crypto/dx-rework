@@ -29,6 +29,19 @@ async function preorderRecipientScope(db:PreparationDB,actorId:string,handover:P
   [priorIds,actorId,handover.resource.id])).rows:[];
  return {actorId,handover,evidence:new Set([...handover.evidenceIds,...own.map(row=>row.attachment_id)])};
 }
+function usesInstructionHandover(
+ context:Awaited<ReturnType<typeof preparationContext>>,
+ prior:PreparationMaterialFact|undefined,
+ history:readonly PreparationMaterialFact[],
+){
+ if(!context.orderId)return false;
+ if(!context.sourceId)return true;
+ // A source attached later cannot replace the original order handover stream.
+ // Its most recent record may have been invalidated or withdrawn.
+ return prior?.resource.kind==='order'&&prior.resource.id===context.orderId&&history.some(row=>
+  row.recordId===prior.recordId&&row.scopeRef===prior.scopeRef&&row.resource.kind==='order'
+  &&row.resource.id===context.orderId&&row.state==='ready'&&row.orderInstructionVersion!==undefined);
+}
 export class ProductionReadinessService{
  constructor(private readonly database:Pool){}
  private async access(db:PreparationDB,actor:TrustedActorContext,resource:PreparationResource){
@@ -65,7 +78,10 @@ export class ProductionReadinessService{
   const adoption=await preparationAdoption(db,resource),enrolled=Boolean(orderId?readiness?.adoption:adoption);
   const revision=readiness?.revision??preparationHash({source:resource.id,facts:a.facts.map(f=>[f.recordId,f.version,f.valid]),responsibility:a.responsibility});
   const canRecord:PreparationMaterialKind[]=[];
-  if(a.designer||isRootActor(actor))canRecord.push('design_handover');
+  const originalHandover=a.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole');
+  const instructionHandover=usesInstructionHandover(a.context,originalHandover,a.history);
+  const root=isRootActor(actor);
+  if(root||a.designer&&!instructionHandover)canRecord.push('design_handover');
   if(a.merch||isRootActor(actor))canRecord.push('material_investment');
   if(a.warehouse||isRootActor(actor))canRecord.push('fabric_receipt','accessories_ready','style_label_ready');
   if(a.color||isRootActor(actor))canRecord.push('color_confirmation');
@@ -76,9 +92,9 @@ export class ProductionReadinessService{
   const handover=a.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole'&&f.state==='ready'&&f.valid&&f.investmentScopeBasis);
   const investment=a.facts.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
   const reminder=handover&&orderId&&!(investment?.state==='ready'&&investment.valid)?await materialInvestmentReminder(db,{sourceId:a.context.sourceId,orderId,handoverId:handover.recordId,scopeFingerprint:handover.investmentScopeBasis!.fingerprint}):null;
-  const orderInstruction=!a.context.sourceId&&orderId&&isRootActor(actor)?await directInvestmentInstruction(db,orderId):null;
+  const orderInstruction=instructionHandover&&root&&orderId?await directInvestmentInstruction(db,orderId):null;
   return {...(reminder?{materialInvestmentReminder:{...reminder,canClose:!reminder.termination&&reminder.enabled
-   &&reminder.status!=='waiting'&&(a.merch||isRootActor(actor))}}:{}),...(orderInstruction?{orderInstructionVersion:orderInstruction.version}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
+   &&reminder.status!=='waiting'&&(a.merch||isRootActor(actor))}}:{}),...(instructionHandover&&root?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
    canDeliverInstruction:a.merch||isRootActor(actor),canAcknowledgeAdoption:!enrolled&&Boolean(orderId)&&(a.merch||isRootActor(actor)),canAdopt:!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
    adoptionReason:enrolled?null:'历史单未自动套用；主跟单核对预览后由供应链总监、老板或 Root 明确采用，完成实绩不重算',finalReasons:readiness?.finalReasons??[],technicalRevision:readiness?.technical?.revision??null,
    draftWindow:orderId?await preparationWindow(db,orderId,'draft'): {startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:'正式单形成前保留真实投料及到仓记录',status:'waiting'},
@@ -100,8 +116,9 @@ export class ProductionReadinessService{
    if(!isRootActor(actor)){
     let required:string|null=null;
     if(action==='record'){
-     const kind=(input as PreparationMaterialRecord).kind;
-     if(kind==='design_handover'&&a.designer)required='sample_designer';
+     const {kind,scopeRef}=input as PreparationMaterialRecord;
+     const prior=kind==='design_handover'?a.facts.find(f=>f.kind===kind&&f.scopeRef===scopeRef):undefined;
+     if(kind==='design_handover'&&a.designer&&!usesInstructionHandover(a.context,prior,a.history))required='sample_designer';
      else if(kind==='material_investment'&&a.merch)required='order_merchandiser';
      else if(['fabric_receipt','accessories_ready','style_label_ready'].includes(kind)&&a.warehouse)required=actor.actorRoles.includes('warehouse_supervisor')?'warehouse_supervisor':'warehouse_receiver';
      else if(kind==='color_confirmation'&&a.color)required=a.responsibility.colorConfirmationRole;
@@ -151,20 +168,25 @@ export class ProductionReadinessService{
    if(input.occurredAt&&Date.parse(input.occurredAt)>businessNow().getTime())conflict('实际时间不能在未来');
    const prior=a.facts.find(f=>f.kind===input.kind&&f.scopeRef===input.scopeRef);
    if((prior?.version??0)!==input.expectedVersion)conflict('本项资料已更新，请刷新后追加订正');
-   if(input.kind==='design_handover'&&input.state==='ready'){
-    if(!input.recipientId||!await a.policy.lockActiveRole(input.recipientId,'order_merchandiser'))conflict('请指定有效订单跟单接收资料');
-    if(a.context.order?.primary_merchandiser_id&&a.context.order.primary_merchandiser_id!==input.recipientId)conflict('请交给本单主跟单，不另建第二责任人');
-    const d=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;
-    const preorder=d?.status==='draft'&&d.document.customerOrderDraft?.withOrder===true&&d.document.customerOrderDraft.stage==='preorder';
-    if(a.context.sourceId){
-     if(!d||d.status!=='published'&&!preorder||d.version!==input.sourceDocumentVersion||input.orderInstructionVersion!==undefined)
-      conflict('设计交接须引用当前已保存投料草稿或有效发布资料版本');
-    }else if(a.context.orderId){
-     const instruction=await directInvestmentInstruction(db,a.context.orderId);
-     if(input.sourceDocumentVersion!==null||input.orderInstructionVersion!==instruction?.version)
-      conflict('设计交接须引用当前已保存的本单制单版本；资料变更后请重新读取');
+   if(input.kind==='design_handover'){
+    const useInstruction=usesInstructionHandover(a.context,prior,a.history);
+    if(!useInstruction&&input.orderInstructionVersion!==undefined)conflict('设计交接须引用当前已保存投料草稿或有效发布资料版本');
+    if(input.state==='ready'){
+     if(!input.recipientId||!await a.policy.lockActiveRole(input.recipientId,'order_merchandiser'))conflict('请指定有效订单跟单接收资料');
+     if(a.context.order?.primary_merchandiser_id&&a.context.order.primary_merchandiser_id!==input.recipientId)conflict('请交给本单主跟单，不另建第二责任人');
+     if(useInstruction&&a.context.orderId){
+      const instruction=await directInvestmentInstruction(db,a.context.orderId);
+      if(input.sourceDocumentVersion!==null||input.orderInstructionVersion!==instruction?.version||a.context.sourceId&&!instruction)
+       conflict('设计交接须引用当前已保存的本单制单版本；资料变更后请重新读取');
+     }else if(a.context.sourceId){
+      const d=await developmentDocumentRow(db,a.context.sourceId);
+      const preorder=d?.status==='draft'&&d.document.customerOrderDraft?.withOrder===true&&d.document.customerOrderDraft.stage==='preorder';
+      if(!d||d.status!=='published'&&!preorder||d.version!==input.sourceDocumentVersion)
+       conflict('设计交接须引用当前已保存投料草稿或有效发布资料版本');
+      if(preorder&&!d.document.materials.some((m:{category:string;name:string;quantity:string})=>m.category!=='辅料'&&m.name.trim()&&m.quantity.trim()))
+       conflict('预下单交接请先保存实际面料名称和数量资料；不要求完整尺码、预算或正式单');
+     }
     }
-    if(preorder&&!d.document.materials.some((m:{category:string;name:string;quantity:string})=>m.category!=='辅料'&&m.name.trim()&&m.quantity.trim()))conflict('预下单交接请先保存实际面料名称和数量资料；不要求完整尺码、预算或正式单');
    }
    if(input.kind==='color_confirmation'&&a.context.order?.requires_color_matching===false)conflict('设计已选择无需对色，不重复建立确认步骤');
    for(const q of input.quantities){

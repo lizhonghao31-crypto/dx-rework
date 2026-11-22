@@ -19,7 +19,7 @@ export const PreparationMaterialRecordSchema=z.object({
  investmentMaterialId:z.uuid().optional(),
 }).strict().transform(x=>({...x,quantities:x.quantities.map(q=>({...q,unit:x.kind==='style_label_ready'?(normalizeStyleLabelUnit(q.unit)??q.unit):q.unit}))})).superRefine((x,c)=>{
  if(x.orderInstructionVersion!==undefined&&(x.kind!=='design_handover'||x.sourceDocumentVersion!==null))
-  c.addIssue({code:'custom',path:['orderInstructionVersion'],message:'正式单资料版本仅用于无开发来源的设计交接'});
+  c.addIssue({code:'custom',path:['orderInstructionVersion'],message:'正式制单版本仅用于制单交接，不能同时引用开发资料版本'});
  if(x.investmentMaterialId&&(x.kind!=='material_investment'||!x.quantities.some(row=>row.materialId===x.investmentMaterialId)))
   c.addIssue({code:'custom',path:['investmentMaterialId'],message:'须选择本次实际登记的投面辅料'});
  if(['ready','partial'].includes(x.state)&&!x.occurredAt)c.addIssue({code:'custom',path:['occurredAt'],message:'实际办理须填写真实发生时间'});
@@ -52,7 +52,7 @@ export type MaterialInvestmentReminder={
 };
 export type ProductionReadinessState={
  materialInvestmentReminder?:MaterialInvestmentReminder&{canClose:boolean};
- sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;orderInstructionVersion?:number;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;
+ sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;orderInstructionVersion?:number|null;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;
  facts:PreparationMaterialFact[];history:PreparationMaterialFact[];canRecord:PreparationMaterialKind[];
  responsibility:{version:number;warehouseWorkerId:string|null;colorConfirmationWorkerId:string|null;colorConfirmationRole:string|null};canAssign:boolean;
  canDeliverInstruction:boolean;canAcknowledgeAdoption:boolean;canAdopt:boolean;adoptionAcknowledged:boolean;adoptionReason:string|null;

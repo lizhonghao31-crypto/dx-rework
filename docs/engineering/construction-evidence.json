@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "c9dace0c24c6ce1fd0a1d687542fefd469085250",
-  "sourceFingerprint": "3548054f7e76f09637e52a7d80749f97e45720a9cf531618859ce6cd87258432",
+  "sourceFingerprint": "6fa4f5b1b88b3c1e1f4d9b3a7b19e4bca26123e93c81bb29cd542d2379eb28e7",
   "rules": [
     {
       "rule": "在真实预下单依原材料版本交接给指定跟单，并在原准备面板登记；正式转单续用原记录。",
@@ -145,52 +145,82 @@
       "checks": [
         "preorder-original-pg-and-browser"
       ]
+    },
+    {
+      "rule": "直接正式单已有原制单交接，关联历史开发来源后，由原有权角色按当前制单续接原记录。",
+      "source": "审定 v2 §§7.4–7.6 与 #1077 Codex Review 4659020861 的真实材料换版。",
+      "writes": [
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/web/src/production-readiness-panel.tsx",
+        "packages/contracts/src/production-readiness.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/preparation-material-repository.ts#preparationMaterialHistory",
+        "apps/api/src/production-platform/preparation-material-repository.ts#directInvestmentInstruction",
+        "apps/api/src/production-platform/preparation-todos.ts#materialInvestmentTodos"
+      ],
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#renews an instruction-backed handover"
+      ],
+      "initialization": "从原创建、安排与制单流程建立真实对照，由同一来源设计师匹配关联，并用原签名浏览器调用办理入口。",
+      "dateAndPermission": "同单原有效交接范围决定依据；仅原直接制单交接角色可续办，版本在原事务内绑定。既有开发源、预下单、提醒、真实材料历史和冻结时效保持。",
+      "expectation": "后附历史来源后改正式制单必须让旧交接失效，面板读取、发出与重读同一新版正式制单。旧正式版本、合法历史来源版本及设计师直接调用均被拒，跟单只登记新范围、未改辅料继续有效。",
+      "checks": [
+        "preorder-original-pg-and-browser",
+        "preorder-schedule-and-authorization"
+      ]
     }
   ],
   "checks": [
     {
       "id": "preorder-original-pg-and-browser",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/order-time-requests-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/f1-candidate-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/order-time-requests-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/renewal-candidate-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 96,
+      "passed": 98,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7e140c9892c0715b44eeea0a631ea66df0705bb7",
-      "sourceFingerprint": "3548054f7e76f09637e52a7d80749f97e45720a9cf531618859ce6cd87258432",
-      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟。执行时的工作树包含本次两份测试修正，由实际完整源码指纹绑定。",
-      "startedAt": "2026-11-22T16:40:36.906Z",
-      "endedAt": "2026-11-22T16:44:57.532Z",
-      "log": "/tmp/dx1077-evidence/f1-candidate-pg.log",
-      "logSha256": "a2ea2e6860da239d0697b648a25f8731bf01342ce559ec5ab24beda76f533d7e",
+      "testedHead": "a6ca2de698be7896de552f9de072deed019c696e",
+      "sourceFingerprint": "6fa4f5b1b88b3c1e1f4d9b3a7b19e4bca26123e93c81bb29cd542d2379eb28e7",
+      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟、关联历史来源后由正式制单再次交接及投料回执。执行时的工作树含本次正式制单原交接续办修复，完整源码指纹绑定实际输入。",
+      "startedAt": "2026-11-22T16:59:48.615Z",
+      "endedAt": "2026-11-22T17:04:22.151Z",
+      "log": "/tmp/dx1077-evidence/renewal-candidate-pg.log",
+      "logSha256": "03d51aa5a9ad06e70808f8ccef94892ac49676bcee8d2922414fd8982d7babfd",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bb1e35911d0a1891743d8c43bac5715f882e5b753e81600f8bd0b9b4f538594f"
+          "sha256": "978a07f884bd2b133b3ed63223fcc05a12dfa3802a3aa9cce3071d9e409d90a1"
         }
       ]
     },
     {
       "id": "preorder-schedule-and-authorization",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail,full-gate-risk-map}.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/f1-candidate-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail,full-gate-risk-map}.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/renewal-candidate-unit.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 278,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7e140c9892c0715b44eeea0a631ea66df0705bb7",
-      "sourceFingerprint": "3548054f7e76f09637e52a7d80749f97e45720a9cf531618859ce6cd87258432",
-      "context": "Node 22.22.2。现有 PMC 权限矩阵、排程合同、手算采购边界、原固定里程碑、旧版本与 Full 风险映射。执行时的工作树包含本次两份测试修正，由实际完整源码指纹绑定。",
-      "startedAt": "2026-11-22T16:40:45.680Z",
-      "endedAt": "2026-11-22T16:40:54.024Z",
-      "log": "/tmp/dx1077-evidence/f1-candidate-unit.log",
-      "logSha256": "bfe0364f1d7b44880b6466f644654d868600130b035ab47bcb993eb7b092719e",
+      "testedHead": "a6ca2de698be7896de552f9de072deed019c696e",
+      "sourceFingerprint": "6fa4f5b1b88b3c1e1f4d9b3a7b19e4bca26123e93c81bb29cd542d2379eb28e7",
+      "context": "Node 22.22.2。现有 PMC 权限矩阵、排程合同、手算采购边界、原固定里程碑、旧版本与 Full 风险映射。执行时的工作树含本次正式制单原交接续办修复，完整源码指纹绑定实际输入。",
+      "startedAt": "2026-11-22T16:59:57.075Z",
+      "endedAt": "2026-11-22T17:00:05.375Z",
+      "log": "/tmp/dx1077-evidence/renewal-candidate-unit.log",
+      "logSha256": "88f3bf1ba4d920195fb51115868a3abfed499980fcc47b744142c9a85446878b",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "499d6a2adc2250ac3d244bbd96bda6993457ba5e0f2cbb8c24cc0bd061a9d37a"
+          "sha256": "4cf68fe9fd8a2441d926283c801ed0721c0c874f81f34c03f8adb676b41c57ba"
         }
       ]
     }
