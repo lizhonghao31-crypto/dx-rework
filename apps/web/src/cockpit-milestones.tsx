@@ -41,6 +41,13 @@ export function milestoneContains(milestone: CockpitMilestone, node: JourneyNode
  })===true;
 }
 
+/** Prefer adopted work identities. A record can prove a PO when no fixed
+ * work was attached, but a missing record scope does not prove shared work. */
+export function cockpitScopeContains(scope: Pick<JourneyFrameworkScope,'scopeRef'|'lineId'>, node: JourneyNode) {
+ if(node.fixedTargets?.length)return node.fixedTargets.some(target=>target.scopeRef===scope.scopeRef&&target.lineId===scope.lineId);
+ return scope.lineId!==null&&node.records.some(record=>record.lineId===scope.lineId);
+}
+
 export function CockpitStageMilestones({items,selected,asOf,onSelect}:{items:CockpitMilestone[];selected:string|undefined;asOf:string|undefined;onSelect:(item:CockpitMilestone)=>void}) {
  return <CockpitStack className="cockpit-stage-milestones" direction="vertical" gap={1}>{items.map(item=><div
   key={item.selectionKey} className="cockpit-stage-milestone" data-milestone-key={item.key}>

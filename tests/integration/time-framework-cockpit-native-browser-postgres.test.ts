@@ -5,6 +5,7 @@ import {writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import type {BulkWashingAdoption} from '@dx-rework/contracts/bulk-washing';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
@@ -17,6 +18,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 (url?describe.sequential:describe.skip)('PR08 activated original App time framework',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,scene:string;
  const orders:Array<{id:string;style:string;route:'A'|'B'}>=[];
+ let pairedOrder:{id:string;style:string};
  beforeAll(async()=>{
   h=await supplychainSettingsBrowser(url!,process.env.TIME08_BROWSER_EVIDENCE??join(tmpdir(),'time08-cockpit-'+randomUUID()),{fullApp:true,orderTimeModel:true,orderTimeFlow:true});
   const settings=new OrderTimeSettingsService(h.db),read=await settings.read(h.f.root);
@@ -24,13 +26,31 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await settings.save(h.f.root,{expectedVersion:0,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
   scene=await h.f.scene('2027-01-07T15:00:00Z');h.setCollectionScene(scene);
   const requests=new OrderTimeRequestService(h.db,orderTimeNativeExecutor(h.db,true,h.patternOrders));
-  for(const route of ['A','B'] as const)await h.f.runtime.run(scene,h.f.root,async()=>{
-   const designer=h.f.people['sample-designer']!,style='TEST-TIME08-'+route+'-'+randomUUID();
-   const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:route==='A',designStyleNo:style,orderDate:'2027-01-07',primaryMerchandiserId:h.f.people.merchandiser!.actorId,lines:[{formalPoNo:style+'-PO',color:'黑',customerWarehouseArrivalDate:'2027-02-20',sizes:[{size:'M',quantity:10}]}]});
+  for(const sample of ['A','B','paired'] as const)await h.f.runtime.run(scene,h.f.root,async()=>{
+   const route=sample==='paired'?'B':sample;
+   const designer=h.f.people['sample-designer']!,style=(sample==='paired'?'TEST-F3-TWO-PO-':'TEST-TIME08-'+route+'-')+randomUUID();
+   const line={formalPoNo:style+'-PO',color:'黑',customerWarehouseArrivalDate:'2027-02-20',sizes:[{size:'M',quantity:10}]};
+   const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:route==='A',designStyleNo:style,orderDate:'2027-01-07',primaryMerchandiserId:h.f.people.merchandiser!.actorId,
+    lines:sample==='paired'?[line,{...line,formalPoNo:style+'-PO2',color:'白'}]:[line]});
    const operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}},check=await requests.check(designer,operation);
    const pending=await requests.submit(designer,{operation,fingerprint:check.fingerprint,reason:'TEST intermediate milestone gap'},randomUUID());
    const manager=h.f.people.owner!,review=await requests.read(manager,pending.requestId),result=await requests.apply(manager,pending.requestId,{expectedVersion:review.version,fingerprint:review.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
-   orders.push({id:result.result!.orderId!,style,route});
+   const order={id:result.result!.orderId!,style,route};
+   if(sample==='paired'){
+    pairedOrder=order;
+    const resource={kind:'order' as const,id:order.id};
+    const lines=(await h.db.query<{line_id:string}>('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[order.id])).rows;
+    const washing=lines.map((line,index)=>{
+     const duration={minutes:index===0?60:180,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
+     const document:BulkWashingAdoption={arrangement:{mode:'after_receipt',reference:'TEST separate PO washing',
+      revision:1,accounting:'additional',washing:duration,inspection:duration},
+      staff:{logisticsId:h.f.people['embroidery-washing-merchandiser']!.actorId,inspectorId:h.f.people.qc!.actorId},
+      fee:{kind:'pending'},sourceRef:'TEST authenticated arrangement'};
+     return {lineId:line.line_id,expectedVersion:0,document};
+    });
+    const preview=await requests.check(h.f.root,{kind:'arrangement',resource},{},washing);
+    await requests.arrange(h.f.root,{resource,fingerprint:preview.fingerprint,overrides:{},washing,acceptLate:true},randomUUID());
+   }else orders.push(order);
   });
  });
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
@@ -164,5 +184,74 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(h.evidence,'detail-'+route+'-650.png'),fullPage:true});
    expect(h.errors).toEqual([]);
   }finally{await tab.page.screenshot({path:join(h.evidence,'last-'+route+'.png'),fullPage:true});await writeFile(join(h.evidence,'last-'+route+'.html'),await tab.page.content());await tab.context.close();}
+ });
+ it('keeps a PO-only stage on its exact work scope and restores that PO after the original order record',async()=>{
+  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+pairedOrder.id);
+  try{
+   const page=tab.page,selector=page.getByRole('combobox',{name:'里程碑PO范围'}),flow=page.getByRole('region',{name:'订单全流程'});
+   await selector.waitFor();
+   const dto=await page.evaluate(async id=>{
+    const response=await fetch('/api/digital-production/journeys/'+id+'?view=cockpit');
+    if(!response.ok)throw Error('Journey read failed '+response.status);
+    return response.json();
+   },pairedOrder.id) as OrderJourney;
+   await writeFile(join(h.evidence,'paired-scope-dates.json'),JSON.stringify(dto,null,2));
+   const [first,second]=dto.fixedSchedule!.framework!.scopes;
+   expect(first?.customerDate).toBe(second?.customerDate);
+   const productionDate=(scopeRef:string)=>{
+    const date=dto.cockpitStageDates!.find(scope=>scope.scopeRef===scopeRef)!.stages.find(stage=>stage.key==='production')!.expected;
+    expect(date.precision).toBe('instant');
+    return date.precision==='instant'?date.at:null;
+   };
+   const firstDate=productionDate(first!.scopeRef),secondDate=productionDate(second!.scopeRef);
+   const shownProductionDate=flow.locator('[aria-label="工厂生产日期"] time').first();
+   const receiving=dto.stages.find(stage=>stage.key==='receiving')!.nodes;
+   const localNode=(scope:string)=>receiving.find(node=>node.key==='bulk_return_washing'
+    &&node.fixedTargets?.length&&node.fixedTargets.every(target=>target.scopeRef===scope))!;
+   const firstOnly=localNode(first!.scopeRef),secondOnly=localNode(second!.scopeRef);
+   const shared=receiving.find(node=>node.fixedTargets?.some(target=>target.scopeRef===first!.scopeRef)
+    &&node.fixedTargets.some(target=>target.scopeRef===second!.scopeRef))!;
+   expect([firstOnly,secondOnly,shared].every(Boolean)).toBe(true);
+   const panel=page.getByRole('region',{name:'小流程明细'});
+   const node=(id:string)=>panel.locator(`[data-cockpit-focus="node:${id}"]`);
+   await selector.selectOption(first!.scopeRef);
+   await flow.getByRole('button',{name:'回货与装箱节点明细',exact:true}).click();
+   await node(firstOnly.instanceId).waitFor();
+   expect(await shownProductionDate.getAttribute('datetime')).toBe(firstDate);
+   expect(await node(secondOnly.instanceId).count()).toBe(0);
+   await node(firstOnly.instanceId).click();
+   await selector.selectOption(second!.scopeRef);
+   await node(secondOnly.instanceId).waitFor();
+   expect(await shownProductionDate.getAttribute('datetime')).toBe(secondDate);
+   expect(await node(firstOnly.instanceId).count()).toBe(0);
+   expect(await node(shared.instanceId).count()).toBe(1);
+   const current=page.getByRole('region',{name:'当前节点详情'}).getByRole('heading',{level:2});
+   expect(await current.innerText()).not.toContain(firstOnly.subject!);
+   await node(secondOnly.instanceId).click();
+   expect(await current.innerText()).toContain(secondOnly.subject!);
+   const materials=page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return url.pathname.endsWith('/journeys/'+pairedOrder.id+'/node-materials')
+     &&url.searchParams.get('instanceId')===secondOnly.instanceId&&response.ok();
+   });
+   await page.getByRole('button',{name:'该节点所需材料一览',exact:true}).click();
+   await materials;
+   await page.getByRole('dialog',{name:'该节点所需材料一览',exact:true}).waitFor();
+   await page.keyboard.press('Escape');
+
+   await flow.getByRole('button',{name:'订单创建节点明细',exact:true}).click();
+   await panel.getByRole('link',{name:'创建正式订单',exact:true}).click();
+   await page.waitForURL(url=>url.searchParams.get('instruction')===pairedOrder.id);
+   await page.getByRole('heading',{name:pairedOrder.style,exact:true}).waitFor();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await page.waitForURL(url=>url.searchParams.get('selected')===pairedOrder.id&&url.searchParams.get('expanded')==='creation'
+    &&url.searchParams.get('milestone')===second!.scopeRef+'|');
+   expect(await selector.inputValue()).toBe(second!.scopeRef);
+   await panel.getByRole('button',{name:'本单全部节点',exact:true}).click();
+   await node(firstOnly.instanceId).waitFor();
+   await node(secondOnly.instanceId).waitFor();
+   expect(await node(shared.instanceId).count()).toBe(1);
+   expect(h.errors).toEqual([]);
+  }finally{await tab.context.close();}
  });
 });

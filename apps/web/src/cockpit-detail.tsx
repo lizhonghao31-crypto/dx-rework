@@ -1,5 +1,5 @@
 import {selectCockpitWashingWindow} from './washing-window-target.js';
-import {CockpitStageMilestones,cockpitMilestones,milestoneContains,type CockpitMilestone} from './cockpit-milestones.js';
+import {CockpitStageMilestones,cockpitMilestones,cockpitScopeContains,milestoneContains,type CockpitMilestone} from './cockpit-milestones.js';
 import {CockpitFrameworkNodes,CockpitPlanDates} from './cockpit-framework-nodes.js';
 import {CockpitDurationSummary,CockpitActualDates,useScheduleObservation} from './cockpit-fixed-schedule.js';
 import {useNodeMaterialsView} from './node-materials-view.js';
@@ -59,7 +59,9 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
   const groupStages=chosen?[COCKPIT_MILESTONE_GROUP[chosen.key]]:context.expanded===undefined?legacySelection.stages
    :expandedStages.filter(key=>JOURNEY_STAGES.some(stage=>stage.key===key));
   const groupMilestones=scopeMilestones.filter(item=>groupStages.includes(COCKPIT_MILESTONE_GROUP[item.key]));
-  const memberNodes=chosen?nodes.filter(node=>milestoneContains(chosen,node,'direct')):nodes.filter(node=>node.state!=='not_applicable');
+  const selectedPo=scope&&scopes.length>1&&context.milestone!==''?scope:null;
+  const memberNodes=chosen?nodes.filter(node=>milestoneContains(chosen,node,'direct'))
+   :nodes.filter(node=>node.state!=='not_applicable'&&(!selectedPo||cockpitScopeContains(selectedPo,node)));
   const prerequisites=chosen?nodes.filter(node=>milestoneContains(chosen,node,'prerequisite')&&!memberNodes.includes(node)):[];
   const visible=memberNodes.filter(node=>(chosen||!groupStages.length||groupStages.includes(node.stage))
    &&(!context.round||node.stage!=='development'||node.round===context.round));
@@ -70,7 +72,12 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
   const requested=windowSelection.node,filter=context.nodeView??'all';
   const filterMatches=!requested||filter==='all'||filter==='completed'&&['completed','inherited'].includes(requested.state)||filter==='active'&&nodeIsInProgress(requested)||filter==='not_started'&&['uncreated','pending'].includes(requested.state)||filter==='overdue'&&requested.risks.includes('overdue');
   const conflicting=Boolean(requested&&(!visible.some(node=>node.instanceId===requested.instanceId)||!filterMatches));
-  useEffect(()=>{if(requested&&conflicting)onChange({milestone:scopeLink,expanded:requested.stage,nodeView:'all',focus:requested.instanceId,row:requested.instanceId});},[requested?.instanceId,conflicting]);
+  const nodeScopeLink=(node:JourneyNode)=>{
+   if(scopes.length<2||scope&&cockpitScopeContains(scope,node))return scopeLink;
+   const matches=scopes.filter(candidate=>cockpitScopeContains(candidate,node));
+   return matches.length===1?matches[0]!.scopeRef+'|':'';
+  };
+  useEffect(()=>{if(requested&&conflicting)onChange({milestone:nodeScopeLink(requested),expanded:requested.stage,nodeView:'all',focus:requested.instanceId,row:requested.instanceId});},[requested?.instanceId,conflicting]);
   // Invalid explicit window context must not be erased by the ordinary default
   // material-view initialization, nor silently choose a different native node.
   const materials=useNodeMaterialsView(order,selected??null,context,patch=>{if(!windowSelection.error)onChange(patch);});
@@ -96,7 +103,7 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
    const directMilestones=milestones.filter(item=>milestoneContains(item,node,'direct'));
    const milestone=chosen&&milestoneContains(chosen,node)?chosen:directMilestones.find(item=>item.scopeRef===scope?.scopeRef)
     ??(directMilestones.length===1?directMilestones[0]:undefined);
-   onChange({nodeView:'all',...clearWindowFocus(),...(framework?{milestone:milestone?.selectionKey??scopeLink,
+   onChange({nodeView:'all',...clearWindowFocus(),...(framework?{milestone:milestone?.selectionKey??nodeScopeLink(node),
     expanded:milestone?COCKPIT_MILESTONE_GROUP[milestone.key]:node.stage}:{expanded:node.stage}),
     focus:node.instanceId,row:node.instanceId,...(fromRisk?{round:node.stage==="development"?node.round??undefined:undefined}:{})});
    requestAnimationFrame(()=>{
