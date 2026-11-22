@@ -29,11 +29,12 @@ export async function prepareRewashSettings(f:Awaited<ReturnType<typeof business
   await settings.save(f.root,{expectedVersion:current.version,values:prepareTimeFrameworkConfiguration(values)},randomUUID());
 
 }
-export async function admittedFrameworkProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>){
- return admittedProductionFixture(f,true);
+type NativeProductionOptions={poCount?:number;commonCustomerDate?:string;cuttingProcess?:'in_house'|'outsourced';preshrink?:'需要预缩'|'无需预缩'};
+export async function admittedFrameworkProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:NativeProductionOptions){
+ return admittedProductionFixture(f,true,options);
 }
 /** The same original admission supports both stored arrangement formats. */
-export async function admittedProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,framework:boolean,options?:{poCount?:number;cuttingProcess?:'in_house'|'outsourced';preshrink?:'需要预缩'|'无需预缩'}){
+export async function admittedProductionFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,framework:boolean,options?:NativeProductionOptions){
  const admitted=await admittedOrderFixture(f,options),{scene,orderId,sourceId,resource,repo}=admitted;
  return f.runtime.run(scene,f.root,async()=>{
    expect(Boolean((await repo.current(resource()))!.input.frameworkPlans)).toBe(framework);
@@ -50,7 +51,7 @@ export async function admittedProductionFixture(f:Awaited<ReturnType<typeof busi
  });
 }
 /** Real admission with the original development work still waiting for material verification. */
-export async function admittedOrderFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:{poCount?:number;startAt?:string}){
+export async function admittedOrderFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:Pick<NativeProductionOptions,'poCount'|'commonCustomerDate'>&{startAt?:string}){
  const scene=await f.scene(options?.startAt??'2026-11-17T08:00:00.000Z');
  const native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
  const requests=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,native)),washing=new BulkWashingService(f.db),repo=new OrderTimePlanRepository(f.db);
@@ -61,7 +62,7 @@ export async function admittedOrderFixture(f:Awaited<ReturnType<typeof businessA
    const identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true,native);
    const style='TEST-REWASH-PLAN-'+randomUUID(),source=await identity.createSource(f.root,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    const ordering=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-17',contractDeliveryDate:'2027-03-01',requiresColorMatching:false,salesYear:2027,salesSeries:'P03',
-    lines:Array.from({length:options?.poCount??1},(_,index)=>({formalPoNo:style+(options?.poCount&&options.poCount>1?'-'+(index+1):''),color:index?'白':'黑',deliveryDate:null,customerWarehouseArrivalDate:index?'2027-03-03':'2027-03-01',sizes:[{size:'M',quantity:'2'}]}))});
+    lines:Array.from({length:options?.poCount??1},(_,index)=>({formalPoNo:style+(options?.poCount&&options.poCount>1?'-'+(index+1):''),color:index?'白':'黑',deliveryDate:null,customerWarehouseArrivalDate:options?.commonCustomerDate??(index?'2027-03-03':'2027-03-01'),sizes:[{size:'M',quantity:'2'}]}))});
    const developmentDocument=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:'2027-03-01',unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],
     interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original admitted washing order',craft:'无',washing:'免洗',
     productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order:ordering},

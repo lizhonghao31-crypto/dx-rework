@@ -12,6 +12,9 @@ import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
+import {admittedFrameworkProductionFixture} from '../helpers/order-time-rewash-fixture.js';
+import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -216,12 +219,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const node=(id:string)=>panel.locator(`[data-cockpit-focus="node:${id}"]`);
    // The overview enters the exact task before it has a PO selector value.
    await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:pairedOrder.id,
-    expanded:secondOnly.stage,focus:secondOnly.instanceId,row:secondOnly.instanceId}));
+    expanded:secondOnly.stage,focus:secondOnly.instanceId}));
    await page.locator('[data-view=order][aria-busy=false]').waitFor();
    expect(await selector.inputValue()).toBe(second!.scopeRef);
    expect(await shownProductionDate.getAttribute('datetime')).toBe(secondDate);
    expect(await node(secondOnly.instanceId).getAttribute('aria-pressed')).toBe('true');
    expect(await node(firstOnly.instanceId).count()).toBe(0);
+   await page.goto(h.base+'/ui/digital-cockpit?'+new URLSearchParams({selected:pairedOrder.id,
+    expanded:shared.stage,focus:shared.instanceId}));
+   await page.locator('[data-view=order][aria-busy=false]').waitFor();
+   expect(await selector.inputValue()).toBe('');
+   expect(await node(shared.instanceId).getAttribute('aria-pressed')).toBe('true');
+   expect(await node(shared.instanceId).count()).toBe(1);
    await selector.selectOption(first!.scopeRef);
    await flow.getByRole('button',{name:'回货与装箱节点明细',exact:true}).click();
    await node(firstOnly.instanceId).waitFor();
@@ -260,6 +269,61 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await node(secondOnly.instanceId).waitFor();
    expect(await node(shared.instanceId).count()).toBe(1);
    expect(h.errors).toEqual([]);
+  }finally{await tab.context.close();}
+ });
+ it('opens the original second-PO rework task from the homepage and returns to its exact node and materials',async()=>{
+  const f=h.f,fixture=await admittedFrameworkProductionFixture(f,{poCount:2,commonCustomerDate:'2027-03-01'});
+  h.setCollectionScene(fixture.scene);
+  const rework=await f.runtime.run(fixture.scene,f.root,async()=>{
+   const [first,second]=(await f.db.query<{line_id:string;child_id:string;po_number:string}>(`SELECT line.line_id,link.child_id,line.po_number
+    FROM digital_production_po_lines line JOIN digital_production_child_lines link USING(line_id)
+    WHERE line.production_order_id=$1 AND link.production_order_id=$1 AND link.module='cutting' AND link.child_line_key='record'
+    ORDER BY line.position`,[fixture.orderId])).rows;
+   expect(first?.line_id).not.toBe(second?.line_id);
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+   const qc={...f.people.qc!,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']};
+   await fixture.ready.cutting.record(cutter,second!.child_id,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const receipt=await new ReceivingService(f.db).create(warehouse,{cuttingOrderId:second!.child_id,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID());
+   const draft=await new ReworkInitiationService(f.db,'anchor-test').createDraft(qc,{receivingBatchId:receipt.value.receivingBatchId,
+    problemPart:'TEST二号PO',problemDescription:'TEST仅第二张PO待返工',reworkQuantity:1},randomUUID());
+   return {id:draft.value.reworkOrderId,lineId:second!.line_id,firstLineId:first!.line_id,po:second!.po_number};
+  });
+  const tab=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?'+new URLSearchParams({search:rework.po,stage:'receiving',node:'rework'}));
+  try{
+   const {page}=tab,task=page.locator(`[data-order-id="${fixture.sourceId}"] .cockpit-home-task`);
+   await task.waitFor();
+   const source=await page.request.get(h.base+`/api/digital-production/journeys/${fixture.sourceId}?view=cockpit`);
+   expect(source.ok()).toBe(true);
+   const dto=await source.json() as OrderJourney,scopes=dto.fixedSchedule!.framework!.scopes;
+   const first=scopes.find(scope=>scope.lineId===rework.firstLineId),second=scopes.find(scope=>scope.lineId===rework.lineId);
+   expect(scopes).toHaveLength(2);
+   expect(first?.customerDate).toBe(second?.customerDate);
+   const target=dto.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='rework'&&node.instanceId===rework.id)!;
+   expect(target.records.map(record=>record.lineId)).toEqual([rework.lineId]);
+   await task.click();
+   await page.waitForURL(url=>url.searchParams.get('focus')===rework.id&&url.searchParams.get('expanded')==='receiving');
+   expect(new URL(page.url()).searchParams.has('milestone')).toBe(false);
+   expect(new URL(page.url()).searchParams.has('materialFocus')).toBe(false);
+   const selector=page.getByRole('combobox',{name:'里程碑PO范围'}),current=page.getByRole('region',{name:'当前节点详情'});
+   await selector.waitFor();
+   expect(await selector.inputValue()).toBe(second!.scopeRef);
+   expect(await page.locator(`[data-cockpit-focus="node:${rework.id}"]`).getAttribute('aria-pressed')).toBe('true');
+   const materials=page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return url.pathname.endsWith(`/journeys/${fixture.sourceId}/node-materials`)&&url.searchParams.get('instanceId')===rework.id&&response.ok();
+   });
+   await current.getByRole('button',{name:'该节点所需材料一览',exact:true}).click();
+   expect(await (await materials).json()).toMatchObject({instanceId:rework.id});
+   await page.getByRole('dialog',{name:'该节点所需材料一览',exact:true}).waitFor();
+   await page.keyboard.press('Escape');
+   const original=current.getByRole('link',{name:'查看节点记录',exact:true});
+   await original.click();
+   await page.waitForURL(url=>url.pathname===`/ui/tasks/${rework.id}`);
+   await page.getByRole('link',{name:'返回来源列表',exact:true}).click();
+   await page.waitForURL(url=>url.searchParams.get('focus')===rework.id&&url.searchParams.get('selected')===fixture.sourceId);
+   expect(await selector.inputValue()).toBe(second!.scopeRef);
+   expect(await page.locator(`[data-cockpit-focus="node:${rework.id}"]`).getAttribute('aria-pressed')).toBe('true');
   }finally{await tab.context.close();}
  });
 });

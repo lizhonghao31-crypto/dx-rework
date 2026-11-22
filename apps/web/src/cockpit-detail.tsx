@@ -43,13 +43,14 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
   const linkedMilestone=milestones.find(item=>item.selectionKey===context.milestone);
   const explicitlyScoped=context.milestone?.endsWith('|')?scopes.find(scope=>context.milestone===scope.scopeRef+'|'):undefined;
   const unavailableMilestone=Boolean(context.milestone&&!linkedMilestone&&!explicitlyScoped);
-  const currentMilestones=milestones.filter(item=>legacySelection.selected&&milestoneContains(item,legacySelection.selected,'direct'));
-  const defaultMilestone=context.expanded===undefined&&context.milestone===undefined&&currentMilestones.length===1?currentMilestones[0]:undefined;
-  const chosen=linkedMilestone??defaultMilestone;
   const focusedNode=scopes.length>1&&context.milestone===undefined&&context.focus
    ?nodes.find(node=>node.instanceId===context.focus):undefined;
   const scopeCandidates=focusedNode?scopes.filter(item=>cockpitScopeContains(item,focusedNode)):scopes;
-  const scope=unavailableMilestone?undefined:scopeCandidates.find(item=>item.scopeRef===chosen?.scopeRef)
+  const ambiguousFocus=Boolean(focusedNode&&scopeCandidates.length!==1);
+  const currentMilestones=milestones.filter(item=>legacySelection.selected&&milestoneContains(item,legacySelection.selected,'direct'));
+  const defaultMilestone=!ambiguousFocus&&context.expanded===undefined&&context.milestone===undefined&&currentMilestones.length===1?currentMilestones[0]:undefined;
+  const chosen=linkedMilestone??defaultMilestone;
+  const scope=unavailableMilestone||ambiguousFocus?undefined:scopeCandidates.find(item=>item.scopeRef===chosen?.scopeRef)
    ??explicitlyScoped??scopeCandidates.find(item=>item.scopeRef===milestones[0]?.scopeRef)??scopeCandidates[0];
   const scopeLink=scope?scope.scopeRef+'|':'';
   const scopeMilestones=milestones.filter(item=>item.scopeRef===scope?.scopeRef);
