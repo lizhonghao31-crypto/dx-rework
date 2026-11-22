@@ -84,7 +84,8 @@ export async function readDevelopmentExecutionSnapshot(
     const readiness=sheet.document?await materialReadiness(db,sourceId,currentRound):null;
     const supplementTask=readiness?.sewingMissing.length?tasks.filter(task=>task.routeVersion===currentRound&&task.state==="completed"&&task.canExecute&&["development_materials","development_material_recheck"].includes(task.taskKind)).at(-1):null;
 
-    const materialVerification=sheet.document?await readMaterialVerification(db,sourceId,currentRound,sheet.document,sheet.version):null;
+    const currentRecheck=tasks.find(task=>task.routeVersion===currentRound&&task.taskKind==='development_material_recheck'&&task.state==='ready'&&task.canExecute);
+    const materialVerification=sheet.document?await readMaterialVerification(db,sourceId,currentRound,sheet.document,sheet.version,currentRecheck?.taskId):null;
     let reopenMaterialCheck:null|{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}=null;
     if(materialVerification?.taskId&&(isRootActor(actor)||(actor.actorRoles.includes('development_clerk')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'development_clerk')))){
       const candidate=(await db.query(`SELECT supply.task_id AS supply_id,check_task.task_id AS check_id,v.version FROM digital_production_tasks supply

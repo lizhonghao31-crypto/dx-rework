@@ -194,7 +194,7 @@ export class DigitalProductionIdentityService {
       return { sourceId: id };
     });
   }
-  async developmentDrafts(actor:TrustedActorContext,page:number,search:string){
+  async developmentDrafts(actor:TrustedActorContext,page:number,search:string,countOnly=false){
     this.assertSourceCreation(actor);
     return this.readSnapshot(async db=>{
     if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
@@ -203,6 +203,7 @@ export class DigitalProductionIdentityService {
     const params=[isRootActor(actor),actor.actorId,search];
     const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total FROM digital_production_sources s
       JOIN digital_development_source_lifecycle lifecycle USING(source_id) ${scope}`,params)).rows[0]!.total;
+    if(countOnly)return {items:[],page,total,hasNext:page*15<total};
     const result=await db.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
       s.design_style_no AS "designStyleNo",s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",
       coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState"

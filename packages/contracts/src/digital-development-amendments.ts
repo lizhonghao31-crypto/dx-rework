@@ -14,7 +14,7 @@ export const SaveDevelopmentAmendmentSchema=z.object({taskId:z.string().uuid(),r
 export const SubmitDevelopmentAmendmentSchema=SaveDevelopmentAmendmentSchema.omit({document:true,reason:true}).extend({expectedDraftVersion:z.number().int().nonnegative()});
 export type SaveDevelopmentAmendment=z.infer<typeof SaveDevelopmentAmendmentSchema>;
 export type SubmitDevelopmentAmendment=z.infer<typeof SubmitDevelopmentAmendmentSchema>;
-export type DevelopmentAmendmentContext={sourceId:string;taskId:string;roundNumber:number;documentVersion:number;document:DevelopmentDocument;issues:DevelopmentReturnIssue[];directSupplyMode:"legacy"|"structured"|null;note:string;draft:{version:number;document:DevelopmentDocument;reason:string}|null};
+export type DevelopmentAmendmentContext={sourceId:string;taskId:string;roundNumber:number;documentVersion:number;document:DevelopmentDocument;materialForecastOnly?:boolean;issues:DevelopmentReturnIssue[];directSupplyMode:"legacy"|"structured"|null;note:string;draft:{version:number;document:DevelopmentDocument;reason:string}|null};
 /** JSONB and HTTP parsers may reorder object keys. Arrays and actual values remain exact. */
 function sameDocumentValue(before:unknown,after:unknown):boolean{
  if(before===after)return true;

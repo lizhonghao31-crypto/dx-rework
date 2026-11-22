@@ -8,6 +8,7 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
@@ -23,6 +24,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-pure-create-reload-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true});await prepareRewashSettings(h.f);});
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
+ it('keeps one creation draft panel and the old designer URL opens the work list',async()=>{
+  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
+  try{
+   const page=tab.page;
+   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
+   expect(await page.getByRole('heading',{name:'开发草稿',exact:true}).count()).toBe(1);
+   expect(await page.getByRole('button',{name:'新建开发订单',exact:true}).count()).toBe(1);
+   expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/workspaces/designer')).toHaveLength(0);
+   const searched=page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return url.pathname.endsWith('/sources/drafts')&&url.searchParams.get('search')==='TEST-无草稿'&&response.ok();
+   });
+   await page.getByRole('textbox',{name:'搜索草稿款号',exact:true}).fill('TEST-无草稿');
+   await searched;
+   await page.goto(h.base+'/ui/digital-production?workspace=designer');
+   const list=page.locator('.development-list-panel');
+   await list.waitFor();
+   expect(await list.locator('thead th').allTextContents()).toContain('款图 / 款号');
+   expect(await page.getByRole('heading',{name:'开发草稿',exact:true}).count()).toBe(0);
+   expect(await page.getByRole('button',{name:'新建开发订单',exact:true}).count()).toBe(0);
+   expect(await page.getByRole('columnheader',{name:'操作',exact:true}).count()).toBe(0);
+  }finally{await tab.context.close();}
+ });
  async function verifyCreationDetail(id:string,name:string,expected:Array<{label:string;at:string;target:string}>){
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+id);
   try{
@@ -91,7 +115,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await tab.context.close();}
  }
  it.each([['development','无确定客户订单'],['certain_order','有确定客户订单'],['preorder','预下单备料']] as const)('restores %s parent intent, raw document/order input and original row identities with no command or writes',async(mode,label)=>{
-  const before=Number((await h.db.query('SELECT count(*) FROM digital_production_sources')).rows[0].count),tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  const before=Number((await h.db.query('SELECT count(*) FROM digital_production_sources')).rows[0].count),tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());
    if(mode==='development'){
@@ -118,7 +142,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }catch(error){await writeFile(join(h.evidence,'pure-create-reload-'+mode+'-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
  it('reuses the acknowledged source and current version when reopening a saved creation draft in the same tab and after reload',async()=>{
-  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer'),style='TEST-CREATION-SAVE-'+randomUUID();
+  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create'),style='TEST-CREATION-SAVE-'+randomUUID();
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();
@@ -129,7 +153,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rows).toEqual([{source_id:sheet.sourceId}]);
    const boundPath=`/api/digital-production/sources/${sheet.sourceId}/development`,countPuts=()=>h.requests.filter(row=>row.session===tab.session&&row.path===boundPath&&row.method==='PUT').length;
    const reopen=async()=>{await page.getByRole('button',{name:'返回列表',exact:true}).click();
-    const box=page.getByRole('button',{name:'开发草稿箱',exact:true});if(await box.getAttribute('aria-expanded')==='false')await box.click();
+    await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
     await page.getByRole('button',{name:style,exact:true}).click();
    };
    for(const [index,reload]of [false,true,false].entries()){
@@ -170,11 +194,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),instructions:`TEST independent ${index}`,
     customerOrderDraft:{withOrder:true,stage:'formal',order},files:index===0?attachments.map(attachmentId=>({attachmentId,kind:'款图' as const})):[]}},randomUUID());
   }
-  const initialTab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  const initialTab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   await initialTab.context.close();
-  const {context,page,session}=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  const {context,page,session}=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
-   await page.getByRole('button',{name:'开发草稿箱',exact:true}).click();
+   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
    for(const index of [0,1,0]){
     await page.getByRole('button',{name:styles[index]!,exact:true}).click();
     expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(styles[index]);
@@ -248,6 +272,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   h.setCollectionScene(scene);
   await verifyCreationDetail(sourceId,'development',[{label:'创建纯开发',at:publication,target:sourceId}]);
+  const workList=await h.open(actor.actorId,1165,{},`/ui/digital-production?workspace=designer&section=workspace&search=${encodeURIComponent(designStyleNo)}`);
+  try{
+   const {page}=workList,link=page.locator(`#development-open-${sourceId}`);
+   await link.waitFor();
+   expect(await page.locator('style[data-designer-style="astryx-v0.7.16"]').count()).toBe(1);
+   expect(await link.evaluate(element=>element.tagName)).toBe('A');
+   const destination=new URL((await link.getAttribute('href'))!,page.url());
+   expect(destination.searchParams.get('development')).toBe(sourceId);
+   expect(destination.searchParams.get('search')).toBe(designStyleNo);
+   await link.focus();
+   await page.keyboard.press('Enter');
+   await page.getByRole('heading',{name:'本单资料',exact:true}).waitFor();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(sourceId);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await link.waitFor();
+   expect(new URL(page.url()).searchParams.get('search')).toBe(designStyleNo);
+   await expect.poll(()=>link.evaluate(element=>document.activeElement===element)).toBe(true);
+   await link.click();
+   const edit=page.getByRole('button',{name:'编辑版单',exact:true});
+   await edit.waitFor();
+   const beforeEdit=h.requests.length;
+   await edit.click();
+   await page.locator('#development-revision').waitFor();
+   await page.getByRole('button',{name:'保存草稿',exact:true}).waitFor();
+   expect(h.requests.slice(beforeEdit).filter(call=>call.session===workList.session&&['POST','PUT','PATCH'].includes(call.method)
+    &&call.path.startsWith(`/api/digital-production/sources/${sourceId}/development`))).toEqual([]);
+  }finally{await workList.context.close();}
+  const rounds=new DevelopmentRoundService(h.db,true,h.patternOrders),originalSheet=await forms.read(actor,sourceId);
+  const originalComment='TEST 原已保存客户评语';
+  await h.f.runtime.run(scene,actor,()=>rounds.save(actor,sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,
+    document:originalSheet.document!,origin:'客户新增要求',customerComment:originalComment,internalProblem:'',explanation:'TEST 保留原复版资料',
+    categories:['其他'],affectedNodes:['车板'],outputKind:'整件样板'}},randomUUID()));
+  const resume=await h.open(actor.actorId,1165,{},`/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`);
+  try{
+   const edit=resume.page.getByRole('button',{name:'编辑版单',exact:true});
+   await edit.waitFor();
+   expect(await edit.getAttribute('title')).toBe('继续修订草稿');
+   await edit.click();
+   await resume.page.locator('#development-revision').waitFor();
+   expect(await resume.page.getByRole('textbox',{name:/客户原评语/}).inputValue()).toBe(originalComment);
+   expect((await rounds.read(actor,sourceId)).draft.version).toBe(1);
+   expect((await forms.read(actor,sourceId)).version).toBe(originalSheet.version);
+  }finally{await resume.context.close();}
   const formal='2026-11-19T06:18:09.789Z';
   await h.f.advance(scene,formal);
   const created=await h.f.runtime.run(scene,actor,async()=>{
@@ -400,13 +467,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const origin=reserved.draftDocumentDate!;
   expect(origin).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   const later=new Date(Date.parse(origin)+86400000).toISOString().slice(0,10);
-  const {page,context}=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  const {page,context}=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    await page.route('**/api/digital-production/options*',async route=>{
     const response=await route.fetch(),body=await response.json();
     await route.fulfill({response,json:{...body,serverToday:later}});
    });
-   await page.getByRole('button',{name:'开发草稿箱',exact:true}).click();
+   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
    await page.getByRole('button',{name:designStyleNo,exact:true}).click();
    const saved=page.waitForResponse(response=>response.url().endsWith(`/sources/${sourceId}/development`)&&response.request().method()==='PUT');
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
@@ -419,7 +486,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
 
  it('reads the authorized original reservation receipt when creation is paused and preserves the unknown command on browser reload',async()=>{
-  const actor=h.f.root,style='TEST-PAUSED-RECEIPT-'+randomUUID(),tab=await h.open(actor.actorId,390,{},'/ui/digital-production?workspace=designer');
+  const actor=h.f.root,style='TEST-PAUSED-RECEIPT-'+randomUUID(),tab=await h.open(actor.actorId,390,{},'/ui/digital-production?workspace=designer&section=create');
   const {page,session}=tab;
   try{
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
@@ -464,7 +531,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
 
  it('retains an acknowledged-server but browser-unknown source creation across real reload without issuing a duplicate source command',async()=>{
-  const tab=await h.open(h.f.root.actorId,390,{},'/ui/digital-production?workspace=designer'),style='TEST-CREATION-UNKNOWN-'+randomUUID();let attempts=0;
+  const tab=await h.open(h.f.root.actorId,390,{},'/ui/digital-production?workspace=designer&section=create'),style='TEST-CREATION-UNKNOWN-'+randomUUID();let attempts=0;
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    await page.route('**/api/digital-production/sources/drafts',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}attempts++;const response=await route.fetch();expect(response.status(),await response.text()).toBe(200);await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_CREATE_ACK_LOST',message:'TEST 已创建但原回执丢失'}})});});
@@ -488,7 +555,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const order=operation==='confirm'?InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,primaryMerchandiserId:h.f.people.merchandiser!.actorId,orderDate:'2026-11-17',contractDeliveryDate:null,requiresColorMatching:false,salesYear:2027,salesSeries:'P03',lines:[{formalPoNo:style+'-PO',color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:'2'}]}]}):null;
   let sheet=await forms.save(actor,source.sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,files:[{attachmentId:await h.f.image(actor),kind:'款图'}],patternCategoryId:category.price_id,...(order?{productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order}}:{})}},randomUUID());
   if(operation==='confirm')sheet=await forms.publish(actor,source.sourceId,sheet.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version});
-  const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer');
+  const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    // Isolated restoration fixture: the source/document are prepared by their
@@ -508,7 +575,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }catch(error){await writeFile(join(h.evidence,'native-publish-reload-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
  it('preserves the minimal successful source acknowledgement when the following sheet read fails and resumes that same source on explicit save after reload',async()=>{
-  const fault:SettingsBrowserFault={},tab=await h.open(h.f.root.actorId,1165,fault,'/ui/digital-production?workspace=designer'),style='TEST-CREATION-READ-FAIL-'+randomUUID();let sourceId='',creates=0;
+  const fault:SettingsBrowserFault={},tab=await h.open(h.f.root.actorId,1165,fault,'/ui/digital-production?workspace=designer&section=create'),style='TEST-CREATION-READ-FAIL-'+randomUUID();let sourceId='',creates=0;
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    await page.route('**/api/digital-production/sources/drafts',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}creates++;const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);sourceId=(await result.json()).sourceId;fault.readPath=`/api/digital-production/sources/${sourceId}/development`;fault.failRead=true;await route.fulfill({response:result});});

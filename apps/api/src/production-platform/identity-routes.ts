@@ -121,7 +121,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   app.post('/digital-production/whole-orders/delete-preview',async request=>dependencies.service.deletions().preview(await actor(request),parse(WholeOrderSelectionSchema,request.body)));
   app.post('/digital-production/whole-orders/delete',async request=>dependencies.service.deletions().remove(await actor(request),parse(WholeOrderDeletionInputSchema,request.body),key(request)));
   if (dependencies.journeys) {
-    const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys);
+    const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys,dependencies.notificationService);
     app.get("/digital-production/workspaces/designer", async request => workspaces.designer(await actor(request), parse(DevelopmentWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/journeys", async request => {
@@ -162,8 +162,8 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   });
   app.get("/digital-production/design-codes/check",async request=>dependencies.service.checkDesignCode(await actor(request),parse(DigitalDesignCodeCheckSchema,request.query).code));
   app.get("/digital-production/sources/drafts",async request=>{
-    const trusted=await actor(request),query=parse(DigitalPageSchema,request.query);
-    return dependencies.service.developmentDrafts(trusted,query.page,query.search);
+    const trusted=await actor(request),query=parse(DigitalPageSchema.safeExtend({view:cockpitZ.literal('count').optional()}),request.query);
+    return dependencies.service.developmentDrafts(trusted,query.page,query.search,query.view==='count');
   });
   app.get("/digital-production/sources/drafts/receipt",async request=>dependencies.service.developmentDraftReceipt(await actor(request),key(request)));
   app.post("/digital-production/sources/drafts",async request=>dependencies.service.createSource(await actor(request),parse(DigitalSourceCreateSchema,request.body),key(request),true));

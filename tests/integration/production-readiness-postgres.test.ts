@@ -68,7 +68,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  beforeAll(async()=>{f=await businessAnchorFixture(url!);identity=new DigitalProductionIdentityService(f.db,true);forms=new DigitalDevelopmentService(f.db,true);service=new ProductionReadinessService(f.db);instruction=new ProductionInstructionService(f.db,true);bulk=new BulkPreparationService(f.db);});
  afterAll(async()=>{await f?.dispose();});
  // Pure template construction must not publish an unrelated source for draft tests.
- const documentFixture=(photo:string)=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',sizes:['M'],measurements:[{name:'胸围',values:['48']}],unit:'cm',craft:'无',washing:'免洗',materials:[{materialId:randomUUID(),category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
+ const documentFixture=(photo:string,{available=true}={})=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',sizes:['M'],measurements:[{name:'胸围',values:['48']}],unit:'cm',craft:'无',washing:'免洗',materials:[{materialId:randomUUID(),category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
  const setup=async()=>{
   const designer=f.people['sample-designer']!,primary=f.people.merchandiser!,warehouse=f.people.warehouse!,style=`TEST-P05-${randomUUID()}`,photo=await f.image(designer);
   const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
@@ -575,9 +575,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 
  it.each([['quantity','120米'],['width','150cm'],['weight','180g/m²'],['composition','100%聚酯']] as const)('lets a genuine preorder draft invest without a formal order and renews evidence after a %s change',async(changedField,changedValue)=>{
   const designer=f.people['sample-designer']!,primary=f.people.merchandiser!,style=`TEST-PREORDER-${randomUUID()}`,source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true),photo=await f.image(designer),unshared=await f.image(designer),materialId=randomUUID(),accessoryId=randomUUID();
-  const p={designer,primary,document:documentFixture(photo)};
+  const p={designer,primary,document:documentFixture(photo,{available:false})};
   const document={...p.document,quantity:null,sampleSize:'',sizes:[],sizeQuantities:[],measurements:[],materials:[{...p.document.materials[0]!,materialId,quantity:'100米，预单投料量'},{...p.document.materials[0]!,materialId:accessoryId,category:'辅料' as const,name:'TEST原辅料',quantity:'15枚'}],files:[{attachmentId:photo,kind:'款图' as const},{attachmentId:unshared,kind:'局部图' as const}],customerOrderDraft:{withOrder:true,stage:'preorder' as const,order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}};
-  const saved=await forms.save(p.designer,source.sourceId,{expectedVersion:0,document},randomUUID());expect(saved.status).toBe('draft');await expect(forms.publish(p.designer,source.sourceId,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400});
+  const saved=await forms.save(p.designer,source.sourceId,{expectedVersion:0,document},randomUUID());
+  expect(saved).toMatchObject({status:'draft',materialEvents:[],document:{materials:[{available:false},{available:false}]}});
+  await expect(forms.publish(p.designer,source.sourceId,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400});
   const resource={kind:'source' as const,id:source.sourceId};
   const handed=await service.record(p.designer,resource,{kind:'design_handover',scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST预单投料资料已交订单跟单',quantities:[],evidenceIds:[],sourceDocumentVersion:saved.version,recipientId:p.primary.actorId},randomUUID());
   expect(handed.sourceIsPreorderDraft).toBe(true);expect(handed.facts[0]!.handoverMaterials?.[0]?.quantity).toBe('100米，预单投料量');
@@ -626,9 +628,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const style='TEST-PREORDER-RECIPIENT-'+randomUUID(),materialId=randomUUID();
   const {sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
   const resource={kind:'source' as const,id:sourceId},oldShared=await f.image(designer),currentShared=await f.image(designer),oldReceipt=await f.image(first);
-  const baseDocument=documentFixture(oldShared),draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{
+  const baseDocument=documentFixture(oldShared,{available:false}),draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{
    ...baseDocument,materials:[{...baseDocument.materials[0]!,materialId,quantity:'20米'}],
    customerOrderDraft:{withOrder:true,stage:'preorder',order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}}},randomUUID());
+  expect(draft).toMatchObject({status:'draft',materialEvents:[],document:{materials:[{available:false}]}});
   const at=businessNow().toISOString(),handover=async(version:number,recipientId:string,evidenceIds:string[])=>service.record(designer,resource,{
    kind:'design_handover',scopeRef:'whole',expectedVersion:version,state:'ready',occurredAt:at,note:'TEST actual handover '+version,
    quantities:[],evidenceIds,sourceDocumentVersion:draft.version,recipientId},randomUUID());

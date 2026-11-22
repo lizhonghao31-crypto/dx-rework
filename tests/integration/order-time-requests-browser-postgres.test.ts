@@ -121,14 +121,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(h.requests.filter(request=>request.session===session&&request.method==='POST'&&request.path.endsWith('/confirm'))).toEqual([]);
    }finally{await documentTab.context.close();}
   }
-  const tab=await h.open(original.actor.actorId,operation==='publish'?1165:390,{},'/ui/digital-production?development='+original.sourceId),path=`/api/digital-production/sources/${original.sourceId}/${operation==='publish'?'development/publish':'confirm'}`;
+  const entry=operation==='confirm'?`/ui/digital-production?workspace=designer&section=workspace&area=customer&development=${original.sourceId}`:'/ui/digital-production?development='+original.sourceId;
+  const tab=await h.open(original.actor.actorId,operation==='publish'?1165:390,{},entry),path=`/api/digital-production/sources/${original.sourceId}/${operation==='publish'?'development/publish':'confirm'}`;
   let checks=0;
   try{
    // Only the named check transport fails. Original auth, saved source, form,
    // publication/confirmation commands and all later requests stay native.
    await tab.page.route('**/api/digital-production/order-time/check',async route=>{checks++;await route.fulfill({status:500,contentType:'application/json',headers:{'x-request-id':'TEST-read-check-'+operation},body:JSON.stringify({error:{code:'INTERNAL_ERROR',message:'原提交结果尚未确认，请先核对原记录，不要重复提交'}})});});
    if(operation==='publish')await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
-   const button=tab.page.getByRole('button',{name:operation==='publish'?'发布开发单':'确认客户订单',exact:true});
+   else await tab.page.getByRole('region',{name:'客户与报价'}).getByRole('button',{name:'客户确认下单',exact:true}).click();
+   const button=operation==='publish'?tab.page.getByRole('button',{name:'发布开发单',exact:true})
+    :tab.page.getByRole('region',{name:'客户与报价'}).getByRole('button',{name:'确认下单',exact:true});
+   if(operation==='confirm')expect(await tab.page.getByRole('region',{name:'版单资料'}).getByRole('button',{name:/确认.*订单|确认下单/}).count()).toBe(0);
    for(let attempt=0;attempt<2;attempt++){
     const check=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/check')&&response.request().method()==='POST');
     await button.click();expect((await check).status()).toBe(500);await tab.page.getByRole('status').filter({hasText:operation==='publish'?'本次开发发布尚未发送':'本次客户订单确认尚未发送'}).waitFor();
@@ -143,6 +147,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const command=tab.page.waitForResponse(response=>new URL(response.url()).pathname===path&&response.request().method()==='POST');
    await button.click();const response=await command;expect(response.status(),await response.text()).toBe(200);
    expect(h.requests.filter(request=>request.session===tab.session&&request.method==='POST'&&request.path===path)).toHaveLength(1);
+   if(operation==='confirm'){
+    const created=await response.json();
+    try {await tab.page.getByRole('link',{name:'查看关联客户订单',exact:true}).waitFor();}
+    catch(error){await writeFile(join(h.evidence,'workbench-confirm-result.txt'),[tab.page.url(),String(created.productionOrderId),await tab.page.locator('body').innerText()].join('\n'));throw error;}
+    expect(new URL((await tab.page.getByRole('link',{name:'查看关联客户订单',exact:true}).getAttribute('href'))!,tab.page.url()).searchParams.get('order')).toBe(created.productionOrderId);
+    expect(new URL(tab.page.url()).searchParams.get('development')).toBe(original.sourceId);
+    expect(new URL(tab.page.url()).searchParams.get('area')).toBe('customer');
+    expect(await tab.page.getByRole('navigation',{name:'本单区域'}).getByRole('link').count()).toBe(6);
+   }
   }finally{await tab.context.close();}
  });
  it('publishes from the original designer App with its optional sample date empty, without a false time application or fabricated date',async()=>{

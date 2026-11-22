@@ -43,7 +43,7 @@ export function DigitalQuotationPage(){
  if(query.has('id')||query.has('kind'))return parsed.success?<DigitalQuotationPanel key={`${parsed.data.kind}:${parsed.data.id}`} resource={parsed.data}/>:<Surface><p role="alert">报价来源编号无效，请从原单进入</p></Surface>;
  return <Surface><h1>报价协作</h1><p>显示最近100条当前有权的报价；更早报价可从原单进入。用量与价格由各自负责岗位填写。</p>{error&&<><p role="alert">{error}</p><Button onClick={list.retry}>重试读取</Button></>}<DocumentTableScroll><table><thead><tr><th>设计编号</th><th>版本</th><th>状态</th><th>办理</th></tr></thead><tbody>{items.map(item=><tr key={item.resource.id}><td>{item.designStyleNo}</td><td>{item.version}</td><td>{item.status==='confirmed'?'客户已确认':'协作草稿'}</td><td><a href={quotationHref(item.resource)}>打开报价</a></td></tr>)}</tbody></table></DocumentTableScroll>{!items.length&&!error&&!list.waiting&&<p>暂无分配给自己的报价；设计可从原开发单或预算页建立。</p>}</Surface>;
 }
-export function DigitalQuotationPanel({resource}:{resource:QuotationResource}){
+export function DigitalQuotationPanel({resource,onChanged}:{resource:QuotationResource;onChanged?:()=>void}){
  const [initialHistory]=useState(()=>quotationHistoryFromSearch(window.location.search,resource));
  const [sheet,setSheet]=useState<QuotationSheet|null>(null),[document,setDocument]=useState<BudgetDocument>(empty),[assignments,setAssignments]=useState<QuotationAssignment[]>([]);
  const [participants,setParticipants]=useState<Array<{id:string;name:string;role:string}>>([]),[rowInputs,setRowInputs]=useState<Record<string,{consumption?:string;unitPrice?:string;pricingUnit?:string}>>({});
@@ -91,11 +91,11 @@ export function DigitalQuotationPanel({resource}:{resource:QuotationResource}){
  const mutate=async(path:string,method:string,body:unknown)=>{
   if(!canEditDisplayed||writing.current||uncertain)return;writing.current=true;setBusy(true);setError('');const epoch=generation.current;
   const op={path,method,body:JSON.parse(JSON.stringify(body)) as unknown,key:createClientRequestId(),startedAt:Date.now()};operation.current=op;
-  try{const value=await quotationRequest(path,resource,method,op.body,op.key);if(epoch!==generation.current)return;install(value);operation.current=null;}
+  try{const value=await quotationRequest(path,resource,method,op.body,op.key);if(epoch!==generation.current)return;install(value);operation.current=null;onChanged?.();}
   catch(e){if(epoch!==generation.current)return;const unknown=e instanceof DigitalRequestError?e.resultUnknown:unknownWriteResult(e);setUncertain(unknown);if(!unknown)operation.current=null;setError(e instanceof Error?e.message:'报价提交失败，输入保留');}
   finally{if(epoch===generation.current){writing.current=false;setBusy(false);}}
  };
- const recover=async()=>{const op=operation.current;if(!op||writing.current||!uncertain)return;if(Date.now()-op.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError('已超过原请求安全恢复期限，请核对原报价版本，不能生成新请求重发');return;}const epoch=generation.current;writing.current=true;setBusy(true);try{const value=await quotationRequest(op.path,resource,op.method,op.body,op.key);if(epoch!==generation.current)return;install(value);setUncertain(false);operation.current=null;setError('');}catch(e){if(epoch===generation.current)setError(e instanceof Error?e.message:'原报价回执仍未确认');}finally{if(epoch===generation.current){writing.current=false;setBusy(false);}}};
+ const recover=async()=>{const op=operation.current;if(!op||writing.current||!uncertain)return;if(Date.now()-op.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError('已超过原请求安全恢复期限，请核对原报价版本，不能生成新请求重发');return;}const epoch=generation.current;writing.current=true;setBusy(true);try{const value=await quotationRequest(op.path,resource,op.method,op.body,op.key);if(epoch!==generation.current)return;install(value);setUncertain(false);operation.current=null;setError('');onChanged?.();}catch(e){if(epoch===generation.current)setError(e instanceof Error?e.message:'原报价回执仍未确认');}finally{if(epoch===generation.current){writing.current=false;setBusy(false);}}};
  const reload=async()=>{if(refreshing||writing.current)return;if(!uncertain&&(dirty||confirmationDirty)&&!await confirmInApp('重新载入会丢弃本页未保存修改，确定继续？'))return;if(uncertain){try{const current=await quotationRequest(base,resource);setError(`当前报价 v${current.version}，原请求结果仍未确认；输入和请求标识保留`);}catch(e){setError(e instanceof Error?e.message:'读取失败');}return;}setRetry(v=>v+1);};
  const edit=(patch:Partial<BudgetDocument>)=>{setDocument(v=>({...v,...patch}));setDirty(true);setStructureDirty(true);};
  const rowEdit=(id:string,patch:Partial<BudgetRow>)=>{edit({rows:document.rows.map(row=>row.rowId===id?{...row,...patch}:row)});};

@@ -1,3 +1,4 @@
+import {readMaterialRecheckBasis} from "./development-material-check-rules.js";
 import {assembleQuotation} from './quotation-assembly.js';
 import {readDevelopmentExecutionSnapshot} from "./development-execution-read.js";
 import {businessNow} from '../acceptance-clock/business-time.js';
@@ -179,9 +180,10 @@ export class DevelopmentExecutionService {
     return this.command(actor,sourceId,"check",key,input,async db=>{
       await new DigitalProductionAccessPolicy(db).assert(actor,"task",input.taskId,"execute");
       const task=await this.task(db,sourceId,input.taskId);if(!["development_materials","development_material_recheck"].includes(task.task_kind)||task.state!=="ready")fail("当前不是可办理的核配任务");
-      const supplemental=Boolean((await db.query("SELECT 1 FROM digital_development_execution_facts WHERE source_id=$1 AND task_id=$2 AND kind='补料复核' AND payload->>'supplemental'='true'",[sourceId,input.taskId])).rowCount);
       const sheet=await this.forms().read(actor,sourceId,db,task.route_version),document=sheet.document!;
-      const verification=await readMaterialVerification(db,sourceId,task.route_version,document,sheet.version);
+      const {supplemental,receiptMaterialIds,receiptVersionChanged}=await readMaterialRecheckBasis(db,sourceId,task.route_version,input.taskId,sheet.version);
+      if(receiptVersionChanged)fail("退回补料所对应的资料版本已变化，请核对当前正式资料");
+      const verification=await readMaterialVerification(db,sourceId,task.route_version,document,sheet.version,input.taskId);
       if(verification){
         assertMaterialChecks(verification,verification.entries);
         if(!verification.version||input.expectedVerificationVersion!==verification.version)fail("请先保存本轮材料使用确认，再提交核料结果；已有记录不会被覆盖");
@@ -198,6 +200,8 @@ export class DevelopmentExecutionService {
       if(input.result==="通过"){
         if(verification&&required.some(item=>!item.name.trim()))fail("本轮使用材料缺少品名，请设计师在本单资料补齐后由文员复核");
         if(!required.some(item=>item.category==="主布"))fail("请先补齐本轮主布资料，不能无主料通过");
+        if(receiptMaterialIds.some(id=>!input.items.some(item=>item.materialId===id&&item.physical&&item.quantity&&item.color&&item.specification)))
+          fail("退回补料须由文员逐项核实实到及相符后才能提交通过");
         const prior=(await db.query(`SELECT f.payload FROM digital_development_execution_facts f
           JOIN digital_production_tasks t ON t.task_id=f.task_id
           WHERE f.source_id=$1 AND f.kind='缺项退回' AND t.route_version=$2

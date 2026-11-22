@@ -10,7 +10,7 @@ import {businessNow,ContextBusinessClock} from '../acceptance-clock/business-tim
 import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
-import {developmentRevisionForSave} from "./development-document-format.js";
+import {developmentRevisionForSave,validateDevelopmentMaterialPlan} from "./development-document-format.js";
 import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {isDeepStrictEqual} from "node:util";
@@ -60,6 +60,7 @@ export class DevelopmentRoundService {
    const sheet=await this.forms().read(actor,sourceId,db);if((sheet.roundNumber??1)!==input.revision.basedOnRound)fail('已有新轮次，请重新读取当前资料');
    const before=(await db.query('SELECT version,payload FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];if((before?.version??0)!==input.expectedDraftVersion)fail('复版草稿已更新，请刷新');
    const revision={...input.revision,document:developmentRevisionForSave(input.revision.document,sheet.document!)};
+   if(sheet.materialForecastOnly)validateDevelopmentMaterialPlan(revision.document,sheet.document!);
    await validateAuxiliaryReferences(db,revision.document,before?.payload?.document??sheet.document!);
    await this.forms().bindFiles(db,actor,sourceId,revision.document);
    await db.query('INSERT INTO digital_development_round_drafts(source_id,version,based_on_round,payload,updated_by) VALUES($1,1,$2,$3,$4) ON CONFLICT(source_id) DO UPDATE SET version=digital_development_round_drafts.version+1,based_on_round=$2,payload=$3,updated_by=$4,updated_at=CURRENT_TIMESTAMP',[sourceId,input.revision.basedOnRound,JSON.stringify(revision),actor.actorId]);
@@ -104,6 +105,7 @@ export class DevelopmentRoundService {
    else if(!await approvedOrderTimeRevision(db,actor,sourceId,input.basedOnRound))await authorizePatternOrder(db,actor,"pattern_room:orders:rework",true);
   }
   if(!returnTaskId&&!patternReworkRoundId&&!sheet.canEdit)digitalForbidden();
+  if(!returnTaskId&&!patternReworkRoundId&&sheet.materialForecastOnly)validateDevelopmentMaterialPlan(input.document,sheet.document!);
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');
   if(returnTaskId){const task=(await db.query("SELECT t.route_version,a.task_kind,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1",[returnTaskId])).rows[0];if(!task||task.source_id!==sourceId||task.task_kind!=='development_tail_check'||task.route_version!==input.basedOnRound||input.origin!=='内部发现')digitalForbidden();}
   await validateAuxiliaryReferences(db,input.document,sheet.document!);

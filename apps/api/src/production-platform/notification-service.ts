@@ -39,6 +39,7 @@ import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { digitalTodoTarget } from "./notification-policy.js";
 import {readTaskAccessForPage} from './journey-selection-access.js';
 import {readJourneyCandidateCohort} from './journey-snapshot-reads.js';
+import type {DevelopmentWorkspaceAction} from '@dx-rework/contracts/digital-development-workspace';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const iso = (value: Date | string) => new Date(value).toISOString();
@@ -227,14 +228,24 @@ export class DigitalProductionNotificationService {
     const db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const result=await this.selectReadyTodoTasks(db,actor,todoId,withMetadata);
+      await db.query('COMMIT');return result;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+
+  private async selectReadyTodoTasks(db:PoolClient,actor:TrustedActorContext,todoId:string|undefined,withMetadata:boolean,workbenchIds?:readonly string[]){
       const people=await this.people(db),byId=new Map(people.map(person=>[person.actorId,person])),viewer=byId.get(actor.actorId);
-      if(!viewer){await db.query('COMMIT');return null;}
+      if(!viewer)return null;
       const activeRoles=new Set(people.flatMap(person=>person.actorRoles));
-      const tasks=(await db.query<Task>(`${TASKS} WHERE ${ACTIVE}${todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`,todoId?[todoId]:[])).rows;
+      const tasks=(await db.query<Task>(`${TASKS} WHERE ${ACTIVE}${workbenchIds?' AND t.task_id=ANY($1::uuid[])':todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,${workbenchIds?'t.created_at DESC,t.task_id DESC':'t.created_at,t.task_id'}`,workbenchIds?[workbenchIds]:todoId?[todoId]:[])).rows;
       const unified=await arrangementsAvailable(db),visible:Array<{task:Task;missing:boolean}>=[];
       for(const task of tasks){
         const assignee=task.assignee_id?byId.get(task.assignee_id):undefined;
         const missing=!assignee||!hasRequiredWarehouseRole(assignee.actorRoles,task.required_role);
+        if(workbenchIds){
+          if(!missing&&(assignee.actorId===actor.actorId?task.state==='ready':task.state==='pending'||task.state==='ready'))visible.push({task,missing});
+          continue;
+        }
         if(!missing){if(task.state!=='pending'&&assignee.actorId===actor.actorId)visible.push({task,missing});continue;}
         if(unified&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
         // For this ready-assignment path, every preferred role is a technical
@@ -244,14 +255,33 @@ export class DigitalProductionNotificationService {
         if(viewer.actorRoles.some(role=>eligible.includes(role)))visible.push({task,missing});
       }
       const access=await readTaskAccessForPage(db,viewer,visible.map(row=>row.task.task_id));
-      const eligible=visible.filter(row=>access.get(row.task.task_id)?.technical);
+      const eligible=visible.filter(row=>access.get(row.task.task_id)?.technical
+        &&(!workbenchIds||row.task.assignee_id!==actor.actorId||access.get(row.task.task_id)?.execute));
       // Search metadata uses the original actor and native access decisions.
       // Cohort eligible reads on this one snapshot; count-only paths read none.
       const contexts=new Map(withMetadata?await readJourneyCandidateCohort(db,eligible,async(client,{task,missing})=>
         [task.task_id,await this.readTaskContext(client,actor,task,missing)] as const):[]);
-      await db.query('COMMIT');
       return {people,unified,eligible,contexts};
-    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+
+  /** Use the original actionable-task selector within the workspace's read snapshot. */
+  async workbenchNativeActions(db:PoolClient,actor:TrustedActorContext,taskIds:readonly string[]):Promise<DevelopmentWorkspaceAction[]>{
+    if(!taskIds.length||!isRootActor(actor)&&!actor.authorizationCapabilities?.includes('todo:view'))return [];
+    const ready=await this.selectReadyTodoTasks(db,actor,undefined,false,taskIds);
+    if(!ready)return [];
+    const returnCandidates=ready.eligible.filter(({task})=>task.assignee_id===actor.actorId&&task.task_kind==='development_material_supply');
+    const requirements=returnCandidates.length?(await db.query<{task_id:string;source_id:string;note:string|null}>(`SELECT DISTINCT ON(f.task_id) f.task_id,f.source_id,
+      f.payload->'returnRequirements'->>'note' AS note FROM digital_development_execution_facts f
+      JOIN digital_production_task_access a ON a.task_id=f.task_id AND a.source_id=f.source_id
+      WHERE f.task_id=ANY($1::uuid[]) AND f.kind='补料复核' AND f.payload ? 'returnRequirements' ORDER BY f.task_id,f.sequence DESC`,[returnCandidates.map(({task})=>task.task_id)])).rows:[];
+    const returned=new Map(requirements.map(row=>[row.task_id,row]));
+    return ready.eligible.map(({task})=>{
+      const waiting=task.assignee_id!==actor.actorId,issue=returned.get(task.task_id);
+      const returnedForSource=!waiting&&issue?.source_id===task.source_id;
+      const kind=waiting?'waiting':returnedForSource?'returned':'mine';
+      return {id:task.task_id,kind,label:task.label,route:{routeName:'digital_production_task',entityId:task.task_id,todoId:task.task_id,
+        ...(task.source_id?{developmentRound:task.route_version}:{})},...(returnedForSource&&issue?.note?{reason:issue.note}:{})};
+    });
   }
   async todos(actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]> {
     let targetSelected=false;

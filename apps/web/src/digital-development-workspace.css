@@ -554,3 +554,23 @@
 .bulk-fabric-panel input, .bulk-fabric-panel select, .bulk-fabric-panel textarea { width: 100%; min-width: 0; box-sizing: border-box; }
 .bulk-fabric-panel p { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .bulk-fabric-fields { grid-template-columns: minmax(0, 1fr); } }
+
+/* Designer workbench areas retain the existing document and domain editors. */
+.designer-order-workbench{display:grid;gap:var(--spacing-4,1rem);min-width:0}
+.designer-order-workbench>*{min-width:0}
+.designer-order-workbench .order-document-layout{display:block}
+.designer-order-identity>h1{margin-block:var(--spacing-2,.5rem)}
+.designer-order-summary{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--spacing-3,.75rem);align-items:start}
+.designer-order-summary .development-style-image,.designer-order-summary .development-style-placeholder{inline-size:5rem;block-size:5rem;object-fit:contain}
+.designer-order-summary dl{display:flex;flex-wrap:wrap;gap:var(--spacing-2,.5rem) var(--spacing-3,.75rem);margin-block:var(--spacing-2,.5rem)}
+.designer-order-summary dl>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--spacing-1,.25rem);overflow-wrap:anywhere}
+.designer-order-summary dt::after{content:'：'}
+.designer-order-summary dd{margin:0}
+.designer-order-identity table{width:100%;border-collapse:collapse}
+.designer-order-identity :is(th,td){text-align:left;padding:var(--spacing-2,.5rem);border-bottom:1px solid var(--production-border)}
+.designer-order-sections{display:flex;flex-wrap:wrap;gap:var(--spacing-2,.5rem) var(--spacing-4,1rem)}
+.designer-order-area>h2{scroll-margin-block-start:var(--spacing-4,1rem)}
+.designer-current-actions ul{padding-inline-start:1em;margin-block:var(--spacing-1,.25rem)}
+.designer-current-actions small{display:block}
+.designer-handling-filter{display:inline-flex;align-items:center;gap:var(--spacing-2,.5rem);margin-block:var(--spacing-2,.5rem)}
+@media(max-width:480px){.designer-order-summary{grid-template-columns:minmax(0,1fr)}}

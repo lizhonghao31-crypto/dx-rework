@@ -4,7 +4,7 @@ import {developmentRevisionSource,inheritedDevelopmentFile} from './development-
 import {acceptanceBusinessContext,observedBusinessTime,businessNow} from '../acceptance-clock/business-time.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {DevelopmentAmendmentService} from "./development-amendment-service.js";
-import {developmentDraftForSave} from "./development-document-format.js";
+import {developmentDraftForSave,validateDevelopmentMaterialPlan} from "./development-document-format.js";
 import type {SaveDevelopmentAmendment,SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
 import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {documentMetadata} from "./document-metadata.js";
@@ -94,10 +94,13 @@ export class DigitalDevelopmentService {
     // on publication. Do not downgrade their draft editor while that plan is absent.
     // An existing plan remains authoritative for historical sources.
     const timelineSchemaVersion=adoptedPlan?.timeline_schema_version??(source.order_time_managed?2:undefined);
+    const forecastOnly=Boolean(adoptedPlan)&&!isRootActor(actor);
+    const forecastState=forecastOnly&&source.can_edit&&row?.status==='published'?(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0]?.state:undefined;
     return { ...(unavailableDraftAttachments.length?{unavailableDraftAttachments}:{}),orderTimeEnabled:Boolean(source.order_time_managed)||await acceptsNewOrderTime(db),...(timelineSchemaVersion===2?{timelineSchemaVersion:2 as const}:{}),revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(adoptedPlan),...(draftDocumentDate?{draftDocumentDate}:{developmentCreatedDate:beijingCalendarDate(new Date(createdTime??source.created_at))}), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
-      canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
+      canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents,
+      ...(forecastOnly?{materialForecastOnly:true}:{}),...(forecastState&&forecastState!=='active'?{materialForecastBlocked:'开发单已暂停或取消'}:{}) };
   }
   async submissionReceipt(actor:TrustedActorContext,sourceId:string,operation:'publish'|'confirm',key:string){
     DevelopmentSubmissionReceiptQuerySchema.parse({operation,key});
@@ -164,6 +167,7 @@ export class DigitalDevelopmentService {
       if (row?.status === "published") conflict("已发布开发单不可覆盖，请通过复版记录实际修改");
       const source=(await db.query("SELECT created_at,(to_jsonb(s)->>'draft_reserved')::boolean AS draft_reserved FROM digital_production_sources s WHERE source_id=$1",[sourceId])).rows[0];
       const document=developmentDraftForSave(input.document,row?.document,await this.draftDocumentOrigin(db,sourceId,source));
+      if(source.draft_reserved&&!isRootActor(actor))validateDevelopmentMaterialPlan(document,row?.document);
       if(document.customerOrderDraft?.withOrder&&await developmentRevisionSource(db,sourceId))conflict('复版沿原开发档案的客户订单，不重复填写大货数量');
       await validateAuxiliaryReferences(db,document,row?.document);
       await validateSpecialCraftChoices(db,document.craftSteps??[],row?.document?.craftSteps??[],'development');
@@ -234,20 +238,28 @@ export class DigitalDevelopmentService {
     return this.command(actor, sourceId, "material", key, { materialId, ...input }, async db => {
       const row = await developmentDocumentRow(db,sourceId) ?? digitalNotFound();
       if (row.status !== "published" || row.version !== input.expectedVersion) conflict("请在当前已发布开发单上确认物料");
+      const clerkReceiptRequired=!isRootActor(actor)&&Boolean(await developmentSlaPlan(db,sourceId));
+      if(clerkReceiptRequired&&input.action!=='修改预计日期')digitalForbidden();
+      if((clerkReceiptRequired||input.expectedRound!==undefined)&&input.expectedRound!==(row.round_number??1))conflict("开发轮次已变化，请刷新后重新确认");
+      if(input.action==='修改预计日期'&&(clerkReceiptRequired||input.expectedRound!==undefined)){
+        const state=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0]?.state;
+        if(state&&state!=='active')conflict("开发单已暂停或取消，不能修改预计到料日期");
+      }
       const rounds=await developmentRoundsAvailable(db);
       const revision=Number((await db.query(`SELECT count(*) AS revision FROM digital_development_material_events WHERE source_id=$1 AND material_id=$2 ${rounds?"AND route_version=$3":""}`,[sourceId,materialId,...(rounds?[row.round_number??1]:[])])).rows[0].revision);
       if(revision!==input.expectedMaterialRevision)conflict("物料记录已更新，请刷新后重新确认");
       const material = (await effectiveVerificationDocument(db,sourceId,row.round_number??1,row.document as DevelopmentDocument)).materials.find(item => item.materialId === materialId);
       if (!material || !material.requiredThisRound) conflict("该物料不属于本轮所需");
       if (input.action === "确认代用" && material!.category !== "辅料") conflict("设计师代用确认仅适用于辅料；问题面料须供应链总监决定");
+      if (input.action === "修改预计日期" && material!.category !== "辅料") conflict("仅可修改辅料预计到料日期");
       const eventId = randomUUID();
       await db.query(`INSERT INTO digital_development_material_events(event_id,source_id,material_id,action,expected_date,note,actor_id${rounds?',route_version':''}) VALUES($1,$2,$3,$4,$5,$6,$7${rounds?',$8':''})`, [eventId, sourceId, materialId, input.action, input.expectedDate, input.note, actor.actorId,...(rounds?[row.round_number]:[])]);
       if(input.action!=='修改预计日期'){
         const occurrence=developmentOccurrence(input.actualTime,businessNow());
         await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
           VALUES($1,'source',$2,'development_material_recorded',$3,$4,$5,$6)`,[eventId,sourceId,actor.actorId,occurrence.actualCompletedAt,occurrence.timeQuality,JSON.stringify({...occurrence,materialEventId:eventId,materialId,roundNumber:row.round_number??1,action:input.action})]);
+        await new DevelopmentRouteService(this.database).releaseSewing(db,actor,sourceId);
       }
-      await new DevelopmentRouteService(this.database).releaseSewing(db,actor,sourceId);
       return this.read(actor, sourceId, db);
     });
   }

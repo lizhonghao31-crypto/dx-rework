@@ -31,7 +31,7 @@ describe("finance secondary navigation", () => {
     expect(app).not.toContain("FinancePage");
     const shell = await readFile("apps/web/src/components.tsx", "utf8");
     const groups = shell.slice(shell.indexOf("const desktopNavigationGroups"), shell.indexOf("const roleLabels"));
-    const positions = ["设计师创建订单", "产品开发打板", "大货产前准备", "外发定价&选厂", "订单开裁", "裁后工艺与发厂", "订单返工", "供应商中心", "样衣管理", "financeGroup", "平台管理"].map(name => groups.indexOf(name));
+    const positions = ["设计开发工作台", "产品开发打板", "大货产前准备", "外发定价&选厂", "订单开裁", "裁后工艺与发厂", "订单返工", "供应商中心", "样衣管理", "financeGroup", "平台管理"].map(name => groups.indexOf(name));
     expect(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!))).toBe(true);
     expect(shell).toContain("<NavigationGroupMenu group={financeGroup}");
   });

@@ -3,6 +3,14 @@ import {developmentSizeQuantityIssues,type DevelopmentDocument,type DevelopmentM
 import {ApplicationError} from "../platform/errors.js";
 
 const reject=(message:string):never=>{throw new ApplicationError("VALIDATION_ERROR",message,400);};
+export function validateDevelopmentMaterialPlan(document:DevelopmentDocument,basis?:DevelopmentDocument){
+ const before=new Map(basis?.materials.map(material=>[material.materialId,material]));
+ for(const material of document.materials){
+  const original=before.get(material.materialId);
+  if(material.available!==(original?.available??false))reject('实物到料沿文员原核料记录办理，版单资料不能登记或改写实到');
+  if(material.category!=='辅料'&&material.expectedDate!==null&&(material.category!==original?.category||material.expectedDate!==original.expectedDate))reject('预计到料日期只可填在辅料资料，面料沿原跟单流程');
+ }
+}
 /** Called only with the original row held by the development command transaction. */
 export function developmentDraftForSave(input:DevelopmentDocument,previous:DevelopmentDocument|undefined,createdAt:Date|string):DevelopmentDocument{
  const fixedDate=previous?.orderDate??beijingCalendarDate(new Date(createdAt));

@@ -17,6 +17,9 @@ import {EmployeeAccessService} from "../../apps/api/src/access/employee-access-s
 import {DevelopmentExecutionService} from "../../apps/api/src/production-platform/development-execution-service.js";
 import {DevelopmentRoundService} from "../../apps/api/src/production-platform/development-round-service.js";
 import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {DevelopmentWorkspaceQuery} from '../../apps/api/src/production-platform/development-workspace-query.js';
+import {DevelopmentWorkspaceFilterSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {DigitalProductionIdentityService} from "../../apps/api/src/production-platform/identity-service.js";
 import {DigitalDevelopmentService} from "../../apps/api/src/production-platform/development-service.js";
 import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
@@ -33,11 +36,13 @@ import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js'
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {arrangeTestRound} from "../helpers/development-arrangement-fixture.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
+import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("S1 development read through original App and native signed identity",()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string;
+ let prepareDevelopment:(published?:boolean,accessoryId?:string)=>Promise<{id:string;materialId:string}>;
  let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string,uploadSourceId:string,uploadPaperId:string;
  let externalSourceId:string,externalTaskId:string,externalRequestId:string;
  const tokens=new Map<string,string>(),evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"development-read");
@@ -64,11 +69,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const prices=new PatternRoomPriceService(f.db),option=(await prices.options(f.root))[0]!,quote=await prices.quote(f.root,'category',option.priceId);
   const category=await prices.change(f.root,'category',option.priceId,{version:quote.version,amount:'10.000',enabled:true,reason:'TEST isolated S1 sample'},randomUUID());
   const designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!;
-  const prepare=async(published=true)=>{
+  const prepare=prepareDevelopment=async(published=true,accessoryId?:string)=>{
    const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-S1-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    const materialId=randomUUID(),photo=await f.image(designer);
    const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST S1 原制作说明',craft:'无',washing:'免洗',materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
    document.patternCategoryId=category.priceId;
+   if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST 必需纽扣',name:'TEST 必需纽扣',available:false,expectedDate:'2027-01-01'});
    const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
    if(published)await forms.publish(designer,source.sourceId,saved.version,randomUUID(),{categoryId:category.priceId,priceVersion:category.version});
    return {id:source.sourceId,materialId};
@@ -91,7 +97,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   externalTaskId=external.taskId;externalRequestId=external.requestId;
   foreignSourceId=(await prepare()).id;foreignTaskId=(await execution.read(f.root,foreignSourceId)).tasks.find(t=>t.taskKind==='development_materials')!.taskId;
   draftId=(await prepare(false)).id;
-  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentExecution:execution,developmentAttachments:f.attachments,quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
+  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentRounds:new DevelopmentRoundService(f.db,true,native),developmentExecution:execution,developmentAttachments:f.attachments,journeys:new DigitalJourneyQuery(f.db),quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
   for(const role of ['root','pattern-room-worker','worker-a','pattern-room-supervisor','development-clerk'])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   output=await mkdtemp(join(tmpdir(),"dx-development-read-native-"));const previous=process.env.NODE_ENV;
   try{process.env.NODE_ENV="production";await build({root:resolve("apps/web"),configFile:resolve("apps/web/vite.config.ts"),mode:"production",base:"/",build:{outDir:output,emptyOutDir:true}});}finally{if(previous===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previous;}
@@ -339,6 +345,112 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(stored.payload.actualCompletedDate).toBe('2026-11-09');
   }catch(error){await page.screenshot({path:join(evidence,'occurrence-failure.png'),fullPage:true});await writeFile(join(evidence,'occurrence-failure-body.txt'),await page.locator('body').innerText());await writeFile(join(evidence,'occurrence-failure-controls.json'),JSON.stringify(await page.locator('.development-material-events select').evaluateAll(selects=>selects.map(select=>select.outerHTML))));throw error;}finally{await context.close();}
  });
+ it('opens the six workbench areas and returns from the authorized original task to the same order',async()=>{
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  const token=await loginRole('sample-designer');
+  await context.addCookies([{name:'dx_rework_session',value:token,url:base}]);
+  const page=await context.newPage(),requests:{method:string;path:string}[]=[];
+  page.on('request',request=>requests.push({method:request.method(),path:new URL(request.url()).pathname}));
+  try {
+   const source=(await f.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]!.design_style_no;
+   const filters=new URLSearchParams({workspace:'designer',section:'workspace',search:source});
+   const list=await app.inject({method:'GET',url:`/digital-production/workspaces/designer?layout=workbench&search=${source}&handling=waiting`,headers:{cookie:`dx_rework_session=${token}`}});
+   expect(list.statusCode).toBe(200);
+   expect(list.json()).toMatchObject({total:1,items:[{journey:{sourceId},handling:{complete:false,items:expect.arrayContaining([expect.objectContaining({id:paperId,kind:'waiting'})])}}]});
+   await new JourneyFactRepository(f.db).buildOne({kind:'source',id:sourceId});
+   const indexed=new DevelopmentWorkspaceQuery(new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),new DigitalProductionNotificationService(f.db));
+   const matched=await indexed.designer(f.people['sample-designer']!,DevelopmentWorkspaceFilterSchema.parse({layout:'workbench',search:source,handling:'waiting'}));
+   expect(matched.items.map(item=>item.handling)).toEqual(list.json().items.map((item:{handling:unknown})=>item.handling));
+   expect(matched.total).toBe(1);
+   const denied=await get('development-clerk',`/digital-production/workspaces/designer?layout=workbench&search=${source}`);
+   expect(denied.statusCode).toBe(403);
+   await page.goto(`${base}/ui/digital-production?${filters}`);
+   const row=page.locator(`#development-open-${sourceId}`);
+   await row.click();
+   await page.getByRole('heading',{name:source,exact:true}).waitFor();
+   const nav=page.getByRole('navigation',{name:'本单区域'});
+   expect(await nav.getByRole('link').allTextContents()).toEqual(['版单资料','开发办理','客户与报价','交接与协同','订单相关单据','操作记录']);
+   expect(await nav.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+   await page.setViewportSize({width:390,height:747});
+   expect(await nav.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+   await page.setViewportSize({width:1165,height:747});
+   const lazyPaths=[`/sources/${sourceId}/quotation`,`/sources/${sourceId}/production-readiness`,`/journeys/${sourceId}`];
+   expect(requests.filter(request=>lazyPaths.some(path=>request.path.endsWith(path)))).toEqual([]);
+   await nav.getByRole('link',{name:'客户与报价',exact:true}).focus();
+   await page.keyboard.press('Enter');
+   const customer=page.getByRole('region',{name:'客户与报价',exact:true});
+   await customer.getByText('客户报价协作',{exact:true}).click();
+   await customer.getByText('客户当前确认版：',{exact:false}).waitFor();
+   expect(requests.filter(request=>request.path.endsWith(lazyPaths[0]!))).toHaveLength(1);
+   const nativeTask=page.getByRole('region',{name:'当前办理'}).getByRole('link',{name:/等别人.*纸样/});
+   const target=new URL((await nativeTask.getAttribute('href'))!,page.url());
+   expect(target.searchParams.get('task')).toBe(paperId);
+   expect(target.searchParams.get('taskView')).toBe('read');
+   await nativeTask.click();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await nav.getByRole('link',{name:'开发办理',exact:true}).waitFor();
+   expect(new URL(page.url()).searchParams.get('area')).toBe('development');
+   expect(new URL(page.url()).searchParams.get('development')).toBe(sourceId);
+   expect(new URL(page.url()).searchParams.get('search')).toBe(source);
+   expect(requests.filter(request=>request.method!=='GET'&&request.path.startsWith(`/api/digital-production/sources/${sourceId}`))).toEqual([]);
+  } finally {await context.close();}
+ });
+ it('lets the original designer update only the required accessory forecast from the workbench',async()=>{
+  const accessoryId=randomUUID(),prepared=await prepareDevelopment(true,accessoryId);
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  await context.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);
+  const page=await context.newPage();
+  try {
+   await page.goto(`${base}/ui/digital-production?workspace=designer&section=workspace&development=${prepared.id}`);
+   await page.getByRole('button',{name:'轮次与记录',exact:true}).click();
+   const fabric=page.locator(`#material-${prepared.materialId}`),accessory=page.locator(`#material-${accessoryId}`);
+   await fabric.waitFor();
+   expect(await fabric.getByRole('button',{name:'修改辅料预计到料日期'}).count()).toBe(0);
+   const edit=accessory.getByRole('button',{name:'修改辅料预计到料日期',exact:true});
+   await edit.click();
+   const date=accessory.getByLabel('辅料预计到料日期',{exact:true});
+   expect(await date.inputValue()).toBe('2027-01-01');
+   expect(await accessory.getByLabel('实际发生时间').count()).toBe(0);
+   await date.fill('2027-01-03');
+   const receipt=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/materials/${accessoryId}/events`));
+   await accessory.getByRole('button',{name:'保存预计日期',exact:true}).click();
+   const response=await receipt;
+   expect(response.status()).toBe(200);
+   expect(response.request().postDataJSON()).toEqual({action:'修改预计日期',expectedRound:1,expectedVersion:2,expectedMaterialRevision:0,expectedDate:'2027-01-03',note:''});
+   expect(await response.json()).toMatchObject({sourceId:prepared.id,materialEvents:[{materialId:accessoryId,action:'修改预计日期',expectedDate:'2027-01-03',occurredAt:null,occurredDate:null}]});
+   await accessory.getByText('修改预计日期 · 2027-01-03',{exact:false}).waitFor();
+   await expect.poll(()=>edit.evaluate(element=>element===document.activeElement)).toBe(true);
+   await edit.click();
+   expect(await date.inputValue()).toBe('2027-01-03');
+   await accessory.getByRole('button',{name:'取消',exact:true}).click();
+   await expect.poll(()=>edit.evaluate(element=>element===document.activeElement)).toBe(true);
+  } finally {await context.close();}
+ });
+ it('keeps reserved draft facts and published revision edits separate from actual material receipt',async()=>{
+  const actor=f.people['sample-designer']!,token=await loginRole('sample-designer');
+  const identity=new DigitalProductionIdentityService(f.db,true);
+  const {sourceId:draft}=await identity.createSource(actor,{developmentType:'头版',designStyleNo:'TEST-DRAFT-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+  const command=(path:string,input:object)=>app.inject({method:'PUT',url:`/digital-production/sources/${path}`,headers:{cookie:`dx_rework_session=${token}`,'idempotency-key':randomUUID()},payload:input});
+  const document=initialDevelopmentDocument(),fabric={...document.materials[0]!,name:'TEST面料'};
+  const accessory={...fabric,materialId:randomUUID(),category:'辅料' as const,label:'辅料',name:'TEST辅料',auxiliaryKind:'普通辅料' as const};
+  const physical=await command(`${draft}/development`,{expectedVersion:0,document:{...document,materials:[{...fabric,available:true},accessory]}});
+  expect(physical.statusCode).toBe(400);expect(physical.body).toContain('不能登记或改写实到');
+  const fabricForecast=await command(`${draft}/development`,{expectedVersion:0,document:{...document,materials:[{...fabric,expectedDate:'2027-01-03'},accessory]}});
+  expect(fabricForecast.statusCode).toBe(400);expect(fabricForecast.body).toContain('预计到料日期只可填在辅料资料');
+  const response=await command(`${draft}/development`,{expectedVersion:0,document:{...document,materials:[fabric,{...accessory,expectedDate:'2027-01-03'}]}});
+  expect(response.statusCode,response.body).toBe(200);
+  expect(response.json()).toMatchObject({sourceId:draft,status:'draft',version:1,materialEvents:[],document:{materials:[{available:false,expectedDate:null},{available:false,expectedDate:'2027-01-03'}]}});
+  const tally=await app.inject({method:'GET',url:'/digital-production/sources/drafts?view=count&search=TEST-DRAFT-',headers:{cookie:`dx_rework_session=${token}`}});
+  expect(tally.statusCode).toBe(200);
+  expect(tally.json()).toEqual({items:[],page:1,total:1,hasNext:false});
+  const prepared=await prepareDevelopment(true,randomUUID());
+  const original=await new DigitalDevelopmentService(f.db,true).read(actor,prepared.id);
+  const materials=original.document!.materials.map(material=>material.category==='辅料'?{...material,available:true}:material);
+  const revise=await command(`${prepared.id}/development/round-draft`,{expectedDraftVersion:0,revision:{basedOnRound:1,document:{...original.document,materials},origin:'内部发现',customerComment:'',internalProblem:'TEST actual material stays with clerk',explanation:'TEST intact receipt',categories:['版型'],affectedNodes:['纸样'],outputKind:'整件样板'}});
+  expect(revise.statusCode,revise.body).toBe(400);
+  expect(revise.body).toContain('不能登记或改写实到');
+  expect((await new DevelopmentRoundService(f.db,true).read(actor,prepared.id)).draft).toBeNull();
+ });
  it("inherits the original verified material occurrence when a new round explicitly retains the completed check",async()=>{
   const old=await new DigitalDevelopmentService(f.db,true).read(f.root,sourceId);
   const check=(await f.db.query("SELECT t.task_id,t.completed_at FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_materials' AND t.route_version=1 AND t.state='completed'",[sourceId])).rows[0]!;
@@ -350,6 +462,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const current=await new DigitalJourneyQuery(f.db).read(f.root,sourceId,2);
   const material=current.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===`material:${old.document!.materials[0]!.materialId}:2`)!;
   expect(material).toMatchObject({state:'completed',round:2,actualAt:check.completed_at.toISOString(),actualQuality:'verified'});
+
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage(),writes:string[]=[];
+  page.on('request',request=>{if(request.method()!=='GET'&&new URL(request.url()).pathname.startsWith(`/api/digital-production/sources/${sourceId}/development`))writes.push(request.method());});
+  try {
+   const detail=`${base}/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`;
+   const historical=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith(`/sources/${sourceId}/development`)&&new URL(response.url()).searchParams.get('round')==='1');
+   await page.goto(`${detail}&round=1`);
+   expect(await (await historical).json()).toMatchObject({sourceId,roundNumber:1,latestRoundNumber:2,version:old.version,canEdit:false,document:old.document});
+   await page.getByRole('button',{name:'轮次与记录',exact:true}).click();
+   expect(await page.getByLabel('查看轮次').inputValue()).toBe('1');
+   expect(await page.getByRole('button',{name:/编辑版单|发起实际修改|继续复版草稿|保存草稿/}).count()).toBe(0);
+   await page.getByLabel('查看轮次').selectOption('2');
+   await page.getByRole('button',{name:'编辑版单',exact:true}).waitFor();
+   expect(new URL(page.url()).searchParams.get('round')).toBe('2');
+   expect(writes).toEqual([]);
+  } finally {await context.close();}
  });
  it("R5 blocks publication during quote loading, failed or unconfigured reads and publishes with the recovered native quote",async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});

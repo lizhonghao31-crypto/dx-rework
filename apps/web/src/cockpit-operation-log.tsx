@@ -5,7 +5,7 @@ import {digitalRequest} from "./digital-production-api.js";
 import {journeyTime} from "./digital-journey-cockpit-model.js";
 import {trapCockpitDialogFocus} from "./cockpit-dialog-focus.js";
 
-export function CockpitOperationLog({order}:{order:OrderJourney}){
+export function CockpitOperationLog({order,embedded=false}:{order:OrderJourney;embedded?:boolean}){
   const summary=order.operationLog,dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),request=useRef<AbortController|null>(null);
   const [open,setOpen]=useState(false),[page,setPage]=useState(summary),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const live=useRef(false);
@@ -28,7 +28,7 @@ export function CockpitOperationLog({order}:{order:OrderJourney}){
     }catch(failure){if(live.current&&!controller.signal.aborted)setError(failure instanceof Error?failure.message:"操作记录读取失败");}
     finally{if(request.current===controller){loading.current=false;if(live.current&&!controller.signal.aborted)setBusy(false);}}
   };
-  return <section className="dx-production-panel journey-activity-panel"><div className="journey-section-title"><h2>操作记录</h2></div>
+  return <section className="dx-production-panel journey-activity-panel">{!embedded&&<div className="journey-section-title"><h2>操作记录</h2></div>}
     <ol className="cockpit-log-summary">{summary?.items.slice(0,3).map(item=><li key={item.id}><CockpitDate value={item.at}/><span title={item.actor?.name??"姓名未登记"} tabIndex={0}>{item.actor?.name??"姓名未登记"}</span><strong>{item.object} · {item.action}</strong></li>)}</ol>
     {!summary?<p className="journey-muted">操作记录暂不可用。</p>:!summary.items.length?<p className="journey-muted">暂无可查节点操作记录。</p>:null}
     <footer className="cockpit-log-summary-footer">{summary&&<button type="button" className="journey-text-action" ref={trigger} onClick={()=>{setPage(summary);setError("");setOpen(true);}}>查看更多</button>}</footer>

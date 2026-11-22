@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it,vi } from "vitest";
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
+import { DevelopmentRouteService } from "../../apps/api/src/production-platform/development-route-service.js";
 import { DevelopmentTechnicalService } from "../../apps/api/src/production-platform/development-technical-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
@@ -126,14 +127,25 @@ run("P06 development execution PostgreSQL", () => {
   });
 
   it('R5 material actions retain their real occurrence independently of the original registration sequence',async()=>{
-    const current=await prepare(true),actualDate='2026-10-20',sheet=await development.read(actor(),current.id),before=Date.now();
+    const accessory=auxiliary(),current=await prepare(true,'无',true,[accessory]);
+    const actualDate='2026-10-20',sheet=await development.read(actor(),current.id),before=Date.now();
     const result=await development.materialEvent(actor(),current.id,current.materialId,{expectedVersion:sheet.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST material arrived earlier; only date known',actualTime:{precision:'date',date:actualDate}},randomUUID());
     const material=result.materialEvents[0]!;
     expect(material).toMatchObject({action:'到货',occurredAt:null,occurredDate:actualDate,timeQuality:'补报未核实'});
     expect(new Date(material.createdAt).getTime()).toBeGreaterThanOrEqual(before-1000);
     const event=(await database.query("SELECT task_id,resource_id,occurred_at,time_quality,payload FROM digital_production_task_events WHERE event_id=$1",[material.eventId])).rows[0];
     expect(event).toMatchObject({task_id:null,resource_id:current.id,occurred_at:null,time_quality:'补报未核实',payload:{materialEventId:material.eventId,materialId:current.materialId,roundNumber:1,actualCompletedDate:actualDate}});
-    await development.materialEvent(actor(),current.id,current.materialId,{expectedVersion:sheet.version,expectedMaterialRevision:1,action:'修改预计日期',expectedDate:'2027-01-01',note:'TEST plan change only'},randomUUID());
+    const change={expectedVersion:sheet.version,expectedMaterialRevision:1,action:'修改预计日期' as const,
+      expectedDate:'2027-01-01',note:'TEST plan change only'};
+    await expect(development.materialEvent(actor(),current.id,current.materialId,change,randomUUID())).rejects.toThrow('仅可修改辅料预计到料日期');
+    const release=vi.spyOn(DevelopmentRouteService.prototype,'releaseSewing');
+    try {
+      const moved=await development.materialEvent(actor(),current.id,accessory.materialId,{...change,expectedMaterialRevision:0},randomUUID());
+      expect(moved.materialEvents).toEqual(expect.arrayContaining([expect.objectContaining({materialId:accessory.materialId,
+        action:'修改预计日期',expectedDate:'2027-01-01'})]));
+      expect(moved.materialReadiness?.find(row=>row.materialId===accessory.materialId)?.available).toBe(false);
+      expect(release).not.toHaveBeenCalled();
+    }finally{release.mockRestore();}
     expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='development_material_recorded'",[current.id])).rows[0].n).toBe(1);
   });
 
