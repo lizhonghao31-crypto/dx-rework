@@ -1,5 +1,5 @@
 import {COCKPIT_MILESTONE_GROUP, type JourneyNode, type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
-import {SERIES_MILESTONES} from '@dx-rework/contracts/digital-series-plan';
+import {SERIES_MILESTONES,type SeriesMilestoneKey} from '@dx-rework/contracts/digital-series-plan';
 import type {JourneyFrameworkScope} from '@dx-rework/contracts/time-framework-journey';
 import {CockpitDate} from './cockpit-date.js';
 import {CockpitStageDifference, observedGoalDelta} from './cockpit-fixed-schedule.js';
@@ -13,6 +13,10 @@ export type CockpitMilestone = JourneyFrameworkScope['milestones'][number] & {
  prerequisiteIds: string[];
 };
 
+export function cockpitMilestoneLabel(key:SeriesMilestoneKey) {
+ return key==='planned_shipment'?'出货完成':SERIES_MILESTONES.find(item=>item.key===key)!.label;
+}
+
 export function cockpitMilestones(order: OrderJourney): CockpitMilestone[] {
  return (order.fixedSchedule?.framework?.scopes??[]).flatMap(scope=>{
   const projection=order.cockpitStageDates?.find(value=>value.scopeRef===scope.scopeRef
@@ -21,7 +25,7 @@ export function cockpitMilestones(order: OrderJourney): CockpitMilestone[] {
    &&scope.milestones.filter(candidate=>candidate.key===row.key).length===1).map(row=>{
    const members=projection?.milestoneMembers.find(item=>item.key===row.key);
    return {...row,scopeRef:scope.scopeRef,selectionKey:scope.scopeRef+'|'+row.key,
-    label:row.key==='planned_shipment'?'出货完成':SERIES_MILESTONES.find(item=>item.key===row.key)!.label,
+    label:cockpitMilestoneLabel(row.key),
     directWorkIds:members?.workIds??row.workIds,
     prerequisiteIds:members?.prerequisiteIds??(row.relatedWorkIds??[]).filter(id=>!row.workIds.includes(id))};
   });

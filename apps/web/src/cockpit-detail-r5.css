@@ -130,6 +130,7 @@
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-flow-heading h2 {margin:0;font-size:17px}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-original-stage-goal {grid-column:1/-1;font-size:12px}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-original-stage-goal small {display:block;overflow-wrap:anywhere}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-original-stage-goal ul {margin:4px 0 0;padding-inline-start:14px;text-align:start;overflow-wrap:anywhere}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-stage-milestones {display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-stage-milestone {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-stage-milestone time {white-space:nowrap}

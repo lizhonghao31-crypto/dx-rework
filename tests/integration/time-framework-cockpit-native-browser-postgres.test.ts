@@ -108,6 +108,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(milestoneKeys.sort()).toEqual(dto.fixedSchedule!.framework!.scopes[0]!.milestones.map(item=>item.key).sort());
    expect(new Set(milestoneKeys).size).toBe(route==='A'?9:8);
    const stageDates=dto.cockpitStageDates![0]!.stages;
+   const preparation=flow.locator('.cockpit-stage').nth(2);
+   expect(stageDates.find(row=>row.key==='preparation')).toMatchObject({expected:{precision:'unknown'},missingTargets:['material_investment']});
+   const explanation=preparation.locator('summary').filter({hasText:'查看待核项'});
+   await explanation.click();
+   await preparation.getByText('投面辅料：待核实际采购材料范围',{exact:true}).waitFor();
+   await explanation.click();
+   const originalTarget=stageDates.find(row=>row.differenceUsesOriginalTarget&&row.goalDelta?.targetAt)!;
+   expect(originalTarget).toBeDefined();
+   const targetStage=flow.locator('.cockpit-stage').nth(stageDates.indexOf(originalTarget));
+   const compare=targetStage.locator('summary').filter({hasText:'差异按原目标'});
+   await compare.click();
+   const originalGoal=originalTarget.goalDelta!;
+   expect(await targetStage.locator('details[open] time').getAttribute('datetime')).toBe(originalGoal.targetPrecision==='date'?originalGoal.targetDate:originalGoal.targetAt);
+   expect(await targetStage.locator('details[open] small').innerText()).toBe('版本 '+originalGoal.targetRevision.split(':').at(-1));
+   await compare.click();
+   await flow.getByRole('button',{name:'大货产前准备节点明细',exact:true}).click();
+   for(const key of ['fabric_receipt','style_label_ready'])
+    expect(await panel.locator(`[data-milestone-key="${key}"] time`).first().innerText()).toMatch(/^20\d{2}-\d{2}-\d{2}$/);
    for(const key of ['cutting','production'] as const){
     const stage=stageDates.find(row=>row.key===key);
     expect(stage).toMatchObject({expectedSource:'stage_schedule',missingTargets:[]});

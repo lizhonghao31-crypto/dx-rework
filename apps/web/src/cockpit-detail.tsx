@@ -37,6 +37,8 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
   const nodes=cockpitDetailNodes(order),legacySelection=journeyDetailSelection(order,context);
   const windowSelection=selectCockpitWashingWindow(nodes,context.focus,context.materialFocus);
   const scopes=order.fixedSchedule?.framework?.scopes??[],framework=Boolean(order.fixedSchedule?.framework);
+  const legacyScheduled=!framework&&order.orderId&&order.seriesPlanVisible&&order.supervision?.status!=='limited'
+   &&order.fixedSchedule?.stages?.some(stage=>stage.expected.precision!=='unknown');
   const milestones=cockpitMilestones(order);
   const linkedMilestone=milestones.find(item=>item.selectionKey===context.milestone);
   const explicitlyScoped=context.milestone?.endsWith('|')?scopes.find(scope=>context.milestone===scope.scopeRef+'|'):undefined;
@@ -136,6 +138,7 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
     <section className="dx-production-panel cockpit-flow-panel" aria-label="订单全流程">
      <div className="cockpit-flow-heading">
       <h2>{scope?.route==='A'?'要对色':scope?.route==='B'?'无需对色':'流程'}</h2>
+      {legacyScheduled&&<small>未采用里程碑计划</small>}
       {!framework&&order.seriesPlanVisible&&!order.fixedSchedule&&order.supervision?.status!=='limited'&&<small>缺少有效固定计划</small>}
       {unavailableMilestone&&<small role="status">原里程碑不可查看或已变更</small>}
       {scopes.length>1&&<select aria-label="里程碑PO范围" value={scope?.scopeRef??''} onChange={event=>{
@@ -147,7 +150,7 @@ export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,on
      <div className="cockpit-flow-scroll"><div className="cockpit-stages">
       {flow.map((stage,index)=><CockpitStageProgress key={stage.key} stage={stage} index={index} lines={order.lines}
        scheduleAsOf={scheduleAsOf} fact={order.visualProgress?.stages.find(value=>value.key===stage.key)}
-       scoped={framework} dates={scopedDates?.stages.find(value=>value.key===stage.key)}
+       scoped={framework} dates={scopedDates?.stages.find(value=>value.key===stage.key)} milestones={scopeMilestones}
        selected={(framework?groupStages:legacyFlowSelection).includes(stage.key)} onSelect={()=>selectStage(stage.key)}/>)}
      </div></div>
     </section>

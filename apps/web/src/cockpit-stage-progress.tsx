@@ -2,6 +2,7 @@ import {CockpitTargetDifference,CockpitStageDifference} from './cockpit-fixed-sc
 import type {CockpitStageDates,JourneyBusinessDate,JourneyVisualStage,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {ScheduleOccurrence} from '@dx-rework/contracts';
 import {CockpitDate} from './cockpit-date.js';
+import {cockpitMilestoneLabel,type CockpitMilestone} from './cockpit-milestones.js';
 
 const known=(ratio:number|null|undefined):ratio is number=>typeof ratio==='number'&&Number.isFinite(ratio)&&ratio>=0&&ratio<=1;
 export const cockpitStagePercentage=(ratio:number|null|undefined)=>known(ratio)?`${ratio===1?100:Math.min(99.9,Math.round(ratio*1000)/10)}%`:'—';
@@ -12,7 +13,7 @@ function ScopedStageDate({value,missing}:{value:ScheduleOccurrence|undefined;mis
  return <CockpitDate value={value?.precision==='instant'?value.at:value?.precision==='date'?value.date:null} precision={value?.precision==='date'?'date':'instant'} missing={missing} short/>;
 }
 /** Only the shared server projection supplies progress, risk and date facts. */
-export function CockpitStageProgress({stage,index,fact,selected,scheduleAsOf,lines,onSelect,scoped,dates}:{stage:OrderJourney['stages'][number];index:number;fact:JourneyVisualStage|undefined;selected:boolean;lines?:OrderJourney['lines']|undefined;scheduleAsOf?:string|undefined;onSelect:()=>void;scoped?:boolean;dates?:CockpitStageDates|undefined;tooltipOpen?:boolean;onTooltipOpen?:()=>void;onTooltipClose?:()=>void}){
+export function CockpitStageProgress({stage,index,fact,selected,scheduleAsOf,lines,onSelect,scoped,dates,milestones=[]}:{stage:OrderJourney['stages'][number];index:number;fact:JourneyVisualStage|undefined;selected:boolean;lines?:OrderJourney['lines']|undefined;scheduleAsOf?:string|undefined;onSelect:()=>void;scoped?:boolean;dates?:CockpitStageDates|undefined;milestones?:CockpitMilestone[];tooltipOpen?:boolean;onTooltipOpen?:()=>void;onTooltipClose?:()=>void}){
  const time=cockpitStagePercentage(fact?.timeRatio),actual=cockpitStagePercentage(fact?.actualRatio);
  const started=Boolean(fact?.startedAt)||known(fact?.actualRatio)&&fact.actualRatio>0;
  const tone=!fact||fact.applicability!=='applicable'||fact.risk==='unknown'?'neutral':fact.risk==='overdue'?'danger':fact.risk==='due_soon'?'warning':started?'success':'neutral';
@@ -33,6 +34,13 @@ export function CockpitStageProgress({stage,index,fact,selected,scheduleAsOf,lin
     <div><span>实际：</span><ScopedStageDate value={dates?.actual} missing={dates?.actualComplete?'完成时间待核':'—'}/></div>
    </div>
    {dates?.goalDelta?<CockpitStageDifference goal={dates.goalDelta} asOf={scheduleAsOf} wrapUnits/>:<span>—</span>}
+   {Boolean(dates?.missingTargets.length)&&<details className="cockpit-original-stage-goal">
+    <summary>查看待核项</summary>
+    <ul>{dates?.missingTargets.map(key=>{
+     const evidence=milestones.find(item=>item.key===key)?.coverage.filter(Boolean);
+     return <li key={key}>{cockpitMilestoneLabel(key)}：{evidence?.length?evidence.join('；'):'缺少可核目标依据'}</li>;
+    })}</ul>
+   </details>}
    {dates?.differenceUsesOriginalTarget&&dates.goalDelta&&<details className="cockpit-original-stage-goal">
     <summary>差异按原目标</summary>
     <ScopedStageDate value={dates.goalDelta.targetPrecision==='date'&&dates.goalDelta.targetDate
