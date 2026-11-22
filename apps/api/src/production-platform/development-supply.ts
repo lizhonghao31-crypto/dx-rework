@@ -9,6 +9,7 @@ import {DigitalProductionAccessPolicy} from "./access-policy.js";
 import {DigitalProductionTaskService} from "./task-service.js";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import {materialReadiness} from "./development-material-readiness.js";
+import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_SUPPLY_CONFLICT",message,409);};
 export function validateDevelopmentReturn(document:DevelopmentDocument,input:DevelopmentCheck,retainedIssues:DevelopmentReturnIssue[]=[]){
@@ -64,18 +65,27 @@ export async function submitDevelopmentSupply(db:PoolClient,pool:Pool,actor:Trus
   const draft=(await db.query("SELECT 1 FROM digital_development_amendment_drafts WHERE source_id=$1 AND task_id=$2",[sourceId,taskId])).rowCount;
   if(draft||requirements?.issues.some(issue=>developmentReturnNeed(issue)==="document")&&!amendment)fail("本次包含资料补正，请打开本任务“补改资料”，保存并提交补正草稿；仅登记到货不能完成资料补正");
  }
- const missing=requirements?readiness.materials.filter(m=>requirements.issues.some(issue=>issue.materialId===m.materialId&&developmentReturnNeed(issue)==="supply"&&issue.field==="physical")&&!m.supplyAvailable):[...readiness.supplyMissing];
- if(requirements)for(const issue of requirements.issues.filter(issue=>developmentReturnNeed(issue)==="supply"&&issue.field!=="physical")){
-  const replacement=(await db.query("SELECT 1 FROM digital_development_material_events WHERE source_id=$1 AND material_id=$2 AND route_version=$3 AND action IN ('到货','确认代用') AND created_at>$4::timestamptz",[sourceId,issue.materialId,task.route_version,requirements.returnedAt])).rowCount;
-  const material=readiness.materials.find(m=>m.materialId===issue.materialId);if(!replacement&&material&&!missing.includes(material))missing.push(material);
+ const supplyIssues=requirements?.issues.filter(issue=>developmentReturnNeed(issue)==="supply")??[];
+ const clerkReceipts=supplyIssues.length>0&&Boolean(await developmentSlaPlan(db,sourceId));
+ const receiptMaterialIds=clerkReceipts?[...new Set(supplyIssues.flatMap(issue=>issue.materialId?[issue.materialId]:[]))]:[];
+ if(clerkReceipts&&receiptMaterialIds.some(id=>!readiness.materials.some(material=>material.materialId===id)))fail("退回的实物不在当前资料中，请先核对原补料材料");
+ if(!clerkReceipts){
+  const missing=requirements?readiness.materials.filter(material=>supplyIssues.some(issue=>issue.materialId===material.materialId&&issue.field==="physical")&&!material.supplyAvailable):[...readiness.supplyMissing];
+  for(const issue of supplyIssues.filter(issue=>issue.field!=="physical")){
+   const replacement=(await db.query("SELECT 1 FROM digital_development_material_events WHERE source_id=$1 AND material_id=$2 AND route_version=$3 AND action IN ('到货','确认代用') AND created_at>$4::timestamptz",[sourceId,issue.materialId,task.route_version,requirements?.returnedAt])).rowCount;
+   const material=readiness.materials.find(m=>m.materialId===issue.materialId);if(!replacement&&material&&!missing.includes(material))missing.push(material);
+  }
+  if(missing.length)fail(`实物尚未补齐：${missing.map(m=>m.name).join("、")}。请原设计师在本单“物料记录”登记到货，再提交文员复核`);
  }
- if(missing.length)fail(`实物尚未补齐：${missing.map(m=>m.name).join("、")}。请原设计师在本单“物料记录”登记到货，再提交文员复核`);
  const clerk=(await db.query(`SELECT a.assignee_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
   WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind IN ('development_materials','development_material_recheck')
   ORDER BY (t.task_id=$3::uuid) DESC,t.created_at DESC LIMIT 1`,[sourceId,task.route_version,requirements?.checkTaskId??null])).rows[0]?.assignee_id;
  const occurrence=Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_recheck'",[sourceId,task.occurrence+1])).rows[0].n);
  const tasks=new DigitalProductionTaskService(pool),next=await tasks.createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:taskId,kind:"development_material_recheck",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence,assigneeId:clerk&&await policy.activeRole(clerk,"development_clerk")?clerk:null});
- if((await db.query("SELECT 1 FROM digital_development_execution_facts WHERE source_id=$1 AND task_id=$2 AND kind='补料复核' AND payload->>'supplemental'='true'",[sourceId,taskId])).rowCount)await db.query("INSERT INTO digital_development_execution_facts(fact_id,source_id,task_id,kind,payload,actor_id) VALUES($1,$2,$3,'补料复核',$4,$5)",[randomUUID(),sourceId,next.taskId,JSON.stringify({supplemental:true,note:"补充核验本轮材料",priorTaskId:taskId}),actor.actorId]);
+ const supplemental=Boolean((await db.query("SELECT 1 FROM digital_development_execution_facts WHERE source_id=$1 AND task_id=$2 AND kind='补料复核' AND payload->>'supplemental'='true'",[sourceId,taskId])).rowCount);
+ if(supplemental||receiptMaterialIds.length)await db.query("INSERT INTO digital_development_execution_facts(fact_id,source_id,task_id,kind,payload,actor_id) VALUES($1,$2,$3,'补料复核',$4,$5)",[randomUUID(),sourceId,next.taskId,JSON.stringify({
+  priorTaskId:taskId,...(supplemental?{supplemental:true,note:"补充核验本轮材料"}:{}),...(receiptMaterialIds.length?{receiptMaterialIds,receiptDocumentVersion:sheet!.version}:{}),
+ }),actor.actorId]);
  await db.query("INSERT INTO digital_development_execution_facts(fact_id,source_id,task_id,kind,payload,actor_id) VALUES($1,$2,$3,'补料复核',$4,$5)",[randomUUID(),sourceId,taskId,JSON.stringify({nextTaskId:next.taskId,documentVersion:sheet?.version}),actor.actorId]);
  await tasks.setConditionWithClient(db,actor,taskId,"business_recorded",true,undefined);await tasks.completeWithClient(db,actor,taskId,{note:"补正 / 补料后提交文员复核"},`resubmit:${createHash("sha256").update(JSON.stringify([sourceId,taskId,key])).digest("hex")}`);return next;
 }

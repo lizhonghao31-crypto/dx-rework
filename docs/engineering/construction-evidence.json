@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-  "sourceFingerprint": "b5ee242f4d105ca8c7b7a30551f165472020e4027fd189e99b086d86f5acc1e9",
+  "sourceFingerprint": "2758e0f6e0e26e324e2e0771913cf457edb483c08613e417f9a11c793484e747",
   "rules": [
     {
       "rule": "分离创建、开发工作区和共享辅料目录，按源单组织六个固定入口并复用原业务表单。",
@@ -45,12 +45,9 @@
       "dateAndPermission": "历史轮只读保原业务日期。正式确认仍通过当前来源原资格、原时间检查与幂等命令，不凭工作台入口授予动作。",
       "expectation": "按款号打开原对象、六区键盘定位，专岗任务返回相同筛选与区域。正式订单只提交一次，成功显示对应订单，保留原来源。",
       "checks": [
-        "final-browser",
-        "final-pg",
-        "final-unit",
-        "final-static",
-        "final-craft",
-        "final-gate-preflight"
+        "1079-final-browser",
+        "1079-final-unit",
+        "1079-final-static"
       ]
     },
     {
@@ -80,10 +77,9 @@
       "dateAndPermission": "按当前任务角色与执行条件决定可办或只读，草稿数按原创建身份。未覆盖的非任务事项标为待核。",
       "expectation": "同单原生和索引路径返回同一已核办理集合。原角色拒绝仍有效，用户打开等待项仅得到原任务只读入口。",
       "checks": [
-        "final-browser",
-        "final-pg",
-        "final-unit",
-        "final-static"
+        "1079-final-browser",
+        "1079-final-unit",
+        "1079-final-static"
       ]
     },
     {
@@ -105,12 +101,15 @@
         "packages/contracts/src/digital-development.ts",
         "tests/integration/development-amendment-postgres.test.ts",
         "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts"
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "apps/api/src/production-platform/development-supply.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-service.ts#materialEvent",
         "apps/api/src/production-platform/development-material-verification.ts#appliedVerification",
-        "apps/web/src/development-material-event-form.tsx#DevelopmentAccessoryForecastForm"
+        "apps/web/src/development-material-event-form.tsx#DevelopmentAccessoryForecastForm",
+        "apps/api/src/production-platform/development-supply.ts#submitDevelopmentSupply",
+        "apps/api/src/production-platform/development-material-check-rules.ts#readMaterialRecheckBasis"
       ],
       "oldTests": [
         "tests/integration/development-amendment-postgres.test.ts",
@@ -122,128 +121,98 @@
       ],
       "initialization": "同一个合成开发单保面料和两件必要辅料。原复核只在文员提交后才应用事实；保留既有补正草稿和退出保护。",
       "dateAndPermission": "预计日期要求正确轮次、资料及材料记录版本。面料不写辅料预计，普通设计师不写实到；历史轮及 Root 原有路径分别验证。",
-      "expectation": "更新辅料预计不会放行车板。仅核一件及保存两件草稿均继续等待，文员逐件实核提交后原车板人员才可办理。",
+      "expectation": "更新辅料预计不会放行车板。仅核一件及保存两件草稿均继续等待，文员逐件实核提交后原车板人员才可办理。 对原退回补料按准确当前轮、材料与版本用原任务投递给文员。交接和补核草稿不产生实到；文员逐项正式通过才生效。保留旧补料路径及资料问题未改拒绝。",
       "checks": [
-        "final-browser",
-        "final-pg",
-        "final-static"
+        "1079-final-amendment",
+        "1079-final-browser",
+        "1079-final-unit",
+        "1079-final-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "final-craft",
+      "id": "1079-final-amendment",
+      "status": "passed",
+      "exitCode": 0,
+      "context": "Node 22.22.2，隔离低权限 PostgreSQL 16.16，原开发资料、命令、设计师和开发文员的授权；串行执行。",
+      "testedHead": "82f83ca6f839b5fbd2a5d3d2228b0ee64aaeea13",
+      "sourceFingerprint": "2758e0f6e0e26e324e2e0771913cf457edb483c08613e417f9a11c793484e747",
+      "startedAt": "2026-11-22T22:01:31Z",
+      "endedAt": "2026-11-22T22:02:01Z",
+      "log": "/tmp/dx-designer-workbench-evidence/1079-final-amendment.log",
+      "logSha256": "937a14caafe10db3c987a2467fe2ec8a4b6fd9da58250d8a6a7c175e1863d5c7",
       "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-      "sourceFingerprint": "b5ee242f4d105ca8c7b7a30551f165472020e4027fd189e99b086d86f5acc1e9",
-      "context": "隔离 PostgreSQL 16.16、原应用 Chromium、原签名人，串行 maxWorkers=1；核新入口保存和重开原工艺草稿。",
-      "startedAt": "2026-11-22T21:49:31Z",
-      "endedAt": "2026-11-22T21:49:58Z",
-      "logSha256": "537f382cd5d95ddf65af9d641a3f92ebca1a563f5acabebd18b5003e4405c31c",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/final-craft.json tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts -t 'saves the actual chosen craft order|keeps new managed drafts'",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 6,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "be6ad295cfe8cd8e0cfaccd360fd280c2e7ff868bb858e22b56a8da4141df059"
-        }
-      ]
-    },
-    {
-      "id": "final-gate-preflight",
-      "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-      "sourceFingerprint": "b5ee242f4d105ca8c7b7a30551f165472020e4027fd189e99b086d86f5acc1e9",
-      "context": "Node 22.22.2 本地执行；时间来源清单保留先前语义，未引入工作流变更。",
-      "startedAt": "2026-11-22T21:49:58Z",
-      "endedAt": "2026-11-22T21:50:08Z",
-      "logSha256": "1f743ca5367ba4137abf11a575f1e42ea2a4fede00025d00a0620ece2dc1994a",
-      "command": "npm run secret:scan && node --test scripts/ci/pr-gate-controller.test.mjs && npm run test:preflight"
-    },
-    {
-      "id": "final-browser",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-      "sourceFingerprint": "b5ee242f4d105ca8c7b7a30551f165472020e4027fd189e99b086d86f5acc1e9",
-      "context": "隔离 PostgreSQL 16.16、真实签名账号、Chromium 原应用、Node 22 本地锁定依赖，串行 maxWorkers=1；源码由工作树指纹绑定。",
-      "startedAt": "2026-11-22T21:44:02Z",
-      "endedAt": "2026-11-22T21:44:51Z",
-      "logSha256": "ece8d94c2e07193ce67fc5db85b2e273223067db3800faa28a7edc2afda5bd48",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/final-browser.json tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts -t 'six workbench areas|only the required accessory forecast|keeps reserved draft facts|inherits the original verified|records a date-only material occurrence|failed confirm precheck'",
-      "passed": 6,
-      "failed": 0,
-      "skipped": 23,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "5abb11406ae91e7c09e3fb20e367ee567800b43de5b7ade67a35f93be5a954ef"
-        }
-      ]
-    },
-    {
-      "id": "final-pg",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-      "sourceFingerprint": "b5ee242f4d105ca8c7b7a30551f165472020e4027fd189e99b086d86f5acc1e9",
-      "context": "隔离 PostgreSQL 16.16 与各套件原生 schema、真实业务身份及签名 App，沿现有生命周期清理，maxWorkers=1；源码由工作树指纹绑定。",
-      "startedAt": "2026-11-22T21:44:51Z",
-      "endedAt": "2026-11-22T21:47:57Z",
-      "logSha256": "7f5593712a74eda714b92687ca4b9b891c5508e55596eca987c7afd6f860cd58",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/final-pg.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/development-amendment-postgres.test.ts tests/integration/workspace-page-facts-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts",
-      "passed": 110,
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-final-amendment.json tests/integration/development-amendment-postgres.test.ts",
+      "passed": 26,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c0cbb4006b29bbd1de0c694d9644680b80a526d7bd21664a815455381be3178c"
+          "sha256": "0035f8791b243ccae345283692f476f8e0766bd9efd0c05a8b8c83841e5e46fa"
         }
       ]
     },
     {
-      "id": "final-unit",
-      "kind": "tests",
+      "id": "1079-final-browser",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-      "sourceFingerprint": "b5ee242f4d105ca8c7b7a30551f165472020e4027fd189e99b086d86f5acc1e9",
-      "context": "本地 Node 22 和 Vitest，非数据库原工作区及导航回归，maxWorkers=1；源码由工作树指纹绑定。",
-      "startedAt": "2026-11-22T21:45:04Z",
-      "endedAt": "2026-11-22T21:45:07Z",
-      "logSha256": "def128f4632d9cef22d32d678ec6c340b738290cd1570d4e180da007452e6f75",
-      "command": "DX_REWORK_TEST_SUITE_KIND=non-db npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/final-unit.json tests/unit/digital-development-workspace.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/finance-navigation-hierarchy.test.ts",
-      "passed": 21,
+      "context": "Node 22.22.2，隔离 PostgreSQL 16.16，原 App 及 Chromium、签名身份；专测位置、回执、授权、预计和 M05 工序门禁。",
+      "testedHead": "82f83ca6f839b5fbd2a5d3d2228b0ee64aaeea13",
+      "sourceFingerprint": "2758e0f6e0e26e324e2e0771913cf457edb483c08613e417f9a11c793484e747",
+      "startedAt": "2026-11-22T22:02:01Z",
+      "endedAt": "2026-11-22T22:02:50Z",
+      "log": "/tmp/dx-designer-workbench-evidence/1079-final-browser.log",
+      "logSha256": "fb38cd81f923839c3dd8fd76097dc0c3058739a54644d5d073b3c0575bb9dfd9",
+      "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-final-browser.json tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts -t 'six workbench areas|only the required accessory forecast|failed confirm precheck|M05 lets paper and cutting proceed'",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 64,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "4c4c36304bcc0c77c00f8c5127de76d0b231dde59ebad93991eda01fe5931839"
+        }
+      ]
+    },
+    {
+      "id": "1079-final-unit",
+      "status": "passed",
+      "exitCode": 0,
+      "context": "Node 22.22.2，定向的核料、补正合同和设计工作区单测。",
+      "testedHead": "82f83ca6f839b5fbd2a5d3d2228b0ee64aaeea13",
+      "sourceFingerprint": "2758e0f6e0e26e324e2e0771913cf457edb483c08613e417f9a11c793484e747",
+      "startedAt": "2026-11-22T22:01:31Z",
+      "endedAt": "2026-11-22T22:01:36Z",
+      "log": "/tmp/dx-designer-workbench-evidence/1079-final-unit.log",
+      "logSha256": "d2f422284f80b0c75c0e088ddd9e63b92dcdc1144c26745affbc1779c7b08109",
+      "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=non-db npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-final-unit.json tests/unit/material-bulk-checks.test.ts tests/unit/development-amendment-contract.test.ts tests/unit/digital-development-workspace.test.ts",
+      "passed": 26,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d3e401392129a3bbcac74fda889ade52faab07efb58dd732837d9fc799b233c9"
+          "sha256": "4aa176da35b455093f1dd02c0a2c128e7540e94a7f8b59eb471477bca54b436e"
         }
       ]
     },
     {
-      "id": "final-static",
-      "kind": "command",
+      "id": "1079-final-static",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-      "sourceFingerprint": "b5ee242f4d105ca8c7b7a30551f165472020e4027fd189e99b086d86f5acc1e9",
-      "context": "本地 Node 22、已更新的工作区包和针对改动文件的类型与 ESLint 检查；源码由工作树指纹绑定。",
-      "startedAt": "2026-11-22T21:44:01Z",
-      "endedAt": "2026-11-22T21:45:04Z",
-      "logSha256": "932545329e6ed0ef2ab16f257c191254c223f70018896f7fcae4409575d6de3e",
-      "command": "npm run -w apps/api typecheck && npm run -w apps/web typecheck && npm exec -- eslint $(git diff --name-only | rg '\\.tsx?$') apps/web/src/designer-order-workbench.tsx && git diff --check"
+      "context": "Node 22.22.2；API 和 Web 类型、基线到候选的命中 TS/TSX lint、业务时间来源清单。",
+      "testedHead": "82f83ca6f839b5fbd2a5d3d2228b0ee64aaeea13",
+      "sourceFingerprint": "2758e0f6e0e26e324e2e0771913cf457edb483c08613e417f9a11c793484e747",
+      "startedAt": "2026-11-22T22:01:36Z",
+      "endedAt": "2026-11-22T22:02:34Z",
+      "log": "/tmp/dx-designer-workbench-evidence/1079-final-static.log",
+      "logSha256": "b2e9c71ed3da4d45279135b363f95684985cdb661aac0c08234e1fed11b78ccf",
+      "kind": "command",
+      "command": "npm run -w apps/api typecheck && npm run -w apps/web typecheck && npm exec -- eslint $(git diff --name-only 5f00c462 | rg '\\.tsx?$') && node scripts/acceptance/time-site-inventory.mjs && git diff --check"
     }
   ]
 }

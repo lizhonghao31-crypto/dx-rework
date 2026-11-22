@@ -25,7 +25,7 @@ export async function readMaterialVerification(db:DB,sourceId:string,round:numbe
  }
  const people=(await db.query("SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",[entries.map(e=>e.changedBy).filter(Boolean)])).rows;
  for(const entry of entries)entry.changedBy=people.find(p=>p.id===entry.changedBy)?.display_name??entry.changedBy;
- const bulkRules=(await readMaterialBulkRules(db,sourceId,round,document,checkTaskId)).filter(row=>entries.some(entry=>entry.materialId===row.materialId));
+ const bulkRules=(await readMaterialBulkRules(db,sourceId,round,document,documentVersion,checkTaskId)).filter(row=>entries.some(entry=>entry.materialId===row.materialId));
  for(const entry of entries)for(const field of entry.invalidatedChecks??[]){const rule=bulkRules.find(row=>row.materialId===entry.materialId)?.checks[field];if(rule){rule.canSelect=false;rule.reason="对应资料已变更，请先逐项重新核实并保存；本次全选不代替复核";}}
  return {bulkRules,returnIssues:saved?.draft_return_issues??[],version:saved?.version??0,documentVersion,taskId:saved?.task_id??null,note:saved?.draft_note??"",result:saved?.draft_result??"通过",entries};
 }
