@@ -27,7 +27,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const current=await settings.read(root);
   await settings.save(root,{expectedVersion:current.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
   const {context,page}=await h.open(undefined,{},1165);try{
-   await page.goto(h.base+'/ui/digital-production?workspace=designer');await page.getByRole('button',{name:'新建开发订单',exact:true}).waitFor();await dismiss(page);await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await page.goto(h.base+'/ui/digital-production?workspace=designer&section=create');await page.getByRole('button',{name:'新建开发订单',exact:true}).waitFor();await dismiss(page);await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
    const choices=page.getByRole('group',{name:'工艺',exact:true});await choices.waitFor();
    await page.getByRole('textbox',{name:'设计款号',exact:true}).fill('TEST-FIXED-UI-'+randomUUID());
    await choices.getByRole('checkbox',{name:'印花',exact:true}).check();await choices.getByRole('checkbox',{name:'绣花',exact:true}).check();

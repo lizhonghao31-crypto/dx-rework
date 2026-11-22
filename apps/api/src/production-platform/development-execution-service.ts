@@ -181,7 +181,7 @@ export class DevelopmentExecutionService {
       const task=await this.task(db,sourceId,input.taskId);if(!["development_materials","development_material_recheck"].includes(task.task_kind)||task.state!=="ready")fail("当前不是可办理的核配任务");
       const supplemental=Boolean((await db.query("SELECT 1 FROM digital_development_execution_facts WHERE source_id=$1 AND task_id=$2 AND kind='补料复核' AND payload->>'supplemental'='true'",[sourceId,input.taskId])).rowCount);
       const sheet=await this.forms().read(actor,sourceId,db,task.route_version),document=sheet.document!;
-      const verification=await readMaterialVerification(db,sourceId,task.route_version,document,sheet.version);
+      const verification=await readMaterialVerification(db,sourceId,task.route_version,document,sheet.version,input.taskId);
       if(verification){
         assertMaterialChecks(verification,verification.entries);
         if(!verification.version||input.expectedVerificationVersion!==verification.version)fail("请先保存本轮材料使用确认，再提交核料结果；已有记录不会被覆盖");

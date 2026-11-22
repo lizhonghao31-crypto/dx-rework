@@ -150,7 +150,7 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
 }
 type ExecutionProps=Parameters<typeof useDevelopmentExecution>[0];
 export function DevelopmentExecutionPanel(props:ExecutionProps){const controller=useDevelopmentExecution(props);return <DevelopmentExecutionBody {...props} controller={controller}/>;}
-export function DevelopmentExecutionBody({sourceId,taskId,workspace=false,taskOnly=false,controller}:{controller:ReturnType<typeof useDevelopmentExecution>;taskOnly?:boolean}&ExecutionProps){
+export function DevelopmentExecutionBody({sourceId,taskId,workspace=false,taskOnly=false,separateCustomer=false,controller}:{controller:ReturnType<typeof useDevelopmentExecution>;taskOnly?:boolean;separateCustomer?:boolean}&ExecutionProps){
   const {state,people,error,writeError,readError,peopleError,reading,peopleReading,recheck,retryPeople,busy,uncertainWrite,craftFiles,sewingFiles,tailFiles,tailReturn,setTailReturn,base,urls,run}=controller;
   const [reopenNote,setReopenNote]=useState("");
   const readTask=state?.tasks.find(task=>task.taskId===taskId);
@@ -194,7 +194,7 @@ export function DevelopmentExecutionBody({sourceId,taskId,workspace=false,taskOn
 
     {!taskOnly&&<DevelopmentFabricDecisions controller={controller}/>}
     {!taskOnly&&!materialCheck&&state.canReportFabric&&<DocumentEntry category="materials" label="面料检测报告"><DevelopmentFabricReport controller={controller}/></DocumentEntry>}
-    {!taskOnly&&!materialCheck&&<DevelopmentCustomerConfirmation controller={controller}/>}
+    {!taskOnly&&!materialCheck&&!separateCustomer&&<DevelopmentCustomerConfirmation controller={controller}/>}
     {!taskOnly&&<details><summary>工艺至寄样记录</summary>{state.routeFacts.map(fact=><div key={fact.factId}><p>第 {fact.routeVersion} 轮 · {fact.kind} · {fact.payload.sentDate??""} {fact.payload.trackingNo??""} · {fact.payload.note??""}</p>{fact.payload.inspection&&<details><summary>{fact.payload.inspection.phase}实际尺寸（{fact.payload.inspection.unit}）</summary>{fact.payload.inspection.measurements.map((row,index)=><p key={index}>{row.name}：{row.values.map((value,column)=>`${fact.payload.inspection!.sizes[column]} ${value}`).join(" / ")}</p>)}</details>}</div>)}</details>}
     {controller.reopenReceipt&&!taskOnly&&<p role="status">已接回文员重新核料，尚未确认通过。<a href={controller.reopenReceipt.target}>打开本轮核料页</a></p>}
     {state.reopenMaterialCheck&&!controller.reopenReceipt&&!taskOnly&&<form onSubmit={event=>{event.preventDefault();void run("reopen-materials",{...state.reopenMaterialCheck,note:reopenNote});}}><h3>文员重新确认本轮用途</h3><p>沟通后用途有变，由文员接回原核料页重新确认。原补正／补料将结束并保留记录；尚未重新核料通过，工序不会自动放行。资料缺错与质量问题仍须处理。</p><label>重新核料说明<textarea required maxLength={1000} value={reopenNote} disabled={busy||uncertainWrite} onChange={event=>setReopenNote(event.target.value)}/></label><Button type="submit" disabled={busy||uncertainWrite}>接回文员重新核料</Button></form>}

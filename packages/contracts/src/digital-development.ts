@@ -70,7 +70,7 @@ export const DevelopmentOccurrenceSchema=z.discriminatedUnion('precision',[
  z.object({precision:z.literal('unknown')}).strict(),
 ]);
 export type DevelopmentOccurrence=z.infer<typeof DevelopmentOccurrenceSchema>;
-export const DevelopmentMaterialEventSchema = z.object({ actualTime:DevelopmentOccurrenceSchema.optional(),expectedMaterialRevision: z.number().int().nonnegative(), expectedVersion: z.number().int().positive(), action: z.enum(["到货", "修改预计日期", "确认代用"]), expectedDate: z.iso.date().nullable(), note: text }).strict().superRefine((value, context) => {
+export const DevelopmentMaterialEventSchema = z.object({ actualTime:DevelopmentOccurrenceSchema.optional(),expectedRound: z.number().int().positive().optional(), expectedMaterialRevision: z.number().int().nonnegative(), expectedVersion: z.number().int().positive(), action: z.enum(["到货", "修改预计日期", "确认代用"]), expectedDate: z.iso.date().nullable(), note: text }).strict().superRefine((value, context) => {
   if (value.action === "修改预计日期" && !value.expectedDate) context.addIssue({code:"custom",path:["expectedDate"],message:"请填写预计日期"});
   if (value.action === "确认代用" && !value.note) context.addIssue({code:"custom",path:["note"],message:"请填写代用说明"});
 });
@@ -135,6 +135,8 @@ export type DevelopmentSheet = {
   developmentCreatedDate?:string;
   draftDocumentDate?:string;
   unavailableDraftAttachments?:string[];
+  materialForecastOnly?:boolean;
+  materialForecastBlocked?:string;
   metadata?:JourneyDocumentMetadata;
   materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
   productionOrderId?:string|null;

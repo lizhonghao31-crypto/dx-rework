@@ -225,7 +225,7 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
   expect((await forms.read(designer,old.sourceId)).timelineSchemaVersion).toBeUndefined();
   const standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
   const craft=await new SpecialCraftLibraryService(h.db).save(h.f.root,{id:null,expectedVersion:0,definition:{name:'TEST managed draft special',enabled:true,development:standard,bulk:standard}},randomUUID());
-  const style='TEST-MANAGED-DRAFT-'+randomUUID(),tab=await h.open(designer.actorId,1165,{},'/ui/digital-production');
+  const style='TEST-MANAGED-DRAFT-'+randomUUID(),tab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page;
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();

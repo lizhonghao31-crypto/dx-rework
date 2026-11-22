@@ -140,7 +140,9 @@ const url=process.env.TEST_DATABASE_URL;
   await db.query(`CREATE FUNCTION d08_injected_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'TEST D08 transaction interruption'; END $$; CREATE TRIGGER d08_injected_failure BEFORE INSERT ON audit_events FOR EACH ROW WHEN (NEW.entity_id='${f.sourceId}' AND NEW.action='development_material_reopen') EXECUTE FUNCTION d08_injected_failure()`);
   try{await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,input,key)).rejects.toThrow("TEST D08 transaction interruption");}finally{await db.query("DROP TRIGGER d08_injected_failure ON audit_events; DROP FUNCTION d08_injected_failure()");}
   expect((await tasks.read(actor("designer"),f.supply.taskId)).state).toBe('ready');expect(Number((await db.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[f.sourceId])).rows[0].n)).toBe(before);
-  await forms.materialEvent(actor("designer"),f.sourceId,f.materialId,{expectedMaterialRevision:0,expectedVersion:f.sheet.version,action:"到货",expectedDate:null,note:"TEST与文员接回同时提交的真实到货"},randomUUID());
+  const material={expectedMaterialRevision:0,expectedVersion:f.sheet.version,action:"到货" as const,expectedDate:null,note:"TEST与文员接回同时提交的真实到货"};
+  await expect(forms.materialEvent(actor("designer"),f.sourceId,f.materialId,material,randomUUID())).rejects.toMatchObject({statusCode:403});
+  await forms.materialEvent(actor("root"),f.sourceId,f.materialId,material,randomUUID());
   const results=await Promise.allSettled([execution.reopenMaterials(actor("clerk"),f.sourceId,input,key),execution.resubmit(actor("designer"),f.sourceId,f.supply.taskId,randomUUID())]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
   expect((await db.query("SELECT count(*)::int n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_materials','development_material_supply','development_material_recheck') AND t.state IN ('pending','ready','blocked')",[f.sourceId])).rows[0].n).toBe(1);expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(false);
  });
@@ -279,11 +281,11 @@ const url=process.env.TEST_DATABASE_URL;
  it("does not confuse a material arrival with correcting data and atomically retains the draft on a mixed rejection",async()=>{
   const f=await prepare("specification",true),{saved}=await save(f),body={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:saved.draftVersion};
   await expect(amendments.submit(actor("designer"),f.sourceId,body,randomUUID())).rejects.toThrow("实物尚未补齐");expect((await forms.read(actor("designer"),f.sourceId)).version).toBe(f.sheet.version);expect((await amendments.read(actor("designer"),f.sourceId,f.supply.taskId)).draft?.version).toBe(saved.draftVersion);
-  await forms.materialEvent(actor("designer"),f.sourceId,f.materialId,{expectedVersion:f.sheet.version,expectedMaterialRevision:0,action:"到货",expectedDate:null,note:"TEST实物到货"},randomUUID());
+  await forms.materialEvent(actor("root"),f.sourceId,f.materialId,{expectedVersion:f.sheet.version,expectedMaterialRevision:0,action:"到货",expectedDate:null,note:"TEST实物到货"},randomUUID());
   const response=await amendments.submit(actor("designer"),f.sourceId,body,randomUUID());expect(response.documentVersion).toBe(f.sheet.version+1);expect((await execution.read(actor("clerk"),f.sourceId)).tasks.filter(t=>t.taskKind==="development_material_recheck")).toHaveLength(1);
  });
  it("submits a physical-only replenishment without inventing another document revision and exposes the original command receipt",async()=>{
-  const f=await prepare("physical",true);await forms.materialEvent(actor("designer"),f.sourceId,f.materialId,{expectedVersion:f.sheet.version,expectedMaterialRevision:0,action:"到货",expectedDate:null,note:"TEST实物到货"},randomUUID());
+  const f=await prepare("physical",true);await forms.materialEvent(actor("root"),f.sourceId,f.materialId,{expectedVersion:f.sheet.version,expectedMaterialRevision:0,action:"到货",expectedDate:null,note:"TEST实物到货"},randomUUID());
   const body={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:0},key="x".repeat(128);
   const result=await amendments.submit(actor("designer"),f.sourceId,body,key);expect(result).toMatchObject({documentVersion:f.sheet.version,amendmentId:null});expect((await amendments.receipt(actor("designer"),f.sourceId,f.supply.taskId,"submit",key)).receipt).toEqual(result);expect((await amendments.receipt(actor("designer"),f.sourceId,f.supply.taskId,"submit",randomUUID())).receipt).toBeNull();
   expect((await forms.read(actor("designer"),f.sourceId)).version).toBe(f.sheet.version);expect((await db.query("SELECT count(*)::int n FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(0);

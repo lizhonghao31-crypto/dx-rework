@@ -129,7 +129,7 @@ export class DigitalJourneyQuery {
 )
     ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id,patternKinds])).rows;
   }
-  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[])=>OrderJourney[],options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all"}={}) {
+  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[],db:PoolClient)=>OrderJourney[]|Promise<OrderJourney[]>,options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all"}={}) {
     assertIdentityActor(actor);
     if(this.options.listReadMode==='indexed'&&filter.scope&&!exportAll&&!selectPage&&options.details!==false&&!options.patternBusiness)
       return this.snapshot((db,asOf,transaction)=>this.indexedList(db,actor,filter,asOf,transaction));
@@ -166,7 +166,7 @@ export class DigitalJourneyQuery {
       const result=selectJourneys(items,filter,asOf,!exportAll);
       endFilter();
       if(summaryOnly&&options.details!==false&&!filter.scope){
-        const details:OrderJourney[]=[],selected=selectPage?selectPage(result.items):result.items;
+        const details:OrderJourney[]=[],selected=selectPage?await selectPage(result.items,db):result.items;
         const nativeByCandidate=new Map(items.map(item=>[candidates.get(item.id)!,this.authorizedTasks.get(item)??[]]));
         const taskIds=selected.flatMap(summary=>(nativeByCandidate.get(candidates.get(summary.id)!)??[])
           .filter(task=>journeyDefinition(task.key)).map(task=>task.id));
@@ -201,7 +201,7 @@ export class DigitalJourneyQuery {
   /** Read minimal authorized facts once, then hydrate only the objects the
    * workspace actually displays. No GET-side rebuild or stale-result fallback. */
   async workspace<T>(actor:TrustedActorContext,filter:JourneyFilter,patternBusiness:"development"|"bulk"|"all"|undefined,
-    select:(items:WorkspaceJourneyFact[],asOf:string,freshness?:NonNullable<JourneyResult['freshness']>)=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
+    select:(items:WorkspaceJourneyFact[],asOf:string,freshness:NonNullable<JourneyResult['freshness']>|undefined,db:PoolClient)=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
     if(this.options.listReadMode!=='indexed')return null;
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf,transaction)=>{
@@ -220,7 +220,7 @@ export class DigitalJourneyQuery {
         facts.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[]});byId.set(row.selection.id,candidate);
       }
       const freshness=()=>pending||failed?{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}:undefined;
-      const plan=await select(facts,asOf,freshness()),details=new Map<string,OrderJourney>(),detailFailures:string[]=[];
+      const plan=await select(facts,asOf,freshness(),db),details=new Map<string,OrderJourney>(),detailFailures:string[]=[];
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,plan.ids.flatMap(id=>byId.get(id)?.order?[byId.get(id)!.order!.production_order_id]:[]));
       const pagePlan=patternBusiness?undefined:await this.prepareWorkspaceTaskPage(db,transaction,actor,plan.ids,byId,detailFailures);
       for(const id of new Set(plan.ids)){

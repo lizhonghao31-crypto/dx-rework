@@ -3,11 +3,14 @@ import { DigitalAnalysisFilterSchema } from '@dx-rework/contracts/digital-produc
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { createWebUrls } from "../url-contract.js";
 import {documentCategories,documentChapterIds,taskTabLabels} from './digital-detail-context.js';
+import {DESIGNER_ORDER_AREAS,DESIGNER_WORKSPACE_SECTIONS} from './digital-workspace-navigation.js';
 
 const designerDocumentKeys=['round','instructionVersion','budgetVersion','documentCategory','documentChapter','documentKind'] as const;
 const selectedDocumentVersion=z.union([z.literal('current'),z.string().regex(/^[1-9]\d*$/).refine(value=>Number.isSafeInteger(Number(value)))]).optional();
 const designerReturnSchema=DevelopmentWorkspaceFilterSchema.safeExtend({
   workspace:z.literal('designer'),selected:z.string().uuid().optional(),development:z.string().uuid().optional(),
+  section:z.enum(DESIGNER_WORKSPACE_SECTIONS).optional(),
+  area:z.enum(DESIGNER_ORDER_AREAS).optional(),
   round:z.string().regex(/^[1-9]\d*$/).refine(value=>Number.isSafeInteger(Number(value))).optional(),
   documentCategory:z.enum(documentCategories).optional(),documentChapter:z.enum(documentChapterIds).optional(),
   documentKind:z.enum(['development','instruction','budget']).optional(),
@@ -30,7 +33,8 @@ export function developmentWorkspaceReturnUrl(value: string | null, base: string
     if (url.pathname === urls.pageUrl("ui/digital-pattern-room") && PatternWorkspaceFilterSchema.safeExtend({section:z.enum(["development","bulk"]).optional(),bulkOrder:z.string().uuid().optional(),task: z.string().uuid().optional(), taskView: z.enum(["read","handle","correct"]).optional(),taskTab:z.enum(Object.keys(taskTabLabels) as [keyof typeof taskTabLabels,...Array<keyof typeof taskTabLabels>]).optional(),documentCategory:z.enum(documentCategories).optional(),documentChapter:z.enum(documentChapterIds).optional(),documentKind:z.enum(["development","instruction","budget"]).optional(),round:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),instructionVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),budgetVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional()}).safeParse(query).success) return url.pathname + url.search;
     if (url.pathname === urls.pageUrl("ui/digital-production")) {
       const designer=designerReturnSchema.safeParse(query);
-      if(designer.success&&(designer.data.development||!designerDocumentKeys.some(key=>url.searchParams.has(key))))return url.pathname+url.search;
+      if(designer.success&&(!designer.data.area||designer.data.section==='workspace'&&designer.data.development)
+        &&(designer.data.development||!designerDocumentKeys.some(key=>url.searchParams.has(key))))return url.pathname+url.search;
     }
   } catch { /* A malformed return target has no navigation effect. */ }
   return null;

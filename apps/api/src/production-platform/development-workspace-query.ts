@@ -6,6 +6,9 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { isRootActor } from "../access/business-authority.js";
 import { digitalForbidden, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 import {journeyMatchesSearch} from "./journey-projection.js";
+import type {PoolClient} from 'pg';
+import type {DevelopmentWorkspaceHandling} from '@dx-rework/contracts/digital-development-workspace';
+import type {DigitalProductionNotificationService} from './notification-service.js';
 
 /** Display views only. The original publication, route and order facts remain authoritative. */
 export function developmentView(item: OrderJourney): DevelopmentView {
@@ -28,25 +31,51 @@ export function patternTasks(items: OrderJourney[]): PatternWorkspaceTask[] {
 }
 
 export class DevelopmentWorkspaceQuery {
-  constructor(private readonly journeys: DigitalJourneyQuery) {}
+  constructor(private readonly journeys: DigitalJourneyQuery,private readonly notifications?:Pick<DigitalProductionNotificationService,'workbenchNativeActions'>) {}
+
+  private async handling(db:PoolClient,actor:TrustedActorContext,rows:readonly {id:string;nodes:readonly Pick<WorkspaceNodeFact,'instanceId'|'current'|'planningOnly'|'owner'>[]}[]){
+    const activeNodes=(row:typeof rows[number])=>row.nodes.filter(node=>node.current&&!node.planningOnly&&/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(node.instanceId));
+    const requested=[...new Set(rows.flatMap(row=>activeNodes(row).map(node=>node.instanceId)))];
+    const native=await this.notifications?.workbenchNativeActions(db,actor,requested)??[];
+    const priority={returned:0,mine:1,waiting:2};
+    const ordered=native.sort((left,right)=>priority[left.kind]-priority[right.kind]);
+    const order=new Map(ordered.map((item,index)=>[item.id,{item,index}]));
+    return new Map<string,DevelopmentWorkspaceHandling>(rows.map(row=>{
+      const owners=new Map(activeNodes(row).map(node=>[node.instanceId,node.owner?.name]));
+      const items=[...owners].flatMap(([id,ownerName])=>{
+        const match=order.get(id);return match?[{index:match.index,item:{...match.item,...(match.item.kind==='waiting'&&ownerName?{ownerName}:{})}}]:[];
+      }).sort((left,right)=>left.index-right.index).map(({item})=>item);
+      return [row.id,{items,complete:false}];
+    }));
+  }
+
   async designer(actor: TrustedActorContext, filter: DevelopmentWorkspaceFilter): Promise<DevelopmentWorkspaceResult> {
     if (!isRootActor(actor) && !(actor.actorRoles.includes("sample_designer") && actor.authorizationCapabilities?.includes("pattern_room:orders:create"))) digitalForbidden();
-    const indexed=await this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search,...(filter.customer?{customer:filter.customer}:{}),startDate:filter.startDate,endDate:filter.endDate}),undefined,(facts,asOf,freshness)=>{
-      const all=facts.filter(item=>!filter.designer||item.designer===filter.designer).map(journey=>({journey,view:developmentNodesView(journey.orderId,journey.nodes),canConfirm:!journey.orderId&&Boolean(journey.sourceId)&&(isRootActor(actor)||journey.nodes.some(node=>node.key==='product_development'&&node.owner?.id===actor.actorId))}));
+    const viewMatches=(item:{view:DevelopmentView;handling?:DevelopmentWorkspaceHandling|undefined})=>{
+      if(filter.layout==='workbench'&&item.view==='draft')return false;
+      if(filter.view!=='all'&&item.view!==filter.view)return false;
+      return !filter.handling||filter.handling==='all'||item.handling?.items.some(action=>action.kind===filter.handling||filter.handling==='mine'&&action.kind==='returned');
+    };
+    const indexed=await this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search,...(filter.customer?{customer:filter.customer}:{}),startDate:filter.startDate,endDate:filter.endDate}),undefined,async(facts,asOf,freshness,db)=>{
+      const scoped=facts.filter(item=>!filter.designer||item.designer===filter.designer);
+      const handling=filter.layout==='workbench'?await this.handling(db,actor,scoped):undefined;
+      const all=scoped.map(journey=>({journey,view:developmentNodesView(journey.orderId,journey.nodes),canConfirm:!journey.orderId&&Boolean(journey.sourceId)&&(isRootActor(actor)||journey.nodes.some(node=>node.key==='product_development'&&node.owner?.id===actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
       const counts=Object.fromEntries(DEVELOPMENT_VIEWS.map(view=>[view.key,view.key==='all'?all.length:all.filter(item=>item.view===view.key).length])) as DevelopmentWorkspaceResult['counts'];
-      const filtered=filter.view==='all'?all:all.filter(item=>item.view===filter.view),page=filtered.slice(((freshness?1:filter.page)-1)*15,(freshness?1:filter.page)*15);
+      const filtered=all.filter(viewMatches),page=filtered.slice(((freshness?1:filter.page)-1)*15,(freshness?1:filter.page)*15);
       return {ids:page.map(item=>item.journey.id),finish:(details,finalFreshness=freshness,detailFailures=[])=>({asOf,page:finalFreshness?1:filter.page,pageSize:15 as const,total:finalFreshness?null:filtered.length,counts:finalFreshness?null:counts,...(finalFreshness?{freshness:finalFreshness}:{}),...(detailFailures.length?{detailFailures:detailFailures.map(id=>({journeyId:id,designStyleNo:facts.find(item=>item.id===id)!.designStyleNo}))}:{}),designers:[...new Set(facts.flatMap(item=>item.designer?[item.designer]:[]))].sort(),customers:[...new Set(facts.flatMap(item=>item.customer?[item.customer]:[]))].sort(),items:page.filter(item=>details.has(item.journey.id)).map(item=>({...item,journey:details.get(item.journey.id)!}))})};
     });
     if(indexed)return indexed;
-    let selectionFacts:OrderJourney[]|undefined;
-    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({ search: filter.search, ...(filter.customer ? {customer: filter.customer} : {}), startDate: filter.startDate, endDate: filter.endDate }), true,items=>{
+    let selectionFacts:OrderJourney[]|undefined,handling:Map<string,DevelopmentWorkspaceHandling>|undefined;
+    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({ search: filter.search, ...(filter.customer ? {customer: filter.customer} : {}), startDate: filter.startDate, endDate: filter.endDate }), true,async(items,db)=>{
       selectionFacts=items;
-      return items.filter(item=>(!filter.designer||item.designer===filter.designer)&&(filter.view==='all'||developmentView(item)===filter.view)).slice((filter.page-1)*15,filter.page*15);
+      const scoped=items.filter(item=>!filter.designer||item.designer===filter.designer);
+      if(filter.layout==='workbench')handling=await this.handling(db,actor,scoped.map(item=>({id:item.id,nodes:item.stages.flatMap(stage=>stage.nodes)})));
+      return scoped.filter(item=>viewMatches({view:developmentView(item),handling:handling?.get(item.id)})).slice((filter.page-1)*15,filter.page*15);
     });
     const facts=selectionFacts??result.items,details=new Map(result.items.map(item=>[item.id,item]));
-    const all = facts.filter(item => !filter.designer || item.designer === filter.designer).map(journey => ({journey, view: developmentView(journey), canConfirm: !journey.orderId && Boolean(journey.sourceId) && (isRootActor(actor) || journey.stages.flatMap(stage => stage.nodes).some(node => node.key === "product_development" && node.owner?.id === actor.actorId))}));
+    const all = facts.filter(item => !filter.designer || item.designer === filter.designer).map(journey => ({journey, view: developmentView(journey), canConfirm: !journey.orderId && Boolean(journey.sourceId) && (isRootActor(actor) || journey.stages.flatMap(stage => stage.nodes).some(node => node.key === "product_development" && node.owner?.id === actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
     const counts = Object.fromEntries(DEVELOPMENT_VIEWS.map(view => [view.key, view.key === "all" ? all.length : all.filter(item => item.view === view.key).length])) as DevelopmentWorkspaceResult["counts"];
-    const filtered = filter.view === "all" ? all : all.filter(item => item.view === filter.view);
+    const filtered = all.filter(viewMatches);
     return {asOf: result.asOf, page: filter.page, pageSize: 15, total: filtered.length, counts, designers: [...new Set(facts.flatMap(item => item.designer ? [item.designer] : []))].sort(), customers: [...new Set(facts.flatMap(item => item.customer ? [item.customer] : []))].sort(), items: filtered.slice((filter.page - 1) * 15, filter.page * 15).map(item=>({...item,journey:details.get(item.journey.id)!}))};
   }
   async pattern(actor: TrustedActorContext, filter: PatternWorkspaceFilter): Promise<PatternWorkspaceResult> {

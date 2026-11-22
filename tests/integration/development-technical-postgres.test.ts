@@ -1,4 +1,5 @@
 import {developmentNativeFacts} from '../../apps/api/src/production-platform/development-sla-evidence.js';
+import {receivedDevelopmentAccessories} from '../../apps/api/src/production-platform/development-accessory-receipts.js';
 import {journeyTaskSummaries} from '../../apps/api/src/production-platform/journey-task-summary.js';
 import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
 import {execFileSync} from 'node:child_process';
@@ -70,15 +71,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
   const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],
    interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST technical garment',craft,washing:'免洗',
    materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
-  const accessoryId=options.missingAccessory?randomUUID():null;
-  if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST必要纽扣',name:'纽扣',available:false,expectedDate:'2027-01-01'});
+  const accessoryIds=(options.twoMissingAccessories?['纽扣','拉链']:options.missingAccessory?['纽扣']:[]).map(name=>{
+   const materialId=randomUUID();
+   document.materials.push({...document.materials[0]!,materialId,category:'辅料',label:`TEST必要${name}`,name,available:false,expectedDate:'2027-01-01'});
+   return materialId;
+  });
+  const accessoryId=accessoryIds[0]??null;
   if(options.automatic){document.quotationMode='automatic_v1';document.materials=document.materials.map(m=>({...m,pricingUnit:m.category==='辅料'?'件':options.missingPricingUnit?'':'米',unitPrice:m.category==='辅料'?'2':'20'}));}
   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
   if(options.withoutNative)await new DigitalDevelopmentService(f.db,true).publish(designer,sourceId,saved.version,randomUUID());
@@ -86,13 +91,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const fixed=await execution.read(f.root,sourceId);
   if(!fixed.fixedCutting?.valid)await execution.configureFixedCutting(f.root,sourceId,{expectedVersion:fixed.fixedCutting?.version??0,assigneeId:worker.actorId,reason:'TEST fixed cutter'},randomUUID());
   const checkedState=await execution.read(f.root,sourceId),check=checkedState.tasks.find(t=>t.taskKind==='development_materials')!;
-  const savedVerification=await execution.saveMaterials(f.root,sourceId,{taskId:check.taskId,expectedVersion:checkedState.materialVerification!.version,expectedDocumentVersion:checkedState.sheet.version,
-   entries:[{materialId,usage:'use',physical:true,quantity:true,color:true,specification:true,note:'TEST真实使用',confirmedWith:''},...(accessoryId?[{materialId:accessoryId,usage:'use' as const,physical:false,quantity:true,color:true,specification:true,note:'TEST必要辅料待到，原规则允许先纸样裁板',confirmedWith:'TEST设计师确认'}]:[])],note:'TEST actual clerk verification',result:'通过'},randomUUID());
-  await execution.check(f.root,sourceId,{taskId:check.taskId,result:'通过',note:'TEST actual material verification',expectedVerificationVersion:savedVerification.version,items:[{materialId,physical:true,quantity:true,color:true,specification:true},...(accessoryId?[{materialId:accessoryId,physical:false,quantity:true,color:true,specification:true}]:[])]},randomUUID());
+  const clerk=options.useClerk?person('development-clerk'):f.root;
+  if(options.useClerk&&check.assigneeId!==clerk.actorId)await tasks.reassign(f.root,check.taskId,clerk.actorId,randomUUID());
+  const items=[{materialId,physical:true,quantity:true,color:true,specification:true},...accessoryIds.map(materialId=>({materialId,physical:false,quantity:true,color:true,specification:true}))];
+  const savedVerification=await execution.saveMaterials(clerk,sourceId,{taskId:check.taskId,expectedVersion:checkedState.materialVerification!.version,expectedDocumentVersion:checkedState.sheet.version,
+   entries:items.map(item=>({...item,usage:'use',note:item.physical?'TEST真实使用':'TEST必要辅料待到，原规则允许先纸样裁板',confirmedWith:item.physical?'':'TEST设计师确认'})),note:'TEST actual clerk verification',result:'通过'},randomUUID());
+  await execution.check(clerk,sourceId,{taskId:check.taskId,result:'通过',note:'TEST actual material verification',expectedVerificationVersion:savedVerification.version,items},randomUUID());
   const state=await execution.read(f.root,sourceId),arrangement=state.arrangement!;
   await execution.arrange(f.root,sourceId,{roundNumber:1,expectedDocumentVersion:state.sheet.version,expectedVersion:arrangement.version,management:'keep',managementReason:'',entries:arrangement.rows.filter(r=>(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(r.kind)).map(r=>({kind:r.kind as typeof DEVELOPMENT_ARRANGEABLE_KINDS[number],assigneeId:r.kind==='development_sewing'&&options.assignSewing===false?null:r.editable&&r.requiredRole==='pattern_room_worker'?worker.actorId:r.editable&&r.requiredRole==='pattern_room_tail_inspector'?Object.values(f.people).find(p=>p.actorRoles.includes('pattern_room_tail_inspector'))!.actorId:r.assigneeId,expectedTask:r.taskId?{taskId:r.taskId,state:r.state!,assigneeId:r.assigneeId}:null,reason:'TEST explicit current worker'}))},randomUUID());
   const paper=(await execution.read(worker,sourceId)).tasks.find(t=>t.taskKind==='development_pattern')!;
-  return {sourceId,materialId,accessoryId,designer,worker,paper,checkTaskId:check.taskId,publishedAt:(await forms.read(f.root,sourceId)).publishedAt,documentVersion:(await forms.read(worker,sourceId)).version};
+  return {sourceId,materialId,accessoryId,accessoryIds,designer,worker,paper,checkTaskId:check.taskId,publishedAt:(await forms.read(f.root,sourceId)).publishedAt,documentVersion:(await forms.read(worker,sourceId)).version};
  };
  const plot=async(p:Awaited<ReturnType<typeof prepare>>,taskId=p.paper.taskId)=>{
   const bytes=Buffer.from('IN;SP1;PU0,0;PD100,100;PU;SP0;'),sha256=createHash('sha256').update(bytes).digest('hex');
@@ -341,7 +349,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.advance(scene,'2026-11-09T09:00:00.000Z');
   await run(async()=>{
    const sheet=await forms.read(p.designer,p.sourceId);
-   await forms.materialEvent(p.designer,p.sourceId,p.accessoryId!,{expectedVersion:sheet.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST designer delivery is not clerk verification'},randomUUID());
+   await expect(forms.materialEvent(p.designer,p.sourceId,p.accessoryId!,{expectedRound:1,expectedVersion:sheet.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST designer delivery is not clerk verification'},randomUUID())).rejects.toMatchObject({statusCode:403});
+   expect((await forms.read(p.designer,p.sourceId)).materialEvents).toEqual(sheet.materialEvents);
    await execution.read(f.root,p.sourceId);await execution.read(f.root,p.sourceId);
   });
   expect(await readiness()).toMatchObject({eventId:null,firstReadyAt:null});
@@ -537,6 +546,74 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tail=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_tail_check')!;
   return {...p,tail};
  };
+ it('M05 lets paper and cutting proceed, then releases sewing only after the clerk submits both required accessories',async()=>{
+  const p=await prepare('无',{twoMissingAccessories:true,useClerk:true}),clerk=person('development-clerk');
+  const accessoryReadiness=async()=>{
+   const state=await execution.read(p.designer,p.sourceId);
+   return p.accessoryIds.map(id=>state.materialReadiness.find(material=>material.materialId===id)?.available);
+  };
+  expect(await accessoryReadiness()).toEqual([false,false]);
+  expect(p.paper.state).toBe('ready');
+  const published=await artifact(p);
+  await execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,attachmentIds:[],artifactRef:{id:published.artifactSetId,version:published.version,scopeRef:'整款'},note:'TEST actual paper before accessories'},randomUUID());
+  const cut=(await execution.read(p.worker,p.sourceId)).tasks.find(t=>t.taskKind==='development_cutting')!;
+  expect(cut.state).toBe('ready');
+  await execution.complete(p.worker,p.sourceId,{taskId:cut.taskId,attachmentIds:[],note:'TEST actual cutting before accessories'},randomUUID());
+  const sewing=(await execution.read(p.worker,p.sourceId)).tasks.find(t=>t.taskKind==='development_sewing')!;
+  const readSewing=()=>tasks.read(p.worker,sewing.taskId);
+  const [firstAccessory,secondAccessory]=p.accessoryIds;
+  const received=async()=>receivedDevelopmentAccessories(f.db,p.sourceId,1,(await forms.read(p.designer,p.sourceId)).document!);
+  const materialBlockers=(task:Awaited<ReturnType<typeof readSewing>>)=>task.unmetConditions.map(item=>item.condition).filter(key=>key.startsWith('materials_ready:')).sort();
+  const waiting=await readSewing();
+  expect(waiting.state).toBe('pending');
+  expect(materialBlockers(waiting)).toEqual([`materials_ready:${firstAccessory}`,`materials_ready:${secondAccessory}`].sort());
+  const forecast={expectedRound:1,expectedVersion:p.documentVersion,expectedMaterialRevision:0,action:'修改预计日期' as const,expectedDate:'2027-01-02',note:'TEST辅料未到，更新预计'};
+  await expect(forms.materialEvent(p.designer,p.sourceId,secondAccessory!,{...forecast,expectedRound:2},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(forms.materialEvent(p.designer,p.sourceId,p.materialId,forecast,randomUUID())).rejects.toThrow('仅可修改辅料预计到料日期');
+  expect((await forms.read(p.designer,p.sourceId)).materialEvents).toEqual([]);
+  const forecasted=await forms.materialEvent(p.designer,p.sourceId,secondAccessory!,forecast,randomUUID());
+  expect(forecasted.materialEvents).toEqual([expect.objectContaining({materialId:secondAccessory,action:'修改预计日期',expectedDate:'2027-01-02',occurredAt:null,occurredDate:null})]);
+  expect(await accessoryReadiness()).toEqual([false,false]);
+  const afterDate=await readSewing();
+  expect(afterDate.state).toBe('pending');
+  expect(materialBlockers(afterDate)).toEqual(materialBlockers(waiting));
+
+  const saveSupplement=async(priorTaskId:string,arrived:readonly string[])=>{
+   const check=await execution.supplementCheck(clerk,p.sourceId,priorTaskId,randomUUID());
+   const state=await execution.read(clerk,p.sourceId);
+   const items=[p.materialId,firstAccessory!,secondAccessory!].map(materialId=>({materialId,physical:materialId===p.materialId||arrived.includes(materialId),quantity:true,color:true,specification:true}));
+   const note='TEST文员核对本轮材料，仍未到的辅料按原预计跟进';
+   const input={taskId:check.taskId,expectedDocumentVersion:state.sheet.version,expectedVersion:state.materialVerification!.version,entries:items.map(item=>({...item,usage:'use' as const,note,confirmedWith:''})),note,result:'通过'};
+   const newReceipt=arrived.find(id=>!state.materialReadiness?.find(material=>material.materialId===id)?.available)!;
+   expect(state.materialVerification?.bulkRules?.find(row=>row.materialId===newReceipt)?.checks.physical).toMatchObject({canSelect:false,knownConflict:false});
+   await expect(execution.saveMaterials(p.designer,p.sourceId,input,randomUUID())).rejects.toMatchObject({statusCode:404});
+   await expect(execution.saveMaterials(clerk,p.sourceId,{...input,bulkChecks:[{materialId:newReceipt,field:'physical'}]},randomUUID())).rejects.toThrow('请逐项核实实物');
+   const saved=await execution.saveMaterials(clerk,p.sourceId,input,randomUUID());
+   return {taskId:check.taskId,submit:()=>execution.check(clerk,p.sourceId,{taskId:check.taskId,expectedVerificationVersion:saved.version,items,note,result:'通过'},randomUUID())};
+  };
+  const first=await saveSupplement(p.checkTaskId,[firstAccessory!]);
+  expect(await accessoryReadiness()).toEqual([false,false]);
+  expect(await received()).toEqual(new Set());
+  await first.submit();
+  expect(await accessoryReadiness()).toEqual([true,false]);
+  expect(await received()).toEqual(new Set([firstAccessory]));
+  const partiallyReady=await readSewing();
+  expect(partiallyReady.state).toBe('pending');
+  expect(materialBlockers(partiallyReady)).toEqual([`materials_ready:${secondAccessory}`]);
+
+  const second=await saveSupplement(first.taskId,[firstAccessory!,secondAccessory!]);
+  expect(await accessoryReadiness()).toEqual([true,false]);
+  expect(await received()).toEqual(new Set([firstAccessory]));
+  expect((await readSewing()).state).toBe('pending');
+  await second.submit();
+  expect(await accessoryReadiness()).toEqual([true,true]);
+  expect(await received()).toEqual(new Set([firstAccessory,secondAccessory]));
+  expect(await readSewing()).toMatchObject({state:'ready',assigneeId:p.worker.actorId});
+  const photo=await f.image(p.worker);
+  await execution.recordUploadPurpose(p.worker,p.sourceId,photo,'车板成果',sewing.taskId);
+  await execution.route(p.worker,p.sourceId,{taskId:sewing.taskId,note:'TEST actual sewing after both accessory checks',result:'通过',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null,attachmentIds:[photo]},randomUUID());
+  expect((await readSewing()).state).toBe('completed');
+ });
  it('PR03 retains completed material verification on a supervisor sewing-only remake while prices stay hidden and persisted',async()=>{
   const p=await sampleToTail({automatic:true}),supervisor=person('pattern-room-supervisor');
   const before=await forms.read(p.designer,p.sourceId),hidden=await forms.read(supervisor,p.sourceId);

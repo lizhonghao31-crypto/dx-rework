@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { JourneyNode, OrderJourney,JourneyResult } from "./digital-production-journey.js";
+import type {TodoRouteDescriptor} from './todos.js';
 
 export const DEVELOPMENT_VIEWS = [
   { key: "all", label: "全部档案" }, { key: "draft", label: "草稿" },
@@ -7,17 +8,21 @@ export const DEVELOPMENT_VIEWS = [
   { key: "ordered", label: "已下单" },
 ] as const;
 export type DevelopmentView = Exclude<typeof DEVELOPMENT_VIEWS[number]["key"], "all">;
+export const DEVELOPMENT_HANDLING_FILTERS=['all','mine','waiting','returned'] as const;
 export const DevelopmentWorkspaceFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   search: z.string().trim().max(100).default(""), customer: z.string().trim().max(100).optional(),
   view: z.enum(DEVELOPMENT_VIEWS.map(item => item.key)).default("all"),
   designer: z.string().trim().max(100).optional(),
+  layout: z.literal('workbench').optional(), handling: z.enum(DEVELOPMENT_HANDLING_FILTERS).optional(),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
   if (value.startDate && value.endDate && value.startDate > value.endDate) context.addIssue({code:"custom", message:"开始日期不能晚于结束日期", path:["endDate"]});
 });
 export type DevelopmentWorkspaceFilter = z.infer<typeof DevelopmentWorkspaceFilterSchema>;
-export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean };
+export type DevelopmentWorkspaceAction={id:string;kind:'mine'|'waiting'|'returned';label:string;ownerName?:string;reason?:string;route:TodoRouteDescriptor};
+export type DevelopmentWorkspaceHandling={items:DevelopmentWorkspaceAction[];complete:boolean};
+export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean; handling?:DevelopmentWorkspaceHandling };
 export type DevelopmentWorkspaceResult = {
   asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;detailFailures?:Array<{journeyId:string;designStyleNo:string}>;
   counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;

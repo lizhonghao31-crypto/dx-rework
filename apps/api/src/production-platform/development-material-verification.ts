@@ -10,7 +10,7 @@ import {ApplicationError} from "../platform/errors.js";
 type DB=Pick<Pool|PoolClient,"query">;
 type Stored=MaterialVerificationEntry&{basis:DevelopmentMaterial;changedBy:string;changedAt:string};
 export const verificationAvailable=async(db:DB)=>Boolean((await db.query("SELECT to_regclass('digital_development_material_verifications') AS relation")).rows[0]?.relation);
-export async function readMaterialVerification(db:DB,sourceId:string,round:number,document:DevelopmentDocument,documentVersion:number):Promise<MaterialVerification|null>{
+export async function readMaterialVerification(db:DB,sourceId:string,round:number,document:DevelopmentDocument,documentVersion:number,checkTaskId?:string):Promise<MaterialVerification|null>{
  if(!await verificationAvailable(db))return null;
  const saved=(await db.query("SELECT * FROM digital_development_material_verifications WHERE source_id=$1 AND round_number=$2",[sourceId,round])).rows[0];
  const old:Stored[]=saved?.entries??[];
@@ -25,7 +25,7 @@ export async function readMaterialVerification(db:DB,sourceId:string,round:numbe
  }
  const people=(await db.query("SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",[entries.map(e=>e.changedBy).filter(Boolean)])).rows;
  for(const entry of entries)entry.changedBy=people.find(p=>p.id===entry.changedBy)?.display_name??entry.changedBy;
- const bulkRules=(await readMaterialBulkRules(db,sourceId,round,document)).filter(row=>entries.some(entry=>entry.materialId===row.materialId));
+ const bulkRules=(await readMaterialBulkRules(db,sourceId,round,document,checkTaskId)).filter(row=>entries.some(entry=>entry.materialId===row.materialId));
  for(const entry of entries)for(const field of entry.invalidatedChecks??[]){const rule=bulkRules.find(row=>row.materialId===entry.materialId)?.checks[field];if(rule){rule.canSelect=false;rule.reason="对应资料已变更，请先逐项重新核实并保存；本次全选不代替复核";}}
  return {bulkRules,returnIssues:saved?.draft_return_issues??[],version:saved?.version??0,documentVersion,taskId:saved?.task_id??null,note:saved?.draft_note??"",result:saved?.draft_result??"通过",entries};
 }
@@ -44,7 +44,7 @@ export function verificationRows(document:DevelopmentDocument,old:Stored[]){
  });
 }
 export async function saveMaterialVerification(db:PoolClient,actor:TrustedActorContext,sourceId:string,round:number,document:DevelopmentDocument,documentVersion:number,input:Omit<SaveMaterialVerification,"note"|"result">&{note?:string;result?:string}){
- const current=await readMaterialVerification(db,sourceId,round,document,documentVersion);
+ const current=await readMaterialVerification(db,sourceId,round,document,documentVersion,input.taskId);
  const fail=(text:string):never=>{throw new ApplicationError("DEVELOPMENT_CONFLICT",text,409);};
  if(!current)fail("材料确认功能尚未就绪，请联系管理员核实版本");
  if(input.expectedVersion!==current!.version||input.expectedDocumentVersion!==documentVersion)fail("材料资料或文员确认已更新，请重新读取后核对，未覆盖已有记录");

@@ -7,7 +7,7 @@ import {createHash,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
 import type {Pool,PoolClient} from "pg";
 import {DevelopmentDocumentSchema,developmentPublishErrors,type DevelopmentDocument} from "@dx-rework/contracts/digital-development";
-import {legacyAmendmentPublicationOptions} from "./development-document-format.js";
+import {legacyAmendmentPublicationOptions,validateDevelopmentMaterialPlan} from "./development-document-format.js";
 import {DEVELOPMENT_RETURN_FIELD_LABELS,developmentReturnNeed,developmentAmendmentErrors,type DevelopmentAmendmentContext,type SaveDevelopmentAmendment,type SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
 import {isRootActor} from "../access/business-authority.js";
 import type {TrustedActorContext} from "../tools/repositories.js";
@@ -44,7 +44,8 @@ export class DevelopmentAmendmentService{
    const current=await this.authorize(db,actor,sourceId,taskId);this.current(current,current.task.route_version);
    const requirements=await developmentSupplyRequirements(db,sourceId,taskId),draft=(await db.query("SELECT * FROM digital_development_amendment_drafts WHERE source_id=$1 AND task_id=$2",[sourceId,taskId])).rows[0];
    const directSupplyMode=await developmentDirectSupplyMode(db,sourceId,taskId,requirements);
-   const result={sourceId,taskId,roundNumber:current.task.route_version,documentVersion:current.sheet.version,document:current.sheet.document!,issues:requirements?.issues??[],directSupplyMode,note:requirements?.note??"旧退回记录未分项，请核对原缺项说明；补料后仍由文员复核，不会自动确认资料已补正",draft:draft?{version:draft.version,document:draft.document,reason:draft.reason}:null};
+   const result={sourceId,taskId,roundNumber:current.task.route_version,documentVersion:current.sheet.version,document:current.sheet.document!,
+    ...(current.sheet.materialForecastOnly?{materialForecastOnly:true}:{}),issues:requirements?.issues??[],directSupplyMode,note:requirements?.note??"旧退回记录未分项，请核对原缺项说明；补料后仍由文员复核，不会自动确认资料已补正",draft:draft?{version:draft.version,document:draft.document,reason:draft.reason}:null};
    await db.query("COMMIT");return result;
   }catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}
  }
@@ -73,6 +74,7 @@ export class DevelopmentAmendmentService{
    const draft=(await db.query("SELECT version,document FROM digital_development_amendment_drafts WHERE task_id=$1 FOR UPDATE",[input.taskId])).rows[0];
    if((draft?.version??0)!==input.expectedDraftVersion)fail("补正草稿已由另一窗口更新，请保留输入后核对；没有覆盖原草稿");
    const errors=developmentAmendmentErrors(current.sheet.document!,input.document);if(errors.length)fail(errors.join("；"));
+   if(current.sheet.materialForecastOnly)validateDevelopmentMaterialPlan(input.document,current.sheet.document!);
    await validateAuxiliaryReferences(db,input.document,draft?.document??current.sheet.document!);
    await this.forms().bindFiles(db,actor,sourceId,input.document);
    await db.query(`INSERT INTO digital_development_amendment_drafts(task_id,source_id,round_number,version,base_document_version,document,reason,updated_by)
@@ -98,6 +100,7 @@ export class DevelopmentAmendmentService{
    }
    if(!draft.reason.trim())fail("请填写本次具体补正 / 澄清说明，再保存并提交");
    const before=current.sheet.document!,document=DevelopmentDocumentSchema.parse(draft.document);
+   if(current.sheet.materialForecastOnly)validateDevelopmentMaterialPlan(document,before);
    await validateSpecialCraftChoices(db,document.craftSteps??[],before.craftSteps??[],'development');
    const errors=[...developmentAmendmentErrors(before,document),...developmentPublishErrors(document,legacyAmendmentPublicationOptions(before,document))];if(errors.length)fail(errors.join("；"));
    for(const issue of requirements?.issues??[]){

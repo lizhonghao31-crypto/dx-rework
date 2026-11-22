@@ -549,11 +549,15 @@ export function Shell({
       ]
     : [];
   const digital = currentUser && canAccessDigitalProduction(currentUser);
-  const designerNavigation: NavigationEntry[] = digital && (isRoot || (hasRole("sample_designer") && hasCapability("pattern_room:orders:create"))) ? [{ name: "设计师创建订单", description: "产品开发与订购资料", href: "/ui/digital-production?workspace=designer", activeKey: "digital-designer" }] : [];
-  // Keep the mature creation capability, but place the source entry under creation.
-  const creationNavigation = designerNavigation;
-  const developmentNavigation: NavigationEntry[] = [
+  const canOpenDesignerWorkspace=digital && (isRoot || (hasRole("sample_designer") && hasCapability("pattern_room:orders:create")));
+  const designerNavigation: NavigationEntry[] = [
+    ...(canOpenDesignerWorkspace?[
+      {name:"创建开发单",description:"新建、继续草稿或恢复原提交",href:"/ui/digital-production?workspace=designer&section=create",activeKey:"digital-designer-create"},
+      {name:"开发工作区",description:"查订单与本单办事",href:"/ui/digital-production?workspace=designer&section=workspace",activeKey:"digital-designer"},
+    ]:[]),
     ...(currentUser&&canManageAuxiliaryCatalog(currentUser)?[{name:"共享辅料目录",description:"新增、改名、合并重复项及停用",href:"/ui/auxiliary-catalog"}]:[]),
+  ];
+  const developmentNavigation: NavigationEntry[] = [
     ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),
     ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
@@ -561,7 +565,7 @@ export function Shell({
   const preparationNavigation: NavigationEntry[] = isRoot || ["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","pmc","owner_group"].some(hasRole) ? [{name:"客户报价协作",description:"按分工填写用量与价格，记录客户确认",href:"/ui/digital-quotation"}] : [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
   const navigation: NavigationEntry[] = [
-    ...creationNavigation,
+    ...designerNavigation,
     ...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry)),
     ...preparationNavigation,
     ...factoryNavigation,
@@ -574,7 +578,7 @@ export function Shell({
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
-    { name: "设计师创建订单", description: "产品开发源头", entries: creationNavigation },
+    { name: "设计开发工作台", description: "开发单与共享资料", entries: designerNavigation },
     { name: "产品开发打板", description: "开发、打板与分析", entries: developmentNavigation },
     { name: "大货产前准备", description: "生产前置汇合", entries: preparationNavigation },
     { name: "外发定价&选厂", description: "询价、审批与执行", entries: sourcingNavigation },
