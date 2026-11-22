@@ -39,11 +39,12 @@ export type QuotationSheet={
   quoteId:string|null;resource:QuotationResource;productionOrderId:string|null;sourceId:string|null;
   designStyleNo:string;designerId:string;customerCode:string|null;version:number;status:'draft'|'confirmed';confirmedVersion:number|null;versions:number[];
   document:BudgetDocument|null;rows:QuotationVisibleRow[];assignments:QuotationAssignment[];
-  confirmation:QuotationConfirmation|null;canStructure:boolean;canConfirm:boolean;fullCost:boolean;
-  budget:{state:'waiting_formal_order'|'waiting_confirmation'|'created'|'review_required'|'legacy_published';version:number|null};
+  confirmation:QuotationConfirmation|null;confirmedBy?:string;canStructure:boolean;canConfirm:boolean;fullCost:boolean;
+  budget:{state:'waiting_formal_order'|'waiting_confirmation'|'created'|'review_required'|'legacy_published';version:number|null;workbench?:{canOpen:boolean;canEdit:boolean;reason:string}};
 };
 export type BudgetQuoteComparison={
   pendingQuotationVersion?:number|null;
+  workbenchBasis?:'unconfirmed'|'customer_mismatch'|'adoption_required'|'valid';
   policy:'legacy'|'quote_v1';quoteId:string|null;quoteVersion:number|null;currentConfirmedVersion:number|null;
   state:'legacy'|'waiting_confirmation'|'review_required'|'incomparable'|'within_limit'|'exceeds';reason:string;
   budgetComparableTotal:string|null;confirmedQuoteTotal:string|null;amountScope:'per_piece'|'order_total'|null;

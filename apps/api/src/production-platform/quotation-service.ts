@@ -1,3 +1,4 @@
+import {DigitalBudgetService} from './budget-service.js';
 import {quotationMaterialConsumptionBasis,quotationMaterialUnitBasis,quotationMaterialPriceBasis} from './quotation-material-unit.js';
 import {isDeepStrictEqual} from 'node:util';
 import {assembleQuotation,quotationComplete,type AssembledQuotation} from './quotation-assembly.js';
@@ -14,7 +15,7 @@ import {isRootActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './access-policy.js';
-import {ensureQuotationBudget} from './quotation-budget-basis.js';
+import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 
 type Database=Pick<Pool|PoolClient,'query'>;
 type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
@@ -24,11 +25,11 @@ const enabledRoles=['sample_designer','order_merchandiser','pattern_room_worker'
 const readRoles=[...enabledRoles,'pmc'];
 type QuoteDirectoryRow={source_id:string|null;production_order_id:string|null;style_no:string;customer_code:string|null;
  source_designer:string|null;primary_merchandiser_id:string|null;version:number|null;confirmed_version:number|null;assignments:QuotationAssignment[]|null};
-function quotationAuthority(actor:TrustedActorContext,roles:ReadonlySet<string>,designerId:string|null,primaryId:string|null,assignments:readonly QuotationAssignment[]){
+function quotationAuthority(actor:TrustedActorContext,roles:ReadonlySet<string>,designerId:string|null,primaryId:string|null,assignments:readonly QuotationAssignment[],designerConfirmation=false){
  const root=isRootActor(actor),designer=roles.has('sample_designer')&&designerId===actor.actorId,merch=roles.has('order_merchandiser')&&primaryId===actor.actorId;
  const full=root||designer||merch||roles.has('owner_group')||roles.has('production_management')||roles.has('pmc');
  const ownRow=assignments.some(assignment=>assignment.technicalAssigneeId===actor.actorId&&roles.has('pattern_room_worker')||assignment.priceAssigneeId===actor.actorId&&roles.has(assignment.priceRole));
- return {full,allowed:full||ownRow,structure:root||designer,confirm:root||designer||merch};
+ return {full,allowed:full||ownRow,structure:root||designer,confirm:root||designer||!designerConfirmation&&merch};
 }
 async function quotationRoles(db:Database,actor:TrustedActorContext,roleScope:readonly string[]){
  const active=new Set<string>();
@@ -47,11 +48,13 @@ export class DigitalQuotationService{
   const sourceId=resource.kind==='source'?resource.id:row.source_id??null,orderId=order?.production_order_id??null;
   const quote=(await db.query('SELECT * FROM digital_quotation_documents WHERE production_order_id=$1 OR ($2::uuid IS NOT NULL AND source_id=$2)',[orderId,sourceId])).rows[0] as QuoteRow|undefined;
   const roles=await quotationRoles(db,actor,readOnly?readRoles:enabledRoles);
-  const sourceDesigner=sourceId?(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]?.created_by:row.created_by;
-  const {full,allowed,structure,confirm}=quotationAuthority(actor,roles,sourceDesigner,order?.primary_merchandiser_id??null,quote?.assignments??[]);
+  const sourceDesigner=resource.kind==='source'?row.created_by:sourceId
+   ?(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]?.created_by:row.created_by;
+  const policy=orderId?await workbenchCommercialOrderPolicy(db,orderId):row.workbench_commercial_policy;
+  const {full,allowed,structure,confirm}=quotationAuthority(actor,roles,sourceDesigner,order?.primary_merchandiser_id??null,quote?.assignments??[],policy===designerQuotationPolicy);
   if(!allowed)digitalNotFound();
   const sourceDocument=quote?.assembly&&sourceId&&structure?await developmentDocumentRow(db,sourceId):undefined;
-  return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure,confirm};
+  return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure,confirm,workbenchPolicy:policy===designerQuotationPolicy};
  }
  async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number):Promise<QuotationSheet>{
   const c=await this.context(db,actor,resource,true),q=c.quote;
@@ -62,8 +65,19 @@ export class DigitalQuotationService{
   const sources=(snapshot?.consumption_sources??q?.consumption_sources??{}) as Record<string,QuotationConsumptionSource>;
   const userIds=[...new Set(assignments.flatMap(a=>[a.technicalAssigneeId,a.priceAssigneeId]).filter((v):v is string=>Boolean(v)))];
   const names=new Map<string,string>((userIds.length?(await db.query('SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])',[userIds])).rows:[]).map(u=>[u.id,u.display_name]));
-  const confirmation= snapshot?.confirmation??(q?.confirmed_version?(await db.query('SELECT confirmation FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[q.quote_id,q.confirmed_version])).rows[0]?.confirmation:null);
+  const confirmed=snapshot??(q?.confirmed_version?(await db.query('SELECT confirmation,confirmed_by_internal FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[q.quote_id,q.confirmed_version])).rows[0]:null);
+  const confirmation=confirmed?.confirmation??null;
+  const confirmedBy=c.full&&c.workbenchPolicy&&confirmed?.confirmed_by_internal
+   ?(await db.query('SELECT display_name FROM app_users WHERE id=$1',[confirmed.confirmed_by_internal])).rows[0]?.display_name:undefined;
   const budget=c.orderId?(await db.query('SELECT version,quote_id,quote_version,status FROM digital_budget_documents WHERE production_order_id=$1',[c.orderId])).rows[0]:null;
+  let workbenchBudget:QuotationSheet['budget']['workbench'];
+  if(c.workbenchPolicy&&c.full&&c.orderId&&version===undefined){
+   const canOpen=await new DigitalProductionAccessPolicy(db).allowed(actor,'order',c.orderId,'budget');
+   const sheet=canOpen?await new DigitalBudgetService(this.database,this.creationEnabled).read(actor,c.orderId,db):null;
+   workbenchBudget={canOpen,canEdit:sheet?.canEdit??false,reason:!sheet?'当前账号没有本单预算读取权限'
+    :sheet.status==='published'?'预算已发布并冻结':sheet.sourcingCaseId?'已进入外发，请从原外发入口核对'
+     :sheet.comparison?.workbenchBasis!=='valid'?sheet.comparison?.reason??'预算依据待核':sheet.canEdit?'本单预算草稿可编辑':'当前账号或订单状态不允许编辑预算'};
+  }
   const rows=(doc?.rows??[]).flatMap(row=>{
    const a=assignments.find(a=>a.rowId===row.rowId);if(!a)return [];
    // A historical assignment never grants current access after reassignment.
@@ -93,9 +107,9 @@ export class DigitalQuotationService{
   return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...(q?.assembly?{automatic:true,complete:quotationComplete({...q,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q.price_sources,assembly:snapshot?.assembly??q.assembly})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
-   document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation??null:null,
+   document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),
    canStructure:version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&c.confirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
-   budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null}};
+   budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null,...(workbenchBudget?{workbench:workbenchBudget}:{})}};
  }
  async list(actor:TrustedActorContext){
   const db=await this.database.connect();

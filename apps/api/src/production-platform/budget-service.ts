@@ -51,10 +51,16 @@ export class DigitalBudgetService {
     if(linked&&comparison.state==='review_required')comparison.reason='客户报价有新确认版；原外发合同保留已采用版本，后续调整沿原外发更正入口办理，不自动改变生产流程';
     const current=version===undefined;
     const hasDraft=comparison.policy==='legacy'||Boolean(row);
+    const state=comparison.workbenchBasis===undefined?undefined:(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1",[orderId])).rows[0]?.state;
+    const active=state===undefined||state==='active';
+    const writableBasis=comparison.workbenchBasis===undefined||comparison.workbenchBasis==='valid'&&active;
+    const liveEditor=comparison.workbenchBasis===undefined||order.canPublish
+      ||order.created_by===actor.actorId&&actor.actorRoles.includes("sample_designer")
+        &&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"sample_designer");
     return { metadata:await documentMetadata(db,row), versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document: row?.document ?? null,
-      totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && !linked && row?.status !== "published" && current && hasDraft && (Boolean(row) || this.creationEnabled),
-      canPublish: order.canPublish && !linked && row?.status !== "published" && current && hasDraft && (Boolean(row) || this.creationEnabled),
-      comparison,canAdoptQuotation:current&&this.creationEnabled&&order.canPublish&&!linked&&comparison.policy==='quote_v1'&&comparison.state==='review_required',
+      totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && liveEditor && !linked && row?.status !== "published" && current && hasDraft && writableBasis && (Boolean(row) || this.creationEnabled),
+      canPublish: order.canPublish && !linked && row?.status !== "published" && current && hasDraft && writableBasis && (Boolean(row) || this.creationEnabled),
+      comparison,canAdoptQuotation:current&&this.creationEnabled&&order.canPublish&&!linked&&comparison.policy==='quote_v1'&&comparison.state==='review_required'&&active,
       canSubmitSourcing: !linked && row?.status === "published" && ['legacy','within_limit'].includes(comparison.state) && (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
       sourcingCaseId: linked?.child_id ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null,
       designerName: order.designer_name, merchandiserName: order.merchandiser_name ?? null };
@@ -66,14 +72,23 @@ export class DigitalBudgetService {
       await db.query("BEGIN");
       await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await db.query("SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [orderId]);
-      await this.order(db, actor, orderId, true);
+      const order=await this.order(db, actor, orderId, true);
       const command = `budget:${orderId}:${action}`;
       const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
       const prior = (await db.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, command, key])).rows[0];
+      const sheet = await this.read(actor, orderId, db);
+      if(sheet.comparison?.workbenchBasis&&!isRootActor(actor)){
+        const policy=new DigitalProductionAccessPolicy(db);
+        const primary=order.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes("order_merchandiser")
+          &&await policy.lockActiveRole(actor.actorId,"order_merchandiser");
+        const designer=action==="save"&&order.created_by===actor.actorId&&actor.actorRoles.includes("sample_designer")
+          &&await policy.lockActiveRole(actor.actorId,"sample_designer");
+        if(!primary&&!designer)digitalForbidden();
+      }
       if (prior && prior.payload_hash !== hash) conflict("同一操作标识不能用于不同内容");
       if (prior) { await db.query("COMMIT"); return prior.response as T; }
-      const sheet = await this.read(actor, orderId, db);
       if(action==='adopt'&&!sheet.canAdoptQuotation)conflict('当前不能切换报价依据；已关联外发的预算和合同保持原批准版本');
+      if(sheet.comparison?.workbenchBasis&&action!=='adopt'&&sheet.comparison.workbenchBasis!=='valid')conflict(sheet.comparison.reason);
       if (action === "publish" && !sheet.canPublish) throw new ApplicationError("FORBIDDEN","预算由本单跟单最终发布，发布后内容冻结",403);
       if (!sheet.canEdit&&action!=='adopt') conflict(sheet.comparison?.policy==='quote_v1'&&!sheet.document?'请先由本单负责岗位完成客户确认报价及正式下单，再生成预算草稿':sheet.status === "published" ? "预算已最终发布并冻结，请查看已发布版本" : sheet.sourcingCaseId ? "已进入外发审批，请通过原外发预算更正入口处理" : "预算新建尚未启用，请管理员核对当前环境设置");
       const lifecycle = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [orderId])).rows[0];

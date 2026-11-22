@@ -28,8 +28,9 @@ export async function createIndependentDevelopmentRevision(db:PoolClient,actor:T
  const number=Number((await db.query('SELECT coalesce(max(revision_number),0)+1 AS n FROM digital_development_revision_sources WHERE root_source_id=$1',[rootId])).rows[0].n);
  const sourceId=randomUUID(),suffix=` · 复版${number}`,style=`${root.design_style_no.slice(0,100-suffix.length)}${suffix}`;
  const managed=await acceptsNewOrderTime(db);
- await db.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''})
-  VALUES($1,$2,$3,$4,$5,$6${managed?',true':''})`,[sourceId,parent.created_by,parent.development_type,style,parent.temporary_style_no,parent.customer_code]);
+ const hasCommercialPolicy=Object.hasOwn(root,'workbench_commercial_policy');
+ await db.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''}${hasCommercialPolicy?',workbench_commercial_policy':''})
+  VALUES($1,$2,$3,$4,$5,$6${managed?',true':''}${hasCommercialPolicy?',$7':''})`,[sourceId,parent.created_by,parent.development_type,style,parent.temporary_style_no,parent.customer_code,...(hasCommercialPolicy?[root.workbench_commercial_policy]:[])]);
  await db.query(`INSERT INTO digital_development_revision_sources(source_id,parent_source_id,root_source_id,revision_number,parent_round,origin,customer_comment,explanation,categories,affected_nodes,output_kind,created_by)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[sourceId,parentId,rootId,number,input.basedOnRound,input.origin,input.customerComment,input.explanation,input.categories,input.affectedNodes,input.outputKind,actor.actorId]);
  const eventId=randomUUID();

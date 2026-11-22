@@ -1247,6 +1247,10 @@
     {
       "version": "0297_preorder_preparation_material_evidence",
       "checksum": "f188b2cf2693f61931c82b104f83dc3453434792c11f319491b1abaab7f82a4f"
+    },
+    {
+      "version": "0298_designer_workbench_commercial_policy",
+      "checksum": "fa5279cb377bc0e99df0eb72842188538d73b817f82b74747888ece961351896"
     }
   ]
 }

@@ -3,7 +3,10 @@ import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import type {BudgetDocument} from '@dx-rework/contracts/digital-budget';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import {beijingCalendarDate,DigitalOrderCreateSchema,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
+import type {Page} from 'playwright-core';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
@@ -57,6 +60,114 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await quotes.read(designer,resource)).rows.find(row=>row.rowId===materialId)).toMatchObject({consumption:'',unitPrice:'20',consumptionSource:null});
   }finally{await tab.context.close();}
  });
+ it('unlocks only the confirmed order in the original merchandiser budget after two tabs and a lost confirmation receipt',async()=>{
+  const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,worker=h.f.people['pattern-room-worker']!;
+  const identity=new DigitalProductionIdentityService(h.db,true),quotes=new DigitalQuotationService(h.db,true);
+  const createOrder=(name:string)=>identity.createOrder(designer,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:`TEST-BUDGET-${name}-${randomUUID()}`,
+   orderDate:beijingCalendarDate(new Date()),
+   lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}],
+  }),randomUUID());
+  const order=await createOrder('A'),sibling=await createOrder('B'),id=order.productionOrderId,other=sibling.productionOrderId;
+  expect(order.primaryMerchandiserId).toBe(merch.actorId);
+  expect(sibling.primaryMerchandiserId).toBe(merch.actorId);
+  const resource={kind:'order' as const,id},rowId=randomUUID();
+  const document:BudgetDocument={fabricType:'针织',productCategory:'上衣',monthSeries:'',date:null,currency:'人民币',freight:'0',cm:'0',
+   rows:[{rowId,section:'主料',category:'',name:'TEST 面料',specification:'40支',unit:'米',supplier:'TEST',consumption:'',unitPrice:'10'}],
+   salePrice:'',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[]};
+  const draft=await quotes.save(designer,resource,{expectedVersion:0,document,
+   assignments:[{rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:designer.actorId,priceRole:'sample_designer'}]},randomUUID());
+  const quote=await quotes.fillRow(worker,resource,rowId,{expectedVersion:draft.version,consumption:'1'},randomUUID());
+  const quotePage=`/ui/digital-quotation?kind=order&id=${id}`;
+  const budgetApi=(orderId:string)=>`${h.base}/api/digital-production/orders/${orderId}/budget`;
+  const confirmationUrl=`${h.base}/api/digital-production/orders/${id}/quotation/confirm`;
+  const confirmationButton='记录客户报价确认并检查预算生成条件';
+  const operator=await h.open(merch.actorId,1165,{},quotePage);
+  const first=await h.open(designer.actorId,1165,{},quotePage);
+  const second=await first.context.newPage();
+  let releaseFirst!:()=>void;
+  const held=new Promise<void>(resolve=>{releaseFirst=resolve;});
+  try{
+   await operator.page.getByText('等待客户确认报价与正式下单，不能发布预算',{exact:true}).waitFor();
+   expect(await operator.page.getByRole('button',{name:confirmationButton,exact:true}).count()).toBe(0);
+   const budgetLink=operator.page.getByRole('link',{name:'打开本单预算',exact:true});
+   expect(new URL((await budgetLink.getAttribute('href'))!,h.base).searchParams.get('budget')).toBe(id);
+   await budgetLink.click();
+   const assertLocked=async(page:Page,orderId:string)=>{
+    await page.getByRole('region',{name:'客户报价对照',exact:true}).getByText('等待客户确认报价与正式下单，不能发布预算',{exact:false}).waitFor();
+    expect(await page.getByRole('button',{name:'保存预算',exact:true}).count()).toBe(0);
+    expect(await page.getByRole('button',{name:'最终发布',exact:true}).count()).toBe(0);
+    expect(await page.locator('input[type=file]').count()).toBe(0);
+    const result=await page.request.get(budgetApi(orderId));
+    expect(result.status()).toBe(200);
+    expect(await result.json()).toMatchObject({productionOrderId:orderId,version:0,document:null,canEdit:false,canPublish:false});
+    expect((await page.request.put(budgetApi(orderId),{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:0,document}})).status()).toBe(409);
+    const publish=await page.request.post(budgetApi(orderId)+'/publish',{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:1}});
+    expect(publish.status()).toBe(409);
+    expect(await publish.json()).toMatchObject({error:{code:'BUDGET_CONFLICT'}});
+    expect((await page.request.get(budgetApi(orderId)+'/upload-limits')).status()).toBe(403);
+   };
+   await assertLocked(operator.page,id);
+   const fillConfirmation=async(page:Page)=>{
+    await page.getByLabel('客户确认金额',{exact:true}).fill('20');
+    await page.getByLabel('客户真实确认时间',{exact:true}).fill('2026-10-20T09:00');
+    await page.getByLabel('客户确认依据',{exact:true}).fill('TEST客户确认单件20元');
+   };
+   await second.goto(h.base+quotePage);
+   await fillConfirmation(first.page);
+   await fillConfirmation(second);
+   const attempts:Array<{key:string|undefined;body:string|null}>=[];
+   let committedStatus:number|undefined;
+   await first.page.route(confirmationUrl,async route=>{
+    attempts.push({key:route.request().headers()['idempotency-key'],body:route.request().postData()});
+    if(attempts.length>1)return route.continue();
+    committedStatus=(await route.fetch()).status();
+    await held;
+    return route.abort('failed');
+   });
+   const submit=first.page.getByRole('button',{name:confirmationButton,exact:true});
+   await submit.evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
+   await expect.poll(()=>committedStatus).toBe(200);
+   expect(attempts).toHaveLength(1);
+   const [collision]=await Promise.all([
+    second.waitForResponse(confirmationUrl),
+    second.getByRole('button',{name:confirmationButton,exact:true}).click(),
+   ]);
+   expect(collision.status()).toBe(409);
+   expect(collision.request().headers()['idempotency-key']).not.toBe(attempts[0]!.key);
+   releaseFirst();
+   const recover=first.page.getByRole('button',{name:'使用原内容核对报价提交',exact:true});
+   await recover.waitFor();
+   const [receipt]=await Promise.all([first.page.waitForResponse(confirmationUrl),recover.click()]);
+   expect(receipt.status()).toBe(200);
+   await recover.waitFor({state:'hidden'});
+   expect(attempts).toHaveLength(2);
+   expect(attempts[0]?.key).toBeTruthy();
+   expect(attempts[1]).toEqual(attempts[0]);
+   expect((await h.db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1',[quote.quoteId])).rows)
+    .toEqual([{version:quote.version}]);
+   expect((await h.db.query('SELECT production_order_id,created_budget_version FROM digital_budget_quote_conversions WHERE production_order_id=ANY($1::uuid[])',[[id,other]])).rows)
+    .toEqual([{production_order_id:id,created_budget_version:1}]);
+
+   await operator.page.reload();
+   await operator.page.getByRole('button',{name:'保存预算',exact:true}).waitFor();
+   await operator.page.getByRole('textbox',{name:'产品类别',exact:true}).fill('TEST 跟单编辑本单');
+   const [saved]=await Promise.all([
+    operator.page.waitForResponse(response=>response.url()===budgetApi(id)&&response.request().method()==='PUT'),
+    operator.page.getByRole('button',{name:'保存预算',exact:true}).click(),
+   ]);
+   expect(saved.status()).toBe(200);
+   expect(await saved.json()).toMatchObject({productionOrderId:id,version:2,canEdit:true,document:{productCategory:'TEST 跟单编辑本单'}});
+   await operator.page.goto(h.base+`/ui/digital-production?budget=${other}`);
+   await assertLocked(operator.page,other);
+   expect((await h.db.query('SELECT production_order_id,version FROM digital_budget_documents WHERE production_order_id=ANY($1::uuid[])',[[id,other]])).rows)
+    .toEqual([{production_order_id:id,version:2}]);
+  }finally{
+   releaseFirst();
+   await first.context.close();
+   await operator.context.close();
+  }
+ });
  it('edits original source prices, assigns existing roles, fills only own rows, freezes confirmation and rejects revoked session',async()=>{
   const designer=h.f.people['sample-designer']!,worker=h.f.people['pattern-room-worker']!,ie=h.f.people['ie']!;
   const source=await new DigitalProductionIdentityService(h.db,true).createSource(designer,{developmentType:'头版',designStyleNo:'TEST-PR03-UI-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
@@ -72,7 +183,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await d.page.getByLabel('主布材料单价',{exact:true}).fill('20');
    await d.page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
    await expect.poll(async()=>(await forms.read(designer,source.sourceId)).version).toBe(2);
-   await d.page.goto(h.base+path);
+   const edited=await forms.read(designer,source.sourceId);
+   const publication=await forms.save(designer,source.sourceId,{expectedVersion:edited.version,
+    document:DevelopmentDocumentSchema.parse({...edited.document,sizes:['M'],sampleSize:'M',sizeQuantities:[1],
+     measurements:[{name:'胸围',values:['50']}],files:[{attachmentId:await h.f.image(designer),kind:'款图'}]})},randomUUID());
+   await forms.publish(designer,source.sourceId,publication.version,randomUUID());
+   await d.page.goto(h.base+'/ui/digital-production?workspace=designer&section=workspace&area=customer&development='+source.sourceId);
+   const customerArea=d.page.getByRole('region',{name:'客户与报价'});
+   await customerArea.getByText('客户报价协作',{exact:true}).click();
    await d.page.getByRole('heading',{name:'客户报价表',exact:true}).waitFor();
    await d.page.getByLabel('TEST棉布用量负责人').selectOption(worker.actorId);
    await d.page.getByLabel('IE加工单价价格负责人').selectOption('ie_reviewer:'+ie.actorId);
@@ -99,9 +217,43 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     await d.page.getByLabel('客户确认金额',{exact:true}).fill('42');
     await d.page.getByLabel('客户真实确认时间',{exact:true}).fill('2026-10-20T09:00');
     await d.page.getByLabel('客户确认依据',{exact:true}).fill('TEST真实确认42，成本40不是客户售价');
-    await d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).click();
-    await expect.poll(async()=>(await quotes.read(designer,resource)).confirmedVersion).not.toBeNull();
-    const frozen=(await quotes.read(designer,resource)).confirmedVersion!;
+    const confirmationPath=`${h.base}/api/digital-production/sources/${source.sourceId}/quotation/confirm`;
+    const attempts:Array<{key:string|undefined;body:string|null}>=[];
+    let committedStatus:number|undefined;
+    await d.page.route(confirmationPath,async route=>{
+     const request=route.request();
+     attempts.push({key:request.headers()['idempotency-key'],body:request.postData()});
+     if(attempts.length>1)return route.continue();
+     committedStatus=(await route.fetch()).status();
+     return route.abort('failed');
+    });
+    try{
+     await d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).click();
+     const recover=d.page.getByRole('button',{name:'使用原内容核对报价提交',exact:true});
+     await recover.waitFor();
+     expect(committedStatus).toBe(200);
+     expect((await quotes.read(designer,resource)).confirmedVersion).not.toBeNull();
+     await expect.poll(()=>d.page.getByLabel('客户确认金额',{exact:true}).inputValue()).toBe('42');
+     const [receipt]=await Promise.all([d.page.waitForResponse(confirmationPath),recover.click()]);
+     expect(receipt.ok()).toBe(true);
+     await recover.waitFor({state:'hidden'});
+     expect(attempts).toHaveLength(2);
+     expect(attempts[0]?.key).toBeTruthy();
+     expect(attempts[1]).toEqual(attempts[0]);
+    }finally{await d.page.unroute(confirmationPath);}
+    const confirmed=await quotes.read(designer,resource),frozen=confirmed.confirmedVersion!;
+    expect(confirmed.versions).toEqual([frozen]);
+    const confirmedBasis=customerArea.locator('#quote-confirmed-basis');
+    const designerName=(await h.db.query('SELECT display_name FROM app_users WHERE id=$1',[designer.actorId])).rows[0].display_name;
+    await confirmedBasis.getByText(`确认登记人：${designerName}`,{exact:false}).waitFor();
+    expect(await confirmedBasis.innerText()).toContain(new Date(confirmed.confirmation!.confirmedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}));
+    expect(await confirmedBasis.innerText()).toContain('客户确认单件金额：42 元');
+    await customerArea.getByText('等待正式下单；纯开发和预下单不强制生成预算',{exact:true}).waitFor();
+    expect(new URL(d.page.url()).searchParams.get('development')).toBe(source.sourceId);
+    expect(confirmed).toMatchObject({productionOrderId:null,budget:{state:'waiting_formal_order'}});
+    expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[source.sourceId])).rowCount).toBe(0);
+    expect(h.requests.filter(request=>request.session===d.session&&request.method==='POST'
+     &&request.path===`/api/digital-production/sources/${source.sourceId}/confirm`)).toEqual([]);
     await d.page.getByLabel('TEST棉布负责单价',{exact:true}).fill('22');
     await d.page.locator('.quotation-row-input').filter({has:d.page.getByLabel('TEST棉布负责单价',{exact:true})}).getByRole('button',{name:'保存本行负责字段',exact:true}).click();
     await expect.poll(async()=>(await quotes.read(designer,resource)).status).toBe('draft');
