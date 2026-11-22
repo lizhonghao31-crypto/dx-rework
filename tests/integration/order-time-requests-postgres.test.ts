@@ -35,6 +35,8 @@ import {taskResult} from '../helpers/development-task-result-fixture.js';
 import {slaNotificationPreferences} from '../../apps/api/src/production-platform/sla-notification-preferences.js';
 import {DigitalPoDateRepository} from '../../apps/api/src/production-platform/po-date-repository.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
+import {materialInvestmentRiskHistory} from '../../apps/api/src/production-platform/material-investment-risk-history.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-customer-date-service.js';
@@ -540,11 +542,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(executionRows.find(node=>node.key==='warehouse_accessories')).toMatchObject({label:'辅料实物备齐',planningOnly:true,state:'pending',actualAt:null});
    const adopted=(await repo.current(resource))!,forward=Object.values(adopted.input.frameworkPlans!)[0]!;
    const projected=journey.fixedSchedule!.scopes[0]!;
-   // B handover/investment are June12 for an August15 delivery. The
-   // downstream budget bound is July18 end minus IE/selection/approval/
-   // cutting/dispatch (five one-hour tasks), not the August1 event position.
-   const eventDeadlines:Record<string,string>={design_handover:'2027-06-12T16:00:00.000Z',material_investment:'2027-06-12T16:00:00.000Z',customer_confirmation:'2027-07-18T11:00:00.000Z',budget:'2027-07-18T11:00:00.000Z'};
+   // This direct order has no effective material handover to support a deadline.
+   expect(adopted.input.materialInvestmentScope).toBeNull();
+   const preparation=await new ProductionReadinessService(f.db).read(manager,resource);
+   expect(preparation.facts.some(fact=>fact.kind==='material_investment'||fact.kind==='design_handover'&&fact.valid&&fact.investmentScopeBasis)).toBe(false);
+   expect(preparation.materialInvestmentReminder).toBeUndefined();
+   expect(await materialInvestmentRiskHistory(f.db,resource.id,journey.fixedSchedule!.asOf)).toEqual([]);
+   const investment=projected.nodes.find(work=>work.id==='material_investment');
+   expect(investment).toMatchObject({businessCompleted:false,goalDelta:{kind:'unknown',targetAt:null,actual:{precision:'unknown'}},ownSla:{deadlineAt:null,overdueMinutes:null}});
+   expect(investment?.currentTarget?.at??null).toBeNull();
+   expect(investment?.state).not.toBe('late');
+   expect(investment?.ownSla.warning??false).toBe(false);
+   // B handover is June12 for an August15 delivery. The July18 budget
+   // constraint excludes five downstream hours from the end of that day.
+   const eventDeadlines:Record<string,string>={design_handover:'2027-06-12T16:00:00.000Z',customer_confirmation:'2027-07-18T11:00:00.000Z',budget:'2027-07-18T11:00:00.000Z'};
    for(const work of projected.nodes){
+    if(work.id==='material_investment')continue;
     const arranged=forward.arranged.find(row=>row.id===work.id)?.end.at;
     expect(work.currentTarget?.at??work.goalDelta.targetAt,work.id).toBe(eventDeadlines[work.id]??arranged);
     if(eventDeadlines[work.id]){
@@ -553,11 +566,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      expect(work.ownSla.deadlineAt).toBeNull();
     }
    }
-   expect(projected.nodes.filter(work=>eventDeadlines[work.id])).toHaveLength(4);
+   expect(projected.nodes.filter(work=>eventDeadlines[work.id])).toHaveLength(3);
    expect((await repo.current(resource))!.input.frameworkPlans).toEqual(adopted.input.frameworkPlans);
    expect(projected.nodes.find(work=>work.id.startsWith('bulk_return_washing:'))?.businessCompleted).toBe(false);
    expect(journey.visualProgress?.expected.at).toBe('2027-08-15');
-   const model=await new JourneyFactRepository(f.db).buildOne(resource);
+   const facts=new JourneyFactRepository(f.db),model=await facts.buildOne(resource);
+   const reader=await f.db.connect();
+   try{
+    const stored=await facts.readStoredWithClient(reader,resource);
+    expect(stored.status).toBe('ready');
+    const scope=stored.model?.fixedSchedule?.scopes[0];
+    expect(scope?.work.find(work=>work.id==='material_investment')?.eventTarget).toMatchObject({end:null});
+    expect(scope?.facts.material_investment).toMatchObject({businessCompleted:false,completed:{precision:'unknown'}});
+    expect(stored.model?.fixedSchedule?.materialInvestmentTiming).toBeUndefined();
+   }finally{reader.release();}
    expect(model.model.nodes.filter(node=>node.key.startsWith('bulk_return_washing')).map(node=>node.key).sort()).toEqual(washingRows.map(node=>node.key).sort());
    expect(model.model.nodes.find(node=>node.key==='warehouse_accessories')).toMatchObject({planningOnly:true,state:'pending'});
    expect(model.model.fixedSchedule?.framework).toHaveLength(1);

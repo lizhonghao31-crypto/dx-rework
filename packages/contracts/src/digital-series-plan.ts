@@ -6,7 +6,7 @@ export const SERIES_PLAN_RULE='series-plan-20261101-v1';
 export const SeriesDateSchema=z.string().refine(isCalendarDate,'请输入有效日期');
 export const SERIES_MILESTONES=[
  {key:'design_handover',label:'设计资料交接',role:'设计'},
- {key:'material_investment',label:'跟单投面料',role:'订单跟单'},
+ {key:'material_investment',label:'投面辅料',role:'订单跟单'},
  {key:'fabric_receipt',label:'面料实际到仓',role:'仓管'},
  {key:'color_confirmation',label:'对色完成',role:'订单跟单（登记对色反馈）'},
  {key:'client_sample_approval',label:'客户最终批复',role:'设计（登记客户反馈）'},

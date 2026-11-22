@@ -33,7 +33,7 @@ export const FRAMEWORK_TIME_NODES:readonly OrderTimeNode[]=[
  {key:'bulk_return_washing',label:'回货后大货洗水',stage:7,kind:'work'},
  {key:'bulk_return_washing_inspection',label:'回货洗后检查',stage:7,kind:'work'},
  {key:'design_handover',label:'设计资料交接',stage:1,kind:'event'},
- {key:'material_investment',label:'投面料',stage:3,kind:'event'},
+ {key:'material_investment',label:'投面辅料',stage:3,kind:'event'},
  {key:'fabric_receipt_a',label:'需对色面料到仓周期',stage:3,kind:'forecast'},
  {key:'fabric_receipt_b',label:'不对色面料到仓周期',stage:3,kind:'forecast'},
  {key:'color_confirmation',label:'对色完成',stage:3,kind:'forecast'},
@@ -43,7 +43,11 @@ export const FRAMEWORK_TIME_NODES:readonly OrderTimeNode[]=[
 export const OrderTimeConfigurationSchema=z.object({nodes:OrderTimeStandardSchema.shape.nodes,stageBufferMinutes:OrderTimeStandardSchema.shape.stageBufferMinutes,framework:OrderTimeStandardSchema.shape.framework}).strict().superRefine((value,ctx)=>{
  const catalog=value.framework?[...ORDER_TIME_NODES,...FRAMEWORK_TIME_NODES]:ORDER_TIME_NODES;
  const keys=new Set(catalog.map(n=>n.key));
- for(const key of Object.keys(value.nodes))if(!keys.has(key))ctx.addIssue({code:'custom',path:['nodes',key],message:'不是本系统可设置的节点'});
+ for(const [key,rule] of Object.entries(value.nodes)){
+  if(!keys.has(key))ctx.addIssue({code:'custom',path:['nodes',key],message:'不是本系统可设置的节点'});
+  if(key!=='material_investment'&&rule.kind==='event'&&rule.accessoriesLeadTime)
+   ctx.addIssue({code:'custom',path:['nodes',key,'accessoriesLeadTime'],message:'辅料采购周期只用于投面辅料'});
+ }
  for(const node of catalog){const rule=value.nodes[node.key];if(!rule||rule.kind!==(value.framework&&['development_confirmation','development_positioning'].includes(node.key)?'work':value.framework&&node.key==='warehouse_accessories'?'date':node.kind))ctx.addIssue({code:'custom',path:['nodes',node.key],message:node.label+'的设置不完整'});}
  for(const parent of ORDER_TIME_NODES){const rule=value.nodes[parent.key];if(!rule||!('minutes'in rule)||rule.minutes===null)continue;
   const children=ORDER_TIME_NODES.filter(n=>n.includedIn?.includes(parent.key));
@@ -66,11 +70,11 @@ export const OrderTimeSettingsUseSchema=z.object({expectedVersion:z.number().int
 });
 export const OrderTimeCalculationSchema=SettingsCalculationSchema.omit({values:true}).extend({
  bulkWashing:z.object({mode:z.enum(['none','factory','after_receipt']),accounting:z.enum(['additional','included_in_factory'])}).strict().optional(),
- values:OrderTimeConfigurationSchema,frameworkRoute:z.enum(['A','B']).optional(),startAt:z.iso.datetime({offset:true}),
+ values:OrderTimeConfigurationSchema,frameworkRoute:z.enum(['A','B']).optional(),materialInvestmentScope:z.enum(['fabric','accessories','both']).nullable().optional(),startAt:z.iso.datetime({offset:true}),
  lines:z.array(z.object({id:z.string().trim().min(1).max(80),customerDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable()}).strict()).min(1).max(20),
 }).strict();
 export type OrderTimeCalculation=z.infer<typeof OrderTimeCalculationSchema>;
-export type OrderTimeCalculationResult={lines:Array<{milestones?:Array<z.infer<typeof FrameworkMilestoneResultSchema>>;id:string;customerDate:string|null;totalSpanMinutes:number|null;expectedEnd:string|null;marginMinutes:number|null;
+export type OrderTimeCalculationResult={lines:Array<{milestones?:Array<z.infer<typeof FrameworkMilestoneResultSchema>>;inputWarnings?:string[];id:string;customerDate:string|null;totalSpanMinutes:number|null;expectedEnd:string|null;marginMinutes:number|null;
  deliveryStatus?:'sufficient'|'insufficient'|'unknown';
  stages:Array<{stage:number;spanMinutes:number|null}>;rows:Array<{id:string;parameterKey:string;label:string;stage:number;minutes:number|null;calendar:string|null;startAt:string|null;startExclusive:boolean;endAt:string|null;endExclusive:boolean;includedIn:string|null;missing:string[]}>}>};
 
@@ -106,7 +110,7 @@ export function prepareTimeFrameworkConfiguration(values:OrderTimeConfiguration)
   const prior=next.nodes[key];
   next.nodes[key]={kind:'work',minutes:prior?.minutes&&prior.minutes>0?prior.minutes:minutes,calendar:prior?.calendar??'continuous',reminder:prior?.reminder??{enabled:true,percent:70}};
  }
- for(const node of FRAMEWORK_TIME_NODES)next.nodes[node.key]=OrderTimeRuleSchema.parse({kind:node.kind,minutes:node.key.startsWith('bulk_')?null:node.key==='fabric_receipt_a'?41*1440:node.key==='fabric_receipt_b'?31*1440:node.key==='color_confirmation'?12*1440:0,calendar:'continuous',reminder:{enabled:false,percent:70}});
+ for(const node of FRAMEWORK_TIME_NODES)next.nodes[node.key]=OrderTimeRuleSchema.parse({kind:node.kind,minutes:node.key.startsWith('bulk_')?null:node.key==='fabric_receipt_a'?41*1440:node.key==='fabric_receipt_b'?31*1440:node.key==='color_confirmation'?12*1440:0,calendar:'continuous',reminder:{enabled:node.key==='material_investment',percent:70}});
  next.nodes.warehouse_accessories={kind:'date',minutes:0,calendar:'continuous',reminder:next.nodes.warehouse_accessories?.reminder??{enabled:false,percent:70}};
  return OrderTimeConfigurationSchema.parse(next);
 }

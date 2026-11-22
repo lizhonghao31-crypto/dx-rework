@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {CraftStepChoiceSchema} from './digital-craft.js';
-import {FrozenOrderTimePlanSchema,OrderTimeCalendarSchema} from './order-time-plan.js';
+import {FrozenOrderTimePlanSchema,MaterialInvestmentLeadTimeSchema,OrderTimeCalendarSchema} from './order-time-plan.js';
 import {SeriesDateSchema,SeriesMilestoneKeySchema} from './digital-series-plan.js';
 
 const reference=z.string().trim().min(1).max(300);
@@ -29,12 +29,16 @@ export const FrameworkMilestoneBindingSchema=z.object({key:SeriesMilestoneKeySch
 /** A frozen input is not a live settings lookup. Scope identity includes the
  * original PO/round/batch references; adapters own authorization and membership.
  */
+export const MaterialInvestmentScopeSchema=z.object({fabric:z.boolean(),accessories:z.boolean(),reference}).strict()
+ .refine(scope=>scope.fabric||scope.accessories,'至少需要一项可信采购范围');
+export type MaterialInvestmentScope=z.infer<typeof MaterialInvestmentScopeSchema>;
 export const TimeFrameworkInputSchema=z.object({
  scopeRef:reference,route:z.enum(['A','B']),acceptedAt:FrameworkAnchorSchema,
  customerDelivery:z.object({date:SeriesDateSchema,source:reference,revision:z.number().int().positive()}).strict(),
  plan:FrozenOrderTimePlanSchema,milestoneStandard:FrameworkMilestoneStandardSchema,
  work:z.array(FrameworkWorkSchema).min(1),bindings:z.array(FrameworkMilestoneBindingSchema),
  notBefore:z.record(z.string(),FrameworkAnchorSchema),
+ materialInvestmentScope:MaterialInvestmentScopeSchema.nullable().optional(),
 }).strict().superRefine((value,context)=>{
  const ids=new Set(value.work.map(row=>row.id));
  if(ids.size!==value.work.length)context.addIssue({code:'custom',path:['work'],message:'工作身份重复'});
@@ -51,7 +55,10 @@ export const TimeFrameworkInputSchema=z.object({
 export type TimeFrameworkInput=z.infer<typeof TimeFrameworkInputSchema>;
 export type FrameworkTarget=z.infer<typeof FrameworkTargetSchema>;
 
-export const FrameworkMilestoneResultSchema=z.object({key:SeriesMilestoneKeySchema,date:SeriesDateSchema,
+export const FrameworkMilestoneResultSchema=z.object({key:SeriesMilestoneKeySchema,date:SeriesDateSchema.nullable(),
+ materialInvestmentTargetBasis:z.object({scope:MaterialInvestmentScopeSchema.nullable(),
+  branches:z.array(z.object({kind:z.enum(['fabric','accessories']),arrivalDate:SeriesDateSchema,arrival:FrameworkTimeSchema,
+   leadTime:MaterialInvestmentLeadTimeSchema.nullable()}).strict())}).strict().optional(),
  target:FrameworkTimeSchema,planned:FrameworkTimeSchema,workIds:z.array(reference),
  status:z.enum(['sufficient','insufficient','unknown']),lateMinutes:z.number().nonnegative().nullable(),
  marginMinutes:z.number().nullable(),blockingWorkIds:z.array(reference),

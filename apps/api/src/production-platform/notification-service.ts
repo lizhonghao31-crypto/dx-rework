@@ -4,7 +4,7 @@ import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../t
 import {shortLeadTodos} from './short-lead-todos.js';
 import {orderTimeTodos,orderTimeNotification} from './order-time-todos.js';
 import {qcProgressNotices,qcNoticesAsTodos} from './qc-progress-todos.js';
-import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from './preparation-todos.js';
+import {materialInvestmentTodos,preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from './preparation-todos.js';
 import {effectiveSourcingDueSql} from './sla-sourcing-deadline-sql.js';
 import {slaNotificationWindow} from './sla-notification-window.js';
 import {slaNotificationPreferences,slaNotificationDue,type SlaNotificationPreference} from './sla-notification-preferences.js';
@@ -168,6 +168,11 @@ export class DigitalProductionNotificationService {
           await this.notice(client,{key:prior?.source_key??`deadline:${task.task_id}:${task.revision_id}:${kind}`,taskId:task.task_id,kind,revision:task.revision_id},(await this.recipients(client,task,kind,people)).map(p=>p.actorId));
         }
       }
+      for(const person of people.filter(actor=>actor.actorRoles.includes('order_merchandiser'))){
+        const reminders:Array<{key:string;todoId:string}>=[];
+        await materialInvestmentTodos(client,person,undefined,row=>reminders.push(row));
+        for(const reminder of reminders)await this.notice(client,{...reminder,kind:'material_investment'},[person.actorId]);
+      }
       for(const person of people)for(const todo of await bulkWashingTodos(client,person))await this.notice(client,{key:`bulk-washing:${todo.todoId}:${todo.contentToken}`,todoId:todo.todoId,kind:'bulk_washing'},[person.actorId]);
       for(const notice of await qcProgressNotices(client,people,undefined,this.database)){if(await acceptanceIncludesNative(this.database,notice.taskId))await this.notice(client,{key:notice.key,taskId:notice.taskId,kind:'qc_progress'},notice.recipients);}
       await this.projectChildren(client);
@@ -258,7 +263,7 @@ export class DigitalProductionNotificationService {
     result.push(...await bulkWashingTodos(this.database,actor,projection));
     result.push(...await specialCraftQuotationTodos(this.database,actor,projection));
     result.push(...await orderTimeTodos(this.database,actor,projection),...await shortLeadTodos(this.database,actor,projection));
-    result.push(...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
+    result.push(...await materialInvestmentTodos(this.database,actor,projection),...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
 
     if(!projection?.todoId)result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor,projection));
     for(const {task,missing} of eligible){
@@ -288,6 +293,13 @@ export class DigitalProductionNotificationService {
   async todo(actor:TrustedActorContext,id:string){const selected=await this.todoSelections(actor,{todoId:id});return selected[0]?selected[0].load():null;}
   private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
+    if(event.event_kind==='material_investment'){
+      if(!event.todo_id)return null;
+      const current:{notice?:{key:string;title:string;route:TodoRouteDescriptor}}={};
+      await materialInvestmentTodos(database,actor,{todoId:event.todo_id},row=>{current.notice=row;});
+      return current.notice&&event.source_key===current.notice.key?{eventId:event.event_id,title:current.notice.title,actionable:true,
+       route:current.notice.route,createdAt:iso(event.created_at)}:null;
+    }
     if(event.event_kind==='bulk_washing'){
       const todo=event.todo_id?(await bulkWashingTodos(database,actor,{todoId:event.todo_id}))[0]:null;
       return todo&&event.source_key===`bulk-washing:${todo.todoId}:${todo.contentToken}`?{eventId:event.event_id,title:todo.taskTitle!,actionable:true,route:todo.route,createdAt:new Date(event.created_at).toISOString()}:null;

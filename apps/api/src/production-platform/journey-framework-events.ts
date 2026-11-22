@@ -3,7 +3,7 @@ import type {FixedScheduleProgress} from '@dx-rework/contracts';
 import type {FixedScheduleBasis} from './fixed-schedule-basis.js';
 
 const events:Record<string,{label:string;role:string}>={
- design_handover:{label:'设计资料交接',role:'设计'},material_investment:{label:'跟单投面料',role:'订单跟单'},
+ design_handover:{label:'设计资料交接',role:'设计'},material_investment:{label:'投面辅料',role:'订单跟单'},
  fabric_receipt:{label:'面料实际到仓',role:'仓管'},
  color_confirmation:{label:'对色完成',role:'订单跟单'},style_label_ready:{label:'款号唛实物备齐',role:'仓管'},
  warehouse_accessories:{label:'辅料实物备齐',role:'仓管'},
@@ -22,6 +22,10 @@ export function attachFrameworkEvents(item:OrderJourney,basis:FixedScheduleBasis
   const identity=JSON.stringify([work.canonicalWorkRef,fact.businessCompleted,fact.completed,fact.evidenceRefs]);
   const existing=shared.get(identity);
   if(existing){existing.fixedTargets!.push({scopeRef:scope.scopeRef,lineId:scope.lineId,progress:target});existing.subject='整款共用';for(const record of existing.records)record.lineId=null;if(target.goalDelta.kind==='late'&&!existing.risks.includes('overdue'))existing.risks.push('overdue');continue;}
+  const at=Date.parse(progress.asOf),material=key==='material_investment'&&!fact.businessCompleted&&!basis.termination?basis.materialInvestmentTiming:undefined;
+  const due=material?Date.parse(material.dueAt):null;
+  const dueRisk=due!==null&&(at>due||at===due&&material?.exclusive)?'overdue'
+   :material?.warningAt&&at>=Date.parse(material.warningAt)?'due_soon':null;
   const actual=fact.completed,po=item.lines.find(line=>line.id===scope.lineId);
   const node:JourneyNode={key,instanceId:`framework-event:${scope.scopeRef}:${work.id}`,label:definition.label,stage:'preparation',
    state:fact.businessCompleted?'completed':basis.termination?'cancelled':'pending',current:true,round:null,occurrence:null,
@@ -31,8 +35,8 @@ export function attachFrameworkEvents(item:OrderJourney,basis:FixedScheduleBasis
    expectedAt:target.currentTarget?.at??target.goalDelta.targetAt,expectedKind:'plan',expectedPrecision:'instant',
    actualAt:actual.precision==='instant'?actual.at:null,actualDate:actual.precision==='date'?actual.date:null,actualQuality:actual.precision==='unknown'?'missing':'unverified',
    enteredAt:null,sla:'not_set',completionResult:null,overdueSeconds:null,
-   risks:target.goalDelta.kind==='late'?['overdue']:fact.businessCompleted&&actual.precision==='unknown'?['unknown']:[],blockers:[],
-   records:[{domain:'preparation',id:item.orderId,url:`/ui/digital-production?bulk=${item.orderId}`,mode:'read',version:null,lineId:scope.lineId}],inheritedFrom:null,unavailableReason:null};
+   risks:target.goalDelta.kind==='late'||dueRisk==='overdue'?['overdue']:dueRisk==='due_soon'?['due_soon']:fact.businessCompleted&&actual.precision==='unknown'?['unknown']:[],blockers:[],
+   records:[{domain:'preparation',id:item.orderId,url:key==='material_investment'?`/ui/digital-production?materialOrder=${item.orderId}&materialKind=material_investment`:`/ui/digital-production?bulk=${item.orderId}`,mode:'read',version:null,lineId:scope.lineId}],inheritedFrom:null,unavailableReason:null};
   stage.nodes.push(node);
   shared.set(identity,node);
  }

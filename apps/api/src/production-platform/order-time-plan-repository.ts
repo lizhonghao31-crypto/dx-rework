@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {OrderTimeWashingReworkPlanSchema,type OrderTimeWashingReworkPlan} from '@dx-rework/contracts/order-time-washing-rework';
 import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
-import {FrozenTimeFrameworkSchema,type FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
+import {FrozenTimeFrameworkSchema,type FrozenTimeFramework,type MaterialInvestmentScope} from '@dx-rework/contracts/order-time-framework';
 import type {OrderTimeNativeProgress} from './order-time-request-plan.js';
 import {frameworkScopeInputs} from './order-time-framework-route.js';
 import {preparedStoredRewash,retainedWashingReworkTargets} from './order-time-washing-rework.js';
@@ -23,8 +23,9 @@ export type OrderTimeInput={version:'order-time-input-v1'|'order-time-input-rewa
  formalTargets?:Targets;
  carriedFormalInputs?:FormalRemainingInputs;
  rewashing?:OrderTimeWashingReworkPlan[];
- frameworkContext?:{route:SeriesRoute;acceptedAt:SlaAnchor;notBefore:Record<string,SlaAnchor>;progress:Record<string,OrderTimeNativeProgress>};
+ frameworkContext?:{route:SeriesRoute;acceptedAt:SlaAnchor;notBefore:Record<string,SlaAnchor>;progress:Record<string,OrderTimeNativeProgress>;materialInvestmentResolutionRef?:string};
  frameworkPlans?:Record<string,FrozenTimeFramework>;
+ materialInvestmentScope?:MaterialInvestmentScope|null;
  factoryCommitments?:Array<{lineId:string;label:string;date:string;version:number;source:string}>;
  scopes:Array<OrderTimeScope&{lineId:string|null;customerGoalIds:string[];customerDateVersion?:number}>;route:{complete:boolean;missing:string[]}};
 type Targets=Record<string,Record<string,FixedTimelineTarget>>;
@@ -203,11 +204,18 @@ export class OrderTimePlanRepository{
   }
   if(value.frameworkContext){
    const context=value.frameworkContext,progress=new Map(Object.entries(context.progress));
+   const materialInvestmentResolutionRef=context.materialInvestmentResolutionRef;
+   delete context.materialInvestmentResolutionRef;
    const plans:Record<string,FrozenTimeFramework>={};
    for(const scope of frameworkScopeInputs(value,context.route,context.acceptedAt,context.notBefore)){
     const old=previous?.input.frameworkPlans?.[scope.scopeRef];
     if(old&&kind==='customer_date_change'&&!changedScopes.has(scope.scopeRef)){plans[scope.scopeRef]=structuredClone(old);continue;}
-    const result=evaluateTimeFrameworkCandidate(scope,{purpose:'order_proposal',observedAt:time.now,retained:retainedWashingReworkTargets(scope,progress,old,time.now,newRewash.length>0,value.rewashing)});
+    const sameRoute=old?.input.route===scope.route;
+    const sameDelivery=old?.input.customerDelivery.date===scope.customerDelivery.date;
+    const result=evaluateTimeFrameworkCandidate(scope,{purpose:'order_proposal',observedAt:time.now,
+     ...(old&&kind!=='customer_date_change'&&sameRoute?{adoptedMilestones:old.milestones}:{}),
+     ...(kind==='arrangement'&&sameRoute&&sameDelivery&&materialInvestmentResolutionRef?{materialInvestmentResolutionRef}:{}),
+     retained:retainedWashingReworkTargets(scope,progress,old,time.now,newRewash.length>0,value.rewashing)});
     plans[scope.scopeRef]=freezeTimeFrameworkCandidate(result,{reference:`${input.eventRef}:${scope.scopeRef}`,revision:(old?.revision??0)+1,previousReference:old?.reference??null,eventRef:input.eventRef});
    }
    value.frameworkPlans=plans;

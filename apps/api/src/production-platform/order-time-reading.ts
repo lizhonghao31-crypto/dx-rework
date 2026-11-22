@@ -12,6 +12,7 @@ import type {SeriesObservedFact} from '@dx-rework/contracts/digital-series-plan'
 import {readSeriesPlanFacts} from './series-plan-facts.js';
 import {frameworkJourneyBasis} from './journey-time-framework.js';
 import {orderTimeCompletionTarget,inheritedSourcePolicyAt,isInheritedSourceWork,type InheritedOrderTimeHistory} from './order-time-completion-target.js';
+import {materialInvestmentReminder} from './material-investment-reminder.js';
 import {currentPreparationMaterial} from './preparation-material-repository.js';
 import {createHash} from 'node:crypto';
 import type {PoolClient} from 'pg';
@@ -40,7 +41,7 @@ const instant=(value:unknown):ScheduleOccurrence=>value instanceof Date?{precisi
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
 type NativeTask={cancel_events?:string[];source_cancel_events?:SourceTaskCancelEvent[];ready_correction?:ReadyCorrection|null;task_id:string;task_kind:string;route_instance_id:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar'];enteredAt?:string|null;timeQuality?:string;basis?:string[]}|null;native_entered_at:Date|null;warning_at:Date|null};
-type Evidence={termination?:JourneyTermination|null;tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;unplannedRewashing?:ReturnType<typeof journeyUnplannedWashingRework>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
+type Evidence={materialInvestmentTiming?:FixedScheduleBasis['materialInvestmentTiming'];termination?:JourneyTermination|null;tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;unplannedRewashing?:ReturnType<typeof journeyUnplannedWashingRework>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
@@ -323,7 +324,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
  // before a formal instruction exists. Missing targets alone prove nothing.
  const framework=frameworkJourneyBasis(saved,scopes,evidence.policies??[],item.asOf??saved.time.now);
  const noSecondary=resource.kind==='order'&&saved.input.route.complete&&!saved.input.work.some(work=>(['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_qc'].includes(work.parameterKey)||work.parameterKey.startsWith('bulk_special_')));
- return {...(framework?{framework}:{}),version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',...(noSecondary?{notApplicableNodes:['process_logistics','bulk_qc'] as Array<'process_logistics'|'bulk_qc'>}:{}),scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:evidence.termination??legacy?.termination??null,
+ return {...(framework?{framework}:{}),...(evidence.materialInvestmentTiming?{materialInvestmentTiming:evidence.materialInvestmentTiming}:{}),version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',...(noSecondary?{notApplicableNodes:['process_logistics','bulk_qc'] as Array<'process_logistics'|'bulk_qc'>}:{}),scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:evidence.termination??legacy?.termination??null,
   pending:!saved.input.route.complete||scopes.some(scope=>{const required=new Set(requiredFixedTimelineWork(scope.work,scope.terminalIds).map(work=>work.id));return scope.work.some(work=>required.has(work.id)&&(!work.start||!work.end));})};
 }
 
@@ -350,7 +351,15 @@ export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:O
  if(resource.kind==='order'&&saved.input.frameworkPlans){
   const order=(await db.query('SELECT customer_code FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0];
   if(!order)throw Error('本单时间事实缺少原订单');
-  evidence.frameworkFacts=(await readSeriesPlanFacts(db,resource.id,item.sourceId,order.customer_code,Number(saved.input.work.map(work=>work.canonicalWorkRef?.match(/^source:[^:]+:round:(\d+):/)?.[1]).find(Boolean)??item.adoptedRound??1))).facts;
+  const series=await readSeriesPlanFacts(db,resource.id,item.sourceId,order.customer_code,Number(saved.input.work.map(work=>work.canonicalWorkRef?.match(/^source:[^:]+:round:(\d+):/)?.[1]).find(Boolean)??item.adoptedRound??1),true);
+  evidence.frameworkFacts=series.facts;
+  const handover=series.preparationFacts?.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole'&&f.valid&&f.state==='ready');
+  const investment=series.preparationFacts?.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
+  if(handover?.investmentScopeBasis&&!(investment?.state==='ready'&&investment.valid)){
+   const timing=await materialInvestmentReminder(db,{sourceId:item.sourceId,orderId:resource.id,handoverId:handover.recordId,
+    scopeFingerprint:handover.investmentScopeBasis.fingerprint},new Date(asOf),saved);
+   if(timing)evidence.materialInvestmentTiming={dueAt:timing.dueAt,warningAt:timing.warningAt,exclusive:timing.exclusive};
+  }
   const commercial=(await db.query(`SELECT q.quote_id,q.confirmed_version,v.confirmation->>'confirmedAt' AS confirmed_at
    FROM digital_quotation_documents q JOIN digital_quotation_versions v ON v.quote_id=q.quote_id AND v.version=q.confirmed_version
    WHERE q.production_order_id=$1`,[resource.id])).rows[0];
