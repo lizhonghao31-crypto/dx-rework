@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "38abda2844e4127689df028bf431e31248bdeeff",
-  "sourceFingerprint": "d3c51fc9617b4dc1205af91c2d27087d74c2b67cf4266892b584a2955a8bb4eb",
+  "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
   "rules": [
     {
       "rule": "同一授权 scope 和采用版的七组只读日期，里程碑完整覆盖后才取最大目标，开裁及工厂生产沿同范围原阶段排程。",
@@ -46,7 +46,8 @@
         "docs/ui/ASTRYX_UI_SPEC.md",
         "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
         "tests/unit/cockpit-framework.test.ts",
-        "tests/unit/cockpit-detail.test.ts"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/helpers/order-time-rewash-fixture.ts"
       ],
       "reads": [
         "apps/web/src/digital-journey-cockpit-model.ts#journeyDetailSelection",
@@ -63,7 +64,7 @@
       ],
       "initialization": "原生签名 App 登录 Root、相同已采用计划，桌面 1165 和窄屏 650，以正常数据和原 URL 走真实入口。",
       "dateAndPermission": "组日期、组原实际、原差异评价各自取原 scope/版本，旧无计划沿原数据，链接仍由后端原有授权生成。",
-      "expectation": "每组三至一项或零里程碑，A/B 总数与原模型相同；无环节重复，原节点与同单原业务页面精确返回；同交期双 PO 切换验证独有节点、同一共享节点、准确材料请求和原单返回范围；本单全部恢复双 PO。原组待核可展开缺项和实际范围依据，可查看的有排程旧单显示未采用计划，差异基准保留原目标与版本。 框架视图先精确选中原焦点，再在当前可见范围内按原顺序选择正在办理的节点或首个可见节点。默认洗水节点及六窗口返回沿原身份。",
+      "expectation": "每组三至一项或零里程碑，A/B 总数与原模型相同；无环节重复，原节点与同单原业务页面精确返回；同交期双 PO 切换验证独有节点、同一共享节点、准确材料请求和原单返回范围；本单全部恢复双 PO。原组待核可展开缺项和实际范围依据，可查看的有排程旧单显示未采用计划，差异基准保留原目标与版本。 框架视图先精确选中原焦点，再在当前可见范围内按原顺序选择正在办理的节点或首个可见节点。默认洗水节点及六窗口返回沿原身份。 总览深链仅带任务实例而无 PO 参数时，仅在该实例归属唯一时进入其 PO；共享或未知不自动套 PO。通过首页真实第二张 PO 返工、原材料接口及原记录返回验证，保留显式范围与全单。",
       "checks": [
         "cockpit-ab-and-creation",
         "cockpit-detail-units",
@@ -75,92 +76,92 @@
     {
       "id": "cockpit-ab-and-creation",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres TIME08_BROWSER_EVIDENCE=/tmp/dx-f3-evidence/window-default-final/browser node node_modules/vitest/vitest.mjs run --maxWorkers=1 tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/window-default-final/ab-creation.json",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres TIME08_BROWSER_EVIDENCE=/tmp/dx-f3-evidence/focused-po-final/final-browser node node_modules/vitest/vitest.mjs run --maxWorkers=1 tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/ab-creation-verified.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 18,
+      "passed": 19,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7ced667d2f7a6958417f97ef5cba811d10f840f0",
-      "sourceFingerprint": "d3c51fc9617b4dc1205af91c2d27087d74c2b67cf4266892b584a2955a8bb4eb",
-      "context": "本机 localhost 隔离 PostgreSQL 13.23、签名 Chromium 原生浏览器、Node 22.22.2、一个 worker。控制组为已合并旧无计划的三条创建路径，同一候选的正式 A/B 两张合成单逐组取日期、查看原单据并返回。",
-      "startedAt": "2026-11-22T19:57:57.387Z",
-      "endedAt": "2026-11-22T20:00:05.690Z",
-      "log": "/tmp/dx-f3-evidence/window-default-final/ab-creation.log",
-      "logSha256": "8433e950d7d5e67f3836a56a997a26c724417bc5d3da0580ea93fda773c6ac7c",
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
+      "context": "本机 localhost 隔离 PostgreSQL 16.16、签名 Chromium 原生浏览器、Node 22.22.2、一个 worker。控制组为已合并旧无计划的三条创建路径，同一候选的正式 A/B 两张合成单逐组取日期、查看原单据并返回。",
+      "startedAt": "2026-11-22T20:13:51.305Z",
+      "endedAt": "2026-11-22T20:16:07.713Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/ab-creation-verified.log",
+      "logSha256": "47badb8fb61bd531e46ca0bfd8052f886c4908c2be18d7441c167a76b37d2f81",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2e4f05f24cb357f2b1c81d368f201c5a54ba8d847c7634a9c91de33f9b9980f0"
+          "sha256": "eacb00ec01e4dde0cb0aff2c62625c2a610472b939b2cd494530de4e9051b0f8"
         }
       ]
     },
     {
       "id": "cockpit-same-session-pmc",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --maxWorkers=1 tests/integration/journey-page-native-browser-postgres.test.ts -t \"rechecks the real same valid PMC session\" --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/window-default-final/pmc.json",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --maxWorkers=1 tests/integration/journey-page-native-browser-postgres.test.ts -t \"rechecks the real same valid PMC session\" --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/pmc-verified.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 1,
       "failed": 0,
       "skipped": 10,
-      "testedHead": "7ced667d2f7a6958417f97ef5cba811d10f840f0",
-      "sourceFingerprint": "d3c51fc9617b4dc1205af91c2d27087d74c2b67cf4266892b584a2955a8bb4eb",
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
       "context": "同一有效 PMC 浏览器会话中真实撤权，独立 schema，重新读取不能继续使用旧已授权投影，其余未选到用例按实报告。",
-      "startedAt": "2026-11-22T19:58:12.792Z",
-      "endedAt": "2026-11-22T19:58:47.952Z",
-      "log": "/tmp/dx-f3-evidence/window-default-final/pmc.log",
-      "logSha256": "c4aab4fce26913ca87bac874c2a3373c99e604f60fc1e3dc5910c6a345ec71a1",
+      "startedAt": "2026-11-22T20:16:08.079Z",
+      "endedAt": "2026-11-22T20:16:39.162Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/pmc-verified.log",
+      "logSha256": "4007e62025713be3f239d35fbcef710980473b4e387955070e746226acdf2c3c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5430485670e9b68261d5c81d8b9f6f68ae7c9016f5c67bcde10764ee9f3030ef"
+          "sha256": "38efa7566c845b75da571c91cc95707b335a8843f34ced2e28b20893f7f5dbb2"
         }
       ]
     },
     {
       "id": "cockpit-detail-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 tests/unit/cockpit-stage-dates.test.ts tests/unit/cockpit-framework.test.ts tests/unit/cockpit-detail.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/window-default-final/unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 tests/unit/cockpit-stage-dates.test.ts tests/unit/cockpit-framework.test.ts tests/unit/cockpit-detail.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/unit-verified.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 93,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7ced667d2f7a6958417f97ef5cba811d10f840f0",
-      "sourceFingerprint": "d3c51fc9617b4dc1205af91c2d27087d74c2b67cf4266892b584a2955a8bb4eb",
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
       "context": "同候选 Chromium DOM 的 SSR/纯投影对照，双 PO、日期最大值/未知/实际完成、原时效结果、审核和 PMC 权限矩阵。",
-      "startedAt": "2026-11-22T19:56:58.049Z",
-      "endedAt": "2026-11-22T19:57:05.379Z",
-      "log": "/tmp/dx-f3-evidence/window-default-final/unit.log",
-      "logSha256": "7b31733181d2f9402b519f6d107548087930facb76350cd8a11f2f36250c77ab",
+      "startedAt": "2026-11-22T20:12:48.145Z",
+      "endedAt": "2026-11-22T20:12:57.114Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/unit-verified.log",
+      "logSha256": "9aa5ec340dd498daf0c5682388a5d1f2cc638216c305cf83bb47a5f20eacdbe2",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "26d87aec87655b4aef2a095e471e76b2ae6fd142c0e695b570157ca88fee05dc"
+          "sha256": "a5bb5b6d17e20fab7d8be4391023a9e988f9a6d24d5e867e16238bda97e4df93"
         }
       ]
     },
     {
       "id": "cockpit-original-washing-default",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npx --no-install vitest run tests/integration/washing-window-navigation-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts -t \"restores the implicit default|selects each exact window|keeps a PO-only stage\" --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/window-default-final/native.json",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npx --no-install vitest run --maxWorkers=1 tests/integration/washing-window-navigation-browser-postgres.test.ts -t \"restores the implicit default|selects each exact window\" --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/washing-verified.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3,
+      "passed": 2,
       "failed": 0,
-      "skipped": 6,
-      "testedHead": "7ced667d2f7a6958417f97ef5cba811d10f840f0",
-      "sourceFingerprint": "d3c51fc9617b4dc1205af91c2d27087d74c2b67cf4266892b584a2955a8bb4eb",
-      "context": "使用同一本机隔离 PostgreSQL 13.23、签名 Chromium 和原业务办理页面。前一候选 66fad008 的 Full 45060039040 该旧用例失败。当前保留原核验，核六个洗水窗口、原始默认节点、真实记录返回和相同交期双 PO 独占/共享节点。",
-      "startedAt": "2026-11-22T19:56:27.074Z",
-      "endedAt": "2026-11-22T19:57:52.136Z",
-      "log": "/tmp/dx-f3-evidence/window-default-final/native.log",
-      "logSha256": "c542511e334c8f7575eb332323b788349d3b1c35d28340afc5b7c9563835f738",
+      "skipped": 3,
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
+      "context": "本机低权限隔离 PostgreSQL 16.16、签名 Chromium。前一候选 66fad008 的 Full 45060039040 原用例失败。保持原断言，重新验证六个洗水窗口、原始默认节点和原记录往返。",
+      "startedAt": "2026-11-22T20:12:36.528Z",
+      "endedAt": "2026-11-22T20:13:50.951Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/washing-verified.log",
+      "logSha256": "da38708a2b18a77d26588f866eaef2e856552e5a47daeef05c2dc0ee2e806734",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "afdaa60daf6ce76a57f5ec73e8026986218813c5cef4068bd48e146426b28969"
+          "sha256": "0558be6f9180ac9847d24ef84e52733489d41cd410ae175d3f80c1fe647463ad"
         }
       ]
     }
