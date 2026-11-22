@@ -8,6 +8,7 @@ import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {cockpitLegacyOrderBusinessTimeSql,cockpitLegacyOrderTimeSql,firstDevelopmentPublicationConfirmedOrder,orderTimeCreated} from './order-time-created.js';
 import {materialInvestmentRiskHistory} from './material-investment-risk-history.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
+import {cockpitStageDates} from './cockpit-stage-dates.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
 import {journeyMeasure,journeySpan,journeyCandidateCount} from '../platform/journey-diagnostic.js';
@@ -383,9 +384,9 @@ export class DigitalJourneyQuery {
       const selection=await this.nativeTaskSelection(db,new DigitalProductionAccessPolicy(db),actor,row,null);
       const ids=selection.tasks.filter(task=>journeyDefinition(task.task_kind)).map(task=>task.task_id);
       const taskPage=await new DigitalProductionTaskService(this.database).prepareReadPage(actor,ids,db,!compact);
-      const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact,undefined,undefined,taskPage,selection,compact);
+      const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact,undefined,undefined,taskPage,selection,{creation:compact,stageDates:compact&&round===undefined});
       if(!item)return digitalNotFound();
-      const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact,undefined,undefined,undefined,selection);
+      const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact,undefined,undefined,undefined,selection,{stageDates:compact});
       if(compact&&current){
         const creation=item.cockpitCreation;
         const details=item.cockpitCreationDetails??[];
@@ -405,6 +406,7 @@ export class DigitalJourneyQuery {
       if(current){
         if(current.businessProgress)item.businessProgress=current.businessProgress;
         if(current.fixedSchedule)item.fixedSchedule=current.fixedSchedule;
+        if(current.cockpitStageDates)item.cockpitStageDates=current.cockpitStageDates;
         if(current.visualProgress)item.visualProgress=current.visualProgress;
         if(current.identity)item.identity=current.identity;
         if(current.display)item.display=current.display;
@@ -536,7 +538,7 @@ export class DigitalJourneyQuery {
     return observation;
   }
 
-  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch,taskPage?:Awaited<ReturnType<DigitalProductionTaskService['prepareReadPage']>>,nativeSelection?:Awaited<ReturnType<DigitalJourneyQuery['nativeTaskSelection']>>,creationDetail=false):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture,prepared?:PreparedJourneySearch,taskPage?:Awaited<ReturnType<DigitalProductionTaskService['prepareReadPage']>>,nativeSelection?:Awaited<ReturnType<DigitalJourneyQuery['nativeTaskSelection']>>,detail:{creation?:boolean;stageDates?:boolean}={}):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
@@ -1029,7 +1031,7 @@ export class DigitalJourneyQuery {
         source?.order_time_managed||source?.draft_reserved===true||document?.status!=='published'?null:document.published_at,observed.now):null,
       orderCreatedAt:orderAccess?cockpitCreationTime(nativeOrderCreation?.at,order?.order_time_managed?null:row.cockpit_legacy_order_at??order?.created_at,observed.now):null
     },observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:identity.id,sourceId:identity.sourceId,orderId:identity.orderId,designStyleNo:identity.designStyleNo,temporaryStyleNo:identity.temporaryStyleNo,customer:identity.customer,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:visibleCreation&&Date.parse(visibleCreation.at)<=Date.parse(asOf)?visibleCreation.at:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
-    if(creationDetail){
+    if(detail.creation){
       // Preserve the initial round's publication time even for a later
       // development revision. Legacy registration clocks stay in list metadata.
       const firstSourceAt=cockpitCreationTime(source?.draft_reserved===true?nativeSourceCreation?.at:null,
@@ -1085,7 +1087,12 @@ export class DigitalJourneyQuery {
       const adopted=fullOrder&&oid?await readJourneyAdoptedPlan(db,oid,lines):oid?'unavailable' as const:null;
       const replacements=sourceAccess&&sid&&visibleTasks.some(task=>task.returned)
         ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
-      if(fixedInputs?.fixedSchedule){attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);item.fixedSchedule!.observationMode=observation.mode;}
+      if(fixedInputs?.fixedSchedule){
+        attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);
+        item.fixedSchedule!.observationMode=observation.mode;
+        if(detail.stageDates&&item.fixedSchedule!.framework)
+          item.cockpitStageDates=cockpitStageDates(fixedInputs.fixedSchedule,item.fixedSchedule!.framework);
+      }
       item.businessProgress=journeyBusinessProgress(item,observed.now,adopted,businessQuantities,requirementEvidence,replacements);
       item.businessProgress.dates=journeyBusinessDates(item);
       if(fixedInputs?.fixedSchedule?.policyVersion==='order-time-plan-v1')item.display=journeyDisplay(item,asOf,{cancelled,closedAt:item.display?.closedAt??null});

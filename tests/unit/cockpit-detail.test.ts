@@ -63,6 +63,19 @@ it("renders seven double rings with only two date rows, risk color and no invent
   expect(html).not.toContain("节点全流程一览");expect(html.match(/class="cockpit-stage-rings"/g)).toHaveLength(7);expect(html.match(/class="cockpit-stage-dates"/g)).toHaveLength(7);
   expect(html).toContain('is-danger');expect(html).toContain('stroke-dasharray="50 100"');expect(html).not.toContain("时间规则待完善");expect(html).toContain('title="实际 50%"');expect(html).not.toContain('role="tooltip"');expect(html).not.toContain("计划与时效");expect(html).not.toContain("含逾期");expect(html).not.toContain("时间100%");expect(html).not.toContain("订单进度 · 全单范围");
 });
+it('labels a readable original order schedule without milestones, without classifying restricted, missing or source-only plans',()=>{
+ const order=fixture();
+ order.seriesPlanVisible=true;
+ order.fixedSchedule={stages:[{stage:2,expected:{precision:'date',date:'2026-11-01'}}]} as NonNullable<OrderJourney['fixedSchedule']>;
+ order.visualProgress!.stages[1]!.expected=businessDate('2026-11-01');
+ expect(render(order)).toContain('未采用里程碑计划');
+ expect(render(order)).toContain('dateTime="2026-11-01"');
+ expect(render({...order,orderId:null})).not.toContain('未采用里程碑计划');
+ const restricted={...order,supervision:{status:'limited'} as NonNullable<OrderJourney['supervision']>};
+ expect(render(restricted)).not.toContain('未采用里程碑计划');
+ delete order.fixedSchedule;
+ expect(render(order)).not.toContain('未采用里程碑计划');
+});
 it("keeps exactly one handling link above the full node table, with completed records read-only",()=>{
   const html=render(fixture());
   expect(html.match(/taskView=handle/g)).toHaveLength(1);expect(html).toContain("进入该节点办理");expect(html).not.toContain("办理当前任务");expect(html).toContain("查看更多");const rows=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:fixture().stages[1]!.nodes,lines:[],context:{},onSelect:()=>{}}));expect(rows).toContain("查看记录");expect(rows).toContain("taskView=read");expect(rows).toContain("returnTo=");

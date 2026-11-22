@@ -1,312 +1,167 @@
 {
   "version": 1,
-  "base": "c9dace0c24c6ce1fd0a1d687542fefd469085250",
-  "sourceFingerprint": "74187db232becf0ccb5f4089ae561637f7086f5f3bbc6d742d73c68d2de7eefc",
+  "base": "38abda2844e4127689df028bf431e31248bdeeff",
+  "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
   "rules": [
     {
-      "rule": "在真实预下单依原材料版本交接给指定跟单，并在原准备面板登记；正式转单续用原记录。",
-      "source": "《座舱详情七大流程、创建与投面辅料纠偏》v2 §§7.4、7.5、10.1；T05–T11。",
+      "rule": "同一授权 scope 和采用版的七组只读日期，里程碑完整覆盖后才取最大目标，开裁及工厂生产沿同范围原阶段排程。",
+      "source": "座舱详情七大流程、创建与投面辅料纠偏 v2 §9.1–9.6、§9.11。",
       "writes": [
-        "apps/api/migrations/0297_preorder_preparation_material_evidence.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/production-readiness-panel.tsx",
-        "packages/contracts/src/production-readiness.ts",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/production-readiness-service.ts#canDownload",
-        "apps/web/src/production-readiness-panel.tsx#ProductionReadinessPanel"
-      ],
-      "initialization": "创建现有预下单草稿与真实交接，不发布或采纳计划。数据库迁移 0297 追加窄规则保原表、旧触发防线及旧资料。",
-      "dateAndPermission": "交接及实投用各自真实业务时间；跟单只读实际交接，转正式才取本单主跟单。与旧页面共享实际附件窗口，拒绝无权/非现行证据。",
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
-      ],
-      "expectation": "普通跟单以签名会话从待办进原面板、确认原生回执并返回。无成衣尺寸、纸样或正式 PO，草稿不发布不起钟；改范围后旧凭证拒绝，合法实际可保存；源资料和直接正式单原制单规格变化要求新交接，只失效受影响材料；旧无明细原事实仍保留但不满足新的适用范围；普通跟单仅本次有效交接或自己的原投料上传，下载、复用及旧回执均重新核授权。",
-      "checks": [
-        "preorder-original-pg-and-browser",
-        "preorder-schedule-and-authorization"
-      ]
-    },
-    {
-      "rule": "仅新采用的投面辅料目标依当时材料范围与原采购跨度反求，A 对色独立并保第九项。",
-      "source": "v2 §§7.2–7.3、7.8–7.9；T01–T04、T12–T15。",
-      "writes": [
-        "apps/api/src/production-platform/fixed-order-work.ts",
-        "apps/api/src/production-platform/framework-node-targets.ts",
-        "apps/api/src/production-platform/order-time-framework-route.ts",
-        "apps/api/src/production-platform/order-time-framework-submission.ts",
-        "apps/api/src/production-platform/order-time-framework.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/order-time-settings-calculation.ts",
-        "apps/api/src/production-platform/series-plan-facts.ts",
-        "apps/web/src/cockpit-milestones.tsx",
-        "apps/web/src/order-time-calculator.tsx",
-        "apps/web/src/order-time-milestone-fields.tsx",
-        "apps/web/src/order-time-node-fields.tsx",
-        "packages/contracts/src/digital-production-journey.ts",
-        "packages/contracts/src/digital-series-plan.ts",
-        "packages/contracts/src/order-time-framework.ts",
-        "packages/contracts/src/order-time-plan.ts",
-        "packages/contracts/src/order-time-settings.ts",
-        "packages/contracts/src/time-framework-journey.ts",
-        "tests/unit/order-time-framework.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-framework.ts#evaluateTimeFrameworkCandidate",
-        "apps/api/src/production-platform/order-time-settings-calculation.ts#orderTimeSettingsCalculation"
-      ],
-      "initialization": "原事件零工时，缺辅料周期/适用性按未知；首次采用或批准改期使用既有事务，普通安排重评但保已冻结目标。",
-      "dateAndPermission": "同一采用范围和各采购日历反求精确边界，原班表、非投料目标、旧记录及实际写入权限不改。",
-      "oldTests": [
-        "tests/unit/order-time-framework.test.ts",
-        "tests/unit/order-time-framework-submission.test.ts"
-      ],
-      "expectation": "03-29/03-25、小时与排他边界对照；A 逆序资料显示具体冲突而不搬目标，明示未知边界且保旧计划。",
-      "checks": [
-        "preorder-original-pg-and-browser",
-        "preorder-schedule-and-authorization"
-      ]
-    },
-    {
-      "rule": "提醒使用原有效交接和匹配采用截止，70%提醒、关闭、完成以及历史逾期各自独立。",
-      "source": "v2 §§7.5–7.7、10.1；T14–T19。",
-      "writes": [
-        "apps/api/src/production-platform/cockpit-actionable.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-framework-events.ts",
+        "apps/api/src/production-platform/cockpit-stage-dates.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-time-framework.ts",
-        "apps/api/src/production-platform/material-investment-reminder.ts",
-        "apps/api/src/production-platform/material-investment-risk-history.ts",
-        "apps/api/src/production-platform/notification-policy.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/todos/deep-link.ts",
-        "packages/contracts/src/todo-destination.ts",
-        "packages/contracts/src/todo-presentation.ts",
-        "packages/contracts/src/todos.ts"
+        "apps/api/src/production-platform/fixed-schedule-stages.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/unit/cockpit-stage-dates.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/material-investment-reminder.ts#materialInvestmentReminder",
-        "apps/api/src/production-platform/material-investment-risk-history.ts#materialInvestmentRiskHistory"
+        "apps/api/src/production-platform/journey-query.ts#DigitalJourneyQuery",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts#attachFixedJourneySchedule",
+        "apps/web/src/cockpit-stage-progress.tsx#CockpitStageProgress"
       ],
-      "initialization": "无有效窗口只保普通待办。新的匹配采用首次生效才可发送原通知，保持同原事项身份及单份历史记录。",
-      "dateAndPermission": "现行资格、业务快照和采用日历决定时点。日期无法证明或时点已终止时不新起责任，不用关闭时间冒充实际。",
       "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/unit/order-time-framework.test.ts"
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/integration/journey-page-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+        "tests/unit/cockpit-stage-dates.test.ts"
       ],
-      "expectation": "真实批准转单保原记录 ID，精确 70% 时只催一次；没有70%窗时也能关闭已送达的逾期提醒；关联历史来源在首次采用之前或之后，均以原订单制单交接身份保留同一正式截止和提醒。后录入较早材料不得提前整体完成，原迟到一小时继续存在。",
+      "initialization": "直接正式路线 A/B 和纯开发、联合审批、转正式的原夹具，双 PO 使用独立采用范围和不同阶段端点。",
+      "dateAndPermission": "既有完整时效授权和 snapshot 内观察时点，字段只在 cockpit 详情投影，列表索引及旧合算不调用；缺必要目标保待核。",
+      "expectation": "开裁、生产使用各自 PO 的原日期，产前取最晚完整目标；原图、原进度、原时效和原阶段差保留，禁止跨 PO 借日期。",
       "checks": [
-        "preorder-original-pg-and-browser",
-        "preorder-schedule-and-authorization"
+        "cockpit-ab-and-creation",
+        "cockpit-same-session-pmc",
+        "cockpit-detail-units"
       ]
     },
     {
-      "rule": "缺少有效投面辅料交接时无投料日期与责任提醒，启用时效标准的原生草稿仍保工艺顺序且不发布不起钟。",
-      "source": "审定 v2 §§7.5–7.6、10.1 与 #1077 Full 44939451064 两项失败；同时核对 #1076 对草稿时钟的原合同。",
+      "rule": "原流程区七组，里程碑仍是原 A 九、B 八项。真实创建记录、原节点/资料入口和返回上下文保留。",
+      "source": "设计审核 v2 §9.7–9.11、§11.6，Astryx UI 规范 §14。",
       "writes": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-milestones.tsx",
+        "apps/web/src/cockpit-stage-progress.tsx",
+        "apps/web/src/cockpit-detail-r5.css",
+        "docs/ui/ASTRYX_UI_SPEC.md",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/unit/cockpit-framework.test.ts",
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/helpers/order-time-rewash-fixture.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/production-readiness-service.ts#ProductionReadinessService",
-        "apps/api/src/production-platform/journey-fact-repository.ts#readStoredWithClient",
-        "apps/api/src/production-platform/order-time-admission.ts#acceptsNewOrderTime",
-        "apps/api/src/production-platform/order-time-created.ts#orderTimeCreated"
+        "apps/web/src/digital-journey-cockpit-model.ts#journeyDetailSelection",
+        "apps/web/src/cockpit-framework-nodes.tsx#CockpitFrameworkNodes",
+        "apps/web/src/cockpit-fixed-schedule.tsx#CockpitStageDifference",
+        "apps/web/src/cockpit-reading-context.ts"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/unit/journey-washing-projection.test.ts",
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/integration/washing-window-navigation-browser-postgres.test.ts"
       ],
-      "initialization": "保留真实洗水和旧计划事务；仅浏览器工艺草稿用其独立 schema 的原标准设置服务发布标准，厂务用例不加载该标准。",
-      "dateAndPermission": "缺真实投料范围时不借交接日期充当投料期限，保持其他时间与权限；浏览器用原签名会话保存，仅显式发布才有业务创建时钟。",
-      "expectation": "洗水正向事务及其他目标断言保留，实际投料截止、完成证据、催办和投料历史风险均为空；持久化 JourneyFact 再读，同样不造日期。保 PUT 200、schema 2、绣花后印花、重开排序与草稿未发布、不起钟、无正式单。",
+      "initialization": "原生签名 App 登录 Root、相同已采用计划，桌面 1165 和窄屏 650，以正常数据和原 URL 走真实入口。",
+      "dateAndPermission": "组日期、组原实际、原差异评价各自取原 scope/版本，旧无计划沿原数据，链接仍由后端原有授权生成。",
+      "expectation": "每组三至一项或零里程碑，A/B 总数与原模型相同；无环节重复，原节点与同单原业务页面精确返回；同交期双 PO 切换验证独有节点、同一共享节点、准确材料请求和原单返回范围；本单全部恢复双 PO。原组待核可展开缺项和实际范围依据，可查看的有排程旧单显示未采用计划，差异基准保留原目标与版本。 框架视图先精确选中原焦点，再在当前可见范围内按原顺序选择正在办理的节点或首个可见节点。默认洗水节点及六窗口返回沿原身份。 总览深链仅带任务实例而无 PO 参数时，仅在该实例归属唯一时进入其 PO；共享或未知不自动套 PO。通过首页真实第二张 PO 返工、原材料接口及原记录返回验证，保留显式范围与全单。",
       "checks": [
-        "preorder-original-pg-and-browser"
-      ]
-    },
-    {
-      "rule": "直接正式单已有原制单交接，关联历史开发来源后，由原有权角色按当前制单续接原记录。",
-      "source": "审定 v2 §§7.4–7.6 与 #1077 Codex Review 4659020861 的真实材料换版。",
-      "writes": [
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/web/src/production-readiness-panel.tsx",
-        "packages/contracts/src/production-readiness.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/preparation-material-repository.ts#preparationMaterialHistory",
-        "apps/api/src/production-platform/preparation-material-repository.ts#directInvestmentInstruction",
-        "apps/api/src/production-platform/preparation-todos.ts#materialInvestmentTodos"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#renews an instruction-backed handover"
-      ],
-      "initialization": "从原创建、安排与制单流程建立真实对照，由同一来源设计师匹配关联，并用原签名浏览器调用办理入口。",
-      "dateAndPermission": "同单原有效交接范围决定依据；仅原直接制单交接角色可续办，版本在原事务内绑定。既有开发源、预下单、提醒、真实材料历史和冻结时效保持。",
-      "expectation": "后附历史来源后改正式制单必须让旧交接失效，面板读取、发出与重读同一新版正式制单。旧正式版本、合法历史来源版本及设计师直接调用均被拒，跟单只登记新范围、未改辅料继续有效。续办只准原正式单入口；关联开发来源只读原事实、没有当前制单版本/代写资格。新增交接与原历史保留各自实际时间及原附件。",
-      "checks": [
-        "preorder-original-pg-and-browser",
-        "preorder-schedule-and-authorization"
-      ]
-    },
-    {
-      "rule": "已选投料行的订正只替换原行，独立追加保留真实既有行，完结只采信当前每条在范围内的实际。",
-      "source": "审定 v2 §§7.4–7.6、原面板追加订正操作与 #1077 Codex Review 4659091973。",
-      "writes": [
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/web/src/production-readiness-panel.tsx",
-        "packages/contracts/src/production-readiness.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/preparation-material-repository.ts#preparationInvestmentComplete",
-        "apps/api/src/production-platform/preparation-todos.ts#materialInvestmentTodos",
-        "apps/api/src/production-platform/material-investment-reminder.ts#materialInvestmentReminder"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/production-readiness-postgres.test.ts#replaces corrected investment rows"
-      ],
-      "initialization": "原正式单原制单真实交接两种布料；签名 App 走原面板。订正与追加使用明确原行及原版本，既有历史无需回写。",
-      "dateAndPermission": "原办理权、乐观版本与幂等不变；订正行用本次真实发生时间、不再用旧行支撑完成；其他真实行沿用其原发生依据。",
-      "expectation": "把误记 A 订正为 B 后仅 B 属当前实物事实，A 待办和既有可信截止继续；真正独立追加 B 时保留 A 并在齐全时才完成。改 PO/单位不双算，旧版本或选错原行拒绝，原版本日期、历史和其他材料证据保留。",
-      "checks": [
-        "preorder-original-pg-and-browser",
-        "preorder-schedule-and-authorization"
-      ]
-    },
-    {
-      "rule": "原面板使用明确所选行的真实发生时间，独立追加要求填写新的实际时刻。",
-      "source": "审定 v2 §7.4 原真实投料发生时点及 #1077 独立审查 43595f3。",
-      "writes": [
-        "apps/web/src/production-readiness-panel.tsx",
-        "packages/contracts/src/production-readiness.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/production-readiness-panel.tsx#investmentRowTime",
-        "packages/contracts/src/production-readiness.ts#preparationInvestmentRowKey"
-      ],
-      "oldTests": [
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "initialization": "使用原签名浏览器录入同一正式单两行不同的已核实际时点，打开、切行与重读均按同一行键查数据。",
-      "dateAndPermission": "仅按行引用原证明，缺证明留空；用户可以填写不同实际时刻，纯订正单位及款色保留本行原时间精度。",
-      "expectation": "A 13:04、B 13:05，改 A 的单位及 PO 后 A 和 B 原时刻及整项最大值均未变；明确改 A 时间才改变 A 与整项。新增保持空时间。",
-      "checks": [
-        "preorder-original-pg-and-browser"
-      ]
-    },
-    {
-      "rule": "对有同一正式交接范围的已采用空截止，采购周期补齐后仅在原有权正式安排中首次采用完整目标。",
-      "source": "审定 v2 §§7.3、7.6 及 #1077 Codex Review 4659151113。",
-      "writes": [
-        "apps/api/src/production-platform/order-time-framework.ts",
-        "apps/api/src/production-platform/order-time-framework-submission.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/material-investment-reminder.ts#materialInvestmentReminder",
-        "apps/api/src/production-platform/order-time-request-service.ts#arrange",
-        "apps/api/src/production-platform/order-time-settings-service.ts#OrderTimeSettingsService"
-      ],
-      "oldTests": [
-        "tests/unit/order-time-framework.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/production-readiness-postgres.test.ts#adopts the first material cutoff"
-      ],
-      "initialization": "用正常正式单和真实制单交接采用确定范围、缺辅料采购周期的空截止，再从原设置发布明确周期。",
-      "dateAndPermission": "只在原正式操作内同路线、同 PO、同交期和经真实有效交接核实的范围填首次完整值。采用日期冻结，历史原快照、原实际及其他目标保留。",
-      "expectation": "只保存设置、预览、读取或制单规格变化导致交接失效时，均不补已采用日期。不提供额外前端命令，原正式采用后才有首次截止、普通待办和匹配提醒；第三次安排保留已采用目标。原冻结空值字节不变。",
-      "checks": [
-        "preorder-original-pg-and-browser",
-        "preorder-schedule-and-authorization"
+        "cockpit-ab-and-creation",
+        "cockpit-detail-units",
+        "cockpit-original-washing-default"
       ]
     }
   ],
   "checks": [
     {
-      "id": "preorder-original-pg-and-browser",
+      "id": "cockpit-ab-and-creation",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/order-time-requests-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/settled-candidate-pg.json",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres TIME08_BROWSER_EVIDENCE=/tmp/dx-f3-evidence/focused-po-final/final-browser node node_modules/vitest/vitest.mjs run --maxWorkers=1 tests/integration/time-framework-cockpit-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/ab-creation-verified.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 100,
+      "passed": 19,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "43595f39b68657a563bbeaef4389264044ea5023",
-      "sourceFingerprint": "74187db232becf0ccb5f4089ae561637f7086f5f3bbc6d742d73c68d2de7eefc",
-      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟、关联历史来源后由正式订单入口按制单再次交接、投料行订正与独立追加、分行实际时间和正式采用首次完整采购截止。执行时的工作树含本次分行实绩时间和首次完整采购截止修复，完整源码指纹绑定实际输入。 同一命令的原生 Vitest JSON 作为结果日志，原控制台及原摘要保留。",
-      "startedAt": "2026-11-22T17:30:34.221Z",
-      "endedAt": "2026-11-22T17:35:13.877Z",
-      "log": "/tmp/dx1077-evidence/settled-candidate-pg.json",
-      "logSha256": "8dfa1b2f1b63ec9fbc0fcac92e697916fbe71c7abb42e4a06ce0a8ff4a00e794",
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
+      "context": "本机 localhost 隔离 PostgreSQL 16.16、签名 Chromium 原生浏览器、Node 22.22.2、一个 worker。控制组为已合并旧无计划的三条创建路径，同一候选的正式 A/B 两张合成单逐组取日期、查看原单据并返回。",
+      "startedAt": "2026-11-22T20:13:51.305Z",
+      "endedAt": "2026-11-22T20:16:07.713Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/ab-creation-verified.log",
+      "logSha256": "47badb8fb61bd531e46ca0bfd8052f886c4908c2be18d7441c167a76b37d2f81",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8dfa1b2f1b63ec9fbc0fcac92e697916fbe71c7abb42e4a06ce0a8ff4a00e794"
+          "sha256": "eacb00ec01e4dde0cb0aff2c62625c2a610472b939b2cd494530de4e9051b0f8"
         }
-      ],
-      "consoleLog": "/tmp/dx1077-evidence/settled-candidate-pg.log",
-      "consoleLogSha256": "beb85d29fe6d2d4ad0c2a7b08f2302692a7b53b385c898338af9cf0a930f8050"
+      ]
     },
     {
-      "id": "preorder-schedule-and-authorization",
+      "id": "cockpit-same-session-pmc",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail,full-gate-risk-map}.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/settled-candidate-unit.json",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --maxWorkers=1 tests/integration/journey-page-native-browser-postgres.test.ts -t \"rechecks the real same valid PMC session\" --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/pmc-verified.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 278,
+      "passed": 1,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "43595f39b68657a563bbeaef4389264044ea5023",
-      "sourceFingerprint": "74187db232becf0ccb5f4089ae561637f7086f5f3bbc6d742d73c68d2de7eefc",
-      "context": "Node 22.22.2。现有 PMC 权限矩阵、排程合同、手算采购边界、原固定里程碑、旧版本与 Full 风险映射。执行时的工作树含本次分行实绩时间和首次完整采购截止修复，完整源码指纹绑定实际输入。",
-      "startedAt": "2026-11-22T17:31:35.831Z",
-      "endedAt": "2026-11-22T17:31:45.646Z",
-      "log": "/tmp/dx1077-evidence/settled-candidate-unit.log",
-      "logSha256": "8046559afacbb1ed5562bcfc44e60a804c89306ea09ed054ede0eaa9cc046adf",
+      "skipped": 10,
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
+      "context": "同一有效 PMC 浏览器会话中真实撤权，独立 schema，重新读取不能继续使用旧已授权投影，其余未选到用例按实报告。",
+      "startedAt": "2026-11-22T20:16:08.079Z",
+      "endedAt": "2026-11-22T20:16:39.162Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/pmc-verified.log",
+      "logSha256": "4007e62025713be3f239d35fbcef710980473b4e387955070e746226acdf2c3c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ff689fca311ceaa6f8b2329ef531bf6b893f50eedca424a3b017eeca45907e39"
+          "sha256": "38efa7566c845b75da571c91cc95707b335a8843f34ced2e28b20893f7f5dbb2"
+        }
+      ]
+    },
+    {
+      "id": "cockpit-detail-units",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 tests/unit/cockpit-stage-dates.test.ts tests/unit/cockpit-framework.test.ts tests/unit/cockpit-detail.test.ts tests/unit/journey-washing-projection.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/unit-verified.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 93,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
+      "context": "同候选 Chromium DOM 的 SSR/纯投影对照，双 PO、日期最大值/未知/实际完成、原时效结果、审核和 PMC 权限矩阵。",
+      "startedAt": "2026-11-22T20:12:48.145Z",
+      "endedAt": "2026-11-22T20:12:57.114Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/unit-verified.log",
+      "logSha256": "9aa5ec340dd498daf0c5682388a5d1f2cc638216c305cf83bb47a5f20eacdbe2",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a5bb5b6d17e20fab7d8be4391023a9e988f9a6d24d5e867e16238bda97e4df93"
+        }
+      ]
+    },
+    {
+      "id": "cockpit-original-washing-default",
+      "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npx --no-install vitest run --maxWorkers=1 tests/integration/washing-window-navigation-browser-postgres.test.ts -t \"restores the implicit default|selects each exact window\" --reporter=default --reporter=json --outputFile.json=/tmp/dx-f3-evidence/focused-po-final/washing-verified.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 3,
+      "testedHead": "51a34e4fade5600645e7764aa83401e11feebcab",
+      "sourceFingerprint": "9102287de61833f0e6f92a0cf4a07acae66eef8360f7c4ddf9c49d029e39690c",
+      "context": "本机低权限隔离 PostgreSQL 16.16、签名 Chromium。前一候选 66fad008 的 Full 45060039040 原用例失败。保持原断言，重新验证六个洗水窗口、原始默认节点和原记录往返。",
+      "startedAt": "2026-11-22T20:12:36.528Z",
+      "endedAt": "2026-11-22T20:13:50.951Z",
+      "log": "/tmp/dx-f3-evidence/focused-po-final/washing-verified.log",
+      "logSha256": "da38708a2b18a77d26588f866eaef2e856552e5a47daeef05c2dc0ee2e806734",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "0558be6f9180ac9847d24ef84e52733489d41cd410ae175d3f80c1fe647463ad"
         }
       ]
     }
