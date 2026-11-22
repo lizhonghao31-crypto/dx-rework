@@ -13,7 +13,7 @@ function stageNumber(work:ScheduleWork){
 /** A stage's displayed B and delta use that same stage endpoint. They never
  * combine max(B) with the worst unrelated child's delay. PO scopes still keep
  * their own risks; this is the whole-stage date, not cross-PO compensation. */
-export function fixedScheduleStages(basis:FixedScheduleBasis,asOf:string):ScheduleStageProgress[]{
+export function fixedScheduleStages(basis:FixedScheduleBasis,asOf:string,onCompletion?:(stage:number,complete:boolean)=>void):ScheduleStageProgress[]{
  return JOURNEY_STAGES.flatMap((_,index)=>{
   const stage=index+1,scopes:ScheduleScopeInput[]=basis.scopes.flatMap(scope=>{
    const selected=scope.work.filter(work=>stageNumber(work)===stage&&!scope.facts[work.id]?.terminated);
@@ -26,6 +26,7 @@ export function fixedScheduleStages(basis:FixedScheduleBasis,asOf:string):Schedu
   const all=scopes.flatMap(scope=>scope.work.filter(work=>!work.includedIn)),targets=all.map(work=>work.end),known=targets.length&&targets.every((at):at is string=>at!==null);
   const end=known?all.reduce((latest,work)=>Date.parse(work.end!)>Date.parse(latest.end!)?work:latest):null;
   const summary=fixedDurationSummary(scopes,asOf,basis.termination),complete=scopes.every(scope=>scope.work.filter(work=>!work.includedIn).every(work=>scope.facts[work.id]?.businessCompleted));
+  onCompletion?.(stage,complete);
   const actual=complete?summary.deliveryCompletedAt:unknown;
   const expected:ScheduleOccurrence=!end?unknown:end.targetPrecision==='date'&&end.targetDate?{precision:'date',date:end.targetDate}:{precision:'instant',at:end.end!};
   const scope={scopeRef:`stage:${stage}`,targetRevision:basis.scopeRevision};

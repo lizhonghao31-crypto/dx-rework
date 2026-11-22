@@ -61,8 +61,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const order=orders.find(row=>row.route===route)!;
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+order.id);
   try{
-   const page=tab.page,flow=page.locator('.cockpit-milestones');await flow.waitFor();
-   expect(await flow.locator('.cockpit-stage').count()).toBe(route==='A'?9:8);
+   const page=tab.page,flow=page.locator('.cockpit-flow-panel .cockpit-stages');await flow.waitFor();
+   const stageLabels=['订单创建','产品开发打板','大货产前准备','订单开裁','裁后工艺与发厂','工厂生产','回货与装箱'];
+   expect(await flow.locator('.cockpit-stage-select strong').allTextContents()).toEqual(stageLabels);
    expect(await page.locator('.cockpit-flow-panel .cockpit-creation-events, .cockpit-flow-panel .cockpit-stage-date-colon').count()).toBe(0);
    await page.locator('[data-identity-fact="created"] time').waitFor();
    expect(await page.getByRole('heading',{name:route==='A'?'要对色':'无需对色',exact:true}).count()).toBe(1);
@@ -98,8 +99,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(approval).toMatchObject({expectedAt:'2027-01-07',expectedPrecision:'date'});
    expect(dto.fixedSchedule?.framework?.scopes[0]?.milestones.find(row=>row.key==='client_sample_approval')).toMatchObject({feasibility:'sufficient',lateMinutes:0});
    expect(await page.locator('.cockpit-flow-panel').count()).toBe(1);
-   await flow.getByRole('button',{name:'发加工节点明细',exact:true}).click();
    const panel=page.getByRole('region',{name:'小流程明细',exact:true});
+   const milestoneKeys:string[]=[];
+   for(const label of stageLabels){
+    await flow.getByRole('button',{name:label+'节点明细',exact:true}).click();
+    milestoneKeys.push(...await panel.locator('[data-milestone-key]').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-milestone-key')!)));
+   }
+   expect(milestoneKeys.sort()).toEqual(dto.fixedSchedule!.framework!.scopes[0]!.milestones.map(item=>item.key).sort());
+   expect(new Set(milestoneKeys).size).toBe(route==='A'?9:8);
+   const stageDates=dto.cockpitStageDates![0]!.stages;
+   for(const key of ['cutting','production'] as const){
+    const stage=stageDates.find(row=>row.key===key);
+    expect(stage).toMatchObject({expectedSource:'stage_schedule',missingTargets:[]});
+    expect(stage?.expected.precision).not.toBe('unknown');
+   }
+   await flow.getByRole('button',{name:'裁后工艺与发厂节点明细',exact:true}).click();
+   await panel.getByRole('button',{name:'发加工节点明细',exact:true}).click();
    await expect.poll(()=>panel.getByRole('columnheader',{name:'计划完成',exact:true}).count()).toBe(1);
    expect(await panel.getByRole('columnheader',{name:'实际完成',exact:true}).count()).toBe(1);
    expect(await panel.locator('tbody tr').count()).toBeGreaterThan(0);
@@ -110,7 +125,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.setViewportSize({width:1165,height:747});await page.screenshot({path:join(h.evidence,'detail-'+route+'-1165.png')});
    await panel.evaluate(element=>element.scrollIntoView({block:"start",behavior:"instant"}));
    await page.screenshot({path:join(h.evidence,'nodes-'+route+'-1165.png')});
-   await flow.getByRole('button',{name:'设计资料交接节点明细',exact:true}).click();
+   await flow.getByRole('button',{name:'订单创建节点明细',exact:true}).click();
+   const creation=panel.getByRole('link',{name:'创建正式订单',exact:true});
+   await creation.waitFor();
+   expect(new URL((await creation.getAttribute('href'))!,page.url()).searchParams.get('instruction')).toBe(order.id);
+   const loadInstruction=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/orders/'+order.id+'/instruction')&&response.request().method()==='GET'&&response.ok());
+   await creation.click();
+   await loadInstruction;
+   await page.getByRole('heading',{name:order.style,exact:true}).waitFor();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await page.waitForURL(url=>url.searchParams.get('selected')===order.id&&url.searchParams.get('expanded')==='creation');
+   await panel.getByRole('button',{name:'设计资料交接节点明细',exact:true}).click();
    await panel.getByRole('button',{name:'设计资料交接',exact:true}).waitFor();
    expect(await panel.locator('tbody tr').count()).toBe(1);
    expect(await page.getByRole('region',{name:'当前节点详情',exact:true}).innerText()).toContain('设计资料交接');

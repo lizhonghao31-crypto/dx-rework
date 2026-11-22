@@ -3,7 +3,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {expect,it} from 'vitest';
 import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {ScheduleNodeProgress} from '@dx-rework/contracts';
-import {cockpitMilestones,milestoneContains,CockpitMilestoneFlow} from '../../apps/web/src/cockpit-milestones.js';
+import {cockpitMilestones,milestoneContains,CockpitStageMilestones} from '../../apps/web/src/cockpit-milestones.js';
 import {CockpitPlanDates} from '../../apps/web/src/cockpit-framework-nodes.js';
 import {CockpitHomeProgress} from '../../apps/web/src/cockpit-home-progress.js';
 const goal={kind:'late' as const,signedValue:1440,unit:'minute' as const,asOf:'2027-03-09T00:00:00Z',targetAt:'2027-03-06T00:00:00Z',targetDate:null,targetPrecision:'instant' as const,actual:{precision:'instant' as const,at:'2027-03-07T00:00:00Z'},targetRevision:'original',scopeRef:'po:red'};
@@ -18,16 +18,17 @@ it('uses scope and work identity for cross-stage milestone membership and exclud
  expect(milestoneContains(m,{...n,current:false})).toBe(false);
  expect(milestoneContains(m,{...n,state:'unavailable'})).toBe(false);
  expect(milestoneContains({...m,scopeRef:'po:blue'},n)).toBe(false);
- expect(milestoneContains({...m,workIds:['other']},n)).toBe(false);
+ expect(milestoneContains({...m,directWorkIds:['other']},n)).toBe(false);
+ expect(milestoneContains({...m,directWorkIds:['other'],prerequisiteIds:m.workIds},n,'prerequisite')).toBe(true);
 });
 it('shows the effective plan date without replacing the completed historical +1 day',()=>{
  const n={fixedTargets:[{scopeRef:'po:red',lineId:'red',progress}]} as JourneyNode,before=structuredClone(n);
  const html=renderToStaticMarkup(createElement(CockpitPlanDates,{node:n}));
  expect(html).toContain('2027-03-10');expect(html).not.toContain('2027-03-06');expect(n).toEqual(before);expect(n.fixedTargets![0]!.progress.goalDelta.signedValue).toBe(1440);
 });
-it('shows one original milestone ring, full target date, real incomplete status and no invented responsibility',()=>{
- const o=fixture(),items=cockpitMilestones(o),html=renderToStaticMarkup(createElement(CockpitMilestoneFlow,{items,selected:items[0]!.selectionKey,onSelect(){},asOf:undefined,lines:o.lines}));
- expect(html).toContain('2027-03-10');expect(html).toContain('未完成');expect(html).toContain('未到期');expect(html).not.toContain('见节点');expect(html).not.toContain('无责');expect(html).not.toContain('2027-03-08');expect(html.match(/<svg/g)).toHaveLength(1);
+it('shows one original milestone in its stage, with full target date and no invented responsibility',()=>{
+ const items=cockpitMilestones(fixture()),html=renderToStaticMarkup(createElement(CockpitStageMilestones,{items,selected:items[0]!.selectionKey,onSelect(){},asOf:undefined}));
+ expect(html).toContain('2027-03-10');expect(html).toContain('未完成');expect(html).toContain('未到期');expect(html).not.toContain('见节点');expect(html).not.toContain('无责');expect(html).not.toContain('2027-03-08');expect(html.match(/data-milestone-key=/g)).toHaveLength(1);expect(html).not.toContain('<svg');
 });
 it('homepage shows the customer delivery date, never the internal lower-bound forecast as that date',()=>{
  const o=fixture();o.visualProgress={timeRatio:.25,actualRatio:.5} as OrderJourney['visualProgress'];o.orderId='TEST';

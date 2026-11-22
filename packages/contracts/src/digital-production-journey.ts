@@ -1,4 +1,5 @@
-import type {FixedScheduleProgress,ScheduleNodeProgress,ScheduleGoalDelta,ScheduleScopeProgress} from './fixed-schedule-progress.js';
+import type {FixedScheduleProgress,ScheduleNodeProgress,ScheduleGoalDelta,ScheduleOccurrence,ScheduleScopeProgress} from './fixed-schedule-progress.js';
+import type {SeriesMilestoneKey} from './digital-series-plan.js';
 import { z } from "zod";
 import type {QcProgressClock} from './qc-production-progress.js';
 import type { PoDeliveryDate,PoDeliveryRisk } from "./po-delivery-dates.js";
@@ -14,6 +15,36 @@ export const JOURNEY_STAGES = [
   { key: "receiving", label: "回货与装箱" },
 ] as const;
 export type JourneyStageKey = typeof JOURNEY_STAGES[number]["key"];
+
+/** Cockpit detail presentation only. The adopted work graph has its own stage identities. */
+export const COCKPIT_MILESTONE_GROUP: Readonly<Record<SeriesMilestoneKey, JourneyStageKey>> = {
+  design_handover: 'creation',
+  client_sample_approval: 'development',
+  material_investment: 'preparation',
+  fabric_receipt: 'preparation',
+  color_confirmation: 'preparation',
+  style_label_ready: 'preparation',
+  accessories_ready: 'post_cutting',
+  processing_dispatch: 'post_cutting',
+  planned_shipment: 'receiving',
+};
+export type CockpitStageDates = {
+  key: JourneyStageKey;
+  expected: ScheduleOccurrence;
+  expectedSource: 'milestone_targets' | 'stage_schedule';
+  missingTargets: SeriesMilestoneKey[];
+  actual: ScheduleOccurrence;
+  actualComplete: boolean;
+  goalDelta: ScheduleGoalDelta | null;
+  differenceUsesOriginalTarget: boolean;
+};
+export type CockpitStageDateScope = {
+  scopeRef: string;
+  planReference: string;
+  planRevision: number;
+  stages: CockpitStageDates[];
+  milestoneMembers: Array<{key: SeriesMilestoneKey; workIds: string[]; prerequisiteIds: string[]}>;
+};
 /** Public names and stable keys only. Applicability is evaluated against original route facts. */
 export const JOURNEY_NODES: ReadonlyArray<{key:string;label:string;stage:JourneyStageKey;count:boolean;planningOnly?:boolean}> = [
   ...Object.entries({design_handover:'设计资料交接',material_investment:'投面辅料',fabric_receipt:'面料到仓',color_confirmation:'对色完成',client_sample_approval:'客户最终批复',accessories_ready:'辅料实物备齐',style_label_ready:'款号唛实物备齐',processing_dispatch:'发加工计划',planned_shipment:'系统计划出货'}).map(([key,label])=>({key:`series_${key}`,label,stage:key==='processing_dispatch'?'post_cutting' as const:key==='planned_shipment'?'receiving' as const:'preparation' as const,count:false,planningOnly:true})),
@@ -142,6 +173,8 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  /** Only returned on authorized cockpit detail, never used for progress or timing. */
+  cockpitStageDates?: CockpitStageDateScope[];
   cockpitCreation?: CockpitCreationFacts;
   cockpitCreationDetails?: CockpitCreationDetail[];
   cockpitFacts?: CockpitHomeFacts;
