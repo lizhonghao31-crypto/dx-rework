@@ -13,7 +13,7 @@ import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import type {SlaAnchor,SlaTime} from '@dx-rework/domain/digital-sla-plan';
-import {FrozenOrderTimePlanSchema,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import {FrozenOrderTimePlanSchema,orderTimeRule,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {CraftStepChoicesSchema,craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {OrderTimeOperationSchema,type OrderTimeOperation,type OrderTimeProductionRoute,type OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
@@ -104,6 +104,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const publicationOrder=publicationFormalInput(development,{serverToday:beijingCalendarDate(new Date(time.now)),minimumInitialCustomerDate:minimumInitialCustomerDate(new Date(time.now)),orderTimeEnabled:true},Boolean(plan.company.framework));
  const includesProduction=resource?.kind==='order'||operation.kind==='confirm_order'||operation.kind==='direct_order'||Boolean(publicationOrder);
  let materialInvestmentScope:OrderTimeInput['materialInvestmentScope'];
+ let materialInvestmentResolutionRef:string|undefined;
  if(includesProduction){
   const priorFramework=saved?.input.frameworkPlans;
   const priorScope=saved?.input.materialInvestmentScope;
@@ -134,6 +135,33 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    materialInvestmentScope=scope.rows.length?{fabric:scope.fabric,accessories:scope.accessories,
     reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+':'+scope.fingerprint}:null;
   }else if(plan.company.framework)materialInvestmentScope=priorFramework?priorScope:null;
+  // Only an explicit formal arrangement can resolve the first date on an
+  // already identified material scope. Match the same native handover exactly.
+  const pendingInvestment=priorScope&&Object.values(priorFramework??{}).some(plan=>plan.milestones.some(row=>
+   row.key==='material_investment'&&row.target.at===null&&row.materialInvestmentTargetBasis?.scope?.reference===priorScope.reference));
+  if(order&&manager&&pendingInvestment&&priorScope&&operation.kind==='arrangement'&&purpose==='command'&&await preparationAvailable(db)){
+   const orderId=String(order.production_order_id),handover=await currentPreparationMaterial(db,orderId,'design_handover');
+   const basis=handover?.state==='ready'&&handover.valid?handover.investmentScopeBasis:undefined;
+   if(basis&&handover){
+    const reference=handover.resource.kind==='order'&&handover.resource.id===orderId&&basis.orderInstructionVersion
+     ?'order:'+orderId+':'+basis.fingerprint
+     :handover.resource.kind==='source'&&handover.resource.id===sourceId&&basis.sourceDocumentVersion
+      ?(basis.preorder?'preorder:':'source:')+sourceId+':round:'+round+':'+basis.fingerprint:null;
+    if(reference===priorScope.reference){
+     materialInvestmentResolutionRef=reference;
+     sourceVersion.materialInvestmentHandover={id:handover.recordId,version:handover.version,reference};
+     const rule=orderTimeRule(plan,'material_investment')?.rule;
+     if(priorScope.accessories&&rule?.kind==='event'&&!rule.accessoriesLeadTime){
+      const published=await currentOrderTimeCompany(db),next=published?.nodes.material_investment;
+      if(next?.kind==='event'&&next.accessoriesLeadTime){
+       plan.overrides.material_investment={...rule,accessoriesLeadTime:next.accessoriesLeadTime};
+       if(original&&plan.revision===original.revision)plan.revision++;
+       sourceVersion.materialInvestmentStandardReference=published!.reference;
+      }
+     }
+    }
+   }
+  }
   let lines:Array<{id:string;po:string;date:string|null;customerDateVersion?:number}>;
   if(order){
    const rows=(await db.query('SELECT line_id,coalesce(po_number,formal_style_no) AS po,customer_warehouse_arrival_date::text AS date,customer_date_version,factory_delivery_date::text AS factory_date,factory_date_version,factory_date_source FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[resource!.id])).rows;
@@ -299,11 +327,13 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    }
    sourceVersion.frameworkFactRevisions=native.revisions;
   }
-  value.frameworkContext={route:frameworkRoute,acceptedAt,notBefore,progress:Object.fromEntries(progress)};
+  value.frameworkContext={route:frameworkRoute,acceptedAt,notBefore,progress:Object.fromEntries(progress),
+   ...(materialInvestmentResolutionRef?{materialInvestmentResolutionRef}:{})};
   const result=evaluateFrameworkSubmission({scopes:frameworkScopeInputs({...value,scopes:datedScopes},frameworkRoute,acceptedAt,notBefore).map(input=>{
    const prior=saved?.input.frameworkPlans?.[input.scopeRef];
+   const sameBasis=prior&&prior.input.route===input.route&&prior.input.customerDelivery.date===input.customerDelivery.date;
    return {input,retained:retainedWashingReworkTargets(input,progress,prior,time.now,Boolean(rewashing?.added),value.rewashing),
-    ...(prior&&prior.input.route===input.route&&prior.input.customerDelivery.date===input.customerDelivery.date?{adoptedMilestones:prior.milestones}:{})};
+    ...(sameBasis?{adoptedMilestones:prior.milestones,...(materialInvestmentResolutionRef?{materialInvestmentResolutionRef}:{})}:{})};
   }),observedAt:time.now,mode:'automatic',acceptLate:false});
   check.fingerprint=fixedTimelineIdentity({prior:check.fingerprint,sourceVersion,frameworkProgress:[...progress]});
   // The caller already authorized this exact order. Reuse the native scoped

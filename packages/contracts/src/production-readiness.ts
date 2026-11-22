@@ -34,6 +34,8 @@ export const PreparationMaterialRecordSchema=z.object({
  if(new Set(x.evidenceIds).size!==x.evidenceIds.length)c.addIssue({code:'custom',path:['evidenceIds'],message:'凭证不可重复'});
 });
 export type PreparationMaterialRecord=z.infer<typeof PreparationMaterialRecordSchema>;
+export const preparationInvestmentRowKey=(row:PreparationMaterialRecord['quantities'][number])=>
+ JSON.stringify([row.materialId,row.lineId,row.unit,row.materialId?null:row.name]);
 export type PreparationResource={kind:'source'|'order';id:string};
 export type MaterialInvestmentScopeBasis={
   materialIds:string[];materialFingerprints:Record<string,string>;sourceDocumentVersion?:number;orderInstructionVersion?:number;fingerprint:string;

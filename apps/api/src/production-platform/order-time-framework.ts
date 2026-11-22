@@ -31,6 +31,7 @@ export type FrameworkCandidateContext={purpose:'settings_preview'|'order_proposa
  /** An ordinary adjustment changes the forward arrangement, not adopted
   * targets. The caller supplies the prior matching scope from the same transaction. */
  adoptedMilestones?:FrozenTimeFramework['milestones'];
+ materialInvestmentResolutionRef?:string;
  retained?:Readonly<Record<string,{target:FrameworkTarget;sourceRef:string;actualCompletion?:FrameworkTarget['end']}>>};
 
 type InvestmentTarget=Pick<z.infer<typeof FrameworkMilestoneResultSchema>,'date'|'target'|'materialInvestmentTargetBasis'>;
@@ -78,14 +79,17 @@ export function evaluateTimeFrameworkCandidate(value:TimeFrameworkInput,context:
  const adopted=new Map(context.adoptedMilestones?.map(row=>[row.key,row]));
  const milestones=input.bindings.map(binding=>{
   const prior=adopted.get(binding.key);
-  // An explicit original arrangement may adopt the first evidenced material
-  // target after direct-order intake. The old null was never a date to retain.
-  const firstInvestment=binding.key==='material_investment'&&prior?.materialInvestmentTargetBasis?.scope===null
-   &&prior.target.at===null&&Boolean(input.materialInvestmentScope);
+  const scope=input.materialInvestmentScope,priorBasis=prior?.materialInvestmentTargetBasis;
+  const material=binding.key==='material_investment'&&scope!==undefined;
+  const couldResolve=material&&scope&&prior?.target.at===null&&priorBasis
+   &&(priorBasis.scope===null||priorBasis.scope.reference===scope.reference&&context.materialInvestmentResolutionRef===scope.reference);
+  const investment=material&&(!prior||couldResolve)?materialInvestmentTarget(input,original):null;
+  // Adopt an evidenced first scope or its first complete target. Never slide
+  // an established deadline or exchange one already identified scope for another.
+  const firstInvestment=investment&&(priorBasis?.scope===null||investment.target.at!==null);
   const basis:InvestmentTarget=prior&&!firstInvestment
-   ?{date:prior.date,target:prior.target,...(prior.materialInvestmentTargetBasis?{materialInvestmentTargetBasis:prior.materialInvestmentTargetBasis}:{})}
-   :binding.key==='material_investment'&&input.materialInvestmentScope!==undefined
-    ?materialInvestmentTarget(input,original):original[binding.key]!;
+   ?{date:prior.date,target:prior.target,...(priorBasis?{materialInvestmentTargetBasis:priorBasis}:{})}
+   :investment??original[binding.key]!;
   const selected=binding.workIds.map(id=>byId.get(id)!),planned=latest(selected.map(row=>row.end));
   const cutoff=basis.target.at===null?null:Date.parse(basis.target.at);
   const known=selected.filter(row=>row.end.at!==null);

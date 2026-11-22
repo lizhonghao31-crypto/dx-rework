@@ -1,7 +1,7 @@
 import type {TimeFrameworkInput} from '@dx-rework/contracts/order-time-framework';
 import {evaluateTimeFrameworkCandidate,type FrameworkCandidateContext} from './order-time-framework.js';
 
-type ScopeProposal={input:TimeFrameworkInput;retained?:FrameworkCandidateContext['retained'];adoptedMilestones?:FrameworkCandidateContext['adoptedMilestones']};
+type ScopeProposal={input:TimeFrameworkInput;retained?:FrameworkCandidateContext['retained'];adoptedMilestones?:FrameworkCandidateContext['adoptedMilestones'];materialInvestmentResolutionRef?:string};
 /** Shared submission calculation only: no authority, persistence or actual-event
  * writer. The original command must reread inputs under its transaction, check
  * its own permission/CAS and supply the submission observation. Preview results
@@ -12,7 +12,7 @@ export function evaluateFrameworkSubmission(input:{scopes:readonly ScopeProposal
  if(!input.scopes.length)throw Error('缺少本单适用范围');
  if(new Set(input.scopes.map(scope=>scope.input.scopeRef)).size!==input.scopes.length)throw Error('本单适用范围重复');
  const candidates=input.scopes.map(scope=>evaluateTimeFrameworkCandidate(scope.input,
-  {purpose:'order_proposal',observedAt:input.observedAt,...(scope.retained?{retained:scope.retained}:{}),...(scope.adoptedMilestones?{adoptedMilestones:scope.adoptedMilestones}:{})}));
+  {purpose:'order_proposal',observedAt:input.observedAt,...(scope.retained?{retained:scope.retained}:{}),...(scope.adoptedMilestones?{adoptedMilestones:scope.adoptedMilestones}:{}),...(scope.materialInvestmentResolutionRef?{materialInvestmentResolutionRef:scope.materialInvestmentResolutionRef}:{})}));
  const gaps=candidates.flatMap(candidate=>candidate.milestones.filter(row=>row.status==='insufficient')
   .map(row=>({scopeRef:candidate.input.scopeRef,key:row.key,date:row.date!,lateMinutes:row.lateMinutes!,workIds:row.blockingWorkIds})));
  const missing=candidates.flatMap(candidate=>{

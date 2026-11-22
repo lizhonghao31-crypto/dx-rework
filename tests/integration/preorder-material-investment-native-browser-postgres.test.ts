@@ -173,16 +173,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    });
    expect(rejected.status()).toBe(403);
   }finally{await sourceTab.context.close();}
+  await h.f.advance(scene,'2026-11-19T05:10:00.000Z');
   const merchTab=await h.open(merch.actorId,1165,{},path+'&materialKind=material_investment');
   try{
    const page=merchTab.page,form=page.getByRole('group',{name:'投面辅料',exact:true});
    const selection=form.getByLabel('本次交接物料');
-   const submit=async(materialId:string,note:string,quantity:string)=>{
+   const actualTime=form.getByLabel('实际发生时间（北京时间）');
+   const submit=async(materialId:string,note:string,quantity:string,occurredAt?:string,unit='米')=>{
     await selection.selectOption(materialId);
     await form.getByLabel('办理状态').selectOption('ready');
-    await form.getByLabel('实际发生时间（北京时间）').fill('2026-11-19T13:00');
+    if(occurredAt)await actualTime.fill(occurredAt);
     await form.getByLabel('实际数量').fill(quantity);
-    await form.getByLabel('单位',{exact:true}).fill('米');
+    await form.getByLabel('单位',{exact:true}).fill(unit);
     await form.getByLabel('本次情况 / 订正原因').fill(note);
     const receipt=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith('/production-readiness/materials'));
     await form.getByRole('button',{name:'保存本项记录',exact:true}).click();
@@ -191,26 +193,48 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     await page.getByText('已保存原业务记录',{exact:true}).waitFor();
     return {saved:saved as ProductionReadinessState,request:response.request().postDataJSON()};
    };
-   const first=await submit(revisedFabricId,'TEST 跟单初次录入 A','20');
+   const first=await submit(revisedFabricId,'TEST 跟单初次录入 A','20','2026-11-19T13:02');
    expect(await selection.locator('option[value="'+fabricId+'"]').count()).toBe(0);
    const originalInvestment=first.saved.facts.find(row=>row.kind==='material_investment')!;
    expect(originalInvestment).toMatchObject({version:1,state:'partial',recordedBy:merch.actorId,quantities:[{materialId:revisedFabricId,quantity:20}]});
    const rowPicker=form.getByLabel('本次修改的物料明细');
    await rowPicker.selectOption('0');
-   const corrected=await submit(secondFabricId,'TEST 原 A 误记，订正为 B','12');
+   const corrected=await submit(secondFabricId,'TEST 原 A 误记，订正为 B','12','2026-11-19T13:03');
    expect(corrected.request).toMatchObject({expectedVersion:1,investmentQuantityCorrection:{index:0,previous:{materialId:revisedFabricId}}});
    const replacement=corrected.saved.facts.find(row=>row.kind==='material_investment')!;
    expect(replacement).toMatchObject({recordId:originalInvestment.recordId,version:2,state:'partial',quantities:[{materialId:secondFabricId,quantity:12}]});
    expect(replacement.investmentMaterialOccurrences?.[revisedFabricId]).toBeUndefined();
    expect(corrected.saved.history.find(row=>row.recordId===originalInvestment.recordId&&row.version===1)?.quantities).toEqual(originalInvestment.quantities);
    await rowPicker.selectOption('0');
-   await submit(revisedFabricId,'TEST 确认可记 A 的真实投料','20');
+   await submit(revisedFabricId,'TEST 确认可记 A 的真实投料','20','2026-11-19T13:04');
    await rowPicker.selectOption('new');
-   const appended=await submit(secondFabricId,'TEST 独立追加真实 B','12');
+   expect.soft(await actualTime.inputValue()).toBe('');
+   const appended=await submit(secondFabricId,'TEST 独立追加真实 B','12','2026-11-19T13:05');
    expect(appended.request.investmentQuantityCorrection).toBeUndefined();
    expect(appended.saved).toMatchObject({orderId});
    expect(appended.saved.facts.find(row=>row.kind==='material_investment')).toMatchObject({
     recordId:originalInvestment.recordId,version:4,state:'ready',quantities:[{materialId:revisedFabricId,quantity:20},{materialId:secondFabricId,quantity:12}],
+   });
+   await rowPicker.selectOption('1');
+   expect(await actualTime.inputValue()).toBe('2026-11-19T13:05');
+   await rowPicker.selectOption('0');
+   expect(await actualTime.inputValue()).toBe('2026-11-19T13:04');
+   const lineId=appended.saved.lines[0]!.lineId;
+   await form.getByLabel('对应款色').selectOption(lineId);
+   const metadataOnly=await submit(revisedFabricId,'TEST 仅订正 A 的单位和 PO','20',undefined,'码');
+   expect(metadataOnly.request.occurredAt).toBe('2026-11-19T05:04:00.000Z');
+   expect(metadataOnly.saved.facts.find(row=>row.kind==='material_investment')).toMatchObject({
+    occurredAt:'2026-11-19T05:05:00.000Z',
+    investmentMaterialOccurrences:{
+     [revisedFabricId]:{occurredAt:'2026-11-19T05:04:00.000Z'},
+     [secondFabricId]:{occurredAt:'2026-11-19T05:05:00.000Z'},
+    },
+    quantities:[{materialId:revisedFabricId,lineId,unit:'码'},{materialId:secondFabricId}],
+   });
+   const changedTime=await submit(revisedFabricId,'TEST 明确订正 A 的实际时刻','20','2026-11-19T13:06','码');
+   expect(changedTime.saved.facts.find(row=>row.kind==='material_investment')).toMatchObject({
+    occurredAt:'2026-11-19T05:06:00.000Z',
+    investmentMaterialOccurrences:{[revisedFabricId]:{occurredAt:'2026-11-19T05:06:00.000Z'},[secondFabricId]:{occurredAt:'2026-11-19T05:05:00.000Z'}},
    });
   }finally{await merchTab.context.close();}
  });

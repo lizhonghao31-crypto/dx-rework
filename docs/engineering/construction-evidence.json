@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "c9dace0c24c6ce1fd0a1d687542fefd469085250",
-  "sourceFingerprint": "0398470f51f70aa213406e410903aaeda00e418ded63f3350d67017c135c5a47",
+  "sourceFingerprint": "74187db232becf0ccb5f4089ae561637f7086f5f3bbc6d742d73c68d2de7eefc",
   "rules": [
     {
       "rule": "在真实预下单依原材料版本交接给指定跟单，并在原准备面板登记；正式转单续用原记录。",
@@ -205,52 +205,106 @@
         "preorder-original-pg-and-browser",
         "preorder-schedule-and-authorization"
       ]
+    },
+    {
+      "rule": "原面板使用明确所选行的真实发生时间，独立追加要求填写新的实际时刻。",
+      "source": "审定 v2 §7.4 原真实投料发生时点及 #1077 独立审查 43595f3。",
+      "writes": [
+        "apps/web/src/production-readiness-panel.tsx",
+        "packages/contracts/src/production-readiness.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/production-readiness-panel.tsx#investmentRowTime",
+        "packages/contracts/src/production-readiness.ts#preparationInvestmentRowKey"
+      ],
+      "oldTests": [
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "initialization": "使用原签名浏览器录入同一正式单两行不同的已核实际时点，打开、切行与重读均按同一行键查数据。",
+      "dateAndPermission": "仅按行引用原证明，缺证明留空；用户可以填写不同实际时刻，纯订正单位及款色保留本行原时间精度。",
+      "expectation": "A 13:04、B 13:05，改 A 的单位及 PO 后 A 和 B 原时刻及整项最大值均未变；明确改 A 时间才改变 A 与整项。新增保持空时间。",
+      "checks": [
+        "preorder-original-pg-and-browser"
+      ]
+    },
+    {
+      "rule": "对有同一正式交接范围的已采用空截止，采购周期补齐后仅在原有权正式安排中首次采用完整目标。",
+      "source": "审定 v2 §§7.3、7.6 及 #1077 Codex Review 4659151113。",
+      "writes": [
+        "apps/api/src/production-platform/order-time-framework.ts",
+        "apps/api/src/production-platform/order-time-framework-submission.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/material-investment-reminder.ts#materialInvestmentReminder",
+        "apps/api/src/production-platform/order-time-request-service.ts#arrange",
+        "apps/api/src/production-platform/order-time-settings-service.ts#OrderTimeSettingsService"
+      ],
+      "oldTests": [
+        "tests/unit/order-time-framework.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/production-readiness-postgres.test.ts#adopts the first material cutoff"
+      ],
+      "initialization": "用正常正式单和真实制单交接采用确定范围、缺辅料采购周期的空截止，再从原设置发布明确周期。",
+      "dateAndPermission": "只在原正式操作内同路线、同 PO、同交期和经真实有效交接核实的范围填首次完整值。采用日期冻结，历史原快照、原实际及其他目标保留。",
+      "expectation": "只保存设置、预览、读取或制单规格变化导致交接失效时，均不补已采用日期。不提供额外前端命令，原正式采用后才有首次截止、普通待办和匹配提醒；第三次安排保留已采用目标。原冻结空值字节不变。",
+      "checks": [
+        "preorder-original-pg-and-browser",
+        "preorder-schedule-and-authorization"
+      ]
     }
   ],
   "checks": [
     {
       "id": "preorder-original-pg-and-browser",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/order-time-requests-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/closeout-candidate-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/order-time-requests-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/settled-candidate-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 99,
+      "passed": 100,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "ec9f5cb731a9a011ef2542aba87eea8687c52927",
-      "sourceFingerprint": "0398470f51f70aa213406e410903aaeda00e418ded63f3350d67017c135c5a47",
-      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟、关联历史来源后由正式订单入口按制单再次交接、投料行订正与独立追加分开的真实回执。执行时的工作树含本次正式单入口及投料行订正修复，完整源码指纹绑定实际输入。",
-      "startedAt": "2026-11-22T17:15:34.292Z",
-      "endedAt": "2026-11-22T17:20:22.295Z",
-      "log": "/tmp/dx1077-evidence/closeout-candidate-pg.log",
-      "logSha256": "733c682c1402e3ff95aa685310ecec2496f78bfa3e0b3a6b4afc22fb56805018",
+      "testedHead": "43595f39b68657a563bbeaef4389264044ea5023",
+      "sourceFingerprint": "74187db232becf0ccb5f4089ae561637f7086f5f3bbc6d742d73c68d2de7eefc",
+      "context": "隔离 PostgreSQL 13.23、Chromium 151、Node 22.22.2、一个 worker。核五个原套件，包括普通跟单真草稿、现行交接权限、直接正式单及关联顺序、历史冻结、洗水事务、投料空值实时与落盘、真实草稿工艺顺序及未发布不起钟、关联历史来源后由正式订单入口按制单再次交接、投料行订正与独立追加、分行实际时间和正式采用首次完整采购截止。执行时的工作树含本次分行实绩时间和首次完整采购截止修复，完整源码指纹绑定实际输入。",
+      "startedAt": "2026-11-22T17:30:34.221Z",
+      "endedAt": "2026-11-22T17:35:13.877Z",
+      "log": "/tmp/dx1077-evidence/settled-candidate-pg.log",
+      "logSha256": "beb85d29fe6d2d4ad0c2a7b08f2302692a7b53b385c898338af9cf0a930f8050",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c2fdf117fa73be37a3bcdef8585a6c49c097cc155ad6f2ad8be37a31ad6ee24d"
+          "sha256": "8dfa1b2f1b63ec9fbc0fcac92e697916fbe71c7abb42e4a06ce0a8ff4a00e794"
         }
       ]
     },
     {
       "id": "preorder-schedule-and-authorization",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail,full-gate-risk-map}.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/closeout-candidate-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/{digital-pmc-readonly-access,order-time-framework-settings,order-time-framework,order-time-framework-submission,cockpit-framework,production-readiness-contract,cockpit-detail,full-gate-risk-map}.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx1077-evidence/settled-candidate-unit.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 278,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "ec9f5cb731a9a011ef2542aba87eea8687c52927",
-      "sourceFingerprint": "0398470f51f70aa213406e410903aaeda00e418ded63f3350d67017c135c5a47",
-      "context": "Node 22.22.2。现有 PMC 权限矩阵、排程合同、手算采购边界、原固定里程碑、旧版本与 Full 风险映射。执行时的工作树含本次正式单入口及投料行订正修复，完整源码指纹绑定实际输入。",
-      "startedAt": "2026-11-22T17:18:23.676Z",
-      "endedAt": "2026-11-22T17:18:33.405Z",
-      "log": "/tmp/dx1077-evidence/closeout-candidate-unit.log",
-      "logSha256": "6c498b7553accad6e42544be07aaaf106fcc5c9805e3ab4d6e70ce221ce09d6a",
+      "testedHead": "43595f39b68657a563bbeaef4389264044ea5023",
+      "sourceFingerprint": "74187db232becf0ccb5f4089ae561637f7086f5f3bbc6d742d73c68d2de7eefc",
+      "context": "Node 22.22.2。现有 PMC 权限矩阵、排程合同、手算采购边界、原固定里程碑、旧版本与 Full 风险映射。执行时的工作树含本次分行实绩时间和首次完整采购截止修复，完整源码指纹绑定实际输入。",
+      "startedAt": "2026-11-22T17:31:35.831Z",
+      "endedAt": "2026-11-22T17:31:45.646Z",
+      "log": "/tmp/dx1077-evidence/settled-candidate-unit.log",
+      "logSha256": "8046559afacbb1ed5562bcfc44e60a804c89306ea09ed054ede0eaa9cc046adf",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a7ffdb23da2a0b447989b3b84efc87555e77b7ba035c89ed3cd7b0aa1e45c72a"
+          "sha256": "ff689fca311ceaa6f8b2329ef531bf6b893f50eedca424a3b017eeca45907e39"
         }
       ]
     }

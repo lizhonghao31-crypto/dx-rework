@@ -59,6 +59,8 @@ import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js'
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
+import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import type {PreparationMaterialKind,PreparationResource} from '@dx-rework/contracts/production-readiness';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('production preparation native lifecycle (TEST_DATABASE_URL isolated only)',()=>{
@@ -1006,6 +1008,71 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(movedInvestment.investmentMaterialOccurrences?.[fabricB]).toEqual(
    added.facts.find(row=>row.kind==='material_investment')!.investmentMaterialOccurrences?.[fabricB]);
   expect(movedResult.history.find(row=>row.recordId===initial.recordId&&row.version===4)).toMatchObject({quantities:[rowA,rowB]});
+ });
+ it('adopts the first material cutoff for the same formal handover only after supplying its missing lead time',async()=>{
+  const {h,merch,root,scene,started,orderId,requests}=await directMaterialOrder();
+  const resource={kind:'order' as const,id:orderId},operation={kind:'arrangement' as const,resource};
+  const preparation=new ProductionReadinessService(h.db),instruction=new ProductionInstructionService(h.db,true),repo=new OrderTimePlanRepository(h.db);
+  const accessoryId=randomUUID();
+  const original={...initialInstruction(),secondaryCraft:'无' as const,preshrink:'无需预缩' as const,
+   accessories:[{id:accessoryId,group:'车缝' as const,garmentColors:'',materialColor:'黑',name:'TEST 原制单纽扣',
+    category:'',part:'门襟',specification:'15mm',consumption:'2枚',remarks:''}]};
+  const save=async(document:typeof original)=>{
+   const current=await instruction.read(merch,orderId);
+   return instruction.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,document},randomUUID());
+  };
+  const adopted=async()=>{
+   const record=(await repo.current(resource))!;
+   const milestones=Object.values(record.input.frameworkPlans!)[0]!.milestones;
+   return {record,milestones,material:milestones.find(row=>row.key==='material_investment')!};
+  };
+  const first=await h.f.runtime.run(scene,root,async()=>{
+   const saved=await save(original);
+   await preparation.record(root,resource,{kind:'design_handover',scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:started,
+    note:'TEST 正式交接辅料范围，采购周期尚缺',quantities:[],evidenceIds:[],sourceDocumentVersion:null,
+    orderInstructionVersion:saved.version,recipientId:merch.actorId},randomUUID());
+   const check=await requests.check(root,operation);
+   await requests.arrange(root,{resource,fingerprint:check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   const result=await adopted();
+   expect(result.material).toMatchObject({target:{at:null},materialInvestmentTargetBasis:{scope:{fabric:false,accessories:true},branches:[{kind:'accessories',leadTime:null}]}});
+   expect((await preparation.read(merch,resource)).materialInvestmentReminder).toBeUndefined();
+   return result;
+  });
+  const settings=new OrderTimeSettingsService(h.db),standard=await settings.read(root);
+  const rule=orderTimeRule(first.record.input.plan,'material_investment')?.rule;
+  if(rule?.kind!=='event')throw Error('Expected original material event');
+  const supplied={...rule,accessoriesLeadTime:{minutes:1440,calendar:'continuous' as const}};
+  await settings.save(root,{expectedVersion:standard.version,values:{...standard.current,nodes:{...standard.current.nodes,material_investment:supplied}}},randomUUID());
+  expect((await adopted()).record).toEqual(first.record);
+  expect((await preparation.read(merch,resource)).materialInvestmentReminder).toBeUndefined();
+  await h.f.runtime.run(scene,root,async()=>{
+   await save({...original,accessories:[{...original.accessories[0]!,specification:'25mm'}]});
+   const wrongScope=await requests.check(root,operation);
+   expect(wrongScope.framework?.milestones.find(row=>row.key==='material_investment')?.target.at).toBeNull();
+   await save(original);
+   const expectedArrival=first.milestones.find(row=>row.key==='accessories_ready')!.target;
+   const expectedDue=new Date(Date.parse(expectedArrival.at!)-86_400_000).toISOString();
+   const preview=await requests.check(root,operation);
+   expect(preview.framework?.milestones.find(row=>row.key==='material_investment')?.target).toMatchObject({at:expectedDue,exclusive:expectedArrival.exclusive});
+   expect((await preparation.read(merch,resource)).materialInvestmentReminder).toBeUndefined();
+   expect((await adopted()).record).toEqual(first.record);
+   await requests.arrange(root,{resource,fingerprint:preview.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   const second=await adopted();
+   expect(second.material.target.at).toBe(expectedDue);
+   expect(second.material.materialInvestmentTargetBasis?.scope).toEqual(first.material.materialInvestmentTargetBasis?.scope);
+   expect(second.milestones.filter(row=>row.key!=='material_investment')).toEqual(first.milestones.filter(row=>row.key!=='material_investment'));
+   const reminder=(await preparation.read(merch,resource)).materialInvestmentReminder!;
+   expect(reminder).toMatchObject({dueAt:expectedDue,startedAt:started,adoptedPlanId:second.record.id});
+   expect(await materialInvestmentTodos(h.db,merch,{todoId:reminder.handoverId})).toMatchObject([{dueAt:expectedDue}]);
+   const third={material_investment:{...supplied,accessoriesLeadTime:{...supplied.accessoriesLeadTime,minutes:2880}}};
+   const thirdPreview=await requests.check(root,operation,third);
+   await requests.arrange(root,{resource,fingerprint:thirdPreview.fingerprint,overrides:third,acceptLate:true},randomUUID());
+   expect((await adopted()).material).toEqual(second.material);
+   expect((await adopted()).milestones.filter(row=>row.key!=='material_investment')).toEqual(first.milestones.filter(row=>row.key!=='material_investment'));
+   expect((await preparation.read(merch,resource)).materialInvestmentReminder?.dueAt).toBe(expectedDue);
+   const old=(await h.db.query('SELECT input_snapshot FROM digital_order_time_plan_versions WHERE plan_version_id=$1',[first.record.id])).rows[0];
+   expect(old.input_snapshot).toEqual(first.record.input);
+  });
  });
  it.each(['before','after'] as const)('uses the original direct order handover and overdue cutoff when the source is linked %s adoption',async(linkWhen)=>{
   const order=await directMaterialOrder(),{h,merch,root,started,scene,requests,orderId}=order;

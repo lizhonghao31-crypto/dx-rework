@@ -4,7 +4,7 @@ import type {Pool,PoolClient} from 'pg';
 import type {PreparationMaterialFact,PreparationMaterialKind,PreparationResource,PreparationMaterialRecord,MaterialInvestmentScopeBasis} from '@dx-rework/contracts/production-readiness';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
-import {PREPARATION_RULE_VERSION} from '@dx-rework/contracts/production-readiness';
+import {PREPARATION_RULE_VERSION,preparationInvestmentRowKey as investmentRowKey} from '@dx-rework/contracts/production-readiness';
 import {businessNow,acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import {digitalNotFound} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
@@ -130,7 +130,6 @@ export async function preparationResponsibility(db:PreparationDB,context:Awaited
  return {version:row?.version??0,warehouseWorkerId:dispatch?.warehouse_worker_id??row?.warehouse_worker_id??null,colorConfirmationWorkerId:row?.color_confirmation_worker_id??null,colorConfirmationRole:row?.color_confirmation_role??null};
 }
 type Quantity=PreparationMaterialRecord['quantities'][number];
-const investmentRowKey=(row:Quantity)=>JSON.stringify([row.materialId,row.lineId,row.unit,row.materialId?null:row.name]);
 
 function correctedInvestmentQuantities(prior:readonly Quantity[],correction:NonNullable<PreparationMaterialRecord['investmentQuantityCorrection']>,replacement:Quantity){
  const previous=prior[correction.index],original=correction.previous;
