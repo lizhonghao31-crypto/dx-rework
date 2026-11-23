@@ -2,7 +2,7 @@
   "version": 1,
   "base": "8f79b1b8a17a9a86e939d15b96464186574eca88",
   "risk": "full",
-  "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
+  "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
   "rules": [
     {
       "rule": "Use pinned Astryx actions and input fields in guided creation and preserve the three existing entry contracts.",
@@ -65,7 +65,8 @@
         "apps/web/src/development-craft-requirements.tsx",
         "apps/web/src/development-document-fields.tsx",
         "apps/web/src/independent-craft-field.tsx",
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/web/src/digital-development-editing.ts",
@@ -74,11 +75,12 @@
       ],
       "oldTests": [
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
       ],
       "initialization": "Use existing craft and file option sets. The legacy original form keeps its existing inputs. The label for an existing board or sample distinguishes different saved files.",
       "dateAndPermission": "Saved requirement versions and attachment IDs remain exact. The unchanged APIs enforce ownership and ready status.",
-      "expectation": "The signed browser chooses the saved board, retains its exact attachment ID through real save/reload and reopens an old draft link with the original ordered choices.",
+      "expectation": "The signed browser chooses the saved board, retains its exact attachment ID through real save/reload and reopens an old draft link with the original ordered choices. The original fixed-timeline regression operates the actual combobox with its visible selected label and accessible options, checks the real saved printing and embroidery order, and verifies the untouched draft and clock facts.",
       "checks": [
         "r1-controls-browser",
         "r1-controls-types",
@@ -116,23 +118,23 @@
     {
       "id": "r1-controls-browser",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r1-selector-evidence/verify-reviewed-controls.mjs",
+      "command": "node /tmp/dx-workbench-v101-r1-selector-evidence/verify-fixed-timeline-controls.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
-      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
       "context": "Node 22.22.2, Chromium original App, signed test identities, two low-privilege PostgreSQL 16.14 test targets, canonical two workers, owned resource cleanup passed.",
-      "startedAt": "2026-11-23T19:06:25.216Z",
-      "endedAt": "2026-11-23T19:08:51.535Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/reviewed-controls-browser.log",
-      "logSha256": "5250ee8bd766961690b160e7becbbf1bae9ec1fff41164d55c742ce78ebc7234",
-      "passed": 41,
+      "startedAt": "2026-11-23T20:05:31.564Z",
+      "endedAt": "2026-11-23T20:08:03.248Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/fixed-timeline-browser.log",
+      "logSha256": "723e62e89a1f0da0b5131134c64964ea98a1c4498c1497583d46466d36e8a973",
+      "passed": 43,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "80dfa3e897a942634313d6d384cb994600d192cd17a71ca331361c759aef284b"
+          "sha256": "0529601e6f61d9a225c5669ec0e9176923756070f06c8f592074330d00bcab11"
         }
       ]
     },
@@ -142,12 +144,12 @@
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
-      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
       "context": "Node 22.22.2, original web and contract types.",
-      "startedAt": "2026-11-23T19:09:11Z",
-      "endedAt": "2026-11-23T19:09:37Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/static-types.log",
+      "startedAt": "2026-11-23T20:05:47Z",
+      "endedAt": "2026-11-23T20:06:14Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-types.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
     },
     {
@@ -156,12 +158,12 @@
       "command": "git diff --name-only --diff-filter=ACM 8f79b1b8a17a9a86e939d15b96464186574eca88 -- '*.ts' '*.tsx' | xargs node node_modules/eslint/bin/eslint.js --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
-      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
       "context": "Node 22.22.2, all modified and new TypeScript source and tests.",
-      "startedAt": "2026-11-23T19:09:37Z",
-      "endedAt": "2026-11-23T19:09:38Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/static-lint.log",
+      "startedAt": "2026-11-23T20:05:47Z",
+      "endedAt": "2026-11-23T20:05:50Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -170,13 +172,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
-      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
       "context": "Node 22.22.2, repository protocol, time-source inventory and isolated test configuration.",
-      "startedAt": "2026-11-23T19:09:38Z",
-      "endedAt": "2026-11-23T19:09:45Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/final-preflight.log",
-      "logSha256": "a8543b205afb440a2257a92be7f52eaae2343f3e21dfb9ad40a6b1af3e96f156"
+      "startedAt": "2026-11-23T20:05:47Z",
+      "endedAt": "2026-11-23T20:05:58Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-preflight.log",
+      "logSha256": "48bd9310e5115bfbd1f2204ce85ac17527945af3ceba2b77b59a34e8b6bc5949"
     }
   ]
 }

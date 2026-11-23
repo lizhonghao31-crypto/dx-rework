@@ -32,8 +32,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const choices=page.getByRole('group',{name:'工艺',exact:true});await choices.waitFor();
    await page.getByRole('textbox',{name:'设计款号',exact:true}).fill('TEST-FIXED-UI-'+randomUUID());
    await choices.getByRole('checkbox',{name:'印花',exact:true}).check();await choices.getByRole('checkbox',{name:'绣花',exact:true}).check();
-   expect(await choices.getByRole('combobox',{name:'工艺先后顺序'}).inputValue()).toBe('printing');
-   await choices.getByRole('combobox',{name:'工艺先后顺序'}).selectOption('embroidery');
+   const order=choices.getByRole('combobox',{name:'工艺先后顺序',exact:true});
+   await order.getByText('印花 → 绣花',{exact:true}).waitFor();
+   await order.press('Enter');
+   await page.getByRole('option',{name:'绣花 → 印花',exact:true}).click();
+   await order.getByText('绣花 → 印花',{exact:true}).waitFor();
    const saved=page.waitForResponse(response=>/\/sources\/[^/]+\/development$/.test(new URL(response.url()).pathname)&&response.request().method()==='PUT');
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();const response=await saved;expect(response.status()).toBe(200);
    const sheet=await response.json();
@@ -41,7 +44,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await orderTimeCreated(db,{kind:'source',id:sheet.sourceId})).toBeNull();
    expect(sheet.document.craftSteps).toEqual([{craftKind:'embroidery',sequence:1},{craftKind:'printing',sequence:2}]);
    await page.goto(h.base+'/ui/digital-production?development='+sheet.sourceId);
-   await page.getByRole('group',{name:'工艺',exact:true}).waitFor();expect(await page.getByRole('combobox',{name:'工艺先后顺序'}).inputValue()).toBe('embroidery');
+   await order.getByText('绣花 → 印花',{exact:true}).waitFor();
    await page.screenshot({path:join(h.evidence,'development-independent-craft-1165.png'),fullPage:true});expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
