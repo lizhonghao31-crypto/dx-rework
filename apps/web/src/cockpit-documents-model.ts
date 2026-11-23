@@ -142,6 +142,13 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
   }
   return pending.then(value=>{if(!live()||signal.aborted)throw cancelledDirectoryRead();return value;});
  };
+ const readChecked=<T>(path:string,signal:AbortSignal,parse:(value:unknown)=>T)=>{
+  const result=read(path,signal),cached=cache.get(path);
+  return result.then(value=>{
+   try{return parse(value);}
+   catch(error){if(cache.get(path)===cached)cache.delete(path);throw error;}
+  });
+ };
  const validated=async<T>(work:(tracked:CockpitDocumentReader)=>Promise<T>)=>{const used=new Set<string>();try{return await work((path,signal)=>{used.add(path);return read(path,signal);});}catch(error){for(const path of used)cache.delete(path);throw error;}};
  const load=async(key:CockpitDocumentCategory,more=false)=>{
   if(!live()||states[key].phase==='loading'||states[key].phase==='ready'&&!more)return;
@@ -162,6 +169,6 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
   const key=entryKey(entry);if(key){loadedEntries.set(key,value);states=Object.fromEntries(Object.entries(states).map(([category,state])=>[category,state.data?{...state,data:{...state.data,entries:enrich(state.data.entries)}}:state])) as CockpitDirectoryStates;emit();}
   return value;
  };
- return {read,load,loadEntry,start:()=>{for(const category of COCKPIT_DOCUMENT_CATEGORIES)if(states[category.key].phase==='idle')void load(category.key);},getSnapshot:()=>states,subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},dispose:()=>{if(disposed)return;disposed=true;controller.abort();for(const job of queue.splice(0))job.reject(cancelledDirectoryRead());cache.clear();loadedEntries.clear();states=emptyCockpitDirectoryStates();emit();listeners.clear();}};
+ return {read,readChecked,load,loadEntry,start:()=>{for(const category of COCKPIT_DOCUMENT_CATEGORIES)if(states[category.key].phase==='idle')void load(category.key);},getSnapshot:()=>states,subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},dispose:()=>{if(disposed)return;disposed=true;controller.abort();for(const job of queue.splice(0))job.reject(cancelledDirectoryRead());cache.clear();loadedEntries.clear();states=emptyCockpitDirectoryStates();emit();listeners.clear();}};
 }
 export type CockpitDocumentSnapshot=ReturnType<typeof createCockpitDocumentSnapshot>;

@@ -10,6 +10,7 @@ import {digitalChildDetailHref} from './digital-detail-route.js';
 import {digitalRequest} from './digital-production-api.js';
 import {createWebUrls} from '../url-contract.js';
 import {DesignerOriginalShell} from './designer-original-shell.js';
+import type {CockpitDocumentSnapshot} from './cockpit-documents-model.js';
 
 const kinds=z.enum(['receipt','correction','packing','resolution']);
 const quantity=z.union([z.number().int().nonnegative(),z.string().regex(/^\d+$/)]);
@@ -28,8 +29,9 @@ const quantities=(row:z.infer<z.ZodObject<typeof amounts>>)=>[
  ['原送货单',`${row.documentQuantity} 件`],['实收',`${row.actualQuantity} 件`],['次品',`${row.defectiveQuantity} 件`],
 ] as const;
 
-async function readRecords(orderId:string,signal:AbortSignal) {
- const response=historySchema.parse(await digitalRequest(`orders/${orderId}/receipt-summary?documentBindings=true`,'GET',undefined,undefined,{signal}));
+const recordsPath=(orderId:string)=>`orders/${orderId}/receipt-summary?documentBindings=true`;
+function originalRecords(orderId:string,input:unknown){
+ const response=historySchema.parse(input);
  if(response.orderId!==orderId)throw Error('收货历史不属于当前订单。');
  const history=response.history;
  const records:OriginalFact[]=!history?[]:[
@@ -61,8 +63,8 @@ function OriginalFiles({files,label}:{files:OriginalFile[];label:string}){
  </li>)}</ul></details>:null;
 }
 
-export function ReceivingOriginalDirectory({orderId,category,returnTo}:{orderId:string;category:'receiving'|'packing';returnTo:string}){
- const load=useCallback((signal:AbortSignal)=>readRecords(orderId,signal),[orderId]);
+export function ReceivingOriginalDirectory({orderId,category,returnTo,session}:{orderId:string;category:'receiving'|'packing';returnTo:string;session:CockpitDocumentSnapshot}){
+ const load=useCallback((signal:AbortSignal)=>session.readChecked(`digital-production/${recordsPath(orderId)}`,signal,value=>originalRecords(orderId,value)),[orderId,session]);
  const read=useForegroundRead(orderId,orderId,load);
  useForegroundWait(read.foregroundKey);
  if(read.error)return <p role="alert">{read.error.message}<Button label="重新读取收货原单" size="sm" onClick={read.retry}/></p>;
@@ -76,7 +78,7 @@ export function ReceivingOriginalDirectory({orderId,category,returnTo}:{orderId:
 }
 
 export function ReceivingOriginalRecord({orderId,target,onClose}:{orderId:string;target:Exclude<ReturnType<typeof readReceivingOriginalSearch>,undefined>;onClose():void}){
- const load=useCallback((signal:AbortSignal)=>readRecords(orderId,signal),[orderId]);
+ const load=useCallback(async(signal:AbortSignal)=>originalRecords(orderId,await digitalRequest(recordsPath(orderId),'GET',undefined,undefined,{signal})),[orderId]);
  const read=useForegroundRead(orderId,target?`${target.kind}:${target.id}`:null,load);
  useForegroundWait(read.foregroundKey);
  const record=target&&read.value?.records.find(item=>item.id===target.id&&item.kind===target.kind);

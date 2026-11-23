@@ -7,7 +7,7 @@ import {mkdtemp,mkdir,readFile,rm,writeFile} from "node:fs/promises";
 import {join,resolve,extname} from "node:path";
 import {tmpdir} from "node:os";
 import {build} from "vite";
-import type {Browser,chromium as Chromium} from "playwright-core";
+import type {Browser,Route,chromium as Chromium} from "playwright-core";
 import {loadConfig} from "@dx-rework/config";
 import {buildApp} from "../../apps/api/src/app.js";
 import {CuttingSourceService} from '../../apps/api/src/cutting/cutting-source-service.js';
@@ -770,6 +770,44 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('alert').filter({hasText:'找不到所选裁床原记录或版本'}).waitFor();
    expect(await record.count()).toBe(0);
    const receivingOrigin=new URL(source,base);receivingOrigin.searchParams.set('originalStage','receiving');receivingOrigin.searchParams.set('originalCategory','receiving');
+   let receivingReads=0;
+   const receivingHistory=(url:URL)=>url.pathname===`/api/digital-production/orders/${ready.id}/receipt-summary`&&url.searchParams.get('documentBindings')==='true';
+   const captureDirectory=async(route:Route)=>{
+    receivingReads++;
+    if(receivingReads===1){await route.fulfill({status:503,json:{error:{message:'TEST 收货原单暂不可用'}}});return;}
+    await route.continue();
+   };
+   await page.route(receivingHistory,captureDirectory);
+   await page.goto(receivingOrigin.href);
+   await directory.getByRole('button',{name:'重新读取收货原单',exact:true}).click();
+   const originalReceiptLink=directory.locator(`a[href*="originalReceivingId=${receipt.receiptId}"]`);
+   await originalReceiptLink.waitFor();
+   await directory.getByRole('button',{name:'装箱与数量差异',exact:true}).click();
+   await directory.locator(`a[href*="originalReceivingId=${originalPacking.packingRevisionId}"]`).waitFor();
+   const selectOriginalStage=async(label:string)=>{
+    await directory.getByRole('combobox',{name:'原单据阶段',exact:true}).click();
+    await page.getByRole('option',{name:label,exact:true}).click();
+   };
+   await selectOriginalStage('产品开发打板');
+   await directory.getByRole('button',{name:'尺寸表',exact:true}).click();
+   await directory.getByRole('button',{name:'纸样PLT',exact:true}).waitFor();
+   await selectOriginalStage('回货与装箱');
+   await directory.getByRole('button',{name:'真实回货与成衣QC',exact:true}).click();
+   await originalReceiptLink.waitFor();
+   expect(receivingReads).toBe(2);
+   await page.reload();
+   await originalReceiptLink.waitFor();
+   expect(receivingReads).toBe(3);
+   await page.unroute(receivingHistory,captureDirectory);
+   const otherReceiving=new URL(receivingOrigin.href);otherReceiving.searchParams.set('development',qcReady.sourceId);
+   const [otherReceipt]=await Promise.all([
+    page.waitForResponse(result=>new URL(result.url()).pathname===`/api/digital-production/orders/${qcReady.id}/receipt-summary`),
+    page.goto(otherReceiving.href),
+   ]);
+   expect(otherReceipt.status()).toBe(200);
+   expect((await otherReceipt.json()).orderId).toBe(qcReady.id);
+   await directory.getByText('暂无相关收货原记录。',{exact:true}).waitFor();
+   expect(await originalReceiptLink.count()).toBe(0);
    await page.goto(receivingOrigin.href);
    await page.getByText('原收货批次凭证',{exact:true}).click();
    expect(await directory.locator(`a[href*="${receiptPhoto}"]`).count()).toBe(1);
@@ -789,6 +827,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const [refusal]=await Promise.all([denied.waitForResponse(result=>new URL(result.url()).pathname.endsWith('/receipt-summary')),denied.goto(selected.href)]);
     expect(refusal.status()).toBe(404);
     await denied.getByRole('alert').waitFor();expect(await denied.locator('dd').count()).toBe(0);
+    const [directoryRefusal]=await Promise.all([
+     denied.waitForResponse(result=>receivingHistory(new URL(result.url()))),denied.goto(receivingOrigin.href),
+    ]);
+    expect(directoryRefusal.status()).toBe(404);
+    const deniedDirectory=denied.getByLabel('按阶段读取原单据',{exact:true});
+    await deniedDirectory.getByRole('button',{name:'重新读取收货原单',exact:true}).waitFor();
+    expect(await deniedDirectory.locator(`a[href*="originalReceivingId=${receipt.receiptId}"]`).count()).toBe(0);
     const bulkPath=`/api/digital-production/orders/${ready.id}/bulk-preparation`;
     const originalBulk=await signedDesigner.request.get(base+bulkPath);
     expect(originalBulk.status()).toBe(200);

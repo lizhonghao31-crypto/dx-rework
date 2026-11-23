@@ -98,7 +98,7 @@ function SourcingOriginals({order,session,returnTo}:{order:OrderJourney;session:
   setResult(null);
   void Promise.all(caseIds.map(async id=>{
    try{
-    const data=SourcingTimelineResponseSchema.parse(await session.read(`sourcing/cases/${encodeURIComponent(id)}/timeline`,signal.signal));
+    const data=await session.readChecked(`sourcing/cases/${encodeURIComponent(id)}/timeline`,signal.signal,value=>SourcingTimelineResponseSchema.parse(value));
     return {id,entries:data.items};
    }catch{return {id,entries:null};}
   })).then(data=>{if(!signal.signal.aborted)setResult(data);});
@@ -123,11 +123,11 @@ function SourcingOriginals({order,session,returnTo}:{order:OrderJourney;session:
 }
 
 function WashingOriginals({orderId,session,returnTo}:{orderId:string;session:CockpitDocumentSnapshot;returnTo:string}){
- const load=useCallback(async(signal:AbortSignal)=>{
-  const sheet=await session.read(`digital-production/orders/${orderId}/bulk-washing`,signal) as BulkWashingSheet;
+ const load=useCallback((signal:AbortSignal)=>session.readChecked(`digital-production/orders/${orderId}/bulk-washing`,signal,value=>{
+  const sheet=value as BulkWashingSheet;
   if(sheet.orderId!==orderId||!Array.isArray(sheet.scopes))throw Error('洗水原记录与本单不一致。');
   return sheet;
- },[orderId,session]);
+ }),[orderId,session]);
  const reader=useForegroundRead(orderId,'original-washing',load);
  if(reader.error)return <p role="alert">无法读取本单洗水原记录。<Button label="重试读取洗水原记录" onClick={reader.retry}/></p>;
  if(!reader.value)return <p role="status">正在读取洗水原记录…</p>;
@@ -154,9 +154,11 @@ function TimeOriginals({sourceId,session,returnTo}:{sourceId:string;session:Cock
  const [result,setResult]=useState<z.infer<typeof timeDirectorySchema>|null>(null),[error,setError]=useState(false);
  useEffect(()=>{
   const request=new AbortController();setResult(null);setError(false);
-  void (retry?read:session.read)(`digital-production/sources/${sourceId}/order-time/original-requests?page=${page}`,request.signal).then(value=>{
+  void session.readChecked(`digital-production/sources/${sourceId}/order-time/original-requests?page=${page}`,request.signal,value=>{
    const data=timeDirectorySchema.parse(value);
    if(data.sourceId!==sourceId||data.page!==page)throw Error('原时效申请目录不属于当前单据');
+   return data;
+  }).then(data=>{
    if(!request.signal.aborted)setResult(data);
   }).catch(()=>{if(!request.signal.aborted)setError(true);});
   return()=>request.abort();
@@ -231,13 +233,13 @@ export function DesignerRelatedOriginals({order,materials,returnTo}:{order:Order
   {category==='factory'&&current&&order.orderId&&<WashingOriginals orderId={order.orderId} session={current} returnTo={target.pathname+target.search}/>}
   {category==='time_requests'&&current&&order.sourceId&&<TimeOriginals sourceId={order.sourceId} session={current} returnTo={target.pathname+target.search}/>}
   {current&&order.orderId&&(category==='receiving'||category==='packing')&&
-   <ReceivingOriginalDirectory orderId={order.orderId} category={category} returnTo={target.pathname+target.search}/>}
+   <ReceivingOriginalDirectory orderId={order.orderId} category={category} returnTo={target.pathname+target.search} session={current}/>}
   {category==='auxiliary_basis'&&current&&<>
    {materials.some(item=>item.auxiliaryCatalog)?<ul>{materials.flatMap(item=>item.auxiliaryCatalog?[<li key={item.materialId}>
     <Button label={`${item.name} · 版本 ${item.auxiliaryCatalog.version}`} onClick={()=>setMaterial(item)}/>
    </li>]:[])}</ul>:<p>本版未保存共享辅料目录引用。</p>}
    {material?.auxiliaryCatalog&&materials.includes(material)&&<AuxiliaryCatalogHistory
-    item={{id:material.auxiliaryCatalog.id,name:material.name}} exactVersion={material.auxiliaryCatalog.version} onClose={()=>setMaterial(null)}/>}
+    item={{id:material.auxiliaryCatalog.id,name:material.name}} exactVersion={material.auxiliaryCatalog.version} session={current} onClose={()=>setMaterial(null)}/>}
   </>}
   {state?.phase==='error'&&<p role="alert">{state.error}{!state.denied&&<Button label="重试读取目录" onClick={()=>void current?.load(currentCategory!)}/>}</p>}
   {current&&state?.data&&<>

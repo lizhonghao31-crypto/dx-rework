@@ -82,16 +82,24 @@ async function createFromPage(page:Page,name:string){
     workspace:'designer',section:'workspace',development:adopted.sourceId,area:'records',originalStage:'development',originalCategory:'auxiliary_basis',
    }));
    try{
+    const exactHistory=(url:string)=>new URL(url).pathname===`/api/master-data/auxiliaries/${old.id}/versions`&&new URL(url).searchParams.get('version')===String(old.version);
+    let historyReads=0;
+    adoptedTab.page.on('request',request=>{if(exactHistory(request.url()))historyReads++;});
     const control=adoptedTab.page.getByRole('button',{name:`${old.name} · 版本 ${old.version}`,exact:true});
     await control.waitFor();
     const [exact]=await Promise.all([
-     adoptedTab.page.waitForResponse(response=>new URL(response.url()).pathname===`/api/master-data/auxiliaries/${old.id}/versions`&&new URL(response.url()).searchParams.get('version')===String(old.version)),
+     adoptedTab.page.waitForResponse(response=>exactHistory(response.url())),
      control.click(),
     ]);
     expect(exact.status()).toBe(200);expect(await exact.json()).toMatchObject({total:1,items:[{id:old.id,version:old.version,name:old.name}]});
     const originalBasis=adoptedTab.page.getByRole('dialog',{name:`${old.name} · 采用版本 ${old.version}`,exact:true});
     await originalBasis.getByRole('cell',{name:old.name,exact:true}).waitFor();
     expect(await originalBasis.getByRole('cell',{name:current.name,exact:true}).count()).toBe(0);
+    await originalBasis.getByRole('button',{name:'关闭版本历史',exact:true}).click();await originalBasis.waitFor({state:'hidden'});
+    await adoptedTab.page.getByRole('button',{name:'尺寸表',exact:true}).click();
+    await adoptedTab.page.getByRole('button',{name:'采用的共享辅料版本',exact:true}).click();
+    await control.click();await originalBasis.getByRole('cell',{name:old.name,exact:true}).waitFor();
+    expect(historyReads).toBe(1);
     await originalBasis.getByRole('button',{name:'关闭版本历史',exact:true}).click();await originalBasis.waitFor({state:'hidden'});
     expect(new URL(adoptedTab.page.url()).searchParams.get('development')).toBe(adopted.sourceId);
    }finally{await adoptedTab.close();}
