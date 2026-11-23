@@ -7,7 +7,7 @@ import "./document-editor.css";
 
 const DocumentChapterContext=createContext<string|null>(null);
 const DocumentFieldLocationContext=createContext<((id:string)=>void)|undefined>(undefined);
-export function DocumentChapterScope({chapter,children,onLocateField}:{chapter:string;children:ReactNode;onLocateField?:((id:string)=>void)|undefined}){
+export function DocumentChapterScope({chapter,children,onLocateField}:{chapter:string|null;children:ReactNode;onLocateField?:((id:string)=>void)|undefined}){
   const [printing,setPrinting]=useState(false);
   useEffect(()=>{const before=()=>flushSync(()=>setPrinting(true)),after=()=>setPrinting(false);window.addEventListener('beforeprint',before);window.addEventListener('afterprint',after);return()=>{window.removeEventListener('beforeprint',before);window.removeEventListener('afterprint',after);};},[]);
   return <DocumentFieldLocationContext.Provider value={onLocateField}><DocumentChapterContext.Provider value={printing?null:chapter}>{children}</DocumentChapterContext.Provider></DocumentFieldLocationContext.Provider>;

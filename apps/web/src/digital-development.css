@@ -97,7 +97,7 @@
  .dx-doc-development .development-revision fieldset{border:1px solid #dce5f0;min-width:0}
  .dx-doc-development .development-revision textarea{min-height:72px;max-height:180px}
  .dx-doc-development .development-revision label{margin:8px 0!important}
- @container(min-width:1120px){.dx-doc-development .development-document-layout{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}
+ @container(min-width:1120px){.dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}
  @media(max-width:800px){
   .dx-doc-development .development-picture-layout{grid-template-columns:minmax(0,1fr)}
   .dx-doc-development .development-basic-grid{grid-template-columns:minmax(0,1fr)}
@@ -109,7 +109,7 @@
 @media print{.dx-doc-development :is(.development-heading,.dx-doc-card){display:none!important}}
 /* UI02: picture/material column and sample/measurements column in reading order. */
 @media screen{
- .dx-doc-development .development-document-layout{grid-template-columns:minmax(0,.85fr) minmax(0,1.45fr);align-items:start;gap:16px}
+ .dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,.85fr) minmax(0,1.45fr);align-items:start;gap:16px}
  .dx-doc-development .development-picture-layout{grid-template-columns:1fr}
  .dx-doc-development .development-main-picture{height:330px;max-height:none}
  .dx-doc-development .development-main-picture img{max-height:none}
@@ -117,8 +117,8 @@
  .dx-doc-development .development-craft-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
  .dx-doc-development #development-labels>section>div{display:grid;gap:12px}
  .dx-doc-development #development-pattern-preparation{margin:0}
- @container(min-width:1120px){.dx-doc-development .development-document-layout{grid-template-columns:minmax(0,.85fr) minmax(0,1.45fr)}}
- @media(max-width:900px){.dx-doc-development .development-document-layout{grid-template-columns:1fr}.dx-doc-development .development-basic-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ @container(min-width:1120px){.dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,.85fr) minmax(0,1.45fr)}}
+ @media(max-width:900px){.dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:1fr}.dx-doc-development .development-basic-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
  @media(max-width:520px){.dx-doc-development .development-basic-grid,.dx-doc-development .development-craft-groups{grid-template-columns:1fr}}
 }
 @media screen{
@@ -154,7 +154,7 @@
 .dx-doc-development #development-labels>section>div>label{flex-basis:100%}
 
 @media screen{
- .dx-doc-development .development-document-layout{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+ .dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
  .dx-doc-development .development-technical-table{min-width:420px;table-layout:fixed}
  .dx-doc-development .development-technical-table th:first-child{width:auto}
  .dx-doc-development .development-technical-table th:nth-child(2),.dx-doc-development .development-technical-table th:nth-child(3){width:64px}
@@ -167,8 +167,8 @@
  .dx-doc-development .development-size-controls{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
  .dx-doc-development .development-size-controls>label{display:flex!important;gap:8px;align-items:center}
  .dx-doc-development .development-size-controls select{width:90px;margin:0!important}
- @container(min-width:1120px){.dx-doc-development .development-document-layout{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}}
- @media(max-width:1200px){.dx-doc-development .development-document-layout{grid-template-columns:1fr}}
+ @container(min-width:1120px){.dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}}
+ @media(max-width:1200px){.dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:1fr}}
  @media(max-width:520px){.dx-doc-development .development-material-details>div{grid-template-columns:1fr}.dx-doc-development .development-basic-grid{grid-template-columns:1fr}}
 }
 
@@ -183,13 +183,13 @@
 
 /* UAT PR04: all formal document cards share the same two-column grid. */
 @media screen {
- .dx-doc-development .development-document-layout{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-areas:"images basic" "images labels" "materials sizes" "craft craft";align-items:stretch;gap:16px}
- .dx-doc-development #development-images{grid-area:images}
- .dx-doc-development #development-basic{grid-area:basic}
- .dx-doc-development #development-materials{grid-area:materials}
- .dx-doc-development #development-sizes{grid-area:sizes}
- .dx-doc-development #development-labels{grid-area:labels}
- .dx-doc-development #development-craft{grid-area:craft}
+ .dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-areas:"images basic" "images labels" "materials sizes" "craft craft";align-items:stretch;gap:16px}
+ .dx-doc-development #development-images:where(:not(.development-document-layout--creation *)){grid-area:images}
+ .dx-doc-development #development-basic:where(:not(.development-document-layout--creation *)){grid-area:basic}
+ .dx-doc-development #development-materials:where(:not(.development-document-layout--creation *)){grid-area:materials}
+ .dx-doc-development #development-sizes:where(:not(.development-document-layout--creation *)){grid-area:sizes}
+ .dx-doc-development #development-labels:where(:not(.development-document-layout--creation *)){grid-area:labels}
+ .dx-doc-development #development-craft:where(:not(.development-document-layout--creation *)){grid-area:craft}
  .dx-doc-development #development-craft .development-craft-groups{grid-template-columns:repeat(3,minmax(0,1fr))}
  .dx-doc-development .dx-doc-section>h2{min-height:36px;box-sizing:border-box;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
  .dx-doc-development #development-basic>h2{position:static;width:auto;height:auto;margin:0 0 12px;overflow:visible;clip-path:none}
@@ -227,8 +227,8 @@
  .dx-doc-development .development-size-table{width:100%!important;table-layout:fixed}
  .dx-doc-development .development-size-table tr>th:first-child{width:42%;min-width:140px;max-width:none}
  .dx-doc-development .development-size-table :is(th,td){width:88px;min-width:88px;max-width:none}
- @container(min-width:1120px){.dx-doc-development .development-document-layout{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
- @media(max-width:1100px){.dx-doc-development .development-document-layout{grid-template-columns:1fr;grid-template-areas:"images" "basic" "materials" "sizes" "labels" "craft"}}
+ @container(min-width:1120px){.dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+ @media(max-width:1100px){.dx-doc-development .development-document-layout:where(:not(.development-document-layout--creation)){grid-template-columns:1fr;grid-template-areas:"images" "basic" "materials" "sizes" "labels" "craft"}}
  @media(max-width:520px){.dx-doc-development .development-basic-grid,.dx-doc-development .development-craft-groups{grid-template-columns:1fr}.dx-doc-development .development-file-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-doc-development .development-technical-table{min-width:420px}.dx-doc-development .development-material-details>div{grid-template-columns:1fr}}
 }
 
@@ -265,7 +265,7 @@
 
 /* P03: approved creation/document groups, scoped to this editor only. */
 @media screen {
- .dx-doc-development .development-document-layout--grouped{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);grid-template-areas:none;align-items:start}
+ .dx-doc-development .development-document-layout--grouped:where(:not(.development-document-layout--creation)){display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);grid-template-areas:none;align-items:start}
  .dx-doc-development .development-document-layout--grouped>.development-section-group{min-width:0;margin:0;padding:16px}
  .dx-doc-development .development-document-layout--grouped>.development-section-group>h2{margin:0 0 16px;font-size:16px}
  .dx-doc-development .development-document-layout--grouped>.development-section-group>.dx-doc-section{border:0;box-shadow:none;border-radius:0;margin:0;padding:0;min-width:0}
@@ -285,8 +285,8 @@
  .dx-doc-development .development-document-layout--grouped .development-visible-material-label+.development-visible-material-label{margin-top:8px}
  .dx-doc-development .development-document-layout--grouped .development-technical-table{min-width:560px}
  .dx-doc-development .development-document-layout--grouped .development-technical-table th:nth-child(2){min-width:170px}
- @container(min-width:1120px){.dx-doc-development .development-document-layout--grouped{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr)}}
- @media(max-width:1000px){.dx-doc-development .development-document-layout--grouped{grid-template-columns:minmax(0,1fr)}}
+ @container(min-width:1120px){.dx-doc-development .development-document-layout--grouped:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,1fr) minmax(0,1.15fr)}}
+ @media(max-width:1000px){.dx-doc-development .development-document-layout--grouped:where(:not(.development-document-layout--creation)){grid-template-columns:minmax(0,1fr)}}
  @media(max-width:520px){.dx-doc-development .development-document-layout--grouped>.development-section-group{padding:12px}.dx-doc-development .development-document-layout--grouped .development-size-move button{min-height:36px}}
 }
 @media screen{
@@ -300,6 +300,45 @@
 }
 
 @media screen{.dx-doc-development .development-document-layout--grouped :is(#development-materials,#development-sizes) .dx-doc-table-scroll{max-height:none;height:auto}}
+@media screen {
+ .dx-doc-development .development-document-layout--creation {
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:var(--spacing-4,1rem);
+ }
+ .dx-doc-development .development-document-layout--creation>* {min-width:0}
+ .dx-doc-development .development-document-layout--creation .development-picture-layout {grid-template-columns:minmax(0,1fr)}
+ .dx-doc-development .development-document-layout--creation .development-main-picture {height:clamp(10rem,24vw,18rem);min-height:0}
+ .dx-doc-development .development-document-layout--creation .development-main-picture:not(:has(img,object)) {height:auto;min-height:5rem}
+ .dx-doc-development .development-document-layout--creation .development-file-tabs {display:flex;flex-wrap:wrap}
+ .dx-doc-development .development-document-layout--creation .development-file-tabs button {flex:none;max-inline-size:100%}
+ .dx-doc-development .development-picture-upload {margin-block:var(--spacing-2,.5rem)}
+ .dx-doc-development .development-preorder-materials {min-width:42rem}
+ .dx-doc-development .development-preorder-materials :is(td,th) {padding:var(--spacing-2,.5rem)}
+ .dx-doc-development .development-preorder-materials td:first-child {white-space:nowrap}
+ .dx-doc-development .development-preorder-materials td:not(:first-child):not(:last-child) {min-width:8rem}
+ .dx-doc-development .development-craft-requirement {
+  min-width:0;
+  border:1px solid var(--color-border-secondary,#dce5f0);
+  padding:var(--spacing-3,.75rem);
+  margin-block:var(--spacing-3,.75rem);
+ }
+ .dx-doc-development .development-craft-requirement-fields {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));
+  gap:var(--spacing-3,.75rem);
+  align-items:start;
+ }
+ .dx-doc-development :is(.development-craft-attachments,.development-craft-attachment-actions) {
+  display:flex;
+  gap:var(--spacing-3,.75rem);
+  flex-wrap:wrap;
+  align-items:end;
+  padding:0;
+  list-style:none;
+ }
+ .dx-doc-development .development-craft-attachments img {display:block;max-width:5rem;max-height:5rem;object-fit:contain}
+}
 
 .development-print{overflow-wrap:anywhere}.development-print table{table-layout:fixed;max-width:100%}.development-print :is(th,td){overflow-wrap:anywhere}
 

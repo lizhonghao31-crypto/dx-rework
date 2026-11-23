@@ -46,7 +46,7 @@ function PaginationNav({ items, ariaLabel, page, totalPages, total, busy, pendin
   return (
     <nav className="my-todos-pagination" aria-label={ariaLabel}>
       {total!=null&&<span>共 {total} 条</span>}
-      <button type="button" disabled={busy || totalPages === null || page <= 1 || pendingPage === previousPage} onClick={() => onPageChange(previousPage)}>上一页</button>
+      <button type="button" className="my-todos-pagination__direction" disabled={busy || totalPages === null || page <= 1 || pendingPage === previousPage} onClick={() => onPageChange(previousPage)}>上一页</button>
       {totalPages!==null&&items.map((item) => item.kind === "ellipsis"
         ? <span className="my-todos-pagination__ellipsis" aria-hidden="true" key={item.key}>…</span>
         : <button
@@ -57,7 +57,7 @@ function PaginationNav({ items, ariaLabel, page, totalPages, total, busy, pendin
             onClick={item.onClick}
             key={item.page}
           >{item.page}</button>)}
-      <button type="button" disabled={busy || totalPages === null || page >= totalPages || pendingPage === page + 1} onClick={() => onPageChange(page + 1)}>下一页</button>
+      <button type="button" className="my-todos-pagination__direction" disabled={busy || totalPages === null || page >= totalPages || pendingPage === page + 1} onClick={() => onPageChange(page + 1)}>下一页</button>
       <PageJump page={page} totalPages={totalPages} busy={busy} onPage={onPageChange} />
     </nav>
   );

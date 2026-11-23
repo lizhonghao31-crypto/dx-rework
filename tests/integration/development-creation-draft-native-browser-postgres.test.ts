@@ -1,7 +1,7 @@
 import {DEVELOPMENT_MEASUREMENTS} from '@dx-rework/contracts/digital-development';
 import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
 import type {Page} from 'playwright-core';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
@@ -33,8 +33,14 @@ async function fillRequiredWorkbenchSheet(page:Page){
  if(!await styleName.isVisible())return;
  if(!await styleName.inputValue())await styleName.fill('TEST 款名');
  const gender=page.getByRole('combobox',{name:'性别（必填）'}),board=page.getByRole('combobox',{name:'板类（必填）'});
- if(!await gender.inputValue())await gender.selectOption('男装');
- if(!await board.inputValue())await board.selectOption('头版');
+ for(const [field,option] of [[gender,'男装'],[board,'头版']] as const){
+  if(await field.evaluate(el=>el instanceof HTMLSelectElement)){
+   if(!await field.inputValue())await field.selectOption(option);
+  }else if((await field.innerText()).trim()==='请选择'){
+   await field.click();
+   await page.getByRole('option',{name:option,exact:true}).click();
+  }
+ }
  const noCraft=page.getByRole('checkbox',{name:'无加工工艺'});
  if(await noCraft.isVisible())await noCraft.check();
  else if(await page.getByRole('combobox',{name:'工艺',exact:true}).isVisible())
@@ -90,6 +96,66 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(await page.getByRole('heading',{name:'开发草稿',exact:true}).count()).toBe(0);
    expect(await page.getByRole('button',{name:'新建开发订单',exact:true}).count()).toBe(0);
    expect(await page.getByRole('columnheader',{name:'操作',exact:true}).count()).toBe(0);
+  }finally{await tab.context.close();}
+ });
+ it('keeps explicit creation types and two local drafts separate through real workbench navigation as a designer',async()=>{
+  const actor=h.f.people['sample-designer']!,entry='/ui/digital-production?workspace=designer&section=create';
+  const tab=await h.open(actor.actorId,1165,{},entry),page=tab.page;
+  const first='TEST-R1-PREORDER-'+randomUUID(),second='TEST-R1-DEVELOPMENT-'+randomUUID();
+  const code=page.getByRole('textbox',{name:'设计款号',exact:true});
+  try{
+   await openNewWizard(page,'预下单');
+   await code.fill(first);
+   const material=page.locator('.development-preorder-materials');
+   const images=page.locator('#development-images');
+   const label=page.locator('#development-create-style');
+   const check=page.getByRole('button',{name:'检查业务ID',exact:true});
+   for(const width of [1165,1366,1440,1920]){
+    await page.setViewportSize({width,height:900});
+    const measurements=await Promise.all([images.boundingBox(),material.boundingBox(),label.boundingBox(),check.boundingBox()]);
+    const [picture,table,input,button]=measurements;
+    expect(picture&&table&&input&&button).toBeTruthy();
+    expect(table!.y).toBeGreaterThan(picture!.y+picture!.height);
+    expect(table!.x-picture!.x).toBeLessThan(40);
+    expect(Math.abs((input!.y+input!.height/2)-(button!.y+button!.height/2))).toBeLessThan(3);
+   }
+   expect(await page.getByRole('group',{name:'附件分类'}).getByRole('button',{name:/菲林/}).count()).toBe(0);
+   const firstView=new URL(page.url()).searchParams.get('creationDraft');
+   expect(firstView).toMatch(/^[a-f0-9-]{36}$/);
+   await page.getByRole('link',{name:'开发工作区',exact:true}).click();
+   await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+   await page.locator('.development-list-panel').waitFor();
+   expect(await code.count()).toBe(0);
+   await page.getByRole('link',{name:'创建开发单',exact:true}).click();
+   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
+   expect(await code.count()).toBe(0);
+   await openNewWizard(page,'纯开发');
+   expect(await code.inputValue()).toBe('');
+   await code.fill(second);
+   const secondView=new URL(page.url()).searchParams.get('creationDraft');
+   expect(secondView).not.toBe(firstView);
+   await page.getByRole('button',{name:'返回列表',exact:true}).click();
+   await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+   await page.getByRole('button',{name:`继续预下单草稿 · ${first}`,exact:true}).click();
+   expect(await code.inputValue()).toBe(first);
+   expect(new URL(page.url()).searchParams.get('creationDraft')).toBe(firstView);
+   await page.getByRole('button',{name:'返回列表',exact:true}).click();
+   await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+   await page.getByRole('button',{name:`继续纯开发草稿 · ${second}`,exact:true}).click();
+   await page.reload();
+   expect(await code.inputValue()).toBe(second);
+   await page.getByRole('button',{name:'更换订单类型',exact:true}).click();
+   await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+   await page.getByRole('dialog',{name:'请选择创建类型'}).getByRole('button',{name:'已确认订单',exact:true}).click();
+   expect(await code.inputValue()).toBe('');
+   expect(await page.getByLabel('建单步骤').getByText('客户与交货',{exact:true}).count()).toBe(1);
+   await page.getByRole('button',{name:'返回列表',exact:true}).click();
+   await page.getByRole('button',{name:`继续纯开发草稿 · ${second}`,exact:true}).click();
+   expect(await code.inputValue()).toBe(second);
+   await page.goto(h.base+entry+'&creationDraft=wrong&creationDraft='+firstView);
+   await page.getByText('草稿链接无效，请从草稿列表重新选择',{exact:true}).waitFor();
+   expect(await code.count()).toBe(0);
+   expect(h.requests.filter(row=>row.session===tab.session&&['POST','PUT'].includes(row.method)&&row.path.startsWith('/api/digital-production/sources'))).toEqual([]);
   }finally{await tab.context.close();}
  });
  async function verifyCreationDetail(id:string,name:string,expected:Array<{label:string;at:string;target:string}>){
@@ -251,7 +317,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
    const service=new DigitalDevelopmentService(h.db,true,h.patternOrders),latest=await service.read(h.f.root,sheet.sourceId);
    await service.save(h.f.root,sheet.sourceId,{expectedVersion:latest.version,document:{...latest.document!,instructions:'TEST newer authorized edit'}},randomUUID());
-   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await page.getByRole('button',{name:'继续本页保存的草稿',exact:true}).click();
    await page.getByRole('alert').filter({hasText:'原开发档案版本已变化'}).waitFor();expect(await save.count()).toBe(0);expect(countPuts()).toBe(4);
    expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources/drafts'&&row.method==='POST')).toHaveLength(1);
    expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:5,document:{instructions:'TEST newer authorized edit'}});
@@ -334,7 +400,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   try{
    const page=tab.page;
    await page.getByRole('button',{name:style,exact:true}).click();
-   const docs=page.getByRole('heading',{name:'版单',exact:true});
+   const docs=page.getByRole('heading',{name:'版单资料',exact:true});
    await docs.waitFor();
    const lookup=page.getByRole('searchbox',{name:'查找字段'});
    await lookup.fill('针距');
@@ -347,6 +413,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await dialog.waitFor();
    await expect.poll(()=>firstRow.evaluate(el=>document.activeElement===el)).toBe(true);
    await firstRow.fill('补齐供应商');
+   await firstRow.locator('xpath=ancestor::tr/following-sibling::tr[1]').getByText('技术详情',{exact:true}).click();
    await dialog.getByLabel(bad.label+' 实样图片',{exact:true}).selectOption(files[1]!.attachmentId);
    await dialog.getByRole('button',{name:'返回版单',exact:true}).click();
    await dialog.waitFor({state:'hidden'});
@@ -392,16 +459,46 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await page.getByRole('button',{name:'提交开发单',exact:true}).click();
    const issue=page.getByRole('button',{name:'工艺：工艺开发板仅适用于印花或绣花',exact:true});
    await issue.click();
-   expect(await steps.getByRole('heading',{name:'版单',exact:true}).isVisible()).toBe(true);
+   expect(await steps.getByRole('heading',{name:'版单资料',exact:true}).isVisible()).toBe(true);
    const checkbox=page.getByRole('checkbox',{name:'绣花',exact:true}),native=await checkbox.isVisible();
    const craft=native?checkbox:page.getByRole('combobox',{name:'工艺',exact:true});
    await expect.poll(()=>craft.evaluate(el=>document.activeElement===el)).toBe(true);
    if(native)await craft.check();else await craft.selectOption('绣花');
    await issue.waitFor({state:'hidden'});
+   const embroidery=page.getByRole('group',{name:'绣花',exact:true});
+   await embroidery.getByRole('textbox',{name:'绣花部位',exact:true}).fill('左胸');
+   await embroidery.getByRole('textbox',{name:'绣花规格 / 效果',exact:true}).fill('宽 6 cm');
+   await embroidery.getByRole('combobox',{name:'绣花引用已有工艺开发板'}).selectOption(file.attachmentId);
+   await tab.context.route('https://private.example.test/**',async route=>{
+    const request=route.request();
+    if(request.method()!=='POST')return route.abort();
+    // Substitute only the fixture's private object transport, using its signed key and real bytes.
+    const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
+    const key=String(form.get('key')),material=form.get('file') as File,bytes=new Uint8Array(await material.arrayBuffer());
+    const sha256=createHash('sha256').update(bytes).digest('hex');
+    expect(h.f.storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);
+    expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+    await h.f.storage.writeImmutable(key,bytes,{mimeType:material.type,sha256});
+    await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+   });
+   await embroidery.locator('input[type="file"]').setInputFiles({
+    name:'TEST-embroidery-board.png',mimeType:'image/png',
+    buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64'),
+   });
+   await embroidery.getByText('TEST-embroidery-board.png',{exact:true}).first().waitFor();
    const saved=page.waitForResponse(response=>response.url().endsWith('/sources/'+sourceId+'/development')&&response.request().method()==='PUT');
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
    const result=await saved;expect(result.status(),await result.text()).toBe(200);
-   expect(await result.json()).toMatchObject({sourceId,status:'draft',document:{craft:'绣花',files:[file]}});
+   const persisted=await result.json(),uploaded=persisted.document.files[1];
+   expect(uploaded).toMatchObject({kind:'工艺开发板',attachmentId:expect.stringMatching(/^[a-f0-9-]{36}$/)});
+   expect(uploaded.attachmentId).not.toBe(file.attachmentId);
+   expect(persisted).toMatchObject({sourceId,status:'draft',document:{craft:'绣花',files:[file,uploaded],
+    craftRequirements:[{stepKey:'embroidery',part:'左胸',specification:'宽 6 cm',instructions:'',attachmentIds:[file.attachmentId,uploaded.attachmentId]}],
+   }});
+   await page.reload();
+   expect(await embroidery.getByRole('textbox',{name:'绣花部位',exact:true}).inputValue()).toBe('左胸');
+   expect(await embroidery.getByRole('link',{name:'查看绣花附件 1原件'}).getAttribute('href')).toContain('/'+file.attachmentId);
+   expect(await embroidery.getByRole('link',{name:'查看绣花附件 2原件'}).getAttribute('href')).toContain('/'+uploaded.attachmentId);
    expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
   }finally{await tab.context.close();}
  });

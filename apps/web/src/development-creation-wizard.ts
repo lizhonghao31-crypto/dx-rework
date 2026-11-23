@@ -7,4 +7,4 @@ export const DEVELOPMENT_CREATION_TYPES = [
 export type DevelopmentWizardKind = typeof DEVELOPMENT_CREATION_TYPES[number]['kind'];
 export type DevelopmentWizardStep = 1 | 2 | 3;
 
-export const DEVELOPMENT_WIZARD_STEPS = ['版单','开发需求','客户与交货'] as const;
+export const DEVELOPMENT_WIZARD_STEPS = ['版单资料','开发需求','客户与交货'] as const;

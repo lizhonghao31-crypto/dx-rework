@@ -1,5 +1,5 @@
 import { InitialCustomerOrderDraftSchema } from "./digital-production.js";
-import {CraftStepChoicesSchema,ProductionRoutePlanSchema,craftLegacyLabel} from './digital-craft.js';
+import {CraftStepChoicesSchema,ProductionRoutePlanSchema,craftLegacyLabel,craftStepIdentity,craftStepLabel,type CraftStepChoice} from './digital-craft.js';
 import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 import { z } from "zod";
 import {AuxiliaryReferenceSchema} from "./auxiliary-catalog.js";
@@ -43,6 +43,26 @@ export const DevelopmentMaterialSchema = z.object({
   if(value.auxiliaryCatalog&&value.category!=="辅料")context.addIssue({code:"custom",path:["auxiliaryCatalog"],message:"仅辅料可以引用共享辅料目录"});
   if (value.auxiliaryKind && value.category !== "辅料") context.addIssue({code:"custom",path:["auxiliaryKind"],message:"仅辅料可以设置辅料类型"});
 });
+const DevelopmentCraftRequirementSchema=z.object({
+  stepKey:z.string().min(1).max(100),
+  part:short,
+  specification:short,
+  instructions:text,
+  attachmentIds:z.array(z.uuid()).max(30),
+}).strict();
+export type DevelopmentCraftRequirement=z.infer<typeof DevelopmentCraftRequirementSchema>;
+
+export function developmentCraftOptions(document:{craft:string;craftSteps?:readonly CraftStepChoice[]|undefined}){
+  if(document.craftSteps)return document.craftSteps.map(step=>({
+    key:step.specialCraft?`${craftStepIdentity(step)}:${step.specialCraft.version}`:craftStepIdentity(step),
+    label:craftStepLabel(step),
+  }));
+  const printing={key:"printing",label:"印花"},embroidery={key:"embroidery",label:"绣花"};
+  if(document.craft==="印花")return [printing];
+  if(document.craft==="绣花")return [embroidery];
+  return document.craft==="印绣花"?[printing,embroidery]:[];
+}
+
 export const DevelopmentDocumentSchema = z.object({
   quotationMode: z.literal('automatic_v1').optional(),
   workbenchSheet: WorkbenchDevelopmentSheetSchema.optional(),
@@ -70,6 +90,7 @@ export const DevelopmentDocumentSchema = z.object({
   sizeLabel: z.boolean(), careLabel: z.boolean(), instructions: text,
   craft: z.enum(["无", "印花", "绣花", "印绣花", "特殊工艺"]), washing: z.enum(["免洗", "内洗", "外洗"]),
   craftSteps: CraftStepChoicesSchema.optional(),
+  craftRequirements: DevelopmentCraftRequirementSchema.array().max(64).optional(),
   materials: z.array(DevelopmentMaterialSchema).max(100),
   files: z.array(z.object({ attachmentId: z.string().uuid(), kind: z.enum(["款图", "局部图", "菲林", "工艺开发板"]) }).strict()).max(30),
 }).strict().superRefine((value, context) => {
@@ -81,6 +102,17 @@ export const DevelopmentDocumentSchema = z.object({
   if (value.sizeQuantities && value.sizeQuantities.length !== value.sizes.length) context.addIssue({code:"custom",path:["sizeQuantities"],message:"制作数量必须逐列对应尺码"});
   if (new Set(value.materials.map(row => row.materialId)).size !== value.materials.length) context.addIssue({ code: "custom", path: ["materials"], message: "物料行不能重复" });
   if (new Set(value.files.map(row => row.attachmentId)).size !== value.files.length) context.addIssue({ code: "custom", path: ["files"], message: "附件不能重复" });
+  if(value.craftRequirements?.length){
+    const stepKeys=new Set(developmentCraftOptions(value).map(step=>step.key));
+    const craftFiles=new Set(value.files.filter(file=>file.kind==="工艺开发板").map(file=>file.attachmentId));
+    const usedKeys=new Set<string>();
+    value.craftRequirements.forEach((row,index)=>{
+      if(!stepKeys.has(row.stepKey)||usedKeys.has(row.stepKey))context.addIssue({code:"custom",path:["craftRequirements",index,"stepKey"],message:"工艺要求须对应本版所选的具体工艺及库版本"});
+      usedKeys.add(row.stepKey);
+      if(new Set(row.attachmentIds).size!==row.attachmentIds.length||row.attachmentIds.some(id=>!craftFiles.has(id)))
+        context.addIssue({code:"custom",path:["craftRequirements",index,"attachmentIds"],message:"仅可引用本版单中已选的工艺开发板，不可重复引用"});
+    });
+  }
   if(value.workbenchSheet){
     const rows=value.workbenchSheet.sewingRows;
     if(new Set(rows.map(row=>row.rowId)).size!==rows.length)context.addIssue({code:"custom",path:["workbenchSheet","sewingRows"],message:"颜色尺码行不能重复"});

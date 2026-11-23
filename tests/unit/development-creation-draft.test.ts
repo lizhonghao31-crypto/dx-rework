@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
-import {clearCreationDraft,readCreationDraft,writeCreationDraft,type CreationDraftRecord,type CreationDraftSnapshot} from '../../apps/web/src/development-creation-draft.js';
+import {clearCreationDraft,listCreationDrafts,readCreationDraft,selectCreationDraft,writeCreationDraft,type CreationDraftRecord,type CreationDraftSnapshot} from '../../apps/web/src/development-creation-draft.js';
 
 const actorId='11111111-1111-4111-8111-111111111111',viewId='22222222-2222-4222-8222-222222222222',sourceId='33333333-3333-4333-8333-333333333333',identity={actorId,environment:'https://TEST.invalid/acceptance/'};
 function storage(){const rows=new Map<string,string>();return {getItem:(key:string)=>rows.get(key)??null,setItem:(key:string,value:string)=>{rows.set(key,value);},removeItem:(key:string)=>{rows.delete(key);},rows};}
@@ -29,6 +29,23 @@ describe('original designer parent/child pure creation draft storage',()=>{
   const record=draft(),command={operation:'publish' as const,sourceId,key:'TEST-native-publish',body:{expectedVersion:2}},original={path:`sources/${sourceId}/development/publish`,method:'POST' as const,key:command.key,body:JSON.stringify(command.body)},pending:CreationDraftRecord={...record,phase:'pending',sourceId,beforeVersion:2,original,native:command};
   const store=storage();writeCreationDraft(store,pending);expect(readCreationDraft(store,identity)).toEqual(pending);
   for(const changed of [{...pending,native:{...command,key:'OTHER'}},{...pending,original:{...original,path:`sources/${actorId}/development/publish`}},{...pending,original:{...original,body:JSON.stringify({expectedVersion:3})}}])expect(()=>writeCreationDraft(storage(),changed)).toThrow();
+ });
+ it('retains the original unsent draft through a new view and only restores the explicitly selected view',()=>{
+  const store=storage(),record=draft();
+  writeCreationDraft(store,record);
+  expect(()=>selectCreationDraft({...store,setItem:()=>{throw Error('TEST storage full');}},identity)).toThrow('TEST storage full');
+  expect(readCreationDraft(store,identity)).toEqual(record);
+  selectCreationDraft(store,identity);
+  expect(readCreationDraft(store,identity)).toBeNull();
+  expect(()=>writeCreationDraft(store,record)).toThrow('旧回包');
+  const second={...draft(),viewId:sourceId,snapshot:{...snapshot(),preorder:true}};
+  writeCreationDraft(store,second);
+  expect(()=>selectCreationDraft(store,identity,actorId)).toThrow('未找到');
+  expect(readCreationDraft(store,identity)).toEqual(second);
+  expect(selectCreationDraft(store,identity,viewId)).toEqual(record);
+  expect(listCreationDrafts(store,identity)).toEqual([record,{...second,open:false}]);
+  clearCreationDraft(store,identity,viewId);
+  expect(listCreationDrafts(store,identity)).toEqual([{...second,open:false}]);
  });
  it('blocks malformed row/document state and failed durable recording before any command can start',()=>{
   const record=draft(),store=storage();expect(()=>writeCreationDraft(store,{...record,snapshot:{...record.snapshot,measurementIds:[]}})).toThrow('行身份');expect(()=>writeCreationDraft(store,{...record,snapshot:{...record.snapshot,document:{...record.snapshot.document,materials:null as never}}})).toThrow('结构');

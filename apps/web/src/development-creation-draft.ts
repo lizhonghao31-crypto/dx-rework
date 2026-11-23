@@ -4,8 +4,8 @@ import {DevelopmentDocumentSchema,type DevelopmentDocument} from '@dx-rework/con
 import {InitialCustomerOrderDraftSchema,type InitialCustomerOrderDraft} from '@dx-rework/contracts/digital-production';
 import type {PendingDevelopmentSubmission} from './development-submit-recovery.js';
 
-/** One unfinished original creation view in this tab, scoped by a freshly read
- * actor and environment. A pure draft has no source, command, key or version. */
+/** Local views are scoped by tab, actor and environment.
+ * A pure draft has no source, command, key or version. */
 export type CreationDraftIdentity={actorId:string;environment:string};
 export type CreationDraftSnapshot={intent:'development'|'certain_order';form:InitialCustomerOrderDraft;document:DevelopmentDocument;quantityInput:string;sizeQuantityInputs:string[];developmentType:'头版'|'开发板';preorder:boolean;wizardStep?:DevelopmentWizardStep;fixedCraft:boolean;measurementIds:string[];poSizeIds:string[];sharedPoColumns:boolean;dateOverrides:number[];fileKind:DevelopmentDocument['files'][number]['kind'];patternChoice:{categoryId:string;priceVersion:number}|null;baseline:string;localFiles:Array<{id:string;name:string;type:string;size:number;kind:DevelopmentDocument['files'][number]['kind']}>};
 export type CreationDraftRecord={schemaVersion:1;viewId:string;identity:CreationDraftIdentity;open:boolean;snapshot:CreationDraftSnapshot}&(
@@ -45,20 +45,64 @@ function validate(value:unknown):CreationDraftRecord{
  }
  return checked as CreationDraftRecord;
 }
+type CreationDrafts={active:CreationDraftRecord|null;archived:CreationDraftRecord[]};
+const collectionSchema=z.object({collectionVersion:z.literal(1),active:z.unknown(),archived:z.array(z.unknown())}).strict();
+function readDrafts(storage:DraftStorage,identity:CreationDraftIdentity):CreationDrafts{
+ const raw=storage.getItem(key(identity));
+ if(raw===null)return {active:null,archived:[]};
+ if(raw.length>4*1024*1024)throw Error('本页草稿过大，记录保留，未提交');
+ const decoded:unknown=JSON.parse(raw);
+ const collection=decoded&&typeof decoded==='object'&&'collectionVersion' in decoded
+  ?collectionSchema.parse(decoded):{active:decoded,archived:[]};
+ const active=collection.active===null?null:validate(collection.active),archived=collection.archived.map(validate);
+ const records=active?[active,...archived]:archived;
+ if(records.some(record=>record.identity.actorId!==identity.actorId||record.identity.environment!==identity.environment))
+  throw Error('本页草稿身份不符，记录保留');
+ if(new Set(records.map(record=>record.viewId)).size!==records.length||archived.some(record=>record.phase==='pending'))
+  throw Error('本页草稿归属尚不能核实，原资料保留');
+ return {active,archived};
+}
+function storeDrafts(storage:DraftStorage,identity:CreationDraftIdentity,{active,archived}:CreationDrafts){
+ const storageKey=key(identity);
+ if(!active&&!archived.length){
+  storage.removeItem(storageKey);
+  if(storage.getItem(storageKey)!==null)throw Error('原操作已确认，本页恢复记录尚未确认清理；请保留页面，不能另提');
+  return;
+ }
+ // The active view and retained drafts move together in one storage write.
+ const raw=JSON.stringify(archived.length?{collectionVersion:1,active,archived}:active);
+ if(raw.length>4*1024*1024)throw Error('本页草稿未能保存，未开始新提交');
+ storage.setItem(storageKey,raw);
+ if(storage.getItem(storageKey)!==raw)throw Error('本页草稿保存未取得确认，未开始新提交');
+}
 export function readCreationDraft(storage:DraftStorage,identity:CreationDraftIdentity):CreationDraftRecord|null{
- const raw=storage.getItem(key(identity));if(raw===null)return null;if(raw.length>4*1024*1024)throw Error('本页草稿过大，记录保留，未提交');
- const record=validate(JSON.parse(raw));if(JSON.stringify(record.identity)!==JSON.stringify(identitySchema.parse(identity)))throw Error('本页草稿身份不符，记录保留');return record;
+ return readDrafts(storage,identity).active;
+}
+export function listCreationDrafts(storage:DraftStorage,identity:CreationDraftIdentity){
+ const {active,archived}=readDrafts(storage,identity);
+ return active?[active,...archived]:archived;
+}
+export function selectCreationDraft(storage:DraftStorage,identity:CreationDraftIdentity,viewId?:string){
+ const drafts=readDrafts(storage,identity);
+ if(viewId&&drafts.active?.viewId===viewId)return drafts.active;
+ if(drafts.active?.phase==='pending')throw Error('请先核对原创建提交结果。本页其他草稿仍保留。');
+ const selected=viewId?drafts.archived.find(record=>record.viewId===viewId):null;
+ if(viewId&&!selected)throw Error('未找到这份本页草稿，请从草稿列表重新选择');
+ const archived=drafts.archived.filter(record=>record.viewId!==viewId);
+ if(drafts.active)archived.unshift({...drafts.active,open:false});
+ const active=selected?{...selected,open:true}:null;
+ if(drafts.active||selected)storeDrafts(storage,identity,{active,archived});
+ return active;
 }
 export function writeCreationDraft(storage:DraftStorage,record:CreationDraftRecord,resolvedOriginal?:{path:string;key:string}){
- const checked=validate(record),raw=JSON.stringify(checked);if(raw.length>4*1024*1024)throw Error('本页草稿未能保存，未开始新提交');
- const prior=readCreationDraft(storage,record.identity);
- if(prior&&prior.viewId!==record.viewId)throw Error('本页原草稿已变化，不能用旧回包覆盖');
+ const checked=validate(record),{active:prior,archived}=readDrafts(storage,record.identity);
+ if((prior&&prior.viewId!==record.viewId)||archived.some(entry=>entry.viewId===record.viewId))throw Error('本页原草稿已变化，不能用旧回包覆盖');
  if(prior?.phase==='pending'&&(checked.phase!=='pending'||JSON.stringify(prior.original)!==JSON.stringify(checked.original))&&!(resolvedOriginal?.key===prior.original.key&&resolvedOriginal.path===prior.original.path))throw Error('原创建命令尚未核实，不能替换或清除');
- storage.setItem(key(record.identity),raw);if(storage.getItem(key(record.identity))!==raw)throw Error('本页草稿保存未取得确认，未开始新提交');
+ storeDrafts(storage,record.identity,{active:checked,archived});
 }
 export function clearCreationDraft(storage:DraftStorage,identity:CreationDraftIdentity,viewId:string,resolvedOriginal?:{path:string;key:string}){
- const prior=readCreationDraft(storage,identity);if(prior&&prior.viewId!==viewId)throw Error('本页原草稿已变化，不能清除较新内容');
+ const {active:prior,archived}=readDrafts(storage,identity);
+ if((prior&&prior.viewId!==viewId)||archived.some(entry=>entry.viewId===viewId))throw Error('本页原草稿已变化，不能清除较新内容');
  if(prior?.phase==='pending'&&!(resolvedOriginal?.key===prior.original.key&&resolvedOriginal.path===prior.original.path))throw Error('原创建命令尚未核实，不能清除');
- storage.removeItem(key(identity));
- if(storage.getItem(key(identity))!==null)throw Error('原操作已确认，本页恢复记录尚未确认清理；请保留页面，不能另提');
+ storeDrafts(storage,identity,{active:null,archived});
 }

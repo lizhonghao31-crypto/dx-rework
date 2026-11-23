@@ -51,7 +51,6 @@ export function DigitalDesignerWorkspace() {
   const [options, setOptions] = useState<{independentCraftsEnabled?:boolean;orderTimeEnabled?:boolean;creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
   const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<DevelopmentWorkspaceItem | null>(null);
   const [choosingType,setChoosingType]=useState(false);
-  const [initialPreorder,setInitialPreorder]=useState(false);
   const creation=useDevelopmentCreationDraft();
   const [draftPage,setDraftPage]=useState(1);
   const [drafts,setDrafts]=useState<SavedDevelopmentDraftPage|null>(null),[draftError,setDraftError]=useState('');
@@ -84,6 +83,17 @@ export function DigitalDesignerWorkspace() {
   const workbench = Boolean(editor&&query.getAll('section').length===1&&query.get('section')==='workspace'
     &&(!query.has('documentCategory')||query.get('documentCategory')==='development'));
   const creatingPage = !editor && designerWorkspaceSection(query) === "create";
+  const requestedDrafts = creatingPage ? query.getAll('creationDraft') : [];
+  const requestedDraft = requestedDrafts.length===1&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedDrafts[0]!)
+    ? requestedDrafts[0]! : null;
+  const displayedIntent=creatingPage?creation.visibleView?.intent??null:intent;
+  const showCreationView=Boolean((creatingPage||editor&&confirm)&&displayedIntent);
+  const setDraftLocation=(id?:string)=>{
+    const current=new URL(window.location.href);
+    if(id)current.searchParams.set('creationDraft',id);
+    else current.searchParams.delete('creationDraft');
+    window.history.replaceState(window.history.state,'',current.pathname+current.search);
+  };
   const [openedSheet,setOpenedSheet]=useState<{sheet:DevelopmentSheet;requestedRound:number|undefined;refresh:number}|null>(null);
   const rememberOpenedSheet=useCallback((sheet:DevelopmentSheet,requestedRound:number|undefined)=>setOpenedSheet({sheet,requestedRound,refresh}),[refresh]);
   const contextUrl = (parameters: Record<string, string> = {}, next = filter, selected = selectedId) => {
@@ -135,10 +145,17 @@ export function DigitalDesignerWorkspace() {
   useEffect(()=>{
     let live=true;const abort=new AbortController(),read={signal:abort.signal};setAccessError('');
     void Promise.all([digitalRequest<typeof options>('options','GET',undefined,undefined,read),digitalRequest<DigitalAccessOptions>('access/options','GET',undefined,undefined,read)])
-      .then(async([nextOptions,nextAccess])=>{if(!live)return;setOptions(nextOptions);setAccess(nextAccess);const restored=await creation.load(nextAccess,Boolean(nextOptions?.creationEnabled),editor);if(live&&restored)setIntent(restored);})
+      .then(async([nextOptions,nextAccess])=>{
+        if(!live)return;
+        const restored=creatingPage?await creation.load(nextAccess,Boolean(nextOptions?.creationEnabled),requestedDraft,abort.signal):null;
+        if(!live)return;
+        setOptions(nextOptions);setAccess(nextAccess);
+        if(restored)setIntent(restored.intent);
+        if(creatingPage&&requestedDrafts.length&&!requestedDraft)setCreationMessage('草稿链接无效，请从草稿列表重新选择');
+      })
       .catch(reason=>{if(live)setAccessError(reason.message);});
     return()=>{live=false;abort.abort();};
-  },[editor,refresh]);
+  },[editor,creatingPage,refresh]);
   useEffect(()=>registerSessionInvalidator(()=>{creation.reset();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftError('');setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setRefresh(value=>value+1);}),[]);
   useEffect(()=>{
     if(!access?.actorId||editor||creatingPage||query.has('handling'))return;
@@ -180,18 +197,22 @@ export function DigitalDesignerWorkspace() {
   const editorItem=result?.items.find(item=>item.journey.sourceId===editor),editorSheet=openedSheet?.refresh===refresh&&openedSheet.sheet.sourceId===editor&&openedSheet.requestedRound===round?openedSheet.sheet:undefined;
   const canConfirm=Boolean(editorItem?.canConfirm&&!editorItem.journey.orderId&&editorSheet?.status==="published"&&!editorSheet.productionOrderId
     &&(!workbench||editorSheet.canEdit&&(editorSheet.roundNumber??1)===(editorSheet.latestRoundNumber??1))&&options?.creationEnabled&&access?.create&&!confirmedOrderId);
-  const beginCreation=async(kind?:DevelopmentWizardKind)=>{
+  const openCreation=async(action:()=>ReturnType<typeof creation.open>,selectedView?:string)=>{
     if(openingCreation.current)return;
-    const hasDraft=creation.hasLocalRecord();
-    if(!kind&&!hasDraft){setChoosingType(true);return;}
     openingCreation.current=true;setCreationBusy(true);setCreationMessage('');
     try{
-      const restored=await creation.open(undefined,kind&&kind!=='development'?'certain_order':'development');
-      if(restored){setInitialPreorder(!hasDraft&&kind==='preorder');setIntent(restored);setConfirm(null);setChoosingType(false);}
+      // Keep the explicit selection across an immediate reload while authority is rechecked.
+      if(selectedView)setDraftLocation(selectedView);
+      const next=await action();
+      if(next){
+        setDraftLocation(next.viewId);
+        setIntent(next.intent);setConfirm(null);setChoosingType(false);
+      }
     }
-    catch(reason){setCreationMessage(reason instanceof Error?reason.message:'本页创建资料尚未核实');}
+    catch(reason){if(selectedView&&new URL(location.href).searchParams.get('creationDraft')===selectedView)setDraftLocation();setChoosingType(false);setCreationMessage(reason instanceof Error?reason.message:'本页创建资料尚未核实');}
     finally{openingCreation.current=false;setCreationBusy(false);}
   };
+  const beginCreation=(kind:DevelopmentWizardKind)=>openCreation(()=>creation.open(undefined,kind==='development'?'development':'certain_order',kind==='preorder'));
   useEffect(()=>{
     if(!creatingPage||liveSearch.pending||intent||!options?.creationEnabled||!access?.create)return;
     const abort=new AbortController(),finish=beginForegroundWait();setDraftError('');
@@ -213,12 +234,15 @@ export function DigitalDesignerWorkspace() {
   },[editor,creatingPage,liveSearch.pending,refresh,filter.search,options?.creationEnabled,access?.actorId,access?.create]);
   const openSavedDraft=async(sourceId:string)=>{
     if(openingCreation.current)return;
+    const location=window.location.href;
     openingCreation.current=true;setCreationBusy(true);setDraftError('');
     try{
       const sheet=await digitalRequest<DevelopmentSheet>(`sources/${sourceId}/development`);
+      if(window.location.href!==location)return;
       if(sheet.sourceId!==sourceId||!sheet.canEdit)throw Error('当前没有编辑该草稿的权限');
       if(sheet.status!=='draft'){setRefresh(value=>value+1);throw Error('该草稿已发布，请从开发列表打开原档案');}
-      const next=await creation.open(sheet);if(next){setInitialPreorder(false);setIntent(next);setConfirm(null);}
+      const next=await creation.open(sheet);
+      if(next){setDraftLocation(next.viewId);setIntent(next.intent);setConfirm(null);}
     }catch(reason){setDraftError(reason instanceof Error?reason.message:'未能读取该草稿');}
     finally{openingCreation.current=false;setCreationBusy(false);}
   };
@@ -235,17 +259,30 @@ export function DigitalDesignerWorkspace() {
     }catch(reason){setConfirmError(reason instanceof Error?reason.message:"订购资料读取失败，请重试；开发资料仍保留。");}
     finally{preparing.current=false;setPreparingConfirm(false);}
   };
-  if(intent&&options&&!confirm&&['pending','conflict','complete'].includes(creation.mode)){
+  if(creatingPage&&showCreationView&&options&&!confirm&&['pending','conflict','complete'].includes(creation.mode)){
     const record=creation.restored;
-    return <Surface className="development-workspace"><h1>{creation.mode==='pending'?'原创建提交结果待核对':'本页原开发资料保留'}</h1><p>款号：{record?.snapshot.form.designStyleNo||'未填写'} · 客户：{record?.snapshot.form.customerCode||'未填写'}。完整原输入仍保留，尚未开始新的提交。</p>{record?.snapshot.form.lines.map((line,index)=><p key={index}>原PO {index+1} · {line.formalPoNo||line.poNumber||'未填写'} · {line.color} · {line.sizes.map(size=>`${size.size} ${size.quantity}`).join(' / ')}</p>)}{creation.problem&&<p role="alert">{creation.problem}</p>}{creationMessage&&<p role="status">{creationMessage}</p>}
+    const showOriginal=Boolean(creation.mayReadSnapshot&&(creation.sourceSheet?.canEdit||record?.phase==='pending'&&!record.sourceId));
+    return <Surface className="development-workspace"><h1>{creation.mode==='pending'?'原创建提交结果待核对':'本页原开发资料保留'}</h1>{showOriginal&&<><p>款号：{record?.snapshot.form.designStyleNo||'未填写'} · 客户：{record?.snapshot.form.customerCode||'未填写'}。完整原输入仍保留，尚未开始新的提交。</p>{record?.snapshot.form.lines.map((line,index)=><p key={index}>原PO {index+1} · {line.formalPoNo||line.poNumber||'未填写'} · {line.color} · {line.sizes.map(size=>`${size.size} ${size.quantity}`).join(' / ')}</p>)}</>}{creation.problem&&<p role="alert">{creation.problem}</p>}{creationMessage&&<p role="status">{creationMessage}</p>}
       {creation.mode==='pending'&&record?.phase==='pending'&&((record.native||record.original.path==='sources/drafts'||record.original.method==='PUT')?<Button type="button" disabled={creationBusy} onClick={()=>{setCreationBusy(true);setCreationMessage('');void creation.check().then(result=>{if(result){setIntent(null);void navigateInternalPage(contextUrl({development:result.sourceId}));}}).catch(reason=>setCreationMessage(reason instanceof Error?reason.message:'原提交尚未核实，原资料仍保留')).finally(()=>setCreationBusy(false));}}>只读核对原提交结果</Button>:<p>该原创建或保存步骤尚无受支持的只读终态入口；原实际标识及输入保留。不能把它当成新草稿再提交，请先核对权威终态。</p>)}
-      <Button type="button" disabled={creationBusy} onClick={()=>{try{creation.close();setIntent(null);}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原恢复记录尚未保留');}}}>返回列表并保留资料</Button>
+      <Button type="button" disabled={creationBusy} onClick={()=>{try{creation.close();setDraftLocation();setIntent(null);}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原恢复记录尚未保留');}}}>返回列表并保留资料</Button>
     </Surface>;
   }
-  const creationForm=intent&&options?<div className="development-workspace development-golden dx-production-refined development-create-page">
+  const creationTypeDialog=<Dialog isOpen={choosingType} onOpenChange={setChoosingType} purpose="form" width="min(440px, calc(100vw - 32px))">
+        <DialogHeader title="请选择创建类型" onOpenChange={setChoosingType}/>
+        <div className="development-type-choices">
+          {DEVELOPMENT_CREATION_TYPES.map(({kind,label,description})=><div key={kind}>
+            <AstryxButton label={label} variant="secondary" isDisabled={creationBusy} onClick={()=>void beginCreation(kind)}/>
+            <p>{description}</p>
+          </div>)}
+          <AstryxButton label="取消" variant="ghost" isDisabled={creationBusy} onClick={()=>setChoosingType(false)}/>
+        </div>
+      </Dialog>;
+  const creationForm=showCreationView&&displayedIntent&&options?<div className="development-workspace development-golden dx-production-refined development-create-page dx-designer-astryx">
+    <style data-designer-style="astryx-v0.7.16">{workspaceAstryxCss}</style>
     {!workbench&&<div className="development-breadcrumb">产品开发 › <strong>{confirm?"客户确定订单":"新建开发订单"}</strong></div>}
     {creation.problem&&!confirm&&<p role="alert">{creation.problem} <Button type="button" onClick={()=>{try{creation.retry();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'本页记录仍未保留');}}}>重试保留本页资料</Button></p>}{creationMessage&&<p role="status">{creationMessage}</p>}
-    <DevelopmentCreateForm key={confirm?.journey.id ?? creation.viewId??"new-development"} intent={intent} guidedCreation={creatingPage&&!confirm} initialPreorder={initialPreorder} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {...(creation.sourceSheet?{existingDraft:creation.sourceSheet}:{}),...(creation.viewId&&access?{creation:{viewId:creation.viewId,actorId:access.actorId,snapshot:creation.restored?.snapshot,onSnapshot:creation.snapshot,started:creation.started,acknowledged:creation.acknowledged,refused:creation.refused}}:{})})} contained={workbench} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} orderTimeEnabled={options.orderTimeEnabled} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onCancel={canReturnToServer => {if(!confirm)try{creation.close(canReturnToServer);}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原资料尚未保留');return;}setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
+    {creatingPage&&!confirm&&creationTypeDialog}
+    <DevelopmentCreateForm key={confirm?.journey.id ?? creation.viewId??"new-development"} intent={displayedIntent} guidedCreation={creatingPage&&!confirm} initialPreorder={creation.visibleView?.preorder??false} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {...(creation.sourceSheet?{existingDraft:creation.sourceSheet}:{}),...(creation.viewId&&access?{creation:{viewId:creation.viewId,actorId:access.actorId,snapshot:creation.restored?.snapshot,onSnapshot:creation.snapshot,started:creation.started,acknowledged:creation.acknowledged,refused:creation.refused}}:{})})} contained={workbench} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} orderTimeEnabled={options.orderTimeEnabled} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onChooseCreationType={creatingPage&&!confirm?()=>setChoosingType(true):undefined} onCancel={canReturnToServer => {if(!confirm)try{creation.close(canReturnToServer);setDraftLocation();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原资料尚未保留');return;}setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
       if(!confirm)try{if(!creation.completed(sourceId,creation.viewId))return;}catch(reason){setCreationMessage('原办理已完成；本页恢复记录尚未清理。'+(reason instanceof Error?reason.message:''));return;}
       if(confirm&&editor===sourceId){setConfirmedOrderId(orderId);setIntent(null);setConfirm(null);setConfirmSheet(undefined);quietListRefresh.current=true;
         if(workbench)updateEditorFacts();else setRefresh(value=>value+1);}
@@ -273,18 +310,9 @@ export function DigitalDesignerWorkspace() {
     {options?.creationEnabled&&access?.create&&<section className="dx-production-panel">
       <header>
         <h1>创建开发单</h1>
-        <Button type="button" variant="primary" disabled={creationBusy} onClick={()=>void beginCreation()}>新建开发订单</Button>
+        <AstryxButton label="新建开发订单" variant="primary" isDisabled={creationBusy} onClick={()=>setChoosingType(true)}/>
       </header>
-      <Dialog isOpen={choosingType} onOpenChange={setChoosingType} purpose="form" width="min(440px, calc(100vw - 32px))">
-        <DialogHeader title="请选择创建类型" onOpenChange={setChoosingType}/>
-        <div className="development-type-choices">
-          {DEVELOPMENT_CREATION_TYPES.map(({kind,label,description})=><div key={kind}>
-            <AstryxButton label={label} variant="secondary" isDisabled={creationBusy} onClick={()=>void beginCreation(kind)}/>
-            <p>{description}</p>
-          </div>)}
-          <AstryxButton label="取消" variant="ghost" isDisabled={creationBusy} onClick={()=>setChoosingType(false)}/>
-        </div>
-      </Dialog>
+      {creationTypeDialog}
       <div aria-label="开发草稿">
         <h2>开发草稿</h2>
         <label className="development-search-field">搜索草稿款号<input value={search} maxLength={100} onCompositionStart={liveSearch.onCompositionStart}
@@ -298,6 +326,14 @@ export function DigitalDesignerWorkspace() {
           total={!liveSearch.pending&&appliedDraftQuery===draftQuery?drafts.total:null}
           busy={creationBusy||liveSearch.pending||appliedDraftQuery!==draftQuery} onPageChange={setDraftPage} ariaLabel="开发草稿分页"/>}
       </div>
+    </section>}
+    {creation.localDrafts.length>0&&<section className="dx-production-panel" aria-label="此标签页的草稿">
+      <h2>此标签页的草稿</h2>
+      <ul>{creation.localDrafts.map(record=>{
+        const kind=record.snapshot.preorder?'预下单':record.snapshot.intent==='development'?'纯开发':'已确认订单';
+        const label=record.phase==='pending'?'核对原创建提交结果':record.phase==='bound'?'继续本页保存的草稿':`继续${kind}草稿 · ${record.snapshot.form.designStyleNo.trim()||'未填款号'}`;
+        return <li key={record.viewId}><AstryxButton label={label} variant="secondary" isDisabled={creationBusy} onClick={()=>void openCreation(()=>creation.resume(record.viewId),record.viewId)}/></li>;
+      })}</ul>
     </section>}
     {accessError&&<p role="alert">{accessError}</p>}
     {access&&(!access.create||options?.creationEnabled===false)&&<p role="status">当前身份或环境未开放开发单创建。</p>}

@@ -245,6 +245,9 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
    expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
    await page.goto(h.base+'/ui/digital-production?development='+id);
    await page.getByLabel('工艺特殊工艺',{exact:true}).waitFor();
+   await page.getByRole('heading',{name:'工艺要求',exact:true}).waitFor();
+   expect(await page.getByRole('navigation',{name:'单据章节',exact:true}).count()).toBe(0);
+   expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(style);
    expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
    await page.getByRole('button',{name:craft.definition.name+'前移',exact:true}).click();
    await saveDraftAndReadReceipt(page,id,1);
