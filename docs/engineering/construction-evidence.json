@@ -2,7 +2,7 @@
   "version": 1,
   "base": "8f79b1b8a17a9a86e939d15b96464186574eca88",
   "risk": "full",
-  "sourceFingerprint": "87129d91e98c4a046d0b32d0830964f6ea511b75b5e97af387bb53b42e227aec",
+  "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
   "rules": [
     {
       "rule": "Use pinned Astryx actions and input fields in guided creation and preserve the three existing entry contracts.",
@@ -11,7 +11,8 @@
         "apps/web/src/development-entry-controls.tsx",
         "apps/web/src/digital-development-create-form.tsx",
         "apps/web/src/digital-development-workspace.css",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/acceptance/m01-short-lead-native-browser.ts"
       ],
       "reads": [
         "apps/web/src/workbench-development-sheet-fields.tsx",
@@ -20,11 +21,12 @@
       ],
       "oldTests": [
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/m01-short-lead-native-browser-postgres.test.ts"
       ],
       "initialization": "The same loaded form and current source provide customer, PO and wizard state. Original non-guided single-document readers keep their existing behavior.",
-      "dateAndPermission": "Business dates, roles, state guards, explicit submit commands, minimum-date approval and per-PO quantities remain with their original owners.",
-      "expectation": "Real signed creation, original PO/date preservation, reload and distinct saved drafts work. Narrow 390 px at 200% and visible keyboard focus are verified without disabling horizontal access to long tables.",
+      "dateAndPermission": "Business dates, roles, state guards and per-PO quantities retain their original owners. Native picker bounds retain the original min/max hints while the existing noValidate form preserves typed dates for the server and short-lead approval.",
+      "expectation": "Signed browsers verify absent and present picker minimum, unset date retained through calendar loading, exact typed earlier commitment submitted to original approval without an order, 390 px at 200%, and original PO, dates, reload and keyboard focus.",
       "checks": [
         "r1-controls-browser",
         "r1-controls-types",
@@ -48,7 +50,7 @@
       ],
       "initialization": "Server-acknowledged drafts retain their source ID, version and original local recovery state. An old development URL resumes the compatible current wizard.",
       "dateAndPermission": "The authenticated recovery path, command key and original receipt checks remain the authority. Search preserves composing Chinese input.",
-      "expectation": "Server search, separate authenticated-browser reopen, two local drafts and unknown receipt resume pass on the unchanged original commands.",
+      "expectation": "Server search, separate signed reopen and two local drafts pass. The early pending receipt branch uses the same official scoped theme and original command key, and its keyboard action performs only the authorized read.",
       "checks": [
         "r1-controls-browser",
         "r1-controls-types",
@@ -101,7 +103,7 @@
       ],
       "initialization": "The existing embedded designer form builds from the current original saved preparation document and continues to use the original endpoint, receipt and attachment contracts.",
       "dateAndPermission": "The existing native datetime-local remains only for the explicit Beijing actual occurrence. Astryx v0.7.16 DateTimeInput fills a default time after a date-only selection, which would manufacture a factual hour. No acceptance or SLA logic changes.",
-      "expectation": "The browser selects the real eligible merchant, records handover and checks the returned exact version and actor. The original merchant continues from My Tasks. Formal conversion retains the same procurement and attachment history.",
+      "expectation": "The browser activates the two official add-material buttons by keyboard, checks focus returns to each new row, selects the real eligible merchant and checks the returned exact handover version and actor. The original merchant continues from My Tasks. Formal conversion retains the same procurement and attachment history.",
       "checks": [
         "r1-controls-browser",
         "r1-controls-types",
@@ -114,23 +116,23 @@
     {
       "id": "r1-controls-browser",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r1-selector-evidence/verify-controls.mjs",
+      "command": "node /tmp/dx-workbench-v101-r1-selector-evidence/verify-reviewed-controls.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8f79b1b8a17a9a86e939d15b96464186574eca88",
-      "sourceFingerprint": "87129d91e98c4a046d0b32d0830964f6ea511b75b5e97af387bb53b42e227aec",
+      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
+      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
       "context": "Node 22.22.2, Chromium original App, signed test identities, two low-privilege PostgreSQL 16.14 test targets, canonical two workers, owned resource cleanup passed.",
-      "startedAt": "2026-11-23T18:38:08.932Z",
-      "endedAt": "2026-11-23T18:40:54.810Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/revised-browser.log",
-      "logSha256": "67c5795548ee042934e6985743a5b28073649688993540aa47e419a00342052c",
-      "passed": 29,
+      "startedAt": "2026-11-23T19:06:25.216Z",
+      "endedAt": "2026-11-23T19:08:51.535Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/reviewed-controls-browser.log",
+      "logSha256": "5250ee8bd766961690b160e7becbbf1bae9ec1fff41164d55c742ce78ebc7234",
+      "passed": 41,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d8724b755913561f124ea304c9beea946dd4ff703ed44f222296974b3152915d"
+          "sha256": "80dfa3e897a942634313d6d384cb994600d192cd17a71ca331361c759aef284b"
         }
       ]
     },
@@ -140,25 +142,25 @@
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8f79b1b8a17a9a86e939d15b96464186574eca88",
-      "sourceFingerprint": "87129d91e98c4a046d0b32d0830964f6ea511b75b5e97af387bb53b42e227aec",
+      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
+      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
       "context": "Node 22.22.2, original web and contract types.",
-      "startedAt": "2026-11-23T18:39:32Z",
-      "endedAt": "2026-11-23T18:39:55Z",
+      "startedAt": "2026-11-23T19:09:11Z",
+      "endedAt": "2026-11-23T19:09:37Z",
       "log": "/tmp/dx-workbench-v101-r1-selector-evidence/static-types.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
     },
     {
       "id": "r1-controls-lint",
       "kind": "command",
-      "command": "git ls-files --modified --others --exclude-standard -z -- *.ts *.tsx | xargs -0 node node_modules/eslint/bin/eslint.js --max-warnings=0",
+      "command": "git diff --name-only --diff-filter=ACM 8f79b1b8a17a9a86e939d15b96464186574eca88 -- '*.ts' '*.tsx' | xargs node node_modules/eslint/bin/eslint.js --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8f79b1b8a17a9a86e939d15b96464186574eca88",
-      "sourceFingerprint": "87129d91e98c4a046d0b32d0830964f6ea511b75b5e97af387bb53b42e227aec",
+      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
+      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
       "context": "Node 22.22.2, all modified and new TypeScript source and tests.",
-      "startedAt": "2026-11-23T18:39:55Z",
-      "endedAt": "2026-11-23T18:39:57Z",
+      "startedAt": "2026-11-23T19:09:37Z",
+      "endedAt": "2026-11-23T19:09:38Z",
       "log": "/tmp/dx-workbench-v101-r1-selector-evidence/static-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
@@ -168,13 +170,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8f79b1b8a17a9a86e939d15b96464186574eca88",
-      "sourceFingerprint": "87129d91e98c4a046d0b32d0830964f6ea511b75b5e97af387bb53b42e227aec",
+      "testedHead": "a86b990414bef4c665082baecb140ec6f0551613",
+      "sourceFingerprint": "63d7e547ceb1a1ebea49d4f980eb435e27b5d7c5dcb789a0120d4d5b0511bb32",
       "context": "Node 22.22.2, repository protocol, time-source inventory and isolated test configuration.",
-      "startedAt": "2026-11-23T18:42:12Z",
-      "endedAt": "2026-11-23T18:42:16Z",
+      "startedAt": "2026-11-23T19:09:38Z",
+      "endedAt": "2026-11-23T19:09:45Z",
       "log": "/tmp/dx-workbench-v101-r1-selector-evidence/final-preflight.log",
-      "logSha256": "6c24da11762bb682d78db321fc15c660f95e6c64b01b3e2b4af5ac17e3851644"
+      "logSha256": "a8543b205afb440a2257a92be7f52eaae2343f3e21dfb9ad40a6b1af3e96f156"
     }
   ]
 }

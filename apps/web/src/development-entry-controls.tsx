@@ -1,7 +1,7 @@
 import {Button} from '@astryxdesign/core/Button';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import type {ComponentProps} from 'react';
+import {useCallback,type ComponentProps} from 'react';
 
 export function DevelopmentEntryAction({children,disabled,variant='secondary',...props}:{
  children:string;disabled?:boolean|undefined;variant?:'primary'|'secondary'|'ghost'|undefined;
@@ -16,10 +16,18 @@ export function DevelopmentEntryText({maxLength,label,visibleLabel=false,...prop
   {...(maxLength===undefined?{}:{ref:(input:HTMLInputElement|null)=>{if(input)input.maxLength=maxLength;}})}/>;
 }
 
-export function DevelopmentEntryDate({label,value,max,visibleLabel=false,...props}:Omit<ComponentProps<typeof DateInput>,'value'|'max'>&{
- value:string;max?:string|undefined;visibleLabel?:boolean;
+export function DevelopmentEntryDate({label,value,min,max,visibleLabel=false,...props}:Omit<ComponentProps<typeof DateInput>,'value'|'min'|'max'|'ref'>&{
+ value:string;min?:string|undefined;max?:string|undefined;visibleLabel?:boolean;
 }){
  type ISO=NonNullable<ComponentProps<typeof DateInput>['value']>;
- return <DateInput {...props} label={label} isLabelHidden={!visibleLabel} size="sm" format="system_date" presentation="native"
-  value={value?value as ISO:undefined} {...(max?{max:max as ISO}:{})}/>;
+ // These are native picker bounds. The original noValidate form lets typed
+ // dates reach business validation, including the short-delivery approval.
+ // DateInput's min/max props also discard out-of-range typed dates.
+ const pickerBounds=useCallback((input:HTMLInputElement|null)=>{
+  if(!input)return;
+  if(min)input.min=min;else input.removeAttribute('min');
+  if(max)input.max=max;else input.removeAttribute('max');
+ },[min,max]);
+ return <DateInput {...props} ref={pickerBounds} label={label} isLabelHidden={!visibleLabel} size="sm" format="system_date" presentation="native"
+  value={value?value as ISO:undefined}/>;
 }

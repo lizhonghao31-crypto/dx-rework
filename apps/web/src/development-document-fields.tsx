@@ -257,11 +257,11 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
       </tr>)}
     </tbody></table>
   </DocumentTableScroll>
-  {!readonly&&<div className="development-actions">{(["主布","配布"] as const).map(category=><DocumentAddRow key={category} label={`添加${category}`} disabled={busy||document.materials.length>=100} onClick={()=>{
+  {!readonly&&<div className="development-actions">{(["主布","配布"] as const).map(category=><DevelopmentEntryAction className="dx-doc-add-row budget-controls" type="button" key={category} disabled={busy||document.materials.length>=100} onClick={()=>{
     const next=material(category,category);
     edit({materials:[...document.materials,next]});
     requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-name`)?.focus());
-  }}/>)}</div>}
+  }}>{`＋ 添加${category}`}</DevelopmentEntryAction>)}</div>}
 </DocumentSection>}
 {!light&&!requirements&&(creationView==="sheet"||designerInput&&!readonly||readonly&&Boolean(document.craftRequirements?.length))&&
   <DevelopmentCraftRequirements document={document} edit={edit} controls={craftControls} readonly={readonly} disabled={busy}
