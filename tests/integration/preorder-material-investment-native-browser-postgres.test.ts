@@ -190,7 +190,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(sheet.document?.files).toEqual([{attachmentId:picture,kind:'款图'}]);
    expect(h.requests.filter(request=>request.session===tab.session&&request.method==='POST'&&request.path==='/api/digital-production/sources/drafts')).toEqual([]);
    expect((await formal()).rowCount).toBe(1);
-  }finally{await tab.context.close();}
+  }finally{try{await tab.close();}finally{h.setCollectionScene(undefined);}}
  });
  it('renews an instruction-backed handover from the original signed panel after linking a historical source',async()=>{
   const {root}=h.f,designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,style='TEST-ORDER-HANDOVER-'+randomUUID();

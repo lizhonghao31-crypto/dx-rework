@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "ab6989563be67e9302b29506121b41e23bbb6e60",
-  "sourceFingerprint": "6b1f9220c2d9452be1db6c2ab61dd708930be2933789d9aa92e2671ccf0cd893",
+  "sourceFingerprint": "710e3fab537bf187330279919cba6787656336d225505dc58738b47fdfb57180",
   "rules": [
     {
       "rule": "保持纯开发、已确认订单和预下单三条入口。服务器草稿和会话草稿复用同一来源、步骤与原操作回执，切步和结果待核不写正式事实。",
@@ -30,9 +30,9 @@
       "dateAndPermission": "沿用草稿和已保存来源权限以及已有开发计时、正式确认和审批路径。下单日期由原业务日历确定。",
       "expectation": "切步不发布。三 PO、附件及独立草稿完整回读；版本冲突和未知响应不自动写入，不生成第二个来源。",
       "checks": [
-        "pr1081-reviewed-pg",
+        "pr1081-drained-pg",
         "pr1081-reviewed-pg-ordinary",
-        "pr1081-reviewed-nondb"
+        "pr1081-drained-nondb"
       ]
     },
     {
@@ -62,9 +62,9 @@
       "dateAndPermission": "新星标不扩成旧草稿或纸样的必填。实样只可引用本单局部图。面料日期由跟单原入口控制，辅料预计与实到分开。",
       "expectation": "隐藏材料错误定位到准确字段，退出弹窗保持修改。字段、附件、行身份、技术尺寸、原 PO 值及草稿恢复逐项保持。",
       "checks": [
-        "pr1081-reviewed-pg",
+        "pr1081-drained-pg",
         "pr1081-reviewed-pg-ordinary",
-        "pr1081-reviewed-nondb"
+        "pr1081-drained-nondb"
       ]
     },
     {
@@ -92,9 +92,9 @@
       "dateAndPermission": "已采用和旧版快照保持原版本，只有原有权的文员核料实现实际到料与复核。没有额外角色或实到写接口。",
       "expectation": "补正只变供应商和指定局部图，旧版本原样，409 不覆盖先前草稿。新版纸样无技术尺寸能排就绪，不能无 PLT 完工。",
       "checks": [
-        "pr1081-reviewed-pg",
+        "pr1081-drained-pg",
         "pr1081-reviewed-pg-ordinary",
-        "pr1081-reviewed-nondb"
+        "pr1081-drained-nondb"
       ]
     },
     {
@@ -118,9 +118,9 @@
       "dateAndPermission": "草稿仍无开发时钟或正式实体；正式过程以原业务事件计时，原投料、交接身份、原局部时间和附件不变。",
       "expectation": "同源只生成一张正式单，不重新登记投料或重新保留身份。原投料窗口和通知幂等沿现有资格和真实版本。",
       "checks": [
-        "pr1081-reviewed-pg",
+        "pr1081-drained-pg",
         "pr1081-reviewed-pg-ordinary",
-        "pr1081-reviewed-nondb"
+        "pr1081-drained-nondb"
       ]
     },
     {
@@ -145,32 +145,106 @@
       "dateAndPermission": "只改错误链接目标和原控件的可选定位 ID，既有文员、设计师、业务时钟和发布规则保持原样。",
       "expectation": "点击返回版单并聚焦真实工艺控件。可修改并保存原附件与原来源，继续草稿且无业务时钟；原工艺、配码、采购仍走原行为。",
       "checks": [
-        "pr1081-reviewed-pg",
-        "pr1081-reviewed-nondb"
+        "pr1081-drained-pg",
+        "pr1081-reviewed-pg-ordinary",
+        "pr1081-drained-nondb"
+      ]
+    },
+    {
+      "rule": "预下单签名浏览器在切换独立用例前等待上一会话已被原服务接收的请求结束，避免无意跨用例使用相同数据库行。",
+      "source": "#1081 精确 Full 45093005957 的 PostgreSQL job 137427658725。原旧单时效提交在现有 lockActiveRole 抛 40P01，未保存对手 SQL。",
+      "writes": [
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/auth/postgres-store.ts#upsertDirectoryIdentity",
+        "apps/api/src/production-platform/access-policy.ts#lockActiveRole",
+        "apps/api/src/production-platform/order-time-request-service.ts#submit",
+        "apps/api/src/acceptance-clock/repository.ts#withLock"
+      ],
+      "oldTests": [
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "initialization": "隔离 PG 用受控原身份事务复现 SQLSTATE 40P01，另一独立探针用真浏览器的原身份读取证实 Chromium 已关闭时原服务仍可执行；等待结束不靠休眠。",
+      "dateAndPermission": "仅清理结束的 TEST 浏览器会话和该用例的场景。保留真实服务授权、锁顺序、原回执、业务请求和用例内并发。",
+      "expectation": "转正式仍验证来源、原投料、原附件和无重复；原同文件续交接在两次 2 worker 配置运行中按原请求与原权限通过。原业务锁反序作为独立风险。",
+      "checks": [
+        "pr1081-drained-pg",
+        "pr1081-drained-repeat",
+        "pr1081-drained-nondb"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pr1081-reviewed-pg",
+      "id": "pr1081-drained-pg",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/pr1081-reviewed-pg.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/pr1081-drained-pg.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 70,
+      "passed": 86,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7540cdaa8575f78bd49f555cf8f7605203df60cf",
-      "sourceFingerprint": "6b1f9220c2d9452be1db6c2ab61dd708930be2933789d9aa92e2671ccf0cd893",
-      "context": "Node 22.22.2，隔离 PostgreSQL 16.16，Chromium 原 App 和签名测试账号，业务正确性原配置；验工艺错误修复、原工艺办理、工作台长表、换会话、预下单和技术纸样。",
-      "startedAt": "2026-11-23T01:00:50Z",
-      "endedAt": "2026-11-23T01:05:52Z",
-      "log": "/tmp/dx-designer-workbench-evidence/pr1081-reviewed-pg.log",
-      "logSha256": "e1e8739cf3323f7ebc6e1805058a8fee80456ea042b575818dbaff3044fd6f2d",
+      "testedHead": "2fcd63062b62e9efa856ddb41c69de0e1c282f8b",
+      "sourceFingerprint": "710e3fab537bf187330279919cba6787656336d225505dc58738b47fdfb57180",
+      "context": "Node 22.22.2、隔离 PostgreSQL 16.16、业务正确性配置的 2 个 worker。保持旧签名材料、预下单转正式和续交接顺序，同时执行真实建单、纸样和原时效浏览器。",
+      "startedAt": "2026-11-23T01:42:31Z",
+      "endedAt": "2026-11-23T01:48:17Z",
+      "log": "/tmp/dx-designer-workbench-evidence/pr1081-drained-pg.log",
+      "logSha256": "bd519fe9e5d571411f48f6ffb943c9718e0a7a1163d2d6ff4ecaeb8e253089f5",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "78ef910215bebd0cbb5d364e8bc58fbce8be5d565fbb3ef238d40e471930445c"
+          "sha256": "8a39b842964e4518aea9ec2cacfa6a8e3e3152dac2d6fd6c850eb5bf5357590a"
+        }
+      ]
+    },
+    {
+      "id": "pr1081-drained-repeat",
+      "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/pr1081-drained-repeat.json tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "2fcd63062b62e9efa856ddb41c69de0e1c282f8b",
+      "sourceFingerprint": "710e3fab537bf187330279919cba6787656336d225505dc58738b47fdfb57180",
+      "context": "同一隔离 PostgreSQL 和 2 worker，独立重做同文件原顺序并与原特殊工艺签名浏览器并行。",
+      "startedAt": "2026-11-23T01:48:17Z",
+      "endedAt": "2026-11-23T01:49:24Z",
+      "log": "/tmp/dx-designer-workbench-evidence/pr1081-drained-repeat.log",
+      "logSha256": "81dc6833bd1bf1b3a30c175ff300b38323de0ce795b932c70af6504327cbc8be",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ef817fe8823c1cd255b68a20473f56d3c7b25b32197a6fb5d50fcbc41e094bfb"
+        }
+      ]
+    },
+    {
+      "id": "pr1081-drained-nondb",
+      "kind": "tests",
+      "command": "env DATABASE_URL='' TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/pr1081-drained-nondb.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 4510,
+      "failed": 0,
+      "skipped": 15,
+      "testedHead": "2fcd63062b62e9efa856ddb41c69de0e1c282f8b",
+      "sourceFingerprint": "710e3fab537bf187330279919cba6787656336d225505dc58738b47fdfb57180",
+      "context": "Node 22.22.2，数据库环境留空，默认完整非数据库配置。",
+      "startedAt": "2026-11-23T01:42:31Z",
+      "endedAt": "2026-11-23T01:52:36Z",
+      "log": "/tmp/dx-designer-workbench-evidence/pr1081-drained-nondb.log",
+      "logSha256": "b413dea768a9f45cb16dfba391e8716004107e51f63a791e558dfc3604dc2a98",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "61b57b1121d5a110bb7587a1a553ce4bbdd30a563457be8dfb1740cb7e634c1a"
         }
       ]
     },
@@ -185,7 +259,7 @@
       "skipped": 0,
       "testedHead": "7540cdaa8575f78bd49f555cf8f7605203df60cf",
       "sourceFingerprint": "6b1f9220c2d9452be1db6c2ab61dd708930be2933789d9aa92e2671ccf0cd893",
-      "context": "Node 22.22.2，隔离 PostgreSQL 16.16，普通套件原配置，真补正、角色、旧消费者和历史轮次。",
+      "context": "Node 22.22.2，隔离 PostgreSQL 16.16，普通套件原配置，真补正、角色、旧消费者和历史轮次。 本次新增修改仅在两处浏览器测试文件，以匹配原测源码指纹的干净候选和当前输入摘要逐项核证普通服务测试依赖未变。",
       "startedAt": "2026-11-23T01:05:53Z",
       "endedAt": "2026-11-23T01:06:46Z",
       "log": "/tmp/dx-designer-workbench-evidence/pr1081-reviewed-pg-ordinary.log",
@@ -195,30 +269,24 @@
           "format": "vitest-json",
           "sha256": "9ca5f44fc7676197d5d974a4d064e154fc1faee6c19453e4dc7b80313d156ac7"
         }
-      ]
-    },
-    {
-      "id": "pr1081-reviewed-nondb",
-      "kind": "tests",
-      "command": "env DATABASE_URL='' TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/pr1081-reviewed-nondb.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 4510,
-      "failed": 0,
-      "skipped": 15,
-      "testedHead": "7540cdaa8575f78bd49f555cf8f7605203df60cf",
-      "sourceFingerprint": "6b1f9220c2d9452be1db6c2ab61dd708930be2933789d9aa92e2671ccf0cd893",
-      "context": "Node 22.22.2，数据库环境留空，完整默认非数据库配置，含原时效位点、权限和合同消费。",
-      "startedAt": "2026-11-23T01:00:50Z",
-      "endedAt": "2026-11-23T01:09:14Z",
-      "log": "/tmp/dx-designer-workbench-evidence/pr1081-reviewed-nondb.log",
-      "logSha256": "493d15e53dea7645f65372282c38aeb995559249ead81d0018011872d7a2baa5",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8909cbeb131c290f51106dc58cbba9fb441203966b216bc0766815bc2f40e3b7"
-        }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "tsconfig.base.json",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/digital-development-postgres.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/development-round-history-clock-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
+      ],
+      "inputFingerprint": "2c795eb3b4f2afccc0b0c3c1f6e7707b57fc9abb99d5a40d847fc697b9fab145"
     }
   ]
 }

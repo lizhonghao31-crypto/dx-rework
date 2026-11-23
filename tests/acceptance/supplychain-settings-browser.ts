@@ -53,6 +53,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
  const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
+ const activeRequests=new Map<string,Set<Promise<void>>>(),closedSessions=new Set<string>();
  let browser:Browser|undefined,server:Server|undefined,loginIndex=0,collectionScene:string|undefined;
  const dispose=async()=>{await browser?.close();if(server)await new Promise<void>(r=>server!.close(()=>r()));await app.close();await f.dispose();await rm(out,{recursive:true,force:true});};
  try{
@@ -70,9 +71,19 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve(options?.fullApp?'tests/fixtures/m01-cockpit-home-native-ui.tsx':'tests/fixtures/m01-settings-native-ui.tsx'),name:'NativeSettingsUi',formats:['iife']}}});
   const files=await readdir(out),js=await readFile(join(out,files.find(p=>p.endsWith('.js'))!),'utf8'),css=await readFile(join(out,files.find(p=>p.endsWith('.css'))!),'utf8');
   const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
-  server=createServer(async(req,res)=>{try{
+  server=createServer(async(req,res)=>{
+   let settle:(()=>void)|undefined;
+   try{
    const path=req.url??'/',session=(req.headers.cookie??'').split(';').map(v=>v.trim()).find(v=>v.startsWith('settings_fixture_session='))?.split('=')[1]??'unowned';
    if(!path.startsWith('/api/')){res.setHeader('content-type','text/html;charset=utf-8');res.end(html);return;}
+   if(closedSessions.has(session)){res.writeHead(410);res.end();return;}
+   const active=activeRequests.get(session);
+   if(active){
+    let finish!:()=>void;
+    const pending=new Promise<void>(resolve=>{finish=resolve;});
+    active.add(pending);
+    settle=()=>{active.delete(pending);finish();};
+   }
    const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));const body=Buffer.concat(chunks).toString(),method=req.method??'GET',key=typeof req.headers['idempotency-key']==='string'?req.headers['idempotency-key']:null,fault=faults.get(session);
    if(fault?.failRead&&path===(fault.readPath??'/api/digital-production/sla-settings/sets')&&method==='GET'){fault.failRead=false;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_READ_FAILURE',message:'TEST 设置读取暂时失败'}}));return;}
    const inject=async()=>await app.inject({method:method as 'GET'|'POST'|'PUT',url:path.slice(4),headers:{cookie:req.headers.cookie??'',...(req.headers['content-type']?{'content-type':req.headers['content-type']}:{}),...(key?{'idempotency-key':key}:{})},...(body?{payload:body}:{})});
@@ -85,14 +96,33 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
    if(fault?.afterWriteRead===path&&method==='POST'&&result.statusCode===200)fault.failRead=true;
    if(fault?.losePath===path&&!fault.lost&&method==='POST'&&result.statusCode===200){fault.lost=true;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_COMMITTED_RECEIPT_LOST',message:'TEST 已提交，回执暂时不可用'}}));return;}
    res.writeHead(result.statusCode,{'content-type':'application/json','cache-control':'no-store',...(result.headers['x-dx-rework-actor-id']?{'x-dx-rework-actor-id':result.headers['x-dx-rework-actor-id']}:{})});res.end(result.body);
-  }catch(e){res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_NATIVE_HTTP',message:(e as Error).message}}));}});
+  }catch(e){res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_NATIVE_HTTP',message:(e as Error).message}}));}
+   finally{settle?.();}
+  });
   await new Promise<void>(r=>server!.listen(0,'127.0.0.1',r));const address=server.address();if(!address||typeof address==='string')throw Error('Owned loopback port missing');const base='http://127.0.0.1:'+address.port;
   const {chromium}:{chromium:typeof Chromium}=await import(process.env.PLAYWRIGHT_IMPORT??'playwright-core');browser=await chromium.launch({headless:true,...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{}),args:['--no-sandbox']});await mkdir(evidence,{recursive:true});
   const admin={...f.root,authorizationCapability:'access:admin',authorizationCapabilities:['access:admin','master_data:manage']};
   const dedicated=async(role:string,label?:string)=>{const id=randomUUID();await db.query('INSERT INTO app_users(id,display_name,enabled)VALUES($1,$2,true)',[id,label??'TEST settings set '+role]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)VALUES($1,$2,'dingtalk','anchor-test',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,'uat-pair-'+id,'uat-union-pair-'+id]);const assignment=await f.access.assignRole(admin,{userId:id,roleCode:role,reason:'TEST isolated settings native identity'});return {id,assignmentId:assignment.assignmentId};};
   const login=async(id:string)=>{const mapping=(await db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[id])).rows[0];assert(mapping?.provider_user_id.startsWith('uat-'));const response=await app.inject({method:'POST',url:'/auth/mobile',remoteAddress:'127.0.0.'+(++loginIndex),payload:{code:mintAcceptanceLoginCode(mapping.provider_user_id.slice(4),secret)}});assert.equal(response.statusCode,200,response.statusCode===200?undefined:response.body);const cookie=response.headers['set-cookie'],header=Array.isArray(cookie)?cookie[0]:cookie;assert.equal(typeof header,'string');const token=header!.split(';',1)[0]!.slice('dx_rework_session='.length);assert.equal((await auth.authenticate(token)).id,id);return token;};
-  const open=async(id=f.root.actorId,width=1440,fault:SettingsBrowserFault={},path='/ui/digital-cockpit?workspace=settings&fullApp=1')=>{const context=await browser!.newContext({viewport:{width,height:960}}),session=randomUUID();faults.set(session,fault);await context.addCookies([{name:'dx_rework_session',value:await login(id),url:base},{name:'settings_fixture_session',value:session,url:base},...(controlToken?[{name:'dx_acceptance_control',value:controlToken,url:base}]:[])]);const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));await page.goto(base+path);return {context,page,session};};
+  const open=async(id=f.root.actorId,width=1440,fault:SettingsBrowserFault={},path='/ui/digital-cockpit?workspace=settings&fullApp=1')=>{
+   const context=await browser!.newContext({viewport:{width,height:960}}),session=randomUUID(),active=new Set<Promise<void>>();
+   faults.set(session,fault);activeRequests.set(session,active);
+   await context.addCookies([{name:'dx_rework_session',value:await login(id),url:base},{name:'settings_fixture_session',value:session,url:base},...(controlToken?[{name:'dx_acceptance_control',value:controlToken,url:base}]:[])]);
+   const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
+   await page.goto(base+path);
+   const close=async()=>{
+    // Closing Chromium does not stop accepted app.inject requests. Drain this
+    // session before another case reuses its database identities or clock.
+    closedSessions.add(session);
+    try{await context.close();}finally{
+     await Promise.all(active);
+     activeRequests.delete(session);
+     faults.delete(session);
+    }
+   };
+   return {context,page,session,close};
+  };
   const writeEvidence=()=>writeFile(join(evidence,'requests.json'),JSON.stringify({source:'Original App/AuthService/native services, isolated lowpriv TEST PG, only labelled external provider/transport adapters',requests,errors},null,2));
-  return {f,db,auth,base,browser,open,dedicated,admin,requests,faults,errors,evidence,writeEvidence,dispose,patternOrders,orderTimeRequests,setCollectionScene:(id:string)=>{collectionScene=id;}};
+  return {f,db,auth,base,browser,open,dedicated,admin,requests,faults,errors,evidence,writeEvidence,dispose,patternOrders,orderTimeRequests,setCollectionScene:(id:string|undefined)=>{collectionScene=id;}};
  }catch(e){await dispose();throw e;}
 }
