@@ -91,7 +91,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const validationDocument:DevelopmentDocument=document.customerOrderDraft&&validationMode==="publish"&&!preorder
     ?{...document,customerOrderDraft:{withOrder,stage:"formal",order:form}}
     :document;
-  const issues=validationMode?developmentIssues(validationDocument,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs,false,stepValidation):[];
+  const workbenchCraftControl=guided&&document.workbenchSheet?"development-workbench-processingSelected":undefined;
+  const issues=validationMode?developmentIssues(validationDocument,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs,false,stepValidation)
+    .map(issue=>workbenchCraftControl&&(issue.id==="development-craft"||issue.id==="development-craftSteps")?{...issue,id:workbenchCraftControl}:issue):[];
   const [designerName, setDesignerName] = useState<string | null>(existingDraft?.designerName ?? source?.designer ?? null);
   useEffect(() => {
     if (source || existingDraft) return;
@@ -442,7 +444,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const changeCraft=(craft:DevelopmentDocument["craft"],craftSteps?:DevelopmentDocument["craftSteps"])=>{
     edit({craft,...(craftSteps?{craftSteps}:{}),...(document.workbenchSheet?{workbenchSheet:{...document.workbenchSheet,processingSelected:true}}:{})});
   };
-  const basicDevelopment=<><div id="development-workbench-processingSelected"> <label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label>{fixedCraft?<IndependentCraftField label="工艺" value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={changeCraft}/>:<label>工艺<select aria-label="工艺" disabled={published} value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft} onChange={event=>changeCraft(event.target.value as DevelopmentDocument["craft"])}>{document.workbenchSheet&&<option value="" disabled>选择加工类型</option>}{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label>}
+  const basicDevelopment=<><div><label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label>{fixedCraft?<IndependentCraftField label="工艺" firstControlId={workbenchCraftControl} value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={changeCraft}/>:<label>工艺<select id={workbenchCraftControl} aria-label="工艺" disabled={published} value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft} onChange={event=>changeCraft(event.target.value as DevelopmentDocument["craft"])}>{document.workbenchSheet&&<option value="" disabled>选择加工类型</option>}{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label>}
     {fixedCraft&&document.workbenchSheet&&document.craft==="无"&&!published&&
       <label><input type="checkbox" checked={document.workbenchSheet.processingSelected} onChange={event=>edit({workbenchSheet:{...document.workbenchSheet!,processingSelected:event.target.checked}})}/>无加工工艺</label>}
     </div></>;

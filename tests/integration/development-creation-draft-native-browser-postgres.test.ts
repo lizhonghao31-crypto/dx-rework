@@ -372,6 +372,39 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
   }finally{await tab.context.close();}
  });
+ it('returns to the actual craft control when a workbench craft attachment blocks publication',async()=>{
+  const actor=h.f.people['sample-designer']!,style='TEST-V7-CRAFT-LOCATOR-'+randomUUID();
+  const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  const {sourceId}=await identity.createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+  const category=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+  const file={attachmentId:await h.f.image(actor),kind:'工艺开发板' as const};
+  await forms.save(actor,sourceId,{expectedVersion:0,document:{
+   ...initialDevelopmentDocument(),quantity:1,patternCategoryId:category.price_id,files:[file],
+   workbenchSheet:{version:1,styleName:'工艺定位',brand:'',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',sewingRows:[]},
+  }},randomUUID());
+  const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
+  try{
+   const page=tab.page,steps=page.getByLabel('建单步骤');
+   await page.getByRole('button',{name:style,exact:true}).click();
+   await page.getByRole('button',{name:'下一步',exact:true}).click();
+   await steps.getByRole('heading',{name:'开发需求',exact:true}).waitFor();
+   await page.getByText(/^执行单价：/).waitFor();
+   await page.getByRole('button',{name:'提交开发单',exact:true}).click();
+   const issue=page.getByRole('button',{name:'工艺：工艺开发板仅适用于印花或绣花',exact:true});
+   await issue.click();
+   expect(await steps.getByRole('heading',{name:'版单',exact:true}).isVisible()).toBe(true);
+   const checkbox=page.getByRole('checkbox',{name:'绣花',exact:true}),native=await checkbox.isVisible();
+   const craft=native?checkbox:page.getByRole('combobox',{name:'工艺',exact:true});
+   await expect.poll(()=>craft.evaluate(el=>document.activeElement===el)).toBe(true);
+   if(native)await craft.check();else await craft.selectOption('绣花');
+   await issue.waitFor({state:'hidden'});
+   const saved=page.waitForResponse(response=>response.url().endsWith('/sources/'+sourceId+'/development')&&response.request().method()==='PUT');
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   const result=await saved;expect(result.status(),await result.text()).toBe(200);
+   expect(await result.json()).toMatchObject({sourceId,status:'draft',document:{craft:'绣花',files:[file]}});
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
+  }finally{await tab.context.close();}
+ });
  it('opens two independent server drafts from a new authenticated browser session, retaining three PO rows and two original ready files',async()=>{
   const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
   const styles=[`TEST-CABINET-A-${randomUUID()}`,`TEST-CABINET-B-${randomUUID()}`];
