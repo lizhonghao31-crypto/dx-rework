@@ -51,7 +51,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    diagnosis={sourceId:draft.sourceId,materialId:material.materialId};
    const handover=page.getByRole('group',{name:/设计交资料/});
    await handover.getByLabel('实际发生时间（北京时间）').fill(localTime);
-   const recipient=handover.getByRole('combobox',{name:'接收订单跟单',exact:true});
+   const recipient=handover.getByRole('button',{name:/^接收订单跟单(?:\s|$)/});
    await recipient.click();
    const recipientName=(await page.evaluate(async id=>{
     const response=await fetch('/api/digital-production/access/candidates');

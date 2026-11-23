@@ -43,8 +43,12 @@ async function fillRequiredWorkbenchSheet(page:Page){
  }
  const noCraft=page.getByRole('checkbox',{name:'无加工工艺'});
  if(await noCraft.isVisible())await noCraft.check();
- else if(await page.getByRole('combobox',{name:'工艺',exact:true}).isVisible())
-  await page.getByRole('combobox',{name:'工艺',exact:true}).selectOption('无');
+ else {
+  const craft=page.getByRole('combobox',{name:'工艺',exact:true});
+  if(!await craft.isVisible())return;
+  if(await craft.evaluate(element=>element.tagName==='SELECT'))await craft.selectOption('无');
+  else {await craft.press('Enter');await page.getByRole('option',{name:'无',exact:true}).click();}
+ }
 }
 async function wizardNext(page:Page,{fillRequirements=true}={}){
  await fillRequiredWorkbenchSheet(page);
@@ -119,6 +123,24 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect(table!.x-picture!.x).toBeLessThan(40);
     expect(Math.abs((input!.y+input!.height/2)-(button!.y+button!.height/2))).toBeLessThan(3);
    }
+   await page.setViewportSize({width:390,height:747});
+   const rootFont=await page.evaluate(()=>{
+    const size=parseFloat(getComputedStyle(document.documentElement).fontSize);
+    document.documentElement.style.fontSize=(size*2)+'px';return size;
+   });
+   const saveDraft=page.getByRole('button',{name:'保存预下单备料资料',exact:true});
+   await saveDraft.focus();
+   const accessible=await saveDraft.evaluate(button=>({
+    width:button.getBoundingClientRect().width,visible:button.scrollWidth<=button.clientWidth+1,
+    pageFits:document.documentElement.scrollWidth<=innerWidth+1,focused:document.activeElement===button,
+    rootFont:parseFloat(getComputedStyle(document.documentElement).fontSize),
+    theme:!!button.closest('.dx-designer-astryx'),lang:document.documentElement.lang,
+   }));
+   expect(accessible).toMatchObject({visible:true,pageFits:true,focused:true,rootFont:rootFont*2,theme:true,lang:'zh-CN'});
+   expect(accessible.width).toBeGreaterThan(0);
+   await page.screenshot({path:join(h.evidence,'preorder-handovers-390-200pct.png'),fullPage:true});
+   await page.evaluate(()=>document.documentElement.style.removeProperty('font-size'));
+   await page.setViewportSize({width:1165,height:747});
    expect(await page.getByRole('group',{name:'附件分类'}).getByRole('button',{name:/菲林/}).count()).toBe(0);
    const firstView=new URL(page.url()).searchParams.get('creationDraft');
    expect(firstView).toMatch(/^[a-f0-9-]{36}$/);
@@ -414,7 +436,9 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await expect.poll(()=>firstRow.evaluate(el=>document.activeElement===el)).toBe(true);
    await firstRow.fill('补齐供应商');
    await firstRow.locator('xpath=ancestor::tr/following-sibling::tr[1]').getByText('技术详情',{exact:true}).click();
-   await dialog.getByLabel(bad.label+' 实样图片',{exact:true}).selectOption(files[1]!.attachmentId);
+   const sample=dialog.getByRole('combobox',{name:bad.label+' 实样图片',exact:true});
+   await sample.press('Enter');
+   await page.getByRole('option',{name:/^局部图 1(?: · |$)/}).click();
    await dialog.getByRole('button',{name:'返回版单',exact:true}).click();
    await dialog.waitFor({state:'hidden'});
    await wizardNext(page);await wizardNext(page);
@@ -463,12 +487,17 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const checkbox=page.getByRole('checkbox',{name:'绣花',exact:true}),native=await checkbox.isVisible();
    const craft=native?checkbox:page.getByRole('combobox',{name:'工艺',exact:true});
    await expect.poll(()=>craft.evaluate(el=>document.activeElement===el)).toBe(true);
-   if(native)await craft.check();else await craft.selectOption('绣花');
+   if(native)await craft.check();else if(await craft.evaluate(element=>element.tagName==='SELECT'))await craft.selectOption('绣花');
+   else {await craft.press('Enter');await page.getByRole('option',{name:'绣花',exact:true}).click();}
    await issue.waitFor({state:'hidden'});
    const embroidery=page.getByRole('group',{name:'绣花',exact:true});
    await embroidery.getByRole('textbox',{name:'绣花部位',exact:true}).fill('左胸');
    await embroidery.getByRole('textbox',{name:'绣花规格 / 效果',exact:true}).fill('宽 6 cm');
-   await embroidery.getByRole('combobox',{name:'绣花引用已有工艺开发板'}).selectOption(file.attachmentId);
+   const existingBoard=embroidery.getByRole('combobox',{name:'绣花引用已有工艺开发板'});
+   expect(await existingBoard.evaluate(element=>element.tagName)).toBe('BUTTON');
+   await existingBoard.press('Enter');
+   await page.getByRole('option',{name:/^(?:TEST\.png|工艺开发板 1)$/}).click();
+   expect((await embroidery.getByRole('link',{name:'查看绣花附件 1原件'}).getAttribute('href'))).toContain('/'+file.attachmentId);
    await tab.context.route('https://private.example.test/**',async route=>{
     const request=route.request();
     if(request.method()!=='POST')return route.abort();

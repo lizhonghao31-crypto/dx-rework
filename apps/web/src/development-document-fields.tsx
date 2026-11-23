@@ -1,6 +1,8 @@
 import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {FileInput} from '@astryxdesign/core/FileInput';
+import {Selector} from '@astryxdesign/core/Selector';
+import {DevelopmentEntryAction,DevelopmentEntryText} from './development-entry-controls.js';
 import {DEVELOPMENT_CRAFT_FILE_TYPES,DevelopmentCraftRequirements} from './development-craft-requirements.js';
 import {WorkbenchDevelopmentSheetFields} from './workbench-development-sheet-fields.js';
 import {IndependentCraftField} from './independent-craft-field.js';
@@ -95,7 +97,16 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
   };
   const changeMaterial=(index:number,patch:Partial<DevelopmentMaterial>)=>edit({materials:document.materials.map((item,i)=>{if(i!==index)return item;const next={...item,...patch};if(!Object.hasOwn(patch,"auxiliaryCatalog")&&["name","specification","supplier","auxiliaryKind"].some(key=>Object.hasOwn(patch,key)))delete next.auxiliaryCatalog;return next;})});
   const field=(key:keyof DevelopmentDocument,label:string,maxLength=100,multiline=false)=><label>{label}<DocumentField id={`development-${key}`} label={label} value={String(document[key]??"")} onValue={value=>edit({[key]:value})} readonly={readonly} disabled={busy} maxLength={maxLength} multiline={multiline} issue={issue(`development-${key}`)}/></label>;
-  const select=(key:"template"|"unit"|"craft"|"washing",label:string,options:readonly string[],change?:(value:string)=>void)=><label>{label}{readonly?<span className="dx-doc-readonly" id={`development-${key}`}>{key==="washing"?washingChoiceLabel(document[key]):document[key]}</span>:<select id={`development-${key}`} aria-label={label} disabled={busy} value={document[key]} onChange={event=>change?change(event.target.value):edit({[key]:event.target.value})}>{options.map(value=><option key={value} value={value}>{key==="washing"?washingChoiceLabel(value):value}</option>)}</select>}</label>;
+  const select=(key:"template"|"unit"|"craft"|"washing",label:string,options:readonly string[],change?:(value:string)=>void)=>{
+    const show=(value:string)=>key==="washing"?washingChoiceLabel(value):value;
+    const onSelect=(value:string)=>change?change(value):edit({[key]:value});
+    const id=`development-${key}`;
+    if(creationView&&!readonly)return <Selector id={id} label={label} value={document[key]} size="sm" isDisabled={busy}
+      options={options.map(value=>({value,label:show(value)}))} onChange={onSelect}/>;
+    return <label>{label}{readonly?<span className="dx-doc-readonly" id={id}>{show(document[key])}</span>
+      :<select id={id} aria-label={label} disabled={busy} value={document[key]} onChange={event=>onSelect(event.currentTarget.value)}>
+        {options.map(value=><option key={value} value={value}>{show(value)}</option>)}</select>}</label>;
+  };
   const flag=(id:string,label:string,value:boolean,onValue:(value:boolean)=>void,locked=readonly,compact=false)=><label className="development-flag">{locked?<span id={id} className="dx-doc-readonly" aria-label={label}>{compact?"":`${label}：`}{value?"有":"无"}</span>:<><input id={id} aria-label={label} type="checkbox" checked={value} disabled={busy} onChange={event=>onValue(event.target.checked)}/>{!compact&&label}</>}</label>;
   const [activePicture,setActivePicture]=useState<string|null>(null);
   const pictures=document.files.filter(file=>file.kind===fileKind);
@@ -125,14 +136,19 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
       <DocumentField id={`development-${item.materialId}-${key}`} label={`${item.label} ${label}`} value={item[key]??""} readonly={readonly}
         disabled={busy} issue={issue(`development-${item.materialId}-${key}`)} onValue={value=>changeMaterial(index,{[key]:value})}/>
     </label>)}
-    <label>贴实样{readonly?item.sampleAttachmentId?<a href={imageUrl(item.sampleAttachmentId)} target="_blank" rel="noreferrer">查看实样</a>:"未登记":
-      <select id={`development-${item.materialId}-sampleAttachmentId`} aria-label={`${item.label} 实样图片`} value={item.sampleAttachmentId??""}
-        disabled={busy} onChange={event=>changeMaterial(index,{sampleAttachmentId:event.target.value||null})}>
-        <option value="">不引用图片</option>{document.files.filter(file=>file.kind==="局部图").map((file,index)=><option key={file.attachmentId} value={file.attachmentId}>
-          {fileIdentity?.(file.attachmentId)?.filename??`局部图 ${index+1}`}
-        </option>)}
-      </select>}
-    </label>
+    {creationView&&!readonly?<Selector id={`development-${item.materialId}-sampleAttachmentId`} label={`${item.label} 实样图片`}
+      size="sm" value={item.sampleAttachmentId??""} isDisabled={busy}
+      options={[{value:"",label:"不引用图片"},...document.files.filter(file=>file.kind==="局部图").map((file,index)=>({
+        value:file.attachmentId,label:[`局部图 ${index+1}`,fileIdentity?.(file.attachmentId)?.filename].filter(Boolean).join(" · "),
+      }))]} onChange={value=>changeMaterial(index,{sampleAttachmentId:value||null})}/>
+      :<label>贴实样{readonly?item.sampleAttachmentId?<a href={imageUrl(item.sampleAttachmentId)} target="_blank" rel="noreferrer">查看实样</a>:"未登记":
+        <select id={`development-${item.materialId}-sampleAttachmentId`} aria-label={`${item.label} 实样图片`} value={item.sampleAttachmentId??""}
+          disabled={busy} onChange={event=>changeMaterial(index,{sampleAttachmentId:event.target.value||null})}>
+          <option value="">不引用图片</option>{document.files.filter(file=>file.kind==="局部图").map((file,index)=><option key={file.attachmentId} value={file.attachmentId}>
+            {fileIdentity?.(file.attachmentId)?.filename??`局部图 ${index+1}`}
+          </option>)}
+        </select>}
+      </label>}
   </>}</div></details></td></tr></Fragment>)}
             </tbody></table></DocumentTableScroll>{!readonly&&<div className="development-actions">{(["主布","配布","辅料"] as const).map(category=><DocumentAddRow key={category} label={`添加${category}`} disabled={busy||document.materials.length>=100} onClick={()=>{const next=material(category,category);edit({materials:[...document.materials,next]});if(compact)locate(`development-${next.materialId}-name`);else requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-name`)?.focus());}}/> )}</div>}</section>;
   const compactSection=(title:string,summary:string,children:ReactNode)=>compact
@@ -229,14 +245,15 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
       {document.materials.map((item,index)=>item.category!=="辅料"&&<tr key={item.materialId}>
         <th scope="row">{item.category} {index+1}</th>
         {preorderFabricFields.map(([field,label])=><td key={field}>
-          <DocumentField id={`development-${item.materialId}-${field}`} label={`${item.category} ${label}`}
-            value={item[field]} readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{[field]:value})}
-            issue={issue(`development-${item.materialId}-${field}`)}/>
+          {!readonly?<DevelopmentEntryText id={`development-${item.materialId}-${field}`} label={`${item.category} ${label}`}
+            value={item[field]} isDisabled={busy} maxLength={100} onChange={value=>changeMaterial(index,{[field]:value})}
+            {...(issue(`development-${item.materialId}-${field}`)?{status:{type:'error' as const,message:issue(`development-${item.materialId}-${field}`)!}}:{})}/>
+          :<DocumentField id={`development-${item.materialId}-${field}`} label={`${item.category} ${label}`} value={item[field]} readonly/>}
         </td>)}
-        {!readonly&&<td><Button type="button" disabled={busy} onClick={async()=>{
+        {!readonly&&<td><DevelopmentEntryAction type="button" disabled={busy} onClick={async()=>{
           if(await confirmInApp(`删除${item.name||item.label||item.category}？`)&&!writing.current)
             edit({materials:document.materials.filter(row=>row.materialId!==item.materialId)});
-        }}>删除面料</Button></td>}
+        }}>删除面料</DevelopmentEntryAction></td>}
       </tr>)}
     </tbody></table>
   </DocumentTableScroll>

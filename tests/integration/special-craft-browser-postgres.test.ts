@@ -232,7 +232,8 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
    await page.getByRole('dialog',{name:'请选择创建类型'}).getByRole('button',{name:'纯开发',exact:true}).click();
    await page.getByLabel('设计款号',{exact:true}).fill(style);
    await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).check();
-   await page.getByLabel('工艺特殊工艺',{exact:true}).selectOption(craft.id);
+   await page.getByRole('combobox',{name:'工艺特殊工艺',exact:true}).press('Enter');
+   await page.getByRole('option',{name:craft.definition.name,exact:true}).click();
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
    let id='';
    await expect.poll(async()=>{id=(await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rows[0]?.source_id??'';return id?(await forms.read(designer,id)).version:0;}).toBe(1);
@@ -241,10 +242,10 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
    expect(first.document!.craft).toBe('特殊工艺');
    expect(first.document!.craftSteps!.map(s=>s.craftKind)).toEqual(['printing','special']);
    expect((await h.db.query('SELECT 1 FROM digital_development_sla_plans WHERE source_id=$1',[id])).rowCount).toBe(0);
-   await expect.poll(()=>page.getByLabel('工艺特殊工艺',{exact:true}).count()).toBe(1);
+   await expect.poll(()=>page.getByRole('combobox',{name:'工艺特殊工艺',exact:true}).count()).toBe(1);
    expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
    await page.goto(h.base+'/ui/digital-production?development='+id);
-   await page.getByLabel('工艺特殊工艺',{exact:true}).waitFor();
+   await page.getByRole('combobox',{name:'工艺特殊工艺',exact:true}).waitFor();
    await page.getByRole('heading',{name:'工艺要求',exact:true}).waitFor();
    expect(await page.getByRole('navigation',{name:'单据章节',exact:true}).count()).toBe(0);
    expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(style);

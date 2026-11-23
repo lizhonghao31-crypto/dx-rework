@@ -531,8 +531,8 @@
 .development-create-reference .development-create-po-table th.development-size-column{padding-right:30px}
 .development-create-reference .development-create-po-table th.development-size-column>button{top:5px;right:5px}
 .development-create-reference .development-po-size-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:start}
-.development-create-reference .development-po-size-pair>label{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px;align-items:center;min-width:0}
-.development-create-reference .development-po-size-pair>label>span{font-size:12px;white-space:nowrap}
+.development-create-reference .development-po-size-pair>.development-size-control{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px;align-items:center;min-width:0}
+.development-create-reference .development-po-size-pair>.development-size-control>span{font-size:12px;white-space:nowrap}
 .development-create-reference .development-po-size-pair input{min-width:0;width:100%;box-sizing:border-box;text-align:center}
 .development-create-reference .development-po-size-pair .development-po-shared-size{white-space:normal;overflow-wrap:anywhere;display:flex;align-items:center;justify-content:center;min-height:38px}
 
