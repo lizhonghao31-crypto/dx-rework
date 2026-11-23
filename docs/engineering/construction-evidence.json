@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "3f228829676bb08f708a046aa485c3bc4913924f",
-  "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061",
+  "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595",
   "risk": "full",
   "rules": [
     {
@@ -55,7 +55,7 @@
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "initialization": "The existing auxiliary picker writes only the selected draft material UUID and adopted catalog version; reopening original saved values uses the exact version.",
-      "dateAndPermission": "Keep old manually written prices and approved business amounts. An explicit adoption updates only the draft row, retaining original role checks and read-only historical forms.",
+      "dateAndPermission": "Keep old manually written prices and approved business amounts. Completing an unnamed material retains manually entered price and unit. An explicit adoption updates only the draft row, retaining original role checks and read-only historical forms.",
       "expectation": "Signed App exercises the old reference version, distinct catalog and order values, cancel and confirm adoption, zero, and real original history; compatible technical quote consumption stays locked to original units.",
       "checks": [
         "native-business",
@@ -139,46 +139,46 @@
     {
       "id": "catalog-pg",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r3-release-evidence/merged-release/verify-native.mjs catalog-pg",
+      "command": "node /tmp/dx-workbench-v101-r3-release-evidence/material-name-review/verify-native.mjs catalog-pg",
       "status": "passed",
       "exitCode": 0,
       "context": "Node 22.22.2, vitest.config.ts, real signed users and Chromium where applicable, two marked low-privilege PostgreSQL 16.14 environments and verified cleanup.",
-      "startedAt": "2026-11-23T23:08:33.858Z",
-      "endedAt": "2026-11-23T23:08:49.212Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/catalog-pg.log",
-      "logSha256": "ac00edf927269bc57fe2018792df577f4b7fa8b46f88e22eea7174a3db5d18a2",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061",
+      "startedAt": "2026-11-23T23:16:01.058Z",
+      "endedAt": "2026-11-23T23:16:13.522Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/catalog-pg.log",
+      "logSha256": "2231c21120e9e1dbb9da5b9cbb10c971aae1afe3321c4960ec678c61dce34112",
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595",
       "passed": 20,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5ea2e91227b1b07a89a388b81383e585c4c1f9435526c2b848062c5e0ebcab6d"
+          "sha256": "0454051935892e5e59ab877f9f535676b370ad1a872322f26370918604e102b4"
         }
       ]
     },
     {
       "id": "native-business",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r3-release-evidence/merged-release/verify-native.mjs native-business",
+      "command": "node /tmp/dx-workbench-v101-r3-release-evidence/material-name-review/verify-native.mjs native-business",
       "status": "passed",
       "exitCode": 0,
       "context": "Node 22.22.2, vitest.business-chain.config.ts, real signed users and Chromium where applicable, two marked low-privilege PostgreSQL 16.14 environments and verified cleanup.",
-      "startedAt": "2026-11-23T23:08:49.333Z",
-      "endedAt": "2026-11-23T23:10:15.832Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/native-business.log",
-      "logSha256": "460eaf7e3a9cdfaf8b8f9a9f4a2df75abb9a538118cc5c5287f27f4b20f6b1f3",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061",
+      "startedAt": "2026-11-23T23:16:13.679Z",
+      "endedAt": "2026-11-23T23:17:43.486Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/native-business.log",
+      "logSha256": "1ec2bfeaf836d828f177435c021adf417c38d04a3fcceb4076b472581d5cae3a",
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595",
       "passed": 52,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "de850fb362d0cd22a2576024009a18f4915fcd7c2d58fd66ec84f300003cb041"
+          "sha256": "4307f426c69b2705e87106fef899a3f0ed7b058822d8b099f97207ea80cbeeaf"
         }
       ]
     },
@@ -189,12 +189,12 @@
       "exitCode": 0,
       "command": "npm run db:migrate:lint",
       "context": "Pinned Node 22.22.2 and the repository static validation in the isolated R3 worktree.",
-      "startedAt": "2026-11-23T23:08:33.819Z",
-      "endedAt": "2026-11-23T23:08:34.144Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/migration-lint.log",
-      "logSha256": "8b501e136453826315e56955e8ee942c378f44ea4aace14e6c12873ca5217932",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061"
+      "startedAt": "2026-11-23T23:16:07.336Z",
+      "endedAt": "2026-11-23T23:16:07.679Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/migration-lint.log",
+      "logSha256": "3d0318ffcabea1e4f27656881f991a0066381ccdab5562419e3367024aef908c",
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595"
     },
     {
       "id": "lint",
@@ -203,12 +203,12 @@
       "exitCode": 0,
       "command": "ESLint --max-warnings=0 over the changed TypeScript and TSX files",
       "context": "Pinned Node 22.22.2 and the repository static validation in the isolated R3 worktree.",
-      "startedAt": "2026-11-23T23:08:34.146Z",
-      "endedAt": "2026-11-23T23:08:35.804Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/lint.log",
+      "startedAt": "2026-11-23T23:16:07.680Z",
+      "endedAt": "2026-11-23T23:16:09.108Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061"
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595"
     },
     {
       "id": "typecheck-api",
@@ -217,12 +217,12 @@
       "exitCode": 0,
       "command": "npm run typecheck --workspace @dx-rework/api",
       "context": "Pinned Node 22.22.2 and the repository static validation in the isolated R3 worktree.",
-      "startedAt": "2026-11-23T23:08:35.805Z",
-      "endedAt": "2026-11-23T23:08:49.303Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/typecheck-api.log",
+      "startedAt": "2026-11-23T23:16:09.109Z",
+      "endedAt": "2026-11-23T23:16:23.311Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/typecheck-api.log",
       "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061"
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595"
     },
     {
       "id": "typecheck-web",
@@ -231,12 +231,12 @@
       "exitCode": 0,
       "command": "npm run typecheck --workspace @dx-rework/web",
       "context": "Pinned Node 22.22.2 and the repository static validation in the isolated R3 worktree.",
-      "startedAt": "2026-11-23T23:08:49.305Z",
-      "endedAt": "2026-11-23T23:09:13.518Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/typecheck-web.log",
+      "startedAt": "2026-11-23T23:16:23.312Z",
+      "endedAt": "2026-11-23T23:16:46.648Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/typecheck-web.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061"
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595"
     },
     {
       "id": "preflight",
@@ -245,33 +245,33 @@
       "exitCode": 0,
       "command": "npm run test:preflight",
       "context": "Pinned Node 22.22.2 and the repository static validation in the isolated R3 worktree.",
-      "startedAt": "2026-11-23T23:09:13.519Z",
-      "endedAt": "2026-11-23T23:09:20.164Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/preflight.log",
-      "logSha256": "a7c5ecd85a99a10ab9799adb469c46c7851606b9ba983e3f1c5e2a0fa6251fbc",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061"
+      "startedAt": "2026-11-23T23:16:46.650Z",
+      "endedAt": "2026-11-23T23:16:53.569Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/preflight.log",
+      "logSha256": "b0d84c598fd64ae71c108848dce9db6e1246439b0d2c7d8f1712f4d4709b0b37",
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595"
     },
     {
       "id": "unit-creation",
       "kind": "tests",
-      "command": "bash /tmp/dx-workbench-v101-r3-release-evidence/merged-release/verify-static.sh 3f228829676bb08f708a046aa485c3bc4913924f (unit-creation step)",
+      "command": "bash /tmp/dx-workbench-v101-r3-release-evidence/material-name-review/verify-static.sh 3f228829676bb08f708a046aa485c3bc4913924f (unit-creation step)",
       "status": "passed",
       "exitCode": 0,
       "context": "Pinned Node 22.22.2, original draft and publication consumer tests, and the unnamed commercial-row regression.",
-      "startedAt": "2026-11-23T23:09:20.165Z",
-      "endedAt": "2026-11-23T23:09:20.778Z",
-      "log": "/tmp/dx-workbench-v101-r3-release-evidence/merged-release/unit-creation.log",
-      "logSha256": "cf4c035e41ddbd1d4f8b57b52f31a7ff37c383fdeebfed92be027a130005cba0",
-      "testedHead": "ee461467839a9d33ddb92534f6f736706a219989",
-      "sourceFingerprint": "072cb1f0af4d789058ae92afc49dc320a3819741e3d9ff40abfcd3ad51aed061",
+      "startedAt": "2026-11-23T23:16:53.570Z",
+      "endedAt": "2026-11-23T23:16:54.404Z",
+      "log": "/tmp/dx-workbench-v101-r3-release-evidence/material-name-review/unit-creation.log",
+      "logSha256": "016ad333df1affb5077e0dbcb62fce2e14abe2bd3576dffafae9cded248e57b8",
+      "testedHead": "cbc14a58eb2d5d1efd8d34b6832b24efdbc77371",
+      "sourceFingerprint": "9573ccd7916fc59068491a13e3bc6deb8691a4ec2d0737dad374d7c99a580595",
       "passed": 10,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "87ebeccd28451574f649ddf88235c13ad85979bec5075ced01415e3f255a9b14"
+          "sha256": "21de774b0d0c7fc17bcfe79ca1110bb6d0c328a4e9f23c9cbdf3c60db0834738"
         }
       ]
     }
