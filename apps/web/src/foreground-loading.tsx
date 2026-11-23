@@ -63,7 +63,7 @@ export function ForegroundLoading(){
     return()=>observer.disconnect();
   },[]);
   const feedback=<div role={waiting?"status":undefined} aria-live="polite" aria-atomic="true" className="dx-foreground-loading">
-    {waiting&&<span>请稍等</span>}
+    {waiting&&<span>读取中，请稍候</span>}
   </div>;
   return modal?createPortal(feedback,modal):feedback;
 }

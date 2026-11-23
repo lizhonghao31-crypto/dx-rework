@@ -14,7 +14,7 @@ try{
   const page=await browser.newPage({viewport:{width,height:900}});current=page;page.setDefaultTimeout(7000);page.on('pageerror',e=>errors.push(e.message));const origin=`http://127.0.0.1:${server.address().port}/?mode=${mode}`;await page.goto(origin);
   const trigger=page.getByRole('button',{name:'选择共享辅料 1',exact:true});await trigger.click();await page.getByRole('dialog',{name:'共享辅料',exact:true}).waitFor();
   if(mode==='wait'){
-   const dialog=page.getByRole('dialog',{name:'共享辅料',exact:true}),feedback=dialog.getByRole('status').filter({hasText:'请稍等'});
+   const dialog=page.getByRole('dialog',{name:'共享辅料',exact:true}),feedback=dialog.getByRole('status').filter({hasText:'读取中，请稍候'});
    await feedback.waitFor();
    const position=await feedback.evaluate(element=>{
     const box=element.getBoundingClientRect();
@@ -26,7 +26,7 @@ try{
    await dialog.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill('扁机');
    await dialog.getByRole('button',{name:'选择此辅料',exact:true}).click();
    await dialog.waitFor({state:'hidden'});await page.evaluate(()=>window.releaseDirectory());
-   assert.equal(await page.getByText('请稍等',{exact:true}).count(),0);
+   assert.equal(await page.getByText('读取中，请稍候',{exact:true}).count(),0);
    assert.equal((await page.evaluate(()=>window.auxiliaryFixture)).parentSubmits,0);
   }else if(mode==='denied'){await page.getByText('TEST当前账号无目录权限',{exact:false}).waitFor();assert.equal(await page.getByRole('button',{name:'直接新增辅料',exact:true}).count(),0);await page.getByRole('button',{name:'关闭辅料选择',exact:true}).click();assert.equal((await page.evaluate(()=>window.auxiliaryFixture)).document.materials[0].name,'TEST原自由文本');}
   else if(mode==='select'){

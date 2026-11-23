@@ -350,13 +350,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     });
     try{
      await d.page.getByLabel('查看报价版本',{exact:true}).selectOption(String(frozen));
-     await d.page.getByRole('status').filter({hasText:'请稍等'}).waitFor();
+     await d.page.getByRole('status').filter({hasText:'读取中，请稍候'}).waitFor();
      expect(historyRequests).toBe(1);
      expect(await oldSheet.innerText()).toContain('协作草稿');
      expect(await d.page.getByRole('button',{name:'保存报价',exact:true}).isDisabled()).toBe(true);
      releaseHistory();
      await expect.poll(()=>oldSheet.innerText()).toContain('客户已确认');
-     await d.page.getByRole('status').filter({hasText:'请稍等'}).waitFor({state:'hidden'});
+     await d.page.getByRole('status').filter({hasText:'读取中，请稍候'}).waitFor({state:'hidden'});
      expect((await quotes.read(designer,resource)).status).toBe('draft');
     }finally{
      releaseHistory();

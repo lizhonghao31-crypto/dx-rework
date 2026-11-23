@@ -38,7 +38,7 @@ const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_
   const {page,context}=await h.open(h.fixture.root.actorId,{},1440,1,{path:'/ui/production-dashboard'});
   const rows=page.locator('.board-row .board-identity strong');
   const filter=page.getByPlaceholder('款号或供应商');
-  const wait=page.locator('.dx-foreground-loading').getByText('请稍等',{exact:true});
+  const wait=page.locator('.dx-foreground-loading').getByText('读取中，请稍候',{exact:true});
   const held=new Map<string,ReturnType<typeof Promise.withResolvers<void>>>();
   const received=new Map<string,ReturnType<typeof Promise.withResolvers<void>>>();
   const fail='TEST-WAIT-FAILURE';
@@ -100,12 +100,13 @@ const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_
    await filter.fill(b);
    await received.get(b)!.promise;
    await wait.waitFor();
+   expect(await filter.evaluate(input=>document.activeElement===input)).toBe(true);
    expect(await rows.allTextContents()).toEqual([a]);
    await page.evaluate(({next}: {next:string})=>{
     const neverClearBeforeRows=()=>{
      const status=document.querySelector('.dx-foreground-loading')?.textContent;
      const rows=Array.from(document.querySelectorAll('.board-row .board-identity strong'));
-     if(!rows.some(row=>row.textContent===next)&&status!=='请稍等')document.body.dataset.dashboardPrematureFinish='true';
+     if(!rows.some(row=>row.textContent===next)&&status!=='读取中，请稍候')document.body.dataset.dashboardPrematureFinish='true';
     };
     const observer=new MutationObserver(neverClearBeforeRows);
     observer.observe(document.body,{subtree:true,childList:true,characterData:true});
@@ -120,6 +121,7 @@ const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_
    await page.waitForFunction(()=>document.body.dataset.dashboardLateResponse==='200');
    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
    expect(await wait.isVisible()).toBe(true);
+   expect(await filter.evaluate(input=>document.activeElement===input)).toBe(true);
    expect(await rows.allTextContents()).toEqual([a]);
    held.get(c)?.resolve();
    await rows.filter({hasText:c}).waitFor();
@@ -145,7 +147,8 @@ const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_
    try{
     await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
     await badgeStarted.promise;
-    await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,350)));
+    await page.clock.install();
+    await page.clock.runFor(350);
     expect(await wait.isVisible()).toBe(false);
    }finally{releaseBadge.resolve();}
    expect(h.errors).toEqual([]);
@@ -162,7 +165,7 @@ const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_
   const query=page.getByRole('textbox',{name:'搜索产前与发厂订单'});
   const rows=page.locator('.workspace-order-list tbody tr td:first-child small');
   const table=page.locator('.workspace-order-list');
-  const wait=page.locator('.dx-foreground-loading').getByText('请稍等',{exact:true});
+  const wait=page.locator('.dx-foreground-loading').getByText('读取中，请稍候',{exact:true});
   const gate=Promise.withResolvers<void>(),started=Promise.withResolvers<void>();
   try{
    await rows.filter({hasText:a}).waitFor();
@@ -205,7 +208,7 @@ const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_
    return '**/'+file!;
   };
   const board=page.locator('.production-dashboard.production-board');
-  const wait=page.locator('.dx-foreground-loading').getByText('请稍等',{exact:true});
+  const wait=page.locator('.dx-foreground-loading').getByText('读取中，请稍候',{exact:true});
   const cockpitReady=Promise.withResolvers<void>(),allowCockpit=Promise.withResolvers<void>();
   const templateReady=Promise.withResolvers<void>(),failTemplate=Promise.withResolvers<void>();
   let loadCalls=0;
@@ -281,7 +284,7 @@ const database=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_
     }finally{await response.dispose();}
    },{times:1}),
   });
-  const wait=page.locator('.dx-foreground-loading').getByText('请稍等',{exact:true});
+  const wait=page.locator('.dx-foreground-loading').getByText('读取中，请稍候',{exact:true});
   try{
    await observed.promise;
    await wait.waitFor();

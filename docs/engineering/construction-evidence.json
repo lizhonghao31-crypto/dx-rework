@@ -1,274 +1,125 @@
 {
   "version": 1,
-  "base": "45574ca5a748bfdc245f500899e23fd07a92927a",
+  "base": "3597dd0e8a22a1ce9d14bb128f51d76ffbaa28b0",
   "risk": "full",
-  "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
+  "sourceFingerprint": "c2fbdf2c50566ac3d47844db17f3bde265ae7c34f3ca7565c2998f1e4fc539fb",
   "rules": [
     {
-      "rule": "Read immutable published development documents by distinct source/round/documentVersion, with same-snapshot attachment membership and the original source field redaction.",
-      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
+      "rule": "Use the exact common read feedback 读取中，请稍候 while keeping the existing delayed foreground lifecycle and accessibility.",
+      "source": "Approved design-workbench v7 §10.1–10.2 / F01–F09 / K14; common foreground mechanism from #1070 retained.",
       "writes": [
-        "apps/api/src/production-platform/development-document-snapshot.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-routes.ts",
-        "packages/contracts/src/digital-development.ts",
-        "apps/web/src/development-published-document.tsx",
-        "apps/web/src/development-original-reader.tsx",
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/development-round-history-clock-postgres.test.ts"
+        "apps/web/src/foreground-loading.tsx#ForegroundLoading",
+        "tests/unit/foreground-loading.test.ts",
+        "tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-round-repository.ts",
-        "apps/api/src/production-platform/development-amendment-repository.ts",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/digital-development-print.tsx"
+        "apps/web/src/use-foreground-read.ts",
+        "apps/web/src/use-remote-queue.ts",
+        "apps/web/src/foreground-loading.css"
       ],
       "oldTests": [
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/development-round-history-clock-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/unit/foreground-loading.test.ts",
+        "tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts"
       ],
-      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
-      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
-      "expectation": "Initial publication, same-round correction and independent round remain distinct; original dates and adopted native pattern evidence stay unchanged; missing version and wrong-snapshot files are rejected.",
+      "initialization": "No migration, seed, persisted history or new request manager. Existing fixture identity and cleanup contracts remain unchanged.",
+      "dateAndPermission": "Rendered read feedback only. Existing250ms display threshold is unchanged; business clocks, SLA, authorization, writes, unknown-write receipts and focus/navigation policies retain their current behavior.",
+      "expectation": "Existing unit cases prove fast completion does not flash and latest ownership/dedup/stale/error/retry remain intact. The one selected real signed A/B/C browser case proves exact delayed text, focus retention, late B rejection, C content then completion, read failure and original Refresh retry. It uses browser-clock advancement for the existing silent-background probe, without a timing sleep.",
       "checks": [
-        "backend-pg",
-        "original-pg",
-        "non-db",
-        "build"
-      ]
-    },
-    {
-      "rule": "Quotation, budget and production-instruction originals reuse their complete native forms under an explicit read-only snapshot, preserving exact version identity and all native write routes.",
-      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
-      "writes": [
-        "apps/api/src/production-platform/budget-service.ts",
-        "apps/api/src/production-platform/budget-routes.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/production-instruction-routes.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/quotation-routes.ts",
-        "apps/web/src/digital-budget-panel.tsx",
-        "apps/web/src/digital-budget-print.tsx",
-        "apps/web/src/production-instruction-panel.tsx",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "apps/web/src/production-original-reader.tsx",
-        "apps/web/src/production-original-reader.css",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/web/src/document-editor.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/integration/digital-budget-shared-postgres.test.ts",
-        "tests/integration/instruction-recovery-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
-      ],
-      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
-      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
-      "expectation": "Signed merchandiser reads exact old saved fields and exact authorized budget/instruction attachment IDs with successful image decode; quotation confirmation evidence differs from17newer versions; wrong attachment/version/actor refused; native current PO alias correction cannot rewrite saved instruction snapshot; no document writes.",
-      "checks": [
-        "original-pg",
-        "non-db",
-        "api-types",
+        "foreground-unit",
+        "foreground-browser",
+        "lint-changed",
         "web-types"
       ]
     },
     {
-      "rule": "Use metadata-only grouped search and pagination plus a temporary switcher, direct original links and strict return context, keeping original editable/role-specific entries unchanged.",
-      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
+      "rule": "Synchronize existing browser assertions with the approved common wording without changing their business setup, permissions, commands, retries or timing guards.",
+      "source": "Approved design-workbench v7 §10.1–10.2 / F01–F09 / K14; common foreground mechanism from #1070 retained.",
       "writes": [
-        "apps/web/src/original-document-directory.tsx",
-        "apps/web/src/development-original-versions.tsx",
-        "apps/web/src/designer-order-workbench.tsx",
-        "apps/web/src/development-workspace-return.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/digital-production-page.tsx",
-        "tests/unit/digital-detail-route.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
+        "tests/acceptance/auxiliary-catalog-browser.mjs"
       ],
       "reads": [
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/use-internal-return-scroll.ts",
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/list-pagination.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/digital-detail-route.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
-      ],
-      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
-      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
-      "expectation": "Directory search/pages remain bound to the same validated source through the existing workbench areas, preserving selected/list filters and valid native action returns; search precedes paging over17real quote confirmations; selection is exact, the Dialog closes and returns focus, old version restores on Back, workbench selected/source/records/search and router departure scroll stay intact; no body prefetch or permanent inner sidebar.",
-      "checks": [
-        "original-pg",
-        "non-db",
-        "web-types"
-      ]
-    },
-    {
-      "rule": "Keep the inherited signed browser HTTP adapter faithful for original attachment redirects and binary bytes; preserve dual-database safety, real identity authorization and exact server-request draining.",
-      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
-      "writes": [
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "tests/helpers/business-anchor-fixture.ts",
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-resource-lifecycle.mjs"
+        "apps/web/src/foreground-loading.tsx#ForegroundLoading",
+        "apps/web/src/auxiliary-catalog-dialog.tsx",
+        "apps/web/src/digital-quotation-panel.tsx"
       ],
       "oldTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/instruction-recovery-native-browser-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts"
       ],
-      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
-      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
-      "expectation": "No Acceptance guard weakening, fake Root or synthetic approval. Existing original-browser cases plus legacy actual PDF roundtrip pass; authorized API302 is real, external TEST object transport only is adapted; manifests prove cleanup completed.",
+      "initialization": "No migration, seed, persisted history or new request manager. Existing fixture identity and cleanup contracts remain unchanged.",
+      "dateAndPermission": "Rendered read feedback only. Existing250ms display threshold is unchanged; business clocks, SLA, authorization, writes, unknown-write receipts and focus/navigation policies retain their current behavior.",
+      "expectation": "Only literal expectations for the common status change. Related suites are retained in their existing CI mapping; they have not been rerun locally in this narrow pass. Existing shared component behavior is covered by the current unit and selected browser evidence; changed assertions also passed ESLint. Actual classifier requires Full due to these PostgreSQL-test paths, so Quick is not claimed eligible.",
       "checks": [
-        "original-pg",
-        "non-db"
+        "foreground-unit",
+        "foreground-browser",
+        "lint-changed"
       ]
     }
   ],
   "checks": [
     {
-      "id": "original-pg",
+      "id": "foreground-unit",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-original-evidence/verify-managed-pg.mjs (canonical postgresPlan configs; original resourceContext/resourceEnvironment/runOwnedCommand/cleanupResources)",
+      "command": "env -u TEST_DATABASE_URL -u ACCEPTANCE_CLOCK_TEST_DATABASE_URL -u DATABASE_URL node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/foreground-loading.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-read-feedback-evidence/unit-foreground.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 42,
+      "passed": 2,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Node22.22.2/PG16.14/Chromium151; safety-marked dx_rework_ci + dx_rework_acceptance_clock_test, dx_rework_test NOSUPERUSER/NOBYPASSRLS; resolved ordinary1/long-correctness2 workers; workers fully stopped before exact manifest cleanup. Four current long-correctness suites; the separate44 backend checks are reused only after exact input-fingerprint proof. Not remote Full or hardware equivalence.",
-      "startedAt": "2026-11-23T07:02:55.609Z",
-      "endedAt": "2026-11-23T07:04:56.285Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-managed-pg.log",
-      "logSha256": "14604b0a7ff222245274879c3484998081765c76d274337bf010c80640391c6a",
+      "testedHead": "3597dd0e8a22a1ce9d14bb128f51d76ffbaa28b0",
+      "sourceFingerprint": "c2fbdf2c50566ac3d47844db17f3bde265ae7c34f3ca7565c2998f1e4fc539fb",
+      "context": "Node22.22.2; canonical non-DB config; original fake-clock fast/slow, current-request ownership, duplicate request, stale response and explicit retry cases; working diff on recorded release base, not a prior GitHub Gate.",
+      "startedAt": "2026-11-23T07:42:59.520Z",
+      "endedAt": "2026-11-23T07:43:00.319Z",
+      "log": "/tmp/dx-workbench-read-feedback-evidence/unit-foreground.log",
+      "logSha256": "daf92966bcef093373e4f943b0ebdc52a62fea7f6cf0a21b7f5fda7cae75582d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d73b2314c4edde41b69a08e0778911caede5c51f5ae57afd16736e4396702888"
+          "sha256": "92f6d9d1a153a9187bd4b39f32638ea3275042d05cd7db3e27b12d52a228ee8b"
         }
       ]
     },
     {
-      "id": "backend-pg",
+      "id": "foreground-browser",
       "kind": "tests",
-      "command": "Canonical managed vitest.config.ts backend PostgreSQL stage; reuse only byte-identical API/contracts/helpers/test/config inputs proven against the complete prior b30ffad3 source fingerprint",
+      "command": "node /tmp/dx-workbench-read-feedback-evidence/verify-foreground-pg.mjs (canonical configForSuite/resourceContext/resourceEnvironment/runOwnedCommand/cleanupResources; existing A/B/C case selected)",
       "status": "passed",
       "exitCode": 0,
-      "passed": 44,
+      "passed": 1,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
-      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/inspection-report-fixture.ts",
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/development-round-history-clock-postgres.test.ts",
-        "tests/integration/digital-budget-shared-postgres.test.ts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "383236297c35c3481e695b4b6360e11323a6949f57e190b17e7ea4c4ec75641f",
-      "context": "Original actual execution at the b30ffad3 source snapshot, run39ecbe48; ordinary1 worker, low-privilege dx_rework_ci/acceptance-clock DBs, full cleanup passed. Current change is web return-context only; backend source, fixture and test bytes match. This is local scoped reuse, not a new GitHub Head pass.",
-      "startedAt": "2026-11-23T06:39:36.631Z",
-      "endedAt": "2026-11-23T06:41:43.480Z",
-      "log": "/tmp/dx-workbench-original-evidence/b30ffad3-current-passing/ordinary44-command.log",
-      "logSha256": "77e1cda8b24b64e1b5a275da015264e59ae1dc839968e6fcf429a77d44828a41",
+      "skipped": 4,
+      "testedHead": "3597dd0e8a22a1ce9d14bb128f51d76ffbaa28b0",
+      "sourceFingerprint": "c2fbdf2c50566ac3d47844db17f3bde265ae7c34f3ca7565c2998f1e4fc539fb",
+      "context": "Node22.22.2/PG16.14/Chromium151; canonical vitest.config.ts, ordinary1 worker; dual safety-marked dx_rework_ci and dx_rework_acceptance_clock_test; non-superuser/non-BYPASSRLS application role; same real signed App and production build; four other existing cases not selected locally; exact manifest cleanup passed.",
+      "startedAt": "2026-11-23T07:43:38.851Z",
+      "endedAt": "2026-11-23T07:43:54.805Z",
+      "log": "/tmp/dx-workbench-read-feedback-evidence/foreground-browser.log",
+      "logSha256": "b075060659288fdc18ce82cef8747bf233a1b2f5ace24c5fea1832def9e93500",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2b9af2199d118827c61da343ad6ac552197d6942a1d6183bd0e270c072260209"
+          "sha256": "70cffe64e6362021b139e5c7857da590fa4e0a21853d954fdf607f9bcc2675f0"
         }
       ]
     },
     {
-      "id": "non-db",
-      "kind": "tests",
-      "command": "TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' DATABASE_URL='' DX_REWORK_TEST_SUITE_KIND=non-db node node_modules/vitest/vitest.mjs run tests/unit/v2-workspace-navigation.test.ts tests/unit/digital-detail-route.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-original-evidence/pr1083-final-unit.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 91,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Current changed-return-route plus existing detail/PMC permission suites under canonical vitest.config.ts, with all database variables cleared.91 actual current cases. The earlier full non-DB4523/4524 passes remain historical at their source fingerprints, not relabelled as current whole-suite passes.",
-      "startedAt": "2026-11-23T07:02:02.204Z",
-      "endedAt": "2026-11-23T07:02:05.280Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-unit.log",
-      "logSha256": "c4ada5dfe6b0fc14624b41c75dbe5a9332cb4cd72248f66ca0f436d7b394577e",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "0637d4dae9be9f28ea6ec615b1fc39530e375553b43ffe50c1303451da5508c4"
-        }
-      ]
-    },
-    {
-      "id": "lint",
+      "id": "lint-changed",
       "kind": "command",
-      "command": "npm run lint",
+      "command": "node node_modules/eslint/bin/eslint.js apps/web/src/foreground-loading.tsx tests/unit/foreground-loading.test.ts tests/integration/production-dashboard-foreground-native-browser-postgres.test.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts tests/acceptance/auxiliary-catalog-browser.mjs --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
-      "startedAt": "2026-11-23T06:57:03.264Z",
-      "endedAt": "2026-11-23T07:03:27.934Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-lint.log",
-      "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
-    },
-    {
-      "id": "api-types",
-      "kind": "command",
-      "command": "npm run typecheck --workspace @dx-rework/api",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
-      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
-      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head; API type inputs are identical to the b30 source snapshot; only web return context changed.",
-      "startedAt": "2026-11-23T06:34:49.329Z",
-      "endedAt": "2026-11-23T06:35:02.041Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr05-final-static-api.log",
-      "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7",
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/inspection-report-fixture.ts",
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/development-round-history-clock-postgres.test.ts",
-        "tests/integration/digital-budget-shared-postgres.test.ts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "383236297c35c3481e695b4b6360e11323a6949f57e190b17e7ea4c4ec75641f"
+      "testedHead": "3597dd0e8a22a1ce9d14bb128f51d76ffbaa28b0",
+      "sourceFingerprint": "c2fbdf2c50566ac3d47844db17f3bde265ae7c34f3ca7565c2998f1e4fc539fb",
+      "context": "Original completed local command retained without rerun; unchanged source fingerprint; timestamps from original redirected command log birth/last-write metadata.",
+      "startedAt": "2026-11-23T07:43:59.485Z",
+      "endedAt": "2026-11-23T07:43:59.485Z",
+      "log": "/tmp/dx-workbench-read-feedback-evidence/lint-changed.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "id": "web-types",
@@ -276,69 +127,13 @@
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
-      "startedAt": "2026-11-23T06:57:38.595Z",
-      "endedAt": "2026-11-23T07:03:55.122Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-web-types.log",
+      "testedHead": "3597dd0e8a22a1ce9d14bb128f51d76ffbaa28b0",
+      "sourceFingerprint": "c2fbdf2c50566ac3d47844db17f3bde265ae7c34f3ca7565c2998f1e4fc539fb",
+      "context": "Original completed local command retained without rerun; unchanged source fingerprint; timestamps from original redirected command log birth/last-write metadata.",
+      "startedAt": "2026-11-23T07:43:59.493Z",
+      "endedAt": "2026-11-23T07:44:18.849Z",
+      "log": "/tmp/dx-workbench-read-feedback-evidence/web-types.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
-    },
-    {
-      "id": "build",
-      "kind": "command",
-      "command": "npm run build --workspaces --if-present",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
-      "startedAt": "2026-11-23T06:58:00.963Z",
-      "endedAt": "2026-11-23T07:04:13.746Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-build.log",
-      "logSha256": "63d8224d52c0021297a89cf04a2aac18b426dc28bc0f3e2b21d57fcf230f7bff"
-    },
-    {
-      "id": "preflight",
-      "kind": "command",
-      "command": "node scripts/test-preflight.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
-      "startedAt": "2026-11-23T06:58:24.971Z",
-      "endedAt": "2026-11-23T07:03:51.270Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-preflight.log",
-      "logSha256": "f5c2f5413e2f61bf6806fbae30f108483ee653116f9a6aea0718b7f8adde4aca"
-    },
-    {
-      "id": "secret-scan",
-      "kind": "command",
-      "command": "node scripts/secret-scan.mjs --worktree",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
-      "startedAt": "2026-11-23T06:58:30.499Z",
-      "endedAt": "2026-11-23T07:03:55.898Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-secret-scan.log",
-      "logSha256": "e1dfa041688b50d44d86ff40fe8aa56557234186d6cc37fb95cd943eaae1c3ec"
-    },
-    {
-      "id": "time-inventory",
-      "kind": "command",
-      "command": "node scripts/acceptance/time-site-inventory.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b30ffad337fad0d3adc4ef60264121a25628fe18",
-      "sourceFingerprint": "af0f2c771bbd825f8ff6b3f08b14e571fcac65b2b88c8fef427a270a3d46f59a",
-      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
-      "startedAt": "2026-11-23T06:58:30.935Z",
-      "endedAt": "2026-11-23T07:03:56.402Z",
-      "log": "/tmp/dx-workbench-original-evidence/pr1083-final-time-inventory.log",
-      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
     }
   ]
 }

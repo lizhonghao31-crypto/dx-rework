@@ -19,12 +19,13 @@ afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealT
 it("skips fast foreground reads and lets only the most recent read clear its visible status",async()=>{
  await mounts();
  const quick=beginForegroundWait();await advance(249);expect(host.querySelector('[role="status"]')).toBeNull();
- quick();await advance(300);expect(host.textContent).not.toContain("请稍等");
- const old=beginForegroundWait();await advance(250);expect(host.querySelector('[role="status"]')?.textContent).toBe("请稍等");
+ quick();await advance(300);expect(host.textContent).not.toContain("读取中，请稍候");
+ const old=beginForegroundWait();await advance(250);expect(host.querySelector('[role="status"]')?.textContent).toBe("读取中，请稍候");
+ expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);expect(host.querySelector('[role="status"]')?.getAttribute("aria-live")).toBe("polite");
  let latest!:()=>void;
  await act(async()=>{latest=beginForegroundWait();});
  await advance(250);await act(async()=>old());
- expect(host.querySelector('[role="status"]')?.textContent).toBe("请稍等");
+ expect(host.querySelector('[role="status"]')?.textContent).toBe("读取中，请稍候");
  await act(async()=>latest());expect(host.querySelector('[role="status"]')).toBeNull();
 });
 
@@ -47,11 +48,11 @@ it("keeps the prior queue while changing page, ignores repeated and stale reques
  await settle(requests[0]!);expect(host.textContent).toContain("page 1");
  await act(async()=>{read.page.setPage(2);read.page.setPage(2);});
  expect(requests.map(call=>call.page)).toEqual([1,2]);expect(host.textContent).toContain("page 1");
- await advance(250);expect(host.querySelector('[role="status"]')?.textContent).toBe("请稍等");
+ await advance(250);expect(host.querySelector('[role="status"]')?.textContent).toBe("读取中，请稍候");
  await act(async()=>read.page.setPage(3));expect(requests[1]!.signal.aborted).toBe(true);
- await advance(250);await settle(requests[1]!);expect(host.textContent).toContain("page 1");expect(host.textContent).toContain("请稍等");
+ await advance(250);await settle(requests[1]!);expect(host.textContent).toContain("page 1");expect(host.textContent).toContain("读取中，请稍候");
  await settle(requests[2]!,Response.json({}, {status:503}));
- expect(host.textContent).toContain("TEST read failed");expect(host.textContent).not.toContain("请稍等");
+ expect(host.textContent).toContain("TEST read failed");expect(host.textContent).not.toContain("读取中，请稍候");
  await act(async()=>read.retry());expect(requests.map(call=>call.page)).toEqual([1,2,3,3]);
  await settle(requests[3]!);expect(host.textContent).toContain("page 3");
 });

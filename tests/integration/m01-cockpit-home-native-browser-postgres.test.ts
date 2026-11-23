@@ -314,7 +314,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const next=page.locator('.journey-orders').getByRole('button',{name:'下一页',exact:true});
    await next.click();
    await entered;
-   const feedback=page.getByText('请稍等',{exact:true});
+   const feedback=page.getByText('读取中，请稍候',{exact:true});
    await feedback.waitFor();
    expect(await rows.evaluateAll(items=>items.map(row=>row.getAttribute('data-order-id')))).toEqual(before);
    await next.evaluate((button:HTMLButtonElement)=>button.click());
