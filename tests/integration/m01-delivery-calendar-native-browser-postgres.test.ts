@@ -37,7 +37,7 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
  it('keeps a failed request distinct from empty, retries natively and rejects a late response from an older month',async()=>{
   const {context,page}=await h.open(undefined,state({view:'month'}));let release=()=>{};try{await ready(page);await page.route('**/api/digital-production/delivery-calendar/month?**',async route=>{await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_DELIVERY_TRANSPORT',message:'TEST delivery read unavailable'}})});});await page.getByRole('button',{name:'刷新数据',exact:true}).click();await page.getByRole('alert').waitFor();expect(await page.locator('.delivery-po-table').count()).toBe(0);expect(await page.locator('.delivery-kpis').innerText()).not.toContain('3,100');await page.unroute('**/api/digital-production/delivery-calendar/month?**');await page.getByRole('button',{name:'重新读取',exact:true}).click();await ready(page);expect(await page.locator('.delivery-po-table tbody tr').count()).toBe(15);
    const hold=new Promise<void>(resolve=>{release=resolve;});let entered!:()=>void;const waiting=new Promise<void>(resolve=>{entered=resolve;});await page.route('**/api/digital-production/delivery-calendar/month?**',async route=>{if(new URL(route.request().url()).searchParams.get('month')==='2026-09'){const actual=await route.fetch();entered();await hold;await route.fulfill({response:actual}).catch(()=>{});}else await route.continue();});await page.getByRole('button',{name:'上个月',exact:true}).click();await waiting;
-   const wait=page.getByText('请稍等',{exact:true});await wait.waitFor();
+   const wait=page.getByText('读取中，请稍候',{exact:true});await wait.waitFor();
    expect(await page.locator('.delivery-po-table tbody tr').count()).toBe(15);
    await page.getByRole('button',{name:'下个月',exact:true}).click();await ready(page);await wait.waitFor({state:'hidden'});release();await page.unroute('**/api/digital-production/delivery-calendar/month?**',{behavior:'wait'});expect(new URL(page.url()).searchParams.get('date')).toBe('2026-10-01');expect(await page.locator('.delivery-po-table tbody tr').count()).toBe(15);expect(h.errors).toEqual([]);
   }finally{release();await context.close();}
@@ -55,9 +55,9 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
    try{
     await page.locator('.delivery-po-table tbody tr .delivery-link').first().click();
     await history.waitFor();
-    await history.getByRole('status').filter({hasText:'请稍等'}).waitFor();
+    await history.getByRole('status').filter({hasText:'读取中，请稍候'}).waitFor();
     releaseHistory();
-    await history.getByRole('status').filter({hasText:'请稍等'}).waitFor({state:'hidden'});
+    await history.getByRole('status').filter({hasText:'读取中，请稍候'}).waitFor({state:'hidden'});
    }finally{releaseHistory();await page.unroute(historyEndpoint);}
    await history.getByText('未读到该PO的交期变更记录。',{exact:true}).waitFor();expect(await history.innerText()).toContain(due);await history.getByRole('button',{name:'关闭',exact:true}).click();await h.updateCalendarPacking!(3);await page.getByRole('button',{name:'刷新数据',exact:true}).click();await ready(page);
    const updated=page.locator('.delivery-row-info');
