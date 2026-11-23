@@ -18,6 +18,10 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
  app.get(originalBase,async(request,reply)=>{const ref=original(request);reply.header('cache-control','private, no-store');return service.originalVersion(await actor(request),resource(request),ref.quoteId,ref.version);});
 
  app.get(base,async request=>{const q=parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),resource(request),undefined,q.version);});
+ app.get(`${base}/workbench-pricing`,async request=>{
+  parse(z.object({}).strict(),request.query);
+  return service.workbenchPreview(await actor(request),resource(request));
+ });
  app.get(`${base}/participants`,async request=>service.participants(await actor(request),resource(request)));
  app.put(base,async request=>service.save(await actor(request),resource(request),parse(SaveQuotationSchema,request.body),key(request)));
  app.post(`${base}/rows/:rowId`,async request=>service.fillRow(await actor(request),resource(request),parse(z.string().uuid(),(request.params as {rowId:string}).rowId),parse(QuotationRowInputSchema,request.body),key(request)));

@@ -65,6 +65,21 @@ export const QuotationPricingInputSchema = z.object({
   value: QuotationDecimalSchema,
 }).strict();
 export type QuotationPricingInput = z.infer<typeof QuotationPricingInputSchema>;
+export const SaveQuotationPricingDraftSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  input: QuotationPricingInputSchema,
+}).strict();
+
+const quotationReviewField = z.enum(['consumption', 'unitPrice']);
+export type QuotationReviewField = z.infer<typeof quotationReviewField>;
+const reviewFieldVersion = z.number().int().positive();
+export const QuotationLineReviewCommandSchema = z.discriminatedUnion('action', [
+  z.object({action:z.literal('return'), rowId:z.string().uuid(), field:quotationReviewField, expectedRound:z.number().int().positive(),
+    expectedFieldVersion:reviewFieldVersion.nullable(), reason:z.string().trim().min(1).max(500)}).strict(),
+  z.object({action:z.literal('resubmit'), reviewId:z.string().uuid(), expectedFieldVersion:reviewFieldVersion}).strict(),
+  z.object({action:z.literal('resolve'), reviewId:z.string().uuid(), expectedFieldVersion:reviewFieldVersion}).strict(),
+]);
+export type QuotationLineReviewCommand = z.infer<typeof QuotationLineReviewCommandSchema>;
 
 /** Totals adopted quotation rows. The original budget totals keep their own freight and CM rules. */
 export function calculateQuotationUnitCost(document: BudgetDocument): string | null {
@@ -114,7 +129,7 @@ export function calculateQuotationPricing(cost: string | null, rawInput: Quotati
 
 type QuotationDraftReviewRow = {
   complete: boolean;
-  review: 'none' | 'returned' | 'resubmitted';
+  reviews: readonly ('returned' | 'resubmitted')[];
   craftApproval: 'not_applicable' | 'pending' | 'approved';
 };
 
@@ -122,8 +137,7 @@ type QuotationDraftReviewRow = {
 export function quotationDraftReviewSummary(rows: readonly QuotationDraftReviewRow[]) {
   const counts = { returned: 0, resubmitted: 0, incomplete: 0, pendingCraftApproval: 0 };
   for (const row of rows) {
-    if (row.review === 'returned') counts.returned++;
-    if (row.review === 'resubmitted') counts.resubmitted++;
+    for (const review of row.reviews) counts[review]++;
     if (!row.complete) counts.incomplete++;
     if (row.craftApproval === 'pending') counts.pendingCraftApproval++;
   }
@@ -134,6 +148,24 @@ export function quotationDraftReviewSummary(rows: readonly QuotationDraftReviewR
     : 'awaiting_customer_confirmation';
   return { status, counts } as const;
 }
+
+export const QuotationWorkbenchPreviewSchema = z.object({
+  resource: QuotationResourceSchema,
+  quoteId: z.string().uuid(),
+  version: z.number().int().positive(),
+  unitCost: z.string().regex(/^\d+(?:\.\d{1,12})?$/).nullable(),
+  status: z.enum(['awaiting_correction','awaiting_review','incomplete','awaiting_craft_approval','awaiting_customer_confirmation']),
+  counts: z.object({
+    returned:z.number().int().nonnegative(), resubmitted:z.number().int().nonnegative(),
+    incomplete:z.number().int().nonnegative(), pendingCraftApproval:z.number().int().nonnegative(),
+  }).strict(),
+  saved: z.object({input:QuotationPricingInputSchema, version:z.number().int().positive()}).strict().nullable(),
+  reviews: z.array(z.object({
+    reviewId:z.string().uuid(), rowId:z.string().uuid(), field:quotationReviewField,
+    status:z.enum(['returned','resubmitted']), reason:z.string(),
+  }).strict()).max(600),
+  confirmation: z.literal('awaiting_joint_release'),
+}).strict();
 
 export function compareQuotationBudget(document:BudgetDocument,confirmation:QuotationConfirmation,quantity:number){
   if(confirmation.taxBasis!=='excludes_tax')return {state:'incomparable' as const,reason:'客户确认含税金额与当前不含税预算不可直接比较，请核对真实报价口径',budgetComparableTotal:null,confirmedQuoteTotal:confirmation.customerConfirmedTotal};

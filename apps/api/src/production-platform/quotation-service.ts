@@ -7,7 +7,8 @@ import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {z} from 'zod';
 import {BudgetDocumentSchema,type BudgetDocument} from '@dx-rework/contracts/digital-budget';
-import {QuotationConfirmationSchema,SaveQuotationSchema,QuotationRowInputSchema,type QuotationResource,type QuotationAssignment,type QuotationConsumptionSource,type QuotationSheet} from '@dx-rework/contracts/digital-quotation';
+import {QuotationConfirmationSchema,SaveQuotationSchema,QuotationRowInputSchema,SaveQuotationPricingDraftSchema,QuotationLineReviewCommandSchema,
+ type QuotationLineReviewCommand,type QuotationResource,type QuotationAssignment,type QuotationConsumptionSource,type QuotationSheet} from '@dx-rework/contracts/digital-quotation';
 import {acceptanceBusinessContext,acceptanceIncludesNative,businessNow} from '../acceptance-clock/business-time.js';
 import {publishedTechnicalArtifact,technicalDocumentFingerprint} from './development-technical-repository.js';
 import {developmentDocumentRow} from './development-round-repository.js';
@@ -17,6 +18,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './access-policy.js';
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
+import {applyWorkbenchLineReview,persistWorkbenchPricing,readWorkbenchQuotation} from './quotation-workbench.js';
 
 type Database=Pick<Pool|PoolClient,'query'>;
 type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
@@ -59,6 +61,41 @@ export class DigitalQuotationService{
   const sourceDocument=quote?.assembly&&sourceId&&structure?await developmentDocumentRow(db,sourceId):undefined;
   return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure,confirm,workbenchPolicy};
  }
+ async workbenchPreview(actor:TrustedActorContext,resource:QuotationResource){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const context=await this.context(db,actor,resource,true);
+   if(context.designerId!==actor.actorId||!context.roles.has('sample_designer'))digitalNotFound();
+   const quote=context.quote??digitalNotFound();
+   if(quote.version===quote.confirmed_version)digitalNotFound();
+   const result=await readWorkbenchQuotation(db,quote,resource,actor.actorId);
+   await db.query('COMMIT');
+   return result;
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+
+ // Staged transaction primitives. No public writer is registered until R6 can
+ // enforce the common release boundary for confirmation and budget adoption.
+ async saveWorkbenchPricingDraft(actor:TrustedActorContext,resource:QuotationResource,raw:z.infer<typeof SaveQuotationPricingDraftSchema>,key:string){
+  const input=SaveQuotationPricingDraftSchema.parse(raw);
+  return this.command(actor,resource,'workbench-pricing-draft',key,input,async(db,context)=>{
+   if(context.designerId!==actor.actorId||!context.roles.has('sample_designer'))digitalForbidden();
+   const quote=context.quote??digitalNotFound();
+   if(quote.version!==input.expectedVersion||quote.version===quote.confirmed_version)conflict('报价依据已更新或本版已确认，请读取当前报价');
+   await persistWorkbenchPricing(db,quote,actor.actorId,input.input);
+  });
+ }
+
+ async reviewWorkbenchLine(actor:TrustedActorContext,resource:QuotationResource,raw:QuotationLineReviewCommand,key:string){
+  const input=QuotationLineReviewCommandSchema.parse(raw);
+  return this.command(actor,resource,`workbench-review:${input.action}`,key,input,async(db,context)=>{
+   const quote=context.quote??digitalNotFound();
+   if(quote.version===quote.confirmed_version)conflict('客户已确认的报价版本不能退回或改写');
+   await applyWorkbenchLineReview(db,quote,actor.actorId,context.designerId===actor.actorId&&context.roles.has('sample_designer'),input);
+  });
+ }
+
  async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number,original=false):Promise<QuotationSheet>{
   const c=await this.context(db,actor,resource,true),q=c.quote;
   const snapshot=version===undefined?null:(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[q?.quote_id,version])).rows[0]??digitalNotFound();

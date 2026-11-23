@@ -78,12 +78,12 @@ describe('Workbench pricing calculation',()=>{
 
 describe('Workbench quotation review summary',()=>{
  it('shows the blocking state in order and keeps counts for other blockers',()=>{
-  const returned={complete:true,review:'returned',craftApproval:'not_applicable'} as const;
-  const resubmitted={complete:true,review:'resubmitted',craftApproval:'not_applicable'} as const;
-  const incomplete={complete:false,review:'none',craftApproval:'not_applicable'} as const;
-  const pendingCraft={complete:true,review:'none',craftApproval:'pending'} as const;
+  const returned={complete:true,reviews:['returned'],craftApproval:'not_applicable'} as const;
+  const resubmitted={complete:true,reviews:['resubmitted'],craftApproval:'not_applicable'} as const;
+  const incomplete={complete:false,reviews:[],craftApproval:'not_applicable'} as const;
+  const pendingCraft={complete:true,reviews:[],craftApproval:'pending'} as const;
   const approvedCraft={...pendingCraft,craftApproval:'approved'} as const;
-  expect(quotationDraftReviewSummary([returned,returned,resubmitted,incomplete,pendingCraft])).toEqual({
+  expect(quotationDraftReviewSummary([{...returned,reviews:['returned','resubmitted']},returned,incomplete,pendingCraft])).toEqual({
    status:'awaiting_correction',counts:{returned:2,resubmitted:1,incomplete:1,pendingCraftApproval:1},
   });
   expect(quotationDraftReviewSummary([returned,resubmitted,incomplete,pendingCraft]).status).toBe('awaiting_correction');
