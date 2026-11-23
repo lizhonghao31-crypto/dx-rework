@@ -7,7 +7,7 @@ import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {Link} from '@astryxdesign/core/Link';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {Dialog,DialogHeader} from '@astryxdesign/core/Dialog';
-import astryxCss from '@astryxdesign/core/astryx.css?raw';
+import {designerAstryxCss as workspaceAstryxCss} from './designer-astryx.js';
 import {registerSessionInvalidator} from './auth-session.js';
 import {useLiveSearch} from "./use-live-search.js";
 import { SearchableSelect } from "./search-select.js";
@@ -32,7 +32,6 @@ import { createWebUrls } from "../url-contract.js";
 import "./digital-development-workspace.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
-const workspaceAstryxCss='@scope (.dx-designer-astryx) {\n'+astryxCss.replaceAll(':root',':scope')+'\n}';
 const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
 type SavedDevelopmentDraft={sourceId:string;designStyleNo:string;version:number;updatedAt:string;approvalState:string|null};
 type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean;total:number};

@@ -10,6 +10,9 @@ export const MergeAuxiliarySchema=DisableAuxiliarySchema.extend({targetId:z.stri
 export const AuxiliaryQuerySchema=z.object({q:z.string().trim().max(100).default(''),page:z.coerce.number().int().min(1).max(100000).default(1),includeInactive:z.enum(['true','false']).default('false').transform(x=>x==='true')}).strict();
 export const AuxiliaryItemSchema=z.object({id:z.string().uuid(),version:z.number().int().positive(),name,specification:text,supplier:text,auxiliaryKind:AuxiliaryKindSchema,active:z.boolean(),mergedInto:z.string().uuid().nullable(),changedAt:z.string()});
 export const AuxiliaryPageSchema=z.object({items:z.array(AuxiliaryItemSchema),total:z.number().int().nonnegative(),page:z.number().int().positive(),pageSize:z.number().int().positive(),canManage:z.boolean()});
+export const AuxiliaryHistoryQuerySchema=z.object({page:z.coerce.number().int().min(1).max(100000).default(1)}).strict();
+export const AuxiliaryVersionSchema=AuxiliaryItemSchema.extend({reason:z.string().nullable(),changedBy:z.string().nullable(),action:z.string()});
+export const AuxiliaryHistorySchema=z.object({items:z.array(AuxiliaryVersionSchema),total:z.number().int().nonnegative(),page:z.number().int().positive(),pageSize:z.number().int().positive()});
 export type AuxiliaryItem=z.infer<typeof AuxiliaryItemSchema>;
 export type CreateAuxiliary=z.infer<typeof CreateAuxiliarySchema>;
 export type AuxiliaryQuery=z.infer<typeof AuxiliaryQuerySchema>;
