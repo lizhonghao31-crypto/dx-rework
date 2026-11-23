@@ -1,3 +1,4 @@
+import type {DevelopmentWizardStep} from './development-creation-wizard.js';
 import {z} from 'zod';
 import {DevelopmentDocumentSchema,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import {InitialCustomerOrderDraftSchema,type InitialCustomerOrderDraft} from '@dx-rework/contracts/digital-production';
@@ -6,7 +7,7 @@ import type {PendingDevelopmentSubmission} from './development-submit-recovery.j
 /** One unfinished original creation view in this tab, scoped by a freshly read
  * actor and environment. A pure draft has no source, command, key or version. */
 export type CreationDraftIdentity={actorId:string;environment:string};
-export type CreationDraftSnapshot={intent:'development'|'certain_order';form:InitialCustomerOrderDraft;document:DevelopmentDocument;quantityInput:string;sizeQuantityInputs:string[];developmentType:'头版'|'开发板';preorder:boolean;fixedCraft:boolean;measurementIds:string[];poSizeIds:string[];sharedPoColumns:boolean;dateOverrides:number[];fileKind:DevelopmentDocument['files'][number]['kind'];patternChoice:{categoryId:string;priceVersion:number}|null;baseline:string;localFiles:Array<{id:string;name:string;type:string;size:number;kind:DevelopmentDocument['files'][number]['kind']}>};
+export type CreationDraftSnapshot={intent:'development'|'certain_order';form:InitialCustomerOrderDraft;document:DevelopmentDocument;quantityInput:string;sizeQuantityInputs:string[];developmentType:'头版'|'开发板';preorder:boolean;wizardStep?:DevelopmentWizardStep;fixedCraft:boolean;measurementIds:string[];poSizeIds:string[];sharedPoColumns:boolean;dateOverrides:number[];fileKind:DevelopmentDocument['files'][number]['kind'];patternChoice:{categoryId:string;priceVersion:number}|null;baseline:string;localFiles:Array<{id:string;name:string;type:string;size:number;kind:DevelopmentDocument['files'][number]['kind']}>};
 export type CreationDraftRecord={schemaVersion:1;viewId:string;identity:CreationDraftIdentity;open:boolean;snapshot:CreationDraftSnapshot}&(
  |{phase:'draft'}
  |{phase:'bound';sourceId:string;version:number|null}
@@ -14,7 +15,7 @@ export type CreationDraftRecord={schemaVersion:1;viewId:string;identity:Creation
 );
 const identitySchema=z.object({actorId:z.uuid(),environment:z.string().min(1).max(1000)}).strict();
 const fileKind=DevelopmentDocumentSchema.shape.files.element.shape.kind;
-const textArray=z.array(z.string()),snapshotSchema=z.object({intent:z.enum(['development','certain_order']),form:z.unknown(),document:z.unknown(),quantityInput:z.string(),sizeQuantityInputs:textArray,developmentType:z.enum(['头版','开发板']),preorder:z.boolean(),fixedCraft:z.boolean(),measurementIds:textArray,poSizeIds:textArray,sharedPoColumns:z.boolean(),dateOverrides:z.array(z.number().int().nonnegative()),fileKind,patternChoice:z.object({categoryId:z.uuid(),priceVersion:z.number().int().positive()}).strict().nullable(),baseline:z.string(),localFiles:z.array(z.object({id:z.string(),name:z.string(),type:z.string(),size:z.number().int().nonnegative(),kind:fileKind}).strict())}).strict();
+const textArray=z.array(z.string()),snapshotSchema=z.object({intent:z.enum(['development','certain_order']),form:z.unknown(),document:z.unknown(),quantityInput:z.string(),sizeQuantityInputs:textArray,developmentType:z.enum(['头版','开发板']),preorder:z.boolean(),wizardStep:z.union([z.literal(1),z.literal(2),z.literal(3)]).optional(),fixedCraft:z.boolean(),measurementIds:textArray,poSizeIds:textArray,sharedPoColumns:z.boolean(),dateOverrides:z.array(z.number().int().nonnegative()),fileKind,patternChoice:z.object({categoryId:z.uuid(),priceVersion:z.number().int().positive()}).strict().nullable(),baseline:z.string(),localFiles:z.array(z.object({id:z.string(),name:z.string(),type:z.string(),size:z.number().int().nonnegative(),kind:fileKind}).strict())}).strict();
 const originalSchema=z.object({path:z.string().max(300),method:z.enum(['POST','PUT']),key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/),body:z.string()}).strict();
 const nativeSchema=z.discriminatedUnion('operation',[
  z.object({operation:z.literal('publish'),sourceId:z.uuid(),key:originalSchema.shape.key,body:z.object({expectedVersion:z.number().int().nonnegative(),patternOrder:z.object({categoryId:z.uuid(),priceVersion:z.number().int().positive()}).strict().optional()}).strict()}).strict(),

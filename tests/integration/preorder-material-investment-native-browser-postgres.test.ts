@@ -3,7 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
-import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
 import type {ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
@@ -24,22 +24,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
  it('lets the actual merchandiser enter from My Tasks, save real procurement and keep the draft unpublished and untimed',async()=>{
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,style='TEST-PREORDER-'+randomUUID();
-  const at='2026-11-19T04:00:00.000Z',scene=await h.f.scene(at);
-  const diagnosis=await h.f.runtime.run(scene,designer,async()=>{
-   const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
-   const {sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
-   const draft=initialDevelopmentDocument(),material={...draft.materials[0]!,name:'TEST 预下单棉布',quantity:'75米',supplier:'TEST 供应商'};
-   const order=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,
-    orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]});
-   const sheet=await forms.save(designer,sourceId,{expectedVersion:0,document:{...draft,materials:[material],
-    customerOrderDraft:{withOrder:true,stage:'preorder',order}}},randomUUID());
-   const readiness=new ProductionReadinessService(h.db);
-   await readiness.record(designer,{kind:'source',id:sourceId},{kind:'design_handover',scopeRef:'whole',expectedVersion:0,state:'ready',
-    occurredAt:at,note:'TEST 真预下单有效交接',quantities:[],evidenceIds:[],sourceDocumentVersion:sheet.version,recipientId:merch.actorId},randomUUID());
-   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
-   return {sourceId,materialId:material.materialId};
-  });
-  h.setCollectionScene(scene);
+  // This browser creates through the ordinary signed route, without a selected
+  // Acceptance clock. The corresponding My Tasks read must use the same scope.
+  const at=new Date(Math.floor(Date.now()/60_000)*60_000).toISOString();
+  const localTime=new Date(Date.parse(at)+8*3_600_000).toISOString().slice(0,16);
+  const creation=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
+  let diagnosis:{sourceId:string;materialId:string};
+  try{
+   const page=creation.page;
+   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await page.getByRole('dialog',{name:'请选择创建类型'}).getByRole('button',{name:'预下单',exact:true}).click();
+   await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
+   await page.getByLabel('主布 面料名称',{exact:true}).fill('TEST 预下单棉布');
+   await page.getByLabel('主布 数量与单位',{exact:true}).fill('75米');
+   await page.getByLabel('主布 供应商',{exact:true}).fill('TEST 供应商');
+   expect(await page.getByLabel('PO 1 颜色',{exact:true}).count()).toBe(0);
+   expect(await page.getByLabel('本轮打板数量',{exact:true}).count()).toBe(0);
+   const saved=page.waitForResponse(r=>/\/sources\/[^/]+\/development$/.test(new URL(r.url()).pathname)&&r.request().method()==='PUT');
+   await page.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();
+   const response=await saved;
+   expect(response.status(),await response.text()).toBe(200);
+   const draft=await response.json();
+   expect(draft).toMatchObject({status:'draft',productionOrderId:null,publishedAt:null,document:{customerOrderDraft:{withOrder:true,stage:'preorder'}}});
+   const material=draft.document.materials.find((row:{name:string})=>row.name==='TEST 预下单棉布');
+   expect(material).toMatchObject({quantity:'75米',supplier:'TEST 供应商'});
+   diagnosis={sourceId:draft.sourceId,materialId:material.materialId};
+   const handover=page.getByRole('group',{name:/设计交资料/});
+   await handover.getByLabel('实际发生时间（北京时间）').fill(localTime);
+   const recipient=handover.getByRole('combobox',{name:'接收订单跟单',exact:true});
+   await recipient.click();
+   const recipientName=(await page.evaluate(async id=>{
+    const response=await fetch('/api/digital-production/access/candidates');
+    if(!response.ok)throw Error('Could not read handover recipient');
+    return (await response.json()).find((person:{id:string})=>person.id===id)?.displayName;
+   },merch.actorId)) as string;
+   expect(recipientName).toBeTruthy();
+   await page.getByRole('option',{name:recipientName,exact:true}).click();
+   await handover.getByLabel('本次情况 / 订正原因').fill('TEST 真预下单有效交接');
+   const receipt=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/production-readiness/materials'));
+   await handover.getByRole('button',{name:'提交备料交接',exact:true}).click();
+   const result=await receipt;
+   expect(result.status(),await result.text()).toBe(200);
+   expect(await result.json()).toMatchObject({orderId:null,sourceIsPreorderDraft:true,facts:expect.arrayContaining([expect.objectContaining({
+    kind:'design_handover',state:'ready',recipientId:merch.actorId,recordedBy:designer.actorId,sourceDocumentVersion:draft.version,
+   })])});
+   await page.getByText('已保存原业务记录',{exact:true}).waitFor();
+   expect(await orderTimeCreated(h.db,{kind:'source',id:diagnosis.sourceId})).toBeNull();
+  }finally{await creation.context.close();}
   const tab=await h.open(merch.actorId,1165,{},'/ui/my-tasks?q='+encodeURIComponent(style));
   try{
    const page=tab.page,task=page.locator('a.my-todo-row').filter({hasText:'投面辅料'});
@@ -50,7 +81,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.waitForURL(address=>address.searchParams.get('materialSource')===diagnosis.sourceId);
    const form=page.getByRole('group',{name:'投面辅料',exact:true});await form.waitFor();await acknowledged;
    await form.getByLabel('本次交接物料').selectOption(diagnosis.materialId);
-   await form.getByLabel('实际发生时间（北京时间）').fill('2026-11-19T12:00');
+   await form.getByLabel('实际发生时间（北京时间）').fill(localTime);
    await form.getByLabel('实际数量').fill('75');
    await form.getByLabel('单位',{exact:true}).fill('米');
    await form.getByLabel('本次情况 / 订正原因').fill('TEST 跟单在原面板实际投出75米');
@@ -66,10 +97,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'返回来源',exact:true}).click();
    await page.waitForURL(url=>url.pathname.endsWith('/ui/my-tasks')&&url.searchParams.get('q')===style);
    await expect.poll(()=>page.locator('a.my-todo-row').filter({hasText:'投面辅料'}).count()).toBe(0);
-   await h.f.runtime.run(scene,designer,async()=>{
-    expect(await orderTimeCreated(h.db,{kind:'source',id:diagnosis.sourceId})).toBeNull();
-    expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[diagnosis.sourceId])).rowCount).toBe(0);
-   });
+   expect(await orderTimeCreated(h.db,{kind:'source',id:diagnosis.sourceId})).toBeNull();
+   expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[diagnosis.sourceId])).rowCount).toBe(0);
   }finally{await tab.context.close();}
  });
  it('renews an instruction-backed handover from the original signed panel after linking a historical source',async()=>{

@@ -1,4 +1,5 @@
 import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
+import type {Page} from 'playwright-core';
 import {randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -20,6 +21,16 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+async function openNewWizard(page:Page,label:'纯开发'|'已确认订单'|'预下单'='纯开发'){
+ await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+ const choices=page.getByRole('dialog',{name:'请选择创建类型'});
+ await choices.getByRole('button',{name:label,exact:true}).click();
+ await choices.waitFor({state:'hidden'});
+}
+async function wizardNext(page:Page){
+ await page.getByRole('button',{name:'下一步',exact:true}).click();
+}
+
 (url?describe.sequential:describe.skip)('original designer workspace parent and pure child draft across actual browser reload',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-pure-create-reload-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true});await prepareRewashSettings(h.f);});
@@ -32,6 +43,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.getByRole('heading',{name:'开发草稿',exact:true}).count()).toBe(1);
    expect(await page.getByRole('button',{name:'新建开发订单',exact:true}).count()).toBe(1);
    expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/workspaces/designer')).toHaveLength(0);
+   const trigger=page.getByRole('button',{name:'新建开发订单',exact:true});
+   await trigger.click();
+   const types=page.getByRole('dialog',{name:'请选择创建类型'});
+   await types.waitFor();
+   expect(await types.getByRole('button',{name:/^(纯开发|已确认订单|预下单)$/}).allTextContents()).toEqual(['纯开发','已确认订单','预下单']);
+   expect(await page.getByRole('textbox',{name:'设计款号',exact:true}).count()).toBe(0);
+   await types.getByRole('button',{name:'取消',exact:true}).click();
+   await types.waitFor({state:'hidden'});
+   expect(await trigger.evaluate(element=>element===document.activeElement)).toBe(true);
    const searched=page.waitForResponse(response=>{
     const url=new URL(response.url());
     return url.pathname.endsWith('/sources/drafts')&&url.searchParams.get('search')==='TEST-无草稿'&&response.ok();
@@ -114,7 +134,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(process.env.DX_COCKPIT_CREATION_EVIDENCE??h.evidence,'creation-flow-'+name+'.png')});
   }finally{await tab.context.close();}
  }
- it.each([['development','无确定客户订单'],['certain_order','有确定客户订单'],['preorder','预下单备料']] as const)('restores %s parent intent, raw document/order input and original row identities with no command or writes',async(mode,label)=>{
+ it.each([['development','纯开发'],['certain_order','已确认订单'],['preorder','预下单']] as const)('restores %s parent intent, raw document/order input and original row identities with no command or writes',async(mode,label)=>{
   const before=Number((await h.db.query('SELECT count(*) FROM digital_production_sources')).rows[0].count),tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page;page.on('dialog',dialog=>void dialog.accept());
@@ -123,17 +143,46 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     await page.reload();
     expect(await page.evaluate(()=>typeof globalThis.crypto.randomUUID)).toBe('undefined');
    }
-   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
-   if(mode!=='development')await page.getByRole('button',{name:label,exact:true}).click();
+   await openNewWizard(page,label);
    const style=page.locator('#development-create-style'),raw='  TEST pure '+mode+' raw  ';await style.fill(raw);
-   const instructions=page.locator('#development-instructions');await instructions.waitFor({state:'attached'});const details=instructions.locator('xpath=ancestor::details[1]');if(await details.count()&&!await details.evaluate(node=>(node as HTMLDetailsElement).open))await details.locator('summary').first().click();
+   const instructions=page.locator('#development-instructions');
    const text='  TEST 未提交制作说明 '+mode+'  ';await instructions.fill(text);
-   const rowId=await page.getByRole('textbox',{name:'尺寸项目 1',exact:true}).getAttribute('id');expect(rowId).toBeTruthy();
-   if(mode!=='development')await page.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true}).fill('1.');
-   const original=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(original).toHaveLength(1);expect(original[0]).toMatchObject({schemaVersion:1,phase:'draft',snapshot:{intent:mode==='development'?'development':'certain_order',preorder:mode==='preorder'}});
+   const rowId=mode==='preorder'?null:await page.getByRole('textbox',{name:'尺寸项目 1',exact:true}).getAttribute('id');
+   const step=page.locator('.development-creation-steps [aria-current="step"]');
+   if(mode==='preorder'){
+    expect(await page.getByLabel('尺寸模板',{exact:true}).count()).toBe(0);
+    expect(await page.getByLabel('PO 1 颜色',{exact:true}).count()).toBe(0);
+    await page.getByLabel('主布 数量与单位',{exact:true}).fill('7.5米');
+   }else{
+    expect(rowId).toBeTruthy();
+    expect(await step.innerText()).toContain('版单');
+    await wizardNext(page);
+    expect(await step.innerText()).toContain('开发需求');
+    if(mode==='certain_order'){
+     await wizardNext(page);
+     expect(await step.innerText()).toContain('客户与交货');
+     await page.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true}).fill('1.');
+    }
+   }
+   const original=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));
+   const wizardStep=mode==='preorder'?1:mode==='development'?2:3;
+   expect(original).toHaveLength(1);expect(original[0]).toMatchObject({schemaVersion:1,phase:'draft',snapshot:{intent:mode==='development'?'development':'certain_order',preorder:mode==='preorder',wizardStep}});
    for(const field of ['sourceId','original','native','version','beforeVersion'])expect(original[0]).not.toHaveProperty(field);
-   await page.reload();await style.waitFor();expect(await style.inputValue()).toBe(raw);expect(await instructions.inputValue()).toBe(text);expect(await page.getByRole('textbox',{name:'尺寸项目 1',exact:true}).getAttribute('id')).toBe(rowId);expect(await page.getByRole('button',{name:label,exact:true}).getAttribute('aria-pressed')).toBe('true');
-   if(mode!=='development')expect(await page.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true}).inputValue()).toBe('1.');
+   await page.reload();
+   if(mode==='certain_order'){
+    await step.waitFor();expect(await step.innerText()).toContain('客户与交货');
+    const quantity=page.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true});
+    expect(await quantity.inputValue()).toBe('1.');
+    await page.getByRole('button',{name:'提交并确认订单',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:/填写有误|请选择客户/}).waitFor();
+    await page.getByRole('button',{name:'上一步',exact:true}).click();
+   }
+   if(mode!=='preorder'){
+    await step.waitFor();expect(await step.innerText()).toContain('开发需求');
+    await page.getByRole('button',{name:'上一步',exact:true}).click();
+    expect(await page.getByRole('textbox',{name:'尺寸项目 1',exact:true}).getAttribute('id')).toBe(rowId);
+   }else expect(await page.getByLabel('主布 数量与单位',{exact:true}).inputValue()).toBe('7.5米');
+   await style.waitFor();expect(await style.inputValue()).toBe(raw);expect(await instructions.inputValue()).toBe(text);
    // Two original debounce periods must not turn hydration, quotes or other
    // readonly option refreshes into source/save/publish/confirm commands.
    await page.waitForTimeout(2700);const current=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(current[0].viewId).toBe(original[0].viewId);expect(current[0].phase).toBe('draft');
@@ -144,7 +193,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('reuses the acknowledged source and current version when reopening a saved creation draft in the same tab and after reload',async()=>{
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create'),style='TEST-CREATION-SAVE-'+randomUUID();
   try{
-   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
+   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await openNewWizard(page);await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();
    const save=page.getByRole('button',{name:'保存开发资料草稿',exact:true}),saved=page.waitForResponse(response=>/\/sources\/[^/]+\/development$/.test(new URL(response.url()).pathname)&&response.request().method()==='PUT');
    await save.click();const reply=await saved;expect(reply.status(),await reply.text()).toBe(200);const sheet=await reply.json();
@@ -202,6 +251,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    for(const index of [0,1,0]){
     await page.getByRole('button',{name:styles[index]!,exact:true}).click();
     expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(styles[index]);
+    await wizardNext(page);await wizardNext(page);
     const po=page.getByRole('textbox',{name:/^PO \d+ 正式款号 \/ PO$/});
     expect(await po.count()).toBe(index===0?3:1);
     for(let line=0;line<await po.count();line++)expect(await po.nth(line).inputValue()).toBe(`TEST-${index}-PO${line+1}`);
@@ -489,7 +539,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const actor=h.f.root,style='TEST-PAUSED-RECEIPT-'+randomUUID(),tab=await h.open(actor.actorId,390,{},'/ui/digital-production?workspace=designer&section=create');
   const {page,session}=tab;
   try{
-   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await openNewWizard(page);
    await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    let originalKey='',sourceId='';
    await page.route('**/api/digital-production/sources/drafts',async route=>{
@@ -533,7 +583,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('retains an acknowledged-server but browser-unknown source creation across real reload without issuing a duplicate source command',async()=>{
   const tab=await h.open(h.f.root.actorId,390,{},'/ui/digital-production?workspace=designer&section=create'),style='TEST-CREATION-UNKNOWN-'+randomUUID();let attempts=0;
   try{
-   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
+   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await openNewWizard(page);await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    await page.route('**/api/digital-production/sources/drafts',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}attempts++;const response=await route.fetch();expect(response.status(),await response.text()).toBe(200);await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_CREATE_ACK_LOST',message:'TEST 已创建但原回执丢失'}})});});
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();await page.getByRole('alert').filter({hasText:'未收到可确认的提交结果'}).waitFor();
    const prior=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(prior[0]).toMatchObject({phase:'pending',sourceId:null,original:{path:'sources/drafts',method:'POST'}});expect(prior[0].original.key).toBeTruthy();
@@ -557,15 +607,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   if(operation==='confirm')sheet=await forms.publish(actor,source.sourceId,sheet.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version});
   const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
-   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
+   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await openNewWizard(page);await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    // Isolated restoration fixture: the source/document are prepared by their
    // real services, and this is the same bound state following an acknowledged
    // original draft save. Publication and receipt lookup below are unmocked.
    await page.evaluate(({sheet,categoryId,priceVersion,order})=>{const key=Object.keys(sessionStorage).find(key=>key.startsWith('dx:development-creation:'))!,draft=JSON.parse(sessionStorage.getItem(key)!);draft.phase='bound';draft.sourceId=sheet.sourceId;draft.version=sheet.version;draft.snapshot.document=sheet.document;draft.snapshot.quantityInput='1';draft.snapshot.patternChoice={categoryId,priceVersion};if(order){draft.snapshot.intent='certain_order';draft.snapshot.form=order;}sessionStorage.setItem(key,JSON.stringify(draft));},{sheet,categoryId:category.price_id,priceVersion:price.version,order});
-   await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();if(operation==='publish')await page.getByText(/^执行单价：/).waitFor();
+   await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();await wizardNext(page);
+   if(operation==='publish')await page.getByText(/^执行单价：/).waitFor();else await wizardNext(page);
    const path=`/api/digital-production/sources/${source.sourceId}/${operation==='publish'?'development/publish':'confirm'}`,attempts:Array<{key:string|undefined;body:string|null}>=[];
    await page.route('**'+path,async route=>{attempts.push({key:route.request().headers()['idempotency-key'],body:route.request().postData()});const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_NATIVE_PUBLISH_ACK_LOST',message:'TEST 原发布已提交但回执丢失'}})});});
-   await page.getByRole('button',{name:operation==='publish'?'发布开发单':'确认客户订单',exact:true}).click();await page.getByRole('region',{name:'原提交结果待核对',exact:true}).waitFor();expect(attempts).toHaveLength(1);
+   await page.getByRole('button',{name:operation==='publish'?'提交开发单':'提交并确认订单',exact:true}).click();await page.getByRole('region',{name:'原提交结果待核对',exact:true}).waitFor();expect(attempts).toHaveLength(1);
    const pending=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(pending[0]).toMatchObject({phase:'pending',sourceId:source.sourceId,native:{operation,sourceId:source.sourceId,key:attempts[0]!.key}});
    await page.reload();await page.getByRole('heading',{name:'原创建提交结果待核对',exact:true}).waitFor();await page.waitForTimeout(2700);expect(attempts).toHaveLength(1);
    await page.getByRole('button',{name:'只读核对原提交结果',exact:true}).click();await page.locator('.dx-doc-toolbar .dx-doc-status').filter({hasText:/^已发布 ·/}).waitFor();
@@ -577,7 +628,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('preserves the minimal successful source acknowledgement when the following sheet read fails and resumes that same source on explicit save after reload',async()=>{
   const fault:SettingsBrowserFault={},tab=await h.open(h.f.root.actorId,1165,fault,'/ui/digital-production?workspace=designer&section=create'),style='TEST-CREATION-READ-FAIL-'+randomUUID();let sourceId='',creates=0;
   try{
-   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'新建开发订单',exact:true}).click();await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
+   const page=tab.page;page.on('dialog',dialog=>void dialog.accept());await openNewWizard(page);await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    await page.route('**/api/digital-production/sources/drafts',async route=>{if(route.request().method()!=='POST'){await route.continue();return;}creates++;const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);sourceId=(await result.json()).sourceId;fault.readPath=`/api/digital-production/sources/${sourceId}/development`;fault.failRead=true;await route.fulfill({response:result});});
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();await page.getByRole('alert').filter({hasText:'TEST 设置读取暂时失败'}).waitFor();
    const stored=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('dx:development-creation:')).map(([,value])=>JSON.parse(value)));expect(stored[0]).toMatchObject({phase:'bound',sourceId,version:null});expect(stored[0]).not.toHaveProperty('original');

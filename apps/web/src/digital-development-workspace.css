@@ -574,3 +574,26 @@
 .designer-current-actions small{display:block}
 .designer-handling-filter{display:inline-flex;align-items:center;gap:var(--spacing-2,.5rem);margin-block:var(--spacing-2,.5rem)}
 @media(max-width:480px){.designer-order-summary{grid-template-columns:minmax(0,1fr)}}
+
+.development-type-choices {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+.development-type-choices p {
+  margin: 4px 0 0;
+}
+.development-creation-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+}
+.development-creation-steps [aria-current="step"] {
+  color: var(--dx-v2-color-primary);
+  font-weight: 600;
+}
+.development-create-wizard [hidden] {
+  display: none;
+}

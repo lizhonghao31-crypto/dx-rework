@@ -229,6 +229,7 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
   try{
    const page=tab.page;
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await page.getByRole('dialog',{name:'请选择创建类型'}).getByRole('button',{name:'纯开发',exact:true}).click();
    await page.getByLabel('设计款号',{exact:true}).fill(style);
    await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).check();
    await page.getByLabel('工艺特殊工艺',{exact:true}).selectOption(craft.id);
