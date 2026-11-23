@@ -10,10 +10,11 @@ import { readTodoQuery, todoQueryPath } from "./todo-query-state.js";
 import { createWebUrls } from "../url-contract.js";
 import {documentCategories,documentChapterIds,documentVersionKeys,isCurrentDocumentVersion,readDocumentKind,readDocumentVersion,taskTabLabels} from './digital-detail-context.js';
 import {factoryTaskTarget} from './factory-task-target.js';
+import {readTechnicalOriginalSearch,technicalOriginalKeys} from './technical-original-route.js';
 
 const domains = ["timeRequest", "timeOrder", "timeSource", "closure", "factory", "bulk", "materialSource", "materialOrder", "instruction", "budget", "quotationSource", "quotationOrder", "arrangement", "development", "task", "order", "shortLead"] as const;
 type Domain = typeof domains[number];
-const versions: Partial<Record<Domain, string>> = { instruction: "instructionVersion", budget: "budgetVersion", development: "round", arrangement: "round",quotationSource:'quoteVersion',quotationOrder:'quoteVersion' };
+const versions: Partial<Record<Domain, string>> = { timeRequest:'requestVersion',instruction: "instructionVersion", budget: "budgetVersion", development: "round", arrangement: "round",quotationSource:'quoteVersion',quotationOrder:'quoteVersion' };
 export type DigitalDetailRoute = { kind: "landing" } | { kind: "invalid"; message: string } | { kind: Domain; id: string; version?: number; documentVersion?:number;original?:boolean;quoteId?:string };
 
 /** Preserve compound-link priority; malformed history never opens current editable data. */
@@ -83,12 +84,14 @@ export function digitalDetailReturnUrl(value: string | null, base: string,depth=
   const query=url.searchParams,present=domains.filter(kind=>query.has(kind)),active=digitalDetailRoute(url.search);
   if(active.kind==='landing'||active.kind==='invalid'||present.some(kind=>!DigitalIdSchema.safeParse(query.get(kind)).success))return null;
   const kind=active.kind,hasTask=present.includes('task');
-  const identity=`${kind}:${active.id}:${active.version??(kind==='task'?query.get('taskView')??'handle':'current')}${active.documentVersion===undefined?'':':document:'+active.documentVersion}`;
+  const originalTechnical=kind==='development'?readTechnicalOriginalSearch(url.search):undefined;
+  if(originalTechnical===null||originalTechnical&&(present.length!==1||active.documentVersion!==undefined))return null;
+  const identity=`${kind}:${active.id}:${active.version??(kind==='task'?query.get('taskView')??'handle':'current')}${active.documentVersion===undefined?'':':document:'+active.documentVersion}${originalTechnical?':technical:'+originalTechnical.id+':'+originalTechnical.version:''}`;
   if(visited.includes(identity))return null;
   const presentVersionKeys=present.flatMap(domain=>versions[domain]?[versions[domain]!]:[]);
   if(presentVersionKeys.some(key=>query.has(key)&&(!/^[1-9]\d*$/.test(query.get(key)!)||!Number.isSafeInteger(Number(query.get(key))))))return null;
   const documentContext=hasTask||present.some(domain=>['development','budget','instruction'].includes(domain))&&readDocumentKind(url.search)!==undefined;
-  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...(documentContext?Object.values(documentVersionKeys):[]),...(kind==='development'?['developmentDocumentVersion']:[]),...(['budget','instruction'].includes(kind)?['originalDocument']:[]),...(['quotationSource','quotationOrder'].includes(kind)?['quoteId']:[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction','washingWindow'].includes(key)))return null;
+  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...(documentContext?Object.values(documentVersionKeys):[]),...(kind==='development'?['developmentDocumentVersion']:[]),...(originalTechnical?technicalOriginalKeys:[]),...(['budget','instruction'].includes(kind)?['originalDocument']:[]),...(['quotationSource','quotationOrder'].includes(kind)?['quoteId']:[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction','washingWindow'].includes(key)))return null;
   if(documentContext&&Object.entries(documentVersionKeys).some(([document,key])=>query.has(key)&&readDocumentVersion(document as keyof typeof documentVersionKeys,url.search)===undefined&&!isCurrentDocumentVersion(document as keyof typeof documentVersionKeys,url.search)))return null;
   if(query.has('documentKind')&&!readDocumentKind(url.search))return null;
   if (query.has("taskView") && (!hasTask || !["read", "handle", "correct"].includes(query.get("taskView")!))) return null;

@@ -400,11 +400,11 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
       const params = parse(FinanceNodeParamsSchema, request.params);
       return dependencies.businessDetailService!.history(await authenticatedActor(request), params.reworkOrderId, params.node, request.query.entryId);
     });
-    app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/business-detail", async (request) =>
-      dependencies.businessDetailService!.get(
-        await authenticatedActor(request),
-        parse(ReworkOrderParamsSchema, request.params).reworkOrderId,
-      ));
+    app.get<{ Params: { reworkOrderId: string }; Querystring:{originalNodes?:string} }>("/rework-orders/:reworkOrderId/business-detail", async (request) => {
+      const actor=await authenticatedActor(request),{reworkOrderId}=parse(ReworkOrderParamsSchema, request.params);
+      const service=dependencies.businessDetailService!;
+      return request.query.originalNodes==='true'?service.get(actor,reworkOrderId,true):service.get(actor,reworkOrderId);
+    });
     app.post<{
       Params: { reworkOrderId: string };
       Body: unknown;

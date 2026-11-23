@@ -17,7 +17,11 @@ export function registerBulkPreparationRoutes(app:FastifyInstance,deps:DigitalId
   const {view,...filter}=parse(BulkWorkroomFilterSchema.extend({view:z.literal('cards').optional()}),r.query);
   return view==='cards'?service.workroomCards(user,filter):service.workroom(user,filter);
  });
- app.get(`${base}/history`,async r=>service.documentHistory(await actor(r),id(r),parse(z.object({beforeId:z.string().uuid().optional()}).strict(),r.query).beforeId));
+ app.get(`${base}/history`,async r=>{
+  const query=parse(z.union([z.object({eventId:z.string().uuid()}).strict(),z.object({beforeId:z.string().uuid().optional()}).strict()]),r.query);
+  const user=await actor(r),orderId=id(r);
+  return 'eventId'in query?service.documentHistory(user,orderId,undefined,query.eventId):service.documentHistory(user,orderId,query.beforeId);
+ });
  app.get(base,async r=>service.read(await actor(r),id(r)));
  app.put(`${base}/dispatch`,async r=>service.dispatch(await actor(r),id(r),parse(BulkDispatchSchema,r.body),key(r)));
  app.post(`${base}/fabric-report`,async r=>service.reportFabric(await actor(r),id(r),parse(BulkFabricReportSchema,r.body),key(r)));

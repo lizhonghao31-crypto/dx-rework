@@ -41,17 +41,17 @@ export class AuxiliaryCatalogService{
   if(!['create','rename','disable','merge'].includes(action)||!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效原操作标识',400);
   const db=await this.database.connect();try{await this.authorize(db,actor,false);const found=(await db.query("SELECT response FROM idempotency_records WHERE scope=$1 AND actor_key=$2 AND idempotency_key=$3 AND status='completed'",[`auxiliary-catalog:${action}`,actor.actorId,key])).rows[0];return{receipt:found?.response??null};}finally{db.release();}
  }
- async history(actor:TrustedActorContext,id:string,page:number){
-  const query=AuxiliaryHistoryQuerySchema.parse({page});
+ async history(actor:TrustedActorContext,id:string,page:number,version?:number){
+  const query=AuxiliaryHistoryQuerySchema.parse({page,version});
   const db=await this.database.connect();
   try{
    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
    await this.authorize(db,actor,false);
    if(!(await db.query('SELECT 1 FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[id])).rowCount)fail('该辅料不存在',404);
-   const total=Number((await db.query('SELECT count(*) n FROM auxiliary_catalog_versions WHERE auxiliary_id=$1',[id])).rows[0].n);
+   const total=Number((await db.query('SELECT count(*) n FROM auxiliary_catalog_versions WHERE auxiliary_id=$1 AND ($2::int IS NULL OR version=$2)',[id,query.version??null])).rows[0].n);
    const rows=(await db.query<Row&{reason:string|null;changed_by_name:string|null;action:string}>(`SELECT v.*,u.display_name AS changed_by_name,e.action FROM auxiliary_catalog_versions v
     JOIN app_users u ON u.id=v.changed_by JOIN operation_events e ON e.event_id=v.operation_event_id
-    WHERE v.auxiliary_id=$1 ORDER BY v.version DESC LIMIT 15 OFFSET $2`,[id,(query.page-1)*15])).rows;
+    WHERE v.auxiliary_id=$1 AND ($2::int IS NULL OR v.version=$2) ORDER BY v.version DESC LIMIT 15 OFFSET $3`,[id,query.version??null,(query.page-1)*15])).rows;
    await db.query('COMMIT');
    return {items:rows.map(row=>({...item(row),reason:row.reason,changedBy:row.changed_by_name,action:row.action})),total,page:query.page,pageSize:15};
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}

@@ -100,6 +100,9 @@ const url=process.env.TEST_DATABASE_URL;
    expect(second.items[1]).toMatchObject({...original,reason:'业务页直接新增共享辅料',changedBy:'TEST sample_designer',action:'auxiliary_catalog.create'});
   }
   expect((await list(original.name)).items).toEqual([current]);
+  expect(await service.history(actor(),original.id,1,original.version)).toMatchObject({total:1,items:[{id:original.id,version:original.version,name:original.name}]});
+  expect(await service.history(actor(),original.id,1,current.version+1)).toMatchObject({total:0,items:[]});
+  await expect(service.history(actor('development_clerk'),original.id,1,original.version)).rejects.toMatchObject({statusCode:403});
   for(const role of ['development_clerk','pattern_room_worker'])await expect(service.history(actor(role),original.id,1)).rejects.toMatchObject({statusCode:403});
   await expect(service.history(actor(),randomUUID(),1)).rejects.toMatchObject({statusCode:404});
   await expect(service.history(actor(),original.id,0)).rejects.toThrow();

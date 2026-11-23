@@ -266,14 +266,21 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     document:DevelopmentDocumentSchema.parse({...edited.document,sizes:['M'],sampleSize:'M',sizeQuantities:[1],
      measurements:[{name:'胸围',values:['50']}],files:[{attachmentId:await h.f.image(designer),kind:'款图'}]})},randomUUID());
    await forms.publish(designer,source.sourceId,publication.version,randomUUID());
-   await d.page.goto(h.base+'/ui/digital-production?workspace=designer&section=workspace&area=customer&development='+source.sourceId);
+   const workbenchPath='/ui/digital-production?workspace=designer&section=workspace&area=customer&development='+source.sourceId;
+   await d.page.goto(h.base+workbenchPath);
    const customerArea=d.page.getByRole('region',{name:'客户与报价'});
-   await customerArea.getByText('客户报价协作',{exact:true}).click();
+   await customerArea.getByRole('heading',{name:'客户报价表',exact:true}).waitFor();
+   await customerArea.locator('.quotation-editor').getByText('客户当前确认版：尚未确认',{exact:true}).waitFor();
+   expect(await customerArea.getByLabel('TEST棉布用量负责人',{exact:true}).count()).toBe(0);
+   expect(await customerArea.getByLabel('IE加工单价价格负责人',{exact:true}).count()).toBe(0);
+   await d.page.goto(h.base+path);
    await d.page.getByRole('heading',{name:'客户报价表',exact:true}).waitFor();
    await d.page.getByLabel('TEST棉布用量负责人').selectOption(worker.actorId);
    await d.page.getByLabel('IE加工单价价格负责人').selectOption('ie_reviewer:'+ie.actorId);
    await d.page.getByRole('button',{name:'保存报价',exact:true}).click();
    await expect.poll(async()=>(await quotes.read(designer,resource)).assignments.some(a=>a.priceAssigneeId===ie.actorId)).toBe(true);
+   await d.page.goto(h.base+workbenchPath);
+   await customerArea.locator('.quotation-editor').getByText('客户当前确认版：尚未确认',{exact:true}).waitFor();
    expect(await d.page.getByRole('button',{name:'添加主料',exact:true}).count()).toBe(0);
    expect(await d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).isDisabled()).toBe(true);
    expect(await d.page.locator('.quotation-editor').innerText()).not.toContain('[object Object]');

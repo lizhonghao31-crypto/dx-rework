@@ -3,16 +3,20 @@ import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {CloseMaterialInvestmentReminderSchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,PREPARATION_RULE_VERSION,type PreparationMaterialFact,type PreparationMaterialKind,type PreparationMaterialRecord,type PreparationResource,type ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
+import type {ConfirmDevelopmentSampleHandover,ConfirmDevelopmentSampleHandoverResult,DevelopmentSampleHandover,DevelopmentSampleHandoverReceipt} from '@dx-rework/contracts/digital-development-workspace';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {isRootActor} from '../access/business-authority.js';
 import {businessNow,acceptanceBusinessContext,observedBusinessTime} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
+import {DEVELOPMENT_HANDOVER_ENTITY,designElectronicBases,readDesignElectronicHandover,shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {preparationContext,preparationAvailable,preparationAdoption,preparationHash,preparationIso,preparationMaterialHistory,currentPreparationMaterials,preparationResponsibility,appendPreparationMaterial,directInvestmentInstruction,type PreparationDB} from './preparation-material-repository.js';
 import {materialInvestmentReminder} from './material-investment-reminder.js';
 import {productionReadiness,preparationWindow,refreshPreparationWindows} from './production-readiness-repository.js';
 const conflict=(message:string):never=>{throw new ApplicationError('PREPARATION_CONFLICT',message,409);};
+const SAMPLE_HANDOVER_EVENT='design_sample_handed_over';
+type SampleDeliveryEvent={event_id:string;actor_id:string;actor_name:string|null;payload:{round:number;documentVersion:number;recipientId:string;recipientName:string|null;occurredAt:string}};
 type PreorderRecipient={actorId:string;handover:PreparationMaterialFact;evidence:ReadonlySet<string>};
 function preorderRecipientRows(rows:PreparationMaterialFact[],scope:PreorderRecipient,history=false){
  return rows.flatMap(row=>{
@@ -71,6 +75,85 @@ export class ProductionReadinessService{
  async authorize(actor:TrustedActorContext,resource:PreparationResource){await this.access(this.database,actor,resource);}
  async readResponsibility(actor:TrustedActorContext,resource:PreparationResource,db:PreparationDB){
   return (await this.access(db,actor,resource)).responsibility;
+ }
+ private async sampleHandoverActive(db:PreparationDB,sourceId:string,orderId:string|null){
+  const inactive=await db.query(`SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1)
+   OR (resource_kind='source' AND resource_id=$2)) AND state<>'active'`,[orderId,sourceId]);
+  return !inactive.rowCount&&(!orderId||!(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[orderId])).rowCount);
+ }
+ private async accessibleDesignOrder(actor:TrustedActorContext,access:Awaited<ReturnType<ProductionReadinessService['access']>>){
+  const {order,orderId}=access.context;
+  return order&&orderId&&await access.policy.allowed(actor,'order',orderId,'technical')
+   ?{id:orderId,version:Number(order.version),customer:String(order.customer_code)}:null;
+ }
+ private async sampleHandoverView(db:PreparationDB,actor:TrustedActorContext,sourceId:string,access:Awaited<ReturnType<ProductionReadinessService['access']>>):Promise<DevelopmentSampleHandover>{
+  if(!access.designer&&!access.leader&&!access.merch)digitalForbidden();
+  const document=await developmentDocumentRow(db,sourceId);
+  if(!document||document.status!=='published')return digitalForbidden();
+  const round=Number(document.round_number),documentVersion=Number(document.version);
+  const original=access.facts.find(fact=>fact.kind==='design_handover'&&fact.scopeRef==='whole');
+  const order=await this.accessibleDesignOrder(actor,access);
+  const recipientId:string|null=order?access.context.order.primary_merchandiser_id:
+   !access.context.orderId&&original?.state==='ready'&&original.valid?original.recipientId:null;
+  const recipient=recipientId&&await access.policy.activeRole(recipientId,'order_merchandiser')
+   ?{id:recipientId,name:(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[recipientId])).rows[0]?.display_name??null}:null;
+  const events=(await db.query<SampleDeliveryEvent>(`SELECT e.id AS event_id,e.actor_id,u.display_name AS actor_name,e.after_state AS payload
+   FROM audit_events e LEFT JOIN app_users u ON u.id=e.actor_id
+   WHERE e.entity_type=$1 AND e.entity_id=$2 AND e.action=$3 AND e.after_state->>'round'=$4
+   ORDER BY e.created_at DESC,e.id DESC`,[DEVELOPMENT_HANDOVER_ENTITY,sourceId,SAMPLE_HANDOVER_EVENT,String(round)])).rows;
+  const history=events.map(event=>({eventId:event.event_id,...event.payload,confirmedBy:event.actor_id,
+   confirmedByName:event.actor_name}));
+  const current=history.find(record=>record.recipientId===recipient?.id)??null;
+  const canConfirm=access.designer&&recipient!==null&&current===null&&await this.sampleHandoverActive(db,sourceId,access.context.orderId);
+  const bases=await designElectronicBases(db,sourceId,{version:documentVersion,document:document.document},order);
+  const orderState=order?'available':access.context.orderId?'unavailable':'not_applicable';
+  const electronic=await readDesignElectronicHandover(db,{sourceId,round,recipientId:recipient?.id??null},bases,original,orderState);
+  return {sourceId,round,documentVersion,recipient,electronic,canConfirm,current,history};
+ }
+ async sampleHandover(actor:TrustedActorContext,sourceId:string){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const view=await this.sampleHandoverView(db,actor,sourceId,await this.access(db,actor,{kind:'source',id:sourceId}));
+   await db.query('COMMIT');return view;
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+ async confirmSampleHandover(actor:TrustedActorContext,sourceId:string,input:ConfirmDevelopmentSampleHandover,key:string):Promise<ConfirmDevelopmentSampleHandoverResult>{
+  if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN');
+   await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+   const resource={kind:'source' as const,id:sourceId};
+   const access=await this.access(db,actor,resource);
+   if(!access.designer||!await access.policy.lockActiveRole(actor.actorId,'sample_designer'))digitalForbidden();
+   if(access.context.orderId)await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[access.context.orderId]);
+   await db.query('SELECT source_id FROM digital_production_sources WHERE source_id=$1 FOR UPDATE',[sourceId]);
+   const view=await this.sampleHandoverView(db,actor,sourceId,await this.access(db,actor,resource));
+   const command=`preparation:source:${sourceId}:sample_handover`,hash=preparationHash(input);
+   const old=(await db.query<{payload_hash:string;response:DevelopmentSampleHandoverReceipt}>(
+    'SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
+   if(old&&old.payload_hash!==hash)conflict('操作标识已用于不同内容');
+   if(old){await db.query('COMMIT');return {handover:view,receipt:old.response};}
+   if(input.round!==view.round||input.documentVersion!==view.documentVersion||input.recipientId!==view.recipient?.id
+    ||!await access.policy.lockActiveRole(input.recipientId,'order_merchandiser'))conflict('本轮资料或接收人已更新，请刷新核对');
+   if(!await this.sampleHandoverActive(db,sourceId,access.context.orderId))
+    conflict('本单已停止办理，原样衣交接保留');
+   const receipt=view.current??{
+    ...input,eventId:randomUUID(),recipientName:view.recipient!.name,confirmedBy:actor.actorId,
+    confirmedByName:(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[actor.actorId])).rows[0]?.display_name??null,
+    occurredAt:businessNow().toISOString(),
+   };
+   if(!view.current){
+    const {round,documentVersion,recipientId,recipientName,occurredAt}=receipt;
+    await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
+     VALUES($1,$2,$3,$4,$5,$6,$7)`,[receipt.eventId,actor.requestId,actor.actorId,SAMPLE_HANDOVER_EVENT,DEVELOPMENT_HANDOVER_ENTITY,sourceId,
+     JSON.stringify({round,documentVersion,recipientId,recipientName,occurredAt})]);
+   }
+   await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(receipt)]);
+   const handover=view.current?view:{...view,current:receipt,canConfirm:false,history:[receipt,...view.history]};
+   await db.query('COMMIT');return {handover,receipt};
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  async read(actor:TrustedActorContext,resource:PreparationResource,db:PreparationDB=this.database):Promise<ProductionReadinessState>{
   const a=await this.access(db,actor,resource),orderId=a.context.orderId;
@@ -212,6 +295,8 @@ export class ProductionReadinessService{
    }
    await this.bindFiles(db,actor,resource,input.evidenceIds);
    await appendPreparationMaterial(db,a.context,actor.actorId,input);
+   if(resource.kind==='source'&&a.designer&&input.kind==='design_handover'&&input.scopeRef==='whole'&&input.state==='ready')
+    await shareApprovedDesignVersions(db,actor,resource.id);
   });
  }
  async closeMaterialInvestmentReminder(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string){

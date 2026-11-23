@@ -1,184 +1,447 @@
 {
   "version": 1,
-  "base": "8f79b1b8a17a9a86e939d15b96464186574eca88",
+  "base": "185e4d365894c1b679ada9cff2900d79fd62783f",
   "risk": "full",
-  "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
+  "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
   "rules": [
     {
-      "rule": "Use pinned Astryx actions and input fields in guided creation and preserve the three existing entry contracts.",
-      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
+      "rule": "Keep all six designer areas and the original designer scope for each selected order and round.",
+      "source": "Approved designer workbench v10.1 §13 R2, §17.1 and Appendix E DOC01 and DOC06.",
       "writes": [
-        "apps/web/src/development-entry-controls.tsx",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/digital-development-workspace.css",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/acceptance/m01-short-lead-native-browser.ts"
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "apps/web/src/development-workspace-return.tsx",
+        "apps/api/src/production-platform/notification-service.ts",
+        "packages/contracts/src/digital-development-workspace.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/workbench-development-sheet-fields.tsx",
-        "apps/web/src/use-development-creation-draft.ts",
-        "apps/api/src/production-platform/development-service.ts#publish"
+        "apps/api/src/production-platform/development-workspace-query.ts",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/web/src/workbench-development-sheet-fields.tsx"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/m01-short-lead-native-browser-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/digital-development-workspace.test.ts"
       ],
-      "initialization": "The same loaded form and current source provide customer, PO and wizard state. Original non-guided single-document readers keep their existing behavior.",
-      "dateAndPermission": "Business dates, roles, state guards and per-PO quantities retain their original owners. Native picker bounds retain the original min/max hints while the existing noValidate form preserves typed dates for the server and short-lead approval.",
-      "expectation": "Signed browsers verify absent and present picker minimum, unset date retained through calendar loading, exact typed earlier commitment submitted to original approval without an order, 390 px at 200%, and original PO, dates, reload and keyboard focus.",
+      "initialization": "The current order and round reuse the existing workspace identity, record directory and original designer editing. Old task routes still use their native panel.",
+      "dateAndPermission": "Only the assigned designer and applicable task kind yield a designer action. Another role stays a waiting fact under the original display rules.",
+      "expectation": "Signed users see the six areas, current-versus-historical behavior, original case permissions, editable original round and exact return without access expanding to unrelated people. Native quotation still saves and assigns on the existing authorized standalone page; the designer workbench renders its direct customer quote without dispatch selectors.",
       "checks": [
-        "r1-controls-browser",
-        "r1-controls-types",
-        "r1-controls-lint",
-        "r1-controls-preflight"
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight"
       ]
     },
     {
-      "rule": "Use the same themed search and buttons for both restored browser drafts and saved server drafts.",
-      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
+      "rule": "Record the four actual handover categories with the correct version and recipient.",
+      "source": "Approved designer workbench v10.1 §4.5A, §13 R2 and Appendix E DOC09, DOC12.",
       "writes": [
-        "apps/web/src/digital-designer-workspace.tsx"
+        "apps/api/src/production-platform/development-electronic-handover.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/web/src/development-sample-handover.tsx",
+        "apps/web/src/production-readiness-panel.tsx",
+        "apps/web/src/digital-quotation-panel.tsx"
       ],
       "reads": [
-        "apps/web/src/development-creation-draft.ts",
-        "apps/web/src/auth-session.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "packages/contracts/src/digital-development-workspace.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
+      ],
+      "initialization": "Reuse the original development source, readiness record, publication/confirmation facts and quote or quantity version. Missing receipts retain their actual incomplete state.",
+      "dateAndPermission": "The original command and holder decide eligible recipients and permissions. Existing tasks, original clock and existing record metadata stay attached to the scope and version from capture.",
+      "expectation": "Exercise original material and sample receipts, a recipient change, exact quantities and confirmed quote handover, replay, access limits, retained originals and unchanged original clock state.",
+      "checks": [
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight"
+      ]
+    },
+    {
+      "rule": "Read only exact authorized case and version IDs through the existing original forms and return to the same selection.",
+      "source": "Approved designer workbench v10.1 Appendix E §E.1 and DOC01, DOC07, DOC09–12.",
+      "writes": [
+        "apps/web/src/astryx-page-controls.tsx",
+        "apps/web/src/cockpit-document-data.ts",
+        "apps/web/src/cockpit-documents-model.ts",
+        "apps/web/src/designer-original-shell.tsx",
+        "apps/web/src/designer-related-originals.tsx",
+        "apps/web/src/development-original-versions.tsx",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/original-document-directory.tsx",
+        "tests/unit/cockpit-document-snapshot.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/production-original-reader.tsx",
+        "apps/web/src/development-workspace-return.tsx",
+        "apps/api/src/pattern-room/order-reader.ts",
+        "apps/api/src/production-platform/access-policy.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/unit/digital-detail-route.test.ts"
+      ],
+      "initialization": "Use the prior saved order or source ID, selected development round, published document version and the original authorized endpoints. A directory with missing source evidence does not infer a document.",
+      "dateAndPermission": "Object and destination validation precede read under the existing actor and return scope. History remains read-only. Invalid page input never issues a request.",
+      "expectation": "Signed browser opens earlier saved fields and attachments, preserves original round and scroll/selection, validates strict paging, reads 21 explicit miscellaneous records across two pages, and keeps the exact PLT and sizes in the same authorized snapshot without duplicate requests across categories. Checked responses must pass source/version validation before reuse and can be retried after transport or response errors.",
+      "checks": [
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight"
+      ]
+    },
+    {
+      "rule": "Preserve the exact adopted technical artifact, its original content, and the original feedback.",
+      "source": "Approved designer workbench v10.1 Appendix E DOC02–06 and DOC14.",
+      "writes": [
+        "apps/web/src/cockpit-documents-technical.ts",
+        "apps/web/src/development-technical-original.tsx",
+        "apps/web/src/development-technical-workspace.tsx",
+        "apps/web/src/technical-original-route.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/development-execution-routes.ts",
+        "apps/web/src/original-document-directory.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts"
+      ],
+      "initialization": "Read the existing artifact and template reference, saved task, and comment/decision ID from the original linked round. If the originally adopted version is absent, report it without inventing history.",
+      "dateAndPermission": "Technical, task and original attachment scopes remain distinct. A real saved original and its event or occurrence fields carry their own meanings.",
+      "expectation": "Exercise the saved PLT, original PDF, original material quantity, technically adopted prior round after a new revision, and exact comment and final follow-up paths without selecting the latest surrogate.",
+      "checks": [
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight"
+      ]
+    },
+    {
+      "rule": "Use the original prep, factory, cutting and receiving facts identified by their actual record and batch.",
+      "source": "Approved designer workbench v10.1 Appendix E DOC13, DOC17–22, and §13 R2.",
+      "writes": [
+        "apps/api/src/production-platform/bulk-preparation-routes.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/cockpit-receipt-service.ts",
+        "apps/api/src/production-platform/order-closure-routes.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/order-document-history.ts",
+        "apps/web/src/cockpit-documents-production.ts",
+        "apps/web/src/cutting-page.tsx",
+        "apps/web/src/cutting-query.ts",
+        "apps/web/src/factory-flow-original.tsx",
+        "apps/web/src/factory-flow-panel.tsx",
+        "apps/web/src/order-closure-panel.tsx",
+        "apps/web/src/order-history-original.tsx",
+        "apps/web/src/preparation-material-original.tsx",
+        "apps/web/src/production-report-original.tsx",
+        "apps/web/src/production-reporting-page.tsx",
+        "apps/web/src/receiving-original-records.tsx",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/bulk-washing-service.ts",
+        "apps/api/src/receiving/receiving-document-history.ts",
+        "apps/api/src/production-platform/access-policy.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/unit/washing-window-target.test.ts"
+      ],
+      "initialization": "Use existing technical scope, genuine warehouse movements, cutting record/version, production decision, QC, receipt batch and washing scope/event IDs.",
+      "dateAndPermission": "No factory, PO or app role makes an ungranted original visible. Preserve the actual and entry timestamps, avoid treating unrecorded time or a batch link as completion, and avoid all original writes.",
+      "expectation": "Signed original display verifies first/corrected cut and receipt, images, QC versions, actual preshrink completion and original history, both washing modes, warehouse issues and correctly scoped returns. Receiving and packing share the same authorized request across technical category changes, while retry, manual refresh, another order and another identity use their own authorized reads.",
+      "checks": [
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight",
+        "release-cutting-pg"
+      ]
+    },
+    {
+      "rule": "Link exact sourcing, finance and rework originals within the existing authorization.",
+      "source": "Approved designer workbench v10.1 Appendix E DOC15–16 and DOC23, DOC25.",
+      "writes": [
+        "apps/api/src/rework/rework-business-detail-service.ts",
+        "apps/api/src/rework/rework-node-history.ts",
+        "apps/api/src/rework/routes.ts",
+        "apps/web/src/sourcing-contract-original.tsx",
+        "apps/web/src/sourcing-node-history-page.tsx",
+        "apps/web/src/sourcing-workspace-page.tsx"
+      ],
+      "reads": [
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts",
+        "apps/web/src/designer-related-originals.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
+      ],
+      "initialization": "The production mother order must explicitly reference the authorized sourcing case or exact rework; the selected node and its saved version provide source identity.",
+      "dateAndPermission": "Existing roles and attachments determine fields and evidence. Separate contract PDF version, signed attachments, factory transfer and financial reconciliation facts.",
+      "expectation": "Verify original old contract PDF bytes, exact older signed record, case/node and wrong ID rejection, real finance role and two reconciliation versions, outsider denial and return to the same sourcing directory.",
+      "checks": [
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight"
+      ]
+    },
+    {
+      "rule": "Read the retained auxiliary version without exposing the catalog or rewriting old material snapshots.",
+      "source": "Approved designer workbench v10.1 Appendix E DOC26.",
+      "writes": [
+        "apps/api/src/access/auxiliary-catalog-routes.ts",
+        "apps/api/src/access/auxiliary-catalog-service.ts",
+        "apps/web/src/auxiliary-catalog-history.tsx",
+        "packages/contracts/src/auxiliary-catalog.ts",
+        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts",
+        "tests/integration/auxiliary-catalog-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/designer-related-originals.tsx",
+        "apps/web/src/auxiliary-catalog-dialog.tsx",
         "apps/api/src/production-platform/development-service.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts",
+        "tests/integration/auxiliary-catalog-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
       ],
-      "initialization": "Server-acknowledged drafts retain their source ID, version and original local recovery state. An old development URL resumes the compatible current wizard.",
-      "dateAndPermission": "The authenticated recovery path, command key and original receipt checks remain the authority. Search preserves composing Chinese input.",
-      "expectation": "Server search, separate signed reopen and two local drafts pass. The early pending receipt branch uses the same official scoped theme and original command key, and its keyboard action performs only the authorized read.",
+      "initialization": "An existing material line has the saved catalog ID and version. The request uses the originally authorized version list and a bounded exact-version filter.",
+      "dateAndPermission": "Original five identities and object visibility are preserved. A new version or renamed auxiliary cannot update an already saved source snapshot.",
+      "expectation": "Use browser and PG to verify exact immutable version, caller scope, no fallback, previous name lookup and existing merge, retry, disable and draft-priority behavior. Reopening the same retained adopted version uses one exact request within the authorized workbench; the standalone catalog keeps its original reader.",
       "checks": [
-        "r1-controls-browser",
-        "r1-controls-types",
-        "r1-controls-lint",
-        "r1-controls-preflight"
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight",
+        "release-catalog-pg"
       ]
     },
     {
-      "rule": "Use pinned selectors for new craft choices, template, units, washing and saved sample links without changing document identity.",
-      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
+      "rule": "Link the original approved time request without recalculating the order from the directory.",
+      "source": "Approved designer workbench v10.1 Appendix E DOC27 and §13 R2.",
       "writes": [
-        "apps/web/src/development-craft-requirements.tsx",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/independent-craft-field.tsx",
-        "tests/integration/special-craft-browser-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/order-time-request-routes.ts",
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/web/src/order-time-request-page.tsx",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/web/src/digital-development-editing.ts",
-        "packages/contracts/src/digital-development.ts",
-        "apps/api/src/production-platform/development-service.ts#bindFiles"
+        "apps/api/src/production-platform/order-time-request-repository.ts",
+        "apps/web/src/designer-related-originals.tsx",
+        "packages/contracts/src/order-time-requests.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
-      ],
-      "initialization": "Use existing craft and file option sets. The legacy original form keeps its existing inputs. The label for an existing board or sample distinguishes different saved files.",
-      "dateAndPermission": "Saved requirement versions and attachment IDs remain exact. The unchanged APIs enforce ownership and ready status.",
-      "expectation": "The signed browser chooses the saved board, retains its exact attachment ID through real save/reload and reopens an old draft link with the original ordered choices. The original fixed-timeline regression operates the actual combobox with its visible selected label and accessible options, checks the real saved printing and embroidery order, and verifies the untouched draft and clock facts.",
-      "checks": [
-        "r1-controls-browser",
-        "r1-controls-types",
-        "r1-controls-lint",
-        "r1-controls-preflight"
-      ]
-    },
-    {
-      "rule": "Use pinned controls in the designer preorder handover while preserving explicit actual time and original stages.",
-      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
-      "writes": [
-        "apps/web/src/production-readiness-panel.tsx",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/web/src/digital-development-create-form.tsx"
-      ],
-      "oldTests": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/order-time-requests.test.ts"
       ],
-      "initialization": "The existing embedded designer form builds from the current original saved preparation document and continues to use the original endpoint, receipt and attachment contracts.",
-      "dateAndPermission": "The existing native datetime-local remains only for the explicit Beijing actual occurrence. Astryx v0.7.16 DateTimeInput fills a default time after a date-only selection, which would manufacture a factual hour. No acceptance or SLA logic changes.",
-      "expectation": "The browser activates the two official add-material buttons by keyboard, checks focus returns to each new row, selects the real eligible merchant and checks the returned exact handover version and actor. The original merchant continues from My Tasks. Formal conversion retains the same procurement and attachment history.",
+      "initialization": "List genuine authorized applications for the same source, then request the exact original request and version from the pre-existing service.",
+      "dateAndPermission": "PMC stays read-only, scope is tied to the actual source and authorized order. Dates and existing receipt do not move because a directory requests the original.",
+      "expectation": "Confirm paired original history and selected entry, correct pagination and a rejected invented version, no settlement or timing change, and old request product behaviors.",
       "checks": [
-        "r1-controls-browser",
-        "r1-controls-types",
-        "r1-controls-lint",
-        "r1-controls-preflight"
+        "release-business",
+        "release-documents-unit",
+        "release-lint",
+        "release-web-types",
+        "release-api-types",
+        "release-preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "r1-controls-browser",
+      "id": "release-business",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r1-selector-evidence/verify-fixed-timeline-controls.mjs",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/verify-release-business.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
-      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
-      "context": "Node 22.22.2, Chromium original App, signed test identities, two low-privilege PostgreSQL 16.14 test targets, canonical two workers, owned resource cleanup passed.",
-      "startedAt": "2026-11-23T20:05:31.564Z",
-      "endedAt": "2026-11-23T20:08:03.248Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/fixed-timeline-browser.log",
-      "logSha256": "723e62e89a1f0da0b5131134c64964ea98a1c4498c1497583d46466d36e8a973",
-      "passed": 43,
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2, Chromium native App and real signed role fixtures, two owned low-privilege PostgreSQL 16.14 test targets, canonical two workers, resources cleaned.",
+      "startedAt": "2026-11-23T22:18:17.925Z",
+      "endedAt": "2026-11-23T22:22:00.083Z",
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-business.log",
+      "logSha256": "1867aa78b6ae188c8c437e815960552c5355368814c11a6f70fe3e2803c58422",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "7a48dffdad72ba134351f14b5a5872fea69a8d4cd60498eb4dca72c11ac54f10"
+        }
+      ]
+    },
+    {
+      "id": "release-catalog-pg",
+      "kind": "tests",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/verify-release-catalog-pg.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2, canonical suite config and owned PostgreSQL 16.14 schema, persisted domain records and actual authorizations, resources cleaned.",
+      "startedAt": "2026-11-23T22:18:26.020Z",
+      "endedAt": "2026-11-23T22:18:37.965Z",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-catalog-pg.log",
+      "logSha256": "324bd750e92c91082b249052bd08022d456e66f6e05a059e4b69a1e5e3d6b987",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "80cd3fc49e4c194e251ae98c7fa22f86212344bc347f5fedcbc0a95ae5a56719"
+        }
+      ]
+    },
+    {
+      "id": "release-cutting-pg",
+      "kind": "tests",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/verify-release-cutting-pg.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2, canonical suite config and owned PostgreSQL 16.14 schema, persisted domain records and actual authorizations, resources cleaned.",
+      "startedAt": "2026-11-23T22:18:38.140Z",
+      "endedAt": "2026-11-23T22:18:51.224Z",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 141,
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-cutting-pg.log",
+      "logSha256": "88f57064fdd5c6d86a828d071ea6d2249065c48dd6f2b850c45363280f70df83",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1b163496b46fbb328bd97fd62508d56c4b1b4c040a7622731f0b4b79389ab30a"
+        }
+      ]
+    },
+    {
+      "id": "release-documents-unit",
+      "kind": "tests",
+      "command": "bash /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-local-checks.sh (documents-unit step)",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2; vitest.config.ts, selected order workbench, documents, route, time, preparation and PMC unit suites.",
+      "startedAt": "2026-11-23T22:19:24.452Z",
+      "endedAt": "2026-11-23T22:19:32.467Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-documents-unit.log",
+      "logSha256": "81303330de4e5bfec13386eeece2b36c4f34dd03e2900f23fdd932548b41a77f",
+      "passed": 214,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0529601e6f61d9a225c5669ec0e9176923756070f06c8f592074330d00bcab11"
+          "sha256": "00ba30c7464f9d04fd40f674cc36519cf6c4bcc2389680f17c7f03e9d6a2d6e4"
         }
       ]
     },
     {
-      "id": "r1-controls-types",
+      "id": "release-lint",
+      "kind": "command",
+      "command": "ESLint --max-warnings=0 over changed TypeScript paths",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2 and the repository lint policy for the complete R2 changed TypeScript set.",
+      "startedAt": "2026-11-23T22:18:25.850Z",
+      "endedAt": "2026-11-23T22:18:32.616Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "release-web-types",
       "kind": "command",
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
-      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
-      "context": "Node 22.22.2, original web and contract types.",
-      "startedAt": "2026-11-23T20:05:47Z",
-      "endedAt": "2026-11-23T20:06:14Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-types.log",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2, pinned workspace contracts and original frontend type checks.",
+      "startedAt": "2026-11-23T22:18:32.617Z",
+      "endedAt": "2026-11-23T22:19:01.258Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-web-types.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
     },
     {
-      "id": "r1-controls-lint",
+      "id": "release-api-types",
       "kind": "command",
-      "command": "git diff --name-only --diff-filter=ACM 8f79b1b8a17a9a86e939d15b96464186574eca88 -- '*.ts' '*.tsx' | xargs node node_modules/eslint/bin/eslint.js --max-warnings=0",
+      "command": "npm run typecheck --workspace @dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
-      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
-      "context": "Node 22.22.2, all modified and new TypeScript source and tests.",
-      "startedAt": "2026-11-23T20:05:47Z",
-      "endedAt": "2026-11-23T20:05:50Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2, pinned workspace contracts and original API type checks.",
+      "startedAt": "2026-11-23T22:19:01.260Z",
+      "endedAt": "2026-11-23T22:19:17.929Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-api-types.log",
+      "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7"
     },
     {
-      "id": "r1-controls-preflight",
+      "id": "release-preflight",
       "kind": "command",
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
-      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
-      "context": "Node 22.22.2, repository protocol, time-source inventory and isolated test configuration.",
-      "startedAt": "2026-11-23T20:05:47Z",
-      "endedAt": "2026-11-23T20:05:58Z",
-      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-preflight.log",
-      "logSha256": "48bd9310e5115bfbd1f2204ce85ac17527945af3ceba2b77b59a34e8b6bc5949"
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
+      "context": "Node 22.22.2, repository protocol, time-source inventory and test-plan checks.",
+      "startedAt": "2026-11-23T22:19:17.931Z",
+      "endedAt": "2026-11-23T22:19:24.451Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-preflight.log",
+      "logSha256": "221b570a75afa1e944ff6e69b897e2f0978785c9bd5a9176be9449d7d9d48114"
     }
   ]
 }

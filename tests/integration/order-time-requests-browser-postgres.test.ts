@@ -73,6 +73,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await new OrderTimeSettingsService(h.db,true,false).save(h.f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());
   scene=await h.f.scene('2027-01-07T15:00:00.000Z');h.setCollectionScene(scene);
  });
+ it('opens the exact native request as a read-only original and returns to the same designer directory',async()=>{
+  const row=await requestFromOriginalPage('original-directory');
+  const query=new URLSearchParams({workspace:'designer',section:'workspace',development:row.sourceId,area:'records',originalStage:'creation',originalCategory:'time_requests'});
+  const designer=await h.open(row.actor.actorId,1165,{},'/ui/digital-production?'+query);
+  try{
+   const link=designer.page.getByRole('link',{name:'时效申请 · v1 · 待处理',exact:true});
+   await link.waitFor();const href=new URL((await link.getAttribute('href'))!,designer.page.url());
+   expect(href.searchParams.get('timeRequest')).toBe(row.requestId);expect(href.searchParams.get('requestVersion')).toBe('1');
+   await link.click();await applyPage(designer.page);
+   await designer.page.getByText('版本 1 · 只读',{exact:true}).waitFor();
+   expect(await designer.page.getByRole('button',{name:'撤回申请',exact:true}).count()).toBe(0);
+   await designer.page.getByRole('button',{name:'返回',exact:true}).click();await link.waitFor();
+   expect(new URL(designer.page.url()).searchParams.get('development')).toBe(row.sourceId);
+   expect(new URL(designer.page.url()).searchParams.get('originalCategory')).toBe('time_requests');
+   expect(h.requests.filter(request=>request.session===designer.session&&request.method!=='GET'&&request.path.includes('/order-time/requests/'))).toEqual([]);
+   const directoryPath=`**/api/digital-production/sources/${row.sourceId}/order-time/original-requests?*`;
+   const pageReads:number[]=[];
+   await designer.page.route(directoryPath,async route=>{
+    const response=await route.fetch(),body=await response.json(),page=Number(new URL(route.request().url()).searchParams.get('page'));
+    expect(response.status()).toBe(200);pageReads.push(page);
+    // Keep the real authorized v1 for opening. Supply a larger total only to exercise the page controls.
+    await route.fulfill({response,json:{...body,total:16}});
+   });
+   await designer.page.reload();await link.waitFor();
+   const jump=designer.page.getByRole('textbox',{name:'跳转页码',exact:true});
+   const pageError=designer.page.getByRole('region',{name:'订单相关单据',exact:true}).getByText('请输入 1 至 2 的整数页码',{exact:true});
+   await jump.fill('999');await jump.press('Enter');
+   await pageError.waitFor();
+   expect(pageReads).toEqual([1]);
+   await jump.fill('0');await designer.page.getByRole('button',{name:'跳转',exact:true}).click();
+   await pageError.waitFor();
+   expect(pageReads).toEqual([1]);
+   await jump.fill('2');await jump.press('Enter');
+   await designer.page.getByText('本页没有时效申请，请返回有效页。',{exact:true}).waitFor();
+   expect(pageReads).toEqual([1,2]);
+   await designer.page.unroute(directoryPath);
+  }finally{await designer.close();}
+  const manager=h.f.people['production-management']!;
+  const mismatch=await h.open(manager.actorId,1165,{},`/ui/digital-production?timeRequest=${row.requestId}&requestVersion=2`);
+  try{await mismatch.page.getByRole('alert').filter({hasText:'所选申请版本没有可打开的原件'}).waitFor();
+   expect(await mismatch.page.getByRole('button',{name:'提交',exact:true}).count()).toBe(0);
+  }finally{await mismatch.close();}
+ });
  for(const operation of ['publish','confirm'] as const)it(`keeps a failed ${operation} precheck separate from an unsent native command in the original designer App`,async()=>{
   const original=await source('precheck-'+operation,null,operation==='confirm'?'PD':null),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
   if(operation==='confirm')await h.f.runtime.run(scene,original.actor,async()=>{
@@ -282,7 +325,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('R5-08 opens actual independent PLT, sizes, usage, comments and exact older files in the original authenticated App',async()=>{
   const s=await source('detail-documents','2027-02-20'),worker=h.f.people['pattern-room-worker']!,materialId=randomUUID(),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),execution=new DevelopmentExecutionService(h.db,true,h.patternOrders);
-  let paperId='',firstFile='';
+  let paperId='',firstFile='',middleCommentId='',finalCommentId='',reviewTaskId='',finalEvidence='';
   await h.f.runtime.run(scene,s.actor,async()=>{
    const current=await forms.read(s.actor,s.sourceId),document={...current.document!,materials:[{materialId,category:'主布' as const,label:'主布',name:'TEST棉布',supplier:'TEST',width:'150',weight:'200',composition:'棉',consumption:'1.5',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}]};
    const saved=await forms.save(s.actor,s.sourceId,{expectedVersion:current.version,document},randomUUID()),price=await new PatternRoomPriceService(h.db).quote(h.f.root,'category',s.category.price_id);
@@ -298,7 +341,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await execution.recordUploadPurpose(worker,s.sourceId,intent.attachmentId,'纸样成果',paper.taskId);await h.f.storage.writeImmutable(intent.objectKey,bytes,{mimeType:'application/octet-stream',sha256});await h.f.attachments.finalize(worker,intent.attachmentId);firstFile=intent.attachmentId;
    const body={pltAttachmentIds:[firstFile],consumptionRows:[{materialId,unit:'米',consumption:'1.500000'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['50']}],gradingNote:'TEST放码',templateRef:null},note:'TEST真实技术成果',basedOnFinalComment:null},technical=execution.technicalEvidenceService();
    for(const version of [0,1])await technical.saveArtifact(worker,s.sourceId,{taskId:paper.taskId,expectedDocumentVersion:ready.sheet.version,expectedVersion:version,scopeRef:'整款',action:'publish',body:{...body,note:'TEST独立原版本 '+(version+1)}},randomUUID());
-   for(const [version,final]of [[0,false],[1,true]] as const)await technical.recordComment(s.actor,s.sourceId,{roundNumber:1,scopeRef:'整款',expectedVersion:version,isFinal:final,decision:'approved',text:final?'TEST客户最终认可':'TEST客户中间评语',evidenceRefs:[],evidenceNote:'TEST原记录',occurredAt:null},randomUUID());
+   finalEvidence=await h.f.image(s.actor);
+   await execution.recordUploadPurpose(s.actor,s.sourceId,finalEvidence,'客户评语依据');
+   const middle=await technical.recordComment(s.actor,s.sourceId,{roundNumber:1,scopeRef:'整款',expectedVersion:0,isFinal:false,decision:'approved',text:'TEST客户中间评语',evidenceRefs:[],evidenceNote:'TEST原记录',occurredAt:null},randomUUID());
+   const final=await technical.recordComment(s.actor,s.sourceId,{roundNumber:1,scopeRef:'整款',expectedVersion:1,isFinal:true,decision:'approved',text:'TEST客户最终认可',evidenceRefs:[finalEvidence],evidenceNote:'TEST原记录',occurredAt:null},randomUUID());
+   middleCommentId=middle.commentId;finalCommentId=final.commentId;reviewTaskId=final.reviewTaskId!;
+   const selected=(await technical.read(worker,s.sourceId,1)).artifacts.find(artifact=>artifact.version===2)!;
+   await technical.completeReview(worker,s.sourceId,{taskId:reviewTaskId,expectedReviewVersion:1,finalCommentId,finalCommentVersion:2,
+    decision:'reuse',artifactSetId:selected.artifactSetId,artifactVersion:2,note:'TEST 原尺寸复核确认沿用第2版'},randomUUID());
   });
   const tab=await h.open(h.f.root.actorId,1585,{},'/ui/digital-cockpit?scope=development&selected='+s.sourceId+'&expanded=development');
   try{
@@ -334,6 +384,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }
    await page.setViewportSize({width:1585,height:992});
    await page.locator('.journey-node-panel').getByRole('button',{name:'查看更多 ›',exact:true}).click();const nodes=page.getByRole('dialog',{name:'全部节点明细',exact:true});await nodes.waitFor();expect(await nodes.locator(`#journey-full-node-${paperId}`).count()).toBe(1);const targetHeader=nodes.locator('th').filter({hasText:'原截止 / 节点目标'});await targetHeader.waitFor();expect(await targetHeader.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'r508-full-node-dates-1585.png'),fullPage:true});await page.keyboard.press('Escape');
+   const origin=new URL(h.base+'/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:s.sourceId,
+    area:'records',originalStage:'preparation',originalCategory:'customer_comments'}));
+   await page.goto(origin.href);
+   await page.locator(`a[href*="originalTechnicalId=${middleCommentId}"]`).click();
+   await page.getByText('TEST客户中间评语；TEST原记录',{exact:true}).waitFor();
+   const reviewLink=page.getByRole('link',{name:'查看原尺寸复核',exact:true});
+   expect(await reviewLink.count()).toBe(0);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await page.locator(`a[href*="originalTechnicalId=${middleCommentId}"]`).waitFor();
+   origin.searchParams.set('originalCategory','customer_final_approval');await page.goto(origin.href);
+   await page.locator(`a[href*="originalTechnicalId=${finalCommentId}"]`).click();
+   await page.getByText('TEST客户最终认可；TEST原记录',{exact:true}).waitFor();
+   const file=page.getByRole('link',{name:'客户原确认依据 1',exact:true});
+   expect(await file.getAttribute('href')).toContain(`/sources/${s.sourceId}/development/attachments/${finalEvidence}`);
+   await page.getByText('技术尺寸复核 · 明确沿用 v2',{exact:true}).waitFor();
+   await page.getByText('TEST 原尺寸复核确认沿用第2版',{exact:true}).waitFor();
+   const reviewTarget=new URL((await reviewLink.getAttribute('href'))!,h.base);
+   expect(reviewTarget.searchParams.get('task')).toBe(reviewTaskId);
+   expect(reviewTarget.searchParams.get('taskView')).toBe('read');
+   await reviewLink.click();await page.waitForURL(url=>url.searchParams.get('task')===reviewTaskId);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await page.getByText('TEST客户最终认可；TEST原记录',{exact:true}).waitFor();
+   expect(new URL(page.url()).searchParams.get('originalTechnicalId')).toBe(finalCommentId);
    expect(h.errors).toEqual([]);
   }finally{await tab.context.close();}
  });

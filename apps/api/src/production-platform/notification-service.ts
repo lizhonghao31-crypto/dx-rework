@@ -39,7 +39,7 @@ import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { digitalTodoTarget } from "./notification-policy.js";
 import {readTaskAccessForPage} from './journey-selection-access.js';
 import {readJourneyCandidateCohort} from './journey-snapshot-reads.js';
-import type {DevelopmentWorkspaceAction} from '@dx-rework/contracts/digital-development-workspace';
+import {DESIGNER_WORKBENCH_TASK_KINDS,type DevelopmentWorkspaceAction} from '@dx-rework/contracts/digital-development-workspace';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const iso = (value: Date | string) => new Date(value).toISOString();
@@ -276,7 +276,8 @@ export class DigitalProductionNotificationService {
       WHERE f.task_id=ANY($1::uuid[]) AND f.kind='补料复核' AND f.payload ? 'returnRequirements' ORDER BY f.task_id,f.sequence DESC`,[returnCandidates.map(({task})=>task.task_id)])).rows:[];
     const returned=new Map(requirements.map(row=>[row.task_id,row]));
     return ready.eligible.map(({task})=>{
-      const waiting=task.assignee_id!==actor.actorId,issue=returned.get(task.task_id);
+      const waiting=task.assignee_id!==actor.actorId||task.required_role!=='sample_designer'||!DESIGNER_WORKBENCH_TASK_KINDS.has(task.task_kind);
+      const issue=returned.get(task.task_id);
       const returnedForSource=!waiting&&issue?.source_id===task.source_id;
       const kind=waiting?'waiting':returnedForSource?'returned':'mine';
       return {id:task.task_id,kind,label:task.label,route:{routeName:'digital_production_task',entityId:task.task_id,todoId:task.task_id,

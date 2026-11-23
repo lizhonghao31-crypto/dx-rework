@@ -4,6 +4,8 @@ import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "
 import { createWebUrls } from "../url-contract.js";
 import {documentCategories,documentChapterIds,taskTabLabels} from './digital-detail-context.js';
 import {DESIGNER_ORDER_AREAS,DESIGNER_WORKSPACE_SECTIONS} from './digital-workspace-navigation.js';
+import {JOURNEY_STAGES} from '@dx-rework/contracts/digital-production-journey';
+import {COCKPIT_VISIBLE_DOCUMENT_CATEGORIES} from './cockpit-document-catalog.js';
 
 const designerDocumentKeys=['round','instructionVersion','budgetVersion','documentCategory','documentChapter','documentKind'] as const;
 const selectedDocumentVersion=z.union([z.literal('current'),z.string().regex(/^[1-9]\d*$/).refine(value=>Number.isSafeInteger(Number(value)))]).optional();
@@ -17,7 +19,10 @@ const designerReturnSchema=DevelopmentWorkspaceFilterSchema.safeExtend({
   documentKind:z.enum(['development','instruction','budget']).optional(),
   instructionVersion:selectedDocumentVersion,budgetVersion:selectedDocumentVersion,
   originalSearch:z.string().max(100).optional(),
+  originalStage:z.enum(JOURNEY_STAGES.map(stage=>stage.key)).optional(),
+  originalCategory:z.enum([...COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.map(category=>category.key),'sourcing_history','time_requests','auxiliary_basis']).optional(),
   originaldevelopmentPage:originalPage,originalbudgetPage:originalPage,originalinstructionPage:originalPage,originalquotationPage:originalPage,
+  originalTimePage:originalPage,
 });
 
 /** Allow only local read workspaces, with validated filters and selected task. */
@@ -36,7 +41,7 @@ export function developmentWorkspaceReturnUrl(value: string | null, base: string
     if (url.pathname === urls.pageUrl("ui/digital-pattern-room") && PatternWorkspaceFilterSchema.safeExtend({section:z.enum(["development","bulk"]).optional(),bulkOrder:z.string().uuid().optional(),task: z.string().uuid().optional(), taskView: z.enum(["read","handle","correct"]).optional(),taskTab:z.enum(Object.keys(taskTabLabels) as [keyof typeof taskTabLabels,...Array<keyof typeof taskTabLabels>]).optional(),documentCategory:z.enum(documentCategories).optional(),documentChapter:z.enum(documentChapterIds).optional(),documentKind:z.enum(["development","instruction","budget"]).optional(),round:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),instructionVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),budgetVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional()}).safeParse(query).success) return url.pathname + url.search;
     if (url.pathname === urls.pageUrl("ui/digital-production")) {
       const designer=designerReturnSchema.safeParse(query);
-      if(designer.success&&(!Object.keys(query).some(key=>key==='originalSearch'||/^original(?:development|budget|instruction|quotation)Page$/.test(key))||designer.data.section==='workspace'&&designer.data.development)&&(!designer.data.area||designer.data.section==='workspace'&&designer.data.development)
+      if(designer.success&&(!Object.keys(query).some(key=>['originalSearch','originalStage','originalCategory','originalTimePage'].includes(key)||/^original(?:development|budget|instruction|quotation)Page$/.test(key))||designer.data.section==='workspace'&&designer.data.development)&&(!designer.data.area||designer.data.section==='workspace'&&designer.data.development)
         &&(designer.data.development||!designerDocumentKeys.some(key=>url.searchParams.has(key))))return url.pathname+url.search;
     }
   } catch { /* A malformed return target has no navigation effect. */ }

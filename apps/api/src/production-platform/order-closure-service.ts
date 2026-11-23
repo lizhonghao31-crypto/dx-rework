@@ -36,7 +36,7 @@ export class OrderClosureService{
  private async canClose(db:DB,actor:TrustedActorContext){if(actor.actorRoles.includes('root_superuser')&&(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed)return true;const policy=new DigitalProductionAccessPolicy(db);for(const role of ['production_management','owner_group'])if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))return true;return false;}
  async recordQuality(actor:TrustedActorContext,id:string,input:ReceiptQuality,key:string){return new GarmentQualityService(this.database).record(actor,id,input,key);}
  async verifyQualityTime(actor:TrustedActorContext,id:string,input:ReceiptQualityVerification,key:string){return new GarmentQualityService(this.database).verifyTime(actor,id,input,key);}
- async documentHistory(actor:TrustedActorContext,id:string,beforeId?:string){return orderDocumentHistory(this.database,actor,id,'receipt_quality',beforeId);}
+ async documentHistory(actor:TrustedActorContext,id:string,beforeId?:string,eventId?:string){return orderDocumentHistory(this.database,actor,id,'receipt_quality',beforeId,eventId);}
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<OrderClosureSheet>{
   await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');
   return this.project(actor,id,db);

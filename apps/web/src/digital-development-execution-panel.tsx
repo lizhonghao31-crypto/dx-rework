@@ -38,7 +38,7 @@ import {digitalRequest,DigitalRequestError} from "./digital-production-api.js";
 import {createClientRequestId} from "./client-request-id.js";
 import {createWebUrls} from "../url-contract.js";
 import {DevelopmentOccurrenceInput,developmentTimeFromForm} from './development-occurrence-input.js';
-type RouteFact={factId:string;kind:string;routeVersion:number;taskId:string|null;payload:{inspection?:{phase:string;unit:string;sizes:string[];measurements:Array<{name:string;values:string[]}>};note?:string;sentDate?:string;trackingNo?:string;attachmentIds?:string[]};recordedAt:string};
+type RouteFact={factId:string;kind:string;routeVersion:number;taskId:string|null;payload:{inspection?:{phase:string;unit:string;sizes:string[];measurements:Array<{name:string;values:string[]}>};note?:string;sentDate?:string;trackingNo?:string;attachmentIds?:string[];actualCompletedAt?:string|null;actualCompletedDate?:string|null;timeQuality?:string};recordedAt:string};
 export type ExternalPatternRecord={requestId:string;roundNumber:number;actualDeparture?:string|null;intervalVersion?:number;actualDepartureQuality?:string|null;departureHistory?:Array<{version:number;departedAt:string|null;quality:string;note:string;recordedAt:string;recordedBy:string}>;requestedAt:string;requestedBy:string;receivedAt:string|null;receivedBy:string|null;note:string;receiptNote:string|null;attachmentIds:string[]|null;taskId:string};
 type State={technical?:DevelopmentTechnicalState;externalPatterns?:ExternalPatternRecord[];canRequestExternalPattern?:boolean;sewingRecipientName?:string|null;slaEnrolled?:boolean;fixedCutting?:{version:number;assigneeId:string|null;assigneeName:string|null;valid:boolean;canConfigure:boolean}|null;reopenMaterialCheck?:{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}|null;materialVerification?:MaterialVerification|null;fabricCases?:FabricCase[];unifiedArrangement?:boolean;arrangement?:DevelopmentArrangement|null;materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;supplementCheckTaskId?:string|null;nextSteps?:Array<{taskId:string;label:string}>;canConfirmExecution?:boolean;patternPreparation?:{version:number;roundId:string;roundType:string;status:string;categorySaved:boolean;priceSaved:boolean;workerId:string|null;workerName:string|null}|null;patternOrder:{orderId:string}|null;routeFacts:RouteFact[];sheet:DevelopmentSheet;dispatch:{version:number;patternWorkerId:string;cuttingWorkerId:string;sewingWorkerId:string}|null;tasks:DigitalTask[];facts:{factId:string;taskId:string|null;kind:string;payload:{note?:string;recommendation?:string;decision?:string;attachmentIds?:string[];items?:Array<{materialId:string;physical:boolean;quantity:boolean;color:boolean;specification:boolean}>};recordedAt:string}[];canReportFabric:boolean;canDispatch:boolean;canDecideFabric:boolean;qrAvailable:boolean};
 export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onChanged,workspace=false,onPatternOrderLoaded,onPreassignedSewingLoaded}:{sourceId:string;materialRevision?:number;taskId?:string|undefined;onChanged?:((notice?:string)=>void)|undefined;workspace?:boolean;prioritizeMaterialCheck?:boolean;onPatternOrderLoaded?:((id:string|null)=>void)|undefined;onPreassignedSewingLoaded?:((person:{id:string;name:string}|null)=>void)|undefined}){
@@ -218,11 +218,14 @@ function DevelopmentTaskBasis({state,taskId}:{state:State;taskId:string}){
 }
 
 /** Original customer decision, separate from task completion and never automatic. */
-export function DevelopmentCustomerConfirmation({controller}:{controller:ReturnType<typeof useDevelopmentExecution>}){
+export function DevelopmentCustomerConfirmation({controller,direct=false}:{controller:ReturnType<typeof useDevelopmentExecution>;direct?:boolean}){
  const {state,busy,run}=controller;
  if(!state)return null;
- if(state.technical?.enrolled)return <DevelopmentFinalFeedback controller={controller}/>;
- return <>{state.sheet.canEdit&&state.routeFacts.filter(fact=>fact.kind==='最终设计确认').map(fact=><form key={fact.factId} onSubmit={event=>{
+ if(state.technical?.enrolled)return <DevelopmentFinalFeedback controller={controller} direct={direct}/>;
+ const round=state.sheet.roundNumber??1;
+ const recorded=state.routeFacts.filter(fact=>fact.routeVersion===round&&fact.kind==='客户样板确认').at(-1);
+ const finalDesign=state.routeFacts.filter(fact=>fact.kind==='最终设计确认'&&(!direct||fact.routeVersion===round&&!recorded));
+ const editor=<>{state.sheet.canEdit&&finalDesign.map(fact=><form key={fact.factId} onSubmit={event=>{
   event.preventDefault();
   const form=new FormData(event.currentTarget);
   void run('customer-sample',{routeVersion:fact.routeVersion,note:form.get('note'),actualTime:developmentTimeFromForm(form)});
@@ -232,4 +235,17 @@ export function DevelopmentCustomerConfirmation({controller}:{controller:ReturnT
   <label>客户确认记录 *<textarea aria-label="办理备注" name="note" required maxLength={2000}/></label>
   <Button type="submit">记录客户已确认本轮样板</Button>
  </fieldset></form>)}</>;
+ if(!direct)return editor;
+ const evidence=recorded?.payload;
+ const trusted=evidence?.timeQuality&&['现场登记','已核实','补报未核实'].includes(evidence.timeQuality);
+ const time=trusted?(evidence.actualCompletedDate??(evidence.actualCompletedAt
+  ?new Date(evidence.actualCompletedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):null)):null;
+ return <section aria-label="客户意见">
+  <h3>客户意见</h3>
+  {recorded?<article><h4>原客户样板确认</h4>{evidence?.note&&<p>{evidence.note}</p>}
+   <p>实际发生：{time??'时间待核'}{time&&evidence?.timeQuality==='补报未核实'?'（未核实）':''}</p>
+   <p>登记：{new Date(recorded.recordedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</p>
+  </article>:<p>本轮暂无已登记的客户样板确认。</p>}
+  {editor}
+ </section>;
 }

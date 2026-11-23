@@ -53,6 +53,22 @@ it('isolates permission, ambiguous 404 and service errors and rechecks only the 
 it('evicts successful HTTP responses that fail validation so retry can recover instead of replaying malformed cached metadata',async()=>{
  let malformed=true,count=0;const snapshot=createCockpitDocumentSnapshot(fixture(),async path=>{count++;return malformed?{version:0}:metadata(path);});await snapshot.load('budget');expect(snapshot.getSnapshot().budget.phase).toBe('error');malformed=false;await snapshot.load('budget');expect(count).toBe(2);expect(snapshot.getSnapshot().budget.data?.state).toBe('missing');snapshot.dispose();
 });
+it('retries invalid original records and refuses cached records after the authorizing snapshot changes',async()=>{
+ const order=fixture();let current=true,reads=0;
+ const snapshot=createCockpitDocumentSnapshot(order,async()=>({orderId:++reads===1?'wrong-order':oid}),()=>current);
+ const path=`digital-production/orders/${oid}/receipt-summary?documentBindings=true`;
+ const check=(value:unknown)=>{
+  expect(value).toEqual({orderId:oid});
+  return value;
+ };
+ await expect(snapshot.readChecked(path,signal(),check)).rejects.toThrow();
+ await expect(snapshot.readChecked(path,signal(),check)).resolves.toEqual({orderId:oid});
+ await expect(snapshot.readChecked(path,signal(),check)).resolves.toEqual({orderId:oid});
+ current=false;
+ await expect(snapshot.readChecked(path,signal(),check)).rejects.toMatchObject({name:'AbortError'});
+ expect(reads).toBe(2);
+ snapshot.dispose();
+});
 it('rejects metadata for a different source or order without showing its entries',async()=>{
  const read:CockpitDocumentReader=async path=>path.includes('/development/rounds')?{rounds:[]}:path.includes('/development')?{sourceId:'another-source',version:1,document:{}}:{productionOrderId:'another-order',version:1,versions:[1]};
  const snapshot=createCockpitDocumentSnapshot(fixture(),read);await snapshot.load('development');await snapshot.load('budget');expect(snapshot.getSnapshot().development).toMatchObject({phase:'error',error:expect.stringContaining('本单不一致')});expect(snapshot.getSnapshot().budget.data).toBeUndefined();snapshot.dispose();

@@ -1,5 +1,6 @@
 import {BulkWashingPanel} from './bulk-washing-panel.js';
 import {useFactoryFlowRead} from './factory-flow-read.js';
+import {FactoryFlowOriginal,readFactoryOriginalSearch} from './factory-flow-original.js';
 import {factoryFlowProductionHref} from './factory-flow-navigation.js';
 import {QcProductionProgressPanel} from './qc-production-progress-panel.js';
 import {DocumentGuardContext} from './use-digital-detail-navigation-guard.js';
@@ -24,7 +25,12 @@ import {factoryTaskTarget} from './factory-task-target.js';
 import {prepareImageUploadCandidate,sha256Hex,uploadImageWithNormalizationRetry} from './attachment-upload.js';
 import {createWebUrls} from '../url-contract.js';
 const urls=createWebUrls(import.meta.env.BASE_URL);
-export function FactoryFlowPanel({orderId,onClose}:{orderId:string;onClose:()=>void}){
+type Props={orderId:string;onClose:()=>void};
+export function FactoryFlowPanel(props:Props){
+ const target=readFactoryOriginalSearch(window.location.search);
+ return target===undefined?<CurrentFactoryFlowPanel {...props}/>:<FactoryFlowOriginal {...props} target={target}/>;
+}
+function CurrentFactoryFlowPanel({orderId,onClose}:Props){
  const base=`orders/${orderId}/factory-flow`,[error,setError]=useState(''),[working,setBusy]=useState(false);
  const inheritedGuards=useContext(DocumentGuardContext),ownGuards=useRef(new Set<()=>Promise<boolean>>()),guards=inheritedGuards??ownGuards.current;
  const [readEpoch,setReadEpoch]=useState(0);

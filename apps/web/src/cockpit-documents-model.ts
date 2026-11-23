@@ -45,7 +45,7 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
   const entries:CockpitDocumentEntry[]=[];
   for(const source of sources){const directory=row(await read(`sourcing/cases/${source.id}/contract-directory`,signal)),returned={versions:directory.versions,history:undefined,attachments:undefined},versions=checkedRows(directory.versions,version=>positiveValue(version.revision)&&nullableText(version.signedContractDocumentId));
    requireFields(directory,["contracts","versions"]);const contracts=checkedRows(directory.contracts,contract=>textValue(contract.entryId)&&positiveValue(contract.version));for(const version of versions)checkedRows(version.attachments,item=>textValue(item.attachmentId)&&textValue(item.filename));
-   for(const contract of contracts){const documentId=str(contract.entryId);entries.push({id:documentId,label:`合同 v${contract.version}`,at:str(contract.handledAt),by:str(contract.handledBy),url:`/ui/sourcing/orders/${source.id}#contract-${documentId}`,note:contract.pdfAttachmentId?contract.pdfStatus==="ready"?"":"原合同PDF暂不可用":"此版PDF尚未生成",files:contract.pdfAttachmentId?[file(str(contract.pdfAttachmentId),str(contract.pdfFilename)||`合同 v${contract.version}`,contract.pdfStatus==="ready"?`tools/attachments/${contract.pdfAttachmentId}/download?mode=preview`:null)]:[],children:versions.filter(version=>version.signedContractDocumentId===documentId).map(version=>({id:`return:${version.revision}`,label:`回签第 ${version.revision} 次`,at:str(version.submittedAt),by:str(version.uploadedByName),files:rows(version.attachments).map(item=>apiFile(str(item.attachmentId),str(item.filename)))}))});}
+   for(const contract of contracts){const documentId=str(contract.entryId),sourceUrl=`/ui/sourcing/orders/${source.id}`;entries.push({id:documentId,label:`合同 v${contract.version}`,at:str(contract.handledAt),by:str(contract.handledBy),url:`${sourceUrl}#contract-${documentId}`,originalUrl:`${sourceUrl}?${new URLSearchParams({originalContract:documentId})}`,note:contract.pdfAttachmentId?contract.pdfStatus==="ready"?"":"原合同PDF暂不可用":"此版PDF尚未生成",files:contract.pdfAttachmentId?[file(str(contract.pdfAttachmentId),str(contract.pdfFilename)||`合同 v${contract.version}`,contract.pdfStatus==="ready"?`tools/attachments/${contract.pdfAttachmentId}/download?mode=preview`:null)]:[],children:versions.filter(version=>version.signedContractDocumentId===documentId).map(version=>({id:`return:${version.revision}`,label:`回签第 ${version.revision} 次`,at:str(version.submittedAt),by:str(version.uploadedByName),files:rows(version.attachments).map(item=>apiFile(str(item.attachmentId),str(item.filename)))}))});}
    const unbound=versions.filter(version=>!version.signedContractDocumentId);if(unbound.length)entries.push({id:`unbound:${source.id}`,label:"历史回签归属待核实",note:"原记录未保存合同文档编号，不分配给当前合同。"});
    if(!returned.versions&&(rows(returned.history).length||rows(returned.attachments).length))entries.push({id:`old-api:${source.id}`,label:"回签版本资料待完善",note:"当前接口未提供完整回签修订目录，请在原合同区核对。"});
   }return result(entries);
@@ -72,7 +72,15 @@ export async function loadCockpitDocumentEntry(entry:CockpitDocumentEntry,read:C
   return {...entry,at:str(data.publishedAt),files,metadata:metadataFacts(data),note:kind==="instruction"?`采用开发第 ${data.sourceRound??"未核实"} 轮`:undefined};
  }
  if(kind==="cutting"){
-  const record=row(data.record);return {...entry,at:str(record.recordedAt),by:str(record.recordedByName),note:record.version?`实裁 v${record.version} · 裁数 ${record.actualCutCount}`:"尚未登记实裁",files:rows(record.cuttingSheetPhotos??data.photos).map(image=>file(str(image.attachmentId),str(image.filename),`cutting/attachments/${image.attachmentId}/download?mode=preview`)),children:rows(record.corrections).map(correction=>({id:str(correction.correctionId),label:`实裁订正 v${correction.version??""}`,at:str(correction.correctedAt),by:str(correction.correctedByName),note:str(correction.reason)}))};
+  const record=row(data.record),recordId=str(record.cuttingRecordId);
+  const originalUrl=(version:unknown)=>data.cuttingOrderId===id&&recordId&&positiveValue(version)?
+   `/ui/cutting/orders/${id}?${new URLSearchParams({cuttingRecord:recordId,cuttingVersion:String(version)})}`:'';
+  const files=rows(record.cuttingSheetPhotos??data.photos).map(image=>file(str(image.attachmentId),str(image.filename),`cutting/attachments/${image.attachmentId}/download?mode=preview`));
+  return {...entry,at:str(record.recordedAt),by:str(record.recordedByName),note:record.version?`实裁 v${record.version} · 裁数 ${record.actualCutCount}`:"尚未登记实裁",files,
+   ...(recordId?{originalEntries:[{id:recordId,label:'原实裁登记 v1',at:str(record.recordedAt),by:str(record.recordedByName),
+    note:`士啤片 ${record.initialPieceCount} · 实裁 ${record.initialActualCutCount}`,originalUrl:originalUrl(1)}]}:{}),
+   children:rows(record.corrections).map(correction=>({id:str(correction.correctionId)||`${recordId}:${correction.version}`,label:`实裁订正 v${correction.version??""}`,
+    at:str(correction.correctedAt),by:str(correction.correctedByName),note:str(correction.reason),originalUrl:originalUrl(correction.version)}))};
  }
  if(kind==="receiving"){
   if(!strings(data.batchIds).includes(id))throw new Error("回货批次与本单不一致，未展示其他批次资料");
@@ -117,7 +125,11 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
  let active=0,disposed=false,states=emptyCockpitDirectoryStates();
  const live=()=>!disposed&&!controller.signal.aborted&&isCurrent();
  const entryKey=(entry:CockpitDocumentEntry)=>entry.load?JSON.stringify([entry.id,entry.load]):null;
- const enrich=(entries:CockpitDocumentEntry[]):CockpitDocumentEntry[]=>entries.map(entry=>{const key=entryKey(entry),loaded=key?loadedEntries.get(key):undefined,current=loaded??entry;return current.children?{...current,children:enrich(current.children)}:current;});
+ const enrich=(entries:CockpitDocumentEntry[]):CockpitDocumentEntry[]=>entries.map(entry=>{
+  const key=entryKey(entry),current=(key?loadedEntries.get(key):undefined)??entry;
+  return {...current,...(current.children?{children:enrich(current.children)}:{}),
+   ...(current.originalEntries?{originalEntries:enrich(current.originalEntries)}:{})};
+ });
  const emit=()=>{for(const listener of listeners)listener();};
  const update=(key:CockpitDocumentCategory,state:CockpitDirectoryState)=>{if(live()){states={...states,[key]:state};emit();}};
  const pump=()=>{while(live()&&active<3&&queue.length)queue.shift()!.start();};
@@ -130,6 +142,13 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
   }
   return pending.then(value=>{if(!live()||signal.aborted)throw cancelledDirectoryRead();return value;});
  };
+ const readChecked=<T>(path:string,signal:AbortSignal,parse:(value:unknown)=>T)=>{
+  const result=read(path,signal),cached=cache.get(path);
+  return result.then(value=>{
+   try{return parse(value);}
+   catch(error){if(cache.get(path)===cached)cache.delete(path);throw error;}
+  });
+ };
  const validated=async<T>(work:(tracked:CockpitDocumentReader)=>Promise<T>)=>{const used=new Set<string>();try{return await work((path,signal)=>{used.add(path);return read(path,signal);});}catch(error){for(const path of used)cache.delete(path);throw error;}};
  const load=async(key:CockpitDocumentCategory,more=false)=>{
   if(!live()||states[key].phase==='loading'||states[key].phase==='ready'&&!more)return;
@@ -140,8 +159,9 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
   catch(error){if(!live()||(error as Error).name==='AbortError')return;const status=(error as {status?:number}).status,denied=status===401||status===403;
    update(key,{phase:'error',denied,error:denied?'当前身份无权读取此类资料；未确认是否已创建。':status===404?'资料不存在或不在授权范围，无法确认是否已创建。':error instanceof Error?error.message:'目录读取失败，暂未确认原因；请重试，仍失败请管理员核对接口。',...(![401,403,404].includes(status??0)&&prior?{resume:prior}:{})});}
  };
- const loadEntry=async(entry:CockpitDocumentEntry,signal:AbortSignal)=>{
-  const loaded=await validated(tracked=>loadCockpitDocumentEntry(entry,tracked,signal));if(!live()||signal.aborted)throw cancelledDirectoryRead();
+ const loadEntry=async(entry:CockpitDocumentEntry,signal:AbortSignal,preferOriginal=false)=>{
+  const selected=preferOriginal&&entry.load?.originalPath?{...entry,load:{...entry.load,path:entry.load.originalPath}}:entry;
+  const loaded=await validated(tracked=>loadCockpitDocumentEntry(selected,tracked,signal));if(!live()||signal.aborted)throw cancelledDirectoryRead();
   // A successful selected entry is complete. Legacy readers preserve their
   // original descriptor with {...entry}; never feed that load back into the
   // controlled Entry effect when publishing the searchable snapshot.
@@ -149,6 +169,6 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
   const key=entryKey(entry);if(key){loadedEntries.set(key,value);states=Object.fromEntries(Object.entries(states).map(([category,state])=>[category,state.data?{...state,data:{...state.data,entries:enrich(state.data.entries)}}:state])) as CockpitDirectoryStates;emit();}
   return value;
  };
- return {read,load,loadEntry,start:()=>{for(const category of COCKPIT_DOCUMENT_CATEGORIES)if(states[category.key].phase==='idle')void load(category.key);},getSnapshot:()=>states,subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},dispose:()=>{if(disposed)return;disposed=true;controller.abort();for(const job of queue.splice(0))job.reject(cancelledDirectoryRead());cache.clear();loadedEntries.clear();states=emptyCockpitDirectoryStates();emit();listeners.clear();}};
+ return {read,readChecked,load,loadEntry,start:()=>{for(const category of COCKPIT_DOCUMENT_CATEGORIES)if(states[category.key].phase==='idle')void load(category.key);},getSnapshot:()=>states,subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},dispose:()=>{if(disposed)return;disposed=true;controller.abort();for(const job of queue.splice(0))job.reject(cancelledDirectoryRead());cache.clear();loadedEntries.clear();states=emptyCockpitDirectoryStates();emit();listeners.clear();}};
 }
 export type CockpitDocumentSnapshot=ReturnType<typeof createCockpitDocumentSnapshot>;

@@ -1,22 +1,40 @@
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {DigitalIdSchema} from '@dx-rework/contracts/digital-production';
+import {FinanceNodeKeySchema,type FinanceNodeKey} from '@dx-rework/contracts/reporting';
+import {ProductionReportingDetailSchema} from '@dx-rework/contracts';
 import {preparationMaterialLabels} from '@dx-rework/contracts/production-readiness';
 import {row,rows,str,num,strings,file,result,requireFields,checkedRows,check,textValue,positiveValue,nullableText,sameEntity,records,original,type Row,type CockpitDocumentEntry,type CockpitDocumentReader,type CockpitDocumentResult} from './cockpit-document-data.js';
 const privateFile=(oid:string,id:string,label:string)=>file(id,label,`digital-production/orders/${oid}/production-readiness/attachments/${encodeURIComponent(id)}`);
 const lineLabel=(order:OrderJourney,id:string)=>{const l=order.lines.find(l=>l.id===id);return l?`${l.po||'PO待补'} · ${l.color}`:'原款色范围';};
 const oldFactoryKinds=new Set(['工厂到料','到料清点']);
+const reworkOriginalLabels:Record<FinanceNodeKey,string>={
+ initiation:'发起原单',process_configuration:'分配工序与工人',ie_review:'IE 核价',task_assignment:'工人分配',
+ work_reporting:'原报工及尾部检查',whole_order_review:'尾部确认最终数量',final_quantity_ie_review:'IE 复核最终数量',
+ quantity_adjustment:'数量调整',responsibility:'责任判定',owner_signature:'老板签字',
+ settlement_ledger:'责任台账',settlement_followup:'扣款跟进',
+};
 const originalRead=async(order:OrderJourney,domain:'bulk-preparation'|'factory-flow'|'closure',read:CockpitDocumentReader,signal:AbortSignal)=>{const data=row(await read(`digital-production/orders/${order.orderId}/${domain}`,signal));sameEntity(data,'orderId',order.orderId!,'原单资料');return data;};
 function materialEntries(data:Row,oid:string,source=false):CockpitDocumentEntry[]{
  if(source){const resource=row(data.resource);check(resource.kind==='source'&&resource.id===oid);}else sameEntity(data,'orderId',oid,'物料资料');const history=checkedRows(data.history,f=>textValue(f.recordId)&&positiveValue(f.version)&&typeof f.valid==='boolean');
- return history.map(f=>({id:`material:${f.recordId}:${f.version}`,label:`${preparationMaterialLabels[f.kind as keyof typeof preparationMaterialLabels]??'原物料记录'} v${f.version} · ${f.valid?(f.state==='ready'?'已登记备齐':f.state==='partial'?'部分到位':f.state==='withdrawn'?'已撤回':'待核实'):'原版待核对'}`,at:str(f.occurredAt)||str(f.recordedAt),by:str(f.operatorName),url:original(source?'development':'bulk',oid),note:[str(f.note),strings(f.invalidReasons).join('；')].filter(Boolean).join('；'),files:strings(f.evidenceIds).map((id,i)=>source?file(id,`本版原凭证 ${i+1}`,`digital-production/sources/${oid}/production-readiness/attachments/${encodeURIComponent(id)}`):privateFile(oid,id,`本版原凭证 ${i+1}`)),children:rows(f.quantities).map((q,i)=>({id:`quantity:${i}`,label:str(q.name),note:`${q.quantity??'未核实'} ${str(q.unit)}`}))}));
+ return history.map(f=>({id:`material:${f.recordId}:${f.version}`,label:`${preparationMaterialLabels[f.kind as keyof typeof preparationMaterialLabels]??'原物料记录'} v${f.version} · ${f.valid?(f.state==='ready'?'已登记备齐':f.state==='partial'?'部分到位':f.state==='withdrawn'?'已撤回':'待核实'):'原版待核对'}`,
+  at:str(f.occurredAt)||str(f.recordedAt),by:str(f.operatorName),url:original(source?'development':'bulk',oid),
+  originalUrl:`/ui/digital-production?${new URLSearchParams({[source?'materialSource':'materialOrder']:oid,originalMaterial:str(f.recordId),originalMaterialVersion:String(f.version)})}`,
+  note:[str(f.note),strings(f.invalidReasons).join('；')].filter(Boolean).join('；'),files:strings(f.evidenceIds).map((id,i)=>source?file(id,`本版原凭证 ${i+1}`,`digital-production/sources/${oid}/production-readiness/attachments/${encodeURIComponent(id)}`):privateFile(oid,id,`本版原凭证 ${i+1}`)),children:rows(f.quantities).map((q,i)=>({id:`quantity:${i}`,label:str(q.name),note:`${q.quantity??'未核实'} ${str(q.unit)}`}))}));
 }
 export async function preparationDirectory(order:OrderJourney,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentResult>{
  if(!order.orderId){if(!order.sourceId)return {state:'not_applicable',entries:[]};const data=row(await read(`digital-production/sources/${order.sourceId}/production-readiness`,signal));return result(materialEntries(data,order.sourceId,true),'开发/预下单原交接与投料凭证，不强制完整预算或尺码');}const oid=order.orderId,sheet=await originalRead(order,'bulk-preparation',read,signal);requireFields(sheet,['preparationId','facts','tasks']);check(nullableText(sheet.preparationId));const facts=checkedRows(sheet.facts,f=>textValue(f.kind)),tasks=checkedRows(sheet.tasks,t=>textValue(t.taskId)&&textValue(t.label)),material=row(sheet.materials),fabric=row(sheet.fabric),report=row(fabric.report),decision=row(fabric.decision),entries:CockpitDocumentEntry[]=[];
  if(sheet.readiness)entries.push(...materialEntries(row(sheet.readiness),oid));
- if(material.history!==undefined)for(const h of checkedRows(material.history,h=>textValue(h.eventId)))entries.push({id:str(h.eventId),label:'仓库主辅料发料记录',at:str(h.occurredAt),by:str(h.operatorName),url:original('bulk',oid),note:str(h.note),children:rows(h.items).map((m,i)=>({id:`dispatched:${i}`,label:str(m.name)||'原物料',note:`${m.quantity??'未记录'} ${str(m.unit)}`}))});
+ if(material.history!==undefined)for(const h of checkedRows(material.history,h=>textValue(h.eventId)))entries.push({id:str(h.eventId),label:'仓库主辅料发料记录',at:str(h.occurredAt),by:str(h.operatorName),url:original('bulk',oid),
+  originalUrl:original('bulk',oid)+'&'+new URLSearchParams({originalEvent:str(h.eventId)}),
+  note:str(h.note),children:rows(h.items).map((m,i)=>({id:`dispatched:${i}`,label:str(m.name)||'原物料',note:`${m.quantity??'未记录'} ${str(m.unit)}`}))});
  if(report.reportId)entries.push({id:str(report.reportId),label:`当前验布报告 · ${report.result??'尚未检查'}`,at:str(report.inspectedAt)||str(report.arrivedAt),url:original('bulk',oid),note:`${str(report.material)}；${str(report.note)}；当前${fabric.usable?'已获准使用':'尚未放行'}`});
  if(decision.decisionId)entries.push({id:str(decision.decisionId),label:`本报告质量决定 · ${decision.allowUse?'允许使用':'继续处理'}`,url:original('bulk',oid),note:str(decision.note)});
  if(report.reportId)entries.push({id:'fabric-history',label:'验布报告与质量决定历史',load:{kind:'order_events_fabric',path:`digital-production/orders/${oid}/bulk-preparation/history`,id:oid}});
- entries.push(...facts.map((f,i)=>({id:`preparation-fact:${i}`,label:str(f.kind),at:str(f.recordedAt),url:original('bulk',oid)})),...tasks.filter(t=>t.taskKind==='warehouse_preshrink').map(t=>({id:str(t.taskId),label:str(t.label),url:`/ui/digital-production?task=${t.taskId}&taskView=read`,note:str(t.assigneeName)||'负责仓管待指派'})));
+ entries.push(...facts.map((f,i)=>({id:`preparation-fact:${i}`,label:str(f.kind),at:str(f.recordedAt),url:original('bulk',oid)})));
+ for(const task of tasks.filter(task=>task.taskKind==='warehouse_preshrink')){
+  const url='/ui/digital-production?'+new URLSearchParams({task:str(task.taskId),taskView:'read'});
+  entries.push({id:str(task.taskId),label:str(task.label),url,originalUrl:url,note:str(task.assigneeName)||'负责仓管待指派'});
+ }
  return result(entries,'物料实绩、有效性及验布决定来自原准备模块；不因文件存在解除质量条件。');
 }
 export async function bulkTechnicalDirectory(order:OrderJourney,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentResult>{
@@ -37,17 +55,45 @@ export async function bulkTechnicalDirectory(order:OrderJourney,read:CockpitDocu
 }
 export async function qcDirectory(order:OrderJourney,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentResult>{
  if(!order.orderId)return {state:'not_applicable',entries:[]};const oid=order.orderId,data=row(await read(`digital-production/orders/${oid}/qc-progress`,signal));sameEntity(data,'orderId',oid,'QC资料');const executions=checkedRows(data.executions,e=>textValue(e.productionId)&&Array.isArray(e.records)&&Array.isArray(e.lines)),archives=data.archivedExecutions===undefined?[]:checkedRows(data.archivedExecutions,e=>Array.isArray(e.records)),entries:CockpitDocumentEntry[]=[];
+ const qcUrl=original('factory',oid)+'&factoryAction=productionProgress';
  for(const [i,e] of [...executions,...archives].entries()){
-  const all=checkedRows(e.records,r=>textValue(r.recordId)&&Array.isArray(r.attachmentIds)&&Array.isArray(r.observations)),progress=all.filter(r=>r.kind==='progress'),children:CockpitDocumentEntry[]=progress.map(r=>{const additions=all.filter(p=>p.kind==='photos'&&p.relatedProgressRecordId===r.recordId),ids=[...new Set([...strings(r.attachmentIds),...additions.flatMap(a=>strings(a.attachmentIds))])];return {id:str(r.recordId),label:`QC进度 v${r.revision}`,at:str(r.collectedAt),by:str(r.actorName),note:`${str(r.note)}${strings(r.reportIds).length?'；含本次正式成品量记录':''}`,url:original('factory',oid)+'&factoryAction=productionProgress',files:ids.map((id,n)=>file(id,`现场照片 ${n+1}`,`digital-production/orders/${oid}/qc-progress/attachments/${encodeURIComponent(id)}`)),children:[...rows(r.observations).map(o=>({id:str(o.lineId),label:lineLabel(order,str(o.lineId)),note:`裁剪 ${o.cuttingPercent??'未核'}% · 车缝 ${o.sewingPercent??'未核'}% · 整烫 ${o.ironingPercent??'未核'}%${o.additionalFinishedQuantity===undefined?'':` · 本次新增成品 ${o.additionalFinishedQuantity}件`}；${str(o.reason)}`})),...additions.map(p=>({id:str(p.recordId),label:'补传本次现场照片',at:str(p.recordedAt),by:str(p.actorName),note:'补传不改变原现场采集时间或生产数量'}))]};});
+  const all=checkedRows(e.records,r=>textValue(r.recordId)&&Array.isArray(r.attachmentIds)&&Array.isArray(r.observations));
+  const progress=all.filter(r=>r.kind==='progress');
+  const children:CockpitDocumentEntry[]=progress.map(record=>{
+   const additions=all.filter(item=>item.kind==='photos'&&item.relatedProgressRecordId===record.recordId);
+   const ids=[...new Set([...strings(record.attachmentIds),...additions.flatMap(item=>strings(item.attachmentIds))])];
+   const hasIdentity=DigitalIdSchema.safeParse(e.productionId).success&&
+    (e.factoryDecisionId===null||DigitalIdSchema.safeParse(e.factoryDecisionId).success)&&
+    DigitalIdSchema.safeParse(record.recordId).success&&positiveValue(record.revision);
+   const originalUrl=hasIdentity?`/ui/digital-production?${new URLSearchParams({factory:oid,originalFactory:'qc',
+    originalFactoryId:str(record.recordId),qcProductionId:str(e.productionId),
+    qcDecisionId:e.factoryDecisionId===null?'original':str(e.factoryDecisionId),qcRevision:String(record.revision)})}`:undefined;
+   return {id:str(record.recordId),label:`QC进度 v${record.revision}`,at:str(record.collectedAt),by:str(record.actorName),
+    note:`${str(record.note)}${strings(record.reportIds).length?'；含本次正式成品量记录':''}`,url:qcUrl,originalUrl,
+    files:ids.map((id,n)=>file(id,`现场照片 ${n+1}`,`digital-production/orders/${oid}/qc-progress/attachments/${encodeURIComponent(id)}`)),
+    children:[...rows(record.observations).map(observation=>({id:str(observation.lineId),label:lineLabel(order,str(observation.lineId)),
+     note:`裁剪 ${observation.cuttingPercent??'未核'}% · 车缝 ${observation.sewingPercent??'未核'}% · 整烫 ${observation.ironingPercent??'未核'}%${observation.additionalFinishedQuantity===undefined?'':` · 本次新增成品 ${observation.additionalFinishedQuantity}件`}；${str(observation.reason)}`})),
+    ...additions.map(photo=>({id:str(photo.recordId),label:'补传本次现场照片',at:str(photo.recordedAt),by:str(photo.actorName),note:'补传不改变原现场采集时间或生产数量'}))]};
+  });
   const orphanPhotos=all.filter(r=>r.kind==='photos'&&!progress.some(p=>p.recordId===r.relatedProgressRecordId));for(const r of orphanPhotos)children.push({id:str(r.recordId),label:'原进度关联照片',note:'原进度范围未在本页，不据此确认进度',files:strings(r.attachmentIds).map((id,n)=>file(id,`现场照片 ${n+1}`,`digital-production/orders/${oid}/qc-progress/attachments/${encodeURIComponent(id)}`))});
-  entries.push({id:`factory:${e.productionId??'archive'}:${e.factoryDecisionId??'original'}:${i}`,label:`${str(e.supplierName)||'原加工厂'}${i>=executions.length?e.currentQuantity===0?' · 已退出的工厂记录':' · 历史执行范围':''}`,url:original('factory',oid)+'&factoryAction=productionProgress',note:i>=executions.length?`${e.currentQuantity===0?'当前份额0件':'当前范围待核'}；${children.length?'保留原QC采集记录':'未记录QC现场进度或照片'}；不计入当前报量、监督或待办`:children.length?'进度、适用成品量和照片来自同次原办理记录':'已有生产范围，尚无可见QC采集记录',children});
+  const productionId=DigitalIdSchema.safeParse(e.productionId),factoryDecisionId=DigitalIdSchema.safeParse(e.factoryDecisionId);
+  const canOpenProduction=productionId.success&&(e.factoryDecisionId===null||factoryDecisionId.success)&&
+   records(order,'production').some(record=>record.id===productionId.data);
+  const originalEntries:CockpitDocumentEntry[]|undefined=canOpenProduction?[{
+   id:`reports:${productionId.data}:${factoryDecisionId.data??'original'}`,label:'本厂单原生产填报',
+   load:{kind:'original_production_reports',id:productionId.data,scopeRef:factoryDecisionId.data??'original',
+    path:`production-reporting/${productionId.data}${factoryDecisionId.data?`?${new URLSearchParams({factoryDecisionId:factoryDecisionId.data})}`:''}`},
+  }]:undefined;
+  entries.push({id:`factory:${e.productionId??'archive'}:${e.factoryDecisionId??'original'}:${i}`,label:`${str(e.supplierName)||'原加工厂'}${i>=executions.length?e.currentQuantity===0?' · 已退出的工厂记录':' · 历史执行范围':''}`,url:qcUrl,note:i>=executions.length?`${e.currentQuantity===0?'当前份额0件':'当前范围待核'}；${children.length?'保留原QC采集记录':'未记录QC现场进度或照片'}；不计入当前报量、监督或待办`:children.length?'进度、适用成品量和照片来自同次原办理记录':'已有生产范围，尚无可见QC采集记录',children,...(originalEntries?{originalEntries}:{})});
  }return result(entries,'现场进度、正式产量与质量检查分别保留原事实；照片不等同于进度或质量合格。');
 }
 export async function factoryDirectory(order:OrderJourney,read:CockpitDocumentReader,signal:AbortSignal,kind:'factory'|'ship_sample'|'factory_history'):Promise<CockpitDocumentResult>{
  if(!order.orderId)return {state:'not_applicable',entries:[]};const oid=order.orderId,sheet=await originalRead(order,'factory-flow',read,signal);requireFields(sheet,['preparationId','facts','checks']);check(nullableText(sheet.preparationId));const facts=checkedRows(sheet.facts,f=>textValue(f.factId)&&textValue(f.kind));
- if(kind==='ship_sample'){requireFields(sheet,['shipSamples']);return result(checkedRows(sheet.shipSamples,s=>textValue(s.eventId)&&Array.isArray(s.lineIds)).map(s=>({id:str(s.eventId),label:`船样寄出 · ${str(s.trackingNumber)||'快递号待核'}`,at:str(s.occurredAt),by:str(s.operatorName),url:original('factory',oid),note:`${strings(s.lineIds).map(id=>lineLabel(order,id)).join(' / ')}${s.legacy?'；原记录范围按历史保留':''}`})),'船样沿原提醒及记录，不新增生产门禁。');}
- const chosen=facts.filter(f=>oldFactoryKinds.has(str(f.kind))===(kind==='factory_history')&&(kind==='factory_history'||f.kind!=='船样寄出')),entries:CockpitDocumentEntry[]=chosen.map(f=>({id:str(f.factId),label:str(f.kind),url:original('factory',oid),at:str(f.occurredAt)||str(f.recordedAt),by:str(f.actorName),note:[str(row(f.payload).note),kind==='factory_history'?'已退役历史，当前无需补填':''].filter(Boolean).join('；'),children:rows(row(f.payload).lines).map((l,i)=>({id:`scope:${i}`,label:lineLabel(order,str(l.lineId)),note:`原本次范围 ${l.quantity??'未记录'}件`}))}));
- if(kind==='factory')for(const q of checkedRows(sheet.checks,q=>textValue(q.checkId)&&Array.isArray(q.attachmentIds)))entries.push({id:str(q.checkId),label:`工艺检查 · ${q.result}`,at:str(q.checkedAt),by:str(q.checkedBy),url:original('factory',oid),note:[lineLabel(order,str(q.lineId)),str(q.problem),str(q.treatment)].filter(Boolean).join('；'),files:strings(q.attachmentIds).map((id,i)=>file(id,`检查图片 ${i+1}`,`digital-production/orders/${oid}/factory-flow/attachments/${encodeURIComponent(id)}`))});
+ const originalEvent=(event:'fact'|'check'|'ship',id:unknown)=>DigitalIdSchema.safeParse(id).success?
+  original('factory',oid)+'&'+new URLSearchParams({originalFactory:event,originalFactoryId:str(id)}):undefined;
+ if(kind==='ship_sample'){requireFields(sheet,['shipSamples']);return result(checkedRows(sheet.shipSamples,s=>textValue(s.eventId)&&Array.isArray(s.lineIds)).map(s=>({id:str(s.eventId),label:`船样寄出 · ${str(s.trackingNumber)||'快递号待核'}`,at:str(s.occurredAt),by:str(s.operatorName),url:original('factory',oid),originalUrl:originalEvent('ship',s.eventId),note:`${strings(s.lineIds).map(id=>lineLabel(order,id)).join(' / ')}${s.legacy?'；原记录范围按历史保留':''}`})),'船样沿原提醒及记录，不新增生产门禁。');}
+ const chosen=facts.filter(f=>oldFactoryKinds.has(str(f.kind))===(kind==='factory_history')&&(kind==='factory_history'||f.kind!=='船样寄出')),entries:CockpitDocumentEntry[]=chosen.map(f=>({id:str(f.factId),label:str(f.kind),url:original('factory',oid),originalUrl:originalEvent('fact',f.factId),at:str(f.occurredAt)||str(f.recordedAt),by:str(f.actorName),note:[str(row(f.payload).note),kind==='factory_history'?'已退役历史，当前无需补填':''].filter(Boolean).join('；'),children:rows(row(f.payload).lines).map((l,i)=>({id:`scope:${i}`,label:lineLabel(order,str(l.lineId)),note:`原本次范围 ${l.quantity??'未记录'}件`}))}));
+ if(kind==='factory')for(const q of checkedRows(sheet.checks,q=>textValue(q.checkId)&&Array.isArray(q.attachmentIds)))entries.push({id:str(q.checkId),label:`工艺检查 · ${q.result}`,at:str(q.checkedAt),by:str(q.checkedBy),url:original('factory',oid),originalUrl:originalEvent('check',q.checkId),note:[lineLabel(order,str(q.lineId)),str(q.problem),str(q.treatment)].filter(Boolean).join('；'),files:strings(q.attachmentIds).map((id,i)=>file(id,`检查图片 ${i+1}`,`digital-production/orders/${oid}/factory-flow/attachments/${encodeURIComponent(id)}`))});
  return result(entries,kind==='factory_history'?'原历史只读，不计当前待办、进度分母或结案条件。':'原工艺收发、复查及仓库实际发厂记录。');
 }
 export async function receivingDirectory(order:OrderJourney,read:CockpitDocumentReader,signal:AbortSignal,kind:'receiving'|'packing'|'closure'):Promise<CockpitDocumentResult>{
@@ -63,23 +109,40 @@ export async function receivingDirectory(order:OrderJourney,read:CockpitDocument
  return {...result(entries),state:kind==='receiving'&&rows(sheet.quality).length?'created':'unknown',note:kind==='packing'?'按需查看真实装箱及差异记录；批次关联不是装箱完成，责任签字和财务不是装箱前提。':'按原实收批次及有效数量版本查看；目录入口不代表已经产生原单。'};
 }
 export async function reworkDirectory(order:OrderJourney):Promise<CockpitDocumentResult>{
- const linked=records(order,'rework');return linked.length?result(linked.map(r=>({id:r.id,label:'QC返工 / 本厂做尾原单',url:r.url!,load:{kind:'rework',path:`rework-orders/${r.id}/business-detail`,id:r.id}}))):{state:'unknown',entries:[],note:'当前没有可读取的关联返工单；不据此推定不存在或要求新建。'};
+ const linked=records(order,'rework');return linked.length?result(linked.map(r=>({id:r.id,label:'QC返工 / 本厂做尾原单',url:r.url!,load:{kind:'rework',path:`rework-orders/${r.id}/business-detail`,originalPath:`rework-orders/${r.id}/business-detail?originalNodes=true`,id:r.id}}))):{state:'unknown',entries:[],note:'当前没有可读取的关联返工单；不据此推定不存在或要求新建。'};
 }
 export async function loadProductionEntry(entry:CockpitDocumentEntry,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentEntry|undefined>{
- const l=entry.load;if(!l||!['packing','factory_garment_checks','order_events_fabric','order_events_quality','rework'].includes(l.kind))return;const data=row(await read(l.path,signal));
+ const l=entry.load;if(!l||!['packing','factory_garment_checks','order_events_fabric','order_events_quality','rework','original_production_reports'].includes(l.kind))return;const data=row(await read(l.path,signal));
+ if(l.kind==='original_production_reports'){
+  const detail=ProductionReportingDetailSchema.parse(data),decision=l.scopeRef==='original'?null:l.scopeRef;
+  if(detail.order.productionOrderId!==l.id||(detail.order.factoryDecisionId??null)!==decision)throw Error('生产填报与当前厂单不一致。');
+  const children=detail.history.map(report=>({id:report.reportId,label:`原生产填报 · 第 ${report.revision} 版`,at:report.createdAt,by:report.actorName,
+   originalUrl:`/ui/production-reporting/${l.id}?${new URLSearchParams({originalReport:report.reportId,...(decision?{factoryDecisionId:decision}:{})})}`}));
+  return {...entry,load:undefined,children,note:children.length?'':'原厂单暂无可见生产填报记录。'};
+ }
  if(l.kind==='factory_garment_checks'){
   sameEntity(data,'orderId',l.id,'工厂检查');requireFields(data,['productionInspectionHistory','productionChecks']);const history=checkedRows(data.productionInspectionHistory,h=>textValue(h.eventId)),current=checkedRows(data.productionChecks,q=>textValue(q.lineId));
   return {...entry,load:undefined,note:history.length?'检查与本次工厂/PO分配范围关联，不改变实际生产数量':'原集合尚无检查记录',children:history.map(h=>({id:str(h.eventId),label:'工厂成衣检查',at:str(h.occurredAt),by:str(h.operator),note:rows(h.checks).map(q=>`${q.result} · ${q.allocationQuantity??'未核'}件 · ${str(q.problem)}`).join('；')})).concat(current.filter(q=>q.inspected===false).map((q,i)=>({id:`current:${i}`,label:`${str(q.poNumber)||'PO待补'} · ${str(q.color)}待检查`,at:'',by:'',note:'当前分配范围未有有效检查，不用其他批次照片代替'})))};
  }
  if(l.kind.startsWith('order_events_')){
   sameEntity(data,'orderId',l.id,'历史资料');const family=l.kind==='order_events_fabric'?'fabric':'receipt_quality';check(data.family===family&&(data.nextBeforeId===null||textValue(data.nextBeforeId)));const items=checkedRows(data.items,h=>textValue(h.eventId)&&textValue(h.kind));
-  const children:CockpitDocumentEntry[]=items.map(h=>{const p=row(h.payload);return {id:str(h.eventId),label:h.kind==='bulk_fabric_report'?'原验布报告':h.kind==='bulk_fabric_decision'?'原质量处理决定':h.kind==='garment_receipt_qc_time_verified'?'原到仓检查时间核实':'原到仓成衣检查',at:str(h.occurredAt)||str(h.recordedAt),by:str(h.operatorName),note:[str(p.material),str(p.result),p.allowUse===undefined?'':p.allowUse?'当次允许使用':'当次继续处理',p.qualifiedQuantity===undefined?'':`当次合格 ${p.qualifiedQuantity}件`,str(p.note),str(p.problem),str(p.reason),'历史记录，当前有效性见原单'].filter(Boolean).join('；')};});
+  const children:CockpitDocumentEntry[]=items.map(h=>{
+   const p=row(h.payload);
+   return {id:str(h.eventId),label:h.kind==='bulk_fabric_report'?'原验布报告':h.kind==='bulk_fabric_decision'?'原质量处理决定':h.kind==='garment_receipt_qc_time_verified'?'原到仓检查时间核实':'原到仓成衣检查',
+    at:str(h.occurredAt)||str(h.recordedAt),by:str(h.operatorName),
+    originalUrl:original(family==='fabric'?'bulk':'closure',l.id)+'&'+new URLSearchParams({originalEvent:str(h.eventId)}),
+    note:[str(p.material),str(p.result),p.allowUse===undefined?'':p.allowUse?'当次允许使用':'当次继续处理',p.qualifiedQuantity===undefined?'':`当次合格 ${p.qualifiedQuantity}件`,str(p.note),str(p.problem),str(p.reason),'历史记录，当前有效性见原单'].filter(Boolean).join('；')};
+  });
   if(data.nextBeforeId)children.push({id:`older:${data.nextBeforeId}`,label:'读取更早记录',load:{...l,path:l.path.split('?')[0]+`?beforeId=${encodeURIComponent(str(data.nextBeforeId))}`}});
   return {...entry,load:undefined,children,note:items.length?'原事实按实际登记顺序保留，未重新推定历史有效性':'原集合尚无可见历史记录'};
  }
  if(l.kind==='rework'){
   sameEntity(data,'reworkOrderId',l.id,'返工资料');requireFields(data,['attachments','workflowHistory','reworkKind','canReadBusinessDetails']);const attachments=checkedRows(data.attachments,a=>textValue(a.attachmentId)),history=checkedRows(data.workflowHistory,h=>textValue(h.action));
-  return {...entry,load:undefined,label:`${data.reworkKind==='inhouse_finishing'?'本厂做尾':'QC返工'} · ${str(data.reworkNo)||'原单'} v${data.version}`,note:data.canReadBusinessDetails?[str(data.problemPart),str(data.problemDescription),str(data.reworkProcess)].filter(Boolean).join('；'):'保留当前身份原本可读字段，工资/判责按原权限另核',files:attachments.map(a=>file(str(a.attachmentId),str(a.filename),`tools/attachments/${encodeURIComponent(str(a.attachmentId))}/download?mode=preview`)),children:history.map((h,i)=>({id:`history:${i}`,label:str(h.action),at:str(h.handledAt),by:str(h.handledBy),note:str(h.remark)}))};
+  const originalEntries=data.originalNodeEntries===undefined?undefined:checkedRows(data.originalNodeEntries,item=>DigitalIdSchema.safeParse(item.entryId).success&&FinanceNodeKeySchema.safeParse(item.node).success).map(item=>({
+   id:str(item.entryId),at:str(item.handledAt),label:reworkOriginalLabels[item.node as FinanceNodeKey],
+   originalUrl:`/ui/tasks/${l.id}?${new URLSearchParams({node:str(item.node),view:'node-history',entryId:str(item.entryId)})}`,
+  }));
+  return {...entry,load:undefined,label:`${data.reworkKind==='inhouse_finishing'?'本厂做尾':'QC返工'} · ${str(data.reworkNo)||'原单'} v${data.version}`,note:data.canReadBusinessDetails?[str(data.problemPart),str(data.problemDescription),str(data.reworkProcess)].filter(Boolean).join('；'):'保留当前身份原本可读字段，工资/判责按原权限另核',files:attachments.map(a=>file(str(a.attachmentId),str(a.filename),`tools/attachments/${encodeURIComponent(str(a.attachmentId))}/download?mode=preview`)),children:history.map((h,i)=>({id:`history:${i}`,label:str(h.action),at:str(h.handledAt),by:str(h.handledBy),note:str(h.remark)})),...(originalEntries?{originalEntries}:{})};
  }
  const batchIds=strings(data.batchIds);if(!batchIds.includes(l.id))throw new Error('装箱批次与本单不一致，未展示其他批次资料');const packing=checkedRows(data.packing,p=>textValue(p.id)),resolutions=checkedRows(data.resolutions,r=>textValue(r.id)),files=checkedRows(data.files,f=>textValue(f.id));
  return {...entry,load:undefined,files:files.filter(f=>resolutions.some(r=>r.id===f.entityId)).map(f=>file(str(f.id),str(f.filename),f.retiredAt||f.status!=='ready'?null:`tools/attachments/${encodeURIComponent(str(f.id))}/download?mode=preview`,f.retiredAt?'原凭证已停用':undefined)),children:[...packing.map(p=>({id:str(p.id),label:`装箱记录 · ${p.quantity}件`,at:str(p.at),by:str(p.by)})),...resolutions.map(r=>({id:str(r.id),label:`${r.differenceType==='packing'?'装箱':'收货'}差异处理`,at:str(r.at),by:str(r.by),note:`${str(r.result)}；本记录不改变实际收货/装箱数量`}))]};

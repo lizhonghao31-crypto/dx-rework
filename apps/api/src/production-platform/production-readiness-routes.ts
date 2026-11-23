@@ -2,6 +2,7 @@ import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
 import {PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
 import {CreateUploadIntentSchema} from '@dx-rework/contracts';
+import {ConfirmDevelopmentSampleHandoverSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {businessActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
 import type {AttachmentService} from '../tools/attachments.js';
@@ -15,6 +16,15 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
   const base=`/digital-production/${route}/:resourceId/production-readiness`;
   const resource=(r:FastifyRequest):PreparationResource=>({kind,id:parse(z.uuid(),(r.params as {resourceId:unknown}).resourceId)});
   app.get(base,async r=>service.read(await actor(r),resource(r)));
+  if(kind==='source'){
+   app.get(`${base}/sample-handover`,async(r,reply)=>{
+    reply.header('cache-control','private, no-store');return service.sampleHandover(await actor(r),resource(r).id);
+   });
+   app.post(`${base}/sample-handover`,async(r,reply)=>{
+    reply.header('cache-control','private, no-store');
+    return service.confirmSampleHandover(await actor(r),resource(r).id,parse(ConfirmDevelopmentSampleHandoverSchema,r.body),key(r));
+   });
+  }
   app.post(`${base}/material-investment-reminder/close`,async r=>service.closeMaterialInvestmentReminder(await actor(r),resource(r),r.body,key(r)));
   app.post(`${base}/materials`,async r=>service.record(await actor(r),resource(r),parse(PreparationMaterialRecordSchema,r.body),key(r)));
   app.put(`${base}/responsibility`,async r=>service.assign(await actor(r),resource(r),parse(PreparationResponsibilitySchema,r.body),key(r)));

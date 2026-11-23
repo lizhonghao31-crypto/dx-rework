@@ -22,7 +22,7 @@ export class CockpitReceiptService {
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 
-  async read(actor:TrustedActorContext,orderId:string){
+  async read(actor:TrustedActorContext,orderId:string,includeDocumentBindings=false){
     return this.inSnapshot(async db=>{
       // Same order authorization and receiving eligibility as the original closure view.
       if(!canOpenOrderReceiving(actor.actorRoles)) digitalNotFound();
@@ -42,7 +42,7 @@ export class CockpitReceiptService {
         ORDER BY receiving_batch_id`,[[...new Set(receipts.map(receipt=>receipt.batchId))],cutIds])).rows.map(row=>row.id);
       const history=batchIds.length?await readReceivingDocumentHistory(db,batchIds):null;
       const documents=history?.files.filter(file=>file.status==='ready'&&file.retiredAt===null)
-        .map(({id,filename})=>({id,filename}))??[];
+        .map(({id,filename,entityId})=>({id,filename,...(includeDocumentBindings?{entityId}:{})}))??[];
       const lines=poLines.map(line=>{
         const own=receipts.filter(row=>row.lineId===line.lineId);
         const aggregate=native.get(`cut:${cutIdsByLine.get(line.lineId)}`);

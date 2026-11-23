@@ -302,7 +302,7 @@ export function DigitalDesignerWorkspace() {
     {(error||accessError)&&<p role="alert">开发档案读取失败：{error||accessError} <Button onClick={retryList}>重试读取开发档案</Button></p>}
     {confirmedOrderId&&<><p role="status">客户订单已确认。{confirmedOrder?`已读取关联订单：${confirmedOrder.designStyleNo}。`:!confirmedOrderError?"正在读取关联客户订单…":""} <a href={`${urls.pageUrl("ui/digital-production")}?order=${confirmedOrderId}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`}>查看关联客户订单</a></p>{confirmedOrderError&&<p role="alert">订单确认已成功，关联订单读取失败：{confirmedOrderError} <Button onClick={()=>setOrderRetry(value=>value+1)}>重试读取关联订单</Button></p>}</>}
     {confirmError&&<p role="alert">{confirmError}</p>}
-    {workbench?<DesignerOrderWorkbench key={`${editor}:${round??'current'}:${access?.actorId??'unverified'}`} sourceId={editor} round={round} item={editorItem} sheet={editorSheet}
+    {workbench?<DesignerOrderWorkbench key={`${editor}:${round??'current'}:${access?.actorId??'unverified'}`} sourceId={editor} round={round} actorId={access?.actorId} item={editorItem} sheet={editorSheet}
       image={editorItem&&<StyleImage item={editorItem}/>} document={document} confirmation={confirm?creationForm:confirmButton} onClose={close} onChanged={updateEditorFacts}/>:document}
    </div>;
   }

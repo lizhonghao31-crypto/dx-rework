@@ -4,13 +4,14 @@ import { useCallback, useState } from "react";
 import { useForegroundWait } from "./foreground-loading.js";
 import { useForegroundRead } from "./use-foreground-read.js";
 import { navigateInternalPage } from "./internal-navigation.js";
-import { SourcingNodeHistorySchema, type SourcingNodeHistory, type SourcingHistoryNode, type SourcingAttachment } from "@dx-rework/contracts";
+import { SourcingNodeHistorySchema, type SourcingNodeHistory, type SourcingHistoryNode, type SourcingAttachment, type SourcingTimelineEntry } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { DecisionSummary, KeyFacts, ResponsiveFactsTable, Surface, WorkflowRail } from "@dx-rework/ui";
 import { Header } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
 import { createWebUrls } from "../url-contract.js";
 import { historicalSourcingPrice, sourcingLinePricing } from "./sourcing-price-presentation.js";
+import { developmentWorkspaceReturnUrl } from "./development-workspace-return.js";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const nodes = [
@@ -33,7 +34,9 @@ export function SourcingNodeHistoryPage({ sourcingCaseId, node, returnTo }: {
   sourcingCaseId: string; node: SourcingHistoryNode; returnTo: string | null;
 }) {
   const [selectedImage, setSelectedImage] = useState<{target:string|null;image:SourcingAttachment} | null>(null);
-  const entryId = new URLSearchParams(window.location.search).get("entryId");
+  const selection = new URLSearchParams(window.location.search);
+  const entryId = selection.get("entryId");
+  const relatedEntryId = selection.get("relatedEntryId");
   const query = entryId ? `?${new URLSearchParams({ entryId })}` : "";
   const path = `sourcing/cases/${sourcingCaseId}/history/${node}${query}`;
   const load = useCallback(async (signal:AbortSignal) => {
@@ -45,6 +48,7 @@ export function SourcingNodeHistoryPage({ sourcingCaseId, node, returnTo }: {
   const history = read.value;
   const error = read.error?.message;
   const image = selectedImage?.target===read.loadedTarget ? selectedImage?.image : null;
+  const sourceReturn=returnTo?.includes('workspace=designer')?developmentWorkspaceReturnUrl(pageUrl(returnTo)):null;
   useForegroundWait(read.foregroundKey);
   const href = (selected?: SourcingHistoryNode, version?: string) => {
     const query = new URLSearchParams();
@@ -55,18 +59,52 @@ export function SourcingNodeHistoryPage({ sourcingCaseId, node, returnTo }: {
   };
   if (!history) return <div className="sourcing-workspace sourcing-order-detail" aria-busy={!error}>
     <p role="status">{error || "正在加载历史页面…"}</p>
+    {sourceReturn&&<a className="dx-button dx-button--secondary" href={sourceReturn}>返回来源</a>}
     {error ? <div className="sourcing-history-navigation"><a className="dx-button dx-button--primary" href={href()}>返回当前节点</a></div> : null}
   </div>;
-  return <SourcingNodeHistoryView history={history} currentHref={href()} nodeHref={href}
+  if (relatedEntryId !== null) {
+    const record = selection.getAll("relatedEntryId").length === 1 && entryId === null
+      ? history.relatedEntries.find(item => item.entryId === relatedEntryId && item.kind !== "contract") : undefined;
+    return <div className="sourcing-workspace sourcing-order-detail sourcing-node-history sourcing-module-layout" data-legacy-ui="sourcing">
+      <div className="sourcing-history-navigation">{sourceReturn && <a className="dx-button dx-button--secondary" href={sourceReturn}>返回来源</a>}</div>
+      {record ? <section className="sourcing-history-related" aria-label="所选外发记录">
+        <h2>{relatedEntryLabel(record)} · 第 {record.version} 版 · 只读</h2>
+        <SourcingRelatedEntry record={record} />
+      </section> : <p role="alert">找不到所选的外发原记录。</p>}
+    </div>;
+  }
+  return <SourcingNodeHistoryView history={history} currentHref={href()} nodeHref={href} sourceReturn={sourceReturn}
     onImage={image=>setSelectedImage({target:read.loadedTarget,image})}>
     {image ? <div className="rework-image-modal"><section className="rework-image-modal__content" role="dialog" aria-modal="true" aria-label={image.filename}><div className="rework-image-modal__heading"><strong>{image.filename}</strong><button type="button" onClick={() => setSelectedImage(null)}>关闭</button></div><ImageViewer src={pictureUrl(image.attachmentId)} alt={image.filename} /></section></div> : null}
   </SourcingNodeHistoryView>;
 }
 
+function relatedEntryLabel(record: SourcingTimelineEntry) {
+  switch(record.kind) {
+    case "price_reapplication": return "价格重新申请";
+    case "factory_change_request": return "转厂申请";
+    case "factory_change_verification": return "转厂审核";
+    case "contract": return "合同";
+    case "exception_verification": return "差异处理";
+    default: return "款号修订";
+  }
+}
+
+function SourcingRelatedEntry({record}:{record:SourcingTimelineEntry}) {
+  return <article>
+    <div><strong>{relatedEntryLabel(record)}{record.decision ? ` · ${record.decision === "approved" ? "通过" : "驳回"}` : ""}</strong>
+      <span>{dateTime(record.handledAt)} · {record.handledBy}</span></div>
+    {record.supplierName ? <p>申请加工厂：{record.supplierName}；单价：{record.unitPrice ? historicalSourcingPrice(record.unitPrice) : "—"}；数量：{record.quantity ? formatBusinessDecimal(record.quantity) : "—"}；总额：{record.totalAmount ? formatBusinessCurrency(record.totalAmount) : "—"}</p> : null}
+    {record.contractReference ? <p>合同编号：{record.contractReference}</p> : null}
+    {record.resolution ? <p>{record.resolution === "close" ? "确认差异并闭环" : "退回财务重核"}</p> : null}
+    <p>{record.reason}</p>
+  </article>;
+}
+
 // Local read-only page: no submission callbacks, uploaders or mutable draft state.
-export function SourcingNodeHistoryView({ history, currentHref, nodeHref, onImage, children }: {
+export function SourcingNodeHistoryView({ history, currentHref, nodeHref, sourceReturn, onImage, children }: {
   history: SourcingNodeHistory; currentHref: string; nodeHref: (node: SourcingHistoryNode, entryId?: string) => string;
-  onImage: (image: SourcingAttachment) => void; children?: React.ReactNode;
+  sourceReturn?:string|null;onImage: (image: SourcingAttachment) => void; children?: React.ReactNode;
 }) {
   const { item, node, entry, versions, attachments, notices, relatedEntries } = history;
   const index = nodes.findIndex(([key]) => key === node);
@@ -77,6 +115,7 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, onImag
     <div className="sourcing-history-navigation">
       <div><h2>{labels[node]}</h2><span>{dateTime(entry.handledAt)} · {entry.handledBy}</span></div>
       <a className="dx-button dx-button--primary" href={currentHref}>返回当前节点</a>
+      {sourceReturn&&<a className="dx-button dx-button--secondary" href={sourceReturn}>返回来源</a>}
       {versions.length > 1 ? <label>历史版本<select value={entry.entryId} onChange={event => { void navigateInternalPage(nodeHref(node, event.target.value)); }}>
         {versions.map(version => <option key={version.entryId} value={version.entryId}>V{version.version} · {dateTime(version.handledAt)}</option>)}
       </select></label> : null}
@@ -144,14 +183,7 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, onImag
     {relatedEntries.length ? <section className="sourcing-history-related" aria-label="订单相关处理记录">
       <h2>{node === "management" ? "订单转厂记录" : node === "finance" ? "合同与差异处理记录" : "款号修订记录"}</h2>
       <p>以下为该订单的相关记录，时间范围独立于上方选定的节点版本。</p>
-      {relatedEntries.map(record => <article key={record.entryId}>
-        <div><strong>{record.kind === "price_reapplication" ? "价格重新申请" : record.kind === "factory_change_request" ? "转厂申请" : record.kind === "factory_change_verification" ? "转厂审核" : record.kind === "contract" ? "合同" : record.kind === "exception_verification" ? "差异处理" : "款号修订"}
-          {record.decision ? ` · ${record.decision === "approved" ? "通过" : "驳回"}` : ""}</strong><span>{dateTime(record.handledAt)} · {record.handledBy}</span></div>
-        {record.supplierName ? <p>申请加工厂：{record.supplierName}；单价：{record.unitPrice ? historicalSourcingPrice(record.unitPrice) : "—"}；数量：{record.quantity ? formatBusinessDecimal(record.quantity) : "—"}；总额：{record.totalAmount ? formatBusinessCurrency(record.totalAmount) : "—"}</p> : null}
-        {record.contractReference ? <p>合同编号：{record.contractReference}</p> : null}
-        {record.resolution ? <p>{record.resolution === "close" ? "确认差异并闭环" : "退回财务重核"}</p> : null}
-        <p>{record.reason}</p>
-      </article>)}
+      {relatedEntries.map(record => <SourcingRelatedEntry key={record.entryId} record={record} />)}
     </section> : null}
     {children}
   </div>;

@@ -13,12 +13,17 @@ export function registerOrderClosureRoutes(app:FastifyInstance,dependencies:Digi
  const receipt='/digital-production/orders/:orderId/receipt-summary';
  app.get(receipt,async(request,reply)=>{
   reply.header('Cache-Control','no-store');
-  return service.cockpitReceipts.read(await actor(request),id(request));
+  const includeBindings=(request.query as {documentBindings?:unknown}).documentBindings==='true';
+  return service.cockpitReceipts.read(await actor(request),id(request),includeBindings);
  });
  const base='/digital-production/orders/:orderId/closure';
  app.post(`${base}/quality`,async request=>service.recordQuality(await actor(request),id(request),parse(ReceiptQualitySchema,request.body),typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:''));
  app.post(`${base}/quality/verify-time`,async request=>service.verifyQualityTime(await actor(request),id(request),parse(ReceiptQualityVerificationSchema,request.body),typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:''));
- app.get(`${base}/history`,async request=>service.documentHistory(await actor(request),id(request),parse(z.object({beforeId:z.string().uuid().optional()}).strict(),request.query).beforeId));
+ app.get(`${base}/history`,async request=>{
+  const query=parse(z.union([z.object({eventId:z.string().uuid()}).strict(),z.object({beforeId:z.string().uuid().optional()}).strict()]),request.query);
+  const user=await actor(request),orderId=id(request);
+  return 'eventId'in query?service.documentHistory(user,orderId,undefined,query.eventId):service.documentHistory(user,orderId,query.beforeId);
+ });
  app.get(base,async request=>service.read(await actor(request),id(request)));
  app.post(base,async request=>service.close(await actor(request),id(request),parse(SpecialClosureSchema,request.body),typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:''));
 }

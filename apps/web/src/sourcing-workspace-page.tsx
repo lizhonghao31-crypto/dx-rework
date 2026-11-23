@@ -21,6 +21,7 @@ import { digitalRequest } from "./digital-production-api.js";
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
 import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
 import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
+import { SourcingContractOriginal } from './sourcing-contract-original.js';
 import { ContractInformationRefresh } from "./contract-information-refresh.js";
 import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR, canChangeSourcingTransferDeliveryDate } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
@@ -470,7 +471,9 @@ export function SourcingWorkspacePage({
       {view === "pending" ? <OrderListPage mode="pending" user={user} /> : null}
       {view === "history" ? <OrderListPage mode="history" user={user} /> : null}
       {view === "detail" && sourcingCaseId
-        ? <OrderDetailPage key={sourcingCaseId} sourcingCaseId={sourcingCaseId} user={user} /> : null}
+        ? new URLSearchParams(window.location.search).has('originalContract')
+          ? <SourcingContractOriginal key={sourcingCaseId} sourcingCaseId={sourcingCaseId}/>
+          : <OrderDetailPage key={sourcingCaseId} sourcingCaseId={sourcingCaseId} user={user} /> : null}
       </div>
     </Shell>
   );
@@ -1591,7 +1594,7 @@ function OrderDetailPage({
       });
   };
 
-  if(historyNode)return <SourcingNodeHistoryPage key={`${sourcingCaseId}:${historyNode}:${new URLSearchParams(window.location.search).get("entryId")??""}`} sourcingCaseId={sourcingCaseId} node={historyNode}
+  if(historyNode)return <SourcingNodeHistoryPage key={`${sourcingCaseId}:${historyNode}:${window.location.search}`} sourcingCaseId={sourcingCaseId} node={historyNode}
     returnTo={todoReturnPath(window.location.search)??sourcingReturnPath(window.location.search)??cockpitReturnPath(window.location.search)} />;
 
   const todoBackPath = todoReturnPath(window.location.search);

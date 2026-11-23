@@ -10,6 +10,7 @@ import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
 import {createClientRequestId} from './client-request-id.js';
 import {createWebUrls} from '../url-contract.js';
+import {ReceivingOriginalRecord,readReceivingOriginalSearch} from './receiving-original-records.js';
 import './factory-flow-panel.css';
 export function closureWorkQuantityLabel(r:OrderClosureSheet['lines'][number]['reworks'][number]){
  return r.businessSummary?.kind==='inhouse_finishing'?`普通做尾 · 原单登记量 ${r.quantity??'尚未记录'}（不作为不良返工量）`:r.businessSummary?.kind==='qc_rework'?`不良返工 · 原单登记返工量 ${r.quantity??'尚未记录'}`:`原单登记量 ${r.quantity??'尚未记录'} · 业务类型待原单核实`;
@@ -22,7 +23,12 @@ export async function closureRequest(path:string,method='GET',body?:unknown,key?
  if(!valid||method!=='GET'&&(value.stage!=='特殊结案'||!value.closed||value.closed.reason!==(body as {reason:string}).reason.trim()))throw new DigitalRequestError(method==='GET'?'原回货及结案资料尚未取得完整回执，请重新读取':'原结案提交结果尚未确认，请保留原因并核对原提交',200,'INVALID_RESPONSE');
  return value;
 }
-export function OrderClosurePanel({orderId,onClose}:{orderId:string;onClose:()=>void}){
+type Props={orderId:string;onClose:()=>void};
+export function OrderClosurePanel(props:Props){
+ const target=readReceivingOriginalSearch(window.location.search);
+ return target===undefined?<CurrentOrderClosurePanel {...props}/>:<ReceivingOriginalRecord {...props} target={target}/>;
+}
+function CurrentOrderClosurePanel({orderId,onClose}:Props){
  const base=`orders/${orderId}/closure`,[sheet,setSheet]=useState<OrderClosureSheet|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),writing=useRef(false),pending=useRef<{payload:string;key:string}|null>(null);
  const attempt=useRef(new SubmissionAttempt()),contextVersion=useRef(0);const [uncertain,setUncertain]=useState(false);
  useDigitalDetailNavigationGuard(uncertain,busy,writing,'原结案提交结果尚未确认，离开不会撤销提交并会丢失原标识。仍要离开？');

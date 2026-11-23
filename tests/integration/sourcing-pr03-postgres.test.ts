@@ -78,6 +78,7 @@ import { digitalTodoOrder } from "../../apps/api/src/production-platform/notific
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { BudgetDocumentSchema } from "@dx-rework/contracts/digital-budget";
 import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
+import { cuttingOriginalRecord,cuttingOriginalSelection } from '../../apps/web/src/cutting-query.js';
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
 import * as contractPdf from "../../apps/api/src/sourcing/sourcing-contract-pdf.js";
@@ -2897,6 +2898,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(corrected.value.item.record!.corrections).toEqual([
       expect.objectContaining({version:2,pieceCount:122,actualCutCount:22,reason:"修正测试误录",correctedBy:merchandiserId}),
     ]);
+    const history=(await cutting.get(cuttingOwnerActor(),stableCuttingOrderId)).record!;
+    const select=(version:string,id=history.cuttingRecordId)=>cuttingOriginalSelection('?'+new URLSearchParams({cuttingRecord:id,cuttingVersion:version}));
+    expect(cuttingOriginalRecord(history,select('1'))).toMatchObject({version:1,pieceCount:recorded.record!.pieceCount,actualCutCount:20,
+      recordedAt:initialRecordedAt,recordedByName:recorded.record!.recordedByName,photos:[{attachmentId:recordedSheetId}]});
+    expect(cuttingOriginalRecord(history,select('2'))).toMatchObject({version:2,pieceCount:122,actualCutCount:22,
+      recordedAt:history.corrections[0]!.correctedAt,reason:'修正测试误录',photos:[]});
+    expect(cuttingOriginalRecord(history,select('3'))).toBeNull();
+    expect(cuttingOriginalRecord(history,select('1',randomUUID()))).toBeNull();
+    expect(cuttingOriginalSelection(`?cuttingRecord=${history.cuttingRecordId}&cuttingVersion=1&cuttingVersion=2`)).toBeNull();
     await expect(cutting.correct(cuttingWorkerActor() as never,stableCuttingOrderId,{expectedVersion:2,pieceCount:123,actualCutCount:23,reason:"越权"},randomUUID()))
       .rejects.toMatchObject({statusCode:403});
     await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({statusCode:409});

@@ -7,9 +7,22 @@ import {mkdtemp,mkdir,readFile,rm,writeFile} from "node:fs/promises";
 import {join,resolve,extname} from "node:path";
 import {tmpdir} from "node:os";
 import {build} from "vite";
-import type {Browser,chromium as Chromium} from "playwright-core";
+import type {Browser,Route,chromium as Chromium} from "playwright-core";
 import {loadConfig} from "@dx-rework/config";
 import {buildApp} from "../../apps/api/src/app.js";
+import {CuttingSourceService} from '../../apps/api/src/cutting/cutting-source-service.js';
+import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
+import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {BulkWashingService} from '../../apps/api/src/production-platform/bulk-washing-service.js';
+import {QcProductionProgressService} from '../../apps/api/src/production-platform/qc-production-progress-service.js';
+import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
+import {ReworkBusinessDetailService} from '../../apps/api/src/rework/rework-business-detail-service.js';
+import {SourcingContractReturnService} from '../../apps/api/src/sourcing/sourcing-contract-return-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
+import {ExportJobService} from '../../apps/api/src/tools/exports.js';
+import {SubmitQcProgressSchema} from '@dx-rework/contracts/qc-production-progress';
 import {AuthService} from "../../apps/api/src/auth/service.js";
 import {PostgresAuthStore} from "../../apps/api/src/auth/postgres-store.js";
 import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from "../../apps/api/src/auth/acceptance-provider.js";
@@ -28,10 +41,14 @@ import {DigitalProductionTaskService} from "../../apps/api/src/production-platfo
 import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
 import {DigitalQuotationService} from "../../apps/api/src/production-platform/quotation-service.js";
+import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {DevelopmentDocumentSchema,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {QuotationConfirmationSchema} from '@dx-rework/contracts/digital-quotation';
+import {CreateSupplierSchema,type PackingTimeInput} from '@dx-rework/contracts';
 import type {DevelopmentReturnIssue} from '@dx-rework/contracts/digital-development-amendments';
 import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-service.js";
-import {PatternRoomPriceService} from "../../apps/api/src/pattern-room/price-service.js";
+import {PATTERN_HOURLY_PRICE_ID,PatternRoomPriceService} from "../../apps/api/src/pattern-room/price-service.js";
 import {RootAwareTodoProjectionService} from "../../apps/api/src/todos/root-aware-projection-service.js";
 import {TodoService} from "../../apps/api/src/todos/service.js";
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
@@ -39,14 +56,17 @@ import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js'
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {arrangeTestRound} from "../helpers/development-arrangement-fixture.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
+import {failedFrameworkWashingFixture,prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {createHistoricalPatternFixture} from '../helpers/historical-pattern-fixture.js';
+import {physicalCuttingLabelsFixture} from '../helpers/production-readiness-fixture.js';
+import {completeInspectionReport} from '../inspection-report-fixture.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("S1 development read through original App and native signed identity",()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string;
- let prepareDevelopment:(published?:boolean,accessoryId?:string)=>Promise<{id:string;materialId:string}>;
+ let prepareDevelopment:(published?:boolean,accessoryId?:string,completeHandover?:boolean)=>Promise<{id:string;materialId:string}>;
  let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string,uploadSourceId:string,uploadPaperId:string;
  let externalSourceId:string,externalTaskId:string,externalRequestId:string;
  const tokens=new Map<string,string>(),evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"development-read");
@@ -74,11 +94,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const prices=new PatternRoomPriceService(f.db),option=(await prices.options(f.root))[0]!,quote=await prices.quote(f.root,'category',option.priceId);
   const category=await prices.change(f.root,'category',option.priceId,{version:quote.version,amount:'10.000',enabled:true,reason:'TEST isolated S1 sample'},randomUUID());
   const designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!;
-  const prepare=prepareDevelopment=async(published=true,accessoryId?:string)=>{
+  const prepare=prepareDevelopment=async(published=true,accessoryId?:string,completeHandover=false)=>{
    const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-S1-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    const materialId=randomUUID(),photo=await f.image(designer);
    const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST S1 原制作说明',craft:'无',washing:'免洗',materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
    document.patternCategoryId=category.priceId;
+   if(completeHandover)document.materials[0]!.quantityUnit='米';
    if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST 必需纽扣',name:'TEST 必需纽扣',available:false,expectedDate:'2027-01-01'});
    const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
    if(published)await forms.publish(designer,source.sourceId,saved.version,randomUUID(),{categoryId:category.priceId,priceVersion:category.version});
@@ -102,8 +123,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   externalTaskId=external.taskId;externalRequestId=external.requestId;
   foreignSourceId=(await prepare()).id;foreignTaskId=(await execution.read(f.root,foreignSourceId)).tasks.find(t=>t.taskKind==='development_materials')!.taskId;
   draftId=(await prepare(false)).id;
-  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomOrders:{authenticate,root,service:native,attachments:f.attachments},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentRounds:new DevelopmentRoundService(f.db,true,native),developmentExecution:execution,developmentAttachments:f.attachments,journeys:new DigitalJourneyQuery(f.db),quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
-  for(const role of ['root','pattern-room-worker','worker-a','pattern-room-supervisor','development-clerk'])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
+  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomOrders:{authenticate,root,service:native,attachments:f.attachments},patternRoomPrices:{authenticate,root,service:prices},
+   cutting:{authenticate,root,service:new CuttingSourceService(f.db),attachments:f.attachments},
+   rework:{authenticate,root,service:new ReworkInitiationService(f.db,'anchor-test'),businessDetailService:new ReworkBusinessDetailService(f.db),attachments:f.attachments},
+   sourcing:{authenticate,root,service:f.sourcing,contracts:f.contracts,reporting:new ProductionReportingService(f.db)},
+   tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:f.attachments,exports:new ExportJobService(f.db),
+    canDownloadBoundAttachment:async(actor,binding)=>{
+     if(binding.entityType==='receiving_difference_resolution')return binding.mimeType.startsWith('image/')&&(actor.actorRoles.length>0||await root.isRootUser(actor.actorId));
+     return f.sourcing.canDownloadBoundAttachment({actorId:actor.actorId,actorRoles:actor.actorRoles,
+      authorizationCapability:'sourcing:view',authorizationCapabilities:actor.capabilities,requestId:randomUUID()},binding);
+    }},
+   digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentRounds:new DevelopmentRoundService(f.db,true,native),developmentExecution:execution,developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(f.db),bulkPreparationService:new BulkPreparationService(f.db),closureService:new OrderClosureService(f.db),factoryFlowService:new FactoryFlowService(f.db),bulkWashing:new BulkWashingService(f.db),qcProgress:new QcProductionProgressService(f.db),journeys:new DigitalJourneyQuery(f.db),quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
+  for(const role of ['root','pattern-room-worker','worker-a','worker-b','pattern-room-supervisor','development-clerk'])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   output=await mkdtemp(join(tmpdir(),"dx-development-read-native-"));const previous=process.env.NODE_ENV;
   try{process.env.NODE_ENV="production";await build({root:resolve("apps/web"),configFile:resolve("apps/web/vite.config.ts"),mode:"production",base:"/",build:{outDir:output,emptyOutDir:true}});}finally{if(previous===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previous;}
   const html=await readFile(join(output,"index.html"));
@@ -145,6 +176,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const legacyPdfId=pdfId;
   const price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled AND amount IS NOT NULL LIMIT 1")).rows[0]!;
   const legacy=await createHistoricalPatternFixture(native,designer,{styleNo:'TEST-LEGACY-ORIGINAL-'+randomUUID(),categoryId:price.price_id,priceVersion:price.version,quantity:1,attachmentIds:[legacyPdfId],note:'TEST 历史纸样原说明'},randomUUID());
+  const prices=new PatternRoomPriceService(f.db),hourly=await prices.quote(f.root,'hourly',PATTERN_HOURLY_PRICE_ID);
+  const miscPrice=await prices.change(f.root,'hourly',PATTERN_HOURLY_PRICE_ID,{version:hourly.version,amount:'12.000',enabled:true,reason:'TEST 原杂事目录分页'},randomUUID());
+  const miscInput={priceVersion:miscPrice.version,styleNo:adopted.styleNo,association:{kind:'source',id:own.id}};
+  const linkedMisc=[];
+  for(let index=1;index<=21;index++){
+   linkedMisc.push(await native.createMisc(designer,{...miscInput,taskName:`TEST 原杂事 ${index}`,note:`TEST 本轮杂事原备注 ${index}`},randomUUID()));
+  }
+  const unrelatedMisc=await native.createMisc(designer,{...miscInput,association:undefined,styleNo:'',taskName:linkedMisc[0]!.taskName},randomUUID());
   const before=await execution.read(clerk,own.id),check=before.tasks.find(task=>task.taskKind==='development_materials')!;
   const entries=[{materialId:own.materialId,usage:'use' as const,physical:true,quantity:true,color:true,specification:false,note:'TEST原规格需补正',confirmedWith:''}],issues:DevelopmentReturnIssue[]=[{materialId:own.materialId,field:'specification',reason:'TEST原规格待更正'},{materialId:null,field:'files',reason:'TEST本轮附件资料待更正'},{materialId:null,field:'instructions',reason:'TEST制作说明待更正'}];
   const verified=await execution.saveMaterials(clerk,own.id,{taskId:check.taskId,expectedVersion:before.materialVerification!.version,expectedDocumentVersion:before.sheet.version,entries,result:'缺项退回',returnIssues:issues},randomUUID());
@@ -187,6 +226,41 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.goBack();await firstOriginal.waitFor();await expect.poll(async()=>Math.abs(await page.evaluate(()=>window.scrollY)-originalTop)).toBeLessThanOrEqual(2);
    expect(new URL(page.url()).searchParams.get('selected')).toBe(own.id);expect(new URL(page.url()).searchParams.get('area')).toBe('records');
    expect(await search.inputValue()).toBe('资料版本 '+prior.documentVersion);
+   const originalPattern=page.getByRole('button',{name:'打板执行单',exact:true});
+   const relatedResponse=(number:string)=>page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return url.pathname==='/api/pattern-room/related-orders'&&url.searchParams.get('sourceId')===own.id&&(url.searchParams.get('page')??'1')===number;
+   });
+   const firstRelated=relatedResponse('1'),secondRelated=relatedResponse('2');
+   await originalPattern.click();
+   const [related,nextRelated]=await Promise.all([firstRelated,secondRelated]);
+   expect(related.status(),await related.text()).toBe(200);
+   expect(nextRelated.status(),await nextRelated.text()).toBe(200);
+   const firstDirectory=await related.json(),secondDirectory=await nextRelated.json();
+   expect(firstDirectory.nextPage).toBe(2);
+   expect(secondDirectory.nextPage).toBeNull();
+   const visibleIds=[...firstDirectory.items,...secondDirectory.items].map(item=>item.orderId).sort();
+   expect(visibleIds).toEqual([link.order_id,...linkedMisc.map(item=>item.orderId)].sort());
+   const patternLink=page.locator(`a[href*="/ui/pattern-room/orders/${link.order_id}"][href*="readOnly=history"]`);
+   await patternLink.waitFor();
+   expect(new URL((await patternLink.getAttribute('href'))!,page.url()).searchParams.get('round')).toBe(adopted.currentRoundId);
+   await patternLink.click();await page.getByText('历史记录 · 只读',{exact:true}).waitFor();
+   await page.getByText(adopted.note!,{exact:false}).first().waitFor();
+   await page.goBack();await patternLink.waitFor();
+   expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('pattern');
+   expect(new URL(page.url()).searchParams.get('development')).toBe(own.id);
+   await page.getByRole('button',{name:'关联打板杂事单',exact:true}).click();
+   const secondPageMisc=linkedMisc.find(item=>secondDirectory.items.some(entry=>entry.orderId===item.orderId))!;
+   const miscLink=page.locator(`a[href*="/ui/pattern-room/orders/${secondPageMisc.orderId}"][href*="readOnly=history"]`);
+   await miscLink.waitFor();
+   expect(await page.locator(`a[href*="/ui/pattern-room/orders/${unrelatedMisc.orderId}"]`).count()).toBe(0);
+   expect(new URL((await miscLink.getAttribute('href'))!,page.url()).searchParams.get('round')).toBe(secondPageMisc.currentRoundId);
+   await miscLink.click();await page.getByText('历史记录 · 只读',{exact:true}).waitFor();
+   await expect.poll(()=>page.locator('.page-heading h1').innerText()).toContain(secondPageMisc.taskName!);
+   await page.getByText(`备注：${secondPageMisc.note}`,{exact:true}).waitFor();
+   await page.getByRole('link',{name:'返回来源列表',exact:true}).click();await miscLink.waitFor();
+   expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('misc');
+   expect(new URL(page.url()).searchParams.get('selected')).toBe(own.id);
    await firstOriginal.click();await original.waitFor();
    const width=await original.boundingBox();await page.getByRole('button',{name:'切换单据',exact:true}).click();const chooser=page.getByRole('dialog',{name:'切换单据',exact:true});await chooser.waitFor();
    await chooser.getByRole('button',{name:`开发单 · 第1轮 · 资料版本 ${current.version} · 已发布`,exact:true}).waitFor();
@@ -318,6 +392,46 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'车板完成，交给下一位',exact:true}).click();expect((await sewn).status()).toBe(200);
    await expect.poll(()=>page.locator('.task-workbench-sample footer').innerText()).toContain('已完成');await expect.poll(leavingBlocked).toBe(false);
    expect((await execution.read(f.root,uploadSourceId)).tasks.find(task=>task.taskId===sewing.taskId)?.state).toBe('completed');
+   const author=await browser.newContext({viewport:{width:1165,height:747}});
+   try{
+    await author.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);
+    const source=await author.newPage();source.setDefaultTimeout(12000);
+    const technicalHistory:string[]=[];
+    source.on('request',request=>{
+     const url=new URL(request.url());
+     if(url.pathname===`/api/digital-production/sources/${uploadSourceId}/execution/technical/history`&&url.searchParams.get('kind')==='artifacts'){
+      technicalHistory.push(url.searchParams.get('version')??'directory');
+     }
+    });
+    await source.goto(base+'/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:uploadSourceId,
+     area:'records',originalStage:'development',originalCategory:'development_plt'}));
+    const directory=source.getByLabel('按阶段读取原单据',{exact:true});
+    const href=directory.locator(`a[href*="originalTechnicalId=${artifact.artifactSetId}"]`);
+    const loadedFile=directory.getByRole('link',{name:'PLT纸样原件 1',exact:true});
+    await loadedFile.waitFor();
+    expect(await loadedFile.getAttribute('href')).toContain(artifact.body.pltAttachmentIds[0]);
+    expect(technicalHistory).toEqual(['directory',String(artifact.version)]);
+    await directory.getByRole('button',{name:'尺寸表',exact:true}).click();
+    await href.waitFor();
+    expect(technicalHistory).toEqual(['directory',String(artifact.version)]);
+    await directory.getByRole('button',{name:'纸样PLT',exact:true}).click();
+    await loadedFile.waitFor();
+    expect(technicalHistory).toEqual(['directory',String(artifact.version)]);
+    await Promise.all([source.waitForURL(target=>target.searchParams.get('originalTechnicalId')===artifact.artifactSetId),href.click()]);
+    const target=new URL(source.url());
+    expect(target.searchParams.get('originalTechnicalVersion')).toBe(String(artifact.version));
+    await source.getByRole('heading',{name:`原技术成果 · 第 1 轮 v${artifact.version} · 只读`,exact:true}).waitFor();
+    const original=source.getByRole('link',{name:'PLT纸样原件 1',exact:true});
+    expect(await original.getAttribute('href')).toContain(artifact.body.pltAttachmentIds[0]);
+    await source.getByText('1.5 米',{exact:true}).waitFor();
+    await source.getByText('胸围',{exact:true}).waitFor();
+    expect(await source.getByRole('button',{name:'发布技术成果',exact:true}).count()).toBe(0);
+    await source.getByRole('button',{name:'返回来源',exact:true}).click();await href.waitFor();
+    expect(new URL(source.url()).searchParams.get('originalCategory')).toBe('development_plt');
+    target.searchParams.set('originalTechnicalId',randomUUID());await source.goto(target.href);
+    await source.getByRole('alert').filter({hasText:'找不到所选技术历史版本'}).waitFor();
+    expect(await original.count()).toBe(0);
+   }finally{await author.close();}
    await page.screenshot({path:join(evidence,'acknowledged-sewing-1165.png'),fullPage:true});
   }catch(error){await page.screenshot({path:join(evidence,'upload-state-failure.png'),fullPage:true});await writeFile(join(evidence,'upload-state-failure.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
  });
@@ -419,6 +533,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query('SELECT * FROM digital_development_size_review_requests WHERE source_id=$1',[commentSourceId])).rows).toEqual(before);
    const facts=(await f.db.query('SELECT precision,occurred_at,occurred_date::text AS date FROM digital_development_comment_times WHERE source_id=$1',[commentSourceId])).rows;expect(facts).toEqual([{precision:'date',occurred_at:null,date:'2026-11-09'}]);
    await page.screenshot({path:join(evidence,'customer-approval-time-1165.png'),fullPage:true});
+   const designer=await browser.newContext({viewport:{width:1165,height:747}});
+   try{
+    await designer.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);
+    const workbench=await designer.newPage(),writes:string[]=[];
+    workbench.on('request',request=>{
+     if(request.method()!=='GET'&&new URL(request.url()).pathname.includes('/technical/comment'))
+      writes.push(request.method());
+    });
+    await workbench.goto(base+`/ui/digital-production?workspace=designer&section=workspace&development=${commentSourceId}&area=customer`);
+    const feedback=workbench.getByRole('region',{name:'客户意见',exact:true});
+    await feedback.getByText('TEST original customer approval without an invented time',{exact:true}).waitFor();
+    expect(await feedback.getByText(/实际发生：2026-11-09/).isVisible()).toBe(true);
+    expect(await feedback.getByRole('textbox',{name:'评语原意',exact:true}).isVisible()).toBe(true);
+    expect(await workbench.getByText('录客户意见',{exact:true}).count()).toBe(0);
+    expect(await workbench.getByText('客户评语与最终批复',{exact:true}).count()).toBe(0);
+    expect(writes).toEqual([]);
+   }finally{await designer.close();}
   }catch(error){await page.screenshot({path:join(evidence,'customer-approval-time-failure.png'),fullPage:true});await writeFile(join(evidence,'customer-approval-time-failure-body.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
  });
  it("records a date-only material occurrence through the original App without replacing its registration time",async()=>{
@@ -468,29 +599,38 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(denied.statusCode).toBe(403);
    await page.goto(`${base}/ui/digital-production?${filters}`);
    const row=page.locator(`#development-open-${sourceId}`);
+   const readinessResponse=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith(`/sources/${sourceId}/production-readiness`));
    await row.click();
+   expect((await readinessResponse).status()).toBe(200);
    await page.getByRole('heading',{name:source,exact:true}).waitFor();
    const nav=page.getByRole('navigation',{name:'本单区域'});
-   expect(await nav.getByRole('link').allTextContents()).toEqual(['版单资料','开发办理','客户与报价','交接与协同','订单相关单据','操作记录']);
+   expect(await nav.getByRole('link').allTextContents()).toEqual(['版单资料','开发进度','客户与报价','交接与寄样','订单相关单据','操作记录']);
    expect(await nav.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
    await page.setViewportSize({width:390,height:747});
    expect(await nav.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
    await page.setViewportSize({width:1165,height:747});
-   const lazyPaths=[`/sources/${sourceId}/quotation`,`/sources/${sourceId}/production-readiness`,`/journeys/${sourceId}`];
-   expect(requests.filter(request=>lazyPaths.some(path=>request.path.endsWith(path)))).toEqual([]);
+   const customer=page.getByRole('region',{name:'客户与报价',exact:true});
+   await customer.getByText('客户当前确认版：',{exact:false}).waitFor();
+   const originalDirectory=page.getByRole('region',{name:'本单原单据目录',exact:true});
+   await originalDirectory.getByLabel('搜索原单与版本',{exact:true}).waitFor();
+   const overviewPaths=[`/sources/${sourceId}/quotation`,`/sources/${sourceId}/production-readiness`,`/journeys/${sourceId}`];
+   for(const path of overviewPaths)expect(requests.filter(request=>request.path.endsWith(path))).toHaveLength(1);
    await nav.getByRole('link',{name:'客户与报价',exact:true}).focus();
    await page.keyboard.press('Enter');
-   const customer=page.getByRole('region',{name:'客户与报价',exact:true});
-   await customer.getByText('客户报价协作',{exact:true}).click();
-   await customer.getByText('客户当前确认版：',{exact:false}).waitFor();
-   expect(requests.filter(request=>request.path.endsWith(lazyPaths[0]!))).toHaveLength(1);
    await nav.getByRole('link',{name:'订单相关单据',exact:true}).click();
-   const originalDirectory=page.getByRole('region',{name:'本单原单据目录',exact:true});
    await originalDirectory.getByLabel('搜索原单与版本',{exact:true}).fill('资料版本');
    await expect.poll(()=>new URL(page.url()).searchParams.get('originalSearch')).toBe('资料版本');
    await expect.poll(()=>originalDirectory.getByRole('status').filter({hasText:/^正在(?:读取|核对)/}).count()).toBe(0);
+   expect(await originalDirectory.getByRole('navigation',{name:/版本分页/}).count()).toBe(0);
+   const developmentRecords=page.getByRole('region',{name:'产品开发打板',exact:true});
+   const paperDocument=developmentRecords.locator(`a[href*="task=${paperId}"]`);
+   const paperDocumentPath=new URL((await paperDocument.getAttribute('href'))!,page.url());
+   expect(paperDocumentPath.searchParams.get('task')).toBe(paperId);
+   expect(paperDocumentPath.searchParams.get('taskView')).toBe('read');
+   expect(new URL(paperDocumentPath.searchParams.get('returnTo')!,page.url()).searchParams.get('area')).toBe('records');
    await nav.getByRole('link',{name:'客户与报价',exact:true}).click();
    expect(new URL(page.url()).searchParams.get('originalSearch')).toBe('资料版本');
+   for(const path of overviewPaths)expect(requests.filter(request=>request.path.endsWith(path))).toHaveLength(1);
    const nativeTask=page.getByRole('region',{name:'当前办理'}).getByRole('link',{name:/等别人.*纸样/});
    const target=new URL((await nativeTask.getAttribute('href'))!,page.url());
    expect(target.searchParams.get('task')).toBe(paperId);
@@ -498,13 +638,659 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(new URL(target.searchParams.get('returnTo')!,page.url()).searchParams.get('originalSearch')).toBe('资料版本');
    await nativeTask.click();
    await page.getByRole('button',{name:'返回来源',exact:true}).click();
-   await nav.getByRole('link',{name:'开发办理',exact:true}).waitFor();
+   await nav.getByRole('link',{name:'开发进度',exact:true}).waitFor();
    expect(new URL(page.url()).searchParams.get('area')).toBe('development');
    expect(new URL(page.url()).searchParams.get('originalSearch')).toBe('资料版本');
    expect(new URL(page.url()).searchParams.get('development')).toBe(sourceId);
    expect(new URL(page.url()).searchParams.get('search')).toBe(source);
+   const progress=page.getByRole('region',{name:'开发进度',exact:true});
+   const paperRow=progress.getByRole('listitem').filter({has:page.locator('summary').filter({hasText:/^开发纸样 ·/})});
+   await paperRow.locator('summary').click();
+   const paperRecord=paperRow.getByRole('link',{name:'查看原任务',exact:true});
+   const paperUrl=new URL((await paperRecord.getAttribute('href'))!,page.url());
+   expect(paperUrl.searchParams.get('task')).toBe(paperId);
+   expect(paperUrl.searchParams.get('taskView')).toBe('read');
+   expect(await paperRow.getByRole('link',{name:'打开本人的办理',exact:true}).count()).toBe(0);
+   await paperRecord.click();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await nav.getByRole('link',{name:'交接与寄样',exact:true}).click();
+   const handover=page.getByRole('region',{name:'交接与寄样',exact:true});
+   await handover.getByText('原设计资料交接',{exact:false}).waitFor();
+   expect(await handover.getByRole('button',{name:'刷新交接记录',exact:true}).isVisible()).toBe(true);
+   expect(await handover.locator('[data-preparation-kind]').evaluateAll(items=>items.map(item=>item.getAttribute('data-preparation-kind')))).toEqual(['design_handover']);
    expect(requests.filter(request=>request.method!=='GET'&&request.path.startsWith(`/api/digital-production/sources/${sourceId}`))).toEqual([]);
   } finally {await context.close();}
+ });
+ it('opens exact native cutting, receiving, ship-sample, QC and production-report originals from the authorized workbench',async()=>{
+  const ready=await f.bulkReady('无',undefined,1,f.sourcing,{accessory:true}),cutting=new CuttingSourceService(f.db);
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  const [order]=await cutting.listSources({...f.root,authorizationCapability:'cutting:orders:view'}).then(result=>result.items.filter(item=>item.sourcingCaseId===ready.caseId));
+  if(!order)throw Error('TEST cut must be linked to the original approved sourcing case');
+  const originalPhoto=await f.image(cutter);
+  await cutting.record(cutter,order.cuttingOrderId,{pieceCount:3,actualCutCount:10,attachmentIds:[originalPhoto]},randomUUID());
+  const qcReady=await f.bulkReady('无'),[qcCut]=await cutting.listSources({...f.root,authorizationCapability:'cutting:orders:view'}).then(result=>result.items.filter(item=>item.sourcingCaseId===qcReady.caseId));
+  if(!qcCut)throw Error('TEST QC shipment requires the original cutting order');
+  await physicalCuttingLabelsFixture(f.db,f.root,qcCut.cuttingOrderId,10);
+  await cutting.record(cutter,qcCut.cuttingOrderId,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const flow=new FactoryFlowService(f.db),warehouse=f.people.warehouse!,beforeDispatch=await flow.read(warehouse,qcReady.id);
+  await flow.dispatch(warehouse,qcReady.id,{expectedRevision:beforeDispatch.revision,supplierId:f.supplierId,occurredAt:businessNow().toISOString(),note:'TEST original warehouse dispatch'},randomUUID());
+  const qcService=new QcProductionProgressService(f.db),qc=f.people.qc!;
+  const qcTask=(await flow.read(f.root,qcReady.id)).tasks.find(task=>task.taskKind==='factory_production_qc')!;
+  await new DigitalProductionTaskService(f.db).reassign(f.root,qcTask.taskId,qc.actorId,randomUUID());
+  const qcExecution=(await qcService.read(qc,qcReady.id)).executions[0]!;
+  const qcInput={factoryDecisionId:qcExecution.factoryDecisionId,expectedScopeRevision:qcExecution.scopeRevision};
+  const firstQcPhoto=await f.image(qc);
+  await qcService.registerUpload(qc,qcReady.id,qcExecution.factoryDecisionId,qcExecution.scopeRevision,firstQcPhoto);
+  const observe=(revision:number,percent:number,note:string)=>qcService.submit(qc,qcReady.id,SubmitQcProgressSchema.parse({
+   ...qcInput,submissionId:randomUUID(),kind:'progress',expectedProgressRevision:revision,collectedAt:businessNow().toISOString(),
+   observations:[{lineId:qcExecution.lines[0]!.lineId,state:'working',cuttingPercent:percent,sewingPercent:null,ironingPercent:null,
+    ...(revision===0?{additionalFinishedQuantity:2}:{})}],attachmentIds:revision===0?[firstQcPhoto]:[],note,
+  }));
+  const qcOriginal=await observe(0,35,'TEST 原现场进度');
+  const photo=await f.image(qc);
+  await qcService.registerUpload(qc,qcReady.id,qcExecution.factoryDecisionId,qcExecution.scopeRevision,photo);
+  await qcService.submit(qc,qcReady.id,SubmitQcProgressSchema.parse({...qcInput,submissionId:randomUUID(),kind:'photos',
+   expectedProgressRevision:1,relatedProgressRecordId:qcOriginal.recordId,collectedAt:null,observations:[],attachmentIds:[photo],note:'TEST 只补原次照片'}));
+  const laterQc=await observe(2,70,'TEST 后来的独立进度');
+  await cutting.correct({...f.root,authorizationCapability:'cutting:records:correct'},order.cuttingOrderId,{expectedVersion:1,pieceCount:5,actualCutCount:9,reason:'TEST 保留原裁数的订正'},randomUUID());
+  const receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+  const receiving=new ReceivingService(f.db),receiptPhoto=await f.image(receiver);
+  const receipt=(await receiving.create(receiver,{cuttingOrderId:order.cuttingOrderId,documentQuantity:8,actualQuantity:8,attachmentIds:[receiptPhoto]},randomUUID())).value;
+  const date=beijingCalendarDate(businessNow());
+  const [batch]=(await receiving.board(date,date,ready.input.lineItems[0]!.styleNo!)).rows;
+  if(!batch||batch.receivingBatchId!==receipt.receivingBatchId)throw Error('TEST receiving must use the exact original batch');
+  await receiving.correctReceipt({...f.root,authorizationCapability:'receiving:correct'},receipt.receiptId,{expectedVersion:batch.version,documentQuantity:8,actualQuantity:7,defectiveQuantity:1});
+  const correctedReceipt=(await receiving.documentHistory(receipt.receivingBatchId)).corrections.find(item=>item.receiptId===receipt.receiptId)!;
+  const closure=new OrderClosureService(f.db),quality=(await closure.read(f.root,ready.id)).quality!.find(item=>item.receiptId===receipt.receiptId)!;
+  const garmentCheck=await closure.recordQuality(f.root,ready.id,{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,
+   timeMode:'now',qualifiedQuantity:6,problem:'TEST 原成衣质量问题'},randomUUID());
+  const currentBatch=async()=>{
+   const row=(await receiving.board(date,date,ready.input.lineItems[0]!.styleNo!)).rows.find(item=>item.receivingBatchId===receipt.receivingBatchId);
+   if(!row)throw Error('TEST original packing must match the received cutting batch');
+   return row;
+  };
+  const pack=async(quantity:number,packingTime:PackingTimeInput)=>{
+   const row=await currentBatch();
+   return (await receiving.recordPacking({...f.root,authorizationCapability:'receiving:packing_manage'},{receivingBatchId:row.receivingBatchId,
+    expectedVersion:row.version,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:quantity,packingTime},randomUUID())).value;
+  };
+  const originalPacking=await pack(6,{mode:'date',value:date}),latestPacking=await pack(5,{mode:'unknown'}),differenceBatch=await currentBatch();
+  const resolutionText='TEST 原装箱差异处理，保留实际数量';
+  const resolutionPhoto=await f.image(ready.primary);
+  const resolution=(await receiving.resolveDifference({...ready.primary,authorizationCapability:'receiving:resolve_difference'},{
+   receivingBatchId:differenceBatch.receivingBatchId,expectedVersion:differenceBatch.version,expectedDocumentQuantity:differenceBatch.documentQuantity,
+   expectedActualQuantity:differenceBatch.cumulativeActualQuantity,expectedPackingRevisionId:latestPacking.packingRevisionId,
+   differenceType:'packing',result:resolutionText,attachmentIds:[resolutionPhoto],
+  },randomUUID())).value;
+  const preparation=new BulkPreparationService(f.db),preparationSheet=await preparation.read(warehouse,ready.id),materials=preparationSheet.materials!;
+  const preshrink=preparationSheet.tasks.find(task=>task.taskKind==='warehouse_preshrink')!;
+  expect(preshrink.state).toBe('completed');
+  const issueNotes=['TEST 第一次实际发出','TEST 第二次实际发出'];
+  for(const [index,note] of issueNotes.entries()){
+   await preparation.dispatchMaterials(warehouse,ready.id,{instructionVersion:materials.instructionVersion!,supplierId:materials.supplierId!,
+    occurredAt:businessNow().toISOString(),note,items:[{materialId:materials.items[0]!.id,quantity:index?5:3,unit:'粒'}]},randomUUID());
+  }
+  const issues=(await preparation.read(warehouse,ready.id)).materials!.history;
+  const issueIds=issueNotes.map(note=>issues.find(issue=>issue.note===note)!.eventId);
+  const fabricHistory=await preparation.documentHistory(f.root,ready.id);
+  expect(fabricHistory.items.every(item=>item.kind!=='bulk_materials_dispatched')).toBe(true);
+  const fabricReport=fabricHistory.items.find(item=>item.kind==='bulk_fabric_report')!;
+  expect(fabricReport.payload.note).toBe('TEST native quality prerequisite');
+  const current=await flow.read(ready.primary,ready.id);
+  const tracked=await flow.followup(ready.primary,ready.id,{expectedRevision:current.revision,kind:'船样寄出',lineIds:[current.lines[0]!.lineId],
+   occurredAt:businessNow().toISOString(),trackingNumber:'TEST 真实船样 N01',note:'TEST 只读原件使用真实寄出事实'},randomUUID());
+  const shipment=tracked.shipSamples?.find(item=>item.trackingNumber==='TEST 真实船样 N01');
+  if(!shipment)throw Error('TEST ship-sample command must produce one exact original shipment');
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  const source='/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:ready.sourceId,area:'records',originalStage:'cutting',originalCategory:'cutting'});
+  try{
+   await page.goto(base+source);
+   const directory=page.getByLabel('按阶段读取原单据',{exact:true});
+   await directory.getByRole('button',{name:'读取此记录',exact:true}).click();
+   const openVersion=(version:number)=>directory.locator(`a[href*="cuttingVersion=${version}"]`).click();
+   await openVersion(1);
+   await page.getByRole('heading',{name:'原实裁登记',exact:true}).waitFor();
+   const record=page.locator('.cutting-record-panel');
+   expect(await record.getByText('10 件',{exact:true}).count()).toBe(1);
+   expect(await record.getByText('9 件',{exact:true}).count()).toBe(0);
+   const original=record.getByRole('link',{name:'TEST.png',exact:true});
+   expect(await original.getAttribute('href')).toContain(originalPhoto);
+   await expect.poll(()=>original.getByRole('img').evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+   expect(await record.getByRole('button',{name:'修正',exact:true}).count()).toBe(0);
+   await page.locator('header a[href*="originalCategory=cutting"],a.dx-breadcrumb-back[href*="originalCategory=cutting"]').first().click();
+   await directory.getByRole('button',{name:'读取此记录',exact:true}).click();
+   await openVersion(2);
+   await page.getByRole('heading',{name:'实裁修正 · 第 2 版',exact:true}).waitFor();
+   expect(await record.getByText('9 件',{exact:true}).count()).toBe(1);
+   expect(await record.getByText('TEST 保留原裁数的订正',{exact:true}).count()).toBe(1);
+   expect(await record.getByRole('img').count()).toBe(0);
+   const missing=new URL(page.url());missing.searchParams.set('cuttingVersion','99');await page.goto(missing.href);
+   await page.getByRole('alert').filter({hasText:'找不到所选裁床原记录或版本'}).waitFor();
+   expect(await record.count()).toBe(0);
+   const receivingOrigin=new URL(source,base);receivingOrigin.searchParams.set('originalStage','receiving');receivingOrigin.searchParams.set('originalCategory','receiving');
+   let receivingReads=0;
+   const receivingHistory=(url:URL)=>url.pathname===`/api/digital-production/orders/${ready.id}/receipt-summary`&&url.searchParams.get('documentBindings')==='true';
+   const captureDirectory=async(route:Route)=>{
+    receivingReads++;
+    if(receivingReads===1){await route.fulfill({status:503,json:{error:{message:'TEST 收货原单暂不可用'}}});return;}
+    await route.continue();
+   };
+   await page.route(receivingHistory,captureDirectory);
+   await page.goto(receivingOrigin.href);
+   await directory.getByRole('button',{name:'重新读取收货原单',exact:true}).click();
+   const originalReceiptLink=directory.locator(`a[href*="originalReceivingId=${receipt.receiptId}"]`);
+   await originalReceiptLink.waitFor();
+   await directory.getByRole('button',{name:'装箱与数量差异',exact:true}).click();
+   await directory.locator(`a[href*="originalReceivingId=${originalPacking.packingRevisionId}"]`).waitFor();
+   const selectOriginalStage=async(label:string)=>{
+    await directory.getByRole('combobox',{name:'原单据阶段',exact:true}).click();
+    await page.getByRole('option',{name:label,exact:true}).click();
+   };
+   await selectOriginalStage('产品开发打板');
+   await directory.getByRole('button',{name:'尺寸表',exact:true}).click();
+   await directory.getByRole('button',{name:'纸样PLT',exact:true}).waitFor();
+   await selectOriginalStage('回货与装箱');
+   await directory.getByRole('button',{name:'真实回货与成衣QC',exact:true}).click();
+   await originalReceiptLink.waitFor();
+   expect(receivingReads).toBe(2);
+   await page.reload();
+   await originalReceiptLink.waitFor();
+   expect(receivingReads).toBe(3);
+   await page.unroute(receivingHistory,captureDirectory);
+   const otherReceiving=new URL(receivingOrigin.href);otherReceiving.searchParams.set('development',qcReady.sourceId);
+   const [otherReceipt]=await Promise.all([
+    page.waitForResponse(result=>new URL(result.url()).pathname===`/api/digital-production/orders/${qcReady.id}/receipt-summary`),
+    page.goto(otherReceiving.href),
+   ]);
+   expect(otherReceipt.status()).toBe(200);
+   expect((await otherReceipt.json()).orderId).toBe(qcReady.id);
+   await directory.getByText('暂无相关收货原记录。',{exact:true}).waitFor();
+   expect(await originalReceiptLink.count()).toBe(0);
+   await page.goto(receivingOrigin.href);
+   await page.getByText('原收货批次凭证',{exact:true}).click();
+   expect(await directory.locator(`a[href*="${receiptPhoto}"]`).count()).toBe(1);
+   await directory.locator(`a[href*="originalReceivingId=${receipt.receiptId}"]`).click();
+   await page.getByRole('heading',{name:'原收货 · 只读',exact:true}).waitFor();
+   expect(await page.locator('dd').allTextContents()).toEqual(['8 件','8 件','0 件']);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalReceivingId=${correctedReceipt.id}"]`).click();
+   await page.getByRole('heading',{name:'收货更正 · 只读',exact:true}).waitFor();
+   expect(await page.locator('dd').allTextContents()).toEqual(['8 件','7 件','1 件']);
+   const selected=new URL(page.url());
+   expect(selected.searchParams.get('closure')).toBe(ready.id);
+   const signedDesigner=await browser.newContext();
+   try{
+    await signedDesigner.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);
+    const denied=await signedDesigner.newPage();denied.setDefaultTimeout(12000);
+    const [refusal]=await Promise.all([denied.waitForResponse(result=>new URL(result.url()).pathname.endsWith('/receipt-summary')),denied.goto(selected.href)]);
+    expect(refusal.status()).toBe(404);
+    await denied.getByRole('alert').waitFor();expect(await denied.locator('dd').count()).toBe(0);
+    const [directoryRefusal]=await Promise.all([
+     denied.waitForResponse(result=>receivingHistory(new URL(result.url()))),denied.goto(receivingOrigin.href),
+    ]);
+    expect(directoryRefusal.status()).toBe(404);
+    const deniedDirectory=denied.getByLabel('按阶段读取原单据',{exact:true});
+    await deniedDirectory.getByRole('button',{name:'重新读取收货原单',exact:true}).waitFor();
+    expect(await deniedDirectory.locator(`a[href*="originalReceivingId=${receipt.receiptId}"]`).count()).toBe(0);
+    const bulkPath=`/api/digital-production/orders/${ready.id}/bulk-preparation`;
+    const originalBulk=await signedDesigner.request.get(base+bulkPath);
+    expect(originalBulk.status()).toBe(200);
+    const allowedDispatch=(await originalBulk.json()).materials.history.find(event=>event.eventId===issueIds[0]);
+    const selectedDispatch=await signedDesigner.request.get(base+bulkPath+`/history?eventId=${issueIds[0]}`);
+    expect(selectedDispatch.status()).toBe(200);
+    expect((await selectedDispatch.json()).items[0].payload).toEqual({note:allowedDispatch.note,items:allowedDispatch.items});
+   }finally{await signedDesigner.close();}
+   const warehouseIssuePath=`/digital-production/orders/${ready.id}/bulk-preparation`;
+   const [originalDenied,issueDenied]=await Promise.all([
+    get('worker-b',warehouseIssuePath),get('worker-b',warehouseIssuePath+`/history?eventId=${issueIds[0]}`),
+   ]);
+   expect([403,404]).toContain(originalDenied.statusCode);
+   expect(issueDenied.statusCode).toBe(originalDenied.statusCode);
+   const readEntry=(label:string)=>directory.getByText(label,{exact:true}).locator('..').getByRole('button',{name:'读取此记录',exact:true});
+   await page.goto(receivingOrigin.href);
+   await readEntry('到仓成衣检查历史（展开读取）').click();
+   await directory.locator(`a[href*="originalEvent=${garmentCheck.eventId}"]`).click();
+   await page.getByRole('heading',{name:'原到仓成衣检查 · 只读',exact:true}).waitFor();
+   expect(await page.locator('dd').getByText('TEST 原成衣质量问题',{exact:true}).count()).toBe(1);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.getByText('到仓成衣检查历史（展开读取）',{exact:true}).waitFor();
+   const packingOrigin=new URL(receivingOrigin.href);packingOrigin.searchParams.set('originalCategory','packing');
+   await page.goto(packingOrigin.href);
+   await directory.locator(`a[href*="originalReceivingId=${originalPacking.packingRevisionId}"]`).click();
+   await page.getByRole('heading',{name:'装箱记录 · 只读',exact:true}).waitFor();
+   expect(await page.locator('dd').allTextContents()).toEqual(['6 件']);
+   await page.getByText(`${date}（仅日期）`,{exact:false}).waitFor();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalReceivingId=${latestPacking.packingRevisionId}"]`).click();
+   await page.getByRole('heading',{name:'装箱记录 · 只读',exact:true}).waitFor();
+   expect(await page.locator('dd').allTextContents()).toEqual(['5 件']);
+   await page.getByText('实际时间未登记',{exact:false}).waitFor();
+   await page.getByText(/^登记时间 ·/).waitFor();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalReceivingId=${resolution.resolutionId}"]`).click();
+   await page.getByRole('heading',{name:'装箱差异处理 · 只读',exact:true}).waitFor();
+   await page.getByText(resolutionText,{exact:true}).waitFor();
+   await page.getByText('本次差异处理凭证',{exact:true}).click();
+   const evidenceHref=await page.locator(`a[href*="${resolutionPhoto}"]`).getAttribute('href');
+   const originalEvidence=await context.request.get(new URL(evidenceHref!,base).href);
+   expect(originalEvidence.status()).toBe(200);expect((await sharp(await originalEvidence.body()).metadata()).width).toBeGreaterThan(0);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalReceivingId=${resolution.resolutionId}"]`).waitFor();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(ready.sourceId);
+   const preparationOrigin=new URL(source,base);preparationOrigin.searchParams.set('originalStage','preparation');preparationOrigin.searchParams.set('originalCategory','preparation');
+   await page.goto(preparationOrigin.href);
+   const preshrinkLink=directory.locator(`a[href*="task=${preshrink.taskId}"][href*="taskView=read"]`);
+   const taskPath=`/api/digital-production/tasks/${preshrink.taskId}`;
+   const [preshrinkResponse]=await Promise.all([
+    page.waitForResponse(response=>new URL(response.url()).pathname===taskPath),
+    preshrinkLink.click(),
+   ]);
+   expect(preshrinkResponse.status()).toBe(200);
+   expect(await preshrinkResponse.json()).toMatchObject({taskId:preshrink.taskId,orderId:ready.id,taskKind:'warehouse_preshrink',state:'completed'});
+   await page.getByText('原任务记录 · 只读',{exact:true}).waitFor();
+   await page.getByText('历史记录与核实',{exact:true}).click();
+   await page.getByText(/^完成 · 发生/).waitFor();
+   expect(await page.getByRole('link',{name:'打开大货产前办理',exact:true}).count()).toBe(0);
+   const ungrantedTask=await get('worker-b',taskPath.replace('/api',''));
+   expect([403,404]).toContain(ungrantedTask.statusCode);
+   await page.getByRole('button',{name:'返回',exact:true}).click();
+   await preshrinkLink.waitFor();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(ready.sourceId);
+   const firstIssue=directory.locator(`a[href*="originalEvent=${issueIds[0]}"]`);
+   await firstIssue.click();
+   await page.getByRole('heading',{name:'原辅料发出记录 · 只读',exact:true}).waitFor();
+   await page.getByText(issueNotes[0]!,{exact:true}).waitFor();
+   expect(await page.getByText(issueNotes[1]!,{exact:true}).count()).toBe(0);
+   expect(await page.locator('dd').getByText('3 粒',{exact:true}).count()).toBe(1);
+   const foreignIssue=await context.request.get(base+`/api/digital-production/orders/${qcReady.id}/bulk-preparation/history?eventId=${issueIds[0]}`);
+   expect(foreignIssue.status()).toBe(404);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await firstIssue.waitFor();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(ready.sourceId);
+   await directory.locator(`a[href*="originalEvent=${issueIds[1]}"]`).click();
+   await page.getByText(issueNotes[1]!,{exact:true}).waitFor();
+   expect(await page.locator('dd').getByText('5 粒',{exact:true}).count()).toBe(1);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await readEntry('验布报告与质量决定历史').click();
+   await directory.locator(`a[href*="originalEvent=${fabricReport.eventId}"]`).click();
+   await page.getByRole('heading',{name:'原验布报告 · 只读',exact:true}).waitFor();
+   await page.getByText('TEST native quality prerequisite',{exact:true}).waitFor();
+   const wrongFamily=new URL(page.url());wrongFamily.searchParams.set('originalEvent',garmentCheck.eventId);
+   const [outside]=await Promise.all([page.waitForResponse(response=>new URL(response.url()).searchParams.get('eventId')===garmentCheck.eventId),page.goto(wrongFamily.href)]);
+   expect(outside.status()).toBe(404);
+   await page.getByRole('alert').waitFor();
+   const shipOrigin=new URL(source,base);shipOrigin.searchParams.set('originalStage','production');shipOrigin.searchParams.set('originalCategory','ship_sample');
+   await page.goto(shipOrigin.href);
+   await directory.locator(`a[href*="originalFactoryId=${shipment.eventId}"]`).click();
+   await page.getByRole('heading',{name:'船样寄出 · 只读',exact:true}).waitFor();
+   expect(await page.locator('dd').allTextContents()).toEqual(['TEST 真实船样 N01']);
+   expect(await page.getByRole('button',{name:'记录已寄出',exact:true}).count()).toBe(0);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalFactoryId=${shipment.eventId}"]`).waitFor();
+   expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('ship_sample');
+   const qcOrigin=new URL(source,base);qcOrigin.searchParams.set('development',qcReady.sourceId);qcOrigin.searchParams.set('originalStage','production');qcOrigin.searchParams.set('originalCategory','qc_progress');
+   await page.goto(qcOrigin.href);
+   await directory.locator(`a[href*="originalFactoryId=${qcOriginal.recordId}"]`).click();
+   await page.getByRole('heading',{name:'QC进度 · 第 1 版 · 只读',exact:true}).waitFor();
+   await page.getByText('TEST 原现场进度',{exact:true}).waitFor();
+   expect(await page.getByText('TEST 后来的独立进度',{exact:true}).count()).toBe(0);
+   await page.getByText('裁剪 35%',{exact:false}).waitFor();
+   await page.getByText('TEST 只补原次照片',{exact:true}).waitFor();
+   const qcPhoto=page.locator(`a[href*="${photo}"]`),photoHref=await qcPhoto.getAttribute('href');
+   expect(await page.locator(`a[href*="${firstQcPhoto}"]`).count()).toBe(1);
+   expect(photoHref).toContain(photo);
+   const image=await context.request.get(new URL(photoHref!,base).href);
+   expect(image.ok()).toBe(true);expect((await sharp(await image.body()).metadata()).width).toBeGreaterThan(0);
+   const scopedQcUrl=new URL(page.url());
+   expect(scopedQcUrl.searchParams.get('qcProductionId')).toBe(qcExecution.productionId);
+   const wrongDecision=new URL(scopedQcUrl);wrongDecision.searchParams.set('qcDecisionId',randomUUID());
+   await page.goto(wrongDecision.href);
+   await page.getByRole('alert').filter({hasText:'找不到所选厂单的QC原记录或版本'}).waitFor();
+   expect(await qcPhoto.count()).toBe(0);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalFactoryId=${laterQc.recordId}"]`).click();
+   await page.getByRole('heading',{name:'QC进度 · 第 3 版 · 只读',exact:true}).waitFor();
+   await page.getByText('TEST 后来的独立进度',{exact:true}).waitFor();
+   expect(await qcPhoto.count()).toBe(0);
+   const reportId=qcOriginal.reportIds[0];expect(reportId).toBeTruthy();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await readEntry('本厂单原生产填报').click();
+   const report=directory.locator(`a[href*="originalReport=${reportId}"]`);
+   await report.click();
+   await page.getByRole('heading',{name:'生产填报 · 第 1 版 · 只读',exact:true}).waitFor();
+   await page.locator('dd').getByText('2 件',{exact:true}).waitFor();
+   expect(new URL(page.url()).pathname).toBe(`/ui/production-reporting/${qcExecution.productionId}`);
+   expect(await page.getByRole('button',{name:'保存上报',exact:true}).count()).toBe(0);
+   expect(await page.getByRole('button',{name:'Root 修正',exact:true}).count()).toBe(0);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await readEntry('本厂单原生产填报').waitFor();
+   const adoptionReady=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});
+   const beforeBasis=await new BulkPreparationService(f.db).read(f.root,adoptionReady.id);
+   const frozen=beforeBasis.publishedBasis?.technicalArtifact;
+   if(!frozen||frozen.roundNumber!==1)throw Error('TEST original instruction must have adopted a real round-one technical artifact');
+   const historical=await new DigitalDevelopmentService(f.db,true).read(f.root,adoptionReady.sourceId);
+   const rounds=new DevelopmentRoundService(f.db,true);
+   const draft=await rounds.save(f.root,adoptionReady.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:historical.document!,origin:'内部发现',
+    customerComment:'',internalProblem:'TEST 第二轮修改纸样',explanation:'TEST 已发布制单只能打开原采用成果',categories:['版型'],
+    affectedNodes:['纸样','裁板','车板'],outputKind:'整件样板'}},randomUUID());
+   await rounds.publish(f.root,adoptionReady.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+   expect((await new DigitalDevelopmentService(f.db,true).read(f.root,adoptionReady.sourceId)).roundNumber).toBe(2);
+   expect((await new BulkPreparationService(f.db).read(f.root,adoptionReady.id)).publishedBasis).toEqual(beforeBasis.publishedBasis);
+   const technicalOrigin=new URL(preparationOrigin.href);technicalOrigin.searchParams.set('development',adoptionReady.sourceId);technicalOrigin.searchParams.set('originalCategory','technical');
+   await page.goto(technicalOrigin.href);
+   await readEntry('已发布制单第 1 版的采用资料 · 开发第 1 轮').click();
+   const adoptedLink=directory.locator(`a[href*="originalTechnicalId=${frozen.id}"]`);
+   const adoptedTarget=new URL((await adoptedLink.getAttribute('href'))!,base);
+   expect(adoptedTarget.searchParams.get('round')).toBe('1');
+   expect(adoptedTarget.searchParams.get('originalTechnicalVersion')).toBe(String(frozen.version));
+   await adoptedLink.click();
+   await page.getByRole('heading',{name:`原技术成果 · 第 1 轮 v${frozen.version} · 只读`,exact:true}).waitFor();
+   await page.getByText('袖长',{exact:true}).waitFor();
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await readEntry('已发布制单第 1 版的采用资料 · 开发第 1 轮').waitFor();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(adoptionReady.sourceId);
+  }finally{await context.close();}
+ });
+
+ it('opens the explicitly linked rework node and exact original revision without revealing ungranted history',async()=>{
+  const ready=await f.bulkReady('无'),cutting=new CuttingSourceService(f.db);
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  const [cut]=await cutting.listSources({...f.root,authorizationCapability:'cutting:orders:view'}).then(result=>result.items.filter(item=>item.sourcingCaseId===ready.caseId));
+  if(!cut)throw Error('TEST rework requires its own original received order');
+  await cutting.record(cutter,cut.cuttingOrderId,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+  const receipt=await new ReceivingService(f.db).create(warehouse,{cuttingOrderId:cut.cuttingOrderId,documentQuantity:10,actualQuantity:10,attachmentIds:[await f.image(warehouse)]},randomUUID());
+  const qc={...f.people.qc!,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']};
+  const initiation=new ReworkInitiationService(f.db,'anchor-test');
+  const draft=await initiation.createDraft(qc,{receivingBatchId:receipt.value.receivingBatchId,
+   styleNo:ready.input.lineItems[0]!.styleNo!,orderQuantity:10,merchandiserUserId:f.people.merchandiser!.actorId,
+   processingFactory:{type:'supplier',supplierId:f.supplierId},tailInspectionRequired:false,inspectionReport:completeInspectionReport(),
+   problemPart:'袖口',problemDescription:'TEST 原返工问题',reworkQuantity:10,attachmentIds:[await f.image(qc)]},randomUUID());
+  const id=draft.value.reworkOrderId;
+  await initiation.submit(qc,id,{expectedVersion:draft.value.version},randomUUID());
+  const original=(await new ReworkBusinessDetailService(f.db).get(f.root,id,true)).originalNodeEntries?.find(entry=>entry.node==='initiation');
+  if(!original)throw Error('TEST rework has no exact original initiation event');
+  const denied=await app.inject({method:'GET',url:`/rework-orders/${id}/business-detail?originalNodes=true`,
+   headers:{cookie:`dx_rework_session=${await loginRole('sample-designer')}`}});
+  expect([403,404]).toContain(denied.statusCode);
+  expect(denied.body).not.toContain(original.entryId);
+  expect(denied.body).not.toContain('TEST 原返工问题');
+  const baseline=await get('root',`/rework-orders/${id}/business-detail`);
+  expect(baseline.statusCode).toBe(200);expect(baseline.json()).not.toHaveProperty('originalNodeEntries');
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  try{
+   const source='/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:ready.sourceId,
+    area:'records',originalStage:'receiving',originalCategory:'rework'});
+   await page.goto(base+source);
+   const directory=page.getByLabel('按阶段读取原单据',{exact:true});
+   await directory.getByRole('button',{name:'读取此记录',exact:true}).click();
+   const href=directory.locator(`a[href*="entryId=${original.entryId}"][href*="node=initiation"]`);
+   const [response]=await Promise.all([page.waitForResponse(result=>new URL(result.url()).pathname.endsWith(`/rework-orders/${id}/history/initiation`)),href.click()]);
+   expect(response.ok()).toBe(true);
+   const detail=await response.json();
+   expect(detail).toMatchObject({orderId:id,node:'initiation',entry:{id:original.entryId},
+    fields:expect.arrayContaining([{label:'问题描述',value:'TEST 原返工问题'}])});
+   const originalStyle=detail.fields.find((field:{label:string;value:string|null})=>field.label==='款号').value;
+   expect(originalStyle.toLowerCase()).toBe(ready.input.lineItems[0]!.styleNo!.toLowerCase());
+   const originalHeader=page.locator('.rework-history-readonly header');
+   await originalHeader.getByText('历史节点 · 只读',{exact:true}).waitFor();
+   await originalHeader.getByRole('heading',{name:originalStyle,exact:true}).waitFor();
+   expect(new URL(page.url()).pathname).toBe(`/ui/tasks/${id}`);
+   await page.getByRole('link',{name:'返回这张订单',exact:true}).click();
+   await directory.getByRole('button',{name:'读取此记录',exact:true}).waitFor();
+   const returned=new URL(page.url());
+   expect(returned.searchParams.get('development')).toBe(ready.sourceId);
+   expect(returned.searchParams.get('originalCategory')).toBe('rework');
+  }finally{await context.close();}
+ });
+
+ it('opens the original approved contract PDF and its signed revision without borrowing the latest version',async()=>{
+  const ready=await f.bulkReady('无'),root=f.root;
+  const initial=(await f.contracts.getCurrent(root,ready.caseId)).item;
+  if(!initial?.pdfAttachmentId)throw Error('TEST owner approval needs its original produced contract');
+  const signedAttachment=await f.image(root),returns=new SourcingContractReturnService(f.db);
+  const signed=await returns.submit(root,ready.caseId,[signedAttachment],randomUUID(),initial.sourcingContractDocumentId);
+  expect(signed.versions).toEqual(expect.arrayContaining([expect.objectContaining({signedContractDocumentId:initial.sourcingContractDocumentId})]));
+  const template=(await f.contracts.management.templates(root)).item;
+  await f.contracts.management.saveTemplate(root,{...template,expectedVersion:template.templateVersion,
+   terms:{...template.terms,payment:'TEST 修订合同付款条件'}},randomUUID());
+  const preview=await f.contracts.management.previewInformation(root,ready.caseId);
+  const revision=await f.contracts.management.refreshInformation(root,ready.caseId,preview,randomUUID());
+  const current=(await f.contracts.generateIfReady(root,ready.caseId,revision)).item;
+  expect(current?.contractVersion).toBe(initial.contractVersion+1);
+  expect(current?.pdfAttachmentId).not.toBe(initial.pdfAttachmentId);
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  try{
+   const source='/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:ready.sourceId,
+    area:'records',originalStage:'preparation',originalCategory:'contract'});
+   await page.goto(base+source);
+   const directory=page.getByLabel('按阶段读取原单据',{exact:true});
+   await directory.locator(`a[href*="originalContract=${initial.sourcingContractDocumentId}"]`).click();
+   await page.getByRole('heading',{name:`系统合同 · 第 ${initial.contractVersion} 版 · 只读`,exact:true}).waitFor();
+   await page.getByText(initial.contractNumber,{exact:true}).waitFor();
+   const pdfLink=page.getByRole('link',{name:'预览所选合同 PDF',exact:true}),pdfHref=await pdfLink.getAttribute('href');
+   expect(pdfHref).toContain(initial.pdfAttachmentId);
+   const response=await context.request.get(new URL(pdfHref!,base).href);
+   expect(response.ok()).toBe(true);expect((await response.body()).subarray(0,4).toString()).toBe('%PDF');
+   expect(await page.locator(`a[href*="${signedAttachment}"]`).count()).toBe(1);
+   expect(await page.locator(`a[href*="${current!.pdfAttachmentId}"]`).count()).toBe(0);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalContract=${revision}"]`).click();
+   await page.getByRole('heading',{name:`系统合同 · 第 ${current!.contractVersion} 版 · 只读`,exact:true}).waitFor();
+   expect(await page.locator(`a[href*="${signedAttachment}"]`).count()).toBe(0);
+   const other=new URL(page.url());other.searchParams.set('originalContract',randomUUID());await page.goto(other.href);
+   await page.getByRole('alert').filter({hasText:'找不到所选合同版本'}).waitFor();
+   expect(await pdfLink.count()).toBe(0);
+   const factory=await f.access.createSupplier(root,CreateSupplierSchema.parse({supplierCode:'TEST-'+randomUUID().slice(0,8).toUpperCase(),supplierType:'factory',
+    supplierName:'TEST 原转厂单据',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0010',bankName:'TEST',changeReason:'TEST 外发原单据'}));
+   const requestReason='TEST 转厂只读时须保留的原申请理由';
+   await f.sourcing.requestFactoryChange(f.people['production-management']!,ready.caseId,{supplierId:factory.supplierId,unitPrice:'6',changeReason:requestReason},randomUUID());
+   const timeline=(await f.sourcing.listTimeline({...root,authorizationCapability:'sourcing:view'},ready.caseId)).items;
+   const owner=timeline.find(record=>record.kind==='owner_decision')!,transfer=timeline.find(record=>record.kind==='factory_change_request')!;
+   expect(transfer.reason).toBe(requestReason);
+   const sourcingUrl=new URL(base+source);sourcingUrl.searchParams.set('originalCategory','sourcing_history');
+   await page.goto(sourcingUrl.href);
+   await directory.locator(`a[href*="entryId=${owner.entryId}"]`).click();
+   await page.getByRole('heading',{name:'最终审批',exact:true}).first().waitFor();
+   expect(new URL(page.url()).searchParams.get('entryId')).toBe(owner.entryId);
+   await page.getByRole('link',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="relatedEntryId=${transfer.entryId}"]`).click();
+   const selected=page.getByRole('region',{name:'所选外发记录',exact:true});
+   await selected.getByText(requestReason,{exact:true}).waitFor();
+   expect(new URL(page.url()).pathname.endsWith(ready.caseId)).toBe(true);
+   await page.getByRole('link',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="relatedEntryId=${transfer.entryId}"]`).waitFor();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(ready.sourceId);
+   const mismatch=new URL((await directory.locator(`a[href*="relatedEntryId=${transfer.entryId}"]`).getAttribute('href'))!,base);
+   mismatch.searchParams.set('relatedEntryId',owner.entryId);await page.goto(mismatch.href);
+   await page.getByRole('alert').filter({hasText:'找不到所选的外发原记录'}).waitFor();
+   expect(await selected.count()).toBe(0);
+
+   const financeReady=await f.bulkReady('无');
+   const financeContract=(await f.contracts.getCurrent(root,financeReady.caseId)).item;
+   expect(financeContract?.contractNumber).toBeTruthy();
+   const finance=await loginRole('factory-payables'),management=await loginRole('production-management');
+   const moneyPath=`/sourcing/cases/${financeReady.caseId}`;
+   const submit=(token:string,path:string,payload:object)=>app.inject({
+    method:'POST',url:moneyPath+path,payload,
+    headers:{cookie:`dx_rework_session=${token}`,'idempotency-key':randomUUID()},
+   });
+   const reason='TEST 第一轮财务发现原合同总额差异';
+   const difference=await submit(finance,'/finance-reconciliations',{result:'difference',differenceFields:['total_amount'],differenceReason:reason});
+   expect(difference.statusCode,difference.body).toBe(201);
+   const reopen=await submit(management,'/exception-decisions',{resolution:'reconcile_again',resolutionReason:'TEST 回原财务重新核对'});
+   expect(reopen.statusCode,reopen.body).toBe(201);
+   const match=await submit(finance,'/finance-reconciliations',{result:'match'});
+   expect(match.statusCode,match.body).toBe(201);
+   const reconciliations=(await f.sourcing.listTimeline({...root,authorizationCapability:'sourcing:view'},financeReady.caseId)).items.filter(record=>record.kind==='finance_reconciliation');
+   expect(reconciliations.map(item=>[item.version,item.result])).toEqual([[1,'difference'],[2,'match']]);
+   const [firstFinance,lastFinance]=reconciliations;
+   const financeOrigin=new URL(sourcingUrl);
+   financeOrigin.searchParams.set('development',financeReady.sourceId);
+   await page.goto(financeOrigin.href);
+   const financeLink=directory.locator(`a[href*="entryId=${firstFinance!.entryId}"]`);
+   await financeLink.click();
+   await page.getByText('正在回看：财务核对',{exact:true}).waitFor();
+   const readValue=(label:string)=>page.getByText(label,{exact:true}).locator('..').locator('input, textarea').inputValue();
+   expect(await readValue('核对结果')).toBe('发现不一致');
+   expect(await readValue('核对说明')).toBe(reason);
+   expect(await readValue('对应合同')).toBe(financeContract!.contractNumber);
+   const exactHistory=moneyPath+`/history/finance?entryId=${firstFinance!.entryId}`;
+   const [financeOriginal,ungrantedFinance,foreignFinance]=await Promise.all([
+    app.inject({method:'GET',url:exactHistory,headers:{cookie:`dx_rework_session=${finance}`}}),
+    get('worker-b',exactHistory),
+    get('root',exactHistory.replace(financeReady.caseId,ready.caseId)),
+   ]);
+   expect(financeOriginal.statusCode).toBe(200);
+   expect(financeOriginal.json()).toMatchObject({contractReference:financeContract!.contractNumber,entry:{entryId:firstFinance!.entryId,version:1,result:'difference',reason}});
+   expect([403,404]).toContain(ungrantedFinance.statusCode);
+   expect(foreignFinance.statusCode).toBe(404);
+   await page.getByRole('link',{name:'返回来源',exact:true}).click();
+   await financeLink.waitFor();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(financeReady.sourceId);
+   expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('sourcing_history');
+   await directory.locator(`a[href*="entryId=${lastFinance!.entryId}"]`).click();
+   await page.getByText('正在回看：财务核对',{exact:true}).waitFor();
+   expect(await readValue('核对结果')).toBe('确认与合同一致');
+   expect(await readValue('核对说明')).not.toBe(reason);
+  }finally{await context.close();}
+ });
+
+ it('keeps the original sample handover receipt through a recipient change without affecting shipping or clocks',async()=>{
+  const {id}=await prepareDevelopment(),designer=f.people['sample-designer']!,first=f.people.merchandiser!,second=f.people.ie!;
+  const assignment=await f.access.assignRole(f.root,{userId:second.actorId,roleCode:'order_merchandiser',reason:'TEST alternate design handover recipient'});
+  let assignmentActive=true;
+  const token=await loginRole('sample-designer'),root=tokens.get('root')!;
+  const endpoint=`/digital-production/sources/${id}/production-readiness`,sample=endpoint+'/sample-handover';
+  const send=(method:'GET'|'POST',url:string,key:string,payload?:unknown,session=token)=>app.inject({method,url,
+   headers:{cookie:`dx_rework_session=${session}`,'idempotency-key':key},...(payload?{payload}:{}),
+  });
+  const clockAndTasks=async()=>{
+   const plans=(await f.db.query('SELECT to_jsonb(p) AS value FROM digital_development_sla_plans p WHERE source_id=$1 ORDER BY revision',[id])).rows;
+   const tasks=(await f.db.query(`SELECT t.task_id,t.state,a.assignee_id,t.entered_at,t.completed_at,t.created_at
+    FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 ORDER BY t.task_id`,[id])).rows;
+   const events=(await f.db.query('SELECT event_id,event_kind,occurred_at,recorded_at FROM digital_production_task_events WHERE resource_id=$1 ORDER BY event_id',[id])).rows;
+   return {plans,tasks,events};
+  };
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  try{
+   const latest=await new DigitalDevelopmentService(f.db,true).read(designer,id);
+   const body={round:latest.roundNumber!,documentVersion:latest.version,recipientId:first.actorId};
+   const firstEvidence=await f.image(designer),secondEvidence=await f.image(designer);
+   const selectRecipient=(recipientId:string,expectedVersion:number)=>send('POST',endpoint+'/materials',randomUUID(),{
+    kind:'design_handover',state:'ready',scopeRef:'whole',expectedVersion,occurredAt:'2026-11-08T00:00:00Z',
+    note:expectedVersion?'TEST 重新交接':'TEST 第一次交接', sourceDocumentVersion:latest.version,recipientId,
+    evidenceIds:[expectedVersion?secondEvidence:firstEvidence],
+   });
+   const empty=await send('GET',sample,'');expect(empty.statusCode).toBe(200);
+   expect(empty.json()).toMatchObject({recipient:null,canConfirm:false,current:null,history:[]});
+   const firstShare=await selectRecipient(first.actorId,0);expect(firstShare.statusCode,firstShare.body).toBe(200);
+   const before=await clockAndTasks();expect(before.tasks.length).toBeGreaterThan(0);
+   const invalid=await send('POST',sample,randomUUID(),{...body,round:body.round+1});expect(invalid.statusCode).toBe(409);
+   const otherRole=await send('POST',sample,randomUUID(),body,root);expect([403,404]).toContain(otherRole.statusCode);
+   await context.addCookies([{name:'dx_rework_session',value:token,url:base}]);
+   const page=await context.newPage();
+   await page.goto(`${base}/ui/digital-production?workspace=designer&section=workspace&development=${id}&area=handover`);
+   const panel=page.getByRole('region',{name:'样衣交接',exact:true});
+   const result=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(sample));
+   await panel.getByRole('button',{name:'确认已交样衣',exact:true}).click();
+   const submitted=await result;expect(submitted.status()).toBe(200);expect(submitted.request().postDataJSON()).toEqual(body);
+   const key=await submitted.request().headerValue('idempotency-key');expect(key).toBeTruthy();
+   const firstReceipt=(await submitted.json()).receipt;
+   expect(firstReceipt).toMatchObject({...body,confirmedBy:designer.actorId});
+   await panel.getByText(/^已交样衣 ·/).waitFor();
+   const repeat=await send('POST',sample,randomUUID(),body);expect(repeat.statusCode).toBe(200);expect(repeat.json().receipt).toEqual(firstReceipt);
+   const reassigned=await selectRecipient(second.actorId,1);expect(reassigned.statusCode,reassigned.body).toBe(200);
+   const afterReassignment=await send('GET',sample,'');expect(afterReassignment.json()).toMatchObject({recipient:{id:second.actorId},current:null,canConfirm:true,history:[firstReceipt]});
+   const stale=await send('POST',sample,randomUUID(),body);expect(stale.statusCode).toBe(409);
+   const retry=await send('POST',sample,key!,body);expect(retry.json()).toMatchObject({handover:{recipient:{id:second.actorId},current:null},receipt:firstReceipt});
+   const secondBody={...body,recipientId:second.actorId};
+   const secondResult=await send('POST',sample,randomUUID(),secondBody);
+   expect(secondResult.statusCode).toBe(200);expect(secondResult.json().receipt.eventId).not.toBe(firstReceipt.eventId);
+   expect(secondResult.json().handover.history.map((row:{recipientId:string})=>row.recipientId)).toEqual([second.actorId,first.actorId]);
+   await f.access.revokeRole(f.root,assignment.assignmentId,'TEST remove the new recipient’s original role');
+   assignmentActive=false;
+   const revoked=await send('GET',sample,'');
+   expect(revoked.json()).toMatchObject({recipient:null,current:null,canConfirm:false,history:[secondResult.json().receipt,firstReceipt]});
+   const records=(await f.db.query("SELECT id FROM audit_events WHERE entity_type='digital_development_handover' AND entity_id=$1",[id])).rows;
+   expect(records).toHaveLength(2);
+   const initialHandover=firstShare.json().history.find((fact:{kind:string})=>fact.kind==='design_handover');
+   expect(initialHandover).toMatchObject({version:1,recipientId:first.actorId,evidenceIds:[firstEvidence]});
+   const source='/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:id,
+    area:'records',originalStage:'preparation',originalCategory:'preparation'});
+   await page.goto(base+source);
+   const directory=page.getByLabel('按阶段读取原单据',{exact:true});
+   await directory.locator(`a[href*="originalMaterial=${initialHandover.recordId}"][href*="originalMaterialVersion=1"]`).click();
+   await page.getByRole('heading',{name:/第 1 版 · 只读/}).waitFor();
+   await page.getByText('TEST 第一次交接',{exact:true}).waitFor();
+   const signed=page.getByRole('link',{name:'原凭证 1',exact:true}),signedHref=await signed.getAttribute('href');
+   expect(signedHref).toContain(firstEvidence);expect(signedHref).not.toContain(secondEvidence);
+   const downloaded=await context.request.get(new URL(signedHref!,base).href);
+   expect(downloaded.ok()).toBe(true);expect((await sharp(await downloaded.body()).metadata()).width).toBeGreaterThan(0);
+   const wrongVersion=new URL(page.url());wrongVersion.searchParams.set('originalMaterialVersion','99');await page.goto(wrongVersion.href);
+   await page.getByRole('alert').filter({hasText:'找不到所选物料原记录或版本'}).waitFor();
+   expect(await signed.count()).toBe(0);
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await directory.locator(`a[href*="originalMaterial=${initialHandover.recordId}"][href*="originalMaterialVersion=1"]`).waitFor();
+   expect(await clockAndTasks()).toEqual(before);
+  }finally{
+   await context.close();
+   if(assignmentActive)await f.access.revokeRole(f.root,assignment.assignmentId,'TEST teardown alternate handover recipient');
+  }
+ });
+ it('shares authoritative quantities and quotation versions only after the original authorized writes',async()=>{
+  const {id}=await prepareDevelopment(true,undefined,true),designer=f.people['sample-designer']!,recipient=f.people.merchandiser!,worker=f.people['pattern-room-worker']!;
+  const forms=new DigitalDevelopmentService(f.db,true),source=await forms.read(designer,id);
+  const readiness=new ProductionReadinessService(f.db),resource={kind:'source' as const,id};
+  const token=await loginRole('sample-designer'),url=`/digital-production/sources/${id}/production-readiness/sample-handover`;
+  const view=async()=>{
+   const response=await app.inject({method:'GET',url,headers:{cookie:`dx_rework_session=${token}`}});
+   expect(response.statusCode,response.body).toBe(200);
+   return response.json();
+  };
+  const events=async()=> (await f.db.query(`SELECT id,after_state FROM audit_events WHERE entity_type='digital_development_handover'
+   AND entity_id=$1 AND action='design_electronic_documents_shared' ORDER BY created_at,id`,[id])).rows;
+  await readiness.record(designer,resource,{
+   kind:'design_handover',state:'ready',scopeRef:'whole',expectedVersion:0,occurredAt:'2026-11-08T00:00:00Z',note:'TEST original design materials',
+   sourceDocumentVersion:source.version,recipientId:recipient.actorId,evidenceIds:[],quantities:[],
+  },randomUUID());
+  expect((await view()).electronic).toEqual([
+   expect.objectContaining({kind:'materials',state:'shared',version:source.version,receipt:expect.objectContaining({recipientId:recipient.actorId})}),
+   expect.objectContaining({kind:'order_quantities',state:'not_applicable'}),expect.objectContaining({kind:'quotation',state:'incomplete'}),
+  ]);
+  expect(await events()).toEqual([]);
+  await new DigitalProductionAccessService(f.db).setCustomerDefault(f.root,'PD',recipient.actorId);
+  const order=await new DigitalProductionIdentityService(f.db,true).createOrder(designer,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:source.designStyleNo,orderDate:beijingCalendarDate(businessNow()),
+   lines:[{formalPoNo:source.designStyleNo,color:'黑',customerWarehouseArrivalDate:beijingCalendarDate(new Date(businessNow().getTime()+60*86400000)),
+    sizes:[{size:'M',quantity:7},{size:'L',quantity:3}]}],
+  }),randomUUID(),id);
+  expect((await view()).electronic[1]).toMatchObject({kind:'order_quantities',state:'shared',version:order.version,receipt:{recipientId:recipient.actorId,version:order.version}});
+  expect((await view()).electronic[2]).toMatchObject({kind:'quotation',state:'incomplete',version:null});
+  const quotes=new DigitalQuotationService(f.db,true),rowId=randomUUID();
+  const draft=await quotes.save(designer,resource,{expectedVersion:0,document:{fabricType:'针织',productCategory:'上衣',monthSeries:'',date:'2026-11-08',currency:'人民币',
+   rows:[{rowId,section:'主料',category:'',name:'TEST面料',specification:'40支',unit:'米',supplier:'TEST',consumption:'',unitPrice:'8'}],
+   freight:'0',cm:'0',salePrice:'',outsourcingScope:'',outsourcingUnitPrice:'0',imageAttachmentIds:[],
+  },assignments:[{rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:designer.actorId,priceRole:'sample_designer'}]},randomUUID());
+  const priced=await quotes.fillRow(worker,resource,rowId,{expectedVersion:draft.version,consumption:'1'},randomUUID());
+  expect((await view()).electronic[2]).toMatchObject({kind:'quotation',state:'incomplete',version:null});
+  const confirmed=await quotes.confirm(designer,resource,QuotationConfirmationSchema.parse({
+   expectedVersion:priced.version,customerCode:'PD',customerConfirmedTotal:'20',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',
+   taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',
+   evidenceNote:'TEST 真实业务确认入口及签名',confirmedAt:'2026-11-08T00:00:00Z',
+  }),randomUUID());
+  expect((await view()).electronic[2]).toMatchObject({kind:'quotation',state:'shared',version:confirmed.confirmedVersion,receipt:{recipientId:recipient.actorId}});
+  const history=await events();expect(history).toHaveLength(2);
+  expect(history.flatMap(row=>row.after_state.bases).map(row=>[row.kind,row.id,row.version])).toEqual([
+   ['order_quantities',order.productionOrderId,order.version],['quotation',confirmed.quoteId,confirmed.confirmedVersion],
+  ]);
+  await view();expect(await events()).toEqual(history);
  });
  it('lets the original designer update only the required accessory forecast from the workbench',async()=>{
   const accessoryId=randomUUID(),prepared=await prepareDevelopment(true,accessoryId);
@@ -688,6 +1474,67 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await open();await expect.poll(()=>actual.textContent()).not.toContain('时间未知');expect(await actual.textContent()).not.toContain('待核');
    expect((await tasks.read(f.root,shipping.taskId)).actualCompletion).toMatchObject({precision:'instant',at,quality:'verified'});
    expect((await tasks.history(f.root,shipping.taskId)).events.filter(event=>event.kind==='completed')).toEqual([original]);
+  }finally{await context.close();}
+ });
+
+ it('opens the exact native washing facts for a factory and a receiving batch without writing',async()=>{
+  await prepareRewashSettings(f);
+  const scenarios=[];
+  for(const mode of ['factory','after_receipt'] as const){
+   const subject=await failedFrameworkWashingFixture(f,mode);
+   const read=()=>f.runtime.run(subject.scene,f.root,()=>subject.washing.read(f.root,subject.orderId));
+   const before=await read(),scope=before.scopes.find(item=>item.mode===mode)!;
+   const sourceId=(await new DigitalProductionIdentityService(f.db,true).read(f.root,subject.orderId)).sourceId;
+   if(!sourceId)throw Error('TEST washing order must have its original development source');
+   expect(scope.facts.some(item=>item.id===subject.inspectionId)).toBe(true);
+   scenarios.push({mode,subject,read,before,scope,sourceId});
+  }
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  const commands:string[]=[];
+  page.on('request',request=>{
+   const path=new URL(request.url()).pathname;
+   if(path.endsWith('/bulk-washing')&&request.method()!=='GET')commands.push(request.method());
+  });
+  const logistics=await loginRole('embroidery-washing-merchandiser');
+  try{
+   for(const {mode,subject,read,before,scope,sourceId} of scenarios){
+    const orderPath=`/digital-production/orders/${subject.orderId}/bulk-washing`;
+    const origin='/ui/digital-production?'+new URLSearchParams({
+     workspace:'designer',section:'workspace',development:sourceId,
+     selected:sourceId,area:'records',originalStage:'post_cutting',originalCategory:'factory',
+    });
+    const [operatorScope,ungranted]=await Promise.all([
+     app.inject({method:'GET',url:orderPath,headers:{cookie:`dx_rework_session=${logistics}`}}),
+     get('worker-b',orderPath),
+    ]);
+    expect(operatorScope.statusCode).toBe(200);
+    expect(operatorScope.json().scopes).toEqual(expect.arrayContaining([expect.objectContaining({scopeId:scope.scopeId})]));
+    expect(operatorScope.json().scopes.some(item=>Object.hasOwn(item,'fee'))).toBe(false);
+    expect([403,404]).toContain(ungranted.statusCode);
+    await page.goto(base+origin);
+    const directory=page.getByRole('region',{name:'洗水原记录',exact:true});
+    const link=directory.locator(`a[href*="originalFactoryId=${subject.inspectionId}"]`);
+    const href=new URL((await link.getAttribute('href'))!,base);
+    expect(href.searchParams.get('factory')).toBe(subject.orderId);
+    expect(href.searchParams.get('originalWashingScope')).toBe(scope.scopeId);
+    await link.click();
+    await page.getByRole('heading',{name:'洗后检查 · 只读',exact:true}).waitFor();
+    expect(await page.locator('dd').allTextContents()).toEqual(expect.arrayContaining([scope.label,'2 件','1 件']));
+    expect(await page.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);
+    await page.getByRole('button',{name:'返回来源',exact:true}).click();
+    await link.waitFor();
+    expect(new URL(page.url()).searchParams.get('selected')).toBe(sourceId);
+    expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('factory');
+    const second=scenarios.find(item=>item.mode!==mode)!;
+    href.searchParams.set('originalWashingScope',second.scope.scopeId);
+    await page.goto(href.href);
+    await page.getByRole('alert').filter({hasText:'找不到所选批次的洗水原记录'}).waitFor();
+    expect(await page.locator('dd').count()).toBe(0);
+    expect((await read()).scopes[0]!.facts).toEqual(before.scopes[0]!.facts);
+   }
+   expect(commands).toEqual([]);
   }finally{await context.close();}
  });
 });

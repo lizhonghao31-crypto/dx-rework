@@ -24,6 +24,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager, digitalForbidden } from "./access-policy.js";
 import { ProductionOrderRootRepository } from "./order-root-repository.js";
 import {ensureQuotationBudget} from './quotation-budget-basis.js';
+import {shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {acceptsNewOrderTime,approvedOrderTimeSource,approvedOrderTimeCreation,orderTimeAdmission,bindOrderTimeOrder} from './order-time-admission.js';
 import {automaticOrderTime} from './order-time-automatic.js';
 
@@ -311,6 +312,7 @@ export class DigitalProductionIdentityService {
       await bridgePreparationMaterials(client,await preparationContext(client,{kind:'order',id:root.productionOrderId}),actor.actorId);
       await refreshPreparationWindows(client,root.productionOrderId);
       await ensureQuotationBudget(client,root.productionOrderId,actor.actorId);
+      if(sourceId)await shareApprovedDesignVersions(client,actor,sourceId);
       return this.readWith(client, actor, root.productionOrderId);
     },result=>({kind:'order',id:result.productionOrderId})));
   }
