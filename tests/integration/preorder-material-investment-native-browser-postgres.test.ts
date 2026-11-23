@@ -38,6 +38,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByLabel('主布 面料名称',{exact:true}).fill('TEST 预下单棉布');
    await page.getByLabel('主布 数量与单位',{exact:true}).fill('75米');
    await page.getByLabel('主布 供应商',{exact:true}).fill('TEST 供应商');
+   const fabric=page.getByLabel('主布 面料名称',{exact:true}).locator('xpath=ancestor::tr');
+   const materialPrice=fabric.getByRole('textbox',{name:/材料单价$/});
+   const pricingUnit=fabric.getByRole('textbox',{name:/计价单位$/});
+   expect(await materialPrice.inputValue()).toBe('');
+   expect(await pricingUnit.inputValue()).toBe('');
+   await materialPrice.fill('12.75');await pricingUnit.fill('米');
    for(const category of ['主布','配布']){
     const control=page.getByRole('button',{name:`＋ 添加${category}`,exact:true});
     expect(await control.evaluate(button=>button.closest('.dx-designer-astryx')!==null&&!button.classList.contains('dx-button'))).toBe(true);
@@ -56,7 +62,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const draft=await response.json();
    expect(draft).toMatchObject({status:'draft',productionOrderId:null,publishedAt:null,document:{customerOrderDraft:{withOrder:true,stage:'preorder'}}});
    const material=draft.document.materials.find((row:{name:string})=>row.name==='TEST 预下单棉布');
-   expect(material).toMatchObject({quantity:'75米',supplier:'TEST 供应商'});
+   expect(material).toMatchObject({quantity:'75米',supplier:'TEST 供应商',unitPrice:'12.75',pricingUnit:'米'});
    diagnosis={sourceId:draft.sourceId,materialId:material.materialId};
    const handover=page.getByRole('group',{name:/设计交资料/});
    await handover.getByLabel('实际发生时间（北京时间）').fill(localTime);
