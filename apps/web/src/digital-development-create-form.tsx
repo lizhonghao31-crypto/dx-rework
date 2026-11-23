@@ -3,6 +3,8 @@ import {DevelopmentDocumentSchema,developmentWorkbenchPublishIssues,developmentM
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {Selector} from '@astryxdesign/core/Selector';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {DevelopmentEntryAction,DevelopmentEntryDate,DevelopmentEntryText} from './development-entry-controls.js';
 import {WorkbenchDevelopmentSheetFields,emptyWorkbenchDevelopmentSheet} from './workbench-development-sheet-fields.js';
 import {DEVELOPMENT_WIZARD_STEPS,type DevelopmentWizardStep} from './development-creation-wizard.js';
 import {developmentSubmissionResult,recoverDevelopmentSubmission,type PendingDevelopmentSubmission} from './development-submit-recovery.js';
@@ -460,37 +462,48 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     edit({craft,craftSteps,...(document.craftRequirements?{craftRequirements:document.craftRequirements.filter(row=>keys.has(row.stepKey))}:{}),
       ...(document.workbenchSheet?{workbenchSheet:{...document.workbenchSheet,processingSelected:true}}:{})});
   };
+  const compositionStarted=()=>{setComposingCode(true);sourceSearchSequence.current++;setCheckingCode(false);setCodeCheck(null);};
+  const changeDesignCode=(designStyleNo:string)=>{
+    sourceSearchSequence.current++;setDuplicateSource(null);setCodeCheck(null);setCheckingCode(false);
+    setForm(current=>({...current,designStyleNo}));
+  };
   const developmentDate=<label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label>;
-  const craftControl=<>{fixedCraft?<IndependentCraftField label="工艺" firstControlId={workbenchCraftControl} value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={changeCraft}/>:<label>工艺<select id={workbenchCraftControl} aria-label="工艺" disabled={published} value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft} onChange={event=>changeCraft(event.target.value as DevelopmentDocument["craft"])}>{document.workbenchSheet&&<option value="" disabled>选择加工类型</option>}{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label>}
+  const craftControl=<>{fixedCraft?<IndependentCraftField label="工艺" entryControls={guided} firstControlId={workbenchCraftControl} value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={changeCraft}/>:guided?<Selector id={workbenchCraftControl} label="工艺" size="sm" isDisabled={busy||published}
+      value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft}
+      placeholder="选择加工类型" options={["无","印花","绣花","印绣花"]} onChange={value=>changeCraft(value as DevelopmentDocument["craft"])}/>
+      :<label>工艺<select id={workbenchCraftControl} aria-label="工艺" disabled={published} value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft} onChange={event=>changeCraft(event.target.value as DevelopmentDocument["craft"])}>{document.workbenchSheet&&<option value="" disabled>选择加工类型</option>}{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label>}
     {fixedCraft&&document.workbenchSheet&&document.craft==="无"&&!published&&
-      <label><input type="checkbox" checked={document.workbenchSheet.processingSelected} onChange={event=>edit({workbenchSheet:{...document.workbenchSheet!,processingSelected:event.target.checked}})}/>无加工工艺</label>}
+      (guided?<CheckboxInput label="无加工工艺" value={document.workbenchSheet.processingSelected} isDisabled={busy||published}
+       onChange={checked=>edit({workbenchSheet:{...document.workbenchSheet!,processingSelected:checked===true}})}/>
+       :<label><input type="checkbox" checked={document.workbenchSheet.processingSelected} onChange={event=>edit({workbenchSheet:{...document.workbenchSheet!,processingSelected:event.target.checked}})}/>无加工工艺</label>)}
   </>;
   const formSelect=(label:string,value:string,items:{value:string;label:string}[],change:(value:string)=>void,disabled=false)=>
     guided?<Selector label={label} value={value} options={items} onChange={change} isDisabled={busy||disabled} size="sm"/>
       :<label>{label}<select aria-label={label} value={value} disabled={disabled} onChange={event=>change(event.currentTarget.value)}>
         {items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}
       </select></label>;
+  const FormAction=guided?DevelopmentEntryAction:Button;
   return <Surface className={`development-create development-create-reference dx-doc-development${guided?" development-create-wizard":""}`}><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); if(guided&&wizardStep<stepCount)advance();else void save(preorder&&!published);}}>
     {creation?.snapshot&&<p role="status">已恢复本页开发资料和订购草稿；未创建新档案、未自动提交。</p>}
     {unavailableDraftAttachments.length>0&&<p role="alert">此草稿有 {unavailableDraftAttachments.length} 份已保存附件已失效，请在附件列表移除原附件并重新上传。</p>}
     {lostLocalFiles.length>0&&<p role="alert">原本地附件尚未上传，浏览器刷新未保留文件内容：{lostLocalFiles.map(file=>file.name).join('、')}。请重新选择，或沿附件列表明确移除原本地项后再办理；其他输入仍保留。</p>}
-    <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</Button>}
+    <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<FormAction type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</FormAction>}
       {guided&&!createdSource&&onChooseCreationType&&<AstryxButton label="更换订单类型" type="button" variant="secondary"
         isDisabled={busy||submissionUnknown} onClick={async()=>{
           if(dirty.current&&!await confirmInApp("更换类型会打开一份新草稿。当前填写保留在原草稿，可从创建页继续。确定更换？"))return;
           if(!writing.current)onChooseCreationType();
         }}/>}
-      {!source&&!published&&!preorder&&<Button type="button" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)||(!guided&&!source&&!published&&!preorder&&existingDraft?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)}>{busy?"保存中…":guided&&wizardStep<stepCount?"下一步":submitLabel}</Button>{guided&&wizardStep>1&&<Button type="button" disabled={busy||submissionUnknown} onClick={()=>changeStep(wizardStep===3?2:1)}>上一步</Button>}{guided&&preorder&&createdSource&&Boolean(loadedVersion.current)&&!published&&
-      <Button type="button" disabled={busy||submissionUnknown} onClick={()=>void beginPreorderConfirmation()}>客户确认下单</Button>}
+      {!source&&!published&&!preorder&&<FormAction type="button" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</FormAction>}<FormAction form={formId} type="submit" variant="primary" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)||(!guided&&!source&&!published&&!preorder&&existingDraft?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)}>{busy?"保存中…":guided&&wizardStep<stepCount?"下一步":submitLabel}</FormAction>{guided&&wizardStep>1&&<FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>changeStep(wizardStep===3?2:1)}>上一步</FormAction>}{guided&&preorder&&createdSource&&Boolean(loadedVersion.current)&&!published&&
+      <FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>void beginPreorderConfirmation()}>客户确认下单</FormAction>}
       {guided&&!preorder&&!published&&document.customerOrderDraft?.stage==='preorder'&&
-      <Button type="button" disabled={busy||submissionUnknown} onClick={()=>{setPreorder(true);setStepValidation(false);changeStep(1);}}>返回预下单备料</Button>}
+      <FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>{setPreorder(true);setStepValidation(false);changeStep(1);}}>返回预下单备料</FormAction>}
     </DocumentToolbar>
     {guided&&!preorder&&<section aria-label="建单步骤"><Stepper label="建单进度" className="development-creation-steps" activeStep={wizardStep-1}>
       {DEVELOPMENT_WIZARD_STEPS.slice(0,stepCount).map((label,index)=><Step key={label} step={index} label={label}/>)}
     </Stepper><h2 ref={stepHeading} tabIndex={-1}>{DEVELOPMENT_WIZARD_STEPS[wizardStep-1]}</h2></section>}
     {preorder?<p className="dx-doc-hint">先记录已知的面料及备料信息，其余客户、PO和配码资料在正式下单时补齐。</p>:!guided&&withOrder&&!published&&!initialCustomerOrderIsReady(form,confirmationCalendar)&&<p className="dx-doc-hint">订购信息待核实，可先发布开发资料；正式确认订单时再核对PO、颜色、尺码数量及客户约定出货日期。</p>}
 
-    {!guided&&!source&&!existingDraft?.revisionSource&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['preorder','预下单备料'],['certain_order','有确定客户订单']] as const).map(([value,label])=><Button key={value} type="button" aria-pressed={preorder?value==='preorder':intent===value} disabled={busy||published||submissionUnknown||!onIntentChange} onClick={()=>{setPreorder(value==='preorder');onIntentChange?.(value==='preorder'?'certain_order':value);}}>{label}</Button>)}</div>}
+    {!guided&&!source&&!existingDraft?.revisionSource&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['preorder','预下单备料'],['certain_order','有确定客户订单']] as const).map(([value,label])=><FormAction key={value} type="button" aria-pressed={preorder?value==='preorder':intent===value} disabled={busy||published||submissionUnknown||!onIntentChange} onClick={()=>{setPreorder(value==='preorder');onIntentChange?.(value==='preorder'?'certain_order':value);}}>{label}</FormAction>)}</div>}
     {guided&&!preorder&&wizardStep>1&&document.workbenchSheet&&<DocumentSection id="development-prior-steps" title="已填写的版单资料">
       <dl className="development-prior-step-facts">
         <div><dt>款号 / 款名</dt><dd>{form.designStyleNo} · {document.workbenchSheet.styleName}</dd></div>
@@ -505,26 +518,28 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <DocumentErrors error={error} issues={errorField?[{id:errorField,label:"定位需核实字段",message:error}]:[]} onLocateField={locateStep}/>}
     {calendarError?<p role="alert">{calendarError}</p>:!calendarReady&&<p role="status">正在读取本单日期…</p>}
-    {(createdSource||calendarError)&&<Button type="button" disabled={busy} onClick={()=>setCalendarRefresh(value=>value+1)}>重新读取本单日期</Button>}
+    {(createdSource||calendarError)&&<FormAction type="button" disabled={busy} onClick={()=>setCalendarRefresh(value=>value+1)}>重新读取本单日期</FormAction>}
     {duplicateSource&&<a href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${duplicateSource}`)}>打开已有开发档案</a>}
     {!busy&&!published&&!submissionUnknown&&savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，可返回列表后继续填写；发布和确认订单分别办理。</p>}
     {createdSource&&error&&<p role="status">{failedPhase==='confirm_check'?"本单时效检查未完成，本次客户订单确认尚未发送；资料仍保留，请重新检查。":failedPhase==='publish_check'?"本单时效检查未完成，本次开发发布尚未发送；草稿仍保留，请重新检查。":submissionUnknown||failedPhase==='confirm'||failedPhase==='publish'?developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。":developmentPublished?"开发资料已发布；本次办理尚未完成，请按上方原因处理。":"本次办理尚未完成；已保存内容在原档案，当前输入仍保留。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
-    {submissionUnknown&&<section aria-label="原提交结果待核对"><p role="status">{pendingSubmission.current?.operation==='publish'?'开发发布结果尚未确定，不能据此继续确认下单。':'正式确认结果尚未确定，尚不能显示已下单。'}原资料和操作标识已保留；先只读核对回执，查不到仍保持待核。</p><Button disabled={busy} onClick={()=>void recoverSubmission()}>只读核对原提交结果</Button><Button disabled={busy} onClick={()=>void recoverSubmission(true)}>沿原命令继续核对</Button></section>}
+    {submissionUnknown&&<section aria-label="原提交结果待核对"><p role="status">{pendingSubmission.current?.operation==='publish'?'开发发布结果尚未确定，不能据此继续确认下单。':'正式确认结果尚未确定，尚不能显示已下单。'}原资料和操作标识已保留；先只读核对回执，查不到仍保持待核。</p><FormAction disabled={busy} onClick={()=>void recoverSubmission()}>只读核对原提交结果</FormAction><FormAction disabled={busy} onClick={()=>void recoverSubmission(true)}>沿原命令继续核对</FormAction></section>}
     <fieldset disabled={busy||!calendarReady||submissionUnknown}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card" hidden={guided&&wizardStep===2}><h3>{guided?(wizardStep===3?"客户资料":"基本资料"):"1 · 基本资料"}</h3><BasicLayout><div className="development-create-grid" hidden={guided&&wizardStep!==1}>
       {intent!=="confirm_order"&&formSelect("开发类型",developmentType,[{value:"头版",label:"头版"},{value:"开发板",label:"开发板"}],
         value=>setDevelopmentType(value as "头版"|"开发板"),Boolean(createdSource))}
       <div className="development-code-field">
-        <label htmlFor="development-create-style">设计款号 / 业务ID（必填）</label>
+        {guided?<span className="development-code-label">设计款号 / 业务ID（必填）</span>
+          :<label htmlFor="development-create-style">设计款号 / 业务ID（必填）</label>}
         <div className="development-code-check">
-          <input id="development-create-style" aria-label="设计款号" aria-describedby={!createdSource?"development-code-result":undefined}
-            required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)}
-            onCompositionStart={()=>{setComposingCode(true);sourceSearchSequence.current++;setCheckingCode(false);setCodeCheck(null);}}
-            onCompositionEnd={()=>setComposingCode(false)}
-            onBlur={event=>{if(!guided&&!composingCode&&!checkingCode)void findExistingSource(event.target.value);}}
-            onChange={event=>{sourceSearchSequence.current++;setDuplicateSource(null);setCodeCheck(null);setCheckingCode(false);
-              setForm(current=>({...current,designStyleNo:event.target.value}));}}/>
+          {guided?<DevelopmentEntryText label="设计款号" id="development-create-style" aria-describedby={!createdSource?"development-code-result":undefined}
+            aria-required="true" maxLength={100} value={form.designStyleNo} isReadOnly={Boolean(createdSource)}
+            onCompositionStart={compositionStarted} onCompositionEnd={()=>setComposingCode(false)} onChange={changeDesignCode}/>
+            :<input id="development-create-style" aria-label="设计款号" aria-describedby={!createdSource?"development-code-result":undefined}
+              required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)}
+              onCompositionStart={compositionStarted} onCompositionEnd={()=>setComposingCode(false)}
+              onBlur={event=>{if(!composingCode&&!checkingCode)void findExistingSource(event.target.value);}}
+              onChange={event=>changeDesignCode(event.target.value)}/>}
           {!createdSource&&<AstryxButton label={checkingCode?"检查编号中…":"检查业务ID"} size="sm" variant="secondary" type="button"
             isDisabled={busy||checkingCode||composingCode||!form.designStyleNo.trim()} onClick={()=>void checkCode()}/>}
         </div>
@@ -532,7 +547,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           {codeCheck?.code===form.designStyleNo.trim()?codeCheck.message:'填入设计业务ID后可检查是否已使用。'}
         </small>}
       </div>
-      <label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
+      {guided?<DevelopmentEntryText label="代用款号（选填）" visibleLabel maxLength={100} value={form.temporaryStyleNo??''}
+        isReadOnly={Boolean(createdSource)} onChange={temporaryStyleNo=>setForm({...form,temporaryStyleNo:temporaryStyleNo||null})}/>
+        :<label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>}
       <label>设计师（只读）<input aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
 {guided&&!preorder&&developmentDate}</div><div className="development-create-grid development-create-grid-secondary" hidden={guided&&(preorder||withOrder&&wizardStep===1)}>
       {guided?<div id="development-create-customer" tabIndex={-1}>
@@ -551,31 +568,61 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         {formSelect("辅料是否需要对色",form.requiresColorMatching===true?"yes":form.requiresColorMatching===false?"no":"",
           [{value:"",label:"尚未确定"},{value:"yes",label:"需要对色（A路线）"},{value:"no",label:"无需对色（B路线）"}],
           value=>setForm(current=>({...current,requiresColorMatching:value===""?null:value==="yes"})))}
-        {withOrder&&<label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={calendarToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>}
+        {withOrder&&(guided?<div><span>客户下单日期（必填）</span><DevelopmentEntryDate label="客户下单日期" aria-required="true" id="development-customer-order-date"
+          max={calendarToday} value={form.orderDate} onChange={value=>setForm({...form,orderDate:value??''})}/></div>
+         :<label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={calendarToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>)}
 </>}{!guided&&<>{developmentDate}{craftControl}</>}</div></BasicLayout></section>
     {withOrder&&(!guided||!preorder&&wizardStep===3) && <section className="development-create-card development-create-details"><h3>{guided?"客户订单明细":"2 · 客户订单明细"} <small>默认主跟单：{customers.find(customer=>customer.code===form.customerCode)?.defaultMerchandiserName??"未配置，待主管指派"}</small></h3>
-      {guided&&sharedPoColumns&&form.lines.length>1&&!boundOrder&&<Button type="button" onClick={()=>setSharedPoColumns(false)}>分别编辑各 PO 尺码</Button>}
+      {guided&&sharedPoColumns&&form.lines.length>1&&!boundOrder&&<FormAction type="button" onClick={()=>setSharedPoColumns(false)}>分别编辑各 PO 尺码</FormAction>}
       {!sharedPoColumns&&<p className="development-legacy-po-note">各 PO 尺码按原行保留；修改尺码只影响该 PO，订购数量不会并入其它尺码。</p>}
       <div className="development-table-scroll" role="region" aria-label="PO 明细，可左右滑动查看全部列" tabIndex={0}>
         <table className="development-create-po-table" style={{minWidth:600+maxPoSizeCount*240+(form.lines.length>1?90:0)}}><thead><tr>
           <th className="development-po-index">PO</th><th className="development-po-number">正式款号 / PO</th><th className="development-po-color">颜色 *</th>
-          {Array.from({length:maxPoSizeCount},(_,sizeIndex)=><th className="development-size-column" key={poSizeIds.current[sizeIndex]}><span className="development-size-label">尺码与订购数量 · {sizeIndex+1}</span>{sharedPoColumns&&form.lines[0]!.sizes.length>1&&<button type="button" aria-label={`删除尺码列 ${sizeIndex+1}`} onClick={async()=>{if(await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？")&&!writing.current){poSizeIds.current.splice(sizeIndex,1);setForm(current=>({...current,lines:current.lines.map(row=>({...row,sizes:row.sizes.filter((_,i)=>i!==sizeIndex)}))}));}}}>×</button>}</th>)}
+          {Array.from({length:maxPoSizeCount},(_,sizeIndex)=><th className="development-size-column" key={poSizeIds.current[sizeIndex]}><span className="development-size-label">尺码与订购数量 · {sizeIndex+1}</span>{sharedPoColumns&&form.lines[0]!.sizes.length>1&&<FormAction type="button" aria-label={`删除尺码列 ${sizeIndex+1}`} onClick={async()=>{if(await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？")&&!writing.current){poSizeIds.current.splice(sizeIndex,1);setForm(current=>({...current,lines:current.lines.map(row=>({...row,sizes:row.sizes.filter((_,i)=>i!==sizeIndex)}))}));}}}>×</FormAction>}</th>)}
           <th className="development-row-total">合计（件）</th><th className="development-po-date">{customerPoDateLabel}</th>{form.lines.length > 1 && <th className="development-po-actions">删除 PO</th>}
         </tr></thead><tbody>{form.lines.map((value, index) => <tr key={index}>
           <th className="development-po-index">{index + 1}</th>
-          <td className="development-po-number"><input aria-label={`PO ${index + 1} 正式款号 / PO`} placeholder="选填，可后补" maxLength={100} value={value.formalPoNo ?? ""} onChange={event => line(index, {formalPoNo: event.target.value || null})}/></td>
-          <td className="development-po-color"><input id={`development-po-color-${index+1}`} aria-label={`PO ${index + 1} 颜色`} placeholder="颜色（必填）" required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/><input aria-label={`PO ${index + 1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></td>
+          <td className="development-po-number">{guided?<DevelopmentEntryText label={`PO ${index+1} 正式款号 / PO`} placeholder="选填，可后补"
+            maxLength={100} value={value.formalPoNo??''} onChange={formalPoNo=>line(index,{formalPoNo:formalPoNo||null})}/>:<input aria-label={`PO ${index + 1} 正式款号 / PO`} placeholder="选填，可后补" maxLength={100} value={value.formalPoNo ?? ""} onChange={event => line(index, {formalPoNo: event.target.value || null})}/>}</td>
+          <td className="development-po-color">{guided?<><DevelopmentEntryText id={`development-po-color-${index+1}`} label={`PO ${index+1} 颜色`}
+            placeholder="颜色（必填）" aria-required="true" maxLength={100} value={value.color} onChange={color=>line(index,{color})}/>
+            <DevelopmentEntryText label={`PO ${index+1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100}
+              value={value.colorForeign??''} onChange={colorForeign=>line(index,{colorForeign:colorForeign||null})}/></>:<><input id={`development-po-color-${index+1}`} aria-label={`PO ${index + 1} 颜色`} placeholder="颜色（必填）" required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/><input aria-label={`PO ${index + 1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></>}</td>
           {value.sizes.map((size, sizeIndex) => {
             const quantityError = developmentQuantityError(size.quantity), errorId = `development-quantity-error-${index}-${sizeIndex}`;
-            return <td className="development-size-column" key={poSizeIds.current[sizeIndex]}><div className="development-po-size-pair"><label><span>尺码</span>{(index===0||!sharedPoColumns)?<input aria-label={index===0?`尺码列 ${sizeIndex+1}`:`PO ${index+1} 尺码 ${sizeIndex+1}`} placeholder="如 M / 36" required maxLength={100} value={size.size} onChange={event=>setForm(current=>({...current,lines:current.lines.map((row,rowIndex)=>sharedPoColumns||rowIndex===index?{...row,sizes:row.sizes.map((item,i)=>i===sizeIndex?{...item,size:event.target.value}:item)}:row)}))}/>:<span className="development-po-shared-size" aria-label={`PO ${index+1} 尺码 ${sizeIndex+1}`}>{size.size||"待首行填写"}</span>}{!sharedPoColumns&&value.sizes.length>1&&<button type="button" aria-label={`删除 PO ${index+1} 尺码项 ${sizeIndex+1}`} onClick={async()=>{if(await confirmInApp(`删除 PO ${index+1} 的 ${size.size||`第${sizeIndex+1}项尺码`} 及其订购数量？`)&&!writing.current)line(index,{sizes:value.sizes.filter((_,position)=>position!==sizeIndex)});}}>×</button>}</label><label className="development-quantity-field"><span>数量</span><input aria-label={`PO ${index+1} 订购数量 ${sizeIndex+1}`} type="text" inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity} aria-invalid={quantityError!==null} aria-describedby={quantityError?errorId:undefined} onChange={event=>line(index,{sizes:value.sizes.map((item,i)=>i===sizeIndex?{...item,quantity:event.target.value}:item)})}/></label></div>{quantityError&&<small className="development-quantity-error" id={errorId} role="alert">{quantityError}</small>}</td>;
-          })}{Array.from({length:maxPoSizeCount-value.sizes.length},(_,position)=><td className="development-size-column" key={`absent-${position}`} aria-label={`PO ${index+1} 无此尺码项`}>{!sharedPoColumns&&position===0?<Button type="button" disabled={value.sizes.length>=50} onClick={()=>line(index,{sizes:[...value.sizes,{size:"",quantity:""}]})}>补充本 PO 尺码</Button>:"—"}</td>)}
+            const sizeLabel=index===0?`尺码列 ${sizeIndex+1}`:`PO ${index+1} 尺码 ${sizeIndex+1}`;
+            const quantityLabel=`PO ${index+1} 订购数量 ${sizeIndex+1}`;
+            const changeSize=(text:string)=>setForm(current=>({...current,lines:current.lines.map((row,rowIndex)=>
+              sharedPoColumns||rowIndex===index?{...row,sizes:row.sizes.map((item,i)=>i===sizeIndex?{...item,size:text}:item)}:row)}));
+            const changeQuantity=(quantity:string)=>line(index,{sizes:value.sizes.map((item,i)=>i===sizeIndex?{...item,quantity}:item)});
+            return <td className="development-size-column" key={poSizeIds.current[sizeIndex]}>
+              <div className="development-po-size-pair">
+                <div className="development-size-control"><span>尺码</span>{(index===0||!sharedPoColumns)?
+                  guided?<DevelopmentEntryText label={sizeLabel} placeholder="如 M / 36" aria-required="true" maxLength={100} value={size.size} onChange={changeSize}/>
+                  :<input aria-label={sizeLabel} placeholder="如 M / 36" required maxLength={100} value={size.size} onChange={event=>changeSize(event.target.value)}/>
+                  :<span className="development-po-shared-size" aria-label={sizeLabel}>{size.size||"待首行填写"}</span>}
+                  {!sharedPoColumns&&value.sizes.length>1&&<FormAction type="button" aria-label={`删除 PO ${index+1} 尺码项 ${sizeIndex+1}`} onClick={async()=>{
+                    if(await confirmInApp(`删除 PO ${index+1} 的 ${size.size||`第${sizeIndex+1}项尺码`} 及其订购数量？`)&&!writing.current)
+                      line(index,{sizes:value.sizes.filter((_,position)=>position!==sizeIndex)});
+                  }}>×</FormAction>}
+                </div>
+                <div className="development-quantity-field development-size-control"><span>数量</span>
+                  {guided?<DevelopmentEntryText label={quantityLabel} inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity}
+                    aria-invalid={quantityError!==null} aria-describedby={quantityError?errorId:undefined} onChange={changeQuantity}/>
+                    :<input aria-label={quantityLabel} type="text" inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity}
+                      aria-invalid={quantityError!==null} aria-describedby={quantityError?errorId:undefined} onChange={event=>changeQuantity(event.target.value)}/>}
+                </div>
+              </div>{quantityError&&<small className="development-quantity-error" id={errorId} role="alert">{quantityError}</small>}
+            </td>;
+          })}{Array.from({length:maxPoSizeCount-value.sizes.length},(_,position)=><td className="development-size-column" key={`absent-${position}`} aria-label={`PO ${index+1} 无此尺码项`}>{!sharedPoColumns&&position===0?<FormAction type="button" disabled={value.sizes.length>=50} onClick={()=>line(index,{sizes:[...value.sizes,{size:"",quantity:""}]})}>补充本 PO 尺码</FormAction>:"—"}</td>)}
           <td className="development-row-total">{rowTotals[index] === null ? <span className="development-quantity-error">请修正数量</span> : rowTotals[index]?.toLocaleString()}</td>
-          <td className="development-po-date"><input id={`development-po-date-${index+1}`} aria-label={`PO ${index + 1} ${customerPoDateLabel}`} type="date" min={dateMinimum} value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/></td>
-          {form.lines.length > 1 && <td className="development-po-actions"><Button type="button" onClick={async () => {if (await confirmInApp("删除这个 PO 和全部订购数量？") && !writing.current) removeLine(index);}}>删除 PO</Button></td>}
+          <td className="development-po-date">{guided?<DevelopmentEntryDate id={`development-po-date-${index+1}`} label={`PO ${index+1} ${customerPoDateLabel}`}
+            min={dateMinimum} value={value.customerWarehouseArrivalDate??''} onChange={day=>customerDate(index,day??null)}/>:<input id={`development-po-date-${index+1}`} aria-label={`PO ${index + 1} ${customerPoDateLabel}`} type="date" min={dateMinimum} value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/>}</td>
+          {form.lines.length > 1 && <td className="development-po-actions"><FormAction type="button" onClick={async () => {if (await confirmInApp("删除这个 PO 和全部订购数量？") && !writing.current) removeLine(index);}}>删除 PO</FormAction></td>}
         </tr>)}</tbody></table>
       </div>
-      <div className="development-create-line-actions"><Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate({...newLine(), sizes: current.lines[0]!.sizes.map(size => ({size:size.size, quantity:""}))}, current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</Button>
-        <Button type="button" disabled={maxPoSizeCount >= 50} onClick={() => {poSizeIds.current.push(createClientRequestId());setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:""}]}))}));}}>添加尺码列</Button>
+      <div className="development-create-line-actions"><FormAction type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate({...newLine(), sizes: current.lines[0]!.sizes.map(size => ({size:size.size, quantity:""}))}, current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</FormAction>
+        <FormAction type="button" disabled={maxPoSizeCount >= 50} onClick={() => {poSizeIds.current.push(createClientRequestId());setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:""}]}))}));}}>添加尺码列</FormAction>
         <strong className="development-total-quantity" role="status">总订购数量：{totalQuantity === null ? <span className="development-quantity-error">请修正数量</span> : `${totalQuantity.toLocaleString()} 件`}</strong>
       </div></section>}
     </div></div></fieldset>

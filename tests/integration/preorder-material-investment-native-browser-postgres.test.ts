@@ -38,6 +38,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByLabel('主布 面料名称',{exact:true}).fill('TEST 预下单棉布');
    await page.getByLabel('主布 数量与单位',{exact:true}).fill('75米');
    await page.getByLabel('主布 供应商',{exact:true}).fill('TEST 供应商');
+   for(const category of ['主布','配布']){
+    const control=page.getByRole('button',{name:`＋ 添加${category}`,exact:true});
+    expect(await control.evaluate(button=>button.closest('.dx-designer-astryx')!==null&&!button.classList.contains('dx-button'))).toBe(true);
+    await control.focus();await control.press('Enter');
+    const added=page.getByLabel(`${category} 面料名称`,{exact:true}).last();
+    await expect.poll(()=>added.evaluate(input=>input===document.activeElement)).toBe(true);
+    await added.locator('xpath=ancestor::tr').getByRole('button',{name:'删除面料',exact:true}).click();
+    await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+   }
    expect(await page.getByLabel('PO 1 颜色',{exact:true}).count()).toBe(0);
    expect(await page.getByLabel('本轮打板数量',{exact:true}).count()).toBe(0);
    const saved=page.waitForResponse(r=>/\/sources\/[^/]+\/development$/.test(new URL(r.url()).pathname)&&r.request().method()==='PUT');
@@ -51,7 +60,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    diagnosis={sourceId:draft.sourceId,materialId:material.materialId};
    const handover=page.getByRole('group',{name:/设计交资料/});
    await handover.getByLabel('实际发生时间（北京时间）').fill(localTime);
-   const recipient=handover.getByRole('combobox',{name:'接收订单跟单',exact:true});
+   const recipient=handover.getByRole('button',{name:/^接收订单跟单(?:\s|$)/});
    await recipient.click();
    const recipientName=(await page.evaluate(async id=>{
     const response=await fetch('/api/digital-production/access/candidates');

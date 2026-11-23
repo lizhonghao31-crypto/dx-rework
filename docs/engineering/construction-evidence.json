@@ -1,304 +1,184 @@
 {
   "version": 1,
-  "base": "3d02da9c6e7a3f710f1cfaf56618ae6d6405ecdb",
+  "base": "8f79b1b8a17a9a86e939d15b96464186574eca88",
   "risk": "full",
-  "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
+  "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
   "rules": [
     {
-      "rule": "Keep creation routes separate from real order work and preserve exact draft and command identities.",
-      "source": "Approved workbench v10.1 §2.1, §5.1 and §13 R1.",
+      "rule": "Use pinned Astryx actions and input fields in guided creation and preserve the three existing entry contracts.",
+      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
       "writes": [
-        "apps/web/src/development-creation-draft.ts",
-        "apps/web/src/use-development-creation-draft.ts",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "tests/unit/development-creation-draft.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/development-submit-recovery.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/development-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/unit/development-creation-draft.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts"
-      ],
-      "initialization": "Decode the existing one-record actor/environment session format into a compatible bounded archive. Keep the visible draft explicit in the creation route; preserve the same original command evidence.",
-      "dateAndPermission": "Existing authority is revalidated on explicit recovery. Unresolved receipts hold the original payload and key. A local draft or change of type cannot write a source or start a clock by itself.",
-      "expectation": "Signed ordinary designer uses the three choices, keeps independent local views, navigates to work without reopening a draft, restores the originally selected inputs, and never double-sends after ambiguous receipts.",
-      "checks": [
-        "r1-unit",
-        "r1-signed-creation",
-        "r1-types",
-        "r1-lint",
-        "r1-preflight"
-      ]
-    },
-    {
-      "rule": "Reflow the three approved creation forms on one explicit layout without changing the data or original submit conditions.",
-      "source": "Approved workbench v10.1 §5.1–5.4, §11.2, §13 R1, and docs/ui/ASTRYX_UI_SPEC.md.",
-      "writes": [
-        "apps/web/src/development-creation-wizard.ts",
+        "apps/web/src/development-entry-controls.tsx",
         "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/workbench-development-sheet-fields.tsx",
-        "apps/web/src/digital-development.css",
         "apps/web/src/digital-development-workspace.css",
-        "apps/web/src/list-pagination.tsx",
-        "apps/web/src/order-document-container.tsx",
-        "apps/web/src/document-editor.tsx",
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/acceptance/m01-short-lead-native-browser.ts"
       ],
       "reads": [
-        "apps/web/src/document-editor.tsx",
-        "apps/web/src/digital-development-validation.ts",
-        "apps/web/src/development-pattern-link.tsx",
-        "apps/web/src/production-readiness-panel.tsx"
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "apps/web/src/use-development-creation-draft.ts",
+        "apps/api/src/production-platform/development-service.ts#publish"
       ],
       "oldTests": [
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/m01-short-lead-native-browser-postgres.test.ts"
       ],
-      "initialization": "Use the same persisted wizard and development document; preserve single-page preorder and the legacy task deep links. Stable existing row IDs, validation and controls still use their original commands. The old direct development route shows exactly one navigation owner for a resumed wizard draft; historical and ordinary document chapters retain their old context.",
-      "dateAndPermission": "Original first publication, preorder handover, transfer to source-linked order, customer day rules and actor identity stay in their established services. Designer material editing does not record arrivals.",
-      "expectation": "Four desktop viewport checks compare visible geometry and ID action alignment. Signed long-sheet flows retain full original values and two PO-specific dates; original PG cases cover real preorder and M05. The native managed-draft test reopens its exact old route and verifies the same craft order, a real successful update and old permission denial.",
+      "initialization": "The same loaded form and current source provide customer, PO and wizard state. Original non-guided single-document readers keep their existing behavior.",
+      "dateAndPermission": "Business dates, roles, state guards and per-PO quantities retain their original owners. Native picker bounds retain the original min/max hints while the existing noValidate form preserves typed dates for the server and short-lead approval.",
+      "expectation": "Signed browsers verify absent and present picker minimum, unset date retained through calendar loading, exact typed earlier commitment submitted to original approval without an order, 390 px at 200%, and original PO, dates, reload and keyboard focus.",
       "checks": [
-        "r1-unit",
-        "r1-signed-creation",
-        "r1-signed-craft-reopen",
-        "r1-technical-and-handover",
-        "r1-types",
-        "r1-lint",
-        "r1-preflight"
+        "r1-controls-browser",
+        "r1-controls-types",
+        "r1-controls-lint",
+        "r1-controls-preflight"
       ]
     },
     {
-      "rule": "Bind optional requirements and board attachments to one current development craft choice and its original library version.",
-      "source": "Approved workbench v10.1 §5.4 and §13 R1. Quote and assignment remain dependent downstream work.",
+      "rule": "Use the same themed search and buttons for both restored browser drafts and saved server drafts.",
+      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
       "writes": [
-        "packages/contracts/src/digital-development.ts",
+        "apps/web/src/digital-designer-workspace.tsx"
+      ],
+      "reads": [
+        "apps/web/src/development-creation-draft.ts",
+        "apps/web/src/auth-session.ts",
+        "apps/api/src/production-platform/development-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+      ],
+      "initialization": "Server-acknowledged drafts retain their source ID, version and original local recovery state. An old development URL resumes the compatible current wizard.",
+      "dateAndPermission": "The authenticated recovery path, command key and original receipt checks remain the authority. Search preserves composing Chinese input.",
+      "expectation": "Server search, separate signed reopen and two local drafts pass. The early pending receipt branch uses the same official scoped theme and original command key, and its keyboard action performs only the authorized read.",
+      "checks": [
+        "r1-controls-browser",
+        "r1-controls-types",
+        "r1-controls-lint",
+        "r1-controls-preflight"
+      ]
+    },
+    {
+      "rule": "Use pinned selectors for new craft choices, template, units, washing and saved sample links without changing document identity.",
+      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
+      "writes": [
         "apps/web/src/development-craft-requirements.tsx",
-        "apps/web/src/digital-development-editing.ts",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/digital-development-print.tsx",
-        "tests/unit/special-craft-steps.test.ts"
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/independent-craft-field.tsx",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-service.ts#bindFiles",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/web/src/independent-craft-field.tsx",
-        "apps/web/src/digital-development-upload.ts",
-        "apps/web/src/development-amendment-history.tsx",
-        "apps/web/src/development-published-document.tsx"
+        "apps/web/src/digital-development-editing.ts",
+        "packages/contracts/src/digital-development.ts",
+        "apps/api/src/production-platform/development-service.ts#bindFiles"
       ],
       "oldTests": [
-        "tests/unit/special-craft-steps.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
       ],
-      "initialization": "The existing versioned development JSON accepts optional requirements. Existing files remain unchanged; already saved film stays readable through original attachments.",
-      "dateAndPermission": "Keep original ownership and readiness checks for material file binding, the 30-attachment limit, and frozen old versions. No automatic assignment, task, quote, SLA or order is created.",
-      "expectation": "Signed browser reuses an existing board, stages another file and verifies both exact stored IDs after reload. Unit tests reject stale craft versions, absent or wrong-kind attachments and duplicate rows. The print regression renders the original and amended snapshot with each craft linked to the exact original board, and retains legacy attachment display.",
+      "initialization": "Use existing craft and file option sets. The legacy original form keeps its existing inputs. The label for an existing board or sample distinguishes different saved files.",
+      "dateAndPermission": "Saved requirement versions and attachment IDs remain exact. The unchanged APIs enforce ownership and ready status.",
+      "expectation": "The signed browser chooses the saved board, retains its exact attachment ID through real save/reload and reopens an old draft link with the original ordered choices. The original fixed-timeline regression operates the actual combobox with its visible selected label and accessible options, checks the real saved printing and embroidery order, and verifies the untouched draft and clock facts.",
       "checks": [
-        "r1-unit",
-        "r1-signed-creation",
-        "r1-technical-and-handover",
-        "r1-types",
-        "r1-lint",
-        "r1-preflight"
+        "r1-controls-browser",
+        "r1-controls-types",
+        "r1-controls-lint",
+        "r1-controls-preflight"
       ]
     },
     {
-      "rule": "Keep an existing attachment correction valid without making it a way to rewrite a published craft basis.",
-      "source": "Approved workbench v10.1 §3, §5.3, §13 R1 and the original development amendment contract.",
+      "rule": "Use pinned controls in the designer preorder handover while preserving explicit actual time and original stages.",
+      "source": "Approved workbench v10.1 §11.3A and §13 R1. The correction is limited to new guided creation, author draft reopening and the embedded author preorder handover.",
       "writes": [
-        "apps/web/src/development-amendment-panel.tsx",
-        "packages/contracts/src/digital-development-amendments.ts",
-        "tests/unit/development-amendment-contract.test.ts"
+        "apps/web/src/production-readiness-panel.tsx",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-amendment-service.ts",
-        "apps/web/src/development-amendment-history.tsx",
-        "apps/api/src/production-platform/development-document-snapshot.ts"
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/web/src/digital-development-create-form.tsx"
       ],
       "oldTests": [
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/unit/development-amendment-contract.test.ts"
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "initialization": "Use the existing amendment record, expected document version and original snapshot. Remove only references made obsolete by deleting an allowed file.",
-      "dateAndPermission": "Original return, correction and actual-arrival permissions are retained. Same-round amendment never gains the right to edit the selected craft, part, specification, instructions or ongoing work.",
-      "expectation": "Contract tests retain old amendment checks and distinguish authorized logical cleanup on file removal from prohibited alteration. Existing signed role and service coverage retains the original handoff and review.",
+      "initialization": "The existing embedded designer form builds from the current original saved preparation document and continues to use the original endpoint, receipt and attachment contracts.",
+      "dateAndPermission": "The existing native datetime-local remains only for the explicit Beijing actual occurrence. Astryx v0.7.16 DateTimeInput fills a default time after a date-only selection, which would manufacture a factual hour. No acceptance or SLA logic changes.",
+      "expectation": "The browser activates the two official add-material buttons by keyboard, checks focus returns to each new row, selects the real eligible merchant and checks the returned exact handover version and actor. The original merchant continues from My Tasks. Formal conversion retains the same procurement and attachment history.",
       "checks": [
-        "r1-unit",
-        "r1-amendment",
-        "r1-technical-and-handover",
-        "r1-types",
-        "r1-lint",
-        "r1-preflight"
+        "r1-controls-browser",
+        "r1-controls-types",
+        "r1-controls-lint",
+        "r1-controls-preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "r1-unit",
+      "id": "r1-controls-browser",
       "kind": "tests",
-      "command": "vitest run tests/unit/development-creation-draft.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/special-craft-steps.test.ts tests/unit/development-create-size-optional.test.ts tests/unit/development-confirmation-resume.test.ts tests/unit/development-amendment-contract.test.ts tests/unit/digital-development-upload.test.ts tests/unit/g1-acceptance-corrections.test.ts tests/unit/po-customer-dates.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v101-r1-evidence/final-unit.json",
+      "command": "node /tmp/dx-workbench-v101-r1-selector-evidence/verify-fixed-timeline-controls.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Node 22.22.2. Existing validation and navigation suites plus specific archive, craft-version and correction assertions. Working diff on the stated release base.",
-      "startedAt": "2026-11-23T17:40:42Z",
-      "endedAt": "2026-11-23T17:40:48Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-unit.log",
-      "logSha256": "ca5ccd870f87372c9898813adb9ae21ff6fe06abedb535aa3c60c4b99da042e0",
-      "passed": 53,
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
+      "context": "Node 22.22.2, Chromium original App, signed test identities, two low-privilege PostgreSQL 16.14 test targets, canonical two workers, owned resource cleanup passed.",
+      "startedAt": "2026-11-23T20:05:31.564Z",
+      "endedAt": "2026-11-23T20:08:03.248Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/fixed-timeline-browser.log",
+      "logSha256": "723e62e89a1f0da0b5131134c64964ea98a1c4498c1497583d46466d36e8a973",
+      "passed": 43,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0c744b6ca9219642f19d91d0acd4d01e5436c49081b0ec0f558a316836c7709c"
+          "sha256": "0529601e6f61d9a225c5669ec0e9176923756070f06c8f592074330d00bcab11"
         }
       ]
     },
     {
-      "id": "r1-signed-creation",
-      "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r1-evidence/verify-final-pg.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Isolated PG16.14, signed App roles, scoped non-superuser database access, dual fixture routing and owned resource cleanup. Evidence binds the release worktree source fingerprint to the reported run. Canonical business-chain config with two workers. Tests run the built application and original commands for each creation path.",
-      "startedAt": "2026-11-23T17:41:25.753Z",
-      "endedAt": "2026-11-23T17:43:34.586Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-browser.log",
-      "logSha256": "82b2c489abda06ace1d25138b969148e59d5b59215de55103eb8cd78b9a05510",
-      "passed": 20,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "f33e4860f45ca33e0450859f650987b7028716ae8629ebcee35f5b9a8e1a36f7"
-        }
-      ]
-    },
-    {
-      "id": "r1-signed-craft-reopen",
-      "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r1-evidence/verify-special-pg.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Isolated PG16.14, signed App roles, scoped non-superuser database access, dual fixture routing and owned resource cleanup. Evidence binds the release worktree source fingerprint to the reported run. Entire original special craft suite. Signed App exercises scope, price and an old-only development URL opening the current wizard.",
-      "startedAt": "2026-11-23T17:40:01.094Z",
-      "endedAt": "2026-11-23T17:40:39.695Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-special-craft.log",
-      "logSha256": "78bbfbcb486cc41401bf84d2e72cf5020294255de212111f208db8250c910d58",
-      "passed": 6,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "3ebe74811e117b410d5b0c77a6fb88c4d88bcfeb7e0751918222a945ee343508"
-        }
-      ]
-    },
-    {
-      "id": "r1-technical-and-handover",
-      "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r1-evidence/verify-related-pg.mjs (technical group, filtered original suites)",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Isolated PG16.14, signed App roles, scoped non-superuser database access, dual fixture routing and owned resource cleanup. Evidence binds the release worktree source fingerprint to the reported run. Native cover of first PO-free handover, exact transfer, role revocation and old originals. Real M05 paper, cutting and sewing gates.",
-      "startedAt": "2026-11-23T17:40:39.813Z",
-      "endedAt": "2026-11-23T17:41:09.476Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-related-technical.log",
-      "logSha256": "b349d2dab5c81e9827bc9a532696b7d9fb9c6b46bed9698edd672d865151f42e",
-      "passed": 9,
-      "failed": 0,
-      "skipped": 48,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "24db2f4c7d01d485e9d6064f2269362983078ce1a7c8f8713e91fa6afecb4730"
-        }
-      ]
-    },
-    {
-      "id": "r1-amendment",
-      "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r1-evidence/verify-related-pg.mjs (full amendment group)",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Isolated PG16.14, signed App roles, scoped non-superuser database access, dual fixture routing and owned resource cleanup. Evidence binds the release worktree source fingerprint to the reported run. Existing correction service stays authoritative over returns, downstream permissions and original work.",
-      "startedAt": "2026-11-23T17:41:09.526Z",
-      "endedAt": "2026-11-23T17:41:25.407Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-related-amendment.log",
-      "logSha256": "53c6a60a64a0d116e5d218c4260e52dc69c9758d86b650b537a078f4d6246e80",
-      "passed": 28,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "b0882cd6ffbea422ee8e0ab003f4fe95d847ad612fabae16a1bba32bec26002f"
-        }
-      ]
-    },
-    {
-      "id": "r1-types",
+      "id": "r1-controls-types",
       "kind": "command",
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Node 22.22.2. Current contracts were built in the current worktree before Web type checking.",
-      "startedAt": "2026-11-23T17:40:17Z",
-      "endedAt": "2026-11-23T17:40:42Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-typecheck.log",
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
+      "context": "Node 22.22.2, original web and contract types.",
+      "startedAt": "2026-11-23T20:05:47Z",
+      "endedAt": "2026-11-23T20:06:14Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-types.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
     },
     {
-      "id": "r1-lint",
+      "id": "r1-controls-lint",
       "kind": "command",
-      "command": "eslint <all changed TypeScript and TSX files> --max-warnings=0",
+      "command": "git diff --name-only --diff-filter=ACM 8f79b1b8a17a9a86e939d15b96464186574eca88 -- '*.ts' '*.tsx' | xargs node node_modules/eslint/bin/eslint.js --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Node 22.22.2. Includes added, edited and expanded TypeScript source and tests from the same source fingerprint.",
-      "startedAt": "2026-11-23T17:40:17Z",
-      "endedAt": "2026-11-23T17:40:20Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-lint-selected.log",
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
+      "context": "Node 22.22.2, all modified and new TypeScript source and tests.",
+      "startedAt": "2026-11-23T20:05:47Z",
+      "endedAt": "2026-11-23T20:05:50Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "id": "r1-preflight",
+      "id": "r1-controls-preflight",
       "kind": "command",
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dc556b0a7c2c2a3e5040db7b5a01f0b40a8fd56e",
-      "sourceFingerprint": "2c9a00ec8762b4eaebf57d7fde6a922fd0d14148a77719c6bb68ae52d23693e4",
-      "context": "Node 22.22.2 and the repository-owned dual isolation resource configuration.",
-      "startedAt": "2026-11-23T17:40:17Z",
-      "endedAt": "2026-11-23T17:40:26Z",
-      "log": "/tmp/dx-workbench-v101-r1-evidence/final-preflight.log",
-      "logSha256": "dd33308a376ab9a488ea511594a9669b62042c9cb8e3566c2632cee236dfd1df"
+      "testedHead": "7d473f9aca354a5ff667728c0ea466c461645de6",
+      "sourceFingerprint": "f7285de191e11f8effb6dcace14880d7f3581652e6b2489b7a116242e5ccfec1",
+      "context": "Node 22.22.2, repository protocol, time-source inventory and isolated test configuration.",
+      "startedAt": "2026-11-23T20:05:47Z",
+      "endedAt": "2026-11-23T20:05:58Z",
+      "log": "/tmp/dx-workbench-v101-r1-selector-evidence/recovery-preflight.log",
+      "logSha256": "48bd9310e5115bfbd1f2204ce85ac17527945af3ceba2b77b59a34e8b6bc5949"
     }
   ]
 }

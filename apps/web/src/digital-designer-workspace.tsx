@@ -7,6 +7,7 @@ import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {Link} from '@astryxdesign/core/Link';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {Dialog,DialogHeader} from '@astryxdesign/core/Dialog';
+import {DevelopmentEntryAction,DevelopmentEntryText} from './development-entry-controls.js';
 import {designerAstryxCss as workspaceAstryxCss} from './designer-astryx.js';
 import {registerSessionInvalidator} from './auth-session.js';
 import {useLiveSearch} from "./use-live-search.js";
@@ -262,9 +263,10 @@ export function DigitalDesignerWorkspace() {
   if(creatingPage&&showCreationView&&options&&!confirm&&['pending','conflict','complete'].includes(creation.mode)){
     const record=creation.restored;
     const showOriginal=Boolean(creation.mayReadSnapshot&&(creation.sourceSheet?.canEdit||record?.phase==='pending'&&!record.sourceId));
-    return <Surface className="development-workspace"><h1>{creation.mode==='pending'?'原创建提交结果待核对':'本页原开发资料保留'}</h1>{showOriginal&&<><p>款号：{record?.snapshot.form.designStyleNo||'未填写'} · 客户：{record?.snapshot.form.customerCode||'未填写'}。完整原输入仍保留，尚未开始新的提交。</p>{record?.snapshot.form.lines.map((line,index)=><p key={index}>原PO {index+1} · {line.formalPoNo||line.poNumber||'未填写'} · {line.color} · {line.sizes.map(size=>`${size.size} ${size.quantity}`).join(' / ')}</p>)}</>}{creation.problem&&<p role="alert">{creation.problem}</p>}{creationMessage&&<p role="status">{creationMessage}</p>}
-      {creation.mode==='pending'&&record?.phase==='pending'&&((record.native||record.original.path==='sources/drafts'||record.original.method==='PUT')?<Button type="button" disabled={creationBusy} onClick={()=>{setCreationBusy(true);setCreationMessage('');void creation.check().then(result=>{if(result){setIntent(null);void navigateInternalPage(contextUrl({development:result.sourceId}));}}).catch(reason=>setCreationMessage(reason instanceof Error?reason.message:'原提交尚未核实，原资料仍保留')).finally(()=>setCreationBusy(false));}}>只读核对原提交结果</Button>:<p>该原创建或保存步骤尚无受支持的只读终态入口；原实际标识及输入保留。不能把它当成新草稿再提交，请先核对权威终态。</p>)}
-      <Button type="button" disabled={creationBusy} onClick={()=>{try{creation.close();setDraftLocation();setIntent(null);}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原恢复记录尚未保留');}}}>返回列表并保留资料</Button>
+    return <Surface className="development-workspace dx-designer-astryx"><style data-designer-style="astryx-v0.7.16">{workspaceAstryxCss}</style>
+      <h1>{creation.mode==='pending'?'原创建提交结果待核对':'本页原开发资料保留'}</h1>{showOriginal&&<><p>款号：{record?.snapshot.form.designStyleNo||'未填写'} · 客户：{record?.snapshot.form.customerCode||'未填写'}。完整原输入仍保留，尚未开始新的提交。</p>{record?.snapshot.form.lines.map((line,index)=><p key={index}>原PO {index+1} · {line.formalPoNo||line.poNumber||'未填写'} · {line.color} · {line.sizes.map(size=>`${size.size} ${size.quantity}`).join(' / ')}</p>)}</>}{creation.problem&&<p role="alert">{creation.problem}</p>}{creationMessage&&<p role="status">{creationMessage}</p>}
+      {creation.mode==='pending'&&record?.phase==='pending'&&((record.native||record.original.path==='sources/drafts'||record.original.method==='PUT')?<DevelopmentEntryAction type="button" disabled={creationBusy} onClick={()=>{setCreationBusy(true);setCreationMessage('');void creation.check().then(result=>{if(result){setIntent(null);void navigateInternalPage(contextUrl({development:result.sourceId}));}}).catch(reason=>setCreationMessage(reason instanceof Error?reason.message:'原提交尚未核实，原资料仍保留')).finally(()=>setCreationBusy(false));}}>只读核对原提交结果</DevelopmentEntryAction>:<p>该原创建或保存步骤尚无受支持的只读终态入口；原实际标识及输入保留。不能把它当成新草稿再提交，请先核对权威终态。</p>)}
+      <DevelopmentEntryAction type="button" disabled={creationBusy} onClick={()=>{try{creation.close();setDraftLocation();setIntent(null);}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原恢复记录尚未保留');}}}>返回列表并保留资料</DevelopmentEntryAction>
     </Surface>;
   }
   const creationTypeDialog=<Dialog isOpen={choosingType} onOpenChange={setChoosingType} purpose="form" width="min(440px, calc(100vw - 32px))">
@@ -280,7 +282,7 @@ export function DigitalDesignerWorkspace() {
   const creationForm=showCreationView&&displayedIntent&&options?<div className="development-workspace development-golden dx-production-refined development-create-page dx-designer-astryx">
     <style data-designer-style="astryx-v0.7.16">{workspaceAstryxCss}</style>
     {!workbench&&<div className="development-breadcrumb">产品开发 › <strong>{confirm?"客户确定订单":"新建开发订单"}</strong></div>}
-    {creation.problem&&!confirm&&<p role="alert">{creation.problem} <Button type="button" onClick={()=>{try{creation.retry();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'本页记录仍未保留');}}}>重试保留本页资料</Button></p>}{creationMessage&&<p role="status">{creationMessage}</p>}
+    {creation.problem&&!confirm&&<p role="alert">{creation.problem} <DevelopmentEntryAction type="button" onClick={()=>{try{creation.retry();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'本页记录仍未保留');}}}>重试保留本页资料</DevelopmentEntryAction></p>}{creationMessage&&<p role="status">{creationMessage}</p>}
     {creatingPage&&!confirm&&creationTypeDialog}
     <DevelopmentCreateForm key={confirm?.journey.id ?? creation.viewId??"new-development"} intent={displayedIntent} guidedCreation={creatingPage&&!confirm} initialPreorder={creation.visibleView?.preorder??false} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {...(creation.sourceSheet?{existingDraft:creation.sourceSheet}:{}),...(creation.viewId&&access?{creation:{viewId:creation.viewId,actorId:access.actorId,snapshot:creation.restored?.snapshot,onSnapshot:creation.snapshot,started:creation.started,acknowledged:creation.acknowledged,refused:creation.refused}}:{})})} contained={workbench} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} orderTimeEnabled={options.orderTimeEnabled} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onChooseCreationType={creatingPage&&!confirm?()=>setChoosingType(true):undefined} onCancel={canReturnToServer => {if(!confirm)try{creation.close(canReturnToServer);setDraftLocation();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原资料尚未保留');return;}setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
       if(!confirm)try{if(!creation.completed(sourceId,creation.viewId))return;}catch(reason){setCreationMessage('原办理已完成；本页恢复记录尚未清理。'+(reason instanceof Error?reason.message:''));return;}
@@ -315,12 +317,12 @@ export function DigitalDesignerWorkspace() {
       {creationTypeDialog}
       <div aria-label="开发草稿">
         <h2>开发草稿</h2>
-        <label className="development-search-field">搜索草稿款号<input value={search} maxLength={100} onCompositionStart={liveSearch.onCompositionStart}
-          onCompositionEnd={liveSearch.onCompositionEnd} onChange={event=>setSearch(event.target.value)}
-          onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></label>
-        {draftError?<p role="alert">{draftError} <Button type="button" onClick={()=>setRefresh(value=>value+1)}>刷新草稿</Button></p>
+        <div className="development-search-field"><DevelopmentEntryText label="搜索草稿款号" visibleLabel value={search} maxLength={100}
+          onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={setSearch}
+          onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></div>
+        {draftError?<p role="alert">{draftError} <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>刷新草稿</DevelopmentEntryAction></p>
           :!drafts?<p role="status">正在读取草稿…</p>:drafts.items.length===0?<p>暂无开发草稿</p>:<ul>
-            {drafts.items.map(draft=><li key={draft.sourceId}><Button type="button" disabled={creationBusy} onClick={()=>void openSavedDraft(draft.sourceId)}>{draft.designStyleNo}</Button> <span>{draft.version?'最后保存':'已预留款号'} {date(draft.updatedAt)}</span>{draft.approvalState==='pending'&&<span> · 时效待审核</span>}{draft.approvalState==='returned'&&<span> · 时效申请已退回</span>}</li>)}
+            {drafts.items.map(draft=><li key={draft.sourceId}><AstryxButton label={draft.designStyleNo} type="button" variant="secondary" isDisabled={creationBusy} onClick={()=>void openSavedDraft(draft.sourceId)}/> <span>{draft.version?'最后保存':'已预留款号'} {date(draft.updatedAt)}</span>{draft.approvalState==='pending'&&<span> · 时效待审核</span>}{draft.approvalState==='returned'&&<span> · 时效申请已退回</span>}</li>)}
           </ul>}
         {drafts&&<ListPagination page={drafts.page} totalPages={appliedDraftQuery===draftQuery?Math.max(1,Math.ceil(drafts.total/15)):null}
           total={!liveSearch.pending&&appliedDraftQuery===draftQuery?drafts.total:null}

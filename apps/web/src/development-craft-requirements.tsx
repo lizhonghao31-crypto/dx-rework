@@ -1,5 +1,6 @@
 import {Button} from '@astryxdesign/core/Button';
 import {FileInput} from '@astryxdesign/core/FileInput';
+import {Selector} from '@astryxdesign/core/Selector';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {
@@ -59,17 +60,12 @@ export function DevelopmentCraftRequirements({
         {!readonly&&<div className="development-craft-attachment-actions">
           <FileInput label={`添加${label}图片或文件`} value={null} isMultiple accept={DEVELOPMENT_CRAFT_FILE_TYPES}
             isDisabled={disabled||document.files.length>=30} onChange={files=>{if(files)void upload(Array.isArray(files)?files:[files],'工艺开发板',key);}}/>
-          {availableBoards.length>0&&<label>引用已有工艺开发板
-            <select aria-label={`${label}引用已有工艺开发板`} value="" disabled={disabled} onChange={event=>{
-              const id=event.currentTarget.value;
-              if(id)change({attachmentIds:[...row.attachmentIds,id]});
-            }}>
-              <option value="">选择本版附件</option>
-              {availableBoards.map(file=><option key={file.attachmentId} value={file.attachmentId}>
-                {fileIdentity?.(file.attachmentId)?.filename??`工艺开发板 ${boards.indexOf(file)+1}`}
-              </option>)}
-            </select>
-          </label>}
+          {availableBoards.length>0&&<Selector label={`${label}引用已有工艺开发板`} placeholder="选择本版附件"
+            size="sm" value="" isDisabled={disabled} options={availableBoards.map(file=>({
+              value:file.attachmentId,label:fileIdentity?.(file.attachmentId)?.filename??`工艺开发板 ${boards.indexOf(file)+1}`,
+            }))} onChange={id=>{
+              if(availableBoards.some(file=>file.attachmentId===id))change({attachmentIds:[...row.attachmentIds,id]});
+            }}/>}
         </div>}
       </fieldset>;
     })}

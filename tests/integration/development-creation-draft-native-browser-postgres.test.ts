@@ -43,8 +43,12 @@ async function fillRequiredWorkbenchSheet(page:Page){
  }
  const noCraft=page.getByRole('checkbox',{name:'无加工工艺'});
  if(await noCraft.isVisible())await noCraft.check();
- else if(await page.getByRole('combobox',{name:'工艺',exact:true}).isVisible())
-  await page.getByRole('combobox',{name:'工艺',exact:true}).selectOption('无');
+ else {
+  const craft=page.getByRole('combobox',{name:'工艺',exact:true});
+  if(!await craft.isVisible())return;
+  if(await craft.evaluate(element=>element.tagName==='SELECT'))await craft.selectOption('无');
+  else {await craft.press('Enter');await page.getByRole('option',{name:'无',exact:true}).click();}
+ }
 }
 async function wizardNext(page:Page,{fillRequirements=true}={}){
  await fillRequiredWorkbenchSheet(page);
@@ -119,6 +123,24 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect(table!.x-picture!.x).toBeLessThan(40);
     expect(Math.abs((input!.y+input!.height/2)-(button!.y+button!.height/2))).toBeLessThan(3);
    }
+   await page.setViewportSize({width:390,height:747});
+   const rootFont=await page.evaluate(()=>{
+    const size=parseFloat(getComputedStyle(document.documentElement).fontSize);
+    document.documentElement.style.fontSize=(size*2)+'px';return size;
+   });
+   const saveDraft=page.getByRole('button',{name:'保存预下单备料资料',exact:true});
+   await saveDraft.focus();
+   const accessible=await saveDraft.evaluate(button=>({
+    width:button.getBoundingClientRect().width,visible:button.scrollWidth<=button.clientWidth+1,
+    pageFits:document.documentElement.scrollWidth<=innerWidth+1,focused:document.activeElement===button,
+    rootFont:parseFloat(getComputedStyle(document.documentElement).fontSize),
+    theme:!!button.closest('.dx-designer-astryx'),lang:document.documentElement.lang,
+   }));
+   expect(accessible).toMatchObject({visible:true,pageFits:true,focused:true,rootFont:rootFont*2,theme:true,lang:'zh-CN'});
+   expect(accessible.width).toBeGreaterThan(0);
+   await page.screenshot({path:join(h.evidence,'preorder-handovers-390-200pct.png'),fullPage:true});
+   await page.evaluate(()=>document.documentElement.style.removeProperty('font-size'));
+   await page.setViewportSize({width:1165,height:747});
    expect(await page.getByRole('group',{name:'附件分类'}).getByRole('button',{name:/菲林/}).count()).toBe(0);
    const firstView=new URL(page.url()).searchParams.get('creationDraft');
    expect(firstView).toMatch(/^[a-f0-9-]{36}$/);
@@ -346,10 +368,22 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    }});
   }finally{await start.context.close();}
   const resumed=await h.open(designer.actorId,1165,{},url);
+  let releaseCalendar!:()=>void;
+  const calendarHeld=new Promise<void>(resolve=>{releaseCalendar=resolve;});
   try{
    const page=resumed.page,step=page.locator('.development-creation-steps [aria-current="step"]');
+   const optionsPath=`/api/digital-production/options?sourceId=${sourceId!}`;
+   await page.route('**'+optionsPath,async route=>{await calendarHeld;await route.continue();});
    await page.getByRole('button',{name:style,exact:true}).click();
    expect(await step.innerText()).toContain('客户与交货');
+   const poDate=page.locator('#development-po-date-1');
+   expect(await poDate.getAttribute('min')).toBeNull();
+   expect(await poDate.inputValue()).toBe('');
+   const calendar=page.waitForResponse(response=>response.url().endsWith(optionsPath)&&response.ok());
+   releaseCalendar();
+   const {minimumInitialCustomerDate}=await (await calendar).json();
+   await expect.poll(()=>poDate.getAttribute('min')).toBe(minimumInitialCustomerDate);
+   expect(await poDate.inputValue()).toBe('');
    expect(await page.getByRole('textbox',{name:'PO 1 颜色',exact:true}).inputValue()).toBe('TEST 蓝');
    expect(await page.getByRole('dialog',{name:'请选择创建类型'}).count()).toBe(0);
    await page.getByRole('button',{name:'上一步',exact:true}).click();
@@ -357,7 +391,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(h.requests.filter(row=>row.session===resumed.session&&['POST','PUT'].includes(row.method)&&row.path.includes('/sources'))).toEqual([]);
    expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId!})).toBeNull();
    expect((await h.db.query('SELECT version FROM digital_development_documents WHERE source_id=$1',[sourceId!])).rows).toEqual([{version:1}]);
-  }finally{await resumed.context.close();}
+  }finally{releaseCalendar();await resumed.context.close();}
   const direct=await h.open(designer.actorId,1165,{},'/ui/digital-production?development='+sourceId!);
   try{
    const step=direct.page.locator('.development-creation-steps [aria-current="step"]');
@@ -414,7 +448,9 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await expect.poll(()=>firstRow.evaluate(el=>document.activeElement===el)).toBe(true);
    await firstRow.fill('补齐供应商');
    await firstRow.locator('xpath=ancestor::tr/following-sibling::tr[1]').getByText('技术详情',{exact:true}).click();
-   await dialog.getByLabel(bad.label+' 实样图片',{exact:true}).selectOption(files[1]!.attachmentId);
+   const sample=dialog.getByRole('combobox',{name:bad.label+' 实样图片',exact:true});
+   await sample.press('Enter');
+   await page.getByRole('option',{name:/^局部图 1(?: · |$)/}).click();
    await dialog.getByRole('button',{name:'返回版单',exact:true}).click();
    await dialog.waitFor({state:'hidden'});
    await wizardNext(page);await wizardNext(page);
@@ -463,12 +499,17 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const checkbox=page.getByRole('checkbox',{name:'绣花',exact:true}),native=await checkbox.isVisible();
    const craft=native?checkbox:page.getByRole('combobox',{name:'工艺',exact:true});
    await expect.poll(()=>craft.evaluate(el=>document.activeElement===el)).toBe(true);
-   if(native)await craft.check();else await craft.selectOption('绣花');
+   if(native)await craft.check();else if(await craft.evaluate(element=>element.tagName==='SELECT'))await craft.selectOption('绣花');
+   else {await craft.press('Enter');await page.getByRole('option',{name:'绣花',exact:true}).click();}
    await issue.waitFor({state:'hidden'});
    const embroidery=page.getByRole('group',{name:'绣花',exact:true});
    await embroidery.getByRole('textbox',{name:'绣花部位',exact:true}).fill('左胸');
    await embroidery.getByRole('textbox',{name:'绣花规格 / 效果',exact:true}).fill('宽 6 cm');
-   await embroidery.getByRole('combobox',{name:'绣花引用已有工艺开发板'}).selectOption(file.attachmentId);
+   const existingBoard=embroidery.getByRole('combobox',{name:'绣花引用已有工艺开发板'});
+   expect(await existingBoard.evaluate(element=>element.tagName)).toBe('BUTTON');
+   await existingBoard.press('Enter');
+   await page.getByRole('option',{name:/^(?:TEST\.png|工艺开发板 1)$/}).click();
+   expect((await embroidery.getByRole('link',{name:'查看绣花附件 1原件'}).getAttribute('href'))).toContain('/'+file.attachmentId);
    await tab.context.route('https://private.example.test/**',async route=>{
     const request=route.request();
     if(request.method()!=='POST')return route.abort();
@@ -844,7 +885,14 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    });
    await page.reload();
    await page.getByRole('heading',{name:'原创建提交结果待核对',exact:true}).waitFor();
-   await page.getByRole('button',{name:'只读核对原提交结果',exact:true}).click();
+   const checkReceipt=page.getByRole('button',{name:'只读核对原提交结果',exact:true});
+   expect(await checkReceipt.evaluate(button=>{
+    const scope=button.closest('.dx-designer-astryx');
+    return Boolean(scope?.querySelector('style[data-designer-style="astryx-v0.7.16"]')&&
+      getComputedStyle(button).getPropertyValue('--font-family-body').trim()&&document.documentElement.lang==='zh-CN');
+   })).toBe(true);
+   await checkReceipt.focus();
+   await checkReceipt.press('Enter');
    await page.getByRole('alert').filter({hasText:'已核对原草稿回执。当前没有编辑权限'}).waitFor();
    expect(h.requests.filter(row=>row.session===session&&['POST','PUT'].includes(row.method)&&row.path.includes('/sources'))).toHaveLength(1);
    const reads=h.requests.filter(row=>row.session===session&&row.path==='/api/digital-production/sources/drafts/receipt');
