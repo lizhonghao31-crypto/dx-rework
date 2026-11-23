@@ -59,6 +59,82 @@ export function quotationAmount(value:bigint):string{
   const sign=value<0n?'-':'';const n=value<0n?-value:value,f=(n%SCALE).toString().padStart(12,'0').replace(/0+$/,'');
   return `${sign}${n/SCALE}${f?'.'+f:''}`;
 }
+
+export const QuotationPricingInputSchema = z.object({
+  field: z.enum(['multiplier', 'customerUnitPrice']),
+  value: QuotationDecimalSchema,
+}).strict();
+export type QuotationPricingInput = z.infer<typeof QuotationPricingInputSchema>;
+
+/** Totals adopted quotation rows. The original budget totals keep their own freight and CM rules. */
+export function calculateQuotationUnitCost(document: BudgetDocument): string | null {
+  if (!document.rows.length
+    || document.rows.some(row => !row.name || !row.unit || row.consumption === '' || row.unitPrice === '')) return null;
+  const total = calculateBudget(document).rows.reduce((amount, row) => amount + quotationExact(row.amount), 0n);
+  return quotationAmount(total);
+}
+
+type QuotationPricing = {
+  status: 'calculated' | 'cost_missing' | 'zero_cost' | 'price_out_of_range';
+  customerUnitPrice: string | null;
+  multiplierPercent: string | null;
+  /** Exact percentage as a fraction of integers for a directly entered price. */
+  exactMultiplierPercent: { numerator: string; denominator: string } | null;
+};
+
+/** Calculation only. The caller owns cost completeness, adopted versions and confirmation. */
+export function calculateQuotationPricing(cost: string | null, rawInput: QuotationPricingInput): QuotationPricing {
+  const input = QuotationPricingInputSchema.parse(rawInput);
+  const multiplierInput = input.field === 'multiplier';
+  const customerUnitPrice = multiplierInput ? null : input.value;
+  const pending = { customerUnitPrice, multiplierPercent: null, exactMultiplierPercent: null };
+  if (cost === null) return { ...pending, status: 'cost_missing' };
+  const costExact = quotationExact(cost);
+  if (costExact === 0n) return { ...pending, status: 'zero_cost' };
+
+  const value = quotationExact(input.value);
+  if (multiplierInput) {
+    // The percentage divisor and conversion to cents cancel. Round the final price once.
+    const priceInCents = (costExact * value + SCALE * SCALE / 2n) / (SCALE * SCALE);
+    const price = quotationAmount(priceInCents * (SCALE / 100n));
+    if (!QuotationDecimalSchema.safeParse(price).success) return { ...pending, status: 'price_out_of_range' };
+    return { ...pending, status: 'calculated', customerUnitPrice: price, multiplierPercent: input.value };
+  }
+
+  const numerator = value * 100n;
+  const displayScale = 10_000n;
+  const roundedPercent = (numerator * displayScale + costExact / 2n) / costExact;
+  return {
+    ...pending,
+    status: 'calculated',
+    multiplierPercent: quotationAmount(roundedPercent * (SCALE / displayScale)),
+    exactMultiplierPercent: { numerator: numerator.toString(), denominator: costExact.toString() },
+  };
+}
+
+type QuotationDraftReviewRow = {
+  complete: boolean;
+  review: 'none' | 'returned' | 'resubmitted';
+  craftApproval: 'not_applicable' | 'pending' | 'approved';
+};
+
+/** Read-facing status only. Confirmation must still check the actual adopted identities under lock. */
+export function quotationDraftReviewSummary(rows: readonly QuotationDraftReviewRow[]) {
+  const counts = { returned: 0, resubmitted: 0, incomplete: 0, pendingCraftApproval: 0 };
+  for (const row of rows) {
+    if (row.review === 'returned') counts.returned++;
+    if (row.review === 'resubmitted') counts.resubmitted++;
+    if (!row.complete) counts.incomplete++;
+    if (row.craftApproval === 'pending') counts.pendingCraftApproval++;
+  }
+  const status = counts.returned ? 'awaiting_correction'
+    : counts.resubmitted ? 'awaiting_review'
+    : counts.incomplete || rows.length === 0 ? 'incomplete'
+    : counts.pendingCraftApproval ? 'awaiting_craft_approval'
+    : 'awaiting_customer_confirmation';
+  return { status, counts } as const;
+}
+
 export function compareQuotationBudget(document:BudgetDocument,confirmation:QuotationConfirmation,quantity:number){
   if(confirmation.taxBasis!=='excludes_tax')return {state:'incomparable' as const,reason:'客户确认含税金额与当前不含税预算不可直接比较，请核对真实报价口径',budgetComparableTotal:null,confirmedQuoteTotal:confirmation.customerConfirmedTotal};
   if(confirmation.amountScope==='order_total'&&confirmation.quantity!==quantity)return {state:'incomparable' as const,reason:'正式订单件数与客户确认报价件数不一致，请复核报价版本',budgetComparableTotal:null,confirmedQuoteTotal:confirmation.customerConfirmedTotal};
