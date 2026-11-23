@@ -25,10 +25,11 @@ import {DigitalProductionIdentityService} from "../../apps/api/src/production-pl
 import {DigitalDevelopmentService} from "../../apps/api/src/production-platform/development-service.js";
 import {DevelopmentExecutionService} from "../../apps/api/src/production-platform/development-execution-service.js";
 import {DevelopmentAmendmentService} from "../../apps/api/src/production-platform/development-amendment-service.js";
+import {developmentDocumentSnapshot,developmentSnapshotContainsFile} from "../../apps/api/src/production-platform/development-document-snapshot.js";
 import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
 import {materialReadiness} from "../../apps/api/src/production-platform/development-material-readiness.js";
-import type {DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
+import {DOCUMENT_RETURN_FIELDS,type DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
 import type {TrustedActorContext} from "../../apps/api/src/tools/repositories.js";
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)("P02 same-round correction with real current schema",()=>{
@@ -89,7 +90,7 @@ const url=process.env.TEST_DATABASE_URL;
   })():document;
   expect(DevelopmentDocumentSchema.safeParse(createDocument).success).toBe(true);
   const saved=await forms.save(actor("designer"),sourceId,{expectedVersion:0,document:createDocument},randomUUID()),sheet=await forms.publish(actor("designer"),sourceId,saved.version,randomUUID()),checkTask=sheet.taskId!;
-  const issues:DevelopmentReturnIssue[]=[{materialId,field,...(need?{need}:{}),reason:`TEST ${field}需核实`}];if(workbench)issues.push({materialId:null,field:"files",reason:"TEST 附件应改为有效的材料局部图"});if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
+  const issues:DevelopmentReturnIssue[]=[{materialId:(DOCUMENT_RETURN_FIELDS as readonly string[]).includes(field)?null:materialId,field,...(need?{need}:{}),reason:`TEST ${field}需核实`}];if(workbench)issues.push({materialId:null,field:"files",reason:"TEST 附件应改为有效的材料局部图"});if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
   const entry={materialId,usage:"use" as const,physical:!missing,quantity:field!=="quantity",color:field!=="color",specification:field!=="specification",note:"",confirmedWith:""};
   const verification=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:checkTask,expectedVersion:0,expectedDocumentVersion:sheet.version,entries:createDocument.materials.map(m=>m.materialId===materialId?entry:{...entry,materialId:m.materialId,physical:true,quantity:true,color:true,specification:true}),result:"缺项退回",returnIssues:issues},randomUUID()) as {version:number};
   await execution.check(actor("clerk"),sourceId,{taskId:checkTask,expectedVerificationVersion:verification.version,result:"缺项退回",note:"TEST具体退回",returnIssues:issues,items:createDocument.materials.map(m=>({materialId:m.materialId,physical:m.materialId===materialId?entry.physical:true,quantity:m.materialId===materialId?entry.quantity:true,color:m.materialId===materialId?entry.color:true,specification:m.materialId===materialId?entry.specification:true}))},randomUUID());
@@ -271,6 +272,29 @@ const url=process.env.TEST_DATABASE_URL;
   const body={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:saved.draftVersion},key=randomUUID();
   const results=await Promise.all([amendments.submit(actor("designer"),f.sourceId,body,key),amendments.submit(actor("designer"),f.sourceId,body,key)]);expect(results[0]).toEqual(results[1]);
   const current=await forms.read(actor("clerk"),f.sourceId);expect(current).toMatchObject({roundNumber:1,version:f.sheet.version+1,document:{materials:[{specification:"42支"}]}});
+  const original=await developmentDocumentSnapshot(db,f.sourceId,1,f.sheet.version),corrected=await developmentDocumentSnapshot(db,f.sourceId,1,current.version);
+  expect(original).toMatchObject({sourceId:f.sourceId,roundNumber:1,documentVersion:f.sheet.version,document:frozen});
+  expect(corrected).toMatchObject({sourceId:f.sourceId,roundNumber:1,documentVersion:current.version,document:current.document});
+  expect(original!.metadataRecord.published_by).toBeUndefined();expect(corrected!.metadataRecord.published_by).toBe(ids.designer);
+  expect(developmentSnapshotContainsFile(original!,frozen.files[0].attachmentId)).toBe(true);
+  expect(developmentSnapshotContainsFile(original!,randomUUID())).toBe(false);
+  expect(await developmentDocumentSnapshot(db,f.sourceId,2,current.version)).toBeUndefined();
+  expect(await developmentDocumentSnapshot(db,f.sourceId,1,current.version+1)).toBeUndefined();
+  expect(await developmentDocumentSnapshot(db,randomUUID(),1,current.version)).toBeUndefined();
+  expect(await forms.publishedVersion(actor('designer'),f.sourceId,1,f.sheet.version)).toMatchObject({sourceId:f.sourceId,roundNumber:1,documentVersion:f.sheet.version,document:frozen,metadata:{published:{by:null}}});
+  expect(await forms.publishedVersion(actor('designer'),f.sourceId,1,current.version)).toMatchObject({documentVersion:current.version,document:current.document});
+  await expect(forms.publishedVersion(actor('designer'),f.sourceId,2,current.version)).rejects.toMatchObject({statusCode:404});
+  await expect(forms.publishedVersion(actor('other'),f.sourceId,1,current.version)).rejects.toMatchObject({statusCode:404});
+  expect(await forms.canDownloadVersion(actor('clerk'),f.sourceId,1,f.sheet.version,frozen.files[0].attachmentId)).toBe(true);
+  expect(await forms.canDownloadVersion(actor('clerk'),f.sourceId,1,f.sheet.version,randomUUID())).toBe(false);
+  await expect(forms.canDownloadVersion(actor('other'),f.sourceId,1,f.sheet.version,frozen.files[0].attachmentId)).rejects.toMatchObject({statusCode:404});
+  const versions=await forms.publishedVersions(actor('clerk'),f.sourceId);
+  expect(versions).toMatchObject({sourceId:f.sourceId,page:1,pageSize:15,total:2,items:[{roundNumber:1,documentVersion:current.version},{roundNumber:1,documentVersion:f.sheet.version}]});
+  expect(versions.items.every(item=>!Object.hasOwn(item,'document'))).toBe(true);
+  expect(await forms.publishedVersions(actor('clerk'),f.sourceId,2)).toMatchObject({page:2,total:2,items:[]});
+  expect(await forms.publishedVersions(actor('clerk'),f.sourceId,1,`资料版本 ${current.version}`)).toMatchObject({total:1,items:[{documentVersion:current.version}]});
+  await expect(forms.publishedVersions(actor('other'),f.sourceId)).rejects.toMatchObject({statusCode:404});
+  await expect(forms.publishedVersions(actor('clerk'),f.sourceId,0)).rejects.toMatchObject({statusCode:400});
   expect((await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1",[f.sourceId])).rows[0].document).toEqual(frozen);
   expect((await db.query("SELECT count(*)::int n FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(1);
   const state=await execution.read(actor("clerk"),f.sourceId),rechecks=state.tasks.filter(t=>t.taskKind==="development_material_recheck");expect(rechecks).toHaveLength(1);expect(rechecks[0]).toMatchObject({assigneeId:ids.clerk,state:"ready",routeVersion:1});expect(state.materialVerification?.entries[0]).toMatchObject({usage:"use",specification:false});expect(state.materialVerification?.entries[0]?.invalidated.join()).toContain("规格");
@@ -278,6 +302,25 @@ const url=process.env.TEST_DATABASE_URL;
   const history=await amendments.history(actor("clerk"),f.sourceId,1);expect(history.original.document).toEqual(frozen);expect(history.revisions).toHaveLength(1);expect(input.document.materials[0]?.specification).toBe("42支");
   expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(false);
   const clerkTodos=(await notices.todos(actor("clerk"))).filter(todo=>todo.todoId===rechecks[0]!.taskId);expect(clerkTodos).toHaveLength(1);expect(clerkTodos[0]!.recipientUserId).toBe(ids.clerk);expect((await notices.todos(actor("designer"))).some(todo=>todo.todoId===f.supply.taskId)).toBe(false);expect((await notices.todos(actor("worker"))).some(todo=>todo.todoId===rechecks[0]!.taskId)).toBe(false);
+ });
+ it('keeps attachment membership on the selected published version after a real same-round file correction',async()=>{
+  const f=await prepare('files'),context=await amendments.read(actor('designer'),f.sourceId,f.supply.taskId),originalFile=context.document.files[0]!.attachmentId,newFile=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-corrected.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[newFile,`TEST/${newFile}`,'c'.repeat(64),ids.designer]);
+  const document={...context.document,files:[{attachmentId:newFile,kind:'款图' as const}]};
+  const draft=await amendments.save(actor('designer'),f.sourceId,{taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:0,document,reason:'TEST同轮更正原附件'},randomUUID());
+  await amendments.submit(actor('designer'),f.sourceId,{taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:draft.draftVersion},randomUUID());
+  const current=await forms.read(actor('designer'),f.sourceId);
+  expect(current.document!.files).toEqual(document.files);
+  // The original source-level binding legitimately retains both files. It is
+  // insufficient authority to attach either file to the other snapshot.
+  expect(await forms.canDownload(actor('designer'),f.sourceId,originalFile)).toBe(true);
+  expect(await forms.canDownload(actor('designer'),f.sourceId,newFile)).toBe(true);
+  expect(await forms.canDownloadVersion(actor('designer'),f.sourceId,1,f.sheet.version,originalFile)).toBe(true);
+  expect(await forms.canDownloadVersion(actor('designer'),f.sourceId,1,f.sheet.version,newFile)).toBe(false);
+  expect(await forms.canDownloadVersion(actor('designer'),f.sourceId,1,current.version,newFile)).toBe(true);
+  expect(await forms.canDownloadVersion(actor('designer'),f.sourceId,1,current.version,originalFile)).toBe(false);
+  expect((await forms.publishedVersion(actor('designer'),f.sourceId,1,f.sheet.version)).document.files).toEqual([{attachmentId:originalFile,kind:'款图'}]);
+  await expect(forms.canDownloadVersion(actor('other'),f.sourceId,1,current.version,newFile)).rejects.toMatchObject({statusCode:404});
  });
  it("corrects only the returned supplier and sample of a full workbench sheet, and rejects an obsolete correction",async()=>{
   const f=await prepare("supplier",false,false,"document",undefined,true);
@@ -431,7 +474,20 @@ const url=process.env.TEST_DATABASE_URL;
   const parsed=DevelopmentDocumentSchema.parse(body.document);
   expect(JSON.stringify(context.document.customerOrderDraft)).not.toBe(JSON.stringify(parsed.customerOrderDraft));
   expect(parsed.customerOrderDraft).toEqual(context.document.customerOrderDraft);
-  try{const before=await count();for(const [who,status]of [["worker",404],["clerk",403]] as const){const denied=await app.inject({method:"PUT",url:endpoint,headers:{cookie:`dx_rework_session=${sessions.get(who)}`,"idempotency-key":randomUUID()},payload:body});expect(denied.statusCode).toBe(status);expect(await count()).toBe(before);}
+  try{
+  const versionEndpoint=`/digital-production/sources/${f.sourceId}/development/versions/${f.sheet.version}`,beforeReads=await count();
+  for(const who of ['designer','clerk'] as const){
+   const read=await app.inject({url:`${versionEndpoint}?round=1`,headers:{cookie:`dx_rework_session=${sessions.get(who)}`}});
+   expect(read.statusCode,read.body).toBe(200);expect(read.headers['cache-control']).toBe('private, no-store');
+   expect(read.json()).toMatchObject({sourceId:f.sourceId,roundNumber:1,documentVersion:f.sheet.version,document:{materials:[{specification:'40支'}]}});
+   expect(read.json()).not.toHaveProperty('canEdit');if(who==='clerk')expect(read.json().document).not.toHaveProperty('customerOrderDraft');
+  }
+  const hidden=await app.inject({url:`${versionEndpoint}?round=1`,headers:{cookie:`dx_rework_session=${sessions.get('worker')}`}});expect(hidden.statusCode,hidden.body).toBe(404);
+  const wrongRound=await app.inject({url:`${versionEndpoint}?round=2`,headers:{cookie:`dx_rework_session=${sessions.get('designer')}`}});expect(wrongRound.statusCode,wrongRound.body).toBe(404);
+  const noRound=await app.inject({url:versionEndpoint,headers:{cookie:`dx_rework_session=${sessions.get('designer')}`}});expect(noRound.statusCode,noRound.body).toBe(400);
+  const wrongFile=await app.inject({url:`${versionEndpoint}/attachments/${randomUUID()}/metadata?round=1`,headers:{cookie:`dx_rework_session=${sessions.get('designer')}`}});expect(wrongFile.statusCode,wrongFile.body).toBe(404);
+  expect(await count()).toBe(beforeReads);
+   const before=await count();for(const [who,status]of [["worker",404],["clerk",403]] as const){const denied=await app.inject({method:"PUT",url:endpoint,headers:{cookie:`dx_rework_session=${sessions.get(who)}`,"idempotency-key":randomUUID()},payload:body});expect(denied.statusCode).toBe(status);expect(await count()).toBe(before);}
    const key=randomUUID(),allowed=await app.inject({method:"PUT",url:endpoint,headers:{cookie:`dx_rework_session=${sessions.get("designer")}`,"idempotency-key":key},payload:body});expect(allowed.statusCode,allowed.body).toBe(200);expect(allowed.json().draftVersion).toBe(1);expect(await count()).toBe(before+1);expect((await forms.read(actor("designer"),f.sourceId)).version).toBe(f.sheet.version);
    const receipt=await app.inject({url:`${endpoint}/receipt?taskId=${f.supply.taskId}&operation=save&key=${key}`,headers:{cookie:`dx_rework_session=${sessions.get("designer")}`}});expect(receipt.statusCode).toBe(200);expect(receipt.json().receipt.draftVersion).toBe(1);
    const g=await prepare("physical",true,true),reopen=await reopenInput(g),reopenUrl=`/digital-production/sources/${g.sourceId}/execution/reopen-materials`,taskCount=async()=>Number((await db.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[g.sourceId])).rows[0].n),beforeReopen=await taskCount();

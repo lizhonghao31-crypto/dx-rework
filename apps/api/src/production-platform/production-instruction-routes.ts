@@ -13,6 +13,14 @@ export function registerInstructionRoutes(app: FastifyInstance, dependencies: Di
   const id = (request:FastifyRequest,name:string)=>parse(z.string().uuid(),(request.params as Record<string,unknown>)[name]);
   const key=(request:FastifyRequest)=>typeof request.headers["idempotency-key"]==="string"?request.headers["idempotency-key"]:"";
   const base="/digital-production/orders/:orderId/instruction";
+  app.get(`${base}/published-versions`,async(request,reply)=>{const q=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().trim().max(100).default('')}).strict(),request.query);reply.header('cache-control','private, no-store');return service.originalVersions(await actor(request),id(request,'orderId'),q.page,q.q);});
+  const originalBase=`${base}/original-versions/:version`;
+  app.get(originalBase,async(request,reply)=>{parse(z.object({}).strict(),request.query);reply.header('cache-control','private, no-store');return service.originalVersion(await actor(request),id(request,'orderId'),parse(z.coerce.number().int().positive(),(request.params as {version:string}).version));});
+  app.get(`${originalBase}/attachments/:attachmentId`,async(request,reply)=>{
+    parse(z.object({}).strict(),request.query);const trusted=await actor(request),orderId=id(request,'orderId'),attachmentId=id(request,'attachmentId'),version=parse(z.coerce.number().int().positive(),(request.params as {version:string}).version);
+    const grant=await attachments.createDownloadIntent(trusted,attachmentId,()=>service.canDownloadOriginal(trusted,orderId,version,attachmentId),'inline');
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  });
   app.get(base,async request=>{const query=parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),id(request,"orderId"),undefined,query.version);});
   app.get(`${base}/save-receipt`,async request=>{const query=parse(z.object({key:InstructionReceiptKeySchema}).strict(),request.query);return service.saveReceipt(await actor(request),id(request,'orderId'),query.key);});
   app.get(`${base}/date-requests/:requestId/decision-receipt`,async request=>{const query=parse(z.object({key:InstructionReceiptKeySchema,approved:z.enum(['true','false']).transform(value=>value==='true')}).strict(),request.query);return service.decisionReceipt(await actor(request),id(request,'orderId'),id(request,'requestId'),query.approved,query.key);});

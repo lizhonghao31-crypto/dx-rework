@@ -11,10 +11,10 @@ import { createWebUrls } from "../url-contract.js";
 import {documentCategories,documentChapterIds,documentVersionKeys,isCurrentDocumentVersion,readDocumentKind,readDocumentVersion,taskTabLabels} from './digital-detail-context.js';
 import {factoryTaskTarget} from './factory-task-target.js';
 
-const domains = ["timeRequest", "timeOrder", "timeSource", "closure", "factory", "bulk", "materialSource", "materialOrder", "instruction", "budget", "arrangement", "development", "task", "order", "shortLead"] as const;
+const domains = ["timeRequest", "timeOrder", "timeSource", "closure", "factory", "bulk", "materialSource", "materialOrder", "instruction", "budget", "quotationSource", "quotationOrder", "arrangement", "development", "task", "order", "shortLead"] as const;
 type Domain = typeof domains[number];
-const versions: Partial<Record<Domain, string>> = { instruction: "instructionVersion", budget: "budgetVersion", development: "round", arrangement: "round" };
-export type DigitalDetailRoute = { kind: "landing" } | { kind: "invalid"; message: string } | { kind: Domain; id: string; version?: number };
+const versions: Partial<Record<Domain, string>> = { instruction: "instructionVersion", budget: "budgetVersion", development: "round", arrangement: "round",quotationSource:'quoteVersion',quotationOrder:'quoteVersion' };
+export type DigitalDetailRoute = { kind: "landing" } | { kind: "invalid"; message: string } | { kind: Domain; id: string; version?: number; documentVersion?:number;original?:boolean;quoteId?:string };
 
 /** Preserve compound-link priority; malformed history never opens current editable data. */
 export function digitalDetailRoute(search: string): DigitalDetailRoute {
@@ -25,9 +25,14 @@ export function digitalDetailRoute(search: string): DigitalDetailRoute {
     if (query.getAll(kind).length !== 1 || !DigitalIdSchema.safeParse(id).success) return { kind: "invalid", message: "详情编号无效，请从原工作台重新进入" };
     const versionKey = versions[kind], raw = versionKey ? query.get(versionKey) : null;
     if (raw !== null && (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw)) || query.getAll(versionKey!).length !== 1)) return { kind: "invalid", message: "历史版本或轮次无效，请从原记录重新进入" };
+    const original=query.get('originalDocument'),quotation=kind==='quotationSource'||kind==='quotationOrder',quoteId=query.get('quoteId');
+    if(query.has('quoteId')&&!quotation||query.has('originalDocument')&&(query.getAll('originalDocument').length!==1||!['budget','instruction'].includes(kind)||original!==kind||raw===null)||quotation&&(raw===null||query.getAll('quoteId').length!==1||!DigitalIdSchema.safeParse(quoteId).success))return {kind:'invalid',message:'原单对象或精确版本无效，未打开当前资料'};
+    const documentVersion=query.get('developmentDocumentVersion');
+    if(query.has('developmentDocumentVersion')&&(kind!=='development'||raw===null||query.getAll('developmentDocumentVersion').length!==1||!documentVersion||!/^[1-9]\d*$/.test(documentVersion)||!Number.isSafeInteger(Number(documentVersion))))return {kind:'invalid',message:'开发原单轮次或资料版本无效，请从原记录重新进入'};
     if (kind === "task" && query.has("taskView") && (query.getAll("taskView").length !== 1 || !["read", "handle", "correct"].includes(query.get("taskView")!))) return { kind: "invalid", message: "任务查看方式无效，请从原待办重新进入" };
-    return { kind, id: id!, ...(raw === null ? {} : { version: Number(raw) }) };
+    return { kind, id: id!, ...(raw === null ? {} : { version: Number(raw) }),...(documentVersion===null?{}:{documentVersion:Number(documentVersion)}),...(original?{original:true}:{}),...(quotation?{quoteId:quoteId!}:{}) };
   }
+  if(query.has('developmentDocumentVersion')||query.has('originalDocument')||query.has('quoteId'))return {kind:'invalid',message:'缺少原单编号，未打开当前版本'};
   return { kind: "landing" };
 }
 
@@ -78,12 +83,12 @@ export function digitalDetailReturnUrl(value: string | null, base: string,depth=
   const query=url.searchParams,present=domains.filter(kind=>query.has(kind)),active=digitalDetailRoute(url.search);
   if(active.kind==='landing'||active.kind==='invalid'||present.some(kind=>!DigitalIdSchema.safeParse(query.get(kind)).success))return null;
   const kind=active.kind,hasTask=present.includes('task');
-  const identity=`${kind}:${active.id}:${active.version??(kind==='task'?query.get('taskView')??'handle':'current')}`;
+  const identity=`${kind}:${active.id}:${active.version??(kind==='task'?query.get('taskView')??'handle':'current')}${active.documentVersion===undefined?'':':document:'+active.documentVersion}`;
   if(visited.includes(identity))return null;
   const presentVersionKeys=present.flatMap(domain=>versions[domain]?[versions[domain]!]:[]);
   if(presentVersionKeys.some(key=>query.has(key)&&(!/^[1-9]\d*$/.test(query.get(key)!)||!Number.isSafeInteger(Number(query.get(key))))))return null;
   const documentContext=hasTask||present.some(domain=>['development','budget','instruction'].includes(domain))&&readDocumentKind(url.search)!==undefined;
-  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...(documentContext?Object.values(documentVersionKeys):[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction','washingWindow'].includes(key)))return null;
+  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...(documentContext?Object.values(documentVersionKeys):[]),...(kind==='development'?['developmentDocumentVersion']:[]),...(['budget','instruction'].includes(kind)?['originalDocument']:[]),...(['quotationSource','quotationOrder'].includes(kind)?['quoteId']:[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction','washingWindow'].includes(key)))return null;
   if(documentContext&&Object.entries(documentVersionKeys).some(([document,key])=>query.has(key)&&readDocumentVersion(document as keyof typeof documentVersionKeys,url.search)===undefined&&!isCurrentDocumentVersion(document as keyof typeof documentVersionKeys,url.search)))return null;
   if(query.has('documentKind')&&!readDocumentKind(url.search))return null;
   if (query.has("taskView") && (!hasTask || !["read", "handle", "correct"].includes(query.get("taskView")!))) return null;
@@ -138,6 +143,9 @@ export function digitalDetailClosePath(search: string, base: string): string | n
   if (route.kind === "landing" || route.kind === "invalid") return null;
   query.delete(route.kind);
   if (versions[route.kind]) query.delete(versions[route.kind]!);
+  if(route.kind==='development')query.delete('developmentDocumentVersion');
+  if(['quotationSource','quotationOrder'].includes(route.kind))query.delete('quoteId');
+  if(['budget','instruction'].includes(route.kind))query.delete('originalDocument');
   if (route.kind === "task") { query.delete("taskView"); query.delete("todo"); }
   query.delete("returnTo");
   const remaining = digitalDetailRoute(query.toString());

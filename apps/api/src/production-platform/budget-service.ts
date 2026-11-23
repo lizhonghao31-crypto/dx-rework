@@ -12,6 +12,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
 import {readBudgetQuoteComparison} from './quotation-budget-basis.js';
 import {BudgetWashingFeeService} from './budget-washing-fees.js';
+import {DigitalProductionIdentityService} from './identity-service.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("BUDGET_CONFLICT", message, 409); };
@@ -106,6 +107,28 @@ export class DigitalBudgetService {
   async canDownload(actor: TrustedActorContext, orderId: string, attachmentId: string): Promise<boolean> {
     await this.order(this.database, actor, orderId);
     return Boolean((await this.database.query("SELECT 1 FROM digital_budget_attachment_bindings WHERE production_order_id=$1 AND attachment_id=$2", [orderId, attachmentId])).rowCount);
+  }
+  async originalVersions(actor:TrustedActorContext,orderId:string,page:number,q:string){
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.order(db,actor,orderId);
+      const row=(await db.query(`WITH matching AS (SELECT version,published_at FROM digital_budget_versions WHERE production_order_id=$1 AND ($2::text='' OR strpos(lower('成本预算表 已发布版本 '||version),lower($2))>0)),
+       chosen AS (SELECT * FROM matching ORDER BY version DESC LIMIT 15 OFFSET $3)
+       SELECT (SELECT count(*)::int FROM matching) AS total,COALESCE(jsonb_agg(jsonb_build_object('version',version,'publishedAt',published_at) ORDER BY version DESC),'[]'::jsonb) AS items FROM chosen`,[orderId,q,(page-1)*15])).rows[0]!;
+      await db.query('COMMIT');return {id:orderId,page,pageSize:15,total:row.total,items:row.items};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async originalVersion(actor:TrustedActorContext,orderId:string,version:number){
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const sheet=await this.read(actor,orderId,db,version),order=await new DigitalProductionIdentityService(this.database,this.creationEnabled).readWithClient(actor,orderId,db);
+      await db.query('COMMIT');return {order,sheet:{...sheet,canEdit:false,canPublish:false,canAdoptQuotation:false,canSubmitSourcing:false}};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async canDownloadOriginal(actor:TrustedActorContext,orderId:string,version:number,attachmentId:string){
+    const {sheet}=await this.originalVersion(actor,orderId,version);
+    return Boolean(sheet.document?.imageAttachmentIds.includes(attachmentId))&&this.canDownload(actor,orderId,attachmentId);
   }
   private async bindFiles(db: PoolClient, actor: TrustedActorContext, orderId: string, doc: BudgetDocument) {
     for (const attachmentId of [...doc.imageAttachmentIds].sort()) {

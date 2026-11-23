@@ -57,7 +57,7 @@ export class ProductionInstructionService {
     document.composition = source.materials.filter(item => item.category === "主布").map(item => item.composition).filter(Boolean).join("／");
     return { document, sourceRound: row.round_number ?? 1, sourceVersion:row.version as number };
   }
-  async read(actor: TrustedActorContext, id: string, db: Database = this.database, version?: number): Promise<InstructionSheet> {
+  async read(actor: TrustedActorContext, id: string, db: Database = this.database, version?: number,original=false): Promise<InstructionSheet> {
     const { order, editable } = await this.order(db, actor, id);
     const cutStarted = await this.cutStarted(db, id);
     const draftAccess=editable&&!cutStarted;
@@ -77,8 +77,8 @@ export class ProductionInstructionService {
     }
     const review=(await db.query("SELECT a.after_state,a.created_at,u.display_name FROM audit_events a LEFT JOIN app_users u ON u.id=a.actor_id WHERE a.entity_type='digital_instruction' AND a.entity_id=$1 AND a.action='instruction_source_decisions' AND (a.after_state->>'version')::int<=$2 ORDER BY a.created_at DESC LIMIT 1",[id,row?.version??0])).rows[0];
     const sourceReview:InstructionSheet["sourceReview"]=review?{sourceRound:review.after_state.sourceRound,...(typeof review.after_state.sourceVersion==='number'?{sourceVersion:review.after_state.sourceVersion}:{}),instructionVersion:review.after_state.version,decisions:review.after_state.decisions,reviewedAt:new Date(review.created_at).toISOString(),reviewedBy:review.display_name??"",...(review.after_state.priorMeasurements?{priorMeasurements:review.after_state.priorMeasurements}:{})}:undefined;
-    const technicalTable=order.sourceId&&latestSourceRound?(await publishedTechnicalArtifact(db,order.sourceId,latestSourceRound))?.artifact.body.baseSizeTable:null;
-    return { orderTimeEnabled:await acceptsNewOrderTime(db),...(await readInitialTimelineInput(db,{kind:'order',id})?{timelineSchemaVersion:2 as const}:{}),...(technicalTable?{technicalSizeTable:technicalTable}:{}),...(await preparationAdoption(db,{kind:'order',id})?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}), metadata:await documentMetadata(db,row), order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
+    const technicalTable=!original&&order.sourceId&&latestSourceRound?(await publishedTechnicalArtifact(db,order.sourceId,latestSourceRound))?.artifact.body.baseSizeTable:null;
+    return { orderTimeEnabled:await acceptsNewOrderTime(db),...(await readInitialTimelineInput(db,{kind:'order',id})?{timelineSchemaVersion:2 as const}:{}),...(technicalTable?{technicalSizeTable:technicalTable}:{}),...(!original&&await preparationAdoption(db,{kind:'order',id})?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}), metadata:await documentMetadata(db,row), order: original&&selectedVersion?row.order_snapshot:selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
       publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound, ...(sourceComparison?{sourceComparison}:{}),...(sourceReview?{sourceReview}:{}),
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
@@ -204,6 +204,32 @@ export class ProductionInstructionService {
     await instructionNotice(db,await this.identity().readWithClient(actor,id,db),null,title,key,directorsOnly);
   }
   async authorizeUpload(actor:TrustedActorContext,id:string){const current=await this.read(actor,id);if(!current.canEdit)digitalForbidden();}
+  async originalVersions(actor:TrustedActorContext,id:string,page:number,q:string){
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.order(db,actor,id);
+      const row=(await db.query(`WITH matching AS (SELECT version,published_at,source_round FROM digital_instruction_versions WHERE production_order_id=$1 AND ($2::text='' OR strpos(lower('大货制单 已发布版本 '||version),lower($2))>0)),
+       chosen AS (SELECT * FROM matching ORDER BY version DESC LIMIT 15 OFFSET $3)
+       SELECT (SELECT count(*)::int FROM matching) AS total,COALESCE(jsonb_agg(jsonb_build_object('version',version,'publishedAt',published_at,'sourceRound',source_round) ORDER BY version DESC),'[]'::jsonb) AS items FROM chosen`,[id,q,(page-1)*15])).rows[0]!;
+      await db.query('COMMIT');return {id,page,pageSize:15,total:row.total,items:row.items};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async originalVersion(actor:TrustedActorContext,id:string,version:number){
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const sheet=await this.read(actor,id,db,version,true);
+      const row=(await db.query('SELECT order_snapshot FROM digital_instruction_versions WHERE production_order_id=$1 AND version=$2',[id,version])).rows[0]??digitalNotFound();
+      // Keep the saved PO/style identities. The normal historical reader's
+      // current-label overlay remains unchanged for its existing consumers.
+      const saved={...sheet};delete saved.technicalSizeTable;delete saved.sourceComparison;delete saved.readiness;
+      await db.query('COMMIT');return {...saved,order:row.order_snapshot as DigitalOrder,canEdit:false};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async canDownloadOriginal(actor:TrustedActorContext,id:string,version:number,attachmentId:string){
+    const sheet=await this.originalVersion(actor,id,version);
+    return sheet.document.images.some(image=>image.attachmentId===attachmentId)&&this.canDownload(actor,id,attachmentId);
+  }
   async canDownload(actor:TrustedActorContext,id:string,attachmentId:string){
     const current=await this.read(actor,id);
     if(current.canEdit){

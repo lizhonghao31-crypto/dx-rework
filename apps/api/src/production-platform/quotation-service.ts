@@ -58,12 +58,12 @@ export class DigitalQuotationService{
   const sourceDocument=quote?.assembly&&sourceId&&structure?await developmentDocumentRow(db,sourceId):undefined;
   return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure,confirm,workbenchPolicy};
  }
- async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number):Promise<QuotationSheet>{
+ async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number,original=false):Promise<QuotationSheet>{
   const c=await this.context(db,actor,resource,true),q=c.quote;
   const snapshot=version===undefined?null:(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[q?.quote_id,version])).rows[0]??digitalNotFound();
   const doc=(snapshot?.document??q?.document) as BudgetDocument|undefined;
   const assignments=(snapshot?.assignments??q?.assignments??[]) as QuotationAssignment[];
-  const assembly=(snapshot?.assembly??q?.assembly) as AssembledQuotation['assembly'];
+  const assembly=(original&&snapshot?snapshot.assembly??undefined:snapshot?.assembly??q?.assembly) as AssembledQuotation['assembly'];
   const sources=(snapshot?.consumption_sources??q?.consumption_sources??{}) as Record<string,QuotationConsumptionSource>;
   const userIds=[...new Set(assignments.flatMap(a=>[a.technicalAssigneeId,a.priceAssigneeId]).filter((v):v is string=>Boolean(v)))];
   const names=new Map<string,string>((userIds.length?(await db.query('SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])',[userIds])).rows:[]).map(u=>[u.id,u.display_name]));
@@ -106,12 +106,33 @@ export class DigitalQuotationService{
     if(quoteUnit)(r.unit===quoteUnit?matchingUnits:unitMismatches).add(r.materialId);
    }
   }
-  return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...(q?.assembly?{automatic:true,complete:quotationComplete({...q,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q.price_sources,assembly:snapshot?.assembly??q.assembly})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
+  return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...((original?assembly:q?.assembly)?{automatic:true,complete:quotationComplete({...q!,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q!.price_sources,assembly:assembly!})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
    document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),
    canStructure:version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&c.confirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
    budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null,...(workbenchBudget?{workbench:workbenchBudget}:{})}};
+ }
+ async originalVersions(actor:TrustedActorContext,resource:QuotationResource,page:number,q:string){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const context=await this.context(db,actor,resource,true);
+   // The original reader exposes historical version lists only to full readers.
+   if(!context.full)digitalNotFound();
+   const row=(await db.query(`WITH matching AS (SELECT version,recorded_at FROM digital_quotation_versions WHERE quote_id=$1 AND ($2::text='' OR strpos(lower('客户报价 已确认版本 '||version),lower($2))>0)),
+    chosen AS (SELECT * FROM matching ORDER BY version DESC LIMIT 15 OFFSET $3)
+    SELECT (SELECT count(*)::int FROM matching) AS total,COALESCE(jsonb_agg(jsonb_build_object('version',version,'publishedAt',recorded_at) ORDER BY version DESC),'[]'::jsonb) AS items FROM chosen`,[context.quote?.quote_id??null,q,(page-1)*15])).rows[0]!;
+   await db.query('COMMIT');return {id:resource.id,quoteId:context.quote?.quote_id??null,page,pageSize:15,total:row.total,items:row.items};
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+ async originalVersion(actor:TrustedActorContext,resource:QuotationResource,quoteId:string,version:number){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const context=await this.context(db,actor,resource,true);
+   if(context.quote?.quote_id!==quoteId)digitalNotFound();
+   const result=await this.read(actor,resource,db,version,true);
+   await db.query('COMMIT');return result;
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  async list(actor:TrustedActorContext){
   const db=await this.database.connect();

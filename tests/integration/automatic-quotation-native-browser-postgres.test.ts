@@ -13,12 +13,90 @@ import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
 import {publishedTechnicalFixture} from '../helpers/development-technical-fixture.js';
+import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR03 automatic quotation through original authenticated App and real PG',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true});});
  afterAll(async()=>{await h?.writeEvidence();await h?.dispose();});
+ it('opens exact saved quotation, budget and instruction originals through the real authorized App without writes or latest substitution',async()=>{
+  const f=h.f,designer=f.people['sample-designer']!,merch=f.people.merchandiser!,worker=f.people['pattern-room-worker']!,identity=new DigitalProductionIdentityService(h.db,true),quotes=new DigitalQuotationService(h.db,true),budgets=new DigitalBudgetService(h.db,true),instructions=new ProductionInstructionService(h.db,true);
+  const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-ORIGINAL-COMMERCIAL-'+randomUUID(),orderDate:beijingCalendarDate(new Date()),primaryMerchandiserId:merch.actorId,lines:[{formalPoNo:'TEST-ORIGINAL-PO',color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),randomUUID());
+  const id=order.productionOrderId,resource={kind:'order' as const,id},rowId=randomUUID();
+  const qImages=[await f.image(designer),await f.image(designer)],iImages=[await f.image(merch),await f.image(merch)],quoteVersions:number[]=[],budgetVersions:number[]=[],instructionVersions:number[]=[];
+  for(let index=0;index<2;index++){
+   const old=await quotes.read(designer,resource),document:BudgetDocument={fabricType:'针织',productCategory:index?'TEST-QUOTE-NEW':'TEST-QUOTE-OLD',monthSeries:'',date:beijingCalendarDate(new Date()),currency:'人民币',freight:'0',cm:'0',salePrice:'',outsourcingScope:'车缝',outsourcingUnitPrice:'5',rows:[{rowId,section:'主料',category:'面料',name:index?'TEST-NEW-MATERIAL':'TEST-OLD-MATERIAL',specification:'40支',unit:'米',supplier:'TEST',consumption:'',unitPrice:index?'12':'10'}],imageAttachmentIds:[]};
+   const saved=await quotes.save(designer,resource,{expectedVersion:old.version,document,assignments:[{rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:designer.actorId,priceRole:'sample_designer'}]},randomUUID());
+   const filled=await quotes.fillRow(worker,resource,rowId,{expectedVersion:saved.version,consumption:'1'},randomUUID());
+   const confirmed=await quotes.confirm(designer,resource,{expectedVersion:filled.version,customerCode:'PD',customerConfirmedTotal:index?'40':'30',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:index?'TEST CONFIRM NEW':'TEST CONFIRM OLD',confirmedAt:new Date(Date.now()-1000).toISOString()},randomUUID());quoteVersions.push(confirmed.version);
+   let budget=await budgets.read(merch,id);if(index)budget=await budgets.adoptQuotation(merch,id,{expectedVersion:budget.version,sourceQuoteVersion:confirmed.version},randomUUID());
+   const budgetDocument={...budget.document!,productCategory:index?'TEST-BUDGET-NEW':'TEST-BUDGET-OLD',date:beijingCalendarDate(new Date()),imageAttachmentIds:[qImages[index]!]};
+   budget=await budgets.save(designer,id,{expectedVersion:budget.version,document:budgetDocument},randomUUID());budget=await budgets.publish(merch,id,budget.version,randomUUID(),confirmed.version);budgetVersions.push(budget.version);
+
+  }
+  // Real additional confirmations put both chosen originals off page one.
+  // The selector must search the complete authorized history, not just 15 rows.
+  for(let index=0;index<15;index++){
+   const current=await quotes.read(designer,resource),saved=await quotes.save(designer,resource,{expectedVersion:current.version,document:{...current.document!,productCategory:'TEST-LATER-'+index},assignments:current.assignments},randomUUID());
+   await quotes.confirm(designer,resource,{expectedVersion:saved.version,customerCode:'PD',customerConfirmedTotal:'40',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST LATER '+index,confirmedAt:new Date(Date.now()-1000).toISOString()},randomUUID());
+  }
+  const instructionOrder=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),instructionId=instructionOrder.id;
+  for(let index=0;index<2;index++){
+   const prior=await instructions.read(merch,instructionId),doc={...prior.document,styleName:index?'TEST-INSTRUCTION-NEW':'TEST-INSTRUCTION-OLD',images:[{attachmentId:iImages[index]!,kind:'款图' as const,description:index?'TEST NEW IMAGE':'TEST OLD IMAGE'}]};
+   const draft=await instructions.save(merch,instructionId,{expectedVersion:prior.version,orderVersion:prior.currentOrderVersion,sourceRound:prior.sourceRound,document:doc},randomUUID());
+   const readiness=await new ProductionReadinessService(h.db).read(merch,{kind:'order',id:instructionId});
+   const published=await instructions.publish(merch,instructionId,{expectedVersion:draft.version,orderVersion:draft.currentOrderVersion,expectedReadinessRevision:readiness.revision},randomUUID());instructionVersions.push(published.version);
+  }
+  const quoteId=(await quotes.read(designer,resource)).quoteId!,before=(await h.db.query(`WITH saved AS (SELECT 'budget' AS kind,to_jsonb(v) AS value FROM digital_budget_versions v WHERE production_order_id=$1 UNION ALL SELECT 'instruction',to_jsonb(v) FROM digital_instruction_versions v WHERE production_order_id=$3 UNION ALL SELECT 'quotation',to_jsonb(v) FROM digital_quotation_versions v WHERE quote_id=$2) SELECT * FROM saved ORDER BY kind,value->>'version'`,[id,quoteId,instructionId])).rows;
+  expect(await quotes.originalVersions(designer,resource,1,'')).toMatchObject({total:17,items:expect.any(Array)});
+  expect((await quotes.originalVersions(designer,resource,1,'')).items).toHaveLength(15);
+  expect(await quotes.originalVersions(designer,resource,2,'')).toMatchObject({total:17,items:[{version:quoteVersions[1]},{version:quoteVersions[0]}]});
+  expect(await quotes.originalVersions(designer,resource,1,'已确认版本 '+quoteVersions[0])).toMatchObject({total:1,items:[{version:quoteVersions[0]}]});
+  expect(await budgets.originalVersions(merch,id,2,'')).toMatchObject({total:2,items:[]});
+  expect(await instructions.originalVersions(merch,instructionId,1,'已发布版本 '+instructionVersions[0])).toMatchObject({total:1,items:[{version:instructionVersions[0]}]});
+  const originalOrder=(await instructions.originalVersion(merch,instructionId,instructionVersions[0]!)).order;
+  const currentOrder=await identity.read(merch,instructionId);
+  await new DigitalProductionIdentityService(h.db,true,f.sourcing).correctNumbers(merch,instructionId,currentOrder.lines[0]!.lineId,{expectedVersion:currentOrder.version,formalPoNo:'TEST-CURRENT-ALIAS'},randomUUID());
+  expect((await instructions.read(merch,instructionId,undefined,instructionVersions[0]!)).order.lines[0]!.poNumber).toBe('TEST-CURRENT-ALIAS');
+  expect((await instructions.originalVersion(merch,instructionId,instructionVersions[0]!)).order).toEqual(originalOrder);
+  const tab=await h.open(merch.actorId,1165,{},'/');
+  // Playwright routes redirected requests only at their initial URL. Fetch the
+  // real authorized 302, then replace only its external object-storage hop.
+  await tab.context.route('**/original-versions/*/attachments/*',async route=>{
+   const response=await route.fetch({maxRedirects:0});if(response.status()!==302){await route.fulfill({response});return;}
+   const target=new URL(response.headers().location!);expect(target.origin).toBe('https://private.example.test');
+   const key=decodeURIComponent(target.pathname.slice(1)),bytes=f.storage.objectBytes.get(key);
+   expect(f.storage.signed.some(grant=>grant.method==='GET'&&grant.objectKey===key)).toBe(true);expect(bytes).toBeDefined();
+   await route.fulfill({status:200,contentType:f.storage.objects.get(key)!.mimeType,body:Buffer.from(bytes!)});
+  });
+  const path=(kind:string,version:number)=>'/ui/digital-production?'+new URLSearchParams(kind==='quotation'?{quotationOrder:id,quoteId,quoteVersion:String(version)}:{[kind]:kind==='instruction'?instructionId:id,[kind+'Version']:String(version),originalDocument:kind});
+  try{
+   for(const [kind,versions,imageIds,field,expected] of [['budget',budgetVersions,qImages,'#budget-productCategory','TEST-BUDGET-OLD'],['instruction',instructionVersions,iImages,'#instruction-styleName','TEST-INSTRUCTION-OLD'],['quotation',quoteVersions,qImages,'#quote-confirmed-basis','TEST CONFIRM OLD']] as const){
+    await tab.page.goto(h.base+path(kind,versions[0]!));const reader=tab.page.getByRole('region',{name:'完整原单只读查看',exact:true});await reader.waitFor();await expect.poll(()=>tab.page.locator(field).textContent()).toContain(expected);
+    if(kind!=='quotation'){const image=reader.locator(`img[src*="/original-versions/${versions[0]}/attachments/${imageIds[0]}"]`).first();await expect.poll(()=>image.evaluate(element=>(element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);expect(await reader.locator(`img[src*="${imageIds[1]}"]`).count()).toBe(0);}
+    else{await expect.poll(()=>tab.page.locator('#quote-confirmed-basis').textContent()).toContain('30');expect(await tab.page.getByText('TEST-OLD-MATERIAL',{exact:true}).count()).toBeGreaterThan(0);}
+    expect(await reader.locator('input[type=file]').count()).toBe(0);
+    for(const name of ['保存预算','最终发布','保存草稿','发布制单','记录客户报价确认并检查预算生成条件'])expect(await reader.getByRole('button',{name,exact:true}).count()).toBe(0);
+    const entityId=kind==='instruction'?instructionId:id,suffix=kind==='quotation'?`?quoteId=${quoteId}`:'',api=`${h.base}/api/digital-production/orders/${entityId}/${kind}/original-versions/${versions[0]}`;
+    if(kind!=='quotation'){const denied=await tab.page.request.get(`${api}/attachments/${imageIds[1]}${suffix}`);expect([403,404]).toContain(denied.status());}expect((await tab.page.request.get(`${h.base}/api/digital-production/orders/${entityId}/${kind}/original-versions/999999${suffix}`)).status()).toBe(404);
+    await tab.page.getByRole('button',{name:'切换单据',exact:true}).click();const chooser=tab.page.getByRole('dialog',{name:'切换单据',exact:true});await chooser.waitFor();
+    if(kind==='quotation')await chooser.getByLabel('搜索原单与版本',{exact:true}).fill('已确认版本 '+versions[1]);
+    const label={budget:'成本预算表',instruction:'大货制单',quotation:'客户报价'}[kind]+` · ${kind==='quotation'?'已确认':'已发布'}版本 ${versions[1]}`;
+    await chooser.getByRole('button',{name:label,exact:true}).click();await chooser.waitFor({state:'hidden'});await expect.poll(()=>tab.page.locator(field).textContent()).toContain(expected.replace('OLD','NEW'));
+    await tab.page.goBack();await expect.poll(()=>tab.page.locator(field).textContent()).toContain(expected);
+   }
+   const writes=h.requests.filter(row=>row.session===tab.session&&!['GET','HEAD','OPTIONS'].includes(row.method)&&new RegExp(`/digital-production/orders/(${id}|${instructionId})/(budget|instruction|quotation)`).test(row.path));expect(writes).toEqual([]);
+   expect((await h.db.query(`WITH saved AS (SELECT 'budget' AS kind,to_jsonb(v) AS value FROM digital_budget_versions v WHERE production_order_id=$1 UNION ALL SELECT 'instruction',to_jsonb(v) FROM digital_instruction_versions v WHERE production_order_id=$3 UNION ALL SELECT 'quotation',to_jsonb(v) FROM digital_quotation_versions v WHERE quote_id=$2) SELECT * FROM saved ORDER BY kind,value->>'version'`,[id,quoteId,instructionId])).rows).toEqual(before);
+   await expect(budgets.originalVersion(f.people['worker-b']!,id,budgetVersions[0]!)).rejects.toMatchObject({statusCode:404});
+   await expect(instructions.read(f.people['worker-b']!,instructionId)).rejects.toMatchObject({statusCode:403});
+   await expect(instructions.originalVersion(f.people['worker-b']!,instructionId,instructionVersions[0]!)).rejects.toMatchObject({statusCode:403});
+   await expect(quotes.originalVersion(f.people['worker-b']!,resource,quoteId,quoteVersions[0]!)).rejects.toMatchObject({statusCode:404});
+  }finally{await tab.close();}
+ },testExecutionConfig.correctnessTimeoutMs);
  it('explains a current published unit mismatch on only the authorized material row without adopting or rounding its quantity',async()=>{
   const designer=h.f.people['sample-designer']!,worker=h.f.people['pattern-room-worker']!,manager=h.f.people['production-management']!;
   const forms=new DigitalDevelopmentService(h.db,true),quotes=new DigitalQuotationService(h.db,true),technical=new DevelopmentTechnicalService(h.db,true);

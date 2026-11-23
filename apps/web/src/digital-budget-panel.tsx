@@ -38,7 +38,7 @@ export async function budgetRequest(path:string,orderId:string,method="GET",body
  if(!valid)throw new DigitalRequestError(method==="GET"?"预算资料返回不完整，尚未确认当前资料；请重新读取":"未收到可确认的预算提交回执，请先核对原预算版本，避免重复提交",200,"INVALID_RESPONSE");
  return value;
 }
-export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false,onVersionChange,onChapterChange }: { order: DigitalOrder; onClose: () => void; onChapterChange?:((chapter:string)=>void)|undefined; onVersionChange?:((version:number|undefined)=>void)|undefined; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
+export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false,onVersionChange,onChapterChange,originalSnapshot }: { originalSnapshot?:BudgetSheet|undefined;order: DigitalOrder; onClose: () => void; onChapterChange?:((chapter:string)=>void)|undefined; onVersionChange?:((version:number|undefined)=>void)|undefined; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
   const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [initialVersion,setInitialVersion]=useState(requestedVersion);
   const [sheet, setSheet] = useState<BudgetSheet | null>(null), [doc, setDoc] = useState<BudgetDocument>(initial);
@@ -53,14 +53,15 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
   const locateField=useDocumentFieldLocator(revealField);
   const install = (value:BudgetSheet) => { const next=value.document??initial(); templateDefaults.current=new Map(value.document?[]:next.rows.map(row=>[row.rowId,row.category]));setActivated(new Set());setSheet(value);setDoc(next);setDirty(false);setValidationMode(null); };
   const base = `orders/${order.productionOrderId}/budget`;
-  useEffect(() => { let live = true;previews.reset();completedUploads.current.clear();generation.current++;operation.current=null;writing.current=false;setBusy(false);setUncertain(false);setError("");void budgetRequest(`${base}${initialVersion?`?version=${initialVersion}`:""}`,order.productionOrderId).then(value => { if (live) { install(value); } }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false;generation.current++; }; }, [base,initialVersion,order.productionOrderId]);
+  const originalImage=(id:string)=>urls.apiUrl(`digital-production/${base}/original-versions/${originalSnapshot!.version}/attachments/${id}`);
+  useEffect(() => { let live = true;previews.reset();completedUploads.current.clear();generation.current++;operation.current=null;writing.current=false;setBusy(false);setUncertain(false);setError("");void (originalSnapshot?Promise.resolve(originalSnapshot):budgetRequest(`${base}${initialVersion?`?version=${initialVersion}`:""}`,order.productionOrderId)).then(value => { if (live) { install(value); } }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false;generation.current++; }; }, [base,initialVersion,order.productionOrderId,originalSnapshot]);
   useDigitalDetailNavigationGuard(dirty||uncertain,busy,writing,uncertain?"原预算提交结果尚未确认；离开不会撤销提交，并会丢失本页原请求标识。确定离开？":"有未保存修改，确定离开？");
 
   useEffect(()=>{const element=root.current?.querySelector<HTMLElement>(".budget-document-summary");if(!element)return;const measure=()=>{const toolbar=root.current?.querySelector(".dx-doc-toolbar");setSummaryFits(element.getBoundingClientRect().height+(toolbar?.getBoundingClientRect().height??0)+32<=window.innerHeight);};const observer=new ResizeObserver(measure);observer.observe(element);window.addEventListener("resize",measure);measure();return()=>{observer.disconnect();window.removeEventListener("resize",measure);};},[Boolean(sheet)]);
-  const edit = (patch: Partial<BudgetDocument>) => { setDoc(current => ({ ...current, ...patch })); setDirty(true); };
+  const edit = (patch: Partial<BudgetDocument>) => { if(originalSnapshot)return;setDoc(current => ({ ...current, ...patch })); setDirty(true); };
   const changeRow = (rowId: string, patch: Partial<BudgetRow>) => {setActivated(current=>new Set([...current,rowId]));edit({ rows: doc.rows.map(row => row.rowId === rowId ? { ...row, ...patch } : row) });};
   const run = async (publish: boolean, copyPublished = false) => {
-    if (!sheet || !sheet.canEdit || writing.current || uncertain || (sheet.status==="published"&&!copyPublished)) return;
+    if (originalSnapshot||!sheet || !sheet.canEdit || writing.current || uncertain || (sheet.status==="published"&&!copyPublished)) return;
     if(copyPublished&&(publish||sheet.status!=="published"||initialVersion!==undefined||!sheet.document))return;
     const currentGeneration=generation.current;
     const saveDocument=copyPublished?sheet.document!:doc;
@@ -98,7 +99,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     finally{confirmingCopy.current=false;}
   };
   const upload = async (files: File[]) => {
-    if (!files.length || writing.current || uncertain) return;previews.start(files,undefined,upload);
+    if (originalSnapshot||!files.length || writing.current || uncertain) return;previews.start(files,undefined,upload);
     const uploadGeneration=generation.current;writing.current = true; setBusy(true); setError("");
     try {
       const associated=new Set(doc.imageAttachmentIds);
@@ -134,7 +135,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     finally{if(currentGeneration===generation.current){writing.current=false;setBusy(false);}}
   };
   const amount = (value: string | null | undefined) => value == null ? "—" : budgetDisplayAmount(value);
-  const readonly=uncertain||embedded||!sheet?.canEdit||sheet.status==="published", issues=validationMode?budgetIssues(doc,validationMode==="publish"):[];
+  const readonly=Boolean(originalSnapshot)||uncertain||embedded||!sheet?.canEdit||sheet.status==="published", issues=validationMode?budgetIssues(doc,validationMode==="publish"):[];
   const issue=(id:string)=>issues.find(item=>item.id===id)?.message;
   const field = (key: keyof typeof budgetFieldLabels, numeric=false) => {const id=`budget-${key}`,label=budgetFieldLabels[key]!;return <label>{label}<DocumentField id={id} label={label} value={readonly&&numeric&&doc[key as keyof BudgetDocument]?budgetDisplayAmount(String(doc[key as keyof BudgetDocument])):String(doc[key as keyof BudgetDocument]??"")} onValue={value=>edit({[key]:key==="date"?(value||null):value})} readonly={readonly} disabled={busy} numeric={numeric} multiline={key==="outsourcingScope"} type={key==="date"?"date":"text"} maxLength={numeric?21:key==="outsourcingScope"?1000:100} issue={issue(id)} onBlur={numeric?()=>setValidationMode(current=>current??"save"):undefined}/></label>;};
   const unused=(row:BudgetRow)=>templateDefaults.current.has(row.rowId)&&row.category===templateDefaults.current.get(row.rowId)&&!activated.has(row.rowId)&&[row.name,row.specification,row.unit,row.supplier,row.consumption,row.unitPrice].every(value=>value==="");
@@ -170,7 +171,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
               {field("monthSeries")}<label>产品摘要<span className="dx-doc-readonly">{order.productGroup}{doc.fabricType}{doc.productCategory}</span></label>
             </div><div className="budget-images" id="budget-imageAttachmentIds" tabIndex={-1}>
               {!doc.imageAttachmentIds.length&&<div className="budget-image-empty"><NavigationIcon name="Shirt" size="title"/><span>暂无款图</span></div>}
-              {doc.imageAttachmentIds.map(id=><div key={id}>{sheet.document?.imageAttachmentIds.includes(id)?<a href={urls.apiUrl(`digital-production/${base}/attachments/${id}`)} target="_blank" rel="noreferrer"><img alt="预算款图" src={urls.apiUrl(`digital-production/${base}/attachments/${id}`)}/></a>:<span>图片已上传，保存后预览</span>}{!readonly&&<Button className="budget-controls" type="button" disabled={busy} onClick={()=>{for(const [key,value] of completedUploads.current)if(value===id)completedUploads.current.delete(key);edit({imageAttachmentIds:doc.imageAttachmentIds.filter(item=>item!==id)});}}>移除</Button>}</div>)}
+              {doc.imageAttachmentIds.map(id=><div key={id}>{sheet.document?.imageAttachmentIds.includes(id)?<a href={(originalSnapshot?originalImage(id):urls.apiUrl(`digital-production/${base}/attachments/${id}`))} target="_blank" rel="noreferrer"><img alt="预算款图" src={(originalSnapshot?originalImage(id):urls.apiUrl(`digital-production/${base}/attachments/${id}`))}/></a>:<span>图片已上传，保存后预览</span>}{!readonly&&<Button className="budget-controls" type="button" disabled={busy} onClick={()=>{for(const [key,value] of completedUploads.current)if(value===id)completedUploads.current.delete(key);edit({imageAttachmentIds:doc.imageAttachmentIds.filter(item=>item!==id)});}}>移除</Button>}</div>)}
               {!readonly&&<label className="budget-controls budget-upload">上传图片<input disabled={busy} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value="";void upload(files);}}/></label>}
             </div></div>
             <details className="budget-po-summary" open={order.lines.length>0}><summary>款色 / PO · {order.lines.length} 行</summary><DocumentTableScroll><table><thead><tr><th>款号</th><th>PO号</th><th>颜色</th><th>件数</th></tr></thead><tbody>{order.lines.map(line=><tr key={line.lineId}><td>{line.formalStyleNo||line.temporaryStyleNo||order.temporaryStyleNo||order.designStyleNo}</td><td>{line.poNumber||"—"}</td><td>{line.color}</td><td>{line.sizes.reduce((sum,size)=>sum+size.quantity,0).toLocaleString()}</td></tr>)}</tbody></table></DocumentTableScroll></details>
@@ -197,5 +198,5 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     </fieldset></form>}
     {sheet?.status==='published'&&initialVersion===undefined&&!embedded&&<BudgetWashingFeesPanel key={order.productionOrderId} sheet={sheet} quantity={order.lines.reduce((sum,line)=>sum+line.sizes.reduce((n,size)=>n+size.quantity,0),0)} onPublished={async()=>{install(await budgetRequest(base,order.productionOrderId));}}/>}
     {sheet?.status==='published'&&(initialVersion!==undefined||embedded)&&<DocumentSection id="budget-washing-fees" title="本版洗水费用依据"><p>历史预算 v{sheet.version} 只读，不以当前费用替代本版明细。</p>{doc.rows.filter(row=>row.section==='外发工序'&&row.category==='洗水').map(row=><p key={row.rowId}>{row.name} · 用量{row.consumption||'待核'} · 单价{row.unitPrice||'待核'}</p>)}<Button onClick={()=>onChapterChange?.('budget-section-2')}>查看本版外发工序</Button></DocumentSection>}
-  </section></Surface><DigitalBudgetPrint order={order} sheet={sheet} permitted={Boolean(sheet?.document)&&!dirty&&!busy}/></>;
+  </section></Surface><DigitalBudgetPrint order={order} sheet={sheet} permitted={Boolean(sheet?.document)&&!dirty&&!busy} imageUrl={originalSnapshot?originalImage:undefined}/></>;
 }

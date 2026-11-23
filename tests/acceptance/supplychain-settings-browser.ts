@@ -98,7 +98,9 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
    if(fault?.afterPublishRead&&path.endsWith('/sets/publish')&&result.statusCode===200)fault.failRead=true;
    if(fault?.afterWriteRead===path&&method==='POST'&&result.statusCode===200)fault.failRead=true;
    if(fault?.losePath===path&&!fault.lost&&method==='POST'&&result.statusCode===200){fault.lost=true;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_COMMITTED_RECEIPT_LOST',message:'TEST 已提交，回执暂时不可用'}}));return;}
-   res.writeHead(result.statusCode,{'content-type':'application/json','cache-control':'no-store',...(result.headers['x-dx-rework-actor-id']?{'x-dx-rework-actor-id':result.headers['x-dx-rework-actor-id']}:{})});res.end(result.body);
+   // Keep the real endpoint's redirects and binary payloads. Converting every
+   // response to JSON concealed whether an authorized original image opened.
+   res.writeHead(result.statusCode,{'content-type':result.headers['content-type']??'application/json','cache-control':result.headers['cache-control']??'no-store',...(typeof result.headers.location==='string'?{location:result.headers.location}:{}),...(result.headers['x-dx-rework-actor-id']?{'x-dx-rework-actor-id':result.headers['x-dx-rework-actor-id']}:{})});res.end(result.rawPayload);
   }catch(e){res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_NATIVE_HTTP',message:(e as Error).message}}));}
    finally{settle?.();}
   });

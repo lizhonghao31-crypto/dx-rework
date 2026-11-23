@@ -5,6 +5,43 @@ import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailReturnU
 const id = "b92e6815-5892-4c51-b3c9-5e70ddbd1546", other = "65566477-088c-418d-8ba2-a655394759b4";
 const user = (roles: string[], capabilities: string[] = [], isRoot = false) => ({ id, displayName: "TEST", businessRoles: roles, capabilities, isRoot });
 describe("legacy digital detail compatibility", () => {
+  it.each(['budget','instruction'] as const)('keeps explicit readonly %s versions and returns without changing old editable routes',kind=>{
+    const search=`?${kind}=${id}&${kind}Version=2&originalDocument=${kind}`;
+    expect(digitalDetailRoute(search)).toEqual({kind,id,version:2,original:true});
+    expect(digitalDetailReturnUrl('/ui/digital-production'+search,'/acceptance/')).toBe('/acceptance/ui/digital-production'+search);
+    expect(digitalDetailRoute(`?${kind}=${id}&originalDocument=${kind}`).kind).toBe('invalid');
+    expect(digitalDetailRoute(`?${kind}=${id}&${kind}Version=2&originalDocument=other`).kind).toBe('invalid');
+    expect(digitalDetailRoute(`?${kind}=${id}&${kind}Version=2`)).toEqual({kind,id,version:2});
+  });
+  it.each(['quotationSource','quotationOrder'] as const)('binds exact %s history to both quote identity and version',kind=>{
+    const search=`?${kind}=${id}&quoteVersion=7&quoteId=${other}`;
+    expect(digitalDetailRoute(search)).toEqual({kind,id,version:7,quoteId:other});
+    expect(digitalDetailReturnUrl('/ui/digital-production'+search,'/')).toBe('/ui/digital-production'+search);
+    for(const suffix of ['',`&quoteId=bad`,`&quoteId=${other}&quoteId=${id}`])expect(digitalDetailRoute(`?${kind}=${id}&quoteVersion=7`+suffix).kind).toBe('invalid');
+    expect(digitalDetailRoute(`?${kind}=${id}&quoteId=${other}`).kind).toBe('invalid');
+  });
+  it('rejects a quotation identity on a different editable domain instead of ignoring it',()=>{
+    for(const kind of ['order','development','budget','instruction'])expect(digitalDetailRoute(`?${kind}=${id}&quoteId=${other}`).kind).toBe('invalid');
+  });
+  it('keeps development round and exact document version distinct through the original return route',()=>{
+    const target=`/ui/digital-production?development=${id}&round=2&developmentDocumentVersion=7`;
+    expect(digitalDetailRoute(new URL(target,'https://local.invalid').search)).toEqual({kind:'development',id,version:2,documentVersion:7});
+    expect(digitalDetailReturnUrl(target,'/acceptance/')).toBe('/acceptance'+target);
+    expect(digitalDetailClosePath(`?order=${other}&returnTo=${encodeURIComponent(target)}`,'/acceptance/')).toBe('/acceptance'+target);
+    const closed=digitalDetailClosePath(`?development=${id}&round=2&developmentDocumentVersion=7&order=${other}`,'/');
+    expect(closed).toBe(`/ui/digital-production?order=${other}`);
+  });
+  it.each([
+    `?development=${id}&developmentDocumentVersion=7`,
+    `?development=${id}&round=2&developmentDocumentVersion=0`,
+    `?development=${id}&round=2&developmentDocumentVersion=7&developmentDocumentVersion=8`,
+    `?development=${id}&round=2&developmentDocumentVersion=current`,
+    `?order=${id}&round=2&developmentDocumentVersion=7`,
+    '?developmentDocumentVersion=7',
+  ])('does not fall back to an editable current page for invalid exact development reference %s',search=>{
+    expect(digitalDetailRoute(search).kind).toBe('invalid');
+    expect(digitalDetailReturnUrl('/ui/digital-production'+search,'/')).toBeNull();
+  });
   it.each(["closure", "factory", "bulk", "instruction", "budget", "arrangement", "development", "task", "order", "shortLead"])("opens exact %s without a homepage", kind => {
     expect(digitalDetailRoute(`?${kind}=${id}`)).toEqual({ kind, id });
   });

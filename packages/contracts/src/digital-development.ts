@@ -186,6 +186,17 @@ export type DevelopmentSheet = {
   materialEvents: Array<{ eventId: string; materialId: string; action: string; expectedDate: string | null; note: string; createdAt: string;occurredAt?:string|null;occurredDate?:string|null;timeQuality?:string|null }>;
 };
 
+/** A precise published document, without current execution state or edit rights. */
+export type DevelopmentPublishedVersion = {
+ sourceId:string;designStyleNo:string;temporaryStyleNo:string|null;customerCode:string|null;
+ developmentType:string;designerName:string;roundNumber:number;documentVersion:number;
+ document:DevelopmentDocument;publishedAt:string|null;metadata:JourneyDocumentMetadata;
+};
+export type DevelopmentPublishedVersions = {
+ sourceId:string;page:number;pageSize:15;total:number;
+ items:Array<{roundNumber:number;documentVersion:number;publishedAt:string;reason:string|null}>;
+};
+
 /** Shared by print, task handoff and native execution. Never invent counts for legacy text. */
 export function developmentMakingSizes(document:DevelopmentDocument|null|undefined):string {
   if(!document)return "未登记";
