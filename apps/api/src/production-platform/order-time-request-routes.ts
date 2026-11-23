@@ -21,6 +21,11 @@ export function registerOrderTimeRequestRoutes(app:FastifyInstance,dependencies:
  app.post('/digital-production/order-time/requests',async request=>service.submit(await actor(request),body(OrderTimeRequestSchema,request.body),key(request)));
  app.post('/digital-production/order-time/arrange',async request=>service.arrange(await actor(request),body(OrderTimeArrangementSchema,request.body),key(request)));
  app.get('/digital-production/order-time/requests/:requestId',async request=>service.read(await actor(request),id(request)));
+ app.get('/digital-production/sources/:sourceId/order-time/original-requests',async(request,reply)=>{
+  const {sourceId}=body(z.object({sourceId:z.string().uuid()}),request.params);
+  const {page}=body(z.object({page:z.coerce.number().int().min(1).max(1000000).default(1)}).strict(),request.query);
+  reply.header('cache-control','private, no-store');return service.originalDirectory(await actor(request),sourceId,page);
+ });
  app.post('/digital-production/order-time/requests/:requestId/preview',async request=>{const input=body(z.object({overrides:z.record(z.string(),OrderTimeRuleSchema),washing:OrderTimeWashingChangesSchema.optional(),rewashing:OrderTimeWashingReworkChangesSchema.optional()}).strict(),request.body);return service.read(await actor(request),id(request),input.overrides,input.washing,input.rewashing);});
  app.post('/digital-production/order-time/requests/:requestId/resubmit',async request=>service.resubmit(await actor(request),id(request),body(OrderTimeRequestSchema.extend({expectedVersion:OrderTimeApplySchema.shape.expectedVersion}),request.body),key(request)));
  app.post('/digital-production/order-time/requests/:requestId/apply',async request=>service.apply(await actor(request),id(request),body(OrderTimeApplySchema,request.body),key(request)));

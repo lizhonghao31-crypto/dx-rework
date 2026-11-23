@@ -20,6 +20,10 @@ export const DevelopmentWorkspaceFilterSchema = z.object({
   if (value.startDate && value.endDate && value.startDate > value.endDate) context.addIssue({code:"custom", message:"开始日期不能晚于结束日期", path:["endDate"]});
 });
 export type DevelopmentWorkspaceFilter = z.infer<typeof DevelopmentWorkspaceFilterSchema>;
+export const DESIGNER_WORKBENCH_TASK_KINDS:ReadonlySet<string>=new Set([
+  'development_material_supply','development_positioning','development_craft_confirmation','development_confirmation',
+  'development_patch_confirmation','development_shipping',
+]);
 export type DevelopmentWorkspaceAction={id:string;kind:'mine'|'waiting'|'returned';label:string;ownerName?:string;reason?:string;route:TodoRouteDescriptor};
 export type DevelopmentWorkspaceHandling={items:DevelopmentWorkspaceAction[];complete:boolean};
 export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean; handling?:DevelopmentWorkspaceHandling };
@@ -28,6 +32,27 @@ export type DevelopmentWorkspaceResult = {
   counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;
   customers: string[]; designers?: string[]; items: DevelopmentWorkspaceItem[];
 };
+
+export const ConfirmDevelopmentSampleHandoverSchema=z.object({
+  round:z.number().int().positive(),documentVersion:z.number().int().positive(),recipientId:z.uuid(),
+}).strict();
+export type ConfirmDevelopmentSampleHandover=z.infer<typeof ConfirmDevelopmentSampleHandoverSchema>;
+export type DevelopmentSampleHandoverReceipt={
+  eventId:string;round:number;documentVersion:number;recipientId:string;recipientName:string|null;
+  confirmedBy:string;confirmedByName:string|null;occurredAt:string;
+};
+export type DevelopmentElectronicHandoverItem={
+  kind:'materials'|'order_quantities'|'quotation';
+  state:'not_applicable'|'unavailable'|'incomplete'|'waiting_recipient'|'waiting_share'|'shared';
+  version:number|null;
+  receipt?:{id:string;version:number;recipientId:string;at:string};
+};
+export type DevelopmentSampleHandover={
+  sourceId:string;round:number;documentVersion:number;recipient:{id:string;name:string|null}|null;
+  electronic:DevelopmentElectronicHandoverItem[];
+  canConfirm:boolean;current:DevelopmentSampleHandoverReceipt|null;history:DevelopmentSampleHandoverReceipt[];
+};
+export type ConfirmDevelopmentSampleHandoverResult={handover:DevelopmentSampleHandover;receipt:DevelopmentSampleHandoverReceipt};
 
 export const PATTERN_GROUPS = [
   { key: "materials", label: "核配与补料", nodes: ["development_materials", "development_material_supply", "development_material_recheck"] },

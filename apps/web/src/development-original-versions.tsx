@@ -38,6 +38,8 @@ export function DevelopmentOriginalVersions({sourceId,onSelect,onReady,searchQue
   {reading&&<p role="status">正在读取授权原单目录…</p>}
   {error?<DigitalReadFailure error={error} onRetry={()=>setAttempt(value=>value+1)} retryLabel="重新读取原单目录"/>:null}
   {current&&(current.items.length?<ul>{current.items.map(item=><li key={`${item.roundNumber}:${item.documentVersion}`}><Button label={`开发单 · 第${item.roundNumber}轮 · 资料版本 ${item.documentVersion} · 已发布`} onClick={()=>onSelect(item)}/>{item.reason&&<p>{item.reason}</p>}</li>)}</ul>:<p>{current.total?'本页没有记录，请返回有效页码。':'当前授权范围没有匹配的已发布原单。'}</p>)}
-  <ListPagination page={page} totalPages={current?Math.max(1,Math.ceil(current.total/15)):null} total={current?.total??null} busy={reading||!applied} onPageChange={setPage} ariaLabel="原单版本分页"/>
+  {current&&(current.total>current.pageSize||page>1)&&<ListPagination page={page}
+    totalPages={Math.max(1,Math.ceil(current.total/current.pageSize))} total={current.total}
+    busy={reading||!applied} onPageChange={setPage} ariaLabel="原单版本分页"/>}
  </section>;
 }

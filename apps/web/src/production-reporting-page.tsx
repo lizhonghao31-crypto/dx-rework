@@ -24,6 +24,7 @@ import "./sourcing-workspace.css";
 import "./production-reporting-page.css";
 import {productionLineTarget} from "./production-line-target.js";
 import {digitalDetailReturnUrl} from "./digital-detail-route.js";
+import {ProductionReportOriginal} from './production-report-original.js';
 const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 const labels={in_production:"生产中",production_completed:"生产完成",shipped:"已发货"} as const;
 async function request<T>(path:string,schema:z.ZodType<T>,init:RequestInit={}) {
@@ -44,6 +45,11 @@ const attemptListeners=new Set<()=>void>(),attemptSnapshot=()=>attemptRevision;
 const subscribeAttempts=(listener:()=>void)=>{attemptListeners.add(listener);return()=>{attemptListeners.delete(listener);};};
 const changedAttempts=()=>{attemptRevision++;for(const listener of attemptListeners)listener();};
 export function ProductionReportingPage({productionOrderId}:{productionOrderId?:string|undefined}) {
+  if(productionOrderId&&new URLSearchParams(location.search).has('originalReport'))
+   return <Shell active="生产数据填报"><main className="sourcing-workspace production-reporting"><ProductionReportOriginal productionOrderId={productionOrderId}/></main></Shell>;
+  return <CurrentProductionReportingPage productionOrderId={productionOrderId}/>;
+}
+function CurrentProductionReportingPage({productionOrderId}:{productionOrderId?:string|undefined}) {
   useSyncExternalStore(subscribeAttempts,attemptSnapshot,attemptSnapshot);
   const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
   const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';

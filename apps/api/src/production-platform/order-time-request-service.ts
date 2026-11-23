@@ -6,7 +6,7 @@ import {orderTimeGapText,OrderTimeOperationSchema,OrderTimeRequestSchema,OrderTi
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
-import {ContextBusinessClock,observedBusinessTime,businessNow} from '../acceptance-clock/business-time.js';
+import {ContextBusinessClock,observedBusinessTime,businessNow,acceptanceIncludesNative,acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import {isRootActor} from '../access/business-authority.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
 import {assertSlaSettingsActor} from './sla-settings-authority.js';
@@ -57,6 +57,28 @@ export class OrderTimeRequestService{
  }
  check(actor:TrustedActorContext,raw:unknown,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[],rewashing:OrderTimeWashingReworkChanges=[]){const operation=OrderTimeOperationSchema.parse(raw);return this.transaction(false,async db=>(await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes,washing,rewashing)).check);}
  read(actor:TrustedActorContext,id:string,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[],rewashing:OrderTimeWashingReworkChanges=[]){return this.transaction(false,async db=>this.result(db,actor,await this.visible(db,actor,id),changes,washing,rewashing));}
+ originalDirectory(actor:TrustedActorContext,sourceId:string,page:number){return this.transaction(false,async db=>{
+  const policy=new DigitalProductionAccessPolicy(db),clock=acceptanceBusinessContext();
+  await clock?.assertScope({kind:'source',id:sourceId});
+  if(!await acceptanceIncludesNative(this.database,sourceId,db))digitalNotFound();
+  await policy.assert(actor,'source',sourceId,'technical');
+  const orderId=(await db.query<{production_order_id:string}>('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.production_order_id;
+  let orderScope:string|null=null;
+  if(orderId&&await policy.allowed(actor,'order',orderId,'technical')&&await acceptanceIncludesNative(this.database,orderId,db)){
+   try{await clock?.assertScope({kind:'order',id:orderId});orderScope=orderId;}
+   catch(error){if(!(error instanceof ApplicationError)||![403,404].includes(error.statusCode))throw error;}
+  }
+  const hasRole=(role:string)=>actor.actorRoles.includes(role)?policy.activeRole(actor.actorId,role):Promise.resolve(false);
+  const designer=await hasRole('sample_designer'),merchandiser=await hasRole('order_merchandiser');
+  const manages=await hasRole('production_management')||await hasRole('owner_group');
+  const matches=`(r.source_id=$1 OR (r.source_id IS NULL AND r.production_order_id=$2))
+   AND ($3::boolean OR CASE WHEN r.designer_id=$4 THEN $5::boolean WHEN r.requested_by=$4 THEN $6::boolean ELSE $7::boolean END)`;
+  const values=[sourceId,orderScope,isRootActor(actor),actor.actorId,designer,merchandiser,manages];
+  const count=await db.query<{total:number}>(`SELECT count(*)::integer AS total FROM digital_order_time_requests r WHERE ${matches}`,values);
+  const selected=await db.query<{requestId:string;version:number;state:OrderTimeRequestRow['state']}>(`SELECT r.request_id AS "requestId",r.version,r.state FROM digital_order_time_requests r WHERE ${matches}
+   ORDER BY r.updated_at DESC,r.request_id DESC LIMIT 15 OFFSET $8`,[...values,(page-1)*15]);
+  return {sourceId,items:selected.rows,page,pageSize:15 as const,total:count.rows[0]!.total};
+ });}
  arrange(actor:TrustedActorContext,raw:unknown,key:string){const input=OrderTimeArrangementSchema.parse(raw);return this.transaction(true,async db=>{
   await assertSlaSettingsActor(db,actor,true);const repo=new OrderTimeRequestRepository(db);
   return repo.receipt(actor.actorId,'arrange:'+input.resource.kind+':'+input.resource.id,key,input,async()=>{

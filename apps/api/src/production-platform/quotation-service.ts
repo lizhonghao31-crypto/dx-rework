@@ -16,6 +16,7 @@ import {ApplicationError} from '../platform/errors.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './access-policy.js';
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
+import {shareApprovedDesignVersions} from './development-electronic-handover.js';
 
 type Database=Pick<Pool|PoolClient,'query'>;
 type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
@@ -304,6 +305,7 @@ export class DigitalQuotationService{
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10${q.assembly?',$11':''})`,[q.quote_id,q.version,JSON.stringify(document),JSON.stringify(q.assignments),JSON.stringify(q.consumption_sources),JSON.stringify(q.price_sources),JSON.stringify(input),c.customerCode,input.customerConfirmedTotal,actor.actorId,...(q.assembly?[JSON.stringify(q.assembly)]:[])]);
    await db.query('UPDATE digital_quotation_documents SET confirmed_version=$2 WHERE quote_id=$1',[q.quote_id,q.version]);
    if(c.orderId)await ensureQuotationBudget(db,c.orderId,actor.actorId);
+   if(c.orderId&&c.sourceId)await shareApprovedDesignVersions(db,actor,c.sourceId);
   });
  }
 }

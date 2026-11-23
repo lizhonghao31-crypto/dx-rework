@@ -55,16 +55,18 @@ async function createFromPage(page:Page,name:string){
   const designer=h.f.people['sample-designer']!,tab=await h.open(designer.actorId,1165,{},'/ui/auxiliary-catalog');
   let old:AuxiliaryItem,current:AuxiliaryItem;
   const forms=new DigitalDevelopmentService(h.db,true),identity=new DigitalProductionIdentityService(h.db,true);
-  const source=async(name:string,entry?:AuxiliaryItem)=>{
+  const source=async(name:string,entry?:AuxiliaryItem,active=false)=>{
    const created=await identity.createSource(designer,{designStyleNo:name,temporaryStyleNo:null,customerCode:'PD',developmentType:'头版'},randomUUID(),true);
    const photo=await h.f.image(designer),materialId=randomUUID();
-   const document={...initialDevelopmentDocument(),materials:[{materialId,category:'辅料' as const,label:'TEST辅料',name:entry?.name??'TEST 待选料',specification:entry?.specification??'',supplier:entry?.supplier??'',auxiliaryKind:entry?.auxiliaryKind??'普通辅料' as const,...(entry?{auxiliaryCatalog:{id:entry.id,version:entry.version}}:{}),width:'',weight:'',composition:'',consumption:'',color:'TEST 黑',quantity:'1',requiredThisRound:false,available:false,expectedDate:null}],files:[{attachmentId:photo,kind:'款图' as const}]};
+   const document={...initialDevelopmentDocument(),...(active?{quantity:1}:{}),materials:[{materialId,category:'辅料' as const,label:'TEST辅料',name:entry?.name??'TEST 待选料',specification:entry?.specification??'',supplier:entry?.supplier??'',auxiliaryKind:entry?.auxiliaryKind??'普通辅料' as const,...(entry?{auxiliaryCatalog:{id:entry.id,version:entry.version}}:{}),width:'',weight:'',composition:'',consumption:'',color:'TEST 黑',quantity:'1',requiredThisRound:false,available:false,expectedDate:active?'2027-01-01':null}],files:[{attachmentId:photo,kind:'款图' as const}]};
    const saved=await forms.save(designer,created.sourceId,{expectedVersion:0,document},randomUUID());
+   if(active)expect((await forms.publish(designer,created.sourceId,saved.version,randomUUID())).status).toBe('published');
    return {...created,materialId,saved};
   };
   try{
    old=await createFromPage(tab.page,'TEST-旧目录-'+randomUUID());
    const original=await source('TEST-目录旧快照-'+randomUUID(),old);
+   const adopted=await source('TEST-已发布的目录采用依据-'+randomUUID(),old,true);
    await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
    const row=tab.page.getByRole('row').filter({hasText:old.name});
    await row.getByRole('button',{name:'改名',exact:true}).click();
@@ -76,6 +78,23 @@ async function createFromPage(page:Page,name:string){
    const response=await renamed;expect(response.status(),await response.text()).toBe(200);current=await response.json();await editor.waitFor({state:'hidden'});
    const directory=await tab.page.evaluate(async name=>{const r=await fetch('/api/master-data/auxiliaries?'+new URLSearchParams({q:name}));if(!r.ok)throw Error('Directory read failed '+r.status);return r.json();},old.name);
    expect(directory.items).toEqual([current]);
+   const adoptedTab=await h.open(designer.actorId,1165,{},'/ui/digital-production?'+new URLSearchParams({
+    workspace:'designer',section:'workspace',development:adopted.sourceId,area:'records',originalStage:'development',originalCategory:'auxiliary_basis',
+   }));
+   try{
+    const control=adoptedTab.page.getByRole('button',{name:`${old.name} · 版本 ${old.version}`,exact:true});
+    await control.waitFor();
+    const [exact]=await Promise.all([
+     adoptedTab.page.waitForResponse(response=>new URL(response.url()).pathname===`/api/master-data/auxiliaries/${old.id}/versions`&&new URL(response.url()).searchParams.get('version')===String(old.version)),
+     control.click(),
+    ]);
+    expect(exact.status()).toBe(200);expect(await exact.json()).toMatchObject({total:1,items:[{id:old.id,version:old.version,name:old.name}]});
+    const originalBasis=adoptedTab.page.getByRole('dialog',{name:`${old.name} · 采用版本 ${old.version}`,exact:true});
+    await originalBasis.getByRole('cell',{name:old.name,exact:true}).waitFor();
+    expect(await originalBasis.getByRole('cell',{name:current.name,exact:true}).count()).toBe(0);
+    await originalBasis.getByRole('button',{name:'关闭版本历史',exact:true}).click();await originalBasis.waitFor({state:'hidden'});
+    expect(new URL(adoptedTab.page.url()).searchParams.get('development')).toBe(adopted.sourceId);
+   }finally{await adoptedTab.close();}
    for(const width of [1165,1920,390]){
     await tab.page.setViewportSize({width,height:900});
     const bounds=await tab.page.locator('.auxiliary-catalog-page').evaluate(element=>({right:element.getBoundingClientRect().right,viewport:innerWidth}));

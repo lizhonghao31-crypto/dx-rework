@@ -49,7 +49,9 @@ function PublishedGroup({kind,resource,search,onSelect,onReady,page,onPage:setPa
   {!current&&!error&&<p role="status">正在读取授权版本…</p>}
   {error?<DigitalReadFailure error={error} onRetry={()=>setAttempt(value=>value+1)} retryLabel={'重读'+names[kind]+'目录'}/>:null}
   {current&&(current.items.length?<ul>{current.items.map(item=><li key={item.version}><Button label={`${names[kind]} · ${kind==='quotation'?'已确认':'已发布'}版本 ${item.version}`} onClick={()=>onSelect(kind==='quotation'?{kind,resource,quoteId:current.quoteId!,version:item.version}:{kind,orderId:resource.id,version:item.version})}/></li>)}</ul>:<p>{current.total?'本页没有记录，请返回有效页码。':'当前授权范围没有匹配的已保存版本。'}</p>)}
-  <ListPagination page={page} totalPages={current?Math.max(1,Math.ceil(current.total/15)):null} total={current?.total??null} busy={!current} onPageChange={setPage} ariaLabel={names[kind]+'版本分页'}/>
+  {current&&(current.total>current.pageSize||page>1)&&<ListPagination page={page}
+    totalPages={Math.max(1,Math.ceil(current.total/current.pageSize))} total={current.total}
+    onPageChange={setPage} ariaLabel={names[kind]+'版本分页'}/>}
  </section>;
 }
 

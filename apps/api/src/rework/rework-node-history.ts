@@ -34,6 +34,10 @@ export function selectReworkInitiationSnapshot(events: readonly Pick<HistoryEven
 }
 const labels: Record<FinanceNodeKey,string> = {initiation:'发起返工',process_configuration:'分配工序与工人',ie_review:'IE 核价',task_assignment:'工人分配',work_reporting:'返工执行',whole_order_review:'尾部确认最终数量',final_quantity_ie_review:'IE 复核最终数量',quantity_adjustment:'数量调整',responsibility:'责任判定',owner_signature:'老板签字',settlement_ledger:'责任台账',settlement_followup:'扣款跟进'};
 const finishingNodes: FinanceNodeKey[]=['initiation','process_configuration','ie_review','work_reporting','whole_order_review','final_quantity_ie_review'];
+export function accessibleReworkOriginalNode(actor:TrustedActorContext,reworkKind:ReworkBusinessDetail['reworkKind'],action:string){
+ const node=reworkHistoryNode(action);
+ return node&&(reworkKind!=='inhouse_finishing'||finishingNodes.includes(node))&&canReadReworkHistoryNode(actor,node)?node:null;
+}
 export function canReadReworkHistoryNode(actor: TrustedActorContext, node: FinanceNodeKey): boolean {
  const caps = actor.authorizationCapabilities ?? [actor.authorizationCapability];
  const has = (...keys: string[]) => keys.some(key => caps.includes(key));

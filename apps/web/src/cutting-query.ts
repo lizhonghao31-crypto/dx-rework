@@ -1,4 +1,5 @@
-import { CuttingOrderQuerySchema } from "@dx-rework/contracts";
+import { CuttingOrderQuerySchema, type CuttingOrderDetail } from "@dx-rework/contracts";
+import { DigitalIdSchema } from '@dx-rework/contracts/digital-production';
 
 import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 import {normalizeBasePath} from "../url-contract.js";
@@ -44,4 +45,26 @@ export function cuttingReturnPath(search: string,base="/"): string {
   if (target.split("?")[0] !== "/ui/cutting") return "/ui/cutting";
   const targetSearch = target.includes("?") ? target.slice(target.indexOf("?")) : "";
   return cuttingListPath(readCuttingListQuery(targetSearch));
+}
+
+/** A history link must match the saved original and must never open current writes on error. */
+export function cuttingOriginalSelection(search:string){
+  const query=new URLSearchParams(search);
+  if(!query.has('cuttingRecord')&&!query.has('cuttingVersion'))return undefined;
+  const recordId=DigitalIdSchema.safeParse(query.get('cuttingRecord')),text=query.get('cuttingVersion');
+  if(query.getAll('cuttingRecord').length!==1||query.getAll('cuttingVersion').length!==1||!recordId.success||
+    !text||!/^[1-9]\d*$/.test(text)||!Number.isSafeInteger(Number(text)))return null;
+  return {recordId:recordId.data,version:Number(text)};
+}
+
+export function cuttingOriginalRecord(record:CuttingOrderDetail['record'],selection:ReturnType<typeof cuttingOriginalSelection>){
+  if(!selection||!record||record.cuttingRecordId!==selection.recordId)return null;
+  if(selection.version===1)return {
+    version:1,pieceCount:record.initialPieceCount,actualCutCount:record.initialActualCutCount,
+    recordedAt:record.recordedAt,recordedByName:record.recordedByName,reason:null,photos:record.cuttingSheetPhotos,
+  };
+  const correction=record.corrections.find(item=>item.version===selection.version);
+  if(!correction)return null;
+  return {version:correction.version,pieceCount:correction.pieceCount,actualCutCount:correction.actualCutCount,
+    recordedAt:correction.correctedAt,recordedByName:correction.correctedByName,reason:correction.reason,photos:[]};
 }

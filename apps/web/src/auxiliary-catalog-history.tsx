@@ -13,21 +13,27 @@ const actions:Record<string,string>={
  'auxiliary_catalog.disable':'停用',
  'auxiliary_catalog.merge':'合并',
 };
-export function AuxiliaryCatalogHistory({item,onClose}:{item:AuxiliaryItem;onClose():void}){
+export function AuxiliaryCatalogHistory({item,exactVersion,onClose}:{item:Pick<AuxiliaryItem,'id'|'name'>;exactVersion?:number;onClose():void}){
  const [page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
  const [result,setResult]=useState<ReturnType<typeof AuxiliaryHistorySchema.parse>|null>(null);
  const [error,setError]=useState(''),[reading,setReading]=useState(true);
  useEffect(()=>{
   const abort=new AbortController();setReading(true);setResult(null);setError('');
-  void catalogRequest(`/${item.id}/versions?page=${page}`,'GET',undefined,undefined,abort.signal)
-   .then(data=>{if(!abort.signal.aborted)setResult(AuxiliaryHistorySchema.parse(data));})
+  const query=new URLSearchParams({page:String(page),...(exactVersion!==undefined?{version:String(exactVersion)}:{})});
+  void catalogRequest(`/${item.id}/versions?${query}`,'GET',undefined,undefined,abort.signal)
+   .then(data=>{
+    const history=AuxiliaryHistorySchema.parse(data);
+    if(exactVersion!==undefined&&(history.items.length!==1||history.items[0]!.version!==exactVersion||history.items[0]!.id!==item.id))
+     throw Error('所选辅料历史版本不可用，未显示其他版本。');
+    if(!abort.signal.aborted)setResult(history);
+   })
    .catch(error=>{if(!abort.signal.aborted)setError(error instanceof Error?error.message:'未能读取原版本，请重试');})
    .finally(()=>{if(!abort.signal.aborted)setReading(false);});
   return()=>abort.abort();
- },[item.id,page,refresh]);
+ },[item.id,exactVersion,page,refresh]);
  return <Dialog isOpen onOpenChange={open=>{if(!open)onClose();}} className="dx-designer-astryx auxiliary-catalog-history">
   <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style>
-  <DialogHeader title={`${item.name} · 版本历史`} onOpenChange={open=>{if(!open)onClose();}}/>
+  <DialogHeader title={`${item.name} · ${exactVersion===undefined?'版本历史':`采用版本 ${exactVersion}`}`} onOpenChange={open=>{if(!open)onClose();}}/>
   {reading&&<p role="status">正在读取原版本…</p>}
   {error&&<p role="alert">{error}<Button label="重新读取历史" onClick={()=>setRefresh(value=>value+1)}/></p>}
   {result&&<div className="auxiliary-catalog-table"><div className="auxiliary-catalog-table-canvas"><Table data={result.items} idKey="version" density="balanced" aria-label="共享辅料版本历史" columns={[
@@ -41,7 +47,7 @@ export function AuxiliaryCatalogHistory({item,onClose}:{item:AuxiliaryItem;onClo
    {key:'changedBy',header:'操作人',renderCell:row=>row.changedBy||'未记录'},
    {key:'changedAt',header:'时间',renderCell:row=>new Date(row.changedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})},
   ]}/></div></div>}
-  <ListPagination page={page} totalPages={result?Math.max(1,Math.ceil(result.total/result.pageSize)):null} total={result?.total??null} busy={reading} onPageChange={setPage} ariaLabel="辅料历史分页"/>
+  {exactVersion===undefined&&<ListPagination page={page} totalPages={result?Math.max(1,Math.ceil(result.total/result.pageSize)):null} total={result?.total??null} busy={reading} onPageChange={setPage} ariaLabel="辅料历史分页"/>}
   <Button label="关闭版本历史" onClick={onClose}/>
  </Dialog>;
 }

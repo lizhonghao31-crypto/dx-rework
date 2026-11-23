@@ -1,4 +1,4 @@
-import { canReadReworkHistoryNode, readReworkNodeHistory, reworkHistoryNode } from "./rework-node-history.js";
+import { accessibleReworkOriginalNode, canReadReworkHistoryNode, readReworkNodeHistory, reworkHistoryNode } from "./rework-node-history.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
 import { canReadFinanceOrders, isScopedFinanceReader } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -133,6 +133,7 @@ export type ReworkBusinessDetail = Readonly<{
     handledAt: string;
     remark: string | null;
   }>[];
+  originalNodeEntries?: readonly Readonly<{entryId:string;node:FinanceNodeKey;handledAt:string}>[];
 }>;
 
 type AttachmentRow = Readonly<{
@@ -143,6 +144,7 @@ type AttachmentRow = Readonly<{
 }>;
 
 type WorkflowHistoryRow = Readonly<{
+  event_id: string;
   action: string;
   actor_name: string | null;
   actor_id: string;
@@ -246,7 +248,7 @@ export class ReworkBusinessDetailService {
     return readReworkNodeHistory(this.database, actor, detail, node, entryId);
   }
 
-  async get(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkBusinessDetail> {
+  async get(actor: TrustedActorContext, reworkOrderId: string, includeOriginalNodes=false): Promise<ReworkBusinessDetail> {
     const result = await this.database.query<DetailRow>(
       `SELECT
          orders.rework_order_id,orders.rework_no,orders.status,orders.version,orders.style_no,
@@ -439,8 +441,10 @@ export class ReworkBusinessDetailService {
       [reworkOrderId, actor.actorId, fullBusinessAccess],
     );
 
+    const canReadOriginalNodes=includeOriginalNodes&&(fullBusinessAccess||
+      (actor.authorizationCapabilities??[]).includes('rework:finance_nodes:read'));
     const workflowHistory = await this.database.query<WorkflowHistoryRow>(
-      `SELECT event.action,event.actor_id,event.created_at,event.reason,
+      `SELECT event.event_id,event.action,event.actor_id,event.created_at,event.reason,
               actor.display_name actor_name
        FROM operation_events event
        LEFT JOIN app_users actor ON actor.id=event.actor_id
@@ -449,7 +453,7 @@ export class ReworkBusinessDetailService {
        ) OR event.after_state->>'reworkOrderId'=$1)
        ORDER BY event.created_at,event.event_id
        LIMIT 200`,
-      [reworkOrderId, fullBusinessAccess],
+      [reworkOrderId, fullBusinessAccess||canReadOriginalNodes],
     );
     const settlement = await this.database.query<{
       external_status: "not_required" | "in_progress" | "closed" | "revision_in_progress";
@@ -584,12 +588,16 @@ export class ReworkBusinessDetailService {
         mimeType: attachment.mime_type,
         entityType: attachment.entity_type,
       })),
-      workflowHistory: workflowHistory.rows.map((event) => ({
+      workflowHistory: (fullBusinessAccess?workflowHistory.rows:[]).map((event) => ({
         action: event.action,
         handledBy: event.actor_name ?? event.actor_id,
         handledAt: event.created_at.toISOString(),
         remark: event.reason,
       })),
+      ...(includeOriginalNodes?{originalNodeEntries:workflowHistory.rows.flatMap(event=>{
+        const node=accessibleReworkOriginalNode(actor,row.rework_kind,event.action);
+        return node?[{entryId:event.event_id,node,handledAt:event.created_at.toISOString()}]:[];
+      })}:{}),
     };
   }
 

@@ -21,6 +21,7 @@ import type { DigitalAccessOptions } from "./digital-production-access-panel.js"
 import { createClientRequestId } from "./client-request-id.js";
 import {ProductionReadinessPanel} from "./production-readiness-panel.js";
 import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailRoute, digitalLandingPath } from "./digital-detail-route.js";
+import {readTechnicalOriginalSearch} from './technical-original-route.js';
 import "./pattern-room.css";
 import "./digital-production.css";
 import "./digital-detail.css";
@@ -32,6 +33,9 @@ const DevelopmentArrangementPage=lazyBusinessPage(()=>import('./development-arra
 const BulkTaskWorkbench=lazyBusinessPage(()=>import('./bulk-task-workbench.js').then(module=>({default:module.BulkTaskWorkbench})),{shellOnError:false});
 const OrderDocumentContainer=lazyBusinessPage(()=>import('./order-document-container.js').then(module=>({default:module.OrderDocumentContainer})),{shellOnError:false});
 const DevelopmentOriginalReader=lazyBusinessPage(()=>import('./development-original-reader.js').then(module=>({default:module.DevelopmentOriginalReader})),{shellOnError:false});
+const DevelopmentTechnicalOriginal=lazyBusinessPage(()=>import('./development-technical-original.js').then(module=>({default:module.DevelopmentTechnicalOriginal})),{shellOnError:false});
+const PreparationMaterialOriginal=lazyBusinessPage(()=>import('./preparation-material-original.js').then(module=>({default:module.PreparationMaterialOriginal})),{shellOnError:false});
+const OrderHistoryOriginal=lazyBusinessPage(()=>import('./order-history-original.js').then(module=>({default:module.OrderHistoryOriginal})),{shellOnError:false});
 const ProductionOriginalReader=lazyBusinessPage(()=>import('./production-original-reader.js').then(module=>({default:module.ProductionOriginalReader})),{shellOnError:false});
 const TaskWorkbenchSample=lazyBusinessPage(()=>import('./task-workbench-sample.js').then(module=>({default:module.TaskWorkbenchSample})),{shellOnError:false});
 const DigitalPatternWorkspace=lazyBusinessPage(()=>import('./digital-pattern-workspace.js').then(module=>({default:module.DigitalPatternWorkspace})),{shellOnError:false});
@@ -174,26 +178,36 @@ function DigitalProductionPageContent() {
   switch (route.kind) {
     case "landing": detail = <LegacyLanding />; break;
     case "invalid": detail = <><Button onClick={() => void closeDetail()}>返回</Button><p role="alert">{route.message}</p></>; break;
-    case "timeRequest": detail = <OrderTimeRequestPage key={route.id} requestId={route.id} onClose={()=>void closeDetail()}/>; break;
+    case "timeRequest": detail = <OrderTimeRequestPage key={`${route.id}:${route.version??'current'}`} requestId={route.id} originalVersion={route.version} onClose={()=>void closeDetail()}/>; break;
     case "timeOrder": detail = <OrderTimeRequestPage key={route.id} resource={{kind:'order',id:route.id}} onClose={()=>void closeDetail()}/>; break;
     case "timeSource": detail = <OrderTimeRequestPage key={route.id} resource={{kind:'source',id:route.id}} onClose={()=>void closeDetail()}/>; break;
     case "shortLead": detail = <ShortLeadWorkspace key={route.id} sourceId={route.id} onClose={()=>void closeDetail()}/>; break;
-    case "closure": detail = <OrderClosurePanel orderId={route.id} onClose={() => void closeDetail()} />; break;
+    case "closure": detail = new URLSearchParams(location.search).has('originalEvent')?
+      <OrderHistoryOriginal orderId={route.id} domain="closure" onClose={()=>void closeDetail()}/>:
+      <OrderClosurePanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "factory": detail = <FactoryFlowPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "materialSource":
-    case "materialOrder":
-      detail = <section aria-label="投面辅料办理"><Button variant="secondary" onClick={()=>void closeDetail()}>返回来源</Button>
+    case "materialOrder": {
+      const query=new URLSearchParams(window.location.search);
+      detail = query.has('originalMaterial')||query.has('originalMaterialVersion')?
+       <PreparationMaterialOriginal resource={{kind:route.kind==='materialSource'?'source':'order',id:route.id}} onClose={()=>void closeDetail()}/>:
+       <section aria-label="投面辅料办理"><Button variant="secondary" onClick={()=>void closeDetail()}>返回来源</Button>
         <ProductionReadinessPanel key={`${route.kind}:${route.id}`}
           resource={{kind:route.kind==='materialSource'?'source':'order',id:route.id}} focusKind="material_investment"/></section>;
       break;
-    case "bulk": detail = <BulkPreparationPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
+    }
+    case "bulk": detail = new URLSearchParams(location.search).has('originalEvent')?
+      <OrderHistoryOriginal orderId={route.id} domain="bulk-preparation" onClose={()=>void closeDetail()}/>:
+      <BulkPreparationPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "instruction":
     case "budget": detail = route.original?<ProductionOriginalReader key={`${route.kind}:${route.id}`} reference={{kind:route.kind,orderId:route.id,version:route.version!}} onClose={()=>void closeDetail()}/>:<OrderDocumentContainer key={`${route.kind}:${route.id}:${route.version}`} initial={{kind:route.kind,id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case 'quotationSource':
     case 'quotationOrder': detail=<ProductionOriginalReader key={`${route.kind}:${route.id}`} reference={{kind:'quotation',resource:{kind:route.kind==='quotationSource'?'source':'order',id:route.id},quoteId:route.quoteId!,version:route.version!}} onClose={()=>void closeDetail()}/>;break;
     case "order": detail = <OrderDetail id={route.id} />; break;
     case "arrangement": detail = <DevelopmentArrangementPage sourceId={route.id} round={route.version} onClose={() => void closeDetail()} />; break;
-    case "development": detail = route.documentVersion===undefined?<OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />:<DevelopmentOriginalReader key={route.id} sourceId={route.id} roundNumber={route.version!} documentVersion={route.documentVersion} onClose={()=>void closeDetail()}/>; break;
+    case "development": detail = readTechnicalOriginalSearch(window.location.search)!==undefined?
+      <DevelopmentTechnicalOriginal key={route.id} sourceId={route.id} onClose={()=>void closeDetail()}/>:
+      route.documentVersion===undefined?<OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />:<DevelopmentOriginalReader key={route.id} sourceId={route.id} roundNumber={route.version!} documentVersion={route.documentVersion} onClose={()=>void closeDetail()}/>; break;
     case "task": detail = <TaskDetail key={route.id} id={route.id} />; break;
   }
   return <div className="pattern-orders digital-production"><CurrentProductionReturn/>{route.kind!=="landing"&&route.kind!=="invalid"&&route.kind!=='timeRequest'&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;

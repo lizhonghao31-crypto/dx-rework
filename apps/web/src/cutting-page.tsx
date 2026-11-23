@@ -36,6 +36,8 @@ import {
 } from "./cutting-client.js";
 import {
   cuttingListPath,
+  cuttingOriginalRecord,
+  cuttingOriginalSelection,
   cuttingReturnPath,
   readCuttingListQuery,
   type CuttingListQuery,
@@ -311,6 +313,19 @@ function CountInput({
   );
 }
 
+function CuttingSheetOriginalPhotos({photos}:{photos:NonNullable<CuttingOrderDetail['record']>['cuttingSheetPhotos']}){
+  return photos.length>0?<div className="cutting-sheet-readonly">
+    <strong>裁床单</strong>
+    <div className="rework-v2-image-grid">
+      {photos.map(photo=><article key={photo.attachmentId}>
+        <a href={cuttingImageUrl(photo.attachmentId,"preview")} target="_blank" rel="noreferrer">
+          <img src={cuttingImageUrl(photo.attachmentId,"thumbnail")} alt={photo.filename} loading="lazy"/>
+        </a>
+      </article>)}
+    </div>
+  </div>:null;
+}
+
 export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }) {
   const [item, setItem] = useState<CuttingOrderDetail | null>(null);
   const [readVersion,setReadVersion]=useState(0),[readFailed,setReadFailed]=useState(false);
@@ -331,13 +346,16 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
   const [busy, setBusy] = useState(false);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const correctionAttempt = useRef<{ body: string; key: string } | null>(null);
+  const originalSelection=cuttingOriginalSelection(window.location.search);
+  const readingOriginal=originalSelection!==undefined;
+  const originalRecord=cuttingOriginalRecord(item?.record??null,originalSelection);
   const draft = useCuttingDraftGuard(
     JSON.stringify({
       pieceCount,
       actualCutCount,
       attachmentIds: cuttingSheets.map((sheet) => sheet.attachmentId),
     }),
-    Boolean(item?.canRecord && !item.record
+    Boolean(!readingOriginal && item?.canRecord && !item.record
       && (pieceCount || actualCutCount || cuttingSheets.length > 0)),
   );
   const backHref = cuttingReturnPath(window.location.search,import.meta.env.BASE_URL);
@@ -648,7 +666,8 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
       {error ? <Surface><p className="cutting-error" role="alert">{error}</p>{readFailed?<Button onClick={retryDetail}>重新读取裁床订单</Button>:null}</Surface> : null}
       {notice ? <Surface><p role="status">{notice}</p></Surface> : null}
       {!item && !error ? <p role="status">正在读取裁床订单…</p> : null}
-      {item ? (
+      {item && readingOriginal && !originalRecord?<Surface><p role="alert">找不到所选裁床原记录或版本，请返回原单核对。</p></Surface>:null}
+      {item && (!readingOriginal||originalRecord) ? (
         <>
           <Surface>
             <dl className="cutting-detail__facts">
@@ -687,7 +706,17 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
               </details>
             </Surface>
           ) : null}
-          <Surface className="cutting-record-panel">
+          {originalRecord?<Surface className="cutting-record-panel">
+            <h2>{originalRecord.version===1?'原实裁登记':`实裁修正 · 第 ${originalRecord.version} 版`}</h2>
+            <dl className="cutting-record-facts">
+              <div><dt>士啤片</dt><dd>{formatBusinessDecimal(originalRecord.pieceCount)} 片</dd></div>
+              <div><dt>实裁数</dt><dd>{formatBusinessDecimal(originalRecord.actualCutCount)} 件</dd></div>
+              <div><dt>{originalRecord.version===1?'登记人':'修正人'}</dt><dd>{originalRecord.recordedByName}</dd></div>
+              <div><dt>{originalRecord.version===1?'登记时间':'修正时间'}</dt><dd>{cuttingTime(originalRecord.recordedAt)}</dd></div>
+            </dl>
+            {originalRecord.reason&&<p>{originalRecord.reason}</p>}
+            <CuttingSheetOriginalPhotos photos={originalRecord.photos}/>
+          </Surface>:<Surface className="cutting-record-panel">
             <div className="cutting-record-panel__heading">
               <div>
                 <h2>{item.record ? "实裁登记" : item.canRecord ? "登记裁床数量" : "实裁记录"}</h2>
@@ -708,28 +737,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                   <div><dt>登记人</dt><dd>{item.record.recordedByName}</dd></div>
                   <div><dt>登记时间</dt><dd>{cuttingTime(item.record.recordedAt)}</dd></div>
                 </dl>
-                {item.record.cuttingSheetPhotos.length ? (
-                  <div className="cutting-sheet-readonly">
-                    <strong>裁床单</strong>
-                    <div className="rework-v2-image-grid">
-                      {item.record.cuttingSheetPhotos.map((photo) => (
-                        <article key={photo.attachmentId}>
-                          <a
-                            href={cuttingImageUrl(photo.attachmentId, "preview")}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <img
-                              src={cuttingImageUrl(photo.attachmentId, "thumbnail")}
-                              alt={photo.filename}
-                              loading="lazy"
-                            />
-                          </a>
-                        </article>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                <CuttingSheetOriginalPhotos photos={item.record.cuttingSheetPhotos}/>
                 <p className={`cutting-range-note${item.outOfRange ? " is-warning" : ""}`}>
                   合同允许范围：{formatBusinessDecimal(item.allowedRange.min)}–{formatBusinessDecimal(item.allowedRange.max)} 件。
                   {item.outOfRange ? " 当前实裁超出±5%，仅作提示。" : " 当前实裁在±5%范围内。"}
@@ -846,7 +854,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                 ) : null}
               </>
             ) : <p className="cutting-range-note" role="status">尚未登记实裁。当前仅可查看订单及登记后记录。</p>}
-          </Surface>
+          </Surface>}
         </>
       ) : null}
     </div>
