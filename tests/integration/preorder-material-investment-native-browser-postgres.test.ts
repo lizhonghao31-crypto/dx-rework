@@ -38,6 +38,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByLabel('主布 面料名称',{exact:true}).fill('TEST 预下单棉布');
    await page.getByLabel('主布 数量与单位',{exact:true}).fill('75米');
    await page.getByLabel('主布 供应商',{exact:true}).fill('TEST 供应商');
+   const fabric=page.getByLabel('主布 面料名称',{exact:true}).locator('xpath=ancestor::tr');
+   const materialPrice=fabric.getByRole('textbox',{name:/材料单价$/});
+   const pricingUnit=fabric.getByRole('textbox',{name:/计价单位$/});
+   expect(await materialPrice.inputValue()).toBe('');
+   expect(await pricingUnit.inputValue()).toBe('');
+   await materialPrice.fill('12.75');await pricingUnit.fill('米');
    for(const category of ['主布','配布']){
     const control=page.getByRole('button',{name:`＋ 添加${category}`,exact:true});
     expect(await control.evaluate(button=>button.closest('.dx-designer-astryx')!==null&&!button.classList.contains('dx-button'))).toBe(true);
@@ -56,7 +62,39 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const draft=await response.json();
    expect(draft).toMatchObject({status:'draft',productionOrderId:null,publishedAt:null,document:{customerOrderDraft:{withOrder:true,stage:'preorder'}}});
    const material=draft.document.materials.find((row:{name:string})=>row.name==='TEST 预下单棉布');
-   expect(material).toMatchObject({quantity:'75米',supplier:'TEST 供应商'});
+   expect(material).toMatchObject({quantity:'75米',supplier:'TEST 供应商',unitPrice:'12.75',pricingUnit:'米'});
+   await page.getByRole('button',{name:'＋ 添加配布',exact:true}).click();
+   const spareName=page.getByLabel('配布 面料名称',{exact:true}).last();
+   const unnamed=spareName.locator('xpath=ancestor::tr');
+   const sparePrice=unnamed.getByRole('textbox',{name:/材料单价$/}),spareUnit=unnamed.getByRole('textbox',{name:/计价单位$/});
+   await sparePrice.fill('0');await spareUnit.fill('米');
+   await unnamed.getByRole('status').filter({hasText:'请先填写材料名称'}).waitFor();
+   const rejected=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/sources/${draft.sourceId}/development`)&&r.request().method()==='PUT');
+   await page.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();
+   const rejection=await rejected;
+   expect(rejection.status()).toBe(400);
+   expect(await rejection.text()).toContain('请先填写材料名称');
+   expect((await new DigitalDevelopmentService(h.db,true).read(designer,draft.sourceId)).version).toBe(draft.version);
+   await spareName.pressSequentially('TEST spare fabric');
+   expect(await sparePrice.inputValue()).toBe('0');
+   expect(await spareUnit.inputValue()).toBe('米');
+   await unnamed.getByRole('textbox',{name:'配布 规格',exact:true}).fill('TEST changed specification');
+   expect(await sparePrice.inputValue()).toBe('');
+   expect(await spareUnit.inputValue()).toBe('');
+   await unnamed.getByRole('button',{name:'删除面料',exact:true}).click();
+   await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+   await materialPrice.fill('13.25');
+   const retrySave=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/sources/${draft.sourceId}/development`)&&r.request().method()==='PUT');
+   await page.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();
+   const recovered=await retrySave;
+   expect(recovered.status()).toBe(200);
+   const resaved=await recovered.json();
+   expect(resaved.version).toBe(draft.version+1);
+   expect(resaved.document.materials.find((row:{materialId:string})=>row.materialId===material.materialId)).toMatchObject({unitPrice:'13.25',pricingUnit:'米'});
+   await page.getByText('预下单草稿 · 可继续补充资料',{exact:true}).waitFor();
+   const disclosure=page.locator('.preparation-readiness > details > summary').filter({hasText:'产前物料办理'});
+   await disclosure.waitFor();
+   if(!await disclosure.evaluate(summary=>Boolean(summary.closest('details')?.open)))await disclosure.click();
    diagnosis={sourceId:draft.sourceId,materialId:material.materialId};
    const handover=page.getByRole('group',{name:/设计交资料/});
    await handover.getByLabel('实际发生时间（北京时间）').fill(localTime);
@@ -75,7 +113,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const result=await receipt;
    expect(result.status(),await result.text()).toBe(200);
    expect(await result.json()).toMatchObject({orderId:null,sourceIsPreorderDraft:true,facts:expect.arrayContaining([expect.objectContaining({
-    kind:'design_handover',state:'ready',recipientId:merch.actorId,recordedBy:designer.actorId,sourceDocumentVersion:draft.version,
+    kind:'design_handover',state:'ready',recipientId:merch.actorId,recordedBy:designer.actorId,sourceDocumentVersion:resaved.version,
    })])});
    await page.getByText('已保存原业务记录',{exact:true}).waitFor();
    expect(await orderTimeCreated(h.db,{kind:'source',id:diagnosis.sourceId})).toBeNull();

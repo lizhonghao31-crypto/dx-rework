@@ -24,8 +24,9 @@ const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('P06 shared auxiliary catalog with current PostgreSQL schema',()=>{
  const schema=ownedPostgresSchema('auxiliary_catalog'),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const roles=[...AUXILIARY_CATALOG_ROLES,'root_superuser','development_clerk','pattern_room_worker'],ids=new Map(roles.map(role=>[role,randomUUID()]));
+ const capabilities=new Map<string,string[]>();
  const rootAuthority=new RootAuthority(db,'TEST',`TEST-${ids.get('root_superuser')}`),service=new AuxiliaryCatalogService(db,rootAuthority),forms=new DigitalDevelopmentService(db,true),identity=new DigitalProductionIdentityService(db,true);
- const actor=(role='sample_designer'):TrustedActorContext=>({actorId:ids.get(role)!,actorRoles:[role],authorizationCapability:'auxiliary_catalog:write',authorizationCapabilities:['auxiliary_catalog:read','auxiliary_catalog:write','digital_production:view','pattern_room:orders:create'],requestId:'TEST-P06'});
+ const actor=(role='sample_designer'):TrustedActorContext=>({actorId:ids.get(role)!,actorRoles:[role],authorizationCapability:'auxiliary_catalog:write',authorizationCapabilities:capabilities.get(role)??[],requestId:'TEST-P06'});
  const value=(name='TEST-'+randomUUID(),specification='TEST规格',supplier='TEST供应方')=>({name,specification,supplier,auxiliaryKind:'扁机' as const});
  const list=(q='',includeInactive=false,page=1,who=actor())=>service.list(who,AuxiliaryQuerySchema.parse({q,includeInactive:String(includeInactive),page}));
  beforeAll(async()=>{
@@ -35,6 +36,7 @@ const url=process.env.TEST_DATABASE_URL;
   // Synthetic identity/role bootstrap only. Business commands below use persisted roles and RootAuthority.
   for(const role of roles){const id=ids.get(role)!;await db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[id,`TEST ${role}`]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','TEST',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,`TEST-${id}`]);if(role!=='root_superuser')await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'P06 TEST identity bootstrap')",[randomUUID(),id,role]);}
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'TEST')",[ids.get('root_superuser'),`TEST-${ids.get('root_superuser')}`]);await new AccessMasterDataService(db,'TEST').ensureOrganizationPolicy();
+  for(const role of roles)capabilities.set(role,(await db.query<{capability:string}>('SELECT capability FROM role_capabilities WHERE role_code=$1',[role])).rows.map(row=>row.capability));
  },testExecutionConfig.correctnessTimeoutMs);
  afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  it('allows exactly the five authorized identities to perform all four operations, without approval or extra capabilities',async()=>{
@@ -59,6 +61,24 @@ const url=process.env.TEST_DATABASE_URL;
   await service.create(actor(),{...input,specification:'另一规格'},randomUUID());await service.create(actor(),{...input,supplier:'另一供应方'},randomUUID());expect((await list(input.name)).total).toBe(3);
   const key=randomUUID(),next=value(),[a,b]=await Promise.all([service.create(actor(),next,key),service.create(actor(),next,key)]);expect(a).toEqual(b);expect((await list(next.name)).total).toBe(1);
   await expect(service.create(actor(),{...next,name:next.name+'不同载荷'},key)).rejects.toMatchObject({statusCode:409});expect((await service.receipt(actor(),'create',key)).receipt).toMatchObject({id:a.id});expect((await service.receipt(actor('order_merchandiser'),'create',key)).receipt).toBeNull();
+ });
+ it('stores reference pricing by exact version and keeps catalog access separate from cost visibility',async()=>{
+  const original=await service.create(actor(),{...value(),referencePricing:{amount:'0',unit:'套'}},randomUUID());
+  const key=randomUUID(),next={expectedVersion:1,referencePricing:{amount:'2.350001',unit:'枚'},reason:'TEST 目录参考价改版'};
+  const changed=await service.changeReferencePricing(actor(),original.id,next,key);
+  expect(changed).toMatchObject({version:2,referencePricing:next.referencePricing});
+  expect(await service.changeReferencePricing(actor(),original.id,next,key)).toEqual(changed);
+  await expect(service.changeReferencePricing(actor(),original.id,next,randomUUID())).rejects.toMatchObject({statusCode:409});
+  const history=await service.history(actor(),original.id,1);
+  expect(history.items.map(row=>row.referencePricing)).toEqual([next.referencePricing,{amount:'0',unit:'套'}]);
+  const own=actor(),withoutCost={...own,authorizationCapabilities:own.authorizationCapabilities?.filter(value=>value!=='pattern_room:orders:create')??[]};
+  expect((await list(original.name,false,1,withoutCost)).items[0]!.referencePricing).toBeUndefined();
+  expect((await service.history(withoutCost,original.id,1)).items.every(row=>row.referencePricing===undefined)).toBe(true);
+  expect((await service.receipt(withoutCost,'reference-pricing',key)).receipt?.referencePricing).toBeUndefined();
+  await expect(service.changeReferencePricing(withoutCost,original.id,{...next,expectedVersion:2},randomUUID())).rejects.toMatchObject({statusCode:403});
+  const cleared=await service.changeReferencePricing(actor(),original.id,{expectedVersion:2,referencePricing:null,reason:'TEST 参考价待定'},randomUUID());
+  expect(cleared).toMatchObject({version:3,referencePricing:null});
+  expect((await service.history(actor(),original.id,1)).items.map(row=>row.referencePricing)).toEqual([null,next.referencePricing,{amount:'0',unit:'套'}]);
  });
  it('rejects stale versions, foreign combinations, self/cyclic merges and preserves every old-name chain',async()=>{
   const a=await service.create(actor(),value(),randomUUID()),b=await service.create(actor(),value(),randomUUID()),c=await service.create(actor(),value(),randomUUID());

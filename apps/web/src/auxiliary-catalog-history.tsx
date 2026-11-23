@@ -13,6 +13,7 @@ const actions:Record<string,string>={
  'auxiliary_catalog.rename':'改名',
  'auxiliary_catalog.disable':'停用',
  'auxiliary_catalog.merge':'合并',
+ 'auxiliary_catalog.reference-pricing':'调整参考价',
 };
 export function AuxiliaryCatalogHistory({item,exactVersion,session,onClose}:{item:Pick<AuxiliaryItem,'id'|'name'>;exactVersion?:number;session?:CockpitDocumentSnapshot;onClose():void}){
  const [page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
@@ -46,6 +47,8 @@ export function AuxiliaryCatalogHistory({item,exactVersion,session,onClose}:{ite
    {key:'auxiliaryKind',header:'种类'},
    {key:'specification',header:'原规格',renderCell:row=>row.specification||'未填写'},
    {key:'supplier',header:'原供应方',renderCell:row=>row.supplier||'未填写'},
+   ...(result.items.some(row=>row.referencePricing!==undefined)?[{key:'referencePricing' as const,header:'原参考价 / 单位',
+    renderCell:(row:(typeof result.items)[number])=>row.referencePricing?`${row.referencePricing.amount} 元 / ${row.referencePricing.unit}`:'未记录'}]:[]),
    {key:'action',header:'变更',renderCell:row=>actions[row.action]??'历史变更'},
    {key:'reason',header:'原因',renderCell:row=>row.reason||'未记录'},
    {key:'changedBy',header:'操作人',renderCell:row=>row.changedBy||'未记录'},

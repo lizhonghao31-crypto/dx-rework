@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
-import {DevelopmentDocumentSchema,developmentPublishErrors,developmentSizeQuantityIssues,developmentMaterialPublishIssues,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import {DevelopmentDocumentSchema,developmentPublishErrors,developmentSizeQuantityIssues,developmentMaterialPublishIssues,hasDevelopmentMaterialPricing,isDevelopmentMaterialPlaceholder,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderIsReady,salesYearOptions} from '@dx-rework/contracts/digital-production';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {developmentDraftForSave,developmentRevisionForSave} from '../../apps/api/src/production-platform/development-document-format.js';
@@ -86,6 +86,19 @@ describe('versioned workbench sheets preserve the legacy document contract',()=>
     expect(developmentPublishErrors({...sheet,workbenchSheet:{...sheet.workbenchSheet!,styleName:'',processingSelected:false}})).toEqual([
       '请填写或选择款名','请填写或选择加工类型',
     ]);
+  });
+  it('requires identity for a new priced material, preserving empty and historical physical placeholders',()=>{
+    const sheet=draft(),empty=sheet.materials[0]!;
+    const legacy={...sheet,materials:[{...empty,unitPrice:'0'}]};
+    expect(hasDevelopmentMaterialPricing(empty)).toBe(false);
+    expect(isDevelopmentMaterialPlaceholder(legacy.materials[0]!)).toBe(true);
+    expect(hasDevelopmentMaterialPricing(legacy.materials[0]!)).toBe(true);
+    expect(developmentMaterialPublishIssues(legacy)).toEqual([expect.objectContaining({materialId:empty.materialId,field:'name'})]);
+    expect(developmentMaterialPublishIssues({...sheet,materials:[{...empty,category:'辅料',pricingUnit:'枚'}]})).toEqual([expect.objectContaining({materialId:empty.materialId,field:'name'})]);
+    expect(()=>developmentDraftForSave(legacy,undefined,'2026-11-01T00:00:00Z')).toThrow(/请先填写材料名称/);
+    expect(()=>developmentRevisionForSave(legacy,sheet)).toThrow(/请先填写材料名称/);
+    expect(developmentDraftForSave({...legacy,instructions:'TEST corrected note'},legacy,'2026-11-01T00:00:00Z').materials).toEqual(legacy.materials);
+    expect(developmentDraftForSave({...legacy,materials:[{...legacy.materials[0]!,name:'TEST 面料',pricingUnit:'米'}]},legacy,'2026-11-01T00:00:00Z').materials[0]).toMatchObject({name:'TEST 面料',unitPrice:'0',pricingUnit:'米'});
   });
   it('keeps sample pictures in the same document, stable row IDs and original version guards',()=>{
     const sheet=draft(),attachmentId=randomUUID();
