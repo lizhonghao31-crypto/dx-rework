@@ -396,10 +396,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    try{
     await author.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);
     const source=await author.newPage();source.setDefaultTimeout(12000);
+    const technicalHistory:string[]=[];
+    source.on('request',request=>{
+     const url=new URL(request.url());
+     if(url.pathname===`/api/digital-production/sources/${uploadSourceId}/execution/technical/history`&&url.searchParams.get('kind')==='artifacts'){
+      technicalHistory.push(url.searchParams.get('version')??'directory');
+     }
+    });
     await source.goto(base+'/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:uploadSourceId,
      area:'records',originalStage:'development',originalCategory:'development_plt'}));
     const directory=source.getByLabel('按阶段读取原单据',{exact:true});
     const href=directory.locator(`a[href*="originalTechnicalId=${artifact.artifactSetId}"]`);
+    const loadedFile=directory.getByRole('link',{name:'PLT纸样原件 1',exact:true});
+    await loadedFile.waitFor();
+    expect(await loadedFile.getAttribute('href')).toContain(artifact.body.pltAttachmentIds[0]);
+    expect(technicalHistory).toEqual(['directory',String(artifact.version)]);
+    await directory.getByRole('button',{name:'尺寸表',exact:true}).click();
+    await href.waitFor();
+    expect(technicalHistory).toEqual(['directory',String(artifact.version)]);
+    await directory.getByRole('button',{name:'纸样PLT',exact:true}).click();
+    await loadedFile.waitFor();
+    expect(technicalHistory).toEqual(['directory',String(artifact.version)]);
     await Promise.all([source.waitForURL(target=>target.searchParams.get('originalTechnicalId')===artifact.artifactSetId),href.click()]);
     const target=new URL(source.url());
     expect(target.searchParams.get('originalTechnicalVersion')).toBe(String(artifact.version));

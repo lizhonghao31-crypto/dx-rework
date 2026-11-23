@@ -208,7 +208,6 @@ export function DesignerRelatedOriginals({order,materials,returnTo}:{order:Order
  const currentCategory=category&&category!=='sourcing_history'&&category!=='time_requests'&&category!=='auxiliary_basis'&&category!=='packing'?category:null;
  useEffect(()=>{if(currentCategory&&current)void current.load(currentCategory);},[currentCategory,current]);
  const remember=(nextStage:typeof stage,nextCategory:ReaderCategory|null)=>{
-  if(nextCategory!==category)setSelection(null);
   setMaterial(null);setStage(nextStage);setCategory(nextCategory);setAuthError(false);
   const target=new URL(location.href);
   target.searchParams.set('area','records');target.searchParams.set('originalStage',nextStage);
