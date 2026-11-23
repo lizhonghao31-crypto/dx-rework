@@ -10,7 +10,7 @@ import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import type {AuxiliaryItem} from '@dx-rework/contracts/auxiliary-catalog';
 
-const url=process.env.TEST_DATABASE_URL;
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 async function createFromPage(page:Page,name:string){
  await page.getByRole('button',{name:'直接新增辅料',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'直接新增共享辅料',exact:true});

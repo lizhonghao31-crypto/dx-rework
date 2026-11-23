@@ -2,7 +2,7 @@
   "version": 1,
   "base": "0a6823e4a5fb97864cfe607dee213f631915d939",
   "risk": "full",
-  "sourceFingerprint": "0f53694f8b95b1c585d530352cf6877a2c8faf9e55abd27058e3e17ae749efcb",
+  "sourceFingerprint": "6dd616f7adef34cc47ef99873801823f92ed9987e51b0625da8586fa126a08a2",
   "rules": [
     {
       "rule": "共享辅料目录进入即显示原服务分页列表，保留原角色、原URL和字段；官方组件复用同一工作台样式范围。",
@@ -26,7 +26,7 @@
       "newTests": [
         "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
       ],
-      "initialization": "复用原完整App、AuthService、运行时角色和隔离库，不借用设计师创建权限作为目录父门禁；官方Astryx0.7.16锁版本未变。",
+      "initialization": "复用原完整App、AuthService、运行时角色和隔离库，不借用设计师创建权限作为目录父门禁；官方Astryx0.7.16锁版本未变。 原生用例遵循现有Acceptance-clock优先选择，已在同CI双库名和低权限角色下实跑；默认CI库仍保持被Acceptance安全守卫拒绝。",
       "dateAndPermission": "五类原目录身份实际进入；纯PMC和文员经原鉴权链被拒，角色和capability定义保持原合同。",
       "expectation": "独立页面没有第二个打开按钮。1165/1920/390实际渲染；窄屏表格局部滚动后可达完整操作，不修改外层布局或控件字体。",
       "checks": [
@@ -145,73 +145,87 @@
         "pr04-catalog-pg",
         "pr04-catalog-unit"
       ]
+    },
+    {
+      "rule": "供应商显式翻页读取失败后，移除旧行并显示原重读入口，保留已知总数和当前草稿；加载中的旧内容继续保留。",
+      "source": "本PR首次Full 45112195078失败后的协调方定点指令；精确旧基线0a6823e4已同例复现，保留原master-data-pages原生回归全部断言及既有失败重试/不冒充全库零条口径。",
+      "writes": [
+        "apps/web/src/supplier-center-page.tsx",
+        "tests/integration/master-data-pages-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/list-pagination.tsx",
+        "apps/web/src/supplier-center-lists.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/master-data-pages-native-browser-postgres.test.ts",
+        "tests/unit/supplier-draft-guard.test.ts",
+        "tests/unit/supplier-profile-draft.test.ts"
+      ],
+      "newTests": [],
+      "initialization": "实际捕获page2中断一次、Failed to fetch与旧15行，原重读入口为0。仅显式失败清行；不清草稿或已知总数、不改静默刷新。",
+      "dateAndPermission": "无新写命令、角色、scope、日期或超时变化；原匿名401、编辑离开保护与独立选择页外供应商继续验证。",
+      "expectation": "中断后旧行0且原重读入口可见；等待真实重试200及第16条实际呈现，再核15行、page2、错误清除；原草稿和页外对象身份断言不降级。",
+      "checks": [
+        "pr04-catalog-pg",
+        "pr04-catalog-unit"
+      ]
     }
   ],
   "checks": [
     {
       "id": "pr04-catalog-pg",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile.json=/tmp/dx-workbench-auxiliary-evidence/verified-pg.json tests/integration/auxiliary-catalog-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-postgres.test.ts",
+      "command": "source /tmp/dx1081-recovery-env.sh; source /tmp/dx-workbench-auxiliary-evidence/ci-shape-env.sh; DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/auxiliary-catalog-native-browser-postgres.test.ts tests/integration/master-data-pages-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-workbench-auxiliary-evidence/ci-shape-final.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 13,
+      "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "0a6823e4a5fb97864cfe607dee213f631915d939",
-      "sourceFingerprint": "0f53694f8b95b1c585d530352cf6877a2c8faf9e55abd27058e3e17ae749efcb",
-      "context": "Node22.22.2、隔离安全标记 PostgreSQL16.14、Chromium151.0.7922.173。PG使用既有业务正确性配置和2worker，单测使用既有非数据库配置。所有角色和订单为合成TEST，时间取同次Vitest结构化报告起止；测试不等同部署验收。",
-      "startedAt": "2026-11-23T04:16:43.429Z",
-      "endedAt": "2026-11-23T04:17:19.078Z",
-      "log": "/tmp/dx-workbench-auxiliary-evidence/verified-pg.log",
-      "logSha256": "c9fb48aee7e003bd0088636167fab1fe36052e98220fb7a06cb61c9298b854b3",
+      "testedHead": "4e1f60c42539fe4132dce4b3394c7b52314d6cfd",
+      "sourceFingerprint": "6dd616f7adef34cc47ef99873801823f92ed9987e51b0625da8586fa126a08a2",
+      "context": "Node22.22.2、隔离安全标记 PostgreSQL16.14、Chromium151.0.7922.173。双库dx_rework_ci/dx_rework_acceptance_clock_test与低权限运行角色dx_rework_test按实际CI布局建立；保留原Acceptance库名与安全标记守卫。PG用既有业务正确性配置2worker，未宣称本地机器/镜像与GitHub相同。所有身份和数据均为合成TEST。",
+      "startedAt": "2026-11-23T05:04:08.888Z",
+      "endedAt": "2026-11-23T05:04:41.666Z",
+      "log": "/tmp/dx-workbench-auxiliary-evidence/ci-shape-final.log",
+      "logSha256": "ec43ddd37a9ec11e3adbabc4d6022e0a536c22678f06c263deab3cf20a2b7c48",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0df91ad6afc59e0f5055fe90c2a1ef967618e10e7a6fe30d179b7cdb64ef2358"
+          "sha256": "5b2fa9bca776c2b5028b109b73e9abef498f0fbc2c6dacc70c5248c9e3c4425b"
         }
       ]
     },
     {
       "id": "pr04-catalog-unit",
       "kind": "tests",
-      "command": "env DATABASE_URL='' TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' NODE_ENV=test node node_modules/vitest/vitest.mjs run tests/unit/business-time-write-contract.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/g1-acceptance-corrections.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-workbench-auxiliary-evidence/current-unit.json",
+      "command": "env DATABASE_URL='' TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' NODE_ENV=test node node_modules/vitest/vitest.mjs run tests/unit/business-time-write-contract.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/g1-acceptance-corrections.test.ts tests/unit/supplier-center-lists.test.ts tests/unit/supplier-draft-guard.test.ts tests/unit/supplier-profile-draft.test.ts tests/unit/supplier-workspace-query.test.ts tests/unit/supplier-onboarding-ui.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-workbench-auxiliary-evidence/ci-fix-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 50,
+      "passed": 73,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "0a6823e4a5fb97864cfe607dee213f631915d939",
-      "sourceFingerprint": "35e22eefd291fc3c4fd72b465a82b2388416aaa7e3842fa799dfb88c3458249d",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/unit",
-        "tests/helpers",
-        "tests/fixtures",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "e239b516b124a5ba69c19de634256b4936c4be72973ec9f29bf810d12c28d3a8",
-      "context": "Node22.22.2、隔离安全标记 PostgreSQL16.14、Chromium151.0.7922.173。PG使用既有业务正确性配置和2worker，单测使用既有非数据库配置。所有角色和订单为合成TEST，时间取同次Vitest结构化报告起止；测试不等同部署验收。",
-      "startedAt": "2026-11-23T04:14:17.778Z",
-      "endedAt": "2026-11-23T04:14:24.476Z",
-      "log": "/tmp/dx-workbench-auxiliary-evidence/current-unit.log",
-      "logSha256": "e5bc4b477f25ffee8d64192b1c42b90165a4a488da5cb5cfe7ae1bac8505ddc4",
+      "testedHead": "4e1f60c42539fe4132dce4b3394c7b52314d6cfd",
+      "sourceFingerprint": "6dd616f7adef34cc47ef99873801823f92ed9987e51b0625da8586fa126a08a2",
+      "context": "Node22.22.2、隔离安全标记 PostgreSQL16.14、Chromium151.0.7922.173。双库dx_rework_ci/dx_rework_acceptance_clock_test与低权限运行角色dx_rework_test按实际CI布局建立；保留原Acceptance库名与安全标记守卫。PG用既有业务正确性配置2worker，未宣称本地机器/镜像与GitHub相同。所有身份和数据均为合成TEST。",
+      "startedAt": "2026-11-23T05:05:16.069Z",
+      "endedAt": "2026-11-23T05:05:25.204Z",
+      "log": "/tmp/dx-workbench-auxiliary-evidence/ci-fix-unit.log",
+      "logSha256": "9b783e2786b57cc8f9144d88942fa84d7f53632deec5a71f4acca2c16451ad28",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d59057cd15882a8ee9928b844b537e9b276d7e27a0b71e350a21e065747d9f7d"
+          "sha256": "dd5cb6d86c2b8aac6348f80ee33b428502f975baff6a3a3b705aee7c78b88728"
         }
       ]
     }
   ],
   "executionHistory": {
-    "scope": "保留本地组装中间结果，未用旧源码结果冒称当前冻结版本。",
-    "broadPostgres": "8文件98项按原CI配置通过；随后目录局部分页保护由当前13项真实PG/浏览器组合重新验证。",
-    "nonDatabase": "完整本地非数据库曾4510通过/15跳过；后续组装中一次4509通过、1项时间来源清单失败，已刷新本次明确清单并以当前50项相关单测及285项预检关闭。最终GitHub完整门禁另核准确Head。",
+    "scope": "失败、基线及修订结果分开保留，不用旧源码结果冒称当前冻结版本。",
+    "broadPostgres": "早期8文件98项与13项目录组合为历史组装证据；当前修订以同CI双库3文件15项为准确本地PG证据。",
+    "firstFull": "4e1f60c4的45112195078：非数据库4514通过/11跳过；PG先21和60通过，正确性组合510通过、1断言失败、4未执行且一个套件初始化失败。45项资源清理通过；未合并或重跑失败头。",
+    "baseline": "精确0a6823e4的原供应商文件1通过/1失败，复现同一缺少重读入口；实际中断1次、旧15行、错误可见。修正仅新增显式失败清行与原断言的真实请求/DOM同步。",
+    "nonDatabase": "原本地时间清单失败已关闭；当前73项相关单测及285项预检通过。最终GitHub完整门禁另核准确Head。",
     "optionalScope": "本次交付原四种目录命令和§17明确历史面板，未增加建议性通用规格/供应商写命令。"
   }
 }
