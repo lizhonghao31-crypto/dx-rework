@@ -167,23 +167,43 @@ const document: BudgetDocument = {
   outsourcingScope: '', outsourcingUnitPrice: '', imageAttachmentIds: [],
   rows: [{rowId: ROW, section: '主料', category: '', name: 'TEST fabric', specification: '', unit: '米', supplier: '', consumption: '1.2', unitPrice: '10'}],
 };
+const quotationPolicyQuery = "SELECT to_jsonb(rule)->>'workbench_commercial_policy' AS policy FROM digital_commercial_order_rules rule WHERE production_order_id=$1";
 function quotationDatabase(roles: string[], assignee = OTHER) {
   return database(roles, (sql, values) => {
-    if (sql.startsWith('SELECT * FROM digital_production_orders ')) return [order()];
-    if (sql.startsWith('SELECT * FROM digital_quotation_documents ')) return [{
-      quote_id: QUOTE, source_id: null, production_order_id: ORDER, version: 1, confirmed_version: null, document,
-      assignments: [{rowId: ROW, technicalAssigneeId: assignee, priceAssigneeId: OTHER, priceRole: 'sample_designer'}],
-      consumption_sources: {}, price_sources: {},
-    }];
+    if (sql === 'SELECT * FROM digital_production_orders WHERE production_order_id=$1') {
+      expect(values).toEqual([ORDER]);
+      return [order()];
+    }
+    if (sql === quotationPolicyQuery) {
+      expect(values).toEqual([ORDER]);
+      return [{policy: null}]; // A formal order created under the original quotation policy.
+    }
+    if (sql === 'SELECT * FROM digital_quotation_documents WHERE production_order_id=$1 OR ($2::uuid IS NOT NULL AND source_id=$2)') {
+      expect(values).toEqual([ORDER, null]);
+      return [{
+        quote_id: QUOTE, source_id: null, production_order_id: ORDER, version: 1, confirmed_version: null, document,
+        assignments: [{rowId: ROW, technicalAssigneeId: assignee, priceAssigneeId: OTHER, priceRole: 'sample_designer'}],
+        consumption_sources: {}, price_sources: {},
+      }];
+    }
     if (sql.startsWith('WITH candidates AS (SELECT q.source_id,q.production_order_id,q.updated_at ')) {
       return values[0] && values[1] === ACTOR ? [{source_id: null, production_order_id: ORDER,
         style_no: order().design_style_no, customer_code: order().customer_code, source_designer: OTHER,
         primary_merchandiser_id: OTHER, version: 1, confirmed_version: null,
         assignments: [{rowId: ROW, technicalAssigneeId: assignee, priceAssigneeId: OTHER, priceRole: 'sample_designer'}]}] : [];
     }
-    if (sql.startsWith('SELECT id,display_name FROM app_users ')) return [{id: ACTOR, display_name: 'TEST reader'}, {id: OTHER, display_name: 'TEST designer'}];
-    if (sql.startsWith('SELECT version,quote_id,quote_version,status FROM digital_budget_documents ')) return [];
-    if (sql.startsWith('SELECT version FROM digital_quotation_versions ')) return [{version: 1}];
+    if (sql === 'SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])') {
+      expect(values).toEqual([[...new Set([assignee, OTHER])]]);
+      return [{id: ACTOR, display_name: 'TEST reader'}, {id: OTHER, display_name: 'TEST designer'}];
+    }
+    if (sql === 'SELECT version,quote_id,quote_version,status FROM digital_budget_documents WHERE production_order_id=$1') {
+      expect(values).toEqual([ORDER]);
+      return [];
+    }
+    if (sql === 'SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC') {
+      expect(values).toEqual([QUOTE]);
+      return [{version: 1}];
+    }
     return undefined;
   });
 }
@@ -198,11 +218,13 @@ describe('PMC full quotation reads preserve original row and command permissions
       designStyleNo: result.designStyleNo, customerCode: result.customerCode, version: 1, status: 'draft'}]});
   });
 
-  it('does not expose revoked PMC quotation data', async () => {
-    const service = new DigitalQuotationService(quotationDatabase([]).pool, true);
-    await expect(service.read(actor('pmc'), {kind: 'order', id: ORDER})).rejects.toMatchObject({statusCode: 404});
-    await expect(service.list(actor('pmc'))).resolves.toEqual({items: []});
-  });
+  it.each([{role: 'pmc', active: []}, {role: 'quality_control', active: ['quality_control']}])(
+    'denies $role without quotation read scope before loading order policy', async ({role, active}) => {
+      const db = quotationDatabase(active), service = new DigitalQuotationService(db.pool, true);
+      await expect(service.read(actor(role), {kind: 'order', id: ORDER})).rejects.toMatchObject({statusCode: 404});
+      await expect(service.list(actor(role))).resolves.toEqual({items: []});
+      expect(db.query.mock.calls.some(([sql]) => sql === quotationPolicyQuery)).toBe(false);
+    });
 
   it.each([ACTOR, OTHER])('preserves a real assigned worker role without giving price or structure authority (assignee %s)', async assignee => {
     const db = quotationDatabase(['pmc', 'pattern_room_worker'], assignee);
@@ -215,7 +237,8 @@ describe('PMC full quotation reads preserve original row and command permissions
     const db = quotationDatabase(['pmc']), service = new DigitalQuotationService(db.pool, true), pmc = actor('pmc'), resource = {kind: 'order' as const, id: ORDER};
     await expect(service.participants(pmc, resource)).rejects.toMatchObject({statusCode: 404});
     await expect(service.fillRow(pmc, resource, ROW, {expectedVersion: 1, consumption: '2'}, 'former-worker-command')).rejects.toMatchObject({statusCode: 404});
-    expect(db.query.mock.calls.some(([sql]) => sql.includes('digital_production_commands') || /^(INSERT|UPDATE|DELETE)\b/.test(sql))).toBe(false);
+    expect(db.query.mock.calls.some(([sql]) => sql === quotationPolicyQuery
+      || sql.includes('digital_production_commands') || /^(INSERT|UPDATE|DELETE)\b/.test(sql))).toBe(false);
   });
 });
 

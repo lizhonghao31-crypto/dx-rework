@@ -19,7 +19,7 @@ import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR02 customer-confirmed quotation to bounded budget PostgreSQL',()=>{
  const schema=ownedPostgresSchema('customer_quote'),admin=new pg.Pool({connectionString:url}),database=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
- const designer=randomUUID(),other=randomUUID(),root=randomUUID(),merch=randomUUID(),tech=randomUUID(),ie=randomUUID();let legacyId:string;
+ const designer=randomUUID(),other=randomUUID(),root=randomUUID(),merch=randomUUID(),tech=randomUUID(),ie=randomUUID();let legacyId:string,olderSource:{sourceId:string},olderStyle:string;
  const actor=(actorId=designer,actorRoles=['sample_designer']):TrustedActorContext=>({actorId,actorRoles,requestId:'TEST-quote',authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view','pattern_room:orders:create']});
  const budget=new DigitalBudgetService(database,true),identity=new DigitalProductionIdentityService(database,true),quotes=new DigitalQuotationService(database,true);
  const owner=()=>actor(merch,['order_merchandiser']);
@@ -67,6 +67,9 @@ const url=process.env.TEST_DATABASE_URL;
  legacyId=await order();await budget.save(actor(),legacyId,{expectedVersion:0,document:baseDocument()},randomUUID());
  await database.query(await readFile(new URL('../../apps/api/migrations/0267_customer_quotation_budget_basis.sql',import.meta.url),'utf8'));
  for(const name of ['0221_digital_production_notifications.sql','0222_digital_development_documents.sql'])await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),'utf8'));
+ olderStyle=`TEST-BEFORE-WORKBENCH-${randomUUID()}`;
+ olderSource=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:olderStyle,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+ await database.query(await readFile(new URL('../../apps/api/migrations/0298_designer_workbench_commercial_policy.sql',import.meta.url),'utf8'));
  });
  afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  it('enrols every new formal order at database boundary and preserves historical budgets without fabricated quotes',async()=>{
@@ -75,6 +78,56 @@ const url=process.env.TEST_DATABASE_URL;
    expect((await budget.read(owner(),legacyId)).comparison?.policy).toBe('legacy');
    expect((await budget.publish(owner(),legacyId,1,randomUUID())).status).toBe('published');
    expect((await database.query('SELECT * FROM digital_quotation_versions')).rows).toHaveLength(0);
+ });
+ it('applies new designer confirmation only to new roots and preserves the original quotation rules when an existing source converts',async()=>{
+   const direct=await order(),directResource={kind:'order' as const,id:direct},quote=await readyQuote(directResource);
+   expect((await quotes.read(owner(),directResource)).canConfirm).toBe(false);
+   expect((await quotes.read(actor(),directResource)).canConfirm).toBe(true);
+   await expect(quotes.confirm(owner(),directResource,confirmation(quote.sheet.version),randomUUID())).rejects.toMatchObject({statusCode:403});
+   await expect(budget.authorizeUpload(owner(),direct)).rejects.toMatchObject({statusCode:403});
+   expect(await budget.read(owner(),direct)).toMatchObject({canEdit:false,comparison:{workbenchBasis:'unconfirmed'}});
+   const confirmed=await quotes.confirm(actor(),directResource,confirmation(quote.sheet.version),randomUUID());
+   expect(confirmed).toMatchObject({confirmedBy:'TEST P01',confirmedVersion:quote.sheet.version,
+    confirmation:{confirmedAt:'2026-01-01T00:00:00Z',customerCode:'PD',customerConfirmedTotal:'20'},
+    budget:{workbench:{canOpen:true,canEdit:true}}});
+   expect(await budget.read(owner(),direct)).toMatchObject({version:1,canEdit:true,comparison:{workbenchBasis:'valid'}});
+
+   const newerStyle=`TEST-AFTER-WORKBENCH-${randomUUID()}`;
+   const newer=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:newerStyle,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   expect((await database.query('SELECT workbench_commercial_policy FROM digital_production_sources WHERE source_id=$1',[olderSource.sourceId])).rows[0]).toEqual({workbench_commercial_policy:null});
+   for(const [sourceId,style,expected] of [[olderSource.sourceId,olderStyle,null],[newer.sourceId,newerStyle,'designer_quote_v1']] as const){
+    const resource={kind:'source' as const,id:sourceId},ready=await readyQuote(resource);
+    const client=await database.connect();
+    try {
+     await client.query('BEGIN');
+     const task=await new DigitalProductionTaskService(database).createWithClient(client,actor(root,['root_superuser']),{resource,kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null});
+     await client.query("INSERT INTO digital_development_documents(source_id,version,status,document,published_at,task_id,updated_by) VALUES($1,1,'published','{}',CURRENT_TIMESTAMP,$2,$3)",[sourceId,task.taskId,designer]);
+     await client.query('COMMIT');
+    } catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    const orderId=await order(sourceId,style);
+    const saved=(await database.query('SELECT policy,workbench_commercial_policy FROM digital_commercial_order_rules WHERE production_order_id=$1',[orderId])).rows[0];
+    expect(saved).toEqual({policy:'quote_v1',workbench_commercial_policy:expected});
+    const formal={kind:'order' as const,id:orderId};
+    expect((await quotes.read(owner(),formal)).canConfirm).toBe(expected===null);
+    if(expected===null)await quotes.confirm(owner(),formal,confirmation(ready.sheet.version),randomUUID());
+    else await expect(quotes.confirm(owner(),formal,confirmation(ready.sheet.version),randomUUID())).rejects.toMatchObject({statusCode:403});
+   }
+ });
+ it('records one new-order quotation confirmation under competing tabs and recovers its original receipt',async()=>{
+   const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource);
+   const input=confirmation(ready.sheet.version),keys=[randomUUID(),randomUUID()];
+   const attempts=await Promise.allSettled(keys.map(key=>quotes.confirm(actor(),resource,input,key)));
+   const successes=attempts.flatMap((result,index)=>result.status==='fulfilled'?[{receipt:result.value,key:keys[index]!}]:[]);
+   expect(successes).toHaveLength(1);
+   expect(attempts.filter(result=>result.status==='rejected')).toEqual([
+     expect.objectContaining({reason:expect.objectContaining({statusCode:409})})]);
+   const {receipt,key}=successes[0]!;
+   expect(await quotes.confirm(actor(),resource,input,key)).toEqual(receipt);
+   await expect(quotes.confirm(actor(),resource,confirmation(ready.sheet.version,'21'),key)).rejects.toMatchObject({statusCode:409});
+   expect((await database.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1',[receipt.quoteId])).rows)
+     .toEqual([{version:ready.sheet.version}]);
+   expect((await database.query('SELECT created_budget_version FROM digital_budget_quote_conversions WHERE production_order_id=$1',[id])).rows)
+     .toEqual([{created_budget_version:1}]);
  });
  it('requires real technical input and assigned prices, redacts full costs, and rejects cross-order and unauthorized fields',async()=>{
    const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource,true);
@@ -134,6 +187,45 @@ const url=process.env.TEST_DATABASE_URL;
    expect((await database.query('SELECT document FROM digital_budget_versions WHERE production_order_id=$1 AND version=1',[id])).rows[0].document.rows[0].consumption).toBe('1');
    await expect(database.query("UPDATE digital_quotation_versions SET confirmation='{}' WHERE quote_id=$1",[next.quoteId])).rejects.toMatchObject({code:'55000'});
    expect((await quotes.read(actor(),resource,undefined,ready.sheet.version)).confirmation?.customerConfirmedTotal).toBe('20');
+ });
+ it('keeps an unconfirmed revision out of the budget and requires explicit adoption after confirmation',async()=>{
+   const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource);
+   await quotes.confirm(actor(),resource,confirmation(ready.sheet.version),randomUUID());
+   const next=await quotes.fillRow(actor(tech,['pattern_room_worker']),resource,ready.rowId,{expectedVersion:ready.sheet.version,consumption:'0.9'},randomUUID());
+   const original=await budget.read(owner(),id);
+   expect(original).toMatchObject({canEdit:true,canAdoptQuotation:false,comparison:{
+     workbenchBasis:'valid',quoteVersion:ready.sheet.version,pendingQuotationVersion:next.version}});
+   await budget.authorizeUpload(owner(),id);
+   const edited={...original.document!,freight:'1'};
+   const saved=await budget.save(owner(),id,{expectedVersion:original.version,document:edited},randomUUID());
+
+   await quotes.confirm(actor(),resource,confirmation(next.version,'21'),randomUUID());
+   expect(await budget.read(owner(),id)).toMatchObject({version:saved.version,canEdit:false,canAdoptQuotation:true,
+     document:edited,comparison:{workbenchBasis:'adoption_required',currentConfirmedVersion:next.version}});
+   const update={expectedVersion:saved.version,document:{...edited,freight:'2'}};
+   await expect(budget.save(owner(),id,update,randomUUID())).rejects.toMatchObject({statusCode:409});
+   await expect(budget.authorizeUpload(owner(),id)).rejects.toMatchObject({statusCode:403});
+   const adopted=await budget.adoptQuotation(owner(),id,{expectedVersion:saved.version,sourceQuoteVersion:next.version},randomUUID());
+   expect(adopted).toMatchObject({canEdit:true,canAdoptQuotation:false,document:edited,
+     comparison:{workbenchBasis:'valid',quoteVersion:next.version}});
+   await budget.authorizeUpload(owner(),id);
+ });
+ it('revalidates the designer role before allowing new workbench budget writes and replaying their receipts',async()=>{
+   const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource);
+   await quotes.confirm(actor(),resource,confirmation(ready.sheet.version),randomUUID());
+   const initial=await budget.read(actor(),id);
+   const input={expectedVersion:initial.version,document:{...initial.document!,freight:'1'}};
+   const key=randomUUID(),saved=await budget.save(actor(),id,input,key);
+   expect(await budget.save(actor(),id,input,key)).toEqual(saved);
+   await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND role_code='sample_designer'",[designer]);
+   try {
+    expect(await budget.read(actor(),id)).toMatchObject({canEdit:false,version:saved.version});
+    await expect(budget.save(actor(),id,input,key)).rejects.toMatchObject({statusCode:403});
+    await expect(budget.authorizeUpload(actor(),id)).rejects.toMatchObject({statusCode:403});
+   } finally {
+    await database.query("UPDATE user_role_assignments SET revoked_at=NULL WHERE user_id=$1 AND role_code='sample_designer'",[designer]);
+   }
+   expect(await budget.read(owner(),id)).toMatchObject({version:saved.version,document:input.document});
  });
  it('rejects tax/quantity mismatches, stale quote versions, and atomic publish vs quote confirmation races',async()=>{
    const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource);await quotes.confirm(actor(),resource,{...confirmation(ready.sheet.version,'100'),amountScope:'order_total',quantity:6},randomUUID());

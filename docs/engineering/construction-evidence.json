@@ -1,209 +1,159 @@
 {
   "version": 1,
-  "base": "5f00c462ba09b5f240f4f168fc945fea2b6444be",
-  "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
+  "base": "0af33c38e783e7bdcd213dfdbdb925cf779cd14a",
+  "sourceFingerprint": "483c6294571b868786120278ac7630884e17e47124eeced94ce719419a96d0a7",
   "rules": [
     {
-      "rule": "分离创建、开发工作区和共享辅料目录，按源单组织六个固定入口并复用原业务表单。",
-      "source": "《设计开发工作台首轮重构_详细方案.md》Library v7，§§3.1–3.9、§13 PR-1、A/E/L 组。",
+      "rule": "仅迁移启用后首次建立的新来源或直接正式订单采用新报价权限。独立复版和后续正式转单沿原来源策略，已存在的数据不回填。",
+      "source": "《设计开发工作台首轮重构_详细方案》v7 §5.5、§13 PR-2，B03–B11。",
       "writes": [
-        "apps/web/src/cockpit-operation-log.tsx",
-        "apps/web/src/components.tsx",
-        "apps/web/src/designer-order-workbench.tsx",
-        "apps/web/src/development-workspace-return.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/digital-development-execution-panel.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/digital-development-workspace.css",
+        "apps/api/migrations/0298_designer_workbench_commercial_policy.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "apps/api/src/production-platform/development-revision-source.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/identity-service.ts#createSource",
+        "apps/api/src/production-platform/identity-service.ts#createOrder",
+        "apps/api/src/production-platform/identity-service.ts#attachSource",
+        "apps/api/src/production-platform/quotation-budget-basis.ts#workbenchCommercialOrderPolicy"
+      ],
+      "oldTests": [
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/digital-budget-shared-postgres.test.ts"
+      ],
+      "initialization": "在隔离库将旧正式预算与启用前来源建在迁移前。先保留空策略后启用新来源默认，正式单沿已有不可变商业规则区分直接建单和转单。",
+      "dateAndPermission": "按首次来源和不可变订单商业记录判定，避免由最新编辑日期或入口决定。沿用事务角色和报价时点，不替换现有报价确认人及时间。",
+      "expectation": "旧来源后转仍保持它的原确认权限和预算状态，新来源转单和新直接正式订单正确启用，旧预算仍无柔性补表或伪报价。匹配实际迁移摘要和旧历史不改。",
+      "checks": [
+        "workbench-pr2-scope-quotation"
+      ]
+    },
+    {
+      "rule": "新业务的普通客户报价确认归负责设计师，跟单继续原报价协作和已确认后的预算；原生页显示真实确认人、时间、金额、采用版与预算编辑依据。",
+      "source": "同版 v7 §§5.1–5.4，B04–B09、J02–J04。",
+      "writes": [
+        "apps/api/src/production-platform/quotation-service.ts",
         "apps/web/src/digital-quotation-panel.tsx",
-        "apps/web/src/digital-workspace-navigation.ts",
-        "apps/web/src/order-document-container.tsx",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts",
-        "tests/unit/finance-navigation-hierarchy.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts"
+        "packages/contracts/src/digital-quotation.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/designer-order-workbench.tsx#DesignerOrderWorkbench",
-        "apps/web/src/digital-designer-workspace.tsx#beginConfirmation",
-        "apps/web/src/order-document-container.tsx#OrderDocumentContainer",
-        "apps/web/src/digital-quotation-panel.tsx#DigitalQuotationPanel"
+        "apps/web/src/designer-order-workbench.tsx#QuotationSection",
+        "apps/api/src/production-platform/quotation-routes.ts#registerQuotationRoutes",
+        "apps/api/src/production-platform/quotation-budget-basis.ts#ensureQuotationBudget"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts"
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
-      ],
-      "initialization": "真实来源草稿和制单记录分别按原入口读取。六区保留版单现有面板，其他重读和表单按打开时初始化。",
-      "dateAndPermission": "历史轮只读保原业务日期。正式确认仍通过当前来源原资格、原时间检查与幂等命令，不凭工作台入口授予动作。",
-      "expectation": "按款号打开原对象、六区键盘定位，专岗任务返回相同筛选与区域。正式订单只提交一次，成功显示对应订单，保留原来源。 原确认正式单的真实浏览器回执见已复审 a5b98f50；本次集中复跑旧失败、工作区读和原业务时钟。",
+      "initialization": "从合成来源发布原资料，按原报价权限分派真实行、填写后确认；两个同一设计师窗口从同一报价版进入。",
+      "dateAndPermission": "真实普通设计师负责确认，普通跟单维持相应协作和读预算，技术仅能填本行。前端与事务核真实角色、行和版本，客户确认用既有确定时间及凭证。",
+      "expectation": "只报价不生成正式订单。连点、两窗口不同 key 及丢响应恢复仅一次确认和预算转换。旧协作、冻结版本、单位保护和撤权保持相同。",
       "checks": [
-        "1079-readiness-fixed-chain",
-        "1079-readiness-fixed-regular"
+        "workbench-pr2-scope-quotation",
+        "workbench-pr2-full-nondb-node22"
       ]
     },
     {
-      "rule": "实际当前办理信息和草稿量从原授权读取，再按当前已核任务筛选。",
-      "source": "《设计开发工作台首轮重构_详细方案.md》Library v7，§3.7 与 §13 PR-1。",
+      "rule": "新增策略的预算写入、附件及发布须沿同单有效报价和原权限；未确认、未采用的新确认版本或客户冲突阻止越权写入，预算及相关凭证仍走原顺序。",
+      "source": "同版 v7 §§5.2–5.5，B03、B05–B06、B09–B11、K04/K17。",
       "writes": [
-        "apps/api/src/production-platform/development-workspace-query.ts",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "packages/contracts/src/digital-development-workspace.ts"
+        "apps/api/src/production-platform/budget-service.ts",
+        "apps/api/src/production-platform/quotation-budget-basis.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-workspace-query.ts#handling",
-        "apps/api/src/production-platform/notification-service.ts#workbenchNativeActions",
-        "apps/api/src/production-platform/identity-service.ts#developmentDrafts"
+        "apps/api/src/production-platform/budget-routes.ts#registerBudgetRoutes",
+        "apps/api/src/production-platform/budget-sourcing-adapter.ts#readBudgetSourcing",
+        "apps/api/src/production-platform/budget-washing-fees.ts#BudgetWashingFeeService",
+        "apps/web/src/digital-budget-panel.tsx#DigitalBudgetPanel"
       ],
       "oldTests": [
-        "tests/integration/workspace-page-facts-postgres.test.ts",
-        "tests/unit/digital-development-workspace.test.ts"
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/digital-budget-shared-postgres.test.ts",
+        "tests/integration/budget-washing-fees-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
-      ],
-      "initialization": "旧请求未启用工作台布局仍用原集合。新布局由已授权母单投影限定实际任务集合，先筛再取页。",
-      "dateAndPermission": "按当前任务角色与执行条件决定可办或只读，草稿数按原创建身份。未覆盖的非任务事项标为待核。",
-      "expectation": "同单原生和索引路径返回同一已核办理集合。原角色拒绝仍有效，用户打开等待项仅得到原任务只读入口。",
+      "initialization": "同一普通跟单有订单 A 与 B，客户只确认 A，旧预算及未确认 B 在真实服务及签名浏览器中对照。",
+      "dateAndPermission": "走原有主跟单、设计师或批准的 Root 角色边界。事务内校验角色和期望版本，已冻结历史与洗水费用维持原对象事实及权限。",
+      "expectation": "A 原页/API 确认前拒绝编辑，确认后只可写 A 且值、版本可读回。新草稿不抢已采用依据，新确认有明确采用，历史预算及外发附件版本不覆盖。",
       "checks": [
-        "1079-readiness-fixed-regular",
-        "1079-readiness-fixed-chain"
+        "workbench-pr2-scope-quotation"
       ]
     },
     {
-      "rule": "设计师仅维护新流程合格辅料预计，实到复用文员原核验，保留旧记录和原审批约束。",
-      "source": "《设计开发工作台首轮重构_详细方案.md》Library v7，§3.10 及 M01–M06.",
+      "rule": "报价可见资格须在读取订单策略前判断。无报价读取权限、撤权及只有 PMC 权限的写入或回执入口沿原规则 404。",
+      "source": "v7 §5.3、§5.5、B12；#1080 Full 45084954279 non-db 137402222994 的 PMC 角色回归。",
       "writes": [
-        "apps/api/src/production-platform/development-amendment-service.ts",
-        "apps/api/src/production-platform/development-document-format.ts",
-        "apps/api/src/production-platform/development-execution-read.ts",
-        "apps/api/src/production-platform/development-execution-service.ts",
-        "apps/api/src/production-platform/development-material-check-rules.ts",
-        "apps/api/src/production-platform/development-material-verification.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/web/src/development-amendment-panel.tsx",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/development-material-event-form.tsx",
-        "packages/contracts/src/digital-development-amendments.ts",
-        "packages/contracts/src/digital-development.ts",
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts",
-        "apps/api/src/production-platform/development-supply.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "apps/api/src/production-platform/quotation-service.ts#context",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-service.ts#materialEvent",
-        "apps/api/src/production-platform/development-material-verification.ts#appliedVerification",
-        "apps/web/src/development-material-event-form.tsx#DevelopmentAccessoryForecastForm",
-        "apps/api/src/production-platform/development-supply.ts#submitDevelopmentSupply",
-        "apps/api/src/production-platform/development-material-check-rules.ts#readMaterialRecheckBasis"
+        "apps/api/src/production-platform/quotation-service.ts#read",
+        "apps/api/src/production-platform/quotation-service.ts#participants",
+        "apps/api/src/production-platform/quotation-service.ts#command",
+        "apps/api/src/production-platform/quotation-service.ts#list",
+        "apps/api/src/production-platform/quotation-budget-basis.ts#workbenchCommercialOrderPolicy"
       ],
       "oldTests": [
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/development-round-history-clock-postgres.test.ts"
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
-      ],
-      "initialization": "同一个合成开发单保面料和两件必要辅料。原复核只在文员提交后才应用事实；保留既有补正草稿和退出保护。",
-      "dateAndPermission": "预计日期要求正确轮次、资料及材料记录版本。面料不写辅料预计，普通设计师不写实到；历史轮及 Root 原有路径分别验证。",
-      "expectation": "更新辅料预计不会放行车板。仅核一件及保存两件草稿均继续等待，文员逐件实核提交后原车板人员才可办理。 对原退回补料按准确当前轮、材料与版本用原任务投递给文员。交接和补核草稿不产生实到；文员逐项正式通过才生效。保留旧补料路径及资料问题未改拒绝。 轮次精确绑定预计修改；设计师写实到拒绝，文员提交才生成 Journey 真实完成及解除到料提醒，纸样 R/D 原责任窗口与旧病例年龄不变。 #1077 预下单草稿只录材料需求，通过真实交接交原跟单。五例旧夹具带入实到标记，基线五通过、上一候选五拒绝。本次只修两处预下单夹具，草稿断言无实到，原投料、换人、附件、历史和时效验证继续。",
+      "initialization": "原权限测试用预先建立的旧策略订单，真实隔离数据库明确建立迁移前来源、迁移后来源及直接正式单并分别读取。",
+      "dateAndPermission": "沿用原资源、实际角色、行归属和撤权检查。合法报价范围内订单政策只决定普通主跟单是否具有确认资格，不改变报价或账务发生时点。",
+      "expectation": "有权的 PMC 和生产管理仍可看完整报价；纯 PMC 写入口、已撤权 PMC 和无关质检不可查询订单策略或回执、不可写。实际旧策略保留主跟单确认，新策略由有权设计师确认，真实确认人及同单预算仍可读。",
       "checks": [
-        "1079-readiness-fixed-chain",
-        "1079-readiness-fixed-regular",
-        "1079-readiness-fixed-execution"
+        "workbench-pr2-scope-quotation",
+        "workbench-pr2-full-nondb-node22"
       ]
     }
   ],
   "checks": [
     {
-      "id": "1079-readiness-fixed-chain",
+      "id": "workbench-pr2-scope-quotation",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-chain.json --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/development-round-history-clock-postgres.test.ts",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/workbench-pr2-scope-quotation.json tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/customer-quotation-postgres.test.ts tests/integration/digital-budget-shared-postgres.test.ts tests/integration/budget-washing-fees-postgres.test.ts tests/integration/budget-washing-fees-browser-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 163,
+      "passed": 33,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "8f7c0c2f126d11391bef0698fd0d4cf02a5ba188",
-      "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
-      "context": "本地隔离低权限 PostgreSQL 16.16，Node 22.22.2，单 worker，浏览器套件用签名 Chromium 与原 API，同一合成业务领域。",
-      "startedAt": "2026-11-22T22:55:41.103Z",
-      "endedAt": "2026-11-22T23:02:26.986Z",
-      "log": "/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-chain.log",
-      "logSha256": "ea381e2bf7bdeed2e47c0727140218b26bae9c51ef2c8eaad55f593f54998f12",
+      "testedHead": "40728efbfef95e83e2dfdca31171acf4cb2d1618",
+      "sourceFingerprint": "483c6294571b868786120278ac7630884e17e47124eeced94ce719419a96d0a7",
+      "context": "Node 22.22.2，隔离 PostgreSQL 16.16，单 worker。真实报价、预算、洗水费用和签名浏览器；按原角色与商业规则验证，不使用生产数据。",
+      "startedAt": "2026-11-23T00:02:05Z",
+      "endedAt": "2026-11-23T00:03:33Z",
+      "log": "/tmp/dx-designer-workbench-evidence/workbench-pr2-scope-quotation.log",
+      "logSha256": "c8b9eb9d1ff0fd32ff35a6dfe0ac096d12a1a4fa0a05e3bee78f91d49e8b0069",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8272cb6ef131b4579371002157b87763bf3a9ab932288112ba84d8d5b00f6d27"
+          "sha256": "4e004c427f3c0fb367f43465df69dc00bdcac3340c4f3e30f28965b2aee4c9fc"
         }
       ]
     },
     {
-      "id": "1079-readiness-fixed-regular",
+      "id": "workbench-pr2-full-nondb-node22",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-regular.json --config vitest.config.ts tests/integration/digital-journey-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/development-amendment-postgres.test.ts tests/integration/workspace-page-facts-postgres.test.ts",
+      "command": "env DATABASE_URL='' TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' NODE_ENV=test node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/workbench-pr2-full-nondb-node22.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 88,
+      "passed": 4508,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "8f7c0c2f126d11391bef0698fd0d4cf02a5ba188",
-      "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
-      "context": "本地隔离低权限 PostgreSQL 16.16，Node 22.22.2，单 worker，浏览器套件用签名 Chromium 与原 API，同一合成业务领域。",
-      "startedAt": "2026-11-22T23:02:26.998Z",
-      "endedAt": "2026-11-22T23:04:15.011Z",
-      "log": "/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-regular.log",
-      "logSha256": "682805ce31b56bb8e7950dd9ff957dfeb48dec19fea31318dd3a1dfdb43a989c",
+      "skipped": 15,
+      "testedHead": "40728efbfef95e83e2dfdca31171acf4cb2d1618",
+      "sourceFingerprint": "483c6294571b868786120278ac7630884e17e47124eeced94ce719419a96d0a7",
+      "context": "Node 22.22.2；与 Full non-db 相同的 Vitest 默认完整套件、数据库环境留空、单 worker。核 PMC、管理员、无关身份和撤权角色，查询替身严格检查原订单及参数。",
+      "startedAt": "2026-11-23T00:03:03Z",
+      "endedAt": "2026-11-23T00:10:54Z",
+      "log": "/tmp/dx-designer-workbench-evidence/workbench-pr2-full-nondb-node22.log",
+      "logSha256": "5757d3433bde6c0b898b6095c91f26d1226a345a577bd58886cf63e46d0eec9e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "77a8766d5eb9e3a41d31397518d9b33381d110ec936bea20ed06bde1e84538ab"
-        }
-      ]
-    },
-    {
-      "id": "1079-readiness-fixed-execution",
-      "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npm exec -- vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-execution.json --config vitest.config.ts tests/integration/digital-development-execution-postgres.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 24,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "8f7c0c2f126d11391bef0698fd0d4cf02a5ba188",
-      "sourceFingerprint": "835a4e8b11c080df2e9f8549f38a95f85420c3b53d2bbdd13cc18d8a582fafd8",
-      "context": "本地隔离低权限 PostgreSQL 16.16，Node 22.22.2，单 worker，浏览器套件用签名 Chromium 与原 API，同一合成业务领域。",
-      "startedAt": "2026-11-22T23:04:15.915Z",
-      "endedAt": "2026-11-22T23:04:23.943Z",
-      "log": "/tmp/dx-designer-workbench-evidence/1079-readiness-fixed-execution.log",
-      "logSha256": "13a7199786a26a389f287cb04e94151c8e4fa4401703d021e163129a6e5794e4",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "ee072cc08c9e147f1520745bc74ad1a688e5a198b8515b75bb3307cb085f5a3a"
+          "sha256": "76693c2b4144cee45c1de7f9a661e46354eae368f1628fa51d7137ab044debc7"
         }
       ]
     }
