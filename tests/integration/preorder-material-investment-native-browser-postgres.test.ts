@@ -64,8 +64,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const material=draft.document.materials.find((row:{name:string})=>row.name==='TEST 预下单棉布');
    expect(material).toMatchObject({quantity:'75米',supplier:'TEST 供应商',unitPrice:'12.75',pricingUnit:'米'});
    await page.getByRole('button',{name:'＋ 添加配布',exact:true}).click();
-   const unnamed=page.getByLabel('配布 面料名称',{exact:true}).last().locator('xpath=ancestor::tr');
-   await unnamed.getByRole('textbox',{name:/材料单价$/}).fill('0');
+   const spareName=page.getByLabel('配布 面料名称',{exact:true}).last();
+   const unnamed=spareName.locator('xpath=ancestor::tr');
+   const sparePrice=unnamed.getByRole('textbox',{name:/材料单价$/}),spareUnit=unnamed.getByRole('textbox',{name:/计价单位$/});
+   await sparePrice.fill('0');await spareUnit.fill('米');
    await unnamed.getByRole('status').filter({hasText:'请先填写材料名称'}).waitFor();
    const rejected=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/sources/${draft.sourceId}/development`)&&r.request().method()==='PUT');
    await page.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();
@@ -73,6 +75,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(rejection.status()).toBe(400);
    expect(await rejection.text()).toContain('请先填写材料名称');
    expect((await new DigitalDevelopmentService(h.db,true).read(designer,draft.sourceId)).version).toBe(draft.version);
+   await spareName.pressSequentially('TEST spare fabric');
+   expect(await sparePrice.inputValue()).toBe('0');
+   expect(await spareUnit.inputValue()).toBe('米');
+   await unnamed.getByRole('textbox',{name:'配布 规格',exact:true}).fill('TEST changed specification');
+   expect(await sparePrice.inputValue()).toBe('');
+   expect(await spareUnit.inputValue()).toBe('');
    await unnamed.getByRole('button',{name:'删除面料',exact:true}).click();
    await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
    await materialPrice.fill('13.25');

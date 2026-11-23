@@ -167,14 +167,24 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    }finally{await oldTab.close();}
    const next=await source('TEST-新单选料-'+randomUUID()),newTab=await h.open(designer.actorId,1165,{},'/ui/digital-production?development='+next.sourceId);
    try{
-    const page=newTab.page;await page.getByRole('button',{name:'面辅料',exact:true}).click();await page.getByRole('button',{name:'选择共享辅料 1',exact:true}).click();
+    const page=newTab.page;await page.getByRole('button',{name:'面辅料',exact:true}).click();
+    const materialName=page.getByRole('textbox',{name:'辅料品名（材料资料）',exact:true});
+    const orderPrice=page.locator(`#development-${next.materialId}-unitPrice`),priceUnit=page.locator(`#development-${next.materialId}-pricingUnit`);
+    await materialName.fill('');
+    await orderPrice.fill('0');await priceUnit.fill('枚');
+    await materialName.pressSequentially('TEST manual auxiliary');
+    expect(await orderPrice.inputValue()).toBe('0');
+    expect(await priceUnit.inputValue()).toBe('枚');
+    await page.getByRole('textbox',{name:'辅料规格（选填）',exact:true}).fill('TEST changed specification');
+    expect(await orderPrice.inputValue()).toBe('');
+    expect(await priceUnit.inputValue()).toBe('');
+    await page.getByRole('button',{name:'选择共享辅料 1',exact:true}).click();
     const picker=page.getByRole('dialog',{name:'共享辅料',exact:true});
     const picked=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/master-data/auxiliaries'&&new URL(response.url()).searchParams.get('q')===old.name);
     await picker.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
     expect((await (await picked).json()).items).toEqual([current]);
     await picker.getByRole('button',{name:'选择此辅料',exact:true}).click();await picker.waitFor({state:'hidden'});
     expect(await page.getByRole('textbox',{name:'辅料品名（材料资料）',exact:true}).inputValue()).toBe(current.name);
-    const orderPrice=page.locator(`#development-${next.materialId}-unitPrice`);
     expect(await orderPrice.inputValue()).toBe('2.35');
     await orderPrice.fill('3.5');
     const savedResponse=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/digital-production/sources/${next.sourceId}/development`&&response.request().method()==='PUT');

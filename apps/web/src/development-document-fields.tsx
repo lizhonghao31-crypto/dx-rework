@@ -96,14 +96,22 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
     if(value&&item.expectedDate&&!await confirmInApp(`标记已有实物后，预计到料 ${item.expectedDate} 作为原计划保留，当前不再编辑。继续？`))return;
     if(!writing.current)changeMaterial(index,{available:value});
   };
+  const fillingMaterialName=useRef<string|null>(null);
+  const materialNameFocus=(item:DevelopmentMaterial)=>({
+    onFocusCapture:()=>{fillingMaterialName.current=!item.name.trim()&&!item.auxiliaryCatalog?item.materialId:null;},
+    onBlurCapture:()=>{if(fillingMaterialName.current===item.materialId)fillingMaterialName.current=null;},
+  });
   const changeMaterial=(index:number,patch:Partial<DevelopmentMaterial>)=>edit({materials:document.materials.map((item,i)=>{
     if(i!==index)return item;
     const next={...item,...patch};
     const changedIdentity=(["name","specification","supplier","auxiliaryKind"] as const).some(key=>Object.hasOwn(patch,key)&&patch[key]!==item[key]);
     if(changedIdentity&&!Object.hasOwn(patch,"auxiliaryCatalog")){
       delete next.auxiliaryCatalog;
-      if(item.unitPrice!==undefined)next.unitPrice="";
-      if(item.pricingUnit!==undefined)next.pricingUnit="";
+      const completingName=Object.hasOwn(patch,"name")&&fillingMaterialName.current===item.materialId;
+      if(!completingName){
+        if(item.unitPrice!==undefined)next.unitPrice="";
+        if(item.pricingUnit!==undefined)next.pricingUnit="";
+      }
     }
     return next;
   })});
@@ -169,7 +177,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
   const commonMaterialFields=[["supplier","供应商"],["quantity","数量"],["quantityUnit","数量单位"]] as const;
   const showMaterialPricing=!readonly&&(workbench||light||document.quotationMode==="automatic_v1")||document.materials.some(item=>item.unitPrice!==undefined);
   const materialTable=(limit:number)=><section className="development-material-group"><DocumentTableScroll><table className="development-technical-table"><thead><tr>{["类型","材料名称 / 规格",...(compact?["供应商","数量 / 单位"]:[]),...(showMaterialPricing?["材料单价 / 单位"]:[]),"使用范围确认","已有实物","预计到料","操作"].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>
-              {document.materials.slice(0,limit).map((item,index)=><Fragment key={item.materialId}><tr data-doc-row><td><span className="development-material-category">{item.category}</span>{item.category==="辅料"&&<small>辅料类型：{item.auxiliaryKind??"普通辅料"}</small>}</td><td>{item.category==="辅料"&&<div className="development-auxiliary-selection"><strong>{item.name||"尚未选择辅料"}</strong>{!readonly&&<Button type="button" aria-label={`选择共享辅料 ${index+1}`} disabled={busy} onClick={()=>setAuxiliaryMaterialId(item.materialId)}>搜索或新增共享辅料</Button>}{item.auxiliaryCatalog&&<small>已保存目录版本 {item.auxiliaryCatalog.version} 的资料快照</small>}</div>}<label className="development-visible-material-label">品名<DocumentField id={`development-${item.materialId}-name`} label={`${item.category}品名（材料资料）`} value={item.name} column="name" readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{name:value})} issue={issue(`development-${item.materialId}-name`)}/></label><label className="development-visible-material-label">规格<DocumentField id={`development-${item.materialId}-specification`} label={`${item.category}规格（${!workbench&&item.category==="主布"?"发布必填":"选填"}）`} value={item.specification} column="specification" readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{specification:value})} issue={issue(`development-${item.materialId}-specification`)}/></label></td>
+              {document.materials.slice(0,limit).map((item,index)=><Fragment key={item.materialId}><tr data-doc-row><td><span className="development-material-category">{item.category}</span>{item.category==="辅料"&&<small>辅料类型：{item.auxiliaryKind??"普通辅料"}</small>}</td><td>{item.category==="辅料"&&<div className="development-auxiliary-selection"><strong>{item.name||"尚未选择辅料"}</strong>{!readonly&&<Button type="button" aria-label={`选择共享辅料 ${index+1}`} disabled={busy} onClick={()=>setAuxiliaryMaterialId(item.materialId)}>搜索或新增共享辅料</Button>}{item.auxiliaryCatalog&&<small>已保存目录版本 {item.auxiliaryCatalog.version} 的资料快照</small>}</div>}<label className="development-visible-material-label" {...materialNameFocus(item)}>品名<DocumentField id={`development-${item.materialId}-name`} label={`${item.category}品名（材料资料）`} value={item.name} column="name" readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{name:value})} issue={issue(`development-${item.materialId}-name`)}/></label><label className="development-visible-material-label">规格<DocumentField id={`development-${item.materialId}-specification`} label={`${item.category}规格（${!workbench&&item.category==="主布"?"发布必填":"选填"}）`} value={item.specification} column="specification" readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{specification:value})} issue={issue(`development-${item.materialId}-specification`)}/></label></td>
                 {compact&&commonMaterialFields.map(([key,label],column)=>column===2?null:<td key={key}>
                   {(column===0?[[key,label] as const]:commonMaterialFields.slice(1)).map(([field,fieldLabel])=><label key={field} className="development-visible-material-label">{fieldLabel}
                     <DocumentField id={`development-${item.materialId}-${field}`} label={`${item.label} ${fieldLabel}`}
@@ -294,7 +302,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
     </tr></thead><tbody>
       {document.materials.map((item,index)=>item.category!=="辅料"&&<tr key={item.materialId}>
         <th scope="row">{item.category} {index+1}</th>
-        {preorderFabricFields.map(([field,label])=><td key={field}>
+        {preorderFabricFields.map(([field,label])=><td key={field} {...(field==='name'?materialNameFocus(item):{})}>
           {!readonly?<DevelopmentEntryText id={`development-${item.materialId}-${field}`} label={`${item.category} ${label}`}
             value={item[field]} isDisabled={busy} maxLength={100} onChange={value=>changeMaterial(index,{[field]:value})}
             {...(issue(`development-${item.materialId}-${field}`)?{status:{type:'error' as const,message:issue(`development-${item.materialId}-${field}`)!}}:{})}/>
