@@ -15,11 +15,15 @@ export function validateDevelopmentMaterialPlan(document:DevelopmentDocument,bas
 export function developmentDraftForSave(input:DevelopmentDocument,previous:DevelopmentDocument|undefined,createdAt:Date|string):DevelopmentDocument{
  const fixedDate=previous?.orderDate??beijingCalendarDate(new Date(createdAt));
  if(input.orderDate&&input.orderDate!==fixedDate)reject(`开发下单日期固定为${fixedDate}，请重新读取本单；客户下单日期在订单资料中单独填写`);
+ if(previous?.workbenchSheet&&!input.workbenchSheet)reject("不能移除已保存的新版版单；请重新读取当前资料");
+ if(previous&&!previous.workbenchSheet&&input.workbenchSheet)reject("原草稿须沿用保存时的版单格式");
  if(previous?.documentFormatVersion===2&&(input.documentFormatVersion!==2||!input.sizeQuantities))reject("不能移除已保存的每码制作数量，请重新读取当前资料");
  return {...input,...(previous?.quotationMode?{quotationMode:previous.quotationMode}:{}),documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null),orderDate:fixedDate};
 }
 /** A new physical round always uses the new protocol; its source date remains the frozen first date. */
 export function developmentRevisionForSave(input:DevelopmentDocument,basis:DevelopmentDocument):DevelopmentDocument{
+ if(basis.workbenchSheet&&!input.workbenchSheet)reject("复版须保留新版版单；请重新读取原资料");
+ if(!basis.workbenchSheet&&input.workbenchSheet)reject("复版须沿用原版单格式");
  if(input.orderDate!==basis.orderDate)reject("实际复版不能改写首次开发下单日期，请保留原日期；客户日期独立办理");
  return {...input,...(basis.quotationMode?{quotationMode:basis.quotationMode}:{}),documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null)};
 }

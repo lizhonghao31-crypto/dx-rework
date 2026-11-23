@@ -1,8 +1,10 @@
 import {randomUUID} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
-import {DevelopmentDocumentSchema,developmentPublishErrors,developmentSizeQuantityIssues} from '@dx-rework/contracts/digital-development';
+import {DevelopmentDocumentSchema,developmentPublishErrors,developmentSizeQuantityIssues,developmentMaterialPublishIssues,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderIsReady,salesYearOptions} from '@dx-rework/contracts/digital-production';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
+import {developmentDraftForSave,developmentRevisionForSave} from '../../apps/api/src/production-platform/development-document-format.js';
+import {developmentAmendmentErrors} from '@dx-rework/contracts/digital-development-amendments';
 import {developmentIssues} from '../../apps/web/src/digital-development-validation.js';
 
 const order=()=>InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-ID',temporaryStyleNo:null,orderDate:'2026-11-01',contractDeliveryDate:null,salesYear:2027,salesSeries:'P05',requiresColorMatching:false,lines:[{color:'蓝',deliveryDate:'2027-03-15',sizes:[{size:'',quantity:''}]}]});
@@ -58,5 +60,48 @@ describe('development creation sizes are optional for both order intents',()=>{
     const value=order();expect(value.salesSeries).toBe('P05');expect(value.requiresColorMatching).toBe(false);expect(value.lines[0]?.deliveryDate).toBe('2027-03-15');
     expect('plannedShippingDate' in value).toBe(false);
     expect(InitialCustomerOrderDraftSchema.safeParse({...value,salesSeries:'P13'}).success).toBe(false);
+  });
+});
+
+describe('versioned workbench sheets preserve the legacy document contract',()=>{
+  const draft=():DevelopmentDocument=>({
+    ...initialDevelopmentDocument(),orderDate:'2026-11-01',quantity:2,
+    workbenchSheet:{
+      version:1,styleName:'外套',brand:'TEST',gender:'女装',boardType:'船头版',processingSelected:true,referenceNote:'纸样说明',
+      sewingRows:[{rowId:randomUUID(),color:'蓝',size:'',quantity:null}],
+    },
+  });
+  it('validates only the declared new fields and actual fabric rows before publication',()=>{
+    const sheet=draft();
+    const fabric={...sheet.materials[0]!,name:'斜纹布',composition:'棉',width:'120 cm',supplier:'TEST 布行'};
+    const auxiliary={...sheet.materials[0]!,materialId:randomUUID(),category:'辅料' as const,name:'钮扣',label:'辅料'};
+    sheet.materials=[fabric,auxiliary,{...sheet.materials[0]!,materialId:randomUUID()}];
+    expect(DevelopmentDocumentSchema.parse(sheet)).toEqual(sheet);
+    expect(developmentPublishErrors(sheet)).toEqual([]);
+    expect(developmentMaterialPublishIssues({...sheet,materials:[{...fabric,supplier:''},auxiliary]})).toEqual([
+      expect.objectContaining({materialId:fabric.materialId,field:'supplier'}),
+    ]);
+    const legacy={...sheet};delete legacy.workbenchSheet;
+    expect(developmentPublishErrors(legacy).join()).toMatch(/请上传款图.*缺规格.*预计日期/);
+    expect(developmentPublishErrors({...sheet,workbenchSheet:{...sheet.workbenchSheet!,styleName:'',processingSelected:false}})).toEqual([
+      '请填写或选择款名','请填写或选择加工类型',
+    ]);
+  });
+  it('keeps sample pictures in the same document, stable row IDs and original version guards',()=>{
+    const sheet=draft(),attachmentId=randomUUID();
+    sheet.materials[0]!.sampleAttachmentId=attachmentId;
+    expect(DevelopmentDocumentSchema.safeParse(sheet).success).toBe(false);
+    sheet.files=[{attachmentId,kind:'款图'}];
+    expect(DevelopmentDocumentSchema.safeParse(sheet).success).toBe(false);
+    sheet.files=[{attachmentId,kind:'局部图'}];
+    expect(DevelopmentDocumentSchema.parse(sheet)).toEqual(sheet);
+    expect(DevelopmentDocumentSchema.safeParse({...sheet,workbenchSheet:{...sheet.workbenchSheet!,sewingRows:[...sheet.workbenchSheet!.sewingRows,...sheet.workbenchSheet!.sewingRows]}}).success).toBe(false);
+    const downgraded={...sheet};delete downgraded.workbenchSheet;
+    expect(()=>developmentDraftForSave(downgraded,sheet,'2026-11-01T00:00:00Z')).toThrow(/不能移除/);
+    expect(()=>developmentRevisionForSave(downgraded,sheet)).toThrow(/须保留/);
+    expect(()=>developmentDraftForSave(sheet,downgraded,'2026-11-01T00:00:00Z')).toThrow(/沿用/);
+    expect(()=>developmentRevisionForSave(sheet,downgraded)).toThrow(/沿用/);
+    expect(developmentAmendmentErrors(sheet,downgraded)).toHaveLength(1);
+    expect(developmentAmendmentErrors(sheet,{...sheet,materials:sheet.materials.map(row=>({...row,available:true}))}).length).toBeGreaterThan(0);
   });
 });

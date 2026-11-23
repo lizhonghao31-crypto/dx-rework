@@ -43,7 +43,7 @@ export function useDevelopmentCreationDraft(){
    return record.open?record.snapshot.intent:null;
   }catch(error){if(stamp===epoch.current){blocked.current=true;setProblem(error instanceof Error?error.message:'本页创建资料尚未核实，不能开启新单');}return null;}
  };
- const open=async(saved?:DevelopmentSheet)=>{
+ const open=async(saved?:DevelopmentSheet,initialIntent:CreationDraftSnapshot['intent']='development')=>{
   if(!owner.current||blocked.current&&!current.current)throw Error(problem||'当前身份或本页草稿尚未核实，不能创建');
   const record=current.current;
   if(record){
@@ -59,7 +59,7 @@ export function useDevelopmentCreationDraft(){
   }
   // Local view identity only, never an idempotency key or source identifier.
   openedSource.current=saved;view.current=createLocalViewId();setViewId(view.current);setRestored(null);setSourceSheet(saved);setMode('editable');
-  return saved?.document?.customerOrderDraft?.withOrder?'certain_order' as const:'development' as const;
+  return saved?(saved.document?.customerOrderDraft?.withOrder?'certain_order':'development'):initialIntent;
  };
  const snapshot=(id:string,value:CreationDraftSnapshot)=>{
   if(id!==view.current||!owner.current)throw Error('当前创建视图或身份已变化，原资料保留');
@@ -125,5 +125,5 @@ export function useDevelopmentCreationDraft(){
   if(result.status!=='completed')throw Error('尚未取得原提交成功回执，不能认为原请求失败；原资料和标识仍保留');
   if(!completed(record.sourceId!,record.viewId))return null;return {sourceId:record.sourceId!,orderId:result.operation==='confirm'?result.productionOrderId:null};
  };
- return {load,open,snapshot,started,acknowledged,refused,close,retry,completed,check,reset,viewId,restored,sourceSheet,problem,mode};
+ return {load,open,hasLocalRecord:()=>current.current!==null,snapshot,started,acknowledged,refused,close,retry,completed,check,reset,viewId,restored,sourceSheet,problem,mode};
 }

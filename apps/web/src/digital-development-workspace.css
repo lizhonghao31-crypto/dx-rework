@@ -574,3 +574,27 @@
 .designer-current-actions small{display:block}
 .designer-handling-filter{display:inline-flex;align-items:center;gap:var(--spacing-2,.5rem);margin-block:var(--spacing-2,.5rem)}
 @media(max-width:480px){.designer-order-summary{grid-template-columns:minmax(0,1fr)}}
+
+.development-type-choices {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+.development-type-choices p {
+  margin: 4px 0 0;
+}
+.development-material-overview {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:var(--spacing-2,.5rem);
+}
+.development-optional-section {
+  padding:var(--spacing-3,.75rem);
+}
+.development-material-dialog .development-material-group {
+  min-width:0;
+}
+.development-create-wizard [hidden] {
+  display: none;
+}
