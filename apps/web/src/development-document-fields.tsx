@@ -11,7 +11,7 @@ import type {AuxiliaryItem} from '@dx-rework/contracts/auxiliary-catalog';
 import {AttachmentIdentity,type AttachmentIdentityData} from './attachment-identity.js';
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
-import { DEVELOPMENT_MEASUREMENTS, type DevelopmentDocument, type DevelopmentMaterial, isDevelopmentMaterialPlaceholder, developmentCraftOptions } from "@dx-rework/contracts/digital-development";
+import { DEVELOPMENT_MEASUREMENTS, type DevelopmentDocument, type DevelopmentMaterial, developmentMaterialPriceIdentityIssue, hasDevelopmentMaterialPricing, isDevelopmentMaterialPlaceholder, developmentCraftOptions } from "@dx-rework/contracts/digital-development";
 import { washingChoiceLabel } from "./digital-workspace-copy.js";
 import { removeDevelopmentSize, moveDevelopmentSize, developmentMakingQuantityError, developmentAttachmentReferences } from "./digital-development-editing.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -128,7 +128,9 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
     });
     return true;
   };
-  const materialPriceFields=(item:DevelopmentMaterial,index:number)=><>
+  const materialPriceFields=(item:DevelopmentMaterial,index:number)=>{
+   const issue=readonly?null:developmentMaterialPriceIdentityIssue(item);
+   return <>
     {([['pricingUnit','计价单位'],['unitPrice','材料单价']] as const).map(([field,label])=><div key={field} className="development-visible-material-label">
       <span>{label}</span>
       {readonly?<DocumentField id={`development-${item.materialId}-${field}`} label={`${item.label}${label}`}
@@ -137,8 +139,10 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
         value={item[field]??''} isDisabled={busy} maxLength={100} inputMode={field==='unitPrice'?'decimal':'text'}
         onChange={value=>changeMaterial(index,{[field]:value})}/>}
     </div>)}
+    {issue&&<small role="status">{issue}</small>}
     {item.auxiliaryCatalog?.referencePricing&&<small>目录参考价：{item.auxiliaryCatalog.referencePricing.amount} 元 / {item.auxiliaryCatalog.referencePricing.unit}</small>}
-  </>;
+   </>;
+  };
   const field=(key:keyof DevelopmentDocument,label:string,maxLength=100,multiline=false)=><label>{label}<DocumentField id={`development-${key}`} label={label} value={String(document[key]??"")} onValue={value=>edit({[key]:value})} readonly={readonly} disabled={busy} maxLength={maxLength} multiline={multiline} issue={issue(`development-${key}`)}/></label>;
   const select=(key:"template"|"unit"|"craft"|"washing",label:string,options:readonly string[],change?:(value:string)=>void)=>{
     const show=(value:string)=>key==="washing"?washingChoiceLabel(value):value;
@@ -267,7 +271,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
 {!compact&&dimensions}
 <DocumentSection id="development-materials" title="面辅料" detail={`技术材料 · 共 ${document.materials.length} 行`}>
             {compact&&<div className="development-material-overview">
-              <p>共 {document.materials.length} 行 · 已填 {document.materials.filter(row=>!isDevelopmentMaterialPlaceholder(row)).length} 行 · 待核 {document.materials.filter(row=>materialIssueFields.some(field=>issue(`development-${row.materialId}-${field}`))).length} 行</p>
+              <p>共 {document.materials.length} 行 · 已填 {document.materials.filter(row=>!isDevelopmentMaterialPlaceholder(row)||hasDevelopmentMaterialPricing(row)).length} 行 · 待核 {document.materials.filter(row=>developmentMaterialPriceIdentityIssue(row)||materialIssueFields.some(field=>issue(`development-${row.materialId}-${field}`))).length} 行</p>
               <Button type="button" onClick={()=>setMaterialDialog(true)}>查看全部 / 继续添加面辅料</Button>
             </div>}
             {compact&&materialDialog?

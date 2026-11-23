@@ -161,6 +161,14 @@ export function isDevelopmentMaterialPlaceholder(item:DevelopmentMaterial):boole
   return (!item.auxiliaryKind||item.auxiliaryKind==="普通辅料")&&["","主布","配布","辅料","主布A","配布B","配布C"].includes(item.label.replace(/\s/g,""))&&
     ![item.name,item.supplier,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate,item.garmentColor,item.part,item.quantityUnit,item.sampleAttachmentId].some(Boolean)&&!item.available;
 }
+/** Price input makes the row part of the document, independently of physical readiness. */
+export function hasDevelopmentMaterialPricing(item:DevelopmentMaterial):boolean {
+ return Boolean(item.unitPrice?.trim()||item.pricingUnit?.trim());
+}
+export function developmentMaterialPriceIdentityIssue(item:DevelopmentMaterial):string|null {
+ return hasDevelopmentMaterialPricing(item)&&!item.name.trim()
+  ?`${item.label||item.category}已填写材料单价或计价单位，请先填写材料名称` : null;
+}
 export function developmentSizeQuantityIssues(document:DevelopmentDocument):Array<{index:number|null;message:string}>{
   const issues:Array<{index:number|null;message:string}>=[];
   if(document.documentFormatVersion!==2||!document.sizeQuantities||document.sizeQuantities.length!==document.sizes.length){
@@ -249,6 +257,8 @@ type DevelopmentMaterialPublishField = "name"|"specification"|"expectedDate"|"co
 export function developmentMaterialPublishIssues(document:DevelopmentDocument):Array<{materialId:string;field:DevelopmentMaterialPublishField;message:string}>{
  const issues:Array<{materialId:string;field:DevelopmentMaterialPublishField;message:string}>=[];
  for(const row of document.materials){
+  const priceIdentityIssue=developmentMaterialPriceIdentityIssue(row);
+  if(priceIdentityIssue){issues.push({materialId:row.materialId,field:'name',message:priceIdentityIssue});continue;}
   if(isDevelopmentMaterialPlaceholder(row))continue;
   const label=row.label||row.name||row.category;
   if(document.workbenchSheet){

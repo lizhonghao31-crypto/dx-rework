@@ -1,8 +1,17 @@
 import {beijingCalendarDate} from "@dx-rework/contracts/digital-production";
-import {developmentSizeQuantityIssues,type DevelopmentDocument,type DevelopmentMakingUpgrade} from "@dx-rework/contracts/digital-development";
+import {developmentMaterialPriceIdentityIssue,developmentSizeQuantityIssues,type DevelopmentDocument,type DevelopmentMakingUpgrade} from "@dx-rework/contracts/digital-development";
 import {ApplicationError} from "../platform/errors.js";
 
 const reject=(message:string):never=>{throw new ApplicationError("VALIDATION_ERROR",message,400);};
+function validateNewMaterialPriceIdentity(document:DevelopmentDocument,basis?:DevelopmentDocument){
+ const before=new Map(basis?.materials.map(material=>[material.materialId,material]));
+ for(const material of document.materials){
+  const issue=developmentMaterialPriceIdentityIssue(material);
+  if(!issue)continue;
+  const original=before.get(material.materialId);
+  if(!original||material.name!==original.name||material.unitPrice!==original.unitPrice||material.pricingUnit!==original.pricingUnit)reject(issue);
+ }
+}
 export function validateDevelopmentMaterialPlan(document:DevelopmentDocument,basis?:DevelopmentDocument){
  const before=new Map(basis?.materials.map(material=>[material.materialId,material]));
  for(const material of document.materials){
@@ -18,6 +27,7 @@ export function developmentDraftForSave(input:DevelopmentDocument,previous:Devel
  if(previous?.workbenchSheet&&!input.workbenchSheet)reject("不能移除已保存的新版版单；请重新读取当前资料");
  if(previous&&!previous.workbenchSheet&&input.workbenchSheet)reject("原草稿须沿用保存时的版单格式");
  if(previous?.documentFormatVersion===2&&(input.documentFormatVersion!==2||!input.sizeQuantities))reject("不能移除已保存的每码制作数量，请重新读取当前资料");
+ validateNewMaterialPriceIdentity(input,previous);
  return {...input,...(previous?.quotationMode?{quotationMode:previous.quotationMode}:{}),documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null),orderDate:fixedDate};
 }
 /** A new physical round always uses the new protocol; its source date remains the frozen first date. */
@@ -25,6 +35,7 @@ export function developmentRevisionForSave(input:DevelopmentDocument,basis:Devel
  if(basis.workbenchSheet&&!input.workbenchSheet)reject("复版须保留新版版单；请重新读取原资料");
  if(!basis.workbenchSheet&&input.workbenchSheet)reject("复版须沿用原版单格式");
  if(input.orderDate!==basis.orderDate)reject("实际复版不能改写首次开发下单日期，请保留原日期；客户日期独立办理");
+ validateNewMaterialPriceIdentity(input,basis);
  return {...input,...(basis.quotationMode?{quotationMode:basis.quotationMode}:{}),documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null)};
 }
 /** Existing tail/rework permission authorizes only explicit counts for the new round, never rewriting its frozen basis. */
