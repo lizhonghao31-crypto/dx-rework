@@ -1251,6 +1251,10 @@
     {
       "version": "0298_designer_workbench_commercial_policy",
       "checksum": "fa5279cb377bc0e99df0eb72842188538d73b817f82b74747888ece961351896"
+    },
+    {
+      "version": "0299_auxiliary_catalog_reference_pricing",
+      "checksum": "755456b91d30fa6087540bab940d9da8d24c615da3619637dc28e596ea930f24"
     }
   ]
 }

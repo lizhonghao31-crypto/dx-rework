@@ -1,5 +1,5 @@
 import {validateSpecialCraftChoices} from './special-craft-library.js';
-import {withoutDevelopmentMaterialPrice} from './development-commercial-fields.js';
+import {sameDevelopmentMaterialBasis} from './development-commercial-fields.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {captureTechnicalRound} from './development-cycle-evidence.js';
@@ -13,7 +13,6 @@ import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.j
 import {developmentRevisionForSave,validateDevelopmentMaterialPlan} from "./development-document-format.js";
 import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
-import {isDeepStrictEqual} from "node:util";
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {DevelopmentRevisionSchema,type DevelopmentRevision} from '@dx-rework/contracts/digital-development-rounds';
@@ -81,7 +80,18 @@ export class DevelopmentRoundService {
  async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string,patternReworkRoundId?:string){
   if(!this.enabled)digitalForbidden();
   const rawBasis=await developmentDocumentRow(db,sourceId);
-  if(rawBasis?.document.quotationMode)input={...input,document:{...input.document,quotationMode:rawBasis.document.quotationMode,materials:input.document.materials.map(m=>{const original=rawBasis.document.materials.find((v:{materialId:string})=>v.materialId===m.materialId);return m.unitPrice===undefined&&original?.unitPrice!==undefined?{...m,unitPrice:original.unitPrice}:m;})}};
+  if(rawBasis)input={...input,document:{...input.document,
+   ...(rawBasis.document.quotationMode?{quotationMode:rawBasis.document.quotationMode}:{}),
+   materials:input.document.materials.map(material=>{
+    const original=rawBasis.document.materials.find((row:{materialId:string})=>row.materialId===material.materialId);
+    const basis=material.auxiliaryCatalog,previous=original?.auxiliaryCatalog;
+    return {...material,
+     ...(rawBasis.document.quotationMode&&material.unitPrice===undefined&&original?.unitPrice!==undefined?{unitPrice:original.unitPrice}:{}),
+     ...(basis&&previous?.id===basis.id&&previous.version===basis.version&&basis.referencePricing===undefined&&previous.referencePricing!==undefined
+      ?{auxiliaryCatalog:{...basis,referencePricing:previous.referencePricing}}:{}),
+    };
+   }),
+  }};
   const parsed=DevelopmentRevisionSchema.safeParse(input);if(!parsed.success)fail(parsed.error.issues[0]?.message??"复版资料无效");input=parsed.data!;
   const sheet=await this.forms().read(actor,sourceId,db);
   // A technical return carries the commercial basis forward without granting
@@ -120,7 +130,7 @@ export class DevelopmentRoundService {
   const document=structuredClone(input.document),savedPlan=await developmentSlaPlan(db,sourceId);
   const {route,inherited,affectedNodes}=await readDevelopmentRevisionPlan(db,sourceId,input,sheet.document!,savedPlan?.route_schema_version);
   // A changed material gets its own identity; old arrivals never certify a replacement.
-  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!isDeepStrictEqual(withoutDevelopmentMaterialPrice(old),withoutDevelopmentMaterialPrice(material)))material.materialId=randomUUID();}
+  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!sameDevelopmentMaterialBasis(old,material))material.materialId=randomUUID();}
   const roundNumber=input.basedOnRound+1,routeId=randomUUID();
   const native=await linkedDevelopmentOrder(db,sourceId,true);
   if(!patternReworkRoundId&&input.outputKind==='整件样板'&&route.includes('development_sewing')

@@ -2297,5 +2297,19 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0299_auxiliary_catalog_reference_pricing": {
+    "checksum": "755456b91d30fa6087540bab940d9da8d24c615da3619637dc28e596ea930f24",
+    "tables": [
+      "auxiliary_catalog_items",
+      "auxiliary_catalog_versions"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

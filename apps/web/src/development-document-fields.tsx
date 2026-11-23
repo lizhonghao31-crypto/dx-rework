@@ -7,6 +7,7 @@ import {DEVELOPMENT_CRAFT_FILE_TYPES,DevelopmentCraftRequirements} from './devel
 import {WorkbenchDevelopmentSheetFields} from './workbench-development-sheet-fields.js';
 import {IndependentCraftField} from './independent-craft-field.js';
 import {AuxiliaryCatalogDialog} from './auxiliary-catalog-dialog.js';
+import type {AuxiliaryItem} from '@dx-rework/contracts/auxiliary-catalog';
 import {AttachmentIdentity,type AttachmentIdentityData} from './attachment-identity.js';
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
@@ -95,7 +96,49 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
     if(value&&item.expectedDate&&!await confirmInApp(`标记已有实物后，预计到料 ${item.expectedDate} 作为原计划保留，当前不再编辑。继续？`))return;
     if(!writing.current)changeMaterial(index,{available:value});
   };
-  const changeMaterial=(index:number,patch:Partial<DevelopmentMaterial>)=>edit({materials:document.materials.map((item,i)=>{if(i!==index)return item;const next={...item,...patch};if(!Object.hasOwn(patch,"auxiliaryCatalog")&&["name","specification","supplier","auxiliaryKind"].some(key=>Object.hasOwn(patch,key)))delete next.auxiliaryCatalog;return next;})});
+  const changeMaterial=(index:number,patch:Partial<DevelopmentMaterial>)=>edit({materials:document.materials.map((item,i)=>{
+    if(i!==index)return item;
+    const next={...item,...patch};
+    const changedIdentity=(["name","specification","supplier","auxiliaryKind"] as const).some(key=>Object.hasOwn(patch,key)&&patch[key]!==item[key]);
+    if(changedIdentity&&!Object.hasOwn(patch,"auxiliaryCatalog")){
+      delete next.auxiliaryCatalog;
+      if(item.unitPrice!==undefined)next.unitPrice="";
+      if(item.pricingUnit!==undefined)next.pricingUnit="";
+    }
+    return next;
+  })});
+  const chooseAuxiliary=async(selected:AuxiliaryItem)=>{
+    const index=document.materials.findIndex(row=>row.materialId===auxiliaryMaterialId),current=document.materials[index];
+    if(!current||writing.current)return false;
+    const prior=current.auxiliaryCatalog;
+    if(prior?.id===selected.id&&prior.version===selected.version)return true;
+    const nextPrice=selected.referencePricing;
+    if(prior||current.unitPrice){
+      const showPrice=(amount:string|undefined,unit:string|undefined)=>amount?amount+(unit?` 元 / ${unit}`:" 元"):"未记录";
+      const before=showPrice(current.unitPrice,current.pricingUnit);
+      const after=showPrice(nextPrice?.amount,nextPrice?.unit);
+      if(!await confirmInApp(`采用所选辅料版本？本单 ${before} · ${current.supplier||"供应商未记录"} · ${prior?`目录版本 ${prior.version}`:"无目录版本"} → ${after} · ${selected.supplier||"供应商未记录"} · 目录版本 ${selected.version}`)||writing.current)return false;
+    }
+    changeMaterial(index,{
+      name:selected.name,specification:selected.specification,supplier:selected.supplier,auxiliaryKind:selected.auxiliaryKind,
+      auxiliaryCatalog:{id:selected.id,version:selected.version,...(nextPrice!==undefined?{referencePricing:nextPrice}:{})},
+      ...(nextPrice?{unitPrice:nextPrice.amount,pricingUnit:nextPrice.unit}:{
+        ...(current.unitPrice!==undefined?{unitPrice:""}:{}),...(current.pricingUnit!==undefined?{pricingUnit:""}:{}),
+      }),
+    });
+    return true;
+  };
+  const materialPriceFields=(item:DevelopmentMaterial,index:number)=><>
+    {([['pricingUnit','计价单位'],['unitPrice','材料单价']] as const).map(([field,label])=><div key={field} className="development-visible-material-label">
+      <span>{label}</span>
+      {readonly?<DocumentField id={`development-${item.materialId}-${field}`} label={`${item.label}${label}`}
+        value={item[field]??''} readonly/>
+      :<DevelopmentEntryText id={`development-${item.materialId}-${field}`} label={`${item.label}${label}`}
+        value={item[field]??''} isDisabled={busy} maxLength={100} inputMode={field==='unitPrice'?'decimal':'text'}
+        onChange={value=>changeMaterial(index,{[field]:value})}/>}
+    </div>)}
+    {item.auxiliaryCatalog?.referencePricing&&<small>目录参考价：{item.auxiliaryCatalog.referencePricing.amount} 元 / {item.auxiliaryCatalog.referencePricing.unit}</small>}
+  </>;
   const field=(key:keyof DevelopmentDocument,label:string,maxLength=100,multiline=false)=><label>{label}<DocumentField id={`development-${key}`} label={label} value={String(document[key]??"")} onValue={value=>edit({[key]:value})} readonly={readonly} disabled={busy} maxLength={maxLength} multiline={multiline} issue={issue(`development-${key}`)}/></label>;
   const select=(key:"template"|"unit"|"craft"|"washing",label:string,options:readonly string[],change?:(value:string)=>void)=>{
     const show=(value:string)=>key==="washing"?washingChoiceLabel(value):value;
@@ -120,7 +163,8 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
     {previousTemplate&&!readonly&&<Button type="button" disabled={busy} onClick={()=>void undoTemplate()}>撤回模板替换</Button>}</>;
   const materialIssueFields=["name","width","composition","supplier","specification","expectedDate","sampleAttachmentId","quantity"] as const;
   const commonMaterialFields=[["supplier","供应商"],["quantity","数量"],["quantityUnit","数量单位"]] as const;
-  const materialTable=(limit:number)=><section className="development-material-group"><DocumentTableScroll><table className="development-technical-table"><thead><tr>{["类型","材料名称 / 规格",...(compact?["供应商","数量 / 单位"]:[]),"使用范围确认","已有实物","预计到料","操作"].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>
+  const showMaterialPricing=!readonly&&(workbench||light||document.quotationMode==="automatic_v1")||document.materials.some(item=>item.unitPrice!==undefined);
+  const materialTable=(limit:number)=><section className="development-material-group"><DocumentTableScroll><table className="development-technical-table"><thead><tr>{["类型","材料名称 / 规格",...(compact?["供应商","数量 / 单位"]:[]),...(showMaterialPricing?["材料单价 / 单位"]:[]),"使用范围确认","已有实物","预计到料","操作"].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>
               {document.materials.slice(0,limit).map((item,index)=><Fragment key={item.materialId}><tr data-doc-row><td><span className="development-material-category">{item.category}</span>{item.category==="辅料"&&<small>辅料类型：{item.auxiliaryKind??"普通辅料"}</small>}</td><td>{item.category==="辅料"&&<div className="development-auxiliary-selection"><strong>{item.name||"尚未选择辅料"}</strong>{!readonly&&<Button type="button" aria-label={`选择共享辅料 ${index+1}`} disabled={busy} onClick={()=>setAuxiliaryMaterialId(item.materialId)}>搜索或新增共享辅料</Button>}{item.auxiliaryCatalog&&<small>已保存目录版本 {item.auxiliaryCatalog.version} 的资料快照</small>}</div>}<label className="development-visible-material-label">品名<DocumentField id={`development-${item.materialId}-name`} label={`${item.category}品名（材料资料）`} value={item.name} column="name" readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{name:value})} issue={issue(`development-${item.materialId}-name`)}/></label><label className="development-visible-material-label">规格<DocumentField id={`development-${item.materialId}-specification`} label={`${item.category}规格（${!workbench&&item.category==="主布"?"发布必填":"选填"}）`} value={item.specification} column="specification" readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{specification:value})} issue={issue(`development-${item.materialId}-specification`)}/></label></td>
                 {compact&&commonMaterialFields.map(([key,label],column)=>column===2?null:<td key={key}>
                   {(column===0?[[key,label] as const]:commonMaterialFields.slice(1)).map(([field,fieldLabel])=><label key={field} className="development-visible-material-label">{fieldLabel}
@@ -129,8 +173,9 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
                       issue={issue(`development-${item.materialId}-${field}`)}/>
                   </label>)}
                 </td>)}
+                {showMaterialPricing&&<td>{materialPriceFields(item,index)}</td>}
                 <td>由文员在核料页确认</td><td>{flag(`development-${item.materialId}-available`,"已有实物",item.available,value=>void changeAvailability(index,value),readonly||workbench||materialFactsReadonly,true)}</td><td>{(workbench||materialFactsReadonly)&&item.category!=='辅料'?<span>{item.expectedDate?`原登记日期：${item.expectedDate}`:'由跟单跟进'}</span>:<DocumentField id={`development-${item.materialId}-expectedDate`} label={`${item.label} 预计到料日期`} type="date" value={item.expectedDate??""} readonly={readonly} disabled={busy||item.available} onValue={value=>changeMaterial(index,{expectedDate:value||null})} issue={issue(`development-${item.materialId}-expectedDate`)}/>} {item.available&&item.expectedDate&&<small className="development-plan-retained">保留原计划</small>}</td>
-                <td>{!readonly&&<Button type="button" disabled={busy} onClick={async()=>{if(await confirmInApp(`删除${item.label||item.category}？`)&&!writing.current)edit({materials:document.materials.filter(row=>row.materialId!==item.materialId)});}}>删除</Button>}</td></tr><tr className="development-material-detail-row"><td colSpan={compact?8:6}><details className="development-material-details" open={!compact&&["label","width","weight","composition","color","supplier","consumption","quantity","sampleAttachmentId"].some(key=>Boolean(issue(`development-${item.materialId}-${key}`)))||undefined}><summary>技术详情</summary><div>{document.quotationMode==='automatic_v1'&&(!readonly||item.unitPrice!==undefined)&&<><label>计价单位<DocumentField id={`development-${item.materialId}-pricingUnit`} label={`${item.label}计价单位`} value={item.pricingUnit??''} readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{pricingUnit:value})}/></label><label>材料单价<DocumentField id={`development-${item.materialId}-unitPrice`} label={`${item.label}材料单价`} value={item.unitPrice??''} readonly={readonly} disabled={busy} numeric onValue={value=>changeMaterial(index,{unitPrice:value})}/></label></>}{(["width","weight","composition","color"] as const).map((key,i)=><label key={key}>{["幅宽","克重","成分",workbench?"物料颜色":"颜色"][i]}<DocumentField id={`development-${item.materialId}-${key}`} label={`${item.label} ${["幅宽","克重","成分","颜色"][i]}`} value={item[key]} readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{[key]:value})} issue={issue(`development-${item.materialId}-${key}`)}/></label>)}                {(["label","supplier","consumption","quantity"] as const).map((key,i)=>compact&&(key==="supplier"||key==="quantity")?null:<label key={key}>{(workbench?["材料标记","供应商","单件用量","数量"]:["材料标记（选填）","供应方（选填）","用量（选填）","数量（选填）"])[i]}<DocumentField id={`development-${item.materialId}-${key}`} label={`${item.label} ${(workbench?["材料标记","供应商","单件用量","数量"]:["材料标记（选填）","供应方（选填）","用量（选填）","数量（选填）"])[i]}`} value={item[key]} readonly={readonly} disabled={busy} column={key} onValue={value=>changeMaterial(index,{[key]:value})} issue={issue(`development-${item.materialId}-${key}`)}/></label>)}
+                <td>{!readonly&&<Button type="button" disabled={busy} onClick={async()=>{if(await confirmInApp(`删除${item.label||item.category}？`)&&!writing.current)edit({materials:document.materials.filter(row=>row.materialId!==item.materialId)});}}>删除</Button>}</td></tr><tr className="development-material-detail-row"><td colSpan={(compact?9:7)+(showMaterialPricing?1:0)}><details className="development-material-details" open={!compact&&["label","width","weight","composition","color","supplier","consumption","quantity","sampleAttachmentId"].some(key=>Boolean(issue(`development-${item.materialId}-${key}`)))||undefined}><summary>技术详情</summary><div>{(["width","weight","composition","color"] as const).map((key,i)=><label key={key}>{["幅宽","克重","成分",workbench?"物料颜色":"颜色"][i]}<DocumentField id={`development-${item.materialId}-${key}`} label={`${item.label} ${["幅宽","克重","成分","颜色"][i]}`} value={item[key]} readonly={readonly} disabled={busy} onValue={value=>changeMaterial(index,{[key]:value})} issue={issue(`development-${item.materialId}-${key}`)}/></label>)}                {(["label","supplier","consumption","quantity"] as const).map((key,i)=>compact&&(key==="supplier"||key==="quantity")?null:<label key={key}>{(workbench?["材料标记","供应商","单件用量","数量"]:["材料标记（选填）","供应方（选填）","用量（选填）","数量（选填）"])[i]}<DocumentField id={`development-${item.materialId}-${key}`} label={`${item.label} ${(workbench?["材料标记","供应商","单件用量","数量"]:["材料标记（选填）","供应方（选填）","用量（选填）","数量（选填）"])[i]}`} value={item[key]} readonly={readonly} disabled={busy} column={key} onValue={value=>changeMaterial(index,{[key]:value})} issue={issue(`development-${item.materialId}-${key}`)}/></label>)}
 {workbench&&<>
     {([["garmentColor","款式颜色"],["part","部位"],["quantityUnit","数量单位"]] as const).map(([key,label])=>compact&&key==="quantityUnit"?null:<label key={key}>{label}
       <DocumentField id={`development-${item.materialId}-${key}`} label={`${item.label} ${label}`} value={item[key]??""} readonly={readonly}
@@ -167,7 +212,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
           </DocumentSection>);
   const labelSection=<DocumentSection id="development-labels" title="唛类">            <section><div>{(["mainLabel","sizeLabel","careLabel"] as const).map((key,index)=><div key={key}>{flag(`development-${key}`,["主唛","码唛","洗水唛"][index]!,document[key],value=>edit({[key]:value}))}</div>)}{field("mainLabelMethod","主唛车法",1000,true)}</div></section></DocumentSection>;
   return <div className={`development-document-layout development-document-layout--grouped${creationView?" development-document-layout--creation":""}`}>
-    {compact&&<div className="development-optional-section">{templateControl}</div>}{auxiliaryMaterialId&&!readonly&&<AuxiliaryCatalogDialog disabled={busy} onClose={()=>setAuxiliaryMaterialId(null)} onSelect={selected=>{const index=document.materials.findIndex(row=>row.materialId===auxiliaryMaterialId);if(index>=0&&!writing.current)changeMaterial(index,{name:selected.name,specification:selected.specification,supplier:selected.supplier,auxiliaryKind:selected.auxiliaryKind,auxiliaryCatalog:{id:selected.id,version:selected.version}});}}/>}
+    {compact&&<div className="development-optional-section">{templateControl}</div>}{auxiliaryMaterialId&&!readonly&&<AuxiliaryCatalogDialog disabled={busy} onClose={()=>setAuxiliaryMaterialId(null)} onSelect={chooseAuxiliary}/>}
 <DocumentSectionGroup chapters={["development-images","development-basic","development-labels"]} title={requirements?"开发需求":currentInput?"款图与制作说明":`${sectionStart} · 款图与制作说明`}>
 {!requirements&&<DocumentSection id="development-images" title="款图与制作说明" {...((light||workbench)?{detail:`共 ${document.files.length} 个附件`}:{detail:"主款图发布必填；其它附件与说明选填"})}>
             <div className="development-file-tabs" role="group" aria-label="附件分类">{visibleFileKinds.map(kind=>currentInput
@@ -240,6 +285,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
   <DocumentTableScroll scrollLabel="备料面料">
     <table className="development-preorder-materials"><thead><tr><th scope="col">类型</th>
       {preorderFabricFields.map(([field,label])=><th scope="col" key={field}>{label}</th>)}
+      {showMaterialPricing&&<th scope="col">材料单价 / 单位</th>}
       {!readonly&&<th scope="col">操作</th>}
     </tr></thead><tbody>
       {document.materials.map((item,index)=>item.category!=="辅料"&&<tr key={item.materialId}>
@@ -250,6 +296,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
             {...(issue(`development-${item.materialId}-${field}`)?{status:{type:'error' as const,message:issue(`development-${item.materialId}-${field}`)!}}:{})}/>
           :<DocumentField id={`development-${item.materialId}-${field}`} label={`${item.category} ${label}`} value={item[field]} readonly/>}
         </td>)}
+        {showMaterialPricing&&<td>{materialPriceFields(item,index)}</td>}
         {!readonly&&<td><DevelopmentEntryAction type="button" disabled={busy} onClick={async()=>{
           if(await confirmInApp(`删除${item.name||item.label||item.category}？`)&&!writing.current)
             edit({materials:document.materials.filter(row=>row.materialId!==item.materialId)});
