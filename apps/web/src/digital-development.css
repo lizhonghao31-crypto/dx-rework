@@ -310,6 +310,8 @@
  .dx-doc-development .development-document-layout--creation .development-picture-layout {grid-template-columns:minmax(0,1fr)}
  .dx-doc-development .development-document-layout--creation .development-main-picture {height:clamp(10rem,24vw,18rem);min-height:0}
  .dx-doc-development .development-document-layout--creation .development-main-picture:not(:has(img,object)) {height:auto;min-height:5rem}
+ .dx-doc-development .development-document-layout--creation .development-file-tabs {display:flex;flex-wrap:wrap}
+ .dx-doc-development .development-document-layout--creation .development-file-tabs button {flex:none;max-inline-size:100%}
  .dx-doc-development .development-picture-upload {margin-block:var(--spacing-2,.5rem)}
  .dx-doc-development .development-preorder-materials {min-width:42rem}
  .dx-doc-development .development-preorder-materials :is(td,th) {padding:var(--spacing-2,.5rem)}

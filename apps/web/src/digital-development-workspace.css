@@ -606,19 +606,30 @@
   align-items:start;
   gap:var(--spacing-3,.75rem);
 }
+.development-create-wizard :is(.development-create-grid,.development-create-grid-secondary) label {
+  line-height:1.35;
+  text-align:start;
+}
 .development-create-wizard .development-code-field {
   display:grid;
+  grid-column:span 2;
   min-width:0;
   gap:var(--spacing-1,.25rem);
 }
 .development-create-wizard .development-code-check {
   display:flex;
+  flex-wrap:wrap;
   gap:var(--spacing-2,.5rem);
   align-items:center;
 }
-.development-create-wizard .development-code-check input {flex:1;min-width:0}
-.development-create-wizard .development-code-check button {flex:none;white-space:nowrap}
-.development-create-wizard .dx-doc-toolbar button {width:auto;white-space:nowrap}
+.development-create-wizard .development-code-check input {flex:1 1 8em;min-width:min(100%,8em)}
+.development-create-wizard :is(.development-code-check,.dx-doc-toolbar,.development-file-tabs) button {
+  width:auto;
+  height:auto;
+  min-block-size:max(2rem,1.6em);
+  white-space:nowrap;
+}
+.development-create-wizard .development-code-check button {flex:none}
 .development-create-wizard .dx-doc-toolbar {flex-wrap:wrap}
 .development-prior-step-facts {
   display:grid;
@@ -632,5 +643,5 @@
   white-space:nowrap;
 }
 @media(max-width:600px) {
-  .development-create-wizard .development-code-check {flex-wrap:wrap}
+  .development-create-wizard .development-code-field {grid-column:auto}
 }
