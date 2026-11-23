@@ -28,7 +28,13 @@ export const DevelopmentDocumentSchema = z.object({
   // Missing version belongs to frozen historical documents, never an exemption for new publication.
   documentFormatVersion: z.literal(2).optional(),
   sizeQuantities: z.array(z.number().int().min(0).max(100000).nullable()).max(20).optional(),
-  customerOrderDraft: z.object({withOrder:z.boolean(),stage:z.enum(['preorder','formal']).optional(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
+  customerOrderDraft: z.object({
+    withOrder: z.boolean(),
+    stage: z.enum(['preorder','formal']).optional(),
+    order: InitialCustomerOrderDraftSchema,
+    // Resume the last explicitly saved screen. This field has no effect on publication or order authority.
+    wizardStep: z.union([z.literal(1),z.literal(2),z.literal(3)]).optional(),
+  }).strict().optional(),
   // Draft selection only. Publication still obtains and validates the current price quote.
   patternCategoryId: z.string().uuid().nullable().optional(),
   productionPlanning:ProductionRoutePlanSchema.optional(),

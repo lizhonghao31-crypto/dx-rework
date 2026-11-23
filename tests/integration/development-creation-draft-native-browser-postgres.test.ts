@@ -229,6 +229,49 @@ async function wizardNext(page:Page){
    expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:5,document:{instructions:'TEST newer authorized edit'}});
   }catch(error){await writeFile(join(h.evidence,'explicit-save-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
+ it('restores a saved wizard step in a separate signed session without publishing or reserving again',async()=>{
+  const designer=h.f.people['sample-designer']!,style='TEST-WIZARD-PROGRESS-'+randomUUID();
+  const url='/ui/digital-production?workspace=designer&section=create';
+  const start=await h.open(designer.actorId,1165,{},url);
+  let sourceId:string;
+  try{
+   const page=start.page;
+   await openNewWizard(page,'已确认订单');
+   await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
+   await wizardNext(page);
+   await wizardNext(page);
+   await page.getByRole('textbox',{name:'PO 1 颜色',exact:true}).fill('TEST 蓝');
+   const receipt=page.waitForResponse(response=>/\/sources\/[^/]+\/development$/.test(new URL(response.url()).pathname)&&response.request().method()==='PUT');
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   const response=await receipt;
+   expect(response.status(),await response.text()).toBe(200);
+   const draft=await response.json();
+   sourceId=draft.sourceId;
+   expect(draft).toMatchObject({status:'draft',publishedAt:null,productionOrderId:null,version:1,document:{
+    customerOrderDraft:{withOrder:true,stage:'formal',wizardStep:3,order:{lines:[expect.objectContaining({color:'TEST 蓝'})]}},
+   }});
+  }finally{await start.context.close();}
+  const resumed=await h.open(designer.actorId,1165,{},url);
+  try{
+   const page=resumed.page,step=page.locator('.development-creation-steps [aria-current="step"]');
+   await page.getByRole('button',{name:style,exact:true}).click();
+   expect(await step.innerText()).toContain('客户与交货');
+   expect(await page.getByRole('textbox',{name:'PO 1 颜色',exact:true}).inputValue()).toBe('TEST 蓝');
+   expect(await page.getByRole('dialog',{name:'请选择创建类型'}).count()).toBe(0);
+   await page.getByRole('button',{name:'上一步',exact:true}).click();
+   expect(await step.innerText()).toContain('开发需求');
+   expect(h.requests.filter(row=>row.session===resumed.session&&['POST','PUT'].includes(row.method)&&row.path.includes('/sources'))).toEqual([]);
+   expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId!})).toBeNull();
+   expect((await h.db.query('SELECT version FROM digital_development_documents WHERE source_id=$1',[sourceId!])).rows).toEqual([{version:1}]);
+  }finally{await resumed.context.close();}
+  const direct=await h.open(designer.actorId,1165,{},'/ui/digital-production?development='+sourceId!);
+  try{
+   const step=direct.page.locator('.development-creation-steps [aria-current="step"]');
+   expect(await step.innerText()).toContain('客户与交货');
+   expect(await direct.page.getByRole('textbox',{name:'PO 1 颜色',exact:true}).inputValue()).toBe('TEST 蓝');
+   expect(h.requests.filter(row=>row.session===direct.session&&['POST','PUT'].includes(row.method)&&row.path.includes('/sources'))).toEqual([]);
+  }finally{await direct.context.close();}
+ });
  it('opens two independent server drafts from a new authenticated browser session, retaining three PO rows and two original ready files',async()=>{
   const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
   const styles=[`TEST-CABINET-A-${randomUUID()}`,`TEST-CABINET-B-${randomUUID()}`];

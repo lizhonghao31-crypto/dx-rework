@@ -71,7 +71,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [preorder,setPreorder]=useState(creation?.snapshot?.preorder??(existingDraft?.document?existingDraft.document.customerOrderDraft?.stage==='preorder':initialPreorder));
   const withOrder=intent!=='development';
   const stepCount=preorder?1:withOrder?3:2;
-  const [wizardStep,setWizardStep]=useState<DevelopmentWizardStep>(()=>Math.min(stepCount,creation?.snapshot?.wizardStep??1) as DevelopmentWizardStep);
+  const [wizardStep,setWizardStep]=useState<DevelopmentWizardStep>(()=>Math.min(stepCount,creation?.snapshot?.wizardStep??existingDraft?.document?.customerOrderDraft?.wizardStep??1) as DevelopmentWizardStep);
   const stepHeading=useRef<HTMLHeadingElement>(null);
   const [published,setPublished]=useState(existingDraft?.status==="published");
   const [publishedOrder,setPublishedOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
@@ -261,7 +261,11 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       const shouldConfirmOrder=withOrder&&!draftOnly&&(guided||intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form,effectiveConfirmationCalendar));
       const orderInput = shouldConfirmOrder ? DigitalOrderCreateSchema.parse({...developmentOrderInput(form),...(document.productionPlanning?{productionPlanning:document.productionPlanning}:{}),...(!calendar?.orderTimeEnabled&&effectiveApproval?{shortLeadApprovalId:effectiveApproval.requestId}:{})}) : null;
       let liveConfirmationCalendar:CustomerOrderCalendar|undefined=effectiveConfirmationCalendar;
-      const submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{withOrder,stage:preorder?'preorder':'formal',order:form}};
+      const savedWizardStep=guided&&draftOnly?wizardStep:document.customerOrderDraft?.wizardStep;
+      const submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{
+        withOrder,stage:preorder?'preorder':'formal',order:form,
+        ...(savedWizardStep===undefined?{}:{wizardStep:savedWizardStep}),
+      }};
       if(orderInput){
         const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string;orderTimeEnabled?:boolean}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
@@ -469,5 +473,5 @@ export function ResumeDevelopmentCreateForm({sheet,onClose,onCreated,onViewPubli
   const [error,setError]=useState("");
   const [intent,setIntent]=useState<"development"|"certain_order">(sheet.document?.customerOrderDraft?.withOrder?"certain_order":"development");
   useEffect(()=>{let live=true;setOptions(null);setError('');void digitalRequest<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string;orderTimeEnabled?:boolean}>(developmentOrderOptionsPath(sheet.sourceId)).then(value=>{if(live)setOptions(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:"读取客户资料失败");});return()=>{live=false;};},[sheet.sourceId]);
-  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} orderTimeEnabled={options.orderTimeEnabled} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} calendarSourceId={sheet.sourceId} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/>{sheet.canEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:"source",id:sheet.sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}</>;
+  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} guidedCreation={sheet.status==="draft"&&sheet.document?.customerOrderDraft?.wizardStep!==undefined} orderTimeEnabled={options.orderTimeEnabled} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} calendarSourceId={sheet.sourceId} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/>{sheet.canEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:"source",id:sheet.sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}</>;
 }
