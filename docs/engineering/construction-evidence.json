@@ -2,7 +2,7 @@
   "version": 1,
   "base": "185e4d365894c1b679ada9cff2900d79fd62783f",
   "risk": "full",
-  "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+  "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
   "rules": [
     {
       "rule": "Keep all six designer areas and the original designer scope for each selected order and round.",
@@ -101,7 +101,7 @@
       ],
       "initialization": "Use the prior saved order or source ID, selected development round, published document version and the original authorized endpoints. A directory with missing source evidence does not infer a document.",
       "dateAndPermission": "Object and destination validation precede read under the existing actor and return scope. History remains read-only. Invalid page input never issues a request.",
-      "expectation": "Signed browser opens earlier saved fields and attachments, preserves original round and scroll/selection, validates strict paging and reads 21 explicit miscellaneous records across two pages without including an unlinked same-name record.",
+      "expectation": "Signed browser opens earlier saved fields and attachments, preserves original round and scroll/selection, validates strict paging, reads 21 explicit miscellaneous records across two pages, and keeps the exact PLT and sizes in the same authorized snapshot without duplicate requests across categories.",
       "checks": [
         "release-business",
         "release-documents-unit",
@@ -295,92 +295,92 @@
     {
       "id": "release-business",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r2-evidence/verify-release-business.mjs",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/verify-release-business.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2, Chromium native App and real signed role fixtures, two owned low-privilege PostgreSQL 16.14 test targets, canonical two workers, resources cleaned.",
-      "startedAt": "2026-11-23T21:01:29.351Z",
-      "endedAt": "2026-11-23T21:04:58.246Z",
+      "startedAt": "2026-11-23T21:13:52.715Z",
+      "endedAt": "2026-11-23T21:17:06.206Z",
       "passed": 44,
       "failed": 0,
       "skipped": 0,
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-business.log",
-      "logSha256": "5ff9aebb96bdfc88af5ddfafc20ec423e6c7cc313e0cb1fe9d0a4e9c5cd76047",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-business.log",
+      "logSha256": "a80d6ed3c36b7786cdcfe55e407ef40a82f36e4304296ba5b0fdc9cdf9866a11",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1d81ddb17d119274d45b4015deb889af0cde3c51938e129621e0b1227acbdb83"
+          "sha256": "ceee21136ceac315e5919da00164491048ee7fe41a0532bffb899ec7b9c272aa"
         }
       ]
     },
     {
       "id": "release-catalog-pg",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r2-evidence/verify-release-catalog-pg.mjs",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/verify-release-catalog-pg.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2, canonical suite config and owned PostgreSQL 16.14 schema, persisted domain records and actual authorizations, resources cleaned.",
-      "startedAt": "2026-11-23T21:04:58.381Z",
-      "endedAt": "2026-11-23T21:05:03.441Z",
+      "startedAt": "2026-11-23T21:17:06.320Z",
+      "endedAt": "2026-11-23T21:17:11.143Z",
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-catalog-pg.log",
-      "logSha256": "1c113b8b5a529b057eb282b634e72154d2e7ab2f8d3348b50e0e9bd4a317ed89",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-catalog-pg.log",
+      "logSha256": "c840b1675e91ae6e2c7583c0edb8798165dd5a51644f963f44699f2acc1462c4",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d04bf741642a13c13aa3f5fadfc28250708c24742701d92739049a0a89ded55d"
+          "sha256": "b28d22f6efe10ff8cef76e10bad79bede9446d6b39c4ce233f1c8fdae128c21b"
         }
       ]
     },
     {
       "id": "release-cutting-pg",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r2-evidence/verify-release-cutting-pg.mjs",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/verify-release-cutting-pg.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2, canonical suite config and owned PostgreSQL 16.14 schema, persisted domain records and actual authorizations, resources cleaned.",
-      "startedAt": "2026-11-23T21:04:13.235Z",
-      "endedAt": "2026-11-23T21:04:24.458Z",
+      "startedAt": "2026-11-23T21:17:11.255Z",
+      "endedAt": "2026-11-23T21:17:18.658Z",
       "passed": 1,
       "failed": 0,
       "skipped": 141,
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-cutting-pg.log",
-      "logSha256": "b0cad7f102dcfdd3d4d682d168a73a85903365d051fb190f1b0fe2d45bf5c042",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-cutting-pg.log",
+      "logSha256": "07b2866c2f4a893686e06d89edf0d88746781f731db879e2b86d7d22310c221f",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "07a1b96c19a11d2c00805d5427b920fc61df78224580ddfcea74cb7d9a9af347"
+          "sha256": "fdd678563d17593f99b2dbda804446558b42434025128b6cbc698fb7f4e81128"
         }
       ]
     },
     {
       "id": "release-documents-unit",
       "kind": "tests",
-      "command": "bash /tmp/dx-workbench-v101-r2-evidence/release-local-checks.sh (documents-unit step)",
+      "command": "bash /tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-local-checks.sh (documents-unit step)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2; vitest.config.ts, selected order workbench, documents, route, time, preparation and PMC unit suites.",
-      "startedAt": "2026-11-23T21:02:23.975Z",
-      "endedAt": "2026-11-23T21:02:31.661Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-documents-unit.log",
-      "logSha256": "ef49ce182596cd7766cce49d9332533cc07e04047c2e2bc257508c40703df2f5",
+      "startedAt": "2026-11-23T21:14:49.188Z",
+      "endedAt": "2026-11-23T21:14:56.097Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-documents-unit.log",
+      "logSha256": "bd6416432b114761c38cf303ca80fb2ea29e097ac602021e463fddecdf364b16",
       "passed": 213,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d7e70a9cd511f4fc084ca5df12d21c2edfc8c22829277aaa47be048fd3e5077f"
+          "sha256": "2b8debbcadfdfa8b880d43c51a94eb2a6b403135c81d6df3d1cf81edf4bb743e"
         }
       ]
     },
@@ -390,12 +390,12 @@
       "command": "ESLint --max-warnings=0 over changed TypeScript paths",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2 and the repository lint policy for the complete R2 changed TypeScript set.",
-      "startedAt": "2026-11-23T21:01:27.889Z",
-      "endedAt": "2026-11-23T21:01:32.773Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-lint.log",
+      "startedAt": "2026-11-23T21:13:52.694Z",
+      "endedAt": "2026-11-23T21:13:57.604Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -404,12 +404,12 @@
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2, pinned workspace contracts and original frontend type checks.",
-      "startedAt": "2026-11-23T21:01:32.774Z",
-      "endedAt": "2026-11-23T21:01:59.831Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-web-types.log",
+      "startedAt": "2026-11-23T21:13:57.605Z",
+      "endedAt": "2026-11-23T21:14:25.212Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-web-types.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
     },
     {
@@ -418,12 +418,12 @@
       "command": "npm run typecheck --workspace @dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2, pinned workspace contracts and original API type checks.",
-      "startedAt": "2026-11-23T21:01:59.834Z",
-      "endedAt": "2026-11-23T21:02:16.268Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-api-types.log",
+      "startedAt": "2026-11-23T21:14:25.213Z",
+      "endedAt": "2026-11-23T21:14:41.140Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-api-types.log",
       "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7"
     },
     {
@@ -432,13 +432,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2393236add91aaa7b22655e47a5518987f01617c",
-      "sourceFingerprint": "ff5dd520c1b501b9e0248899497c48f52561ac8d89a15003d8ebcc3a34aa8510",
+      "testedHead": "279ef239f0956a97e3a3932d80876b0d5f9e3b8f",
+      "sourceFingerprint": "4fea233dda7bbc0dfa0779602f19f6d656aad738e30410d4e90e5ceb0829702b",
       "context": "Node 22.22.2, repository protocol, time-source inventory and test-plan checks.",
-      "startedAt": "2026-11-23T21:02:16.269Z",
-      "endedAt": "2026-11-23T21:02:23.973Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/release-preflight.log",
-      "logSha256": "a7afd41321f8cda3d6ff2e35ee9766fbe39b6581dd0b2c89242c22e5dfebbb09"
+      "startedAt": "2026-11-23T21:14:41.142Z",
+      "endedAt": "2026-11-23T21:14:49.187Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-cache-fix/release-preflight.log",
+      "logSha256": "853d976bd95307238173ef7f6fb2ff91c9b60366a62063d93b01ce09221da0f1"
     }
   ]
 }
