@@ -2,7 +2,7 @@
   "version": 1,
   "base": "185e4d365894c1b679ada9cff2900d79fd62783f",
   "risk": "full",
-  "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+  "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
   "rules": [
     {
       "rule": "Keep all six designer areas and the original designer scope for each selected order and round.",
@@ -13,7 +13,8 @@
         "apps/web/src/digital-development-execution-panel.tsx",
         "apps/web/src/development-workspace-return.tsx",
         "apps/api/src/production-platform/notification-service.ts",
-        "packages/contracts/src/digital-development-workspace.ts"
+        "packages/contracts/src/digital-development-workspace.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-workspace-query.ts",
@@ -22,12 +23,13 @@
       ],
       "oldTests": [
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-access.test.ts",
         "tests/unit/digital-development-workspace.test.ts"
       ],
       "initialization": "The current order and round reuse the existing workspace identity, record directory and original designer editing. Old task routes still use their native panel.",
       "dateAndPermission": "Only the assigned designer and applicable task kind yield a designer action. Another role stays a waiting fact under the original display rules.",
-      "expectation": "Signed users see the six areas, current-versus-historical behavior, original case permissions, editable original round and exact return without access expanding to unrelated people.",
+      "expectation": "Signed users see the six areas, current-versus-historical behavior, original case permissions, editable original round and exact return without access expanding to unrelated people. Native quotation still saves and assigns on the existing authorized standalone page; the designer workbench renders its direct customer quote without dispatch selectors.",
       "checks": [
         "release-business",
         "release-documents-unit",
@@ -296,92 +298,92 @@
     {
       "id": "release-business",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/verify-release-business.mjs",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/verify-release-business.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2, Chromium native App and real signed role fixtures, two owned low-privilege PostgreSQL 16.14 test targets, canonical two workers, resources cleaned.",
-      "startedAt": "2026-11-23T21:32:17.554Z",
-      "endedAt": "2026-11-23T21:35:50.385Z",
-      "passed": 44,
+      "startedAt": "2026-11-23T22:18:17.925Z",
+      "endedAt": "2026-11-23T22:22:00.083Z",
+      "passed": 49,
       "failed": 0,
       "skipped": 0,
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-business.log",
-      "logSha256": "cdbb8615fca1c34858166604869a109b3621fb6c8b2bbf6a66c5c0bffbe1437e",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-business.log",
+      "logSha256": "1867aa78b6ae188c8c437e815960552c5355368814c11a6f70fe3e2803c58422",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2a766d730cb1fafc46df990ed0181cf1b85eba224ec7bf1e13f7f4aa1b4f34e7"
+          "sha256": "7a48dffdad72ba134351f14b5a5872fea69a8d4cd60498eb4dca72c11ac54f10"
         }
       ]
     },
     {
       "id": "release-catalog-pg",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/verify-release-catalog-pg.mjs",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/verify-release-catalog-pg.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2, canonical suite config and owned PostgreSQL 16.14 schema, persisted domain records and actual authorizations, resources cleaned.",
-      "startedAt": "2026-11-23T21:32:17.560Z",
-      "endedAt": "2026-11-23T21:32:27.424Z",
+      "startedAt": "2026-11-23T22:18:26.020Z",
+      "endedAt": "2026-11-23T22:18:37.965Z",
       "passed": 9,
       "failed": 0,
       "skipped": 0,
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-catalog-pg.log",
-      "logSha256": "99f9efd564fa5e920ab236be2174b3919ef945fa71e28c445a25ff6f26beec2e",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-catalog-pg.log",
+      "logSha256": "324bd750e92c91082b249052bd08022d456e66f6e05a059e4b69a1e5e3d6b987",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b847fadb3a7df474c787245aea73c34046f6fce8fde757597e78ea40eb6f141f"
+          "sha256": "80cd3fc49e4c194e251ae98c7fa22f86212344bc347f5fedcbc0a95ae5a56719"
         }
       ]
     },
     {
       "id": "release-cutting-pg",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/verify-release-cutting-pg.mjs",
+      "command": "node /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/verify-release-cutting-pg.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2, canonical suite config and owned PostgreSQL 16.14 schema, persisted domain records and actual authorizations, resources cleaned.",
-      "startedAt": "2026-11-23T21:32:27.572Z",
-      "endedAt": "2026-11-23T21:32:43.531Z",
+      "startedAt": "2026-11-23T22:18:38.140Z",
+      "endedAt": "2026-11-23T22:18:51.224Z",
       "passed": 1,
       "failed": 0,
       "skipped": 141,
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-cutting-pg.log",
-      "logSha256": "20b59da6543690815af89d06d2a7f3a4d6da7cda089fbbb43bb65371a1e7307e",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-cutting-pg.log",
+      "logSha256": "88f57064fdd5c6d86a828d071ea6d2249065c48dd6f2b850c45363280f70df83",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c138b9a5065991227465dfb3b2f059f6137b9473e046b7f4aee188c15c567573"
+          "sha256": "1b163496b46fbb328bd97fd62508d56c4b1b4c040a7622731f0b4b79389ab30a"
         }
       ]
     },
     {
       "id": "release-documents-unit",
       "kind": "tests",
-      "command": "bash /tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-local-checks.sh (documents-unit step)",
+      "command": "bash /tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-local-checks.sh (documents-unit step)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2; vitest.config.ts, selected order workbench, documents, route, time, preparation and PMC unit suites.",
-      "startedAt": "2026-11-23T21:33:22.088Z",
-      "endedAt": "2026-11-23T21:33:31.016Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-documents-unit.log",
-      "logSha256": "ec0288a610f3c2137e12aeed168cfa7665719f6fcb6c00f316e5ac1799ecbfbe",
+      "startedAt": "2026-11-23T22:19:24.452Z",
+      "endedAt": "2026-11-23T22:19:32.467Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-documents-unit.log",
+      "logSha256": "81303330de4e5bfec13386eeece2b36c4f34dd03e2900f23fdd932548b41a77f",
       "passed": 214,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9996dd732613c699a18099acdf2d3bd51a4c0e4b5b3ec7fffa2e3e742d4ecd4e"
+          "sha256": "00ba30c7464f9d04fd40f674cc36519cf6c4bcc2389680f17c7f03e9d6a2d6e4"
         }
       ]
     },
@@ -391,12 +393,12 @@
       "command": "ESLint --max-warnings=0 over changed TypeScript paths",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2 and the repository lint policy for the complete R2 changed TypeScript set.",
-      "startedAt": "2026-11-23T21:32:17.548Z",
-      "endedAt": "2026-11-23T21:32:22.689Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-lint.log",
+      "startedAt": "2026-11-23T22:18:25.850Z",
+      "endedAt": "2026-11-23T22:18:32.616Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -405,12 +407,12 @@
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2, pinned workspace contracts and original frontend type checks.",
-      "startedAt": "2026-11-23T21:32:22.693Z",
-      "endedAt": "2026-11-23T21:32:53.020Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-web-types.log",
+      "startedAt": "2026-11-23T22:18:32.617Z",
+      "endedAt": "2026-11-23T22:19:01.258Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-web-types.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
     },
     {
@@ -419,12 +421,12 @@
       "command": "npm run typecheck --workspace @dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2, pinned workspace contracts and original API type checks.",
-      "startedAt": "2026-11-23T21:32:53.021Z",
-      "endedAt": "2026-11-23T21:33:10.833Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-api-types.log",
+      "startedAt": "2026-11-23T22:19:01.260Z",
+      "endedAt": "2026-11-23T22:19:17.929Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-api-types.log",
       "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7"
     },
     {
@@ -433,13 +435,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d23aace41fbc29fa13ac3449c8d65ca567582cdc",
-      "sourceFingerprint": "c71b725441ee225e7f6c5d35637337e5c81b251d12d543d0d7c2ea42930c0b90",
+      "testedHead": "d0c18ce6c3926ce289fae53b3cefa80b73fa0f4b",
+      "sourceFingerprint": "584c4bf4323e51224dbd475bb1e27b46bef5940a26f42a714d8466e7c3689c81",
       "context": "Node 22.22.2, repository protocol, time-source inventory and test-plan checks.",
-      "startedAt": "2026-11-23T21:33:10.837Z",
-      "endedAt": "2026-11-23T21:33:22.087Z",
-      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-directory-reuse/release-preflight.log",
-      "logSha256": "08b01d201150c9131e7dcdc9259725e2092d8e73c72196c44033b5b02b6b3188"
+      "startedAt": "2026-11-23T22:19:17.931Z",
+      "endedAt": "2026-11-23T22:19:24.451Z",
+      "log": "/tmp/dx-workbench-v101-r2-evidence/1087-native-quotation/release-preflight.log",
+      "logSha256": "221b570a75afa1e944ff6e69b897e2f0978785c9bd5a9176be9449d7d9d48114"
     }
   ]
 }
