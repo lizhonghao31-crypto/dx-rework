@@ -2,7 +2,7 @@
   "version": 1,
   "base": "3d02da9c6e7a3f710f1cfaf56618ae6d6405ecdb",
   "risk": "full",
-  "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+  "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
   "rules": [
     {
       "rule": "Keep creation routes separate from real order work and preserve exact draft and command identities.",
@@ -79,13 +79,16 @@
         "apps/web/src/development-craft-requirements.tsx",
         "apps/web/src/digital-development-editing.ts",
         "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/digital-development-print.tsx",
         "tests/unit/special-craft-steps.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-service.ts#bindFiles",
         "apps/api/src/production-platform/development-round-service.ts",
         "apps/web/src/independent-craft-field.tsx",
-        "apps/web/src/digital-development-upload.ts"
+        "apps/web/src/digital-development-upload.ts",
+        "apps/web/src/development-amendment-history.tsx",
+        "apps/web/src/development-published-document.tsx"
       ],
       "oldTests": [
         "tests/unit/special-craft-steps.test.ts",
@@ -94,7 +97,7 @@
       ],
       "initialization": "The existing versioned development JSON accepts optional requirements. Existing files remain unchanged; already saved film stays readable through original attachments.",
       "dateAndPermission": "Keep original ownership and readiness checks for material file binding, the 30-attachment limit, and frozen old versions. No automatic assignment, task, quote, SLA or order is created.",
-      "expectation": "Signed browser reuses an existing board, stages another file and verifies both exact stored IDs after reload. Unit tests reject stale craft versions, absent or wrong-kind attachments and duplicate rows.",
+      "expectation": "Signed browser reuses an existing board, stages another file and verifies both exact stored IDs after reload. Unit tests reject stale craft versions, absent or wrong-kind attachments and duplicate rows. The print regression renders the original and amended snapshot with each craft linked to the exact original board, and retains legacy attachment display.",
       "checks": [
         "r1-unit",
         "r1-signed-creation",
@@ -141,20 +144,20 @@
       "command": "vitest run tests/unit/development-creation-draft.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/special-craft-steps.test.ts tests/unit/development-create-size-optional.test.ts tests/unit/development-confirmation-resume.test.ts tests/unit/development-amendment-contract.test.ts tests/unit/digital-development-upload.test.ts tests/unit/g1-acceptance-corrections.test.ts tests/unit/po-customer-dates.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v101-r1-evidence/final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "de33c6062403db57a06cbbdbe6007125e52d99b8",
-      "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+      "testedHead": "25ce5ad48b7fcce0ab7e513f24fd3b87017cce12",
+      "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
       "context": "Node 22.22.2. Existing validation and navigation suites plus specific archive, craft-version and correction assertions. Working diff on the stated release base.",
-      "startedAt": "2026-11-23T16:51:15Z",
-      "endedAt": "2026-11-23T16:51:22Z",
+      "startedAt": "2026-11-23T17:05:48Z",
+      "endedAt": "2026-11-23T17:05:56Z",
       "log": "/tmp/dx-workbench-v101-r1-evidence/final-unit.log",
-      "logSha256": "091fd197ab13517d8c330d2a70d153ae1146fbb4b9bab9aa75dc5ff621581107",
-      "passed": 52,
+      "logSha256": "77db704782a04233f0df049f6f597e154da13a886e4fdacfd4c98185f83dc11a",
+      "passed": 53,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "af81a9827439e41af34c688de3935ff5f97301ee83ebc84b9fc418ef605259a6"
+          "sha256": "e5e4893af139754d248643a5daebc3aee19fd4b15e7d2b97cee4ba6b9250ffda"
         }
       ]
     },
@@ -164,20 +167,20 @@
       "command": "node /tmp/dx-workbench-v101-r1-evidence/verify-final-pg.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "de33c6062403db57a06cbbdbe6007125e52d99b8",
-      "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+      "testedHead": "25ce5ad48b7fcce0ab7e513f24fd3b87017cce12",
+      "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
       "context": "Isolated PG16.14, signed App roles, scoped non-superuser database access, dual fixture routing and owned resource cleanup. Evidence binds the release worktree source fingerprint to the reported run. Canonical business-chain config with two workers. Tests run the built application and original commands for each creation path.",
-      "startedAt": "2026-11-23T16:50:32.155Z",
-      "endedAt": "2026-11-23T16:52:57.357Z",
+      "startedAt": "2026-11-23T17:06:30.074Z",
+      "endedAt": "2026-11-23T17:08:41.127Z",
       "log": "/tmp/dx-workbench-v101-r1-evidence/final-browser.log",
-      "logSha256": "c071ef2ca49490ccc46aa051a8f5a45a141ff9d22cac0e69d19faa71ffff251d",
+      "logSha256": "b9c07eedb1ed42c31aeca962944a39153d825e0afba7d9d4f2c2a6861fccb17c",
       "passed": 20,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "463bb902cff78d6a053a03f95d421b6335f470c900775460bb75361a5bedcd16"
+          "sha256": "3843c94b299999a9a4b84bd7b7d18bde77009d1f1c491a44fa3b5b6e9405983b"
         }
       ]
     },
@@ -187,20 +190,20 @@
       "command": "node /tmp/dx-workbench-v101-r1-evidence/verify-related-pg.mjs (technical group, filtered original suites)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "de33c6062403db57a06cbbdbe6007125e52d99b8",
-      "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+      "testedHead": "25ce5ad48b7fcce0ab7e513f24fd3b87017cce12",
+      "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
       "context": "Isolated PG16.14, signed App roles, scoped non-superuser database access, dual fixture routing and owned resource cleanup. Evidence binds the release worktree source fingerprint to the reported run. Native cover of first PO-free handover, exact transfer, role revocation and old originals. Real M05 paper, cutting and sewing gates.",
-      "startedAt": "2026-11-23T16:50:45.833Z",
-      "endedAt": "2026-11-23T16:51:35.320Z",
+      "startedAt": "2026-11-23T17:05:35.944Z",
+      "endedAt": "2026-11-23T17:06:14.074Z",
       "log": "/tmp/dx-workbench-v101-r1-evidence/final-related-technical.log",
-      "logSha256": "14657a1e401f793c81dd702617e72532b8df055ab0e4e566fe88ba6986e9bcdf",
+      "logSha256": "e384dbe21fb4edcd0be6861701a376494f375d5684842ad7464b296ca20f4aa3",
       "passed": 9,
       "failed": 0,
       "skipped": 48,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1e99fdb8caedb118d01f19e594162a94b84e6771f5e95781cbd0fb8bbc84bb28"
+          "sha256": "a73e24d8e4d51c2c4346c2a6b721feda7d4428eac20f3e8a1be05f98ad58f105"
         }
       ]
     },
@@ -210,20 +213,20 @@
       "command": "node /tmp/dx-workbench-v101-r1-evidence/verify-related-pg.mjs (full amendment group)",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "de33c6062403db57a06cbbdbe6007125e52d99b8",
-      "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+      "testedHead": "25ce5ad48b7fcce0ab7e513f24fd3b87017cce12",
+      "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
       "context": "Isolated PG16.14, signed App roles, scoped non-superuser database access, dual fixture routing and owned resource cleanup. Evidence binds the release worktree source fingerprint to the reported run. Existing correction service stays authoritative over returns, downstream permissions and original work.",
-      "startedAt": "2026-11-23T16:51:35.379Z",
-      "endedAt": "2026-11-23T16:52:00.675Z",
+      "startedAt": "2026-11-23T17:06:14.126Z",
+      "endedAt": "2026-11-23T17:06:29.967Z",
       "log": "/tmp/dx-workbench-v101-r1-evidence/final-related-amendment.log",
-      "logSha256": "4d14adc90e8e1dfe39c637272b8446239d2e13e9d0579d69f20772d24685ddbb",
+      "logSha256": "eb8799a0bc6672ff55eb81794daabc2669edd89b4d119c7d43c1dad5a6173d9a",
       "passed": 28,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cb60d34ad422af4bc309341eb6a931869f18b3957e75cadd9fa86508cb10548c"
+          "sha256": "f8dbaa7aae2db2af0e973ada10aa74b11e1140e33bcb3a9be5c448998e71fb8e"
         }
       ]
     },
@@ -233,11 +236,11 @@
       "command": "npm run typecheck --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "de33c6062403db57a06cbbdbe6007125e52d99b8",
-      "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+      "testedHead": "25ce5ad48b7fcce0ab7e513f24fd3b87017cce12",
+      "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
       "context": "Node 22.22.2. Current contracts were built in the current worktree before Web type checking.",
-      "startedAt": "2026-11-23T16:50:45Z",
-      "endedAt": "2026-11-23T16:51:15Z",
+      "startedAt": "2026-11-23T17:05:24Z",
+      "endedAt": "2026-11-23T17:05:48Z",
       "log": "/tmp/dx-workbench-v101-r1-evidence/final-typecheck.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
     },
@@ -247,11 +250,11 @@
       "command": "eslint <all changed TypeScript and TSX files> --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "de33c6062403db57a06cbbdbe6007125e52d99b8",
-      "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+      "testedHead": "25ce5ad48b7fcce0ab7e513f24fd3b87017cce12",
+      "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
       "context": "Node 22.22.2. Includes added, edited and expanded TypeScript source and tests from the same source fingerprint.",
-      "startedAt": "2026-11-23T16:52:28Z",
-      "endedAt": "2026-11-23T16:52:30Z",
+      "startedAt": "2026-11-23T17:06:02Z",
+      "endedAt": "2026-11-23T17:06:04Z",
       "log": "/tmp/dx-workbench-v101-r1-evidence/final-lint-selected.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
@@ -261,13 +264,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "de33c6062403db57a06cbbdbe6007125e52d99b8",
-      "sourceFingerprint": "30eee6cb53ed816e6600720cc7ed1ed45e61b216731bcef39ff95027a59af89c",
+      "testedHead": "25ce5ad48b7fcce0ab7e513f24fd3b87017cce12",
+      "sourceFingerprint": "2d2de68186e4912fc36067548ca7a758156d6d4fcf716d0235fa86dbc022d473",
       "context": "Node 22.22.2 and the repository-owned dual isolation resource configuration.",
-      "startedAt": "2026-11-23T16:51:56Z",
-      "endedAt": "2026-11-23T16:52:03Z",
+      "startedAt": "2026-11-23T17:05:35Z",
+      "endedAt": "2026-11-23T17:05:43Z",
       "log": "/tmp/dx-workbench-v101-r1-evidence/final-preflight.log",
-      "logSha256": "346292f11f63c97b2ba64a7cb3ab014e9b94da3d3ba0c56ea10c060fc0d08c71"
+      "logSha256": "7371ac7a6df24faaada922e59452c0b320e24feafd5441dea5d081d261294b63"
     }
   ]
 }
