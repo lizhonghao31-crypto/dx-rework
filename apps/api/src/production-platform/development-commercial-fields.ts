@@ -18,7 +18,8 @@ export function withoutDevelopmentPrices(document:DevelopmentDocument):Developme
 
 export function sameDevelopmentMaterialBasis(a:DevelopmentDocument['materials'][number],b:DevelopmentDocument['materials'][number]){
  const physical=(material:typeof a)=>{
-  const {auxiliaryCatalog,pricingUnit,...facts}=withoutDevelopmentMaterialPrice(material);
+  const {auxiliaryCatalog,...facts}=withoutDevelopmentMaterialPrice(material);
+  delete facts.pricingUnit;
   return {...facts,catalogId:auxiliaryCatalog?.id};
  };
  return isDeepStrictEqual(physical(a),physical(b));
