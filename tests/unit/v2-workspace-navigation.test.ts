@@ -30,8 +30,15 @@ describe("V2 shell route adapter", () => {
     const target=root+'&page=2&search=TEST&originalSearch=%E7%89%88%E6%9C%AC%202&originaldevelopmentPage=2&originalbudgetPage=3&originalinstructionPage=4&originalquotationPage=5';
     expect(developmentWorkspaceReturnUrl(target,'/')).toBe(target);
     for(const suffix of ['&originalbudgetPage=0','&originalbudgetPage=1.5','&originalbudgetPage=1000001','&originalbudgetPage=2&originalbudgetPage=3','&originalSearch='+('x'.repeat(101))])expect(developmentWorkspaceReturnUrl(root+suffix,'/')).toBeNull();
-    expect(developmentWorkspaceReturnUrl(root.replace('area=records','area=development')+'&originalSearch=x','/')).toBeNull();
+    expect(developmentWorkspaceReturnUrl(root.replace('area=records','area=development')+'&originalSearch=x','/')).toBe(root.replace('area=records','area=development')+'&originalSearch=x');
     expect(developmentWorkspaceReturnUrl('/ui/digital-production?workspace=designer&originalbudgetPage=2','/')).toBeNull();
+  });
+  it('keeps harmless original-directory state bound to the same source through all real workbench areas',()=>{
+    const root='/ui/digital-production?workspace=designer&section=workspace&development=b92e6815-5892-4c51-b3c9-5e70ddbd1546&page=2&search=TEST&originalSearch=needle&originaldevelopmentPage=2';
+    for(const area of ['document','development','customer','handover','records','history']){
+      const target=root+'&area='+area;expect(developmentWorkspaceReturnUrl(target,'/')).toBe(target);
+    }
+    expect(developmentWorkspaceReturnUrl(root.replace('&development=b92e6815-5892-4c51-b3c9-5e70ddbd1546','')+'&area=development','/')).toBeNull();
   });
   it("retains Root and original non-Root module permissions without granting new capabilities", () => {
     const user = { id: "TEST", displayName: "TEST", capabilities: [], businessRoles: [] as string[] };
