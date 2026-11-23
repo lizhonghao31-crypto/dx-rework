@@ -1,6 +1,8 @@
 import {randomUUID} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
 import {CraftStepChoicesSchema,craftChoiceLabel,hasBothBuiltinCrafts,type CraftStepChoice,type SpecialCraftVersion} from '@dx-rework/contracts/digital-craft';
+import {DevelopmentDocumentSchema,developmentCraftOptions,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {digitalSlaDefaults,DIGITAL_SLA_RULE_VERSION} from '@dx-rework/contracts/digital-sla';
 import {fixedDevelopmentWork} from '../../apps/api/src/production-platform/fixed-development-work.js';
 import {fixedOrderWork} from '../../apps/api/src/production-platform/fixed-order-work.js';
@@ -27,6 +29,20 @@ describe('special crafts have distinct native steps rather than another combined
   expect(hasBothBuiltinCrafts(steps)).toBe(false);
   expect(hasBothBuiltinCrafts([steps[0]!,steps[1]!])).toBe(false);
   expect(hasBothBuiltinCrafts([...steps,{craftKind:'embroidery',sequence:4}])).toBe(true);
+ });
+ it('binds each development requirement to the selected craft version and a board in that document',()=>{
+  const attachmentId=randomUUID(),craftSteps:CraftStepChoice[]=[
+   {craftKind:'special',sequence:1,specialCraft:a},{craftKind:'printing',sequence:2},
+  ];
+  const document:DevelopmentDocument={...initialDevelopmentDocument(),craft:'特殊工艺',craftSteps,files:[{attachmentId,kind:'工艺开发板'}]};
+  const key=developmentCraftOptions(document)[0]!.key;
+  const requirement={stepKey:key,part:'袖口',specification:'单色',instructions:'沿原线',attachmentIds:[attachmentId]};
+  expect(DevelopmentDocumentSchema.safeParse({...document,craftRequirements:[requirement]}).success).toBe(true);
+  expect(DevelopmentDocumentSchema.safeParse({...document,craftRequirements:[requirement,requirement]}).success).toBe(false);
+  expect(DevelopmentDocumentSchema.safeParse({...document,files:[],craftRequirements:[requirement]}).success).toBe(false);
+  expect(DevelopmentDocumentSchema.safeParse({...document,files:[{attachmentId,kind:'菲林'}],craftRequirements:[requirement]}).success).toBe(false);
+  const nextSteps:CraftStepChoice[]=[{craftKind:'special',sequence:1,specialCraft:{...a,version:a.version+1}},craftSteps[1]!];
+  expect(DevelopmentDocumentSchema.safeParse({...document,craftSteps:nextSteps,craftRequirements:[requirement]}).success).toBe(false);
  });
  it('uses each development value, includes each handoff once and preserves real serial order',()=>{
   const kinds=steps.flatMap(()=>['development_craft_dispatch','development_printing','development_craft_confirmation'] as const);

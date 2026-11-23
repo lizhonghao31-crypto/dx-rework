@@ -14,6 +14,7 @@ import {developmentAmendmentPublicationOptions,isDevelopmentMaterialPlaceholder,
 import {digitalRequest,DigitalRequestError} from "./digital-production-api.js";
 import {createClientRequestId} from "./client-request-id.js";
 import {useDigitalDetailNavigationGuard} from "./use-digital-detail-navigation-guard.js";
+import {developmentAttachmentReferences} from "./digital-development-editing.js";
 import {RETURN_FIELD_LABELS} from "./development-return-issues.js";
 const fields=["name","label","specification","quantity","color","supplier","width","weight","composition","consumption"] as const;
 const labels:Record<typeof fields[number],string>={name:"品名",label:"材料标记",specification:"规格",quantity:"数量",color:"颜色",supplier:"供应方",width:"幅宽",weight:"克重",composition:"成分",consumption:"用量"};
@@ -32,13 +33,10 @@ export function DevelopmentAmendmentPanel({sourceId,taskId,onSubmitted}:{sourceI
  const material=(id:string,patch:Partial<DevelopmentMaterial>)=>change({materials:document!.materials.map(m=>{if(m.materialId!==id)return m;const next={...m,...patch};if(!Object.hasOwn(patch,"auxiliaryCatalog")&&["name","specification","supplier","auxiliaryKind","category"].some(key=>Object.hasOwn(patch,key)))delete next.auxiliaryCatalog;return next;})});
  const removeAttachment=async(attachmentId:string)=>{
   if(!document||writing.current||uncertain)return;
-  const linked=document.materials.some(row=>row.sampleAttachmentId===attachmentId);
-  if(linked&&!await confirmInApp("移除此图片将同时去掉材料上的实样引用，确定移除？"))return;
+  const {linked,withoutFile}=developmentAttachmentReferences(document,attachmentId);
+  if(linked&&!await confirmInApp("移除此附件也会解除材料或工艺对它的引用，确定移除？"))return;
   if(writing.current)return;
-  change({
-    files:document.files.filter(row=>row.attachmentId!==attachmentId),
-    ...(linked?{materials:document.materials.map(row=>row.sampleAttachmentId===attachmentId?{...row,sampleAttachmentId:null}:row)}:{}),
-  });
+  change(withoutFile);
  };
  const upload=async(files:File[],kind=fileKind)=>{
   if(writing.current||!document||!files.length)return;const currentContext=uploadContext.current;pendingUpload.current={files,kind};writing.current=true;setBusy(true);setError('');

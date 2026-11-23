@@ -34,6 +34,26 @@ export function initialDevelopmentDocument(template: DevelopmentDocument["templa
 export function editableDevelopmentDocument(document:DevelopmentDocument):DevelopmentDocument{
   return {...document,documentFormatVersion:2,sizeQuantities:document.sizeQuantities??document.sizes.map(()=>null)};
 }
+export function attachDevelopmentCraftFile(document:DevelopmentDocument,stepKey:string,attachmentId:string){
+  const existing=document.craftRequirements??[];
+  const row=existing.find(item=>item.stepKey===stepKey);
+  if(row?.attachmentIds.includes(attachmentId))return existing;
+  if(row)return existing.map(item=>item===row?{...row,attachmentIds:[...row.attachmentIds,attachmentId]}:item);
+  return [...existing,{stepKey,part:"",specification:"",instructions:"",attachmentIds:[attachmentId]}];
+}
+export function developmentAttachmentReferences(document:DevelopmentDocument,attachmentId:string){
+  return {
+    linked:document.materials.some(row=>row.sampleAttachmentId===attachmentId)
+      ||Boolean(document.craftRequirements?.some(row=>row.attachmentIds.includes(attachmentId))),
+    withoutFile:{
+      files:document.files.filter(file=>file.attachmentId!==attachmentId),
+      materials:document.materials.map(row=>row.sampleAttachmentId===attachmentId?{...row,sampleAttachmentId:null}:row),
+      ...(document.craftRequirements?{craftRequirements:document.craftRequirements.map(row=>({
+        ...row,attachmentIds:row.attachmentIds.filter(id=>id!==attachmentId),
+      }))}:{}),
+    },
+  };
+}
 export function developmentSizeQuantityInputs(document:DevelopmentDocument):string[]{return document.sizes.map((_,index)=>document.sizeQuantities?.[index]==null?"":String(document.sizeQuantities[index]));}
 export function developmentMakingQuantityError(value:string):string|null{return value!==""&&(!/^\d+$/.test(value)||Number(value)>100000)?"制作数量须为0—100000整数，未确定时可留空":null;}
 export function removeDevelopmentSize(document: DevelopmentDocument, index: number): DevelopmentDocument {

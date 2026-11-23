@@ -18,7 +18,7 @@ import { DevelopmentPrint } from "./digital-development-print.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { DevelopmentDocument, DevelopmentMaterialEvent, DevelopmentSheet } from "@dx-rework/contracts/digital-development";
-import { initialDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs } from "./digital-development-editing.js";
+import { initialDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs, attachDevelopmentCraftFile } from "./digital-development-editing.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -104,19 +104,27 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   };
   const uploadContext=useRef(0),uploadWriter=useRef(false);
   useEffect(()=>{uploadContext.current++;if(uploadWriter.current){uploadWriter.current=false;writing.current=false;setBusy(false);}previews.reset();successfulUploads.current.clear();return()=>{uploadContext.current++;};},[sourceId,selectedRound]);
-  const upload=async(files:File[])=>{
-    if(!files?.length||writing.current)return;previews.start(files,fileKind,upload);const currentUploadContext=uploadContext.current;uploadWriter.current=true;writing.current=true;setBusy(true);setError("");
+  const upload=async(files:File[],kind=fileKind,stepKey?:string)=>{
+    if(!files?.length||writing.current)return;
+    previews.start(files,kind,selected=>upload(selected,kind,stepKey));
+    const currentUploadContext=uploadContext.current;uploadWriter.current=true;writing.current=true;setBusy(true);setError("");
     try{
       let fileCount=document.files.length;
       const limits=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
       for(const file of Array.from(files)){try{
         if(file.size>limits.maxUploadBytes)throw Error(`${file.name}超过上传大小限制`);
-        const hash=await sha256Hex(file),fingerprint=JSON.stringify([fileKind,file.name,file.size,hash]);
-        if(successfulUploads.current.has(fingerprint)){previews.uploaded(file,successfulUploads.current.get(fingerprint)!);continue;}
+        const hash=await sha256Hex(file),fingerprint=JSON.stringify([kind,file.name,file.size,hash]);
+        const existing=successfulUploads.current.get(fingerprint);
+        if(existing){
+          previews.uploaded(file,existing);
+          if(stepKey){setDocument(current=>({...current,craftRequirements:attachDevelopmentCraftFile(current,stepKey,existing)}));setDirty(true);}
+          continue;
+        }
         if(fileCount>=30)throw Error("开发单最多30个附件");
-        const attachmentId=await uploadDevelopmentMaterial(base,file,fileKind,limits.maxUploadBytes);
+        const attachmentId=await uploadDevelopmentMaterial(base,file,kind,limits.maxUploadBytes);
         if(currentUploadContext!==uploadContext.current)return;previews.uploaded(file,attachmentId);successfulUploads.current.set(fingerprint,attachmentId);fileCount++;
-        setDocument(current=>({...current,files:[...current.files,{attachmentId,kind:fileKind}]}));setDirty(true);
+        setDocument(current=>({...current,files:[...current.files,{attachmentId,kind}],
+          ...(stepKey?{craftRequirements:attachDevelopmentCraftFile(current,stepKey,attachmentId)}:{})}));setDirty(true);
       }catch(reason){if(currentUploadContext!==uploadContext.current)return;const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
     }catch(reason){if(currentUploadContext===uploadContext.current){const message=reason instanceof Error?reason.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);}}finally{if(currentUploadContext===uploadContext.current){uploadWriter.current=false;writing.current=false;setBusy(false);}}
   };
@@ -150,7 +158,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
 
       <form onSubmit={event=>{event.preventDefault();save();}}>
         {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
-        <DevelopmentDocumentFields fixedCraft={sheet.timelineSchemaVersion===2} materialFactsReadonly={directEdit||Boolean(sheet.materialForecastOnly)} {...((embedded||contained)?{attachmentPageSize:6}:{})} key={`${sourceId}:${revision?`revision-${revision.basedOnRound}`:"initial"}`} templateResetKey={revision?draftVersion:sheet.version} document={document} edit={edit} readonly={readonly} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={previews.identity} metadataPath={id=>`${base}/attachments/${id}/metadata`} imageUrl={imageUrl} upload={upload} fileKind={fileKind} setFileKind={setFileKind} issue={issue} patternSection={sheet.status==="draft"&&!revision&&sheet.canEdit?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
+        <DevelopmentDocumentFields designerInput={directEdit&&!readonly} fixedCraft={sheet.timelineSchemaVersion===2} materialFactsReadonly={directEdit||Boolean(sheet.materialForecastOnly)} {...((embedded||contained)?{attachmentPageSize:6}:{})} key={`${sourceId}:${revision?`revision-${revision.basedOnRound}`:"initial"}`} templateResetKey={revision?draftVersion:sheet.version} document={document} edit={edit} readonly={readonly} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={previews.identity} metadataPath={id=>`${base}/attachments/${id}/metadata`} imageUrl={imageUrl} upload={upload} fileKind={fileKind} setFileKind={setFileKind} issue={issue} patternSection={sheet.status==="draft"&&!revision&&sheet.canEdit?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
       </form>
       {sheet.status==="published"&&<DevelopmentAmendmentHistory key={`${sheet.sourceId}:${sheet.roundNumber}:${sheet.version}`} sheet={sheet} imageUrl={imageUrl}/>}
       {sheet.status==="published"&&!embedded&&!directEdit&&!revision&&(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)&&<ProductionReadinessPanel resource={{kind:"source",id:sourceId}} sourceDocumentVersion={sheet.version}/>}

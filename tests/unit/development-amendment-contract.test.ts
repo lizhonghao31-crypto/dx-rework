@@ -19,6 +19,20 @@ describe("P02 publication, returns and same-round correction boundaries",()=>{
  it("refuses production quantity/size/craft changes and invented arrival facts through a correction",()=>{
   const before={...document(),materials:[{...material(),available:false}]};for(const patch of [{quantity:2},{sizes:["L"]},{craft:"印花" as const}])expect(developmentAmendmentErrors(before,{...before,...patch}).join()).toContain("复版");const after=structuredClone(before);after.materials[0]!.available=true;expect(developmentAmendmentErrors(before,after).join()).toContain("实物到货");
  });
+ it("unlinks a removed board without granting correction authority over published craft requirements",()=>{
+  const attachmentId=randomUUID();
+  const before:DevelopmentDocument={...document(),craft:"绣花",files:[{attachmentId,kind:"工艺开发板"}],
+   craftRequirements:[{stepKey:"embroidery",part:"袖口",specification:"宽 6 cm",instructions:"",attachmentIds:[attachmentId]}]};
+  const retained=structuredClone(before);
+  retained.craftRequirements![0]!.part="后背";
+  expect(developmentAmendmentErrors(before,retained).join()).toContain("不能改变已发布工艺要求");
+  const detached=structuredClone(before);
+  detached.craftRequirements![0]!.attachmentIds=[];
+  expect(developmentAmendmentErrors(before,detached).join()).toContain("不能改变已发布工艺要求");
+  detached.files=[];
+  expect(DevelopmentDocumentSchema.safeParse(detached).success).toBe(true);
+  expect(developmentAmendmentErrors(before,detached)).toEqual([]);
+ });
  it("does not let deleting or clearing a published material bypass the clerk's unused confirmation",()=>{
   const before={...document(),materials:[{...material(),specification:"40支"}]};expect(developmentAmendmentErrors(before,{...before,materials:[]}).join()).toContain("文员的本轮不用确认");
   const blank={...before.materials[0]!,name:"",specification:"",quantity:"",color:"",available:false};expect(developmentAmendmentErrors({...before,materials:[{...before.materials[0]!,available:false}]},{...before,materials:[blank]}).join()).toContain("删除或清空");

@@ -27,9 +27,15 @@ function sameDocumentValue(before:unknown,after:unknown):boolean{
 export function developmentAmendmentErrors(before:DevelopmentDocument,after:DevelopmentDocument):string[]{
  const errors:string[]=[];
  for(const key of Object.keys({...before,...after}) as Array<keyof DevelopmentDocument>){
-  if(["materials","files","instructions"].includes(key))continue;
+  if(["materials","files","instructions","craftRequirements"].includes(key))continue;
   if(!sameDocumentValue(before[key],after[key]))errors.push(`本次补正不能改变${({quantity:"打板数量",sampleSize:"制作尺码",sizes:"尺码列",measurements:"尺寸值",craft:"工艺",washing:"洗水",template:"模板",unit:"尺寸单位"} as Record<string,string>)[key]??"已发布制作依据"}；请通过实际修改 / 复版处理`);
  }
+ const retainedFiles=new Set(after.files.map(file=>file.attachmentId));
+ const expectedCraftRequirements=before.craftRequirements?.map(row=>({
+  ...row,attachmentIds:row.attachmentIds.filter(id=>retainedFiles.has(id)),
+ }));
+ if(!sameDocumentValue(expectedCraftRequirements,after.craftRequirements))
+  errors.push("本次补正不能改变已发布工艺要求；请通过实际修改 / 复版处理");
  for(const material of before.materials){
   const next=after.materials.find(row=>row.materialId===material.materialId);
   if(!isDevelopmentMaterialPlaceholder(material)&&(!next||isDevelopmentMaterialPlaceholder(next)))errors.push(`${material.name||material.label||"原材料"}：不能通过删除或清空资料代替文员的本轮不用确认；请保留材料，由文员在复核时记录不用及确认说明`);

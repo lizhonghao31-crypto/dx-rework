@@ -598,3 +598,39 @@
 .development-create-wizard [hidden] {
   display: none;
 }
+.development-create-wizard {
+  margin-inline:auto;
+  width:min(100%,100rem);
+}
+.development-create-wizard :is(.development-create-grid,.development-create-grid-secondary) {
+  align-items:start;
+  gap:var(--spacing-3,.75rem);
+}
+.development-create-wizard .development-code-field {
+  display:grid;
+  min-width:0;
+  gap:var(--spacing-1,.25rem);
+}
+.development-create-wizard .development-code-check {
+  display:flex;
+  gap:var(--spacing-2,.5rem);
+  align-items:center;
+}
+.development-create-wizard .development-code-check input {flex:1;min-width:0}
+.development-create-wizard .development-code-check button {flex:none;white-space:nowrap}
+.development-create-wizard .dx-doc-toolbar button {width:auto;white-space:nowrap}
+.development-create-wizard .dx-doc-toolbar {flex-wrap:wrap}
+.development-prior-step-facts {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));
+  gap:var(--spacing-3,.75rem);
+}
+.development-prior-step-facts dd {margin:0;overflow-wrap:anywhere}
+.development-workspace button.my-todos-pagination__direction {
+  width:auto;
+  padding-inline:var(--spacing-2,.5rem);
+  white-space:nowrap;
+}
+@media(max-width:600px) {
+  .development-create-wizard .development-code-check {flex-wrap:wrap}
+}

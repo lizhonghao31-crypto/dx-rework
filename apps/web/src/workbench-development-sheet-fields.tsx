@@ -1,4 +1,5 @@
 import {Button} from '@dx-rework/ui';
+import {Selector} from '@astryxdesign/core/Selector';
 import {
   DEVELOPMENT_SAMPLE_BOARD_TYPES, DEVELOPMENT_SAMPLE_GENDERS, type WorkbenchDevelopmentSheet,
 } from '@dx-rework/contracts/digital-development';
@@ -10,9 +11,9 @@ export const emptyWorkbenchDevelopmentSheet=():WorkbenchDevelopmentSheet=>({
   version:1,styleName:'',brand:'',gender:null,boardType:null,processingSelected:false,referenceNote:'',sewingRows:[],
 });
 
-export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange}:{
+export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange,creation=false}:{
   sheet:WorkbenchDevelopmentSheet;readonly:boolean;issue:(id:string)=>string|undefined;
-  onChange:(sheet:WorkbenchDevelopmentSheet)=>void;
+  onChange:(sheet:WorkbenchDevelopmentSheet)=>void;creation?:boolean;
 }){
   const text=(key:'styleName'|'brand'|'referenceNote',label:string)=>{
     const id=`development-workbench-${key}`;
@@ -21,10 +22,15 @@ export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange}:
   };
   const choice=<K extends 'gender'|'boardType'>(key:K,label:string,options:readonly NonNullable<WorkbenchDevelopmentSheet[K]>[])=>{
     const id=`development-workbench-${key}`,message=issue(id);
+    const change=(next:string)=>onChange({...sheet,[key]:options.find(value=>value===next)??null});
+    if(creation&&!readonly)return <div id={id} tabIndex={-1}>
+      <Selector label={label} size="sm" options={[...options]} {...(sheet[key]?{value:sheet[key]}:{})}
+        placeholder="请选择" onChange={change} {...(message?{status:{type:'error' as const,message}}:{})}/>
+    </div>;
     return <label>{label}
       {readonly?<span className="dx-doc-readonly">{sheet[key]??'未登记'}</span>:<select id={id} aria-label={label} value={sheet[key]??''}
         aria-invalid={Boolean(message)} aria-describedby={message?`${id}-error`:undefined}
-        onChange={event=>onChange({...sheet,[key]:options.find(value=>value===event.target.value)??null})}>
+        onChange={event=>change(event.target.value)}>
         <option value="">请选择</option>{options.map(value=><option key={value}>{value}</option>)}
       </select>}
       {message&&<small id={`${id}-error`}>{message}</small>}
