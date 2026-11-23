@@ -25,11 +25,11 @@ const enabledRoles=['sample_designer','order_merchandiser','pattern_room_worker'
 const readRoles=[...enabledRoles,'pmc'];
 type QuoteDirectoryRow={source_id:string|null;production_order_id:string|null;style_no:string;customer_code:string|null;
  source_designer:string|null;primary_merchandiser_id:string|null;version:number|null;confirmed_version:number|null;assignments:QuotationAssignment[]|null};
-function quotationAuthority(actor:TrustedActorContext,roles:ReadonlySet<string>,designerId:string|null,primaryId:string|null,assignments:readonly QuotationAssignment[],designerConfirmation=false){
+function quotationAuthority(actor:TrustedActorContext,roles:ReadonlySet<string>,designerId:string|null,primaryId:string|null,assignments:readonly QuotationAssignment[]){
  const root=isRootActor(actor),designer=roles.has('sample_designer')&&designerId===actor.actorId,merch=roles.has('order_merchandiser')&&primaryId===actor.actorId;
  const full=root||designer||merch||roles.has('owner_group')||roles.has('production_management')||roles.has('pmc');
  const ownRow=assignments.some(assignment=>assignment.technicalAssigneeId===actor.actorId&&roles.has('pattern_room_worker')||assignment.priceAssigneeId===actor.actorId&&roles.has(assignment.priceRole));
- return {full,allowed:full||ownRow,structure:root||designer,confirm:root||designer||!designerConfirmation&&merch};
+ return {full,allowed:full||ownRow,structure:root||designer,primaryMerchandiser:merch};
 }
 async function quotationRoles(db:Database,actor:TrustedActorContext,roleScope:readonly string[]){
  const active=new Set<string>();
@@ -50,11 +50,13 @@ export class DigitalQuotationService{
   const roles=await quotationRoles(db,actor,readOnly?readRoles:enabledRoles);
   const sourceDesigner=resource.kind==='source'?row.created_by:sourceId
    ?(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]?.created_by:row.created_by;
-  const policy=orderId?await workbenchCommercialOrderPolicy(db,orderId):row.workbench_commercial_policy;
-  const {full,allowed,structure,confirm}=quotationAuthority(actor,roles,sourceDesigner,order?.primary_merchandiser_id??null,quote?.assignments??[],policy===designerQuotationPolicy);
+  const {full,allowed,structure,primaryMerchandiser}=quotationAuthority(actor,roles,sourceDesigner,order?.primary_merchandiser_id??null,quote?.assignments??[]);
   if(!allowed)digitalNotFound();
+  const policy=orderId?await workbenchCommercialOrderPolicy(db,orderId):row.workbench_commercial_policy;
+  const workbenchPolicy=policy===designerQuotationPolicy;
+  const confirm=structure||(!workbenchPolicy&&primaryMerchandiser);
   const sourceDocument=quote?.assembly&&sourceId&&structure?await developmentDocumentRow(db,sourceId):undefined;
-  return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure,confirm,workbenchPolicy:policy===designerQuotationPolicy};
+  return {row,sourceDocument,designerId:sourceDesigner,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure,confirm,workbenchPolicy};
  }
  async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number):Promise<QuotationSheet>{
   const c=await this.context(db,actor,resource,true),q=c.quote;
