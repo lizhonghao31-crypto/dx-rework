@@ -28,9 +28,9 @@ export function DocumentAnchors({ sections }: { sections: Array<{ id: string; la
   if(chapter)return null;
   return <nav className="dx-doc-anchors" aria-label="单据章节">{sections.map(section => <button key={section.id} type="button" aria-current={active === section.id ? "location" : undefined} onClick={() => { setActive(section.id); document.getElementById(section.id)?.scrollIntoView({ block: "start", behavior: "smooth" }); }}>{section.label}</button>)}</nav>;
 }
-function focusDocumentField(id:string){
-  const target=document.getElementById(id),details=target?.closest("details");
-  if(details)details.open=true;
+export function focusDocumentField(id:string){
+  const target=document.getElementById(id);
+  for(let details=target?.closest("details");details;details=details.parentElement?.closest("details"))details.open=true;
   // The native upload input is visually hidden; focus its visible controlling button.
   const visible=target&&target.getClientRects().length&&!(target instanceof HTMLInputElement&&target.type==="file");
   const focusTarget=visible?target:document.querySelector<HTMLElement>(`[aria-controls="${CSS.escape(id)}"]`);

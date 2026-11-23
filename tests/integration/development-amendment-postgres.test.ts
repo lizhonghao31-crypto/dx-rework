@@ -70,18 +70,29 @@ const url=process.env.TEST_DATABASE_URL;
   const supply=(await execution.read(actor("designer"),sourceId)).tasks.find(task=>task.taskKind==="development_material_supply"&&task.state==="ready")!;
   return {sourceId,materialId,document,supply};
  };
- const prepare=async(field:DevelopmentReturnIssue["field"]="specification",missing=false,withAux=false,need?:DevelopmentReturnIssue["need"],withOrder?:boolean)=>{
+ const prepare=async(field:DevelopmentReturnIssue["field"]="specification",missing=false,withAux=false,need?:DevelopmentReturnIssue["need"],withOrder?:boolean,workbench=false)=>{
   const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-P02-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
   const order={customerCode:withOrder?"TEST":"",productGroup:"男装" as const,designStyleNo:(await forms.read(actor("designer"),sourceId)).designStyleNo,temporaryStyleNo:null,primaryMerchandiserId:null,orderDate:new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),contractDeliveryDate:null,lines:[{formalPoNo:withOrder?"TEST-G1-PO":null,customerWarehouseArrivalDate:withOrder?"2099-12-31":null,poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:withOrder?"TEST黑":"",colorForeign:null,deliveryDate:null,sizes:[{size:withOrder?"M":"",quantity:withOrder?"100":""}]}]};
   const initial=initialDevelopmentDocument(),sizes=["M","L"];
   const document={...initial,...(withOrder===undefined?{}:{customerOrderDraft:{withOrder,order}}),sizes,measurements:initial.measurements.map(row=>({...row,values:sizes.map(()=>"")})),quantity:withOrder===undefined?1:2,sizeQuantities:withOrder===undefined?[1,0]:[1,1],sampleSize:"M",orderDate:null,materials:[...(withAux?[{materialId:randomUUID(),category:"主布" as const,label:"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:true,available:true,expectedDate:null}]:[]),{materialId,category:withAux?"辅料" as const:"主布" as const,...(withAux?{auxiliaryKind:"普通辅料" as const}:{}),label:withAux?"TEST辅料":"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:false,available:!missing,expectedDate:withAux&&missing?"2026-11-01":null}],files:[{attachmentId,kind:"款图" as const}]};
-  expect(DevelopmentDocumentSchema.safeParse(document).success).toBe(true);
-  const saved=await forms.save(actor("designer"),sourceId,{expectedVersion:0,document},randomUUID()),sheet=await forms.publish(actor("designer"),sourceId,saved.version,randomUUID()),checkTask=sheet.taskId!;
-  const issues:DevelopmentReturnIssue[]=[{materialId,field,...(need?{need}:{}),reason:`TEST ${field}需核实`}];if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
+  const createDocument=workbench?await (async()=>{
+   const attachments=await Promise.all(Array.from({length:5},async()=>{
+    const id=randomUUID();
+    await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[id,`TEST/${id}`,"b".repeat(64),ids.designer]);
+    return {attachmentId:id,kind:"局部图" as const};
+   }));
+   const fabric={...document.materials[0]!,available:false,composition:"棉",width:"150 cm",supplier:"原布行",sampleAttachmentId:attachments[0]!.attachmentId};
+   const materials=[fabric,...Array.from({length:19},(_,index)=>({...fabric,materialId:randomUUID(),name:`TEST 材料 ${index+2}`,category:index<7?"主布":"辅料",sampleAttachmentId:null}))];
+   return DevelopmentDocumentSchema.parse({...document,materials,files:[...document.files,...attachments],stitchDensity:"原针距",
+    workbenchSheet:{version:1,styleName:"长表",brand:"原品牌",gender:"男装",boardType:"头版",processingSelected:true,referenceNote:"原说明",sewingRows:[]}});
+  })():document;
+  expect(DevelopmentDocumentSchema.safeParse(createDocument).success).toBe(true);
+  const saved=await forms.save(actor("designer"),sourceId,{expectedVersion:0,document:createDocument},randomUUID()),sheet=await forms.publish(actor("designer"),sourceId,saved.version,randomUUID()),checkTask=sheet.taskId!;
+  const issues:DevelopmentReturnIssue[]=[{materialId,field,...(need?{need}:{}),reason:`TEST ${field}需核实`}];if(workbench)issues.push({materialId:null,field:"files",reason:"TEST 附件应改为有效的材料局部图"});if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
   const entry={materialId,usage:"use" as const,physical:!missing,quantity:field!=="quantity",color:field!=="color",specification:field!=="specification",note:"",confirmedWith:""};
-  const verification=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:checkTask,expectedVersion:0,expectedDocumentVersion:sheet.version,entries:document.materials.map(m=>m.materialId===materialId?entry:{...entry,materialId:m.materialId,physical:true,quantity:true,color:true,specification:true}),result:"缺项退回",returnIssues:issues},randomUUID()) as {version:number};
-  await execution.check(actor("clerk"),sourceId,{taskId:checkTask,expectedVerificationVersion:verification.version,result:"缺项退回",note:"TEST具体退回",returnIssues:issues,items:document.materials.map(m=>({materialId:m.materialId,physical:m.materialId===materialId?entry.physical:true,quantity:m.materialId===materialId?entry.quantity:true,color:m.materialId===materialId?entry.color:true,specification:m.materialId===materialId?entry.specification:true}))},randomUUID());
+  const verification=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:checkTask,expectedVersion:0,expectedDocumentVersion:sheet.version,entries:createDocument.materials.map(m=>m.materialId===materialId?entry:{...entry,materialId:m.materialId,physical:true,quantity:true,color:true,specification:true}),result:"缺项退回",returnIssues:issues},randomUUID()) as {version:number};
+  await execution.check(actor("clerk"),sourceId,{taskId:checkTask,expectedVerificationVersion:verification.version,result:"缺项退回",note:"TEST具体退回",returnIssues:issues,items:createDocument.materials.map(m=>({materialId:m.materialId,physical:m.materialId===materialId?entry.physical:true,quantity:m.materialId===materialId?entry.quantity:true,color:m.materialId===materialId?entry.color:true,specification:m.materialId===materialId?entry.specification:true}))},randomUUID());
   const supply=(await execution.read(actor("designer"),sourceId)).tasks.find(t=>t.taskKind==="development_material_supply"&&t.state==="ready")!;
   return {sourceId,materialId,supply,document,sheet};
  };
@@ -267,6 +278,30 @@ const url=process.env.TEST_DATABASE_URL;
   const history=await amendments.history(actor("clerk"),f.sourceId,1);expect(history.original.document).toEqual(frozen);expect(history.revisions).toHaveLength(1);expect(input.document.materials[0]?.specification).toBe("42支");
   expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(false);
   const clerkTodos=(await notices.todos(actor("clerk"))).filter(todo=>todo.todoId===rechecks[0]!.taskId);expect(clerkTodos).toHaveLength(1);expect(clerkTodos[0]!.recipientUserId).toBe(ids.clerk);expect((await notices.todos(actor("designer"))).some(todo=>todo.todoId===f.supply.taskId)).toBe(false);expect((await notices.todos(actor("worker"))).some(todo=>todo.todoId===rechecks[0]!.taskId)).toBe(false);
+ });
+ it("corrects only the returned supplier and sample of a full workbench sheet, and rejects an obsolete correction",async()=>{
+  const f=await prepare("supplier",false,false,"document",undefined,true);
+  const context=await amendments.read(actor("designer"),f.sourceId,f.supply.taskId);
+  const current=context.document,corrected=structuredClone(current),replaced=corrected.files[1]!,replacement=corrected.files[2]!;
+  expect(current.materials).toHaveLength(20);
+  expect(current.files).toHaveLength(6);
+  expect(context.issues).toEqual([
+   expect.objectContaining({materialId:f.materialId,field:"supplier"}),
+   expect.objectContaining({materialId:null,field:"files"}),
+  ]);
+  Object.assign(corrected.materials[0]!,{supplier:"更新布行",sampleAttachmentId:replacement.attachmentId});
+  corrected.files=corrected.files.filter(file=>file.attachmentId!==replaced.attachmentId);
+  const version={taskId:f.supply.taskId,roundNumber:context.roundNumber,expectedDocumentVersion:context.documentVersion,expectedDraftVersion:0};
+  const input={...version,document:corrected,reason:"TEST 只补供应商与材料局部图"};
+  const saved=await amendments.save(actor("designer"),f.sourceId,input,randomUUID());
+  await expect(amendments.save(actor("designer"),f.sourceId,{...input,reason:"旧窗口"},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await amendments.read(actor("designer"),f.sourceId,f.supply.taskId)).draft?.document).toEqual(corrected);
+  expect((await forms.read(actor("designer"),f.sourceId)).document).toEqual(current);
+  await amendments.submit(actor("designer"),f.sourceId,{...version,expectedDraftVersion:saved.draftVersion},randomUUID());
+  expect((await forms.read(actor("designer"),f.sourceId)).document).toEqual(corrected);
+  const history=await amendments.history(actor("clerk"),f.sourceId,context.roundNumber);
+  expect(history.original.document).toEqual(current);
+  expect(history.revisions).toHaveLength(1);
  });
  it("refuses unauthorized, stale, inactive, wrong-round and conflicting drafts without writes",async()=>{
   const f=await prepare(),{input}=await save(f),count=async()=>Number((await db.query("SELECT count(*) n FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].n);

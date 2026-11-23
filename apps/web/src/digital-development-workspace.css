@@ -583,16 +583,17 @@
 .development-type-choices p {
   margin: 4px 0 0;
 }
-.development-creation-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  list-style: none;
-  padding: 0;
+.development-material-overview {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:var(--spacing-2,.5rem);
 }
-.development-creation-steps [aria-current="step"] {
-  color: var(--dx-v2-color-primary);
-  font-weight: 600;
+.development-optional-section {
+  padding:var(--spacing-3,.75rem);
+}
+.development-material-dialog .development-material-group {
+  min-width:0;
 }
 .development-create-wizard [hidden] {
   display: none;

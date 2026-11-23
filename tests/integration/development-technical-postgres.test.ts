@@ -71,7 +71,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean;workbenchSheet?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
@@ -85,6 +85,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   const accessoryId=accessoryIds[0]??null;
   if(options.automatic){document.quotationMode='automatic_v1';document.materials=document.materials.map(m=>({...m,pricingUnit:m.category==='辅料'?'件':options.missingPricingUnit?'':'米',unitPrice:m.category==='辅料'?'2':'20'}));}
+  if(options.workbenchSheet)document.workbenchSheet={
+   version:1,styleName:"TEST 新版无技术尺码",gender:"男装",boardType:"头版",brand:"",processingSelected:true,referenceNote:"",
+   sewingRows:[{rowId:randomUUID(),color:"蓝",size:"",quantity:null}],
+  };
   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
   if(options.withoutNative)await new DigitalDevelopmentService(f.db,true).publish(designer,sourceId,saved.version,randomUUID());
   else await forms.publish(designer,sourceId,saved.version,randomUUID(),category);
@@ -388,6 +392,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const read=await technical.read(p.designer,p.sourceId);expect(read.enrolled).toBe(true);expect(read.cycle?.allowedSeconds).toBe(7*86400);
   expect((await forms.read(p.designer,p.sourceId)).document?.sizes).toEqual([]);
   await expect(execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,note:'图片不等于PLT',attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await tasks.read(p.worker,p.paper.taskId)).state).toBe('ready');
+ });
+ it('keeps the new workbench sample rows independent of optional technical sizes and real PLT completion',async()=>{
+  const p=await prepare('无',{workbenchSheet:true});
+  const sheet=await forms.read(p.designer,p.sourceId);
+  expect(sheet).toMatchObject({status:'published',document:{sizes:[],sizeQuantities:[],workbenchSheet:{sewingRows:[{color:'蓝',size:'',quantity:null}]}}});
+  expect(p.paper.state).toBe('ready');
+  await expect(execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,note:'TEST 尚未提交PLT',attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
   expect((await tasks.read(p.worker,p.paper.taskId)).state).toBe('ready');
  });
  it('publishes real scopedPLT+usage+base sizes, forbids foreign files and releases cutting parallel to design positioning',async()=>{
