@@ -1,231 +1,306 @@
 {
   "version": 1,
-  "base": "0a6823e4a5fb97864cfe607dee213f631915d939",
+  "base": "45574ca5a748bfdc245f500899e23fd07a92927a",
   "risk": "full",
-  "sourceFingerprint": "6dd616f7adef34cc47ef99873801823f92ed9987e51b0625da8586fa126a08a2",
+  "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
   "rules": [
     {
-      "rule": "共享辅料目录进入即显示原服务分页列表，保留原角色、原URL和字段；官方组件复用同一工作台样式范围。",
-      "source": "批准的设计开发工作台首轮重构 v7，Library a95c7c4c2bb88191aa5ce5b9c066078e，§3.1、§9、§13 PR-4、§17及G01–G08；协调方2026-11-23继续第4张的交接。",
+      "rule": "Read immutable published development documents by distinct source/round/documentVersion, with same-snapshot attachment membership and the original source field redaction.",
+      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
       "writes": [
-        "apps/web/src/auxiliary-catalog-page.tsx",
-        "apps/web/src/auxiliary-catalog-dialog.tsx",
-        "apps/web/src/auxiliary-catalog-dialog.css",
-        "apps/web/src/designer-astryx.ts",
-        "apps/web/src/digital-designer-workspace.tsx"
+        "apps/api/src/production-platform/development-document-snapshot.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "packages/contracts/src/digital-development.ts",
+        "apps/web/src/development-published-document.tsx",
+        "apps/web/src/development-original-reader.tsx",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/development-round-history-clock-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/auxiliary-catalog-access.ts",
-        "apps/web/src/App.tsx",
-        "apps/web/src/components.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/g1-acceptance-corrections.test.ts",
-        "tests/acceptance/auxiliary-catalog-browser.mjs"
-      ],
-      "newTests": [
-        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
-      ],
-      "initialization": "复用原完整App、AuthService、运行时角色和隔离库，不借用设计师创建权限作为目录父门禁；官方Astryx0.7.16锁版本未变。 原生用例遵循现有Acceptance-clock优先选择，已在同CI双库名和低权限角色下实跑；默认CI库仍保持被Acceptance安全守卫拒绝。",
-      "dateAndPermission": "五类原目录身份实际进入；纯PMC和文员经原鉴权链被拒，角色和capability定义保持原合同。",
-      "expectation": "独立页面没有第二个打开按钮。1165/1920/390实际渲染；窄屏表格局部滚动后可达完整操作，不修改外层布局或控件字体。",
-      "checks": [
-        "pr04-catalog-pg",
-        "pr04-catalog-unit"
-      ]
-    },
-    {
-      "rule": "原新增、改名、合并、停用继续调用同一命令，编辑离开保护和未知回执保持原内容及原幂等键。",
-      "source": "批准的设计开发工作台首轮重构 v7，Library a95c7c4c2bb88191aa5ce5b9c066078e，§3.1、§9、§13 PR-4、§17及G01–G08；协调方2026-11-23继续第4张的交接。",
-      "writes": [
-        "apps/web/src/auxiliary-catalog-api.ts",
-        "apps/web/src/auxiliary-catalog-dialog.tsx",
-        "tests/acceptance/auxiliary-catalog-browser.mjs"
-      ],
-      "reads": [
-        "apps/api/src/access/auxiliary-catalog-service.ts",
-        "apps/web/src/use-digital-detail-navigation-guard.ts",
-        "apps/web/src/system-dialog.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/auxiliary-catalog-postgres.test.ts",
-        "tests/acceptance/auxiliary-catalog-browser.mjs"
-      ],
-      "newTests": [
-        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
-      ],
-      "initialization": "原POST和GET receipt走真实隔离服务，只有命名的读取失败/回执丢失属于TEST传输适配。旧模拟脚本在基线同样jsxDEV失败，按现有原生harness显式jsxDev:false对齐。",
-      "dateAndPermission": "目录操作不产生订单实到、核料、计划或时效事实；原版本、原因和实际岗位在原事务内校验。",
-      "expectation": "真实页面逐项执行创建/改名/合并/停用；脏稿取消继续编辑；响应丢失只核对原回执，数据库一项且只有一次原POST。原14个模拟选择器场景通过。",
-      "checks": [
-        "pr04-catalog-pg"
-      ]
-    },
-    {
-      "rule": "版本历史按目录原读取权从原版本表读取，真实原因、人员、时间和字段分页展示，历史查看不增加写权限。",
-      "source": "批准的设计开发工作台首轮重构 v7，Library a95c7c4c2bb88191aa5ce5b9c066078e，§3.1、§9、§13 PR-4、§17及G01–G08；协调方2026-11-23继续第4张的交接。 §17.2明确新增只读历史面板及授权GET。",
-      "writes": [
-        "packages/contracts/src/auxiliary-catalog.ts",
-        "apps/api/src/access/auxiliary-catalog-routes.ts",
-        "apps/api/src/access/auxiliary-catalog-service.ts",
-        "apps/web/src/auxiliary-catalog-history.tsx",
-        "tests/integration/auxiliary-catalog-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/migrations/0249_shared_auxiliary_catalog.sql",
-        "apps/api/src/access/root-authority.ts",
-        "apps/api/src/production-platform/access-policy.ts"
-      ],
-      "oldTests": [
-        "tests/integration/auxiliary-catalog-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
-      ],
-      "initialization": "同一低权限隔离库中实际建立17版并用五类原角色读取两页；路由采用原businessActor和同一authorize。",
-      "dateAndPermission": "只格式化版本自身changed_at，不创建业务时间。无权先拒绝；原Root资格继续核验，读取不修改旧版本或订单。",
-      "expectation": "服务总数和页内版本分别为17、15/2，保原值、原因、操作人和事件类型；无权403、缺项404、非法页码400，真实App历史可见原名和新名。",
-      "checks": [
-        "pr04-catalog-pg"
-      ]
-    },
-    {
-      "rule": "独立目录与建单轻量选料器共用旧名称查询，命中同一有效条目和版本，保存的旧订单资料快照独立保留。",
-      "source": "批准的设计开发工作台首轮重构 v7，Library a95c7c4c2bb88191aa5ce5b9c066078e，§3.1、§9、§13 PR-4、§17及G01–G08；协调方2026-11-23继续第4张的交接。 并补协调方指定旧名双入口核验。",
-      "writes": [
-        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "apps/web/src/auxiliary-catalog-dialog.tsx"
-      ],
-      "reads": [
-        "apps/api/src/access/auxiliary-catalog-service.ts",
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/api/src/production-platform/development-amendment-repository.ts",
         "apps/web/src/development-document-fields.tsx",
-        "apps/api/src/production-platform/development-service.ts"
+        "apps/web/src/digital-development-print.tsx"
       ],
       "oldTests": [
-        "tests/integration/auxiliary-catalog-postgres.test.ts",
-        "tests/acceptance/auxiliary-catalog-browser.mjs"
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/development-round-history-clock-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
-      ],
-      "initialization": "只给原签名harness增加可选目录路由，未选该选项的原harness保持原路径；同一设计师原单保存v1，再经原界面改名、合并和停用。",
-      "dateAndPermission": "选料只填写当前稳定materialId及资料引用，不制造实际到料、文员核验、业务钟或来源实体。",
-      "expectation": "原页面进入面辅料章节后，旧名称、规格、供应方原样显示；新稿搜旧名选中同一有效id/version，保存附件与其他输入保持；后续合并/停用仍保旧快照。",
+      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
+      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
+      "expectation": "Initial publication, same-round correction and independent round remain distinct; original dates and adopted native pattern evidence stay unchanged; missing version and wrong-snapshot files are rejected.",
       "checks": [
-        "pr04-catalog-pg"
+        "original-pg",
+        "non-db",
+        "build"
       ]
     },
     {
-      "rule": "服务端搜索和原15条分页保留；新范围及请求代次未确认时，旧总数不参与跳页，晚响应不覆盖当前选择，实际返回保条件。",
-      "source": "批准的设计开发工作台首轮重构 v7，Library a95c7c4c2bb88191aa5ce5b9c066078e，§3.1、§9、§13 PR-4、§17及G01–G08；协调方2026-11-23继续第4张的交接。 G03及现有严格分页合同。",
+      "rule": "Quotation, budget and production-instruction originals reuse their complete native forms under an explicit read-only snapshot, preserving exact version identity and all native write routes.",
+      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
       "writes": [
-        "apps/web/src/auxiliary-catalog-dialog.tsx",
-        "scripts/test-suite-plan.mjs",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/budget-service.ts",
+        "apps/api/src/production-platform/budget-routes.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/production-instruction-routes.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "apps/web/src/digital-budget-panel.tsx",
+        "apps/web/src/digital-budget-print.tsx",
+        "apps/web/src/production-instruction-panel.tsx",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/production-original-reader.tsx",
+        "apps/web/src/production-original-reader.css",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/list-pagination.tsx",
-        "packages/ui/src/page-jump.tsx",
-        "apps/api/src/access/auxiliary-catalog-service.ts",
-        "scripts/acceptance/time-site-inventory.mjs"
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/web/src/document-editor.tsx"
       ],
       "oldTests": [
-        "tests/unit/business-time-write-contract.test.ts",
-        "tests/integration/auxiliary-catalog-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/digital-budget-shared-postgres.test.ts",
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "newTests": [
-        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
-      ],
-      "initialization": "真实建立16项，原分页可到第二页。仅扣住新筛选的真实HTTP请求；保留原行并检验按钮及Enter零额外跳页请求，放回后核目标数据实际可见及浏览器返回。",
-      "dateAndPermission": "currentResult按q/page/includeInactive/refresh绑定返回值。两处Math.max仅页数边界；现有semanticNotes和p02Review逐项保留，新清单关闭原本地单项清单失败。",
-      "expectation": "新范围未知时页码和跳转均不可用；完成后实际第二页可见，返回保页码和筛选。新PG文件在canonical plan且使用既有2worker配置；PMC、管理角色和无关员工原回归保留。",
+      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
+      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
+      "expectation": "Signed merchandiser reads exact old saved fields and exact authorized budget/instruction attachment IDs with successful image decode; quotation confirmation evidence differs from17newer versions; wrong attachment/version/actor refused; native current PO alias correction cannot rewrite saved instruction snapshot; no document writes.",
       "checks": [
-        "pr04-catalog-pg",
-        "pr04-catalog-unit"
+        "original-pg",
+        "non-db",
+        "api-types",
+        "web-types",
+        "layout-probe"
       ]
     },
     {
-      "rule": "供应商显式翻页读取失败后，移除旧行并显示原重读入口，保留已知总数和当前草稿；加载中的旧内容继续保留。",
-      "source": "本PR首次Full 45112195078失败后的协调方定点指令；精确旧基线0a6823e4已同例复现，保留原master-data-pages原生回归全部断言及既有失败重试/不冒充全库零条口径。",
+      "rule": "Use metadata-only grouped search and pagination plus a temporary switcher, direct original links and strict return context, keeping original editable/role-specific entries unchanged.",
+      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
       "writes": [
-        "apps/web/src/supplier-center-page.tsx",
-        "tests/integration/master-data-pages-native-browser-postgres.test.ts"
+        "apps/web/src/original-document-directory.tsx",
+        "apps/web/src/development-original-versions.tsx",
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/development-workspace-return.tsx",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/digital-production-page.tsx",
+        "tests/unit/digital-detail-route.test.ts",
+        "tests/unit/v2-workspace-navigation.test.ts"
       ],
       "reads": [
-        "apps/web/src/list-pagination.tsx",
-        "apps/web/src/supplier-center-lists.tsx"
+        "apps/web/src/internal-navigation.ts",
+        "apps/web/src/use-internal-return-scroll.ts",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/web/src/list-pagination.tsx"
       ],
       "oldTests": [
-        "tests/integration/master-data-pages-native-browser-postgres.test.ts",
-        "tests/unit/supplier-draft-guard.test.ts",
-        "tests/unit/supplier-profile-draft.test.ts"
+        "tests/unit/digital-detail-route.test.ts",
+        "tests/unit/v2-workspace-navigation.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
-      "newTests": [],
-      "initialization": "实际捕获page2中断一次、Failed to fetch与旧15行，原重读入口为0。仅显式失败清行；不清草稿或已知总数、不改静默刷新。",
-      "dateAndPermission": "无新写命令、角色、scope、日期或超时变化；原匿名401、编辑离开保护与独立选择页外供应商继续验证。",
-      "expectation": "中断后旧行0且原重读入口可见；等待真实重试200及第16条实际呈现，再核15行、page2、错误清除；原草稿和页外对象身份断言不降级。",
+      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
+      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
+      "expectation": "Search precedes paging over17real quote confirmations; selection is exact, the Dialog closes and returns focus, old version restores on Back, workbench selected/source/records/search and router departure scroll stay intact; no body prefetch or permanent inner sidebar.",
       "checks": [
-        "pr04-catalog-pg",
-        "pr04-catalog-unit"
+        "original-pg",
+        "non-db",
+        "web-types",
+        "layout-probe"
+      ]
+    },
+    {
+      "rule": "Keep the inherited signed browser HTTP adapter faithful for original attachment redirects and binary bytes; preserve dual-database safety, real identity authorization and exact server-request draining.",
+      "source": "Approved 设计开发工作台首轮重构 v7 §8.1–8.6, D01–D10/K11–K13; Library a95c7c4c2bb88191aa5ce5b9c066078e. Coordinator2026-11-23 PR5 continuation; exact selected versions and original roles, no deployment/main changes.",
+      "writes": [
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "tests/helpers/business-anchor-fixture.ts",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs"
+      ],
+      "oldTests": [
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+      ],
+      "initialization": "No migration, new role or historical rewrite. Existing real publication/amendment/round records are read; absent, inaccessible and unpublished records never fall back to current. TEST fixtures use only owned safety-marked low-privilege schemas and are cleaned by the canonical manifest contract.",
+      "dateAndPermission": "No SLA/clock/plan/quantity or authority changes. Every body/metadata/file rechecks the native domain authority; selected files must also belong to the exact saved snapshot. Original403/404 and limited quotation-row visibility remain.",
+      "expectation": "No Acceptance guard weakening, fake Root or synthetic approval. Existing original-browser cases plus legacy actual PDF roundtrip pass; authorized API302 is real, external TEST object transport only is adapted; manifests prove cleanup completed.",
+      "checks": [
+        "original-pg",
+        "non-db"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pr04-catalog-pg",
+      "id": "original-pg",
       "kind": "tests",
-      "command": "source /tmp/dx1081-recovery-env.sh; source /tmp/dx-workbench-auxiliary-evidence/ci-shape-env.sh; DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/auxiliary-catalog-native-browser-postgres.test.ts tests/integration/master-data-pages-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-workbench-auxiliary-evidence/ci-shape-final.json",
+      "command": "node /tmp/dx-workbench-original-evidence/verify-managed-pg.mjs (canonical postgresPlan configs; original resourceContext/resourceEnvironment/runOwnedCommand/cleanupResources)",
       "status": "passed",
       "exitCode": 0,
-      "passed": 15,
+      "passed": 86,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4e1f60c42539fe4132dce4b3394c7b52314d6cfd",
-      "sourceFingerprint": "6dd616f7adef34cc47ef99873801823f92ed9987e51b0625da8586fa126a08a2",
-      "context": "Node22.22.2、隔离安全标记 PostgreSQL16.14、Chromium151.0.7922.173。双库dx_rework_ci/dx_rework_acceptance_clock_test与低权限运行角色dx_rework_test按实际CI布局建立；保留原Acceptance库名与安全标记守卫。PG用既有业务正确性配置2worker，未宣称本地机器/镜像与GitHub相同。所有身份和数据均为合成TEST。",
-      "startedAt": "2026-11-23T05:04:08.888Z",
-      "endedAt": "2026-11-23T05:04:41.666Z",
-      "log": "/tmp/dx-workbench-auxiliary-evidence/ci-shape-final.log",
-      "logSha256": "ec43ddd37a9ec11e3adbabc4d6022e0a536c22678f06c263deab3cf20a2b7c48",
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/PG16.14/Chromium151; safety-marked dx_rework_ci + dx_rework_acceptance_clock_test, dx_rework_test NOSUPERUSER/NOBYPASSRLS; resolved ordinary1/long-correctness2 workers; workers fully stopped before exact manifest cleanup. Seven unique affected suites, not remote Full or hardware equivalence.",
+      "startedAt": "2026-11-23T06:39:36.631Z",
+      "endedAt": "2026-11-23T06:41:43.480Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-final-managed-pg.log",
+      "logSha256": "d8d292f5283ff71cbacf0263c2fa68e2ed74ccaf6264fa3184e236d94c443996",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5b2fa9bca776c2b5028b109b73e9abef498f0fbc2c6dacc70c5248c9e3c4425b"
+          "sha256": "2b9af2199d118827c61da343ad6ac552197d6942a1d6183bd0e270c072260209"
+        },
+        {
+          "format": "vitest-json",
+          "sha256": "b1a13c19c0ac9cf13d5bfc922b928c490fdbdbc97d7823c20cbc64c5c8ebedbe"
         }
       ]
     },
     {
-      "id": "pr04-catalog-unit",
+      "id": "non-db",
       "kind": "tests",
-      "command": "env DATABASE_URL='' TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' NODE_ENV=test node node_modules/vitest/vitest.mjs run tests/unit/business-time-write-contract.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/g1-acceptance-corrections.test.ts tests/unit/supplier-center-lists.test.ts tests/unit/supplier-draft-guard.test.ts tests/unit/supplier-profile-draft.test.ts tests/unit/supplier-workspace-query.test.ts tests/unit/supplier-onboarding-ui.test.ts --reporter=default --reporter=json --outputFile.json=/tmp/dx-workbench-auxiliary-evidence/ci-fix-unit.json",
+      "command": "TEST_DATABASE_URL='' ACCEPTANCE_CLOCK_TEST_DATABASE_URL='' DATABASE_URL='' DX_REWORK_TEST_SUITE_KIND=non-db node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-original-evidence/pr05-final-canonical-non-db.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 73,
+      "passed": 4523,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "4e1f60c42539fe4132dce4b3394c7b52314d6cfd",
-      "sourceFingerprint": "6dd616f7adef34cc47ef99873801823f92ed9987e51b0625da8586fa126a08a2",
-      "context": "Node22.22.2、隔离安全标记 PostgreSQL16.14、Chromium151.0.7922.173。双库dx_rework_ci/dx_rework_acceptance_clock_test与低权限运行角色dx_rework_test按实际CI布局建立；保留原Acceptance库名与安全标记守卫。PG用既有业务正确性配置2worker，未宣称本地机器/镜像与GitHub相同。所有身份和数据均为合成TEST。",
-      "startedAt": "2026-11-23T05:05:16.069Z",
-      "endedAt": "2026-11-23T05:05:25.204Z",
-      "log": "/tmp/dx-workbench-auxiliary-evidence/ci-fix-unit.log",
-      "logSha256": "9b783e2786b57cc8f9144d88942fa84d7f53632deec5a71f4acca2c16451ad28",
+      "skipped": 15,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Canonical vitest.config.ts and original non-DB worker limit; all three database variables cleared exactly as Full non-db lane. Existing PMC/management/ordinary/assigned/revoked-role, legacy route and budget/quotation guards retained.",
+      "startedAt": "2026-11-23T06:40:53Z",
+      "endedAt": "2026-11-23T06:45:57Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-final-canonical-non-db.log",
+      "logSha256": "c15d24e9390e72156cd45334e24ca7a4e2d4e39c3c615501769ba4620663265a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dd5cb6d86c2b8aac6348f80ee33b428502f975baff6a3a3b705aee7c78b88728"
+          "sha256": "8c5e56a82f4c63fb463e6552405a8b32eefee125bf603dee57daeee5df8776fe"
         }
       ]
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "command": "npm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:34:21.373Z",
+      "endedAt": "2026-11-23T06:34:49.321Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-final-static-lint.log",
+      "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
+    },
+    {
+      "id": "api-types",
+      "kind": "command",
+      "command": "npm run typecheck --workspace @dx-rework/api",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:34:49.329Z",
+      "endedAt": "2026-11-23T06:35:02.041Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-final-static-api.log",
+      "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7"
+    },
+    {
+      "id": "web-types",
+      "kind": "command",
+      "command": "npm run typecheck --workspace @dx-rework/web",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:35:02.049Z",
+      "endedAt": "2026-11-23T06:35:27.509Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-final-static-web.log",
+      "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef"
+    },
+    {
+      "id": "build",
+      "kind": "command",
+      "command": "npm run build --workspaces --if-present",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:44:08.785Z",
+      "endedAt": "2026-11-23T06:44:30.677Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-final-build.log",
+      "logSha256": "950c1bb6309fe59f2e41b044ea264f8db401bfb96d5808ecc1815527da3e62e5"
+    },
+    {
+      "id": "preflight",
+      "kind": "command",
+      "command": "node scripts/test-preflight.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:35:53.005Z",
+      "endedAt": "2026-11-23T06:35:59.621Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-preflight.log",
+      "logSha256": "3cb875037634fa4dcf4e7e655fc491762304fd1d0605b8b424df69a84b7f85fa"
+    },
+    {
+      "id": "secret-scan",
+      "kind": "command",
+      "command": "node scripts/secret-scan.mjs --worktree",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:35:59.629Z",
+      "endedAt": "2026-11-23T06:36:00.581Z",
+      "log": "/tmp/dx-workbench-original-evidence/pr05-secret-scan.log",
+      "logSha256": "e1dfa041688b50d44d86ff40fe8aa56557234186d6cc37fb95cd943eaae1c3ec"
+    },
+    {
+      "id": "time-inventory",
+      "kind": "command",
+      "command": "node scripts/acceptance/time-site-inventory.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:32:53.685Z",
+      "endedAt": "2026-11-23T06:32:54.229Z",
+      "log": "/tmp/dx-workbench-original-evidence/time-inventory-check.log",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
+    },
+    {
+      "id": "layout-probe",
+      "kind": "command",
+      "command": "node --import tsx /tmp/dx-workbench-original-evidence/verify-original-layout.mts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "45574ca5a748bfdc245f500899e23fd07a92927a",
+      "sourceFingerprint": "65a4bf67c48a5442d36e9924779fcfd521fe50e03fb9a35ea083a15028739366",
+      "context": "Node22.22.2/npm10.9.9; actual local worktree at approved release base plus the fingerprinted uncommitted candidate, not a remote Gate or final GitHub Head",
+      "startedAt": "2026-11-23T06:42:18.073Z",
+      "endedAt": "2026-11-23T06:42:30.561Z",
+      "log": "/tmp/dx-workbench-original-evidence/original-layout-probe-r2.log",
+      "logSha256": "ad633d148d353f2a49c393252482f97208cf4f446aa6668071578926b9a6ccf6"
     }
-  ],
-  "executionHistory": {
-    "scope": "失败、基线及修订结果分开保留，不用旧源码结果冒称当前冻结版本。",
-    "broadPostgres": "早期8文件98项与13项目录组合为历史组装证据；当前修订以同CI双库3文件15项为准确本地PG证据。",
-    "firstFull": "4e1f60c4的45112195078：非数据库4514通过/11跳过；PG先21和60通过，正确性组合510通过、1断言失败、4未执行且一个套件初始化失败。45项资源清理通过；未合并或重跑失败头。",
-    "baseline": "精确0a6823e4的原供应商文件1通过/1失败，复现同一缺少重读入口；实际中断1次、旧15行、错误可见。修正仅新增显式失败清行与原断言的真实请求/DOM同步。",
-    "nonDatabase": "原本地时间清单失败已关闭；当前73项相关单测及285项预检通过。最终GitHub完整门禁另核准确Head。",
-    "optionalScope": "本次交付原四种目录命令和§17明确历史面板，未增加建议性通用规格/供应商写命令。"
-  }
+  ]
 }

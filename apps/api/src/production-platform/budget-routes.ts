@@ -21,6 +21,14 @@ export function registerBudgetRoutes(app: FastifyInstance, dependencies: Digital
   const id = (request: FastifyRequest, name: string) => parse(z.string().uuid(), (request.params as Record<string, unknown>)[name]);
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const base = "/digital-production/orders/:orderId/budget";
+  app.get(`${base}/published-versions`,async(request,reply)=>{const q=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().trim().max(100).default('')}).strict(),request.query);reply.header('cache-control','private, no-store');return service.originalVersions(await actor(request),id(request,'orderId'),q.page,q.q);});
+  const originalBase=`${base}/original-versions/:version`;
+  app.get(originalBase,async(request,reply)=>{parse(z.object({}).strict(),request.query);reply.header('cache-control','private, no-store');return service.originalVersion(await actor(request),id(request,'orderId'),parse(z.coerce.number().int().positive(),(request.params as {version:string}).version));});
+  app.get(`${originalBase}/attachments/:attachmentId`,async(request,reply)=>{
+    parse(z.object({}).strict(),request.query);const trusted=await actor(request),orderId=id(request,'orderId'),attachmentId=id(request,'attachmentId'),version=parse(z.coerce.number().int().positive(),(request.params as {version:string}).version);
+    const grant=await attachments.createDownloadIntent(trusted,attachmentId,row=>Promise.resolve(row.entityType==='digital_budget'&&row.entityId===orderId&&service.canDownloadOriginal(trusted,orderId,version,attachmentId)),'inline');
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  });
   app.get(`${base}/washing-fees`,async request=>service.washingFees.read(await actor(request),id(request,'orderId')));
   app.post(`${base}/washing-fees`,async request=>service.washingFees.publish(await actor(request),id(request,'orderId'),parse(BudgetWashingFeeSchema,request.body),key(request)));
   app.get(base, async request => {

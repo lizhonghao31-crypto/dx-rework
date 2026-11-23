@@ -39,7 +39,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const saved=await run(()=>rounds.save(f.root,p.sourceId,{expectedDraftVersion:0,revision},randomUUID()));
    const key=randomUUID(),input={expectedDraftVersion:saved.draftVersion,basedOnRound},before=Date.now();
    await run(()=>rounds.publish(f.root,p.sourceId,input,key));const after=Date.now();
-   const row=(await f.db.query('SELECT published_at,document FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[p.sourceId,basedOnRound+1])).rows[0];
+   const row=(await f.db.query('SELECT published_at,document,document_version FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[p.sourceId,basedOnRound+1])).rows[0];
+   const precise=await run(()=>p.forms.publishedVersion(f.root,p.sourceId,basedOnRound+1,row.document_version));
+   expect(precise).toMatchObject({sourceId:p.sourceId,roundNumber:basedOnRound+1,documentVersion:row.document_version,document:row.document,publishedAt:row.published_at.toISOString()});
+   await expect(p.forms.publishedVersion(f.root,p.sourceId,basedOnRound,row.document_version)).rejects.toMatchObject({statusCode:404});
    const audit=(await f.db.query("SELECT created_at FROM audit_events WHERE entity_id=$1 AND action='development_round_published' AND after_state->>'roundNumber'=$2",[p.sourceId,String(basedOnRound+1)])).rows[0];
    if(scene)expect(row.published_at.toISOString()).toBe(at);else {expect(row.published_at.getTime()).toBeGreaterThanOrEqual(before);expect(row.published_at.getTime()).toBeLessThanOrEqual(after);}
    expect(audit.created_at.getTime()).toBeGreaterThanOrEqual(before-1000);expect(audit.created_at.getTime()).toBeLessThanOrEqual(after+1000);expect(row.document.quantity).toBe(1);
@@ -52,6 +55,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await run(()=>rounds.publish(f.root,p.sourceId,input,key));expect((await f.db.query('SELECT count(*)::int n FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[p.sourceId,basedOnRound+1])).rows[0].n).toBe(1);
   }
   expect((await f.db.query('SELECT to_jsonb(d) AS value FROM digital_development_documents d WHERE source_id=$1',[p.sourceId])).rows[0].value).toEqual(original);
+  expect(await p.forms.publishedVersions(f.root,p.sourceId)).toMatchObject({total:3,items:[{roundNumber:3},{roundNumber:2},{roundNumber:1}]});
  },testExecutionConfig.correctnessTimeoutMs);
  for(const mode of ['past','current','future','ordinary'] as const)it(`${mode}: inherited objects retain all three round histories without later binding or wage pollution`,async()=>{
   const {at,scene,run}=await context(mode),native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});

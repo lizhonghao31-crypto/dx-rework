@@ -12,6 +12,11 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
  const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
  app.get('/digital-production/quotations',async request=>service.list(await actor(request)));
  const base='/digital-production/:kind/:id/quotation';
+ app.get(`${base}/confirmed-versions`,async(request,reply)=>{const q=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().trim().max(100).default('')}).strict(),request.query);reply.header('cache-control','private, no-store');return service.originalVersions(await actor(request),resource(request),q.page,q.q);});
+ const originalBase=`${base}/original-versions/:version`;
+ const original=(request:FastifyRequest)=>({version:parse(z.coerce.number().int().positive(),(request.params as {version:string}).version),...parse(z.object({quoteId:z.string().uuid()}).strict(),request.query)});
+ app.get(originalBase,async(request,reply)=>{const ref=original(request);reply.header('cache-control','private, no-store');return service.originalVersion(await actor(request),resource(request),ref.quoteId,ref.version);});
+
  app.get(base,async request=>{const q=parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),resource(request),undefined,q.version);});
  app.get(`${base}/participants`,async request=>service.participants(await actor(request),resource(request)));
  app.put(base,async request=>service.save(await actor(request),resource(request),parse(SaveQuotationSchema,request.body),key(request)));

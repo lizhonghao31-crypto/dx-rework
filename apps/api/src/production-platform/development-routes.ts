@@ -23,6 +23,37 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const base = "/digital-production/sources/:sourceId/development";
   app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),id(request,"sourceId"),undefined,query.round);});
+  app.get(`${base}/published-versions`,async(request,reply)=>{
+    const query=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().max(100).default('')}).strict(),request.query);
+    reply.header('cache-control','private, no-store');return service.publishedVersions(await actor(request),id(request,'sourceId'),query.page,query.q);
+  });
+  const versionBase=`${base}/versions/:documentVersion`;
+  const versionReference=(request:FastifyRequest)=>({sourceId:id(request,'sourceId'),
+    documentVersion:parse(z.coerce.number().int().positive(),(request.params as Record<string,unknown>).documentVersion),
+    round:parse(z.object({round:z.coerce.number().int().positive()}).strict(),request.query).round});
+  app.get(versionBase,async(request,reply)=>{
+    const ref=versionReference(request);reply.header('cache-control','private, no-store');
+    return service.publishedVersion(await actor(request),ref.sourceId,ref.round,ref.documentVersion);
+  });
+  const versionFile=async(request:FastifyRequest)=>{
+    const ref=versionReference(request),attachmentId=id(request,'attachmentId'),trusted=await actor(request);
+    if(!await service.canDownloadVersion(trusted,ref.sourceId,ref.round,ref.documentVersion,attachmentId))throw new ApplicationError('NOT_FOUND','找不到所选版本的附件',404);
+    return {...ref,attachmentId,trusted};
+  };
+  app.get(`${versionBase}/attachments/:attachmentId/metadata`,async request=>{
+    const ref=await versionFile(request);
+    return attachments.readIdentity(ref.trusted,ref.attachmentId,row=>Promise.resolve(row.entityType==='digital_development'&&service.canDownloadVersion(ref.trusted,ref.sourceId,ref.round,ref.documentVersion,ref.attachmentId)));
+  });
+  app.get(`${versionBase}/attachments/:attachmentId`,async(request,reply)=>{
+    const ref=await versionFile(request),grant=await attachments.createDownloadIntent(ref.trusted,ref.attachmentId,row=>Promise.resolve(row.entityType==='digital_development'&&service.canDownloadVersion(ref.trusted,ref.sourceId,ref.round,ref.documentVersion,ref.attachmentId)),'inline');
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  });
+  app.get(`${versionBase}/attachments/:attachmentId/preview`,async(request,reply)=>{
+    const grant=await attachments.createImagePreviewDownloadIntent(async()=>{const ref=await versionFile(request);return ref.trusted;},id(request,'attachmentId'),async(trusted,row)=>{
+      const ref=versionReference(request);return row.entityType==='digital_development'&&service.canDownloadVersion(trusted,ref.sourceId,ref.round,ref.documentVersion,id(request,'attachmentId'));
+    });
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  });
   app.get(`${base}/draft-save-receipt`,async request=>service.draftSaveReceipt(await actor(request),id(request,'sourceId'),key(request)));
   app.get(`${base}/submission-receipt`,async(request,reply)=>{const input=parse(DevelopmentSubmissionReceiptQuerySchema,request.query);reply.header('cache-control','private, no-store');return service.submissionReceipt(await actor(request),id(request,'sourceId'),input.operation,input.key);});
   app.get(`${base}/amendment`,async request=>{const input=parse(z.object({taskId:z.string().uuid()}).strict(),request.query);return service.readAmendment(await actor(request),id(request,"sourceId"),input.taskId);});

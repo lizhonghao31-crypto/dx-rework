@@ -24,6 +24,15 @@ describe("V2 shell route adapter", () => {
     expect(developmentWorkspaceReturnUrl(root+"&section=external","/")).toBeNull();
     expect(developmentWorkspaceReturnUrl(root+"&section=create&section=workspace","/")).toBeNull();
   });
+  it('preserves original-directory search and independent page positions only in the selected records area',()=>{
+    const id='b92e6815-5892-4c51-b3c9-5e70ddbd1546';
+    const root=`/ui/digital-production?workspace=designer&section=workspace&development=${id}&area=records`;
+    const target=root+'&page=2&search=TEST&originalSearch=%E7%89%88%E6%9C%AC%202&originaldevelopmentPage=2&originalbudgetPage=3&originalinstructionPage=4&originalquotationPage=5';
+    expect(developmentWorkspaceReturnUrl(target,'/')).toBe(target);
+    for(const suffix of ['&originalbudgetPage=0','&originalbudgetPage=1.5','&originalbudgetPage=1000001','&originalbudgetPage=2&originalbudgetPage=3','&originalSearch='+('x'.repeat(101))])expect(developmentWorkspaceReturnUrl(root+suffix,'/')).toBeNull();
+    expect(developmentWorkspaceReturnUrl(root.replace('area=records','area=development')+'&originalSearch=x','/')).toBeNull();
+    expect(developmentWorkspaceReturnUrl('/ui/digital-production?workspace=designer&originalbudgetPage=2','/')).toBeNull();
+  });
   it("retains Root and original non-Root module permissions without granting new capabilities", () => {
     const user = { id: "TEST", displayName: "TEST", capabilities: [], businessRoles: [] as string[] };
     expect(canAccessDigitalProduction({ ...user, isRoot: true })).toBe(true);

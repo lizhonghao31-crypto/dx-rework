@@ -1,6 +1,7 @@
 import {afterAll,beforeAll,describe,expect,it,vi} from "vitest";
 import {randomUUID,createHash} from "node:crypto";
 import sharp from 'sharp';
+import PDFDocument from 'pdfkit';
 import {createServer,type Server} from "node:http";
 import {mkdtemp,mkdir,readFile,rm,writeFile} from "node:fs/promises";
 import {join,resolve,extname} from "node:path";
@@ -16,6 +17,7 @@ import {RootAuthority} from "../../apps/api/src/access/root-authority.js";
 import {EmployeeAccessService} from "../../apps/api/src/access/employee-access-service.js";
 import {DevelopmentExecutionService} from "../../apps/api/src/production-platform/development-execution-service.js";
 import {DevelopmentRoundService} from "../../apps/api/src/production-platform/development-round-service.js";
+import {DevelopmentAmendmentService} from '../../apps/api/src/production-platform/development-amendment-service.js';
 import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {DevelopmentWorkspaceQuery} from '../../apps/api/src/production-platform/development-workspace-query.js';
@@ -27,6 +29,7 @@ import {DigitalProductionAccessService} from "../../apps/api/src/production-plat
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
 import {DigitalQuotationService} from "../../apps/api/src/production-platform/quotation-service.js";
 import {DevelopmentDocumentSchema,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
+import type {DevelopmentReturnIssue} from '@dx-rework/contracts/digital-development-amendments';
 import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-service.js";
 import {PatternRoomPriceService} from "../../apps/api/src/pattern-room/price-service.js";
 import {RootAwareTodoProjectionService} from "../../apps/api/src/todos/root-aware-projection-service.js";
@@ -36,6 +39,7 @@ import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js'
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {arrangeTestRound} from "../helpers/development-arrangement-fixture.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
+import {createHistoricalPatternFixture} from '../helpers/historical-pattern-fixture.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -46,6 +50,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string,uploadSourceId:string,uploadPaperId:string;
  let externalSourceId:string,externalTaskId:string,externalRequestId:string;
  const tokens=new Map<string,string>(),evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"development-read");
+ const readerRequests=new Map<string,Set<Promise<void>>>(),closedReaderSessions=new Set<string>();
  let loginRole:(role:string)=>Promise<string>;
  const path=(id:string)=>`/digital-production/sources/${id}/execution`;
  const get=(role:string,url:string)=>app.inject({method:"GET",url,headers:{cookie:"dx_rework_session="+tokens.get(role)}});
@@ -97,12 +102,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   externalTaskId=external.taskId;externalRequestId=external.requestId;
   foreignSourceId=(await prepare()).id;foreignTaskId=(await execution.read(f.root,foreignSourceId)).tasks.find(t=>t.taskKind==='development_materials')!.taskId;
   draftId=(await prepare(false)).id;
-  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentRounds:new DevelopmentRoundService(f.db,true,native),developmentExecution:execution,developmentAttachments:f.attachments,journeys:new DigitalJourneyQuery(f.db),quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
+  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomOrders:{authenticate,root,service:native,attachments:f.attachments},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentRounds:new DevelopmentRoundService(f.db,true,native),developmentExecution:execution,developmentAttachments:f.attachments,journeys:new DigitalJourneyQuery(f.db),quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
   for(const role of ['root','pattern-room-worker','worker-a','pattern-room-supervisor','development-clerk'])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   output=await mkdtemp(join(tmpdir(),"dx-development-read-native-"));const previous=process.env.NODE_ENV;
   try{process.env.NODE_ENV="production";await build({root:resolve("apps/web"),configFile:resolve("apps/web/vite.config.ts"),mode:"production",base:"/",build:{outDir:output,emptyOutDir:true}});}finally{if(previous===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previous;}
   const html=await readFile(join(output,"index.html"));
-  server=createServer(async(request,response)=>{try{
+  server=createServer(async(request,response)=>{
+   const readerSession=typeof request.headers['x-test-original-reader']==='string'?request.headers['x-test-original-reader']:undefined;
+   if(readerSession&&closedReaderSessions.has(readerSession)){response.writeHead(410);response.end();return;}
+   let settle:(()=>void)|undefined;const active=readerSession?readerRequests.get(readerSession):undefined;
+   if(active){let finish!:()=>void;const pending=new Promise<void>(done=>{finish=done;});active.add(pending);settle=()=>{active.delete(pending);finish();};}
+   try{
    const path=request.url??"/";
    if(path.startsWith('/__test-storage?')){const key=new URL(path,'http://TEST.invalid').searchParams.get('key')!,bytes=f.storage.objectBytes.get(key);response.writeHead(bytes?200:404,{'content-type':f.storage.objects.get(key)?.mimeType??'application/octet-stream'});response.end(bytes?Buffer.from(bytes):undefined);return;}
    if(path.startsWith("/api/")){
@@ -111,7 +121,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }
    if(path.startsWith("/assets/")){const asset=new URL(path,"http://TEST.invalid").pathname;if(!/^\/assets\/[A-Za-z0-9_.-]+$/.test(asset)){response.writeHead(400);response.end();return;}response.writeHead(200,{"content-type":extname(asset)===".css"?"text/css":"text/javascript"});response.end(await readFile(join(output,asset.slice(1))));return;}
    response.writeHead(200,{"content-type":"text/html;charset=utf-8"});response.end(html);
-  }catch{response.writeHead(500);response.end();}});
+  }catch{response.writeHead(500);response.end();}finally{settle?.();}});
   await new Promise<void>(done=>server.listen(0,"127.0.0.1",done));const address=server.address();if(!address||typeof address==="string")throw Error("Owned native loopback required");base="http://127.0.0.1:"+address.port;
   const grant=f.storage.createDownloadGrant.bind(f.storage);
   f.storage.createDownloadGrant=async(key,options)=>({...await grant(key,options),downloadUrl:base+'/__test-storage?key='+encodeURIComponent(key)});
@@ -119,6 +129,98 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  afterAll(async()=>{await browser?.close();if(server){server.closeAllConnections();await new Promise<void>(done=>server.close(()=>done()));}await app?.close();await f?.dispose();if(output)await rm(output,{recursive:true,force:true});});
 
+ it('reads an exact original development revision as the real designer without editable controls, latest fallback or business writes',async()=>{
+  const designer=f.people['sample-designer']!,clerk=f.people['development-clerk']!,forms=new DigitalDevelopmentService(f.db,true),amendments=new DevelopmentAmendmentService(f.db,true);
+  const pdf=new PDFDocument({size:'A4'}),chunks:Buffer[]=[],finished=new Promise<Buffer>((done,reject)=>{pdf.on('data',chunk=>chunks.push(Buffer.from(chunk)));pdf.on('end',()=>done(Buffer.concat(chunks)));pdf.on('error',reject);});pdf.text('TEST original paper-pattern making record - generic PDF');pdf.end();
+  const pdfBytes=await finished,pdfId=randomUUID(),pdfKey=`TEST-original-reader/${pdfId}`,pdfHash=createHash('sha256').update(pdfBytes).digest('hex');
+  await f.storage.writeImmutable(pdfKey,pdfBytes,{mimeType:'application/pdf',sha256:pdfHash});
+  await f.db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-legacy-original.pdf','application/pdf',$3,$4,$5,'ready',CURRENT_TIMESTAMP)",[pdfId,pdfKey,pdfBytes.length,pdfHash,designer.actorId]);
+  const own=await prepareDevelopment(),originalImage=(await forms.read(designer,own.id)).document!.files[0]!.attachmentId;
+  const native=new PatternRoomOrderService(f.db,new RootAwareTodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
+  const link=(await f.db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[own.id])).rows[0]!;
+  const adopted=await native.get(designer,link.order_id);
+  expect(adopted.note).toBe('TEST S1 原制作说明');expect(adopted.attachments.map(file=>file.attachmentId)).toEqual([originalImage]);
+  // An existing legacy shape has no technical PLT version. Its own generic PDF
+  // remains an original PDF; it must not acquire another source/round's PLT.
+  const legacyPdfId=pdfId;
+  const price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled AND amount IS NOT NULL LIMIT 1")).rows[0]!;
+  const legacy=await createHistoricalPatternFixture(native,designer,{styleNo:'TEST-LEGACY-ORIGINAL-'+randomUUID(),categoryId:price.price_id,priceVersion:price.version,quantity:1,attachmentIds:[legacyPdfId],note:'TEST 历史纸样原说明'},randomUUID());
+  const before=await execution.read(clerk,own.id),check=before.tasks.find(task=>task.taskKind==='development_materials')!;
+  const entries=[{materialId:own.materialId,usage:'use' as const,physical:true,quantity:true,color:true,specification:false,note:'TEST原规格需补正',confirmedWith:''}],issues:DevelopmentReturnIssue[]=[{materialId:own.materialId,field:'specification',reason:'TEST原规格待更正'},{materialId:null,field:'files',reason:'TEST本轮附件资料待更正'},{materialId:null,field:'instructions',reason:'TEST制作说明待更正'}];
+  const verified=await execution.saveMaterials(clerk,own.id,{taskId:check.taskId,expectedVersion:before.materialVerification!.version,expectedDocumentVersion:before.sheet.version,entries,result:'缺项退回',returnIssues:issues},randomUUID());
+  await execution.check(clerk,own.id,{taskId:check.taskId,expectedVerificationVersion:verified.version,result:'缺项退回',note:'TEST真实文员退回规格',returnIssues:issues,items:entries.map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}))},randomUUID());
+  const supply=(await execution.read(designer,own.id)).tasks.find(task=>task.taskKind==='development_material_supply'&&task.state==='ready')!;
+  const prior=await amendments.read(designer,own.id,supply.taskId),document=structuredClone(prior.document),newImage=await f.image(designer);document.materials[0]!.specification='TEST42支';document.instructions='TEST 新修订制作说明';document.files=[{attachmentId:newImage,kind:'款图'}];
+  const draft=await amendments.save(designer,own.id,{taskId:supply.taskId,roundNumber:1,expectedDocumentVersion:prior.documentVersion,expectedDraftVersion:0,document,reason:'TEST仅更正原退回规格'},randomUUID());
+  await amendments.submit(designer,own.id,{taskId:supply.taskId,roundNumber:1,expectedDocumentVersion:prior.documentVersion,expectedDraftVersion:draft.draftVersion},randomUUID());
+  const current=await forms.read(designer,own.id),snapshot=await f.db.query('SELECT to_jsonb(d) AS value FROM digital_development_documents d WHERE source_id=$1',[own.id]);
+  const readerSession=randomUUID(),active=new Set<Promise<void>>();
+  const context=await browser.newContext({viewport:{width:1165,height:747},extraHTTPHeaders:{'x-test-original-reader':readerSession}});readerRequests.set(readerSession,active);
+  await context.addInitScript(()=>{
+   const replace=history.replaceState;
+   history.replaceState=function(data,unused,url){
+    const saved=(data as {dxInternalRestoreScroll?:{path:string;top:number}}|null)?.dxInternalRestoreScroll;
+    // Record the original router's actual departure point, after route loading
+    // preparation. A pre-click sample can precede pending old-page layout.
+    if(saved?.path===location.pathname+location.search&&new URLSearchParams(location.search).get('workspace')==='designer')
+     (window as unknown as {testOriginalDepartureTop:number}).testOriginalDepartureTop=saved.top;
+    replace.call(this,data,unused,url);
+   };
+  });
+  await context.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);
+  const writes:string[]=[],reads:string[]=[];page.on('request',request=>{const url=new URL(request.url());if(url.pathname.startsWith('/api/')){if(!['GET','HEAD','OPTIONS'].includes(request.method()))writes.push(request.method()+' '+url.pathname);else reads.push(url.pathname+url.search);}});
+  const open=async(version:number)=>page.goto(base+`/ui/digital-production?development=${own.id}&round=1&developmentDocumentVersion=${version}`);
+  try{
+   const workspace=base+`/ui/digital-production?${new URLSearchParams({workspace:'designer',section:'workspace',development:own.id,round:'1',area:'records',selected:own.id,page:'1'})}`;
+   await page.goto(workspace);const firstOriginal=page.getByRole('region',{name:'开发资料原版本',exact:true}).getByRole('button',{name:`开发单 · 第1轮 · 资料版本 ${prior.documentVersion} · 已发布`,exact:true});await firstOriginal.waitFor();await firstOriginal.scrollIntoViewIfNeeded();
+   const search=page.getByRole('region',{name:'本单原单据目录',exact:true}).getByLabel('搜索原单与版本',{exact:true});
+   await search.fill('资料版本 '+prior.documentVersion);await firstOriginal.waitFor();
+   await expect.poll(()=>new URL(page.url()).searchParams.get('originalSearch')).toBe('资料版本 '+prior.documentVersion);
+   expect(reads.some(path=>/\/development\/versions\/\d+\?/.test(path))).toBe(false);
+   await firstOriginal.click();const original=page.getByRole('region',{name:'开发原单精确版本',exact:true});await original.waitFor();const originalTop=await page.evaluate(()=>(window as unknown as {testOriginalDepartureTop:number}).testOriginalDepartureTop);expect(Number.isFinite(originalTop)).toBe(true);
+   expect(await page.locator(`#development-${own.materialId}-specification`).textContent()).toBe('TEST40支');
+   expect(await page.locator('.dx-doc-status').textContent()).toContain('资料版本 '+prior.documentVersion);
+   const oldFile=`/sources/${own.id}/development/versions/${prior.documentVersion}/attachments/${originalImage}`;
+   expect(await original.locator(`img[src*="${oldFile}"]`).count()).toBeGreaterThan(0);expect(await original.locator(`img[src*="${newImage}"]`).count()).toBe(0);
+   expect(await page.locator('.order-document-layout > nav').count()).toBe(0);expect(await page.locator('input[type="file"]').count()).toBe(0);
+   for(const name of ['保存草稿','发布开发单','发起实际修改 / 复版'])expect(await page.getByRole('button',{name,exact:true}).count()).toBe(0);
+   await page.goBack();await firstOriginal.waitFor();await expect.poll(async()=>Math.abs(await page.evaluate(()=>window.scrollY)-originalTop)).toBeLessThanOrEqual(2);
+   expect(new URL(page.url()).searchParams.get('selected')).toBe(own.id);expect(new URL(page.url()).searchParams.get('area')).toBe('records');
+   expect(await search.inputValue()).toBe('资料版本 '+prior.documentVersion);
+   await firstOriginal.click();await original.waitFor();
+   const width=await original.boundingBox();await page.getByRole('button',{name:'切换单据',exact:true}).click();const chooser=page.getByRole('dialog',{name:'切换单据',exact:true});await chooser.waitFor();
+   await chooser.getByRole('button',{name:`开发单 · 第1轮 · 资料版本 ${current.version} · 已发布`,exact:true}).waitFor();
+   expect((await original.boundingBox())?.width).toBe(width?.width);await page.keyboard.press('Escape');await chooser.waitFor({state:'hidden'});
+   expect(await page.getByRole('button',{name:'切换单据',exact:true}).evaluate(element=>element===document.activeElement)).toBe(true);
+   await page.getByRole('button',{name:'切换单据',exact:true}).click();await chooser.getByLabel('搜索原单与版本',{exact:true}).fill('资料版本 '+current.version);
+   await expect.poll(()=>chooser.getByRole('button',{name:/开发单 · 第1轮/}).count()).toBe(1);
+   await chooser.getByRole('button',{name:`开发单 · 第1轮 · 资料版本 ${current.version} · 已发布`,exact:true}).click();await chooser.waitFor({state:'hidden'});
+   await expect.poll(()=>page.locator(`#development-${own.materialId}-specification`).textContent()).toBe('TEST42支');
+   expect(await page.locator('.dx-doc-status').textContent()).toContain('资料版本 '+current.version);
+   expect(await original.locator(`img[src*="/versions/${current.version}/attachments/${newImage}"]`).count()).toBeGreaterThan(0);expect(await original.locator(`img[src*="${originalImage}"]`).count()).toBe(0);
+   await page.goBack();await expect.poll(()=>page.locator(`#development-${own.materialId}-specification`).textContent()).toBe('TEST40支');
+   expect((await native.get(designer,link.order_id)).note).toBe(adopted.note);expect((await native.get(designer,link.order_id)).attachments).toEqual(adopted.attachments);
+   const currentUrl=new URL(page.url()),returnTo=currentUrl.pathname+currentUrl.search;
+   const priorReads=reads.length;
+   const legacyReply=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/pattern-room/orders/${legacy.orderId}`&&response.request().method()==='GET');
+   await page.goto(base+`/ui/pattern-room/orders/${legacy.orderId}?${new URLSearchParams({round:legacy.currentRoundId,readOnly:'history',returnTo})}`);
+   const legacyResponse=await legacyReply;expect(legacyResponse.status()).toBe(200);expect(await legacyResponse.json()).toMatchObject({orderId:legacy.orderId,currentRoundId:legacy.currentRoundId});
+   await expect.poll(()=>page.locator('.page-heading h1').innerText()).toContain(legacy.styleNo);await page.getByText(legacy.note!,{exact:false}).first().waitFor();
+   expect(await page.getByText('TEST 新修订制作说明',{exact:false}).count()).toBe(0);
+   const pdfReply=page.waitForResponse(response=>response.url().includes('/pattern-room/attachments/'+legacyPdfId+'/download')&&response.request().method()==='GET');
+   await page.getByRole('button',{name:'预览 TEST-legacy-original.pdf',exact:true}).click();expect((await pdfReply).status()).toBe(302);
+   const response=await context.request.get(base+'/api/pattern-room/attachments/'+legacyPdfId+'/download?mode=preview');expect(response.headers()['content-type']).toContain('application/pdf');expect(createHash('sha256').update(await response.body()).digest('hex')).toBe(pdfHash);
+   const preview=page.getByRole('dialog',{name:'制作资料预览',exact:true});expect(await preview.locator('iframe[title="TEST-legacy-original.pdf"]').count()).toBe(1);await preview.getByRole('button',{name:'关闭',exact:true}).click();
+   expect(reads.slice(priorReads).some(path=>path.includes('/technical/')||path.includes('.plt'))).toBe(false);expect((await native.get(designer,legacy.orderId)).attachments.map(file=>file.attachmentId)).toEqual([legacyPdfId]);
+   expect(await page.locator('input[type="file"]').count()).toBe(0);expect(await page.getByRole('button',{name:'更新任务资料',exact:true}).count()).toBe(0);
+   await page.getByRole('link',{name:'返回来源列表',exact:true}).click();await original.waitFor();expect(new URL(page.url()).searchParams.get('development')).toBe(own.id);expect(new URL(page.url()).searchParams.get('developmentDocumentVersion')).toBe(String(prior.documentVersion));
+   await page.getByRole('button',{name:'返回来源',exact:true}).click();await firstOriginal.waitFor();expect(new URL(page.url()).searchParams.get('selected')).toBe(own.id);expect(new URL(page.url()).searchParams.get('area')).toBe('records');
+   await open(current.version+100);await page.getByRole('alert').filter({hasText:'原记录不存在或当前不可见'}).waitFor();expect(await original.count()).toBe(0);
+   expect(writes).toEqual([]);expect((await forms.read(designer,own.id)).version).toBe(current.version);
+   expect((await f.db.query('SELECT to_jsonb(d) AS value FROM digital_development_documents d WHERE source_id=$1',[own.id])).rows).toEqual(snapshot.rows);
+  }catch(error){await writeFile(join(evidence,'original-reader-failure.json'),JSON.stringify({url:page.url(),body:await page.locator('body').innerText(),position:await page.evaluate(()=>({actual:window.scrollY,departed:(window as unknown as {testOriginalDepartureTop?:number}).testOriginalDepartureTop,history:window.history.state})),reads,writes},null,2));throw error;}
+  finally{closedReaderSessions.add(readerSession);await context.close();while(active.size)await Promise.allSettled([...active]);readerRequests.delete(readerSession);}
+ });
  it("keeps native GET and QR scoped to this source and revalidates the same session after real role revocation or disabling",async()=>{
   const root=await get('root',path(sourceId));expect(root.statusCode).toBe(200);
   expect(root.json()).toMatchObject({qrAvailable:true,canDispatch:true,sheet:{sourceId,status:'published',roundNumber:1},fixedCutting:{valid:true},materialReadiness:[{available:true,verified:true}]});

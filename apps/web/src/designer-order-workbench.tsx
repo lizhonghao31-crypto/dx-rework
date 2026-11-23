@@ -15,6 +15,9 @@ import {DigitalQuotationPanel} from './digital-quotation-panel.js';
 import {DESIGNER_ORDER_AREAS,type DesignerOrderArea} from './digital-workspace-navigation.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {todoRouteHref} from './todo-route-link.js';
+import {OriginalDocumentDirectory,originalDocumentHref,type OriginalDocumentRef} from './original-document-directory.js';
+import {navigateInternalPage} from './internal-navigation.js';
+import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 
 const labels:Record<DesignerOrderArea,string>={document:'版单资料',development:'开发办理',customer:'客户与报价',handover:'交接与协同',records:'订单相关单据',history:'操作记录'};
 const labelsId=(area:DesignerOrderArea)=>`designer-order-${area}`;
@@ -45,6 +48,7 @@ export function DesignerOrderWorkbench({sourceId,round,item,sheet,image,document
  const [focus,setFocus]=useState<DesignerOrderArea|null>(()=>opened[1]??null);
  const [recordRefresh,setRecordRefresh]=useState(0);
  const [records,setRecords]=useState<OrderJourney|null>(null),[recordError,setRecordError]=useState<Error|null>(null);
+ const [originalVersionsReady,setOriginalVersionsReady]=useState(false);
  const recordOpened=opened.includes('records')||opened.includes('history');
  const reloadRecords=()=>setRecordRefresh(value=>value+1);
  const changed=()=>{reloadRecords();onChanged();};
@@ -58,12 +62,18 @@ export function DesignerOrderWorkbench({sourceId,round,item,sheet,image,document
  },[sourceId,round,recordOpened,recordRefresh,sheet?.sourceId]);
  useEffect(()=>{
   if(!focus)return;
+  if(!sheet||recordOpened&&!records||opened.includes('records')&&!originalVersionsReady)return;
+  const saved=window.history.state?.dxInternalRestoreScroll;
+  if(saved?.path===window.location.pathname+window.location.search){setFocus(null);return;}
   const frame=requestAnimationFrame(()=>{
    const heading=window.document.getElementById(labelsId(focus));
    heading?.scrollIntoView({block:'start'});heading?.focus({preventScroll:true});setFocus(null);
   });
   return()=>cancelAnimationFrame(frame);
- },[focus]);
+ },[focus,sheet,recordOpened,records,opened,originalVersionsReady]);
+ // Restore after the actual directory rows have rendered, rather than against
+ // its shorter loading state and then letting browser scroll anchoring move it.
+ useInternalReturnScroll(Boolean(sheet)&&(!recordOpened||Boolean(records))&&(!opened.includes('records')||originalVersionsReady));
 
  const sourceQuery=(area:DesignerOrderArea)=>{
   const target=new URL(window.location.href);target.searchParams.set('area',area);return target.pathname+target.search;
@@ -121,11 +131,14 @@ export function DesignerOrderWorkbench({sourceId,round,item,sheet,image,document
    :<>{region('development',<p>当前轮次请从版单资料查看原办理记录。</p>)}{region('customer',<p>请切换到当前已发布轮次办理客户意见或报价。</p>)}</>}
   {region('handover',current&&sheet?<ProductionReadinessPanel resource={{kind:'source',id:sourceId}} sourceDocumentVersion={sheet.version} focusKind="design_handover" onChanged={changed}/>:<p>请从当前有效资料查看原交接方式。</p>)}
   {region('records',readResult(journey=>{
-   const entries=journeyDocumentGroups(journey).flatMap(group=>group.entries).filter(entry=>entry.record.url&&entry.record.mode==='read'&&entry.record.domain!=='task');
-   return entries.length?<ul>{entries.map(entry=>{
+   const entries=journeyDocumentGroups(journey).flatMap(group=>group.entries).filter(entry=>entry.record.url&&entry.record.mode==='read'&&!['task','development','budget','instruction','quotation'].includes(entry.record.domain));
+   const openOriginal=(ref:OriginalDocumentRef)=>{
+    const href=originalDocumentHref(ref,sourceQuery('records'),urls.base);if(href)void navigateInternalPage(href);
+   };
+   return <><OriginalDocumentDirectory resource={{kind:'source',id:sourceId}} onSelect={openOriginal} onReady={setOriginalVersionsReady} rememberInUrl/>{entries.length?<ul>{entries.map(entry=>{
     const link=digitalChildDetailHref(entry.record.url!,sourceQuery('records'),urls.base);
     return link?<li key={entry.key}><Link type="inherit" href={link}>{entry.label}</Link></li>:null;
-   })}</ul>:<p>当前范围没有可查看的关联单据。</p>;
+   })}</ul>:<p>当前范围没有其它可查看的关联单据。</p>}</>;
   }))}
   {region('history',readResult(journey=><CockpitOperationLog order={journey} embedded/>))}
  </div>;

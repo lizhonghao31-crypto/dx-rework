@@ -31,6 +31,8 @@ const OrderTimeRequestPage=lazyBusinessPage(()=>import('./order-time-request-pag
 const DevelopmentArrangementPage=lazyBusinessPage(()=>import('./development-arrangement-page.js').then(module=>({default:module.DevelopmentArrangementPage})),{shellOnError:false});
 const BulkTaskWorkbench=lazyBusinessPage(()=>import('./bulk-task-workbench.js').then(module=>({default:module.BulkTaskWorkbench})),{shellOnError:false});
 const OrderDocumentContainer=lazyBusinessPage(()=>import('./order-document-container.js').then(module=>({default:module.OrderDocumentContainer})),{shellOnError:false});
+const DevelopmentOriginalReader=lazyBusinessPage(()=>import('./development-original-reader.js').then(module=>({default:module.DevelopmentOriginalReader})),{shellOnError:false});
+const ProductionOriginalReader=lazyBusinessPage(()=>import('./production-original-reader.js').then(module=>({default:module.ProductionOriginalReader})),{shellOnError:false});
 const TaskWorkbenchSample=lazyBusinessPage(()=>import('./task-workbench-sample.js').then(module=>({default:module.TaskWorkbenchSample})),{shellOnError:false});
 const DigitalPatternWorkspace=lazyBusinessPage(()=>import('./digital-pattern-workspace.js').then(module=>({default:module.DigitalPatternWorkspace})),{shellOnError:false});
 const OrderClosurePanel=lazyBusinessPage(()=>import('./order-closure-panel.js').then(module=>({default:module.OrderClosurePanel})),{shellOnError:false});
@@ -185,11 +187,13 @@ function DigitalProductionPageContent() {
           resource={{kind:route.kind==='materialSource'?'source':'order',id:route.id}} focusKind="material_investment"/></section>;
       break;
     case "bulk": detail = <BulkPreparationPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
-    case "instruction": detail = <OrderDocumentContainer key={`instruction:${route.id}:${route.version}`} initial={{kind:"instruction",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
-    case "budget": detail = <OrderDocumentContainer key={`budget:${route.id}:${route.version}`} initial={{kind:"budget",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
+    case "instruction":
+    case "budget": detail = route.original?<ProductionOriginalReader key={`${route.kind}:${route.id}`} reference={{kind:route.kind,orderId:route.id,version:route.version!}} onClose={()=>void closeDetail()}/>:<OrderDocumentContainer key={`${route.kind}:${route.id}:${route.version}`} initial={{kind:route.kind,id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
+    case 'quotationSource':
+    case 'quotationOrder': detail=<ProductionOriginalReader key={`${route.kind}:${route.id}`} reference={{kind:'quotation',resource:{kind:route.kind==='quotationSource'?'source':'order',id:route.id},quoteId:route.quoteId!,version:route.version!}} onClose={()=>void closeDetail()}/>;break;
     case "order": detail = <OrderDetail id={route.id} />; break;
     case "arrangement": detail = <DevelopmentArrangementPage sourceId={route.id} round={route.version} onClose={() => void closeDetail()} />; break;
-    case "development": detail = <OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
+    case "development": detail = route.documentVersion===undefined?<OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />:<DevelopmentOriginalReader key={route.id} sourceId={route.id} roundNumber={route.version!} documentVersion={route.documentVersion} onClose={()=>void closeDetail()}/>; break;
     case "task": detail = <TaskDetail key={route.id} id={route.id} />; break;
   }
   return <div className="pattern-orders digital-production"><CurrentProductionReturn/>{route.kind!=="landing"&&route.kind!=="invalid"&&route.kind!=='timeRequest'&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;

@@ -8,6 +8,7 @@ import {developmentDraftForSave,validateDevelopmentMaterialPlan} from "./develop
 import type {SaveDevelopmentAmendment,SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
 import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {documentMetadata} from "./document-metadata.js";
+import {developmentDocumentSnapshot,developmentSnapshotContainsFile,developmentPublishedVersions} from './development-document-snapshot.js';
 import {materialReadiness} from "./development-material-readiness.js";
 import { beijingCalendarDate } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
@@ -15,7 +16,7 @@ import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentPublishErrors, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet } from "@dx-rework/contracts/digital-development";
+import { DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentPublishErrors, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion } from "@dx-rework/contracts/digital-development";
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -58,6 +59,39 @@ export class DigitalDevelopmentService {
   async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string,db:Database=this.database): Promise<boolean> {
     await this.source(db, actor, sourceId);
     return Boolean((await db.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount)||await inheritedDevelopmentFile(db,sourceId,attachmentId);
+  }
+  async publishedVersion(actor:TrustedActorContext,sourceId:string,roundNumber:number,documentVersion:number):Promise<DevelopmentPublishedVersion>{
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const source=await this.source(db,actor,sourceId);
+      const snapshot=await developmentDocumentSnapshot(db,sourceId,roundNumber,documentVersion)??digitalNotFound();
+      let document=snapshot.document;
+      if(!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;document=withoutDevelopmentPrices(document);}
+      const metadata=await documentMetadata(db,snapshot.metadataRecord);
+      const result={sourceId,designStyleNo:source.design_style_no,temporaryStyleNo:source.temporary_style_no,customerCode:source.customer_code,
+        developmentType:source.development_type,designerName:source.designer_name,roundNumber,documentVersion,document,publishedAt:metadata.published.at,metadata};
+      await db.query('COMMIT');return result;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async publishedVersions(actor:TrustedActorContext,sourceId:string,page=1,q=''){
+    if(!Number.isSafeInteger(page)||page<1||page>1_000_000||q.length>100)throw new ApplicationError('VALIDATION_ERROR','请核对资料记录页码和查询条件',400);
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.source(db,actor,sourceId);
+      const result=await developmentPublishedVersions(db,sourceId,page,q.trim());
+      await db.query('COMMIT');return result;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async canDownloadVersion(actor:TrustedActorContext,sourceId:string,roundNumber:number,documentVersion:number,attachmentId:string){
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      await this.source(db,actor,sourceId);
+      const snapshot=await developmentDocumentSnapshot(db,sourceId,roundNumber,documentVersion)??digitalNotFound();
+      const allowed=developmentSnapshotContainsFile(snapshot,attachmentId)&&await this.canDownload(actor,sourceId,attachmentId,db);
+      await db.query('COMMIT');return allowed;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   private async draftDocumentOrigin(db:Database,sourceId:string,source:{created_at:Date|string;draft_reserved?:boolean|null}){
     if(!acceptanceBusinessContext())return source.created_at;

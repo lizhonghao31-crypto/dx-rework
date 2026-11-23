@@ -7,6 +7,7 @@ import {DESIGNER_ORDER_AREAS,DESIGNER_WORKSPACE_SECTIONS} from './digital-worksp
 
 const designerDocumentKeys=['round','instructionVersion','budgetVersion','documentCategory','documentChapter','documentKind'] as const;
 const selectedDocumentVersion=z.union([z.literal('current'),z.string().regex(/^[1-9]\d*$/).refine(value=>Number.isSafeInteger(Number(value)))]).optional();
+const originalPage=z.string().regex(/^[1-9]\d*$/).refine(value=>Number(value)<=1_000_000).optional();
 const designerReturnSchema=DevelopmentWorkspaceFilterSchema.safeExtend({
   workspace:z.literal('designer'),selected:z.string().uuid().optional(),development:z.string().uuid().optional(),
   section:z.enum(DESIGNER_WORKSPACE_SECTIONS).optional(),
@@ -15,6 +16,8 @@ const designerReturnSchema=DevelopmentWorkspaceFilterSchema.safeExtend({
   documentCategory:z.enum(documentCategories).optional(),documentChapter:z.enum(documentChapterIds).optional(),
   documentKind:z.enum(['development','instruction','budget']).optional(),
   instructionVersion:selectedDocumentVersion,budgetVersion:selectedDocumentVersion,
+  originalSearch:z.string().max(100).optional(),
+  originaldevelopmentPage:originalPage,originalbudgetPage:originalPage,originalinstructionPage:originalPage,originalquotationPage:originalPage,
 });
 
 /** Allow only local read workspaces, with validated filters and selected task. */
@@ -33,7 +36,7 @@ export function developmentWorkspaceReturnUrl(value: string | null, base: string
     if (url.pathname === urls.pageUrl("ui/digital-pattern-room") && PatternWorkspaceFilterSchema.safeExtend({section:z.enum(["development","bulk"]).optional(),bulkOrder:z.string().uuid().optional(),task: z.string().uuid().optional(), taskView: z.enum(["read","handle","correct"]).optional(),taskTab:z.enum(Object.keys(taskTabLabels) as [keyof typeof taskTabLabels,...Array<keyof typeof taskTabLabels>]).optional(),documentCategory:z.enum(documentCategories).optional(),documentChapter:z.enum(documentChapterIds).optional(),documentKind:z.enum(["development","instruction","budget"]).optional(),round:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),instructionVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),budgetVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional()}).safeParse(query).success) return url.pathname + url.search;
     if (url.pathname === urls.pageUrl("ui/digital-production")) {
       const designer=designerReturnSchema.safeParse(query);
-      if(designer.success&&(!designer.data.area||designer.data.section==='workspace'&&designer.data.development)
+      if(designer.success&&(!Object.keys(query).some(key=>key==='originalSearch'||/^original(?:development|budget|instruction|quotation)Page$/.test(key))||designer.data.area==='records'&&designer.data.section==='workspace'&&designer.data.development)&&(!designer.data.area||designer.data.section==='workspace'&&designer.data.development)
         &&(designer.data.development||!designerDocumentKeys.some(key=>url.searchParams.has(key))))return url.pathname+url.search;
     }
   } catch { /* A malformed return target has no navigation effect. */ }

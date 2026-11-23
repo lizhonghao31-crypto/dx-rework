@@ -39,7 +39,7 @@ export async function instructionRequest(path:string,method='GET',body?:unknown,
  if(!valid)throw new DigitalRequestError(method==='GET'?'制单资料尚未取得完整回执，请重新读取':'原制单提交结果尚未确认，请保留输入并核对原提交',200,'INVALID_RESPONSE');
  return value;
 }
-export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false,contained=false,onVersionChange }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; onVersionChange?:((version:number|undefined)=>void)|undefined; contained?:boolean;embedded?:boolean }) {
+export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false,contained=false,onVersionChange,originalSnapshot }: { originalSnapshot?:InstructionSheet|undefined;orderId: string; initialVersion?: number | undefined; onClose: () => void; onVersionChange?:((version:number|undefined)=>void)|undefined; contained?:boolean;embedded?:boolean }) {
   const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [sheet, setSheet] = useState<InstructionSheet | null>(null), [doc, setDoc] = useState<InstructionDocument | null>(null), [version, setVersion] = useState<number | undefined>(initialVersion);
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
@@ -57,7 +57,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   const base = `orders/${orderId}/instruction`;
   useEffect(() => {
     let live = true;previews.reset();writing.current=false;contextVersion.current++;recovery.mask();submission.current=new SubmissionAttempt();setUncertain(false); setReceipt(""); setSheet(null); setDoc(null);docRef.current=null; setError(""); setBusy(true);setReadRequired(false);
-    void instructionRequest(base + (version ? `?version=${version}` : "")).then(async value => {
+    void (originalSnapshot?Promise.resolve(originalSnapshot):instructionRequest(base + (version ? `?version=${version}` : ""))).then(async value => {
       if(!live)return;const restored=await recovery.load(value,!embedded&&!version);if(!live)return;
       setSheet(value);setDoc(restored.document);docRef.current=restored.document;generation.current=restored.generation;setDirty(restored.dirty);setUncertain(restored.pending);setReceipt(restored.receipt??'');setSaveBlocked(false);setValidationMode(null);setSourceReviewOpen(false);operation.current=null;successfulUploads.current.clear();
     }).catch(async e => {
@@ -65,7 +65,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
       if(!embedded&&!version)try{const saved=await recovery.loadUnavailable();if(live){setDirty(saved.dirty);setUncertain(saved.pending);setReceipt(saved.receipt);}}catch{/* No current object-read proof: leave stored bytes intact and private. */}
     }).finally(() => { if (live) setBusy(false); });
     return () => { live = false; };
-  }, [base, version, reloadCount]);
+  }, [base, version, reloadCount,originalSnapshot]);
   useEffect(()=>registerSessionInvalidator(()=>{contextVersion.current++;recovery.mask();setSheet(null);setDoc(null);docRef.current=null;setReloadCount(value=>value+1);}),[]);
   useEffect(() => {
     if (!focusId) return;
@@ -80,7 +80,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     docRef.current=document;setDoc(document);setDirty(true);
     if(sheet)try{recovery.edit(document,sheet,generation.current);}catch(reason){setError(reason instanceof Error?reason.message:'修改保留在当前页面，恢复资料未能保存');}
   };
-  const change = (patch: Partial<InstructionDocument>) => {if(uncertain||!docRef.current)return;setReceipt("");generation.current++;if(!saveBlocked)setError("");remember({...docRef.current,...patch});};
+  const change = (patch: Partial<InstructionDocument>) => {if(originalSnapshot||uncertain||!docRef.current)return;setReceipt("");generation.current++;if(!saveBlocked)setError("");remember({...docRef.current,...patch});};
   const recoverCommand=async(kind:'save'|'decision')=>{
     if(writing.current)return false;const context=contextVersion.current;writing.current=true;setBusy(true);setError('');
     try{
@@ -94,6 +94,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     finally{if(context===contextVersion.current){writing.current=false;setBusy(false);}}
   };
   const act = async (path:string,method:string,body:unknown,recover=false,manualSave=false) => {
+    if(originalSnapshot)return false;
     if(recover&&(recovery.savePending||recovery.decisionPending))return recoverCommand(recovery.savePending?'save':'decision');
     if(writing.current||uncertain&&!recover||!recover&&(readRequired||recovery.blocked||recovery.conflict||!recovery.ready))return false;
     writing.current=true;setBusy(true);setSaving(path===''&&method==='PUT');setError('');setReceipt('');
@@ -143,6 +144,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     if(await discard("重新载入将丢弃未保存修改，确定继续？")){try{recovery.discardDraft();setDirty(false);setReloadCount(value=>value+1);}catch(error){setError(error instanceof Error?error.message:'恢复资料尚未保留，未重新载入');}}
   };
   const upload = async (files: File[]) => {
+    if(originalSnapshot)return;
     if (uncertain||readRequired||recovery.blocked||recovery.conflict||!recovery.ready||!files.length || !doc || !sheet?.canEdit || sheet.cutStarted || writing.current) return;previews.start(files,undefined,upload);
     const uploadContext=contextVersion.current;writing.current = true; setBusy(true); setError("");
     try {
@@ -173,7 +175,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   const total = order.lines.reduce((n, line) => n + line.sizes.reduce((m, size) => m + size.quantity, 0), 0);
   const orderSizes = [...new Set(order.lines.flatMap(line => line.sizes.map(size => size.size)))];
   const issues = validationMode ? instructionIssues(doc, order, validationMode === "publish") : [];
-  const imageUrl = (id: string) => urls.apiUrl(`digital-production/${base}/attachments/${id}`);
+  const imageUrl = (id: string) => urls.apiUrl(`digital-production/${base}${originalSnapshot?`/original-versions/${originalSnapshot.version}`:''}/attachments/${id}`);
   const publishedImage = (id: string) => sheet.document.images.some(image => image.attachmentId === id);
   const mainImage = doc.images.find(image => image.kind === "款图");
   const mode = sheet.isPublishedSnapshot ? `已发布制单版本 ${sheet.version}` : `制单草稿 · 版本 ${sheet.version}`;
