@@ -116,6 +116,9 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       if(error instanceof SupplierReadError&&[401,403,404].includes(error.status)){
         setDirectory(null);setSuppliers([]);setDirectoryDataKey("");setProfile(null);
       }
+      // A failed foreground page exposes the original retry entry and keeps
+      // the last known total. Pending reads still retain their previous rows.
+      if(!silent)setSuppliers([]);
       setDirectoryError(error instanceof Error?error.message:"供应商目录尚未读取");throw error;
     }finally{
       finish();

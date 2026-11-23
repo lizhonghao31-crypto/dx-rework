@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path';
 import {createServer} from 'node:http';
 const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright'),out=await mkdtemp(join(tmpdir(),'dx-auxiliary-')),evidence=process.env.AUXILIARY_EVIDENCE,results=[],errors=[];let browser,server,current;
 try{
- await build({configFile:false,esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve('tests/fixtures/auxiliary-catalog.tsx'),name:'AuxiliaryFixture',formats:['iife']}}});
+ await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve('tests/fixtures/auxiliary-catalog.tsx'),name:'AuxiliaryFixture',formats:['iife']}}});
  const names=await readdir(out),js=await readFile(join(out,names.find(n=>n.endsWith('.js'))),'utf8'),css=await readFile(join(out,names.find(n=>n.endsWith('.css'))),'utf8');const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
  server=createServer((_req,res)=>{res.setHeader('content-type','text/html;charset=utf-8');res.end(html);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));browser=await chromium.launch({headless:true,executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE??'/usr/bin/chromium',args:['--no-sandbox']});if(evidence)await mkdir(evidence,{recursive:true});
  const scenarios=process.env.AUXILIARY_SCENARIOS?.split(',')??['select','create','unknown','timeout','retry','denied','wait'];

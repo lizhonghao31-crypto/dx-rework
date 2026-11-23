@@ -89,6 +89,21 @@ const url=process.env.TEST_DATABASE_URL;
   await expect(forms.save(actor(),next.sourceId,{expectedVersion:0,document:{...document,files:[]}},randomUUID())).rejects.toMatchObject({statusCode:409});expect((await forms.read(actor(),next.sourceId)).document).toBeNull();
   const client=await db.connect();try{await client.query('BEGIN');await validateAuxiliaryReferences(client,published.document!,published.document!);await expect(validateAuxiliaryReferences(client,{...document,materials:document.materials.map(m=>({...m,auxiliaryCatalog:{id:randomUUID(),version:1}}))})).rejects.toMatchObject({statusCode:409});await client.query('ROLLBACK');}finally{client.release();}
  });
+ it('reads the same immutable version history under every original catalog role, with bounded pages and denied unrelated readers',async()=>{
+  const original=await service.create(actor(),value(),randomUUID());
+  let current=original;
+  for(let version=2;version<=17;version++)current=await service.rename(actor(),original.id,{expectedVersion:current.version,name:original.name+'-'+version,reason:'TEST version '+version},randomUUID());
+  for(const role of [...AUXILIARY_CATALOG_ROLES,'root_superuser']){
+   const first=await service.history(actor(role),original.id,1),second=await service.history(actor(role),original.id,2);
+   expect(first).toMatchObject({total:17,page:1,pageSize:15});expect(first.items.map(row=>row.version)).toEqual(Array.from({length:15},(_,index)=>17-index));
+   expect(second.items.map(row=>row.version)).toEqual([2,1]);
+   expect(second.items[1]).toMatchObject({...original,reason:'业务页直接新增共享辅料',changedBy:'TEST sample_designer',action:'auxiliary_catalog.create'});
+  }
+  expect((await list(original.name)).items).toEqual([current]);
+  for(const role of ['development_clerk','pattern_room_worker'])await expect(service.history(actor(role),original.id,1)).rejects.toMatchObject({statusCode:403});
+  await expect(service.history(actor(),randomUUID(),1)).rejects.toMatchObject({statusCode:404});
+  await expect(service.history(actor(),original.id,0)).rejects.toThrow();
+ });
  it('searches across all pages and rejects stopped identities with their old role snapshot',async()=>{
   const prefix='TEST-PAGE-'+randomUUID();for(let i=0;i<17;i++)await service.create(actor(),value(`${prefix}-${i}`),randomUUID());expect((await list(prefix)).items).toHaveLength(15);expect((await list(prefix,false,2)).items).toHaveLength(2);expect((await list(prefix+'-16')).total).toBe(1);
   const employees=new EmployeeAccessService(db,'TEST',new AccessMasterDataService(db,'TEST'),undefined as never,undefined as never,{enabled:false,dingtalkUserId:undefined,secret:undefined},`TEST-${ids.get('root_superuser')}`);
@@ -129,6 +144,9 @@ const url=process.env.TEST_DATABASE_URL;
    const created=await app.inject({method:'POST',url:rewriteApiProxyPath(createWebUrls('/acceptance/').apiUrl('master-data/auxiliaries'),'/acceptance/api'),headers:{'idempotency-key':randomUUID()},payload:value()});expect(created.statusCode).toBe(200);const current=created.json();
    const denied=await app.inject({method:'POST',url:rewriteApiProxyPath(createWebUrls('/acceptance/').apiUrl('master-data/auxiliaries'),'/acceptance/api'),headers:{cookie:'dx_rework_session=clerk','idempotency-key':randomUUID()},payload:value()});expect(denied.statusCode).toBe(403);
    const invalid=await app.inject({method:'POST',url:`/master-data/auxiliaries/${current.id}/disable`,headers:{'idempotency-key':randomUUID()},payload:{expectedVersion:1,reason:'TEST不授权恢复',enabled:true}});expect(invalid.statusCode).toBe(400);
+   const history=await app.inject({method:'GET',url:`/master-data/auxiliaries/${current.id}/versions`});expect(history.statusCode).toBe(200);expect(history.json()).toMatchObject({total:1,items:[{id:current.id,version:1}]});
+   expect((await app.inject({method:'GET',url:`/master-data/auxiliaries/${current.id}/versions`,headers:{cookie:'dx_rework_session=clerk'}})).statusCode).toBe(403);
+   expect((await app.inject({method:'GET',url:`/master-data/auxiliaries/${current.id}/versions?page=0`})).statusCode).toBe(400);
    expect((await app.inject({method:'POST',url:`/master-data/auxiliaries/${current.id}/enable`,payload:{}})).statusCode).toBe(404);
    expect((await list(current.name)).items[0]).toMatchObject({active:true,version:1});
   }finally{await app.close();}

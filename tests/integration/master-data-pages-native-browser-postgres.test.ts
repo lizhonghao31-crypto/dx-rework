@@ -58,15 +58,21 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it("retries page2 without stale rows and keeps original draft guards plus an independently selected off-page supplier",async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:"dx_rework_session",value:token,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);
+  let abortedPage2Reads=0;
   try{
    await page.goto(base+"/ui/suppliers/manage?q="+encodeURIComponent("TEST 目录供应商")+"&status=all");await page.getByText("共 31 家",{exact:true}).waitFor();let fail=true;
-   await page.route("**/master-data/supplier-page?**",async route=>{if(fail&&new URL(route.request().url()).searchParams.get("page")==="2"){await route.abort();return;}await route.continue();});
-   await page.getByRole("navigation",{name:"资料维护分页",exact:true}).getByRole("button",{name:"2",exact:true}).click();await page.getByRole("button",{name:"重新读取目录",exact:true}).waitFor();expect(await page.locator(".supplier-records--manage tbody tr").count()).toBe(0);
-   fail=false;await page.getByRole("button",{name:"重新读取目录",exact:true}).click();await page.getByText("共 31 家",{exact:true}).waitFor();expect(await page.locator(".supplier-records--manage tbody tr").count()).toBe(15);expect(await page.locator(".supplier-center-error").count()).toBe(0);expect(await page.getByRole("navigation",{name:"资料维护分页",exact:true}).getByRole("button",{name:"2",exact:true}).getAttribute("aria-current")).toBe("page");
+   await page.route("**/master-data/supplier-page?**",async route=>{if(fail&&new URL(route.request().url()).searchParams.get("page")==="2"){abortedPage2Reads++;await route.abort();return;}await route.continue();});
+   await page.getByRole("navigation",{name:"资料维护分页",exact:true}).getByRole("button",{name:"2",exact:true}).click();await page.getByRole("button",{name:"重新读取目录",exact:true}).waitFor();expect(abortedPage2Reads).toBe(1);expect(await page.locator(".supplier-records--manage tbody tr").count()).toBe(0);
+   const retry=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/master-data/supplier-page'&&new URL(response.url()).searchParams.get('page')==='2'&&response.request().method()==='GET');
+   fail=false;await page.getByRole("button",{name:"重新读取目录",exact:true}).click();const retried=await retry;expect(retried.status(),await retried.text()).toBe(200);
+   await page.getByRole('button',{name:'维护 TEST 目录供应商 16',exact:true}).waitFor();await page.getByText("共 31 家",{exact:true}).waitFor();expect(await page.locator(".supplier-records--manage tbody tr").count()).toBe(15);expect(await page.locator(".supplier-center-error").count()).toBe(0);expect(await page.getByRole("navigation",{name:"资料维护分页",exact:true}).getByRole("button",{name:"2",exact:true}).getAttribute("aria-current")).toBe("page");
    await page.getByRole("button",{name:"维护 TEST 目录供应商 16",exact:true}).click();const name=page.getByRole("textbox",{name:"供应商名称",exact:false});await name.waitFor();await name.fill("TEST 未保存编辑");await page.getByRole("button",{name:"返回目录",exact:true}).click();await page.getByRole("button",{name:"继续编辑",exact:true}).click();expect(await name.inputValue()).toBe("TEST 未保存编辑");
    const read=page.waitForResponse(r=>r.url().includes("/supplier-page?")&&new URL(r.url()).searchParams.get("q")==="TEST最后页工艺");await page.goto(base+"/ui/suppliers/manage?q="+encodeURIComponent("TEST最后页工艺")+"&status=all&supplierId="+f.supplierIds[0]);const one=await(await read).json();expect(one.items.map((x:{supplierId:string})=>x.supplierId)).toEqual([f.supplierIds[30]]);
    await name.waitFor();expect(await name.inputValue()).toBe("TEST 目录供应商 01");expect(new URL(page.url()).searchParams.get("supplierId")).toBe(f.supplierIds[0]);
    const unauth=await app.inject({method:"GET",url:"/master-data/supplier-page?page=1"});expect(unauth.statusCode).toBe(401);await page.screenshot({path:join(evidence,"supplier-selected-off-page-1165.png"),fullPage:true});
+  }catch(error){
+   console.error('PERF12_PAGE_RETRY_DIAGNOSTIC',JSON.stringify({abortedPage2Reads,requestPaths:requests.filter(path=>path.includes('/supplier-page?')).slice(-8),rows:await page.locator('.supplier-records--manage tbody tr').allTextContents(),errors:await page.locator('.supplier-center-error').allTextContents(),pagination:await page.getByRole('navigation',{name:'资料维护分页',exact:true}).innerText(),retryButtons:await page.getByRole('button',{name:'重新读取目录',exact:true}).count()}));
+   await page.screenshot({path:join(evidence,'supplier-retry-failed-state.png'),fullPage:true});throw error;
   }finally{await context.close();}
  });
 });
