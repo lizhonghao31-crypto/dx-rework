@@ -21,6 +21,8 @@ import {registerDevelopmentExecutionRoutes} from '../../apps/api/src/production-
 import {readDevelopmentRevisionPlan} from '../../apps/api/src/production-platform/development-round-plan.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
+import {AuxiliaryCatalogService} from '../../apps/api/src/access/auxiliary-catalog-service.js';
+import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {developmentSlaPlan} from '../../apps/api/src/production-platform/development-sla-enrollment.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
@@ -71,7 +73,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean;workbenchSheet?:boolean}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean;workbenchSheet?:boolean;catalogReferencePrice?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
@@ -84,6 +86,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return materialId;
   });
   const accessoryId=accessoryIds[0]??null;
+  if(options.catalogReferencePrice){
+   const material=document.materials.find(row=>row.materialId===accessoryId)!;
+   const catalog=new AuxiliaryCatalogService(f.db,new RootAuthority(f.db,'anchor-test','uat-root'));
+   const entry=await catalog.create(designer,{name:`TEST 参考辅料 ${randomUUID()}`,specification:material.specification,supplier:material.supplier,auxiliaryKind:'普通辅料',referencePricing:{amount:'99',unit:'件'}},randomUUID());
+   material.name=entry.name;
+   material.auxiliaryCatalog={id:entry.id,version:entry.version,referencePricing:entry.referencePricing??null};
+  }
   if(options.automatic){document.quotationMode='automatic_v1';document.materials=document.materials.map(m=>({...m,pricingUnit:m.category==='辅料'?'件':options.missingPricingUnit?'':'米',unitPrice:m.category==='辅料'?'2':'20'}));}
   if(options.workbenchSheet)document.workbenchSheet={
    version:1,styleName:"TEST 新版无技术尺码",gender:"男装",boardType:"头版",brand:"",processingSelected:true,referenceNote:"",
@@ -203,14 +212,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
 
  it('PR03 assembles exact native materials, formal consumption, IE and assigned craft; freezes confirmed budgets across later source changes',async()=>{
-  const p=await prepare('印花',{automatic:true,missingAccessory:true}),resource={kind:'source' as const,id:p.sourceId},quotes=new DigitalQuotationService(f.db,true);
+  const p=await prepare('印花',{automatic:true,missingAccessory:true,catalogReferencePrice:true}),resource={kind:'source' as const,id:p.sourceId},quotes=new DigitalQuotationService(f.db,true);
   let q=await quotes.read(p.designer,resource);
   expect(q.automatic).toBe(true);expect(q.complete).toBe(false);
   expect(q.document!.rows).toHaveLength(4);
   const ie=q.document!.rows.find(r=>r.name==='IE加工单价')!,craft=q.document!.rows.find(r=>r.name==='印花')!;
   q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.rowId===ie.rowId?{...a,priceAssigneeId:person('ie').actorId}:a)},randomUUID());
   const own=await quotes.read(p.worker,resource);expect(own.document).toBeNull();expect(own.rows.find(r=>r.rowId===p.materialId)!.unitPrice).toBeNull();expect(own.rows.find(r=>r.rowId===craft.rowId)!.canEditPrice).toBe(true);
-  expect((await forms.read(p.worker,p.sourceId)).document!.materials.every(m=>m.unitPrice===undefined)).toBe(true);
+  const technicalDocument=(await forms.read(p.worker,p.sourceId)).document!;
+  expect(technicalDocument.materials.every(m=>m.unitPrice===undefined)).toBe(true);
+  const adopted=(await forms.read(p.designer,p.sourceId)).document!.materials.find(row=>row.materialId===p.accessoryId)!;
+  expect(adopted).toMatchObject({unitPrice:'2',auxiliaryCatalog:{referencePricing:{amount:'99',unit:'件'}}});
+  expect(technicalDocument.materials.find(row=>row.materialId===p.accessoryId)?.auxiliaryCatalog).toEqual({id:adopted.auxiliaryCatalog!.id,version:adopted.auxiliaryCatalog!.version});
   q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'1.5'},randomUUID());
   q=await quotes.fillRow(p.worker,resource,p.accessoryId!,{expectedVersion:q.version,consumption:'1'},randomUUID());
   q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
