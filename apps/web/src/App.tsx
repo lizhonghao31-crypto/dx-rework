@@ -30,6 +30,7 @@ import { Shell } from "./components.js";
 import {
   accessiblePlatformModules,
   DIGITAL_PRODUCTION_ROLES,
+  IE_PROCESSING_ROLES,
   PLATFORM_MODULE_QUERY,
   platformLandingTarget,
   shouldRedirectLegacyLandingToPlatformHome,
@@ -42,6 +43,8 @@ const DigitalAnalysisPage=lazyBusinessPage(()=>import('./digital-analysis-page.j
 const DigitalCockpitPage=lazyBusinessPage(()=>import('./digital-cockpit-page.js').then(module=>({default:module.DigitalCockpitPage})));
 const DeliveryCalendarPage=lazyBusinessPage(()=>import('./delivery-calendar-page.js').then(module=>({default:module.DeliveryCalendarPage})));
 const DigitalQuotationPage=lazyBusinessPage(()=>import('./digital-quotation-panel.js').then(module=>({default:module.DigitalQuotationPage})));
+const IeProcessingCenter=lazyBusinessPage(()=>import('./ie-processing-center.js').then(module=>({default:module.IeProcessingCenter})));
+const IeReworkReturn=lazyBusinessPage(()=>import('./ie-processing-center.js').then(module=>({default:module.IeReworkReturn})));
 const DigitalProductionPage=lazyBusinessPage(()=>import('./digital-production-page.js').then(module=>({default:module.DigitalProductionPage})));
 const DigitalDesignerWorkspace=lazyBusinessPage(()=>import('./digital-designer-workspace.js').then(module=>({default:module.DigitalDesignerWorkspace})));
 const DigitalPatternWorkspace=lazyBusinessPage(()=>import('./digital-pattern-workspace.js').then(module=>({default:module.DigitalPatternWorkspace})));
@@ -315,6 +318,7 @@ function routeContent(navigation:InternalLocation){
   if (path === "/ui/digital-analysis") page = <Shell active="digital-analysis" appearance="digital"><ProductionWorkspace><DigitalAnalysisPage navigation={navigation} /></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace")==="delivery"?<DeliveryCalendarPage key={search}/>:new URLSearchParams(search).get("workspace")==="settings" ? <CockpitProductionSettings/> : ["pattern","preparation"].includes(new URLSearchParams(search).get("workspace")??"") ? <DigitalPatternWorkspace key={search}/> : ["factory"].includes(new URLSearchParams(search).get("workspace") ?? "") ? <DigitalProductionWorkspace key={search} kind={new URLSearchParams(search).get("workspace") === "factory" ? "factory" : "preparation"}/> : <DigitalCockpitPage key={search} deliveryReturn={deliveryReturnPath(new URLSearchParams(search).get('deliveryReturn'),import.meta.env.BASE_URL)??undefined} />}</ProductionWorkspace></Shell>;
   else if(path === "/ui/digital-quotation") page = <Shell active="客户报价协作" appearance="digital"><ProductionWorkspace><DigitalQuotationPage key={search}/></ProductionWorkspace></Shell>;
+  else if(path === "/ui/ie-processing") page = <Shell active="IE 报价与核价中心" appearance="digital"><ProductionWorkspace><IeProcessingCenter search={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "designer" ? <DigitalDesignerWorkspace key={search}/> : <><DevelopmentWorkspaceReturn/><DigitalProductionPage key={search} /></>}</ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-pattern-room") page = <Shell active="digital-pattern" appearance="digital"><ProductionWorkspace><DigitalPatternWorkspace key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
@@ -382,10 +386,10 @@ function routeContent(navigation:InternalLocation){
     ? <Shell active="订单回货" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>
     : <ReceivingReworkEntryRedirect />;
   else if (path === "/ui/process-configuration") page = hasReworkContext
-    ? <Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>
+    ? <Shell active="返工单看板" mobileNavigation="transaction">{new URLSearchParams(search).has('ieReturn')&&<IeReworkReturn/>}<ProcessConfigurationForm /></Shell>
     : <WorkflowQueuePage active="返工单看板" title="工序配置与 IE 审核工作台" statuses={PROCESS_QUEUE_STATUSES} />;
   else if (path === "/ui/work-reporting" || path === "/ui/piecework/collective") page = hasReworkContext
-    ? <Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>
+    ? <Shell active="返工单看板" mobileNavigation="transaction">{new URLSearchParams(search).has('ieReturn')&&<IeReworkReturn/>}<WorkReportingForm /></Shell>
     : <WorkflowQueuePage active="返工单看板" title="分工、完成登记与整单审核工作台" statuses={WORK_QUEUE_STATUSES} />;
   else if (path === "/system/foundation") page = <Foundation />;
   else return <HomeLanding />;
@@ -393,6 +397,7 @@ function routeContent(navigation:InternalLocation){
   const owner = { requiredRole: "owner_group" } as const;
 
   if(path === "/ui/digital-quotation")return <AuthGate requiredAnyOf={["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","pmc","owner_group"].map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
+  if(path === "/ui/ie-processing")return <AuthGate requiredAnyOf={IE_PROCESSING_ROLES.map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
   if(path === "/ui/digital-pattern-room")return <AuthGate requiredAnyOf={[...DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole})),...patternRoomOrderRequirements,...patternRoomPriceRequirements,...patternRoomCreateRequirements]}>{page}</AuthGate>;
   if(path==='/ui/digital-analysis'&&new URLSearchParams(navigation.search).get('view')==='production')return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole,requiredCapability:'report:view'}))}>{page}</AuthGate>;
   if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;

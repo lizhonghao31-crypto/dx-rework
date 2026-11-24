@@ -17,6 +17,8 @@ export function canAccessSourcing(user: AuthorizedUser): boolean {
     || user.capabilities.includes("sourcing:view");
 }
 
+export const IE_PROCESSING_ROLES = ['ie_reviewer', 'production_management', 'owner_group'] as const;
+
 export function canAccessSupplierCenter(user: AuthorizedUser): boolean {
   return user.isRoot === true || user.capabilities.includes("supplier_profile:read");
 }

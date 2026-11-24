@@ -428,6 +428,25 @@ function SourcingOrderCard({
   </Surface>;
 }
 
+export function readPendingIeSourcingCases(page: number, search: string, signal: AbortSignal) {
+  const query = new URLSearchParams({ page: String(page), q: search, status: 'pending', stage: 'ie' });
+  return request(`sourcing/cases?${query}`, SourcingCaseListResponseSchema, { signal });
+}
+
+export function SourcingIeCenterDetail({ sourcingCaseId, back }: { sourcingCaseId: string; back: string }) {
+  const [user, setUser] = useState<AuthorizedUser | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    void verifySession().then(session => {
+      if (mounted && session !== 'denied' && session.status === 'authorized') setUser(session.user);
+    });
+    return () => { mounted = false; };
+  }, []);
+  return <div data-dx-ui="governed" className="sourcing-governed">
+    <OrderDetailPage key={sourcingCaseId} sourcingCaseId={sourcingCaseId} user={user} ieCenterBack={back} />
+  </div>;
+}
+
 export function SourcingWorkspacePage({
   view,
   sourcingCaseId,
@@ -1259,9 +1278,11 @@ function SourcingDetailFacts({item,ownerTotalDelta}:{item:SourcingCaseSummary;ow
 function OrderDetailPage({
   sourcingCaseId,
   user,
+  ieCenterBack,
 }: {
   sourcingCaseId: string;
   user: AuthorizedUser | null;
+  ieCenterBack?: string;
 }) {
   const requestedHistory=sourcingWorkflowNodeFromSearch();
   const historyNode=new URLSearchParams(window.location.search).get("view")==="node-history"&&requestedHistory
@@ -1333,10 +1354,10 @@ function OrderDetailPage({
   const message=read.error||operationMessage||(!item?"正在加载订单…":"");
   const [activeBusinessInput, setActiveBusinessInput] = useState<string | null>(null);
   const moduleWritable = moduleCanWrite(user, "sourcing");
-  const canSupplementImages = user?.isRoot === true
+  const canSupplementImages = !ieCenterBack && (user?.isRoot === true
     || moduleWritable && (item?.createdBy === user?.id || user?.businessRoles?.some(role => role!=="order_merchandiser" && SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number]))) && user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
       role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number],
-    )) === true;
+    )) === true);
 
   const manualDirty=Boolean(returnOpen&&returnDraft.trim())||Boolean(budgetCorrectionOpen&&(budgetCorrectionDraft.price||budgetCorrectionDraft.reason.trim()))
     ||Boolean(priceReapplicationDraft.reviewReason.trim()||priceReapplicationDraft.open&&(priceReapplicationDraft.reason.trim()||priceReapplicationDraft.price!==(item?.decision?.unitPrice??"")))||prices.dirty||Boolean(editingStyles&&item&&JSON.stringify(styleEdits)!==JSON.stringify(item.lineItems.map(line=>({position:line.position,styleNo:line.styleNo??"",alternateStyleNo:line.alternateStyleNo??""}))))
@@ -1378,8 +1399,8 @@ function OrderDetailPage({
     return () => window.cancelAnimationFrame(frame);
   },[sourcingCaseId,item?.sourcingCaseId,contractReturn?.contractReturnMonitoring]);
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
-  const canManage = canAct(user, "production_management", "sourcing:decision:record");
-  const canCorrectBudget = !!item
+  const canManage = !ieCenterBack && canAct(user, "production_management", "sourcing:decision:record");
+  const canCorrectBudget = !ieCenterBack && !!item
     && user?.isRoot === true
     && "daxingUnitPrice" in item
     && !!item.daxingUnitPrice
@@ -1618,7 +1639,7 @@ function OrderDetailPage({
     const early=read.overview,earlyContract=read.readOnly.contract;
     return <div className="sourcing-workspace sourcing-order-detail sourcing-module-layout" data-legacy-ui="sourcing">
       <div className="sourcing-order-heading">
-        <a className="sourcing-order-back" href={pageUrl(detailReturnPath ?? (early?.status==="closed"?"/ui/sourcing/history":"/ui/sourcing/pending"))}>{todoBackPath ? "返回我的待办" : listBackPath?.startsWith("/ui/digital-production?") ? "返回来源" : "返回订单列表"}</a>
+        <a className="sourcing-order-back" href={ieCenterBack ?? pageUrl(detailReturnPath ?? (early?.status==="closed"?"/ui/sourcing/history":"/ui/sourcing/pending"))}>{ieCenterBack ? "返回 IE 报价与核价中心" : todoBackPath ? "返回我的待办" : listBackPath?.startsWith("/ui/digital-production?") ? "返回来源" : "返回订单列表"}</a>
       <Header iconRoute="/ui/sourcing/pending"
         title={early?.styleNo??"订单详情"}
         subtitle={early?`${early.gender??"历史未维护"} · ${early.styleName??"历史未维护"}`:message}
@@ -1689,7 +1710,7 @@ function OrderDetailPage({
   const requestedIndex = requestedNode ? WORKFLOW.findIndex((node) => node.key === requestedNode) : -1;
   const requestedNodeIsAccessible = requestedNode !== null
     && (item.status === "closed" || requestedIndex <= step);
-  const selectedNode = requestedNodeIsAccessible ? requestedNode : activeNode;
+  const selectedNode = ieCenterBack ? 'ie_quote' : requestedNodeIsAccessible ? requestedNode : activeNode;
   const selectedIndex = WORKFLOW.findIndex((node) => node.key === selectedNode);
   const selectedState: SourcingWorkflowNodeState = item.status === "closed" || selectedIndex < step
     ? "completed"
@@ -1736,7 +1757,7 @@ function OrderDetailPage({
     return <CreateOrderPage key={`${item.sourcingCaseId}:${item.version}`} user={user} correction={{item,attachments}} />;
   }
   const datesValid = sourcingDatesValid(item.estimatedCutPieceSendDate,item.deliveryDate);
-  const canReturn = canAct(user,"owner_group","sourcing:owner:approve") && !item.approvalSnapshot
+  const canReturn = !ieCenterBack && canAct(user,"owner_group","sourcing:owner:approve") && !item.approvalSnapshot
     && ["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(item.status);
   const financialReadView = item.status === "pending_finance_reconciliation" && selectedNode === "finance";
   const quoteEntryView = item.status === "pending_ie_quote" && selectedNode === "ie_quote" && canQuote;
@@ -1791,7 +1812,7 @@ function OrderDetailPage({
         onSubmit={(daxingUnitPrice, reason) => void submitBudgetCorrection(daxingUnitPrice, reason)}
       /> : null}
       <div className="sourcing-order-heading">
-        <a className="sourcing-order-back" href={pageUrl(detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending"))}>{todoBackPath ? "返回我的待办" : listBackPath?.startsWith("/ui/digital-production?") ? "返回来源" : "返回订单列表"}</a>
+        <a className="sourcing-order-back" href={ieCenterBack ?? pageUrl(detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending"))}>{ieCenterBack ? "返回 IE 报价与核价中心" : todoBackPath ? "返回我的待办" : listBackPath?.startsWith("/ui/digital-production?") ? "返回来源" : "返回订单列表"}</a>
         <Header
         iconRoute="/ui/sourcing/pending"
         title={item.styleNo}

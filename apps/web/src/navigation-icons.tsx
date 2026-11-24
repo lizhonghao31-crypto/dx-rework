@@ -23,6 +23,7 @@ export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
   "/ui/sourcing/create": "FilePlus2",
   "/ui/sourcing/pending": "FileText",
   "/ui/sourcing/history": "History",
+  "/ui/ie-processing": "Wallet",
   "/ui/cutting": "ClipboardCheck",
   "/ui/suppliers": "Factory",
   "/ui/suppliers/manage": "FilePenLine",

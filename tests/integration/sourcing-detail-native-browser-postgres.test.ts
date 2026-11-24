@@ -15,12 +15,16 @@ import {RootAuthority} from "../../apps/api/src/access/root-authority.js";
 import {ExportJobService} from "../../apps/api/src/tools/exports.js";
 import {SourcingProductionService} from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import {SourcingContractReturnService} from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
+import {ManagementReportingService} from "../../apps/api/src/reporting/management-reporting-service.js";
+import {ReportExportService} from "../../apps/api/src/reporting/report-export-service.js";
+import {ProcessConfigurationService} from "../../apps/api/src/rework/process-configuration-service.js";
+import {ProcessWorkerPlanService} from "../../apps/api/src/rework/process-worker-plan-service.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("architecture C sourcing through production App and native signed TEST identity",()=>{
- let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string,token:string;
+ let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string,token:string,ieToken:string;
  const ids:string[]=[],styles:string[]=[],evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"sourcing-detail");
  const open=async(index:number,width=1165)=>{
   const context=await browser.newContext({viewport:{width,height:1003}});await context.addCookies([{name:"dx_rework_session",value:token,url:base}]);
@@ -42,8 +46,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    photoGrants.set(id,{key,expiresAt:original.expiresAt});
    return {...original,downloadUrl:base+"/api/__sourcing-photo-test-storage/"+id};
   };
+  const reporting=new ManagementReportingService(f.db);
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},
    sourcing:{authenticate,root,service:f.sourcing,contracts:f.contracts,production:new SourcingProductionService(f.db),contractReturns:new SourcingContractReturnService(f.db)},
+   reporting:{authenticate,root,service:reporting,exportService:new ReportExportService(reporting,f.db,"TEST-ie-center")},
+   processConfiguration:{authenticate,root,service:new ProcessConfigurationService(f.db),workerPlan:new ProcessWorkerPlanService(f.db)},
    tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:f.attachments,exports:new ExportJobService(f.db),
     canDownloadBoundAttachment:(actor,binding)=>Promise.resolve(f.sourcing.canDownloadBoundAttachment({
      actorId:actor.actorId,actorRoles:actor.actorRoles,authorizationCapability:"sourcing:view",
@@ -52,6 +59,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    },
   });
   await app.ready();token=(await auth.loginMobile(mintAcceptanceLoginCode("root",secret))).token;
+  const ieIdentity=(await f.db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[f.people.ie!.actorId])).rows[0]?.provider_user_id;
+  expect(ieIdentity).toMatch(/^uat-/);
+  ieToken=(await auth.loginMobile(mintAcceptanceLoginCode(ieIdentity.slice(4),secret))).token;
   for(let index=0;index<3;index++){
    const style="TEST-ARCH-C-"+index+"-"+randomUUID();styles.push(style);
    const created=await f.sourcing.createCase(f.people.merchandiser!,{gender:"男装",styleName:"TEST详情隔离",deliveryDate:"2026-12-20",estimatedCutPieceSendDate:"2026-11-10",daxingUnitPrice:"5",attachmentIds:[await f.image(f.people.merchandiser!)],lineItems:[{styleNo:style,color:"黑",quantity:10}]},randomUUID());
@@ -190,6 +200,66 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(posts).toHaveLength(2);expect(posts[1]).toEqual(posts[0]);expect((await f.db.query("SELECT count(*)::int n FROM sourcing_ie_quotes WHERE sourcing_case_id=$1",[ids[1]])).rows[0].n).toBe(1);
    await page.screenshot({path:join(evidence,"native-original-request-recovered-1165.png"),fullPage:true});
   }finally{await context.close();}
+ });
+ it("opens the authorized original outside processing quote in the IE center and returns to the same search after saving",async()=>{
+  const style="TEST-IE-CENTER-"+randomUUID();
+  const merch=f.people.merchandiser!;
+  const {value:record}=await f.sourcing.createCase(merch,{gender:"男装",styleName:"TEST核价中心",deliveryDate:"2026-12-20",
+    estimatedCutPieceSendDate:"2026-11-10",daxingUnitPrice:"5",attachmentIds:[await f.image(merch)],
+    lineItems:[{styleNo:style,color:"黑",quantity:10}]},randomUUID());
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  try{
+   await context.addCookies([{name:"dx_rework_session",value:ieToken,url:base}]);
+   const page=await context.newPage();page.setDefaultTimeout(12000);
+   await page.goto(base+"/ui/sourcing/pending");
+   await page.getByRole("link",{name:"IE 报价与核价中心",exact:true}).click();
+   await page.getByRole("link",{name:"外发加工核价",exact:true}).click();
+   await page.getByRole("textbox",{name:"搜索外发款号或单号",exact:true}).fill(style);
+   await page.getByRole("button",{name:"搜索",exact:true}).click();
+   await page.getByRole("link",{name:record.erpOrderNo,exact:true}).click();
+   expect(new URL(page.url()).searchParams.get("caseId")).toBe(record.sourcingCaseId);
+   const editor=page.locator('[aria-label="IE逐款价格"] input').first();
+   await editor.fill("6.25");
+   const submit=page.waitForResponse(response=>response.url().endsWith(`/sourcing/cases/${record.sourcingCaseId}/ie-quotes`)
+     &&response.request().method()==="POST");
+   await page.getByRole("button",{name:"提交 IE 逐款价格",exact:true}).click();
+   expect((await submit).status()).toBe(201);
+   await dismiss(page);
+   const stored=await f.db.query("SELECT count(*)::int AS total FROM sourcing_ie_quotes WHERE sourcing_case_id=$1 AND quoted_by=$2",
+    [record.sourcingCaseId,f.people.ie!.actorId]);
+   expect(stored.rows[0].total).toBe(1);
+   await page.getByRole("link",{name:"返回 IE 报价与核价中心",exact:true}).click();
+   expect(new URL(page.url()).searchParams.get("search")).toBe(style);
+   await page.getByText("暂无该条件下待核价的外发单。",{exact:true}).waitFor();
+  }finally{await context.close();}
+ });
+ it("reaches the exact original rework queue row as the signed IE and returns to the same filtered queue",async()=>{
+  await f.reworkReady(1,async id=>{
+   const row=(await f.db.query("SELECT rework_no FROM rework_orders WHERE rework_order_id=$1",[id])).rows[0];
+   expect(row.rework_no).toBeTruthy();
+   const context=await browser.newContext({viewport:{width:1165,height:1003}});
+   try{
+    await context.addCookies([{name:"dx_rework_session",value:ieToken,url:base}]);
+    const page=await context.newPage();page.setDefaultTimeout(12000);
+    await page.goto(base+"/ui/ie-processing");
+    await page.getByRole("link",{name:"返工核价与复核",exact:true}).click();
+    await page.getByRole("textbox",{name:"搜索款号或原业务单号",exact:true}).fill(row.rework_no);
+    await page.getByRole("button",{name:"搜索",exact:true}).click();
+    const original=page.getByRole("link",{name:row.rework_no,exact:true});
+    const [response]=await Promise.all([
+     page.waitForResponse(value=>value.request().method()==="GET"&&new URL(value.url()).pathname.endsWith(`/rework-orders/${id}/process-configuration`)),
+     original.click(),
+    ]);
+    const detail=new URL(page.url());
+    expect(detail.pathname).toBe("/ui/process-configuration");
+    expect(detail.searchParams.get("rework")).toBe(id);
+    expect(response.status()).toBe(200);
+    await page.getByRole("link",{name:"返回 IE 报价与核价中心",exact:true}).click();
+    await original.waitFor();
+    expect(new URL(page.url()).searchParams.get("search")).toBe(row.rework_no);
+    expect(new URL(page.url()).searchParams.get("queue")).toBe("pending_ie_review");
+   }finally{await context.close();}
+  });
  });
  it("does not carry a price proposal to another order along the original list and detail navigation",async()=>{
   const {context,page}=await open(2);try{

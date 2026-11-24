@@ -1,6 +1,6 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
-import {QuotationResourceSchema,QuotationRowInputSchema,QuotationConfirmationSchema,SaveQuotationSchema} from '@dx-rework/contracts/digital-quotation';
+import {IeProcessingQuerySchema,QuotationResourceSchema,QuotationRowInputSchema,QuotationConfirmationSchema,SaveQuotationSchema} from '@dx-rework/contracts/digital-quotation';
 import {businessActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
 import type {DigitalIdentityDependencies} from './identity-routes.js';
@@ -11,6 +11,17 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
  const resource=(request:FastifyRequest)=>{const p=request.params as {kind:string;id:string};if(!['orders','sources'].includes(p.kind))throw new ApplicationError('NOT_FOUND','报价来源不存在',404);return parse(QuotationResourceSchema,{kind:p.kind==='orders'?'order':'source',id:p.id});};
  const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
  app.get('/digital-production/quotations',async request=>service.list(await actor(request)));
+ app.get('/digital-production/quotations/ie-processing',async(request,reply)=>{
+  const input=parse(IeProcessingQuerySchema,request.query);
+  reply.header('cache-control','private, no-store');return service.ieProcessingDirectory(await actor(request),input);
+ });
+ app.get('/digital-production/quotations/ie-processing/:quoteId/:rowId',async(request,reply)=>{
+  const target=parse(z.object({quoteId:z.string().uuid(),rowId:z.string().uuid()}).strict(),request.params);
+  reply.header('cache-control','private, no-store');
+  const {items}=await service.ieProcessingDirectory(await actor(request),{page:1,search:'',state:'all'},target);
+  if(items.length!==1)throw new ApplicationError('NOT_FOUND','当前账号无法查看所选报价行',404);
+  return items[0];
+ });
  const base='/digital-production/:kind/:id/quotation';
  app.get(`${base}/confirmed-versions`,async(request,reply)=>{const q=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().trim().max(100).default('')}).strict(),request.query);reply.header('cache-control','private, no-store');return service.originalVersions(await actor(request),resource(request),q.page,q.q);});
  const originalBase=`${base}/original-versions/:version`;

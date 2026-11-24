@@ -124,7 +124,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    if(!options?.stopBeforeCompletion)for(const kind of ['纸样完成','唛架完成',...(options?.preshrink==='无需预缩'?[]:['预缩完成' as const])] as const)await completeBulkRangeFixture(db,kind==='预缩完成'?people.warehouse!:people['pattern-room-worker']!,id,sheet.preparationId!,kind);
    return {id,caseId,sourceId:source.sourceId,preparationId:sheet.preparationId!,input,key,cutting:new CuttingService(db),primary};
   };
-  const reworkReady=async(poCount=1)=>{
+  const reworkReady=async(poCount=1,onWaitingForIe?:(id:string)=>Promise<void>)=>{
    const ready=await bulkReady('无',undefined,poCount),cut=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows[0];
    const cutter={...people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
    await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await image(cutter)]},randomUUID());
@@ -143,6 +143,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    const assign={...tail,authorizationCapability:'work:assign'};
    await plan.save(assign,id,{expectedOrderVersion:saved.value.orderVersion,configurationId:saved.value.configuration!.configurationId,expectedConfigurationVersion:saved.value.configuration!.configurationVersion,assignments:[{configurationItemId:saved.value.configuration!.items[0]!.configurationItemId,memberIds:[own,temporary]}]},randomUUID());
    const queued=await configuration.submit(tail,id,{expectedOrderVersion:saved.value.orderVersion,expectedConfigurationVersion:saved.value.configuration!.configurationVersion},randomUUID());
+   await onWaitingForIe?.(id);
    const ie={...people.ie!,authorizationCapability:'process:review',authorizationCapabilities:['process:review']};
    const approved=await configuration.review(ie,id,{expectedOrderVersion:queued.value.orderVersion,expectedConfigurationVersion:queued.value.configuration!.configurationVersion,decision:'approved'},randomUUID());
    await plan.activateAfterIeApproval(id,approved.value.configuration!.configurationVersion,randomUUID());
