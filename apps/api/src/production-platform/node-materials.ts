@@ -5,7 +5,8 @@ import {technicalArtifactIssues} from '@dx-rework/contracts/digital-development-
 import {preparationMaterialLabels,type PreparationMaterialKind} from '@dx-rework/contracts/production-readiness';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ProductionReadinessService} from './production-readiness-service.js';
-import {productionReadiness,instructionTechnicalCurrent,styleLabelCuttingReason} from './production-readiness-repository.js';
+import {productionReadiness,instructionTechnicalCurrent} from './production-readiness-repository.js';
+import {readStyleLabelReadiness} from './style-label-readiness.js';
 import {DevelopmentTechnicalService} from './development-technical-service.js';
 import {ProductionInstructionService} from './production-instruction-service.js';
 import {DigitalBudgetService} from './budget-service.js';
@@ -69,7 +70,20 @@ export async function readNodeMaterials(pool:Pool,db:PoolClient,actor:TrustedAct
      const prep=await new BulkPreparationService(pool).read(actor,order.orderId,db),visible=new Set(order.lines.map(l=>l.id));
      for(const range of readiness.ranges.filter(r=>r.preparationId===prep.preparationId&&r.kind===(key==='bulk_marker'?'唛架完成':'纸样完成')&&r.lineIds.every(id=>visible.has(id))))add({id:'range-'+range.rangeId,label:range.complete?'本次完整范围成果':'已做的局部范围',purpose:'output',state:range.complete?'present':'partial',reason:range.note+(range.complete?'；有效性仍沿原范围核验。':`；仍待 ${range.pendingMaterialIds.length} 项物料，不表示整单已齐套。`),versionLabel:`范围 v${range.version}`,scope:order.lines.filter(l=>range.lineIds.includes(l.id)).map(l=>l.color).join('／')||scope,records:[record('preparation',order.orderId,url,range.version)]});
     }
-    if(['style_label_ready','cutting_gate','bulk_cutting'].includes(key))for(const line of order.lines){const why=await styleLabelCuttingReason(db,order.orderId,[line.id]),labelFact=readiness.facts.find(f=>f.kind==='style_label_ready'&&f.scopeRef==='whole');add({id:'style-label-'+line.id,label:'款号唛实物',purpose:'input',applicability:readiness.enrolled?'required':'optional',state:!readiness.enrolled?'unknown':why?'missing':'effective',reason:why??'本款色的整单准备量已具备；实际开裁仍按原单具体范围核验。',versionLabel:labelFact?`款号唛记录 v${labelFact.version}`:null,scope:`${line.po??'未补 PO'} · ${line.color}`,role:'仓管',owner:readiness.responsibility.warehouseWorkerId?{id:readiness.responsibility.warehouseWorkerId,name:null}:null,records:[record('preparation',order.orderId,url+'&materialKind=style_label_ready',null,line.id)]});}
+    if(['style_label_ready','cutting_gate','bulk_cutting'].includes(key)){
+     const labels=await readStyleLabelReadiness(db,order.orderId,[],{context:current.context,adopted:Boolean(current.adoption),currentMaterials:current.materials,history:current.materialHistory});
+     const requested=key==='style_label_ready'?new Set(node.fixedTargets?.flatMap(target=>target.lineId?[target.lineId]:[])):new Set<string>();
+     for(const line of order.lines.filter(line=>!requested.size||requested.has(line.id))){
+      const outcome=labels.lines.get(line.id),known=labels.adopted&&outcome&&outcome.status!=='unknown';
+      add({id:'style-label-'+line.id,label:'款号唛实物',purpose:'input',applicability:labels.adopted?'required':'optional',
+       state:!known?'unknown':outcome.status==='sufficient'?'effective':'missing',
+       reason:!labels.adopted?'历史单未采用款号唛资料规则；原记录保留。':outcome?.status==='sufficient'
+        ?'本款色的整单准备量已具备；实际开裁仍按原单具体范围核验。':outcome?.reason??'本款色没有有效的款号唛数量依据',
+       versionLabel:outcome?.record?`款号唛记录 v${outcome.record.version}`:null,scope:`${line.po??'未补 PO'} · ${line.color}`,role:'仓管',
+       owner:readiness.responsibility.warehouseWorkerId?{id:readiness.responsibility.warehouseWorkerId,name:null}:null,
+       records:[record('preparation',order.orderId,url+'&materialKind=style_label_ready',null,line.id)]});
+     }
+    }
    }
   }
   if(technicallyRelevant.has(key)&&order.sourceId&&await new DigitalProductionAccessPolicy(db).allowed(actor,'source',order.sourceId,'technical')){

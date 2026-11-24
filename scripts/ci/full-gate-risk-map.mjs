@@ -430,6 +430,12 @@ export const classifyFullGatePaths = (inputPaths) => {
     addAll(mappedTests,['tests/integration/order-time-requests-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/journey-fact-model-postgres.test.ts','tests/integration/m01-journey-performance-postgres.test.ts','tests/integration/bulk-washing-postgres.test.ts']);
     domains.add('time-framework-journey-reading');
   }
+  if(paths.some(path=>/^apps\/api\/src\/production-platform\/style-label-(?:evidence|readiness|model-compatibility)\.ts$/.test(path))){
+    addAll(mappedTests,['tests/integration/production-readiness-postgres.test.ts','tests/integration/series-plan-postgres.test.ts',
+      'tests/integration/order-time-reading-postgres.test.ts','tests/integration/time-framework-cockpit-native-browser-postgres.test.ts',
+      'tests/integration/journey-fact-model-postgres.test.ts','tests/integration/journey-fact-updates-postgres.test.ts']);
+    domains.add('style-label-native-readiness');
+  }
   if(paths.some(path=>/first-effective-receipt|factory-delivery-reading|receiving-span|factory-return-logistics/.test(path))){addAll(mappedTests,['tests/integration/fixed-progress-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/m01-journey-performance-postgres.test.ts']);domains.add('native-first-delivery');}
   if(paths.some(path=>/whole-order-(?:deletion|native-deletion|visibility)|cockpit-order-deletion|0287_whole_order/.test(path))){addAll(mappedTests,['tests/integration/whole-order-deletion-postgres.test.ts','tests/integration/whole-order-deletion-browser-postgres.test.ts']);domains.add('whole-order-deletion');}
   if(paths.some(path=>/^apps\/api\/src\/production-platform\/(?:fixed-development-work|fixed-order-work|fixed-work-definition)\.ts$/.test(path))){

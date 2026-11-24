@@ -1,3 +1,4 @@
+import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
@@ -11,6 +12,8 @@ import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.j
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {SlaConfigurationService} from '../../apps/api/src/production-platform/sla-configuration-service.js';
 import {OperationEventRepository} from '../../apps/api/src/tools/repositories.js';
+import {JOURNEY_FACT_CALCULATION_VERSION} from '../../apps/api/src/production-platform/journey-fact-model.js';
+import {readJourneySelections} from '../../apps/api/src/production-platform/journey-selection-query.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -23,6 +26,131 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  beforeAll(async()=>{f=await businessAnchorFixture(url!);scene=await f.scene('2026-11-08T00:00:00Z');repo=new JourneyFactRepository(f.db);identity=new DigitalProductionIdentityService(f.db,true);});
  beforeEach(async()=>{vi.restoreAllMocks();await f.db.query('DELETE FROM digital_journey_fact_changes');await f.db.query('DELETE FROM digital_journey_fact_retries');});
  afterAll(async()=>{vi.restoreAllMocks();await f?.dispose();});
+ it('upgrades only affected old orders, keeps a compatible source readable and preserves dirty writes during reconstruction',async()=>{
+  // Keep live-clock records out of the existing fixed-clock integration fixture.
+  const f=await businessAnchorFixture(url!),repo=new JourneyFactRepository(f.db),identity=new DigitalProductionIdentityService(f.db,true);
+  const make=()=>identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-LABEL-'+randomUUID(),orderDate:'2026-11-08',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID());
+  const pending=async(id:string)=>(await f.db.query('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_id=$1',[id])).rows;
+  const status=async(id:string)=>{const db=await f.db.connect();try{return await repo.readStoredWithClient(db,{kind:'order',id});}finally{db.release();}};
+  try{
+   const style='TEST-LABEL-C-'+randomUUID();
+   const a=await make(),b=await make(),d=await make(),source=await identity.createSource(f.root,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const sourceScope={kind:'source' as const,id:source.sourceId},orderScope=(id:string)=>({kind:'order' as const,id});
+   const resources=[orderScope(a.productionOrderId),orderScope(b.productionOrderId),sourceScope,orderScope(d.productionOrderId)];
+   for(const resource of resources)await repo.buildOne(resource);
+   const bBefore=(await status(b.productionOrderId)).model;
+   const old=[a.productionOrderId,source.sourceId,d.productionOrderId];
+   await f.db.query("UPDATE digital_journey_fact_models SET calculation_version='journey-facts-material-investment-v19' WHERE resource_id=ANY($1::uuid[])",[old]);
+   const db=await f.db.connect();try{
+    expect(await repo.readStoredWithClient(db,sourceScope)).toMatchObject({status:'ready',model:{orderId:null}});
+    const selected=await repo.readSelectionsWithClient(db,resources,new Date().toISOString());
+    expect(resources.map(scope=>selected.items.get(scope.kind+':'+scope.id)?.status)).toEqual(['obsolete','ready','ready','obsolete']);
+    const sql=await readJourneySelections(f.db,db,f.root,resources.map(scope=>scope.kind==='order'
+     ?{source:null,order:{production_order_id:scope.id}}:{order:null,source:{source_id:scope.id}}),JourneyFilterSchema.parse({}),new Date().toISOString());
+    expect(sql.items.map(item=>[item.resource.id,item.status]).sort()).toEqual(resources.map((scope,index)=>[scope.id,['obsolete','ready','ready','obsolete'][index]]).sort());
+   }finally{db.release();}
+   const query=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'});
+   expect(await query.list(f.root,JourneyFilterSchema.parse({scope:'production',search:a.productionOrderId}))).toMatchObject({total:null,summary:null});
+   expect((await query.list(f.root,JourneyFilterSchema.parse({scope:'production',search:b.productionOrderId}))).total).toBe(1);
+   const updates=new JourneyFactUpdates(f.db,repo);
+   await updates.registerBackfill();
+   expect(await pending(a.productionOrderId)).toHaveLength(1);expect(await pending(d.productionOrderId)).toHaveLength(1);
+   expect(await pending(b.productionOrderId)).toHaveLength(0);expect(await pending(source.sourceId)).toHaveLength(0);
+   const original=DigitalJourneyQuery.prototype.buildFactsWithClient;
+   let enter!:()=>void,release!:()=>void;
+   const entered=new Promise<void>(resolve=>{enter=resolve;}),released=new Promise<void>(resolve=>{release=resolve;});
+   const spy=vi.spyOn(DigitalJourneyQuery.prototype,'buildFactsWithClient').mockImplementation(async function(...args){
+    if(args[1].id===a.productionOrderId){enter();await released;}
+    return original.apply(this,args);
+   });
+   const building=updates.runOnce();await entered;
+   try{await f.db.query('UPDATE digital_production_po_sizes SET quantity=11 WHERE line_id=$1',[a.lines[0]!.lineId]);}finally{release();}
+   expect(await building).toMatchObject({built:2,failed:0});spy.mockRestore();
+   expect(await status(a.productionOrderId)).toMatchObject({status:'pending',model:null});
+   expect(await status(d.productionOrderId)).toMatchObject({status:'ready'});
+   expect((await status(b.productionOrderId)).model).toEqual(bBefore);
+   await f.db.query("UPDATE digital_journey_fact_models SET selection_expires_at=clock_timestamp()-interval '1 second' WHERE resource_id=$1",[source.sourceId]);
+   expect(await updates.runOnce()).toMatchObject({built:2,failed:0});
+   expect(await pending(a.productionOrderId)).toHaveLength(0);expect(await pending(source.sourceId)).toHaveLength(0);
+   expect((await f.db.query('SELECT calculation_version FROM digital_journey_fact_models WHERE resource_id=$1',[source.sourceId])).rows[0]?.calculation_version).toBe(JOURNEY_FACT_CALCULATION_VERSION);
+   await f.db.query("UPDATE digital_journey_fact_models SET calculation_version='journey-facts-material-investment-v19' WHERE resource_id=$1",[source.sourceId]);
+   const linked=await identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-08',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID());
+   await identity.attachSource(f.root,linked.productionOrderId,source.sourceId,randomUUID());
+   const after=await f.db.connect();try{expect((await repo.readStoredWithClient(after,sourceScope)).model).toBeNull();}finally{after.release();}
+  }finally{await f.dispose();}
+ });
+ it('recovers the original dirty work when a real projection process is killed before or after commit',async()=>{
+  const f=await businessAnchorFixture(url!),repo=new JourneyFactRepository(f.db),identity=new DigitalProductionIdentityService(f.db,true);
+  const worker=`
+   import pg from 'pg';
+   import { JourneyFactUpdates } from './apps/api/src/production-platform/journey-fact-updates.ts';
+   import { assertTestDatabaseTarget } from './scripts/test-database-safety.mjs';
+   process.once('message', async ({url,searchPath,phase})=>{
+    try {
+     await assertTestDatabaseTarget(url);
+     const pool=new pg.Pool({connectionString:url,options:searchPath,max:3,connectionTimeoutMillis:3000});
+     const database=new Proxy(pool,{get(target,key){
+      if(key==='connect'&&phase!=='normal')return async()=>{
+       const client=await target.connect(),query=client.query.bind(client);
+       client.query=async(statement,...args)=>{
+        if(statement!=='COMMIT')return query(statement,...args);
+        if(phase==='before')process.send('before');
+        else {await query(statement,...args);process.send('after');}
+        await new Promise(()=>{});
+       };
+       return client;
+      };
+      const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+     }});
+     const result=await new JourneyFactUpdates(database).runOnce();
+     await pool.end();
+     process.send(result,()=>process.disconnect());
+    } catch(error) {process.send({workerError:error?.name,code:error?.code},()=>process.disconnect());process.exitCode=1;}
+   });
+  `;
+  const runWorker=async(phase:'before'|'after'|'normal')=>{
+   const child=spawn(process.execPath,['--import','tsx','--input-type=module','--eval',worker],{stdio:['ignore','ignore','ignore','ipc']});
+   const closed=new Promise<{code:number|null;signal:NodeJS.Signals|null}>(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
+   let timeout:ReturnType<typeof setTimeout>|undefined;
+   try{
+    const message=await new Promise<unknown>((resolve,reject)=>{
+     child.once('message',resolve);
+     child.once('error',reject);
+     void closed.then(result=>reject(new Error('TEST worker exited before the boundary: '+JSON.stringify(result))));
+     timeout=setTimeout(()=>reject(new Error('TEST worker did not reach '+phase+' within limit')),15000);
+     child.send({url,searchPath:f.db.options.options,phase},error=>{if(error)reject(error);});
+    });
+    expect(message).toEqual(phase==='normal'?{built:expect.any(Number),retired:0,failed:0,busy:0}:phase);
+    if(phase!=='normal'){
+     expect(child.kill('SIGKILL')).toBe(true);
+     expect(await closed).toEqual({code:null,signal:'SIGKILL'});
+    }else expect(await closed).toEqual({code:0,signal:null});
+    return message;
+   }finally{clearTimeout(timeout);if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await closed;}
+  };
+  try{
+   const order=await identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-LABEL-KILL-'+randomUUID(),orderDate:'2026-11-08',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID());
+   const scope={kind:'order' as const,id:order.productionOrderId};
+   const read=async()=>{const client=await f.db.connect();try{return await repo.readStoredWithClient(client,scope);}finally{client.release();}};
+   const model=async()=>(await f.db.query('SELECT source_fingerprint,source_version,calculation_version FROM digital_journey_fact_models WHERE resource_id=$1',[scope.id])).rows[0];
+   const dirty=async()=>(await f.db.query('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_id=$1 ORDER BY transaction_id',[scope.id])).rows;
+   const change=(expectedVersion:number)=>identity.correctNumbers(f.root,scope.id,order.lines[0]!.lineId,{expectedVersion,formalPoNo:'TEST-REVISED-'+randomUUID()},randomUUID());
+   await repo.buildOne(scope);const initial=await model();
+   await change(order.version);const originalDirty=await dirty();expect(originalDirty).toHaveLength(1);
+   await runWorker('before');
+   expect(await read()).toMatchObject({status:'pending',model:null});expect(await model()).toEqual(initial);expect(await dirty()).toEqual(originalDirty);
+   expect(await runWorker('normal')).toMatchObject({built:1});expect((await read()).status).toBe('ready');expect(await dirty()).toEqual([]);
+   const beforeCommit=await model();
+   await change(order.version+1);expect(await dirty()).toHaveLength(1);
+   await runWorker('after');
+   const committed=await model();
+   expect(committed.calculation_version).toBe(JOURNEY_FACT_CALCULATION_VERSION);
+   expect(BigInt(committed.source_version)).toBe(BigInt(beforeCommit.source_version)+1n);
+   expect((await read()).status).toBe('ready');expect(await dirty()).toEqual([]);
+   expect(await runWorker('normal')).toMatchObject({built:0});
+   expect(await model()).toEqual(committed);
+  }finally{await f.dispose();}
+ });
  it('registers native create/correction once per transaction and refuses the old result immediately after save',()=>run(async()=>{
   const order=await make(),scope={kind:'order' as const,id:order.productionOrderId};expect(await pending(scope.id)).toHaveLength(1);
   const first=await repo.buildOne(scope);expect((await status(scope.id)).status).toBe('ready');
