@@ -25,7 +25,7 @@ import { digitalWorkspaceActive } from "./digital-workspace-navigation.js";
 import { digitalDetailRoute } from "./digital-detail-route.js";
 import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
-import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
+import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples, IE_PROCESSING_ROLES } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
 import { isCurrentTodoIndicatorActor, markTodoIndicatorRead, readTodoIndicator } from "./todo-indicator-read.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
@@ -434,6 +434,11 @@ export function Shell({
     });
   }
   if(cockpitNavigation.length)globalNavigation.push({name:'供应链总看板',description:'供应链进度与交付',href:cockpitNavigation[0]!.href,expandOnly:true,children:cockpitNavigation});
+  if (isRoot || IE_PROCESSING_ROLES.some(hasRole)) globalNavigation.push({
+    name: "IE 报价与核价中心",
+    description: "办理产品加工报价、外发核价与返工复核",
+    href: "/ui/ie-processing",
+  });
   globalNavigation.push({
     name: "订单回货",
     label: "订单回货看板",

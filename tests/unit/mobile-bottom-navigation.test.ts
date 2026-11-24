@@ -40,7 +40,7 @@ describe("mobile primary navigation", () => {
     expect(css).toContain(".mobile-primary-navigation__more[open] .mobile-primary-navigation__drawer");
     expect(app).toContain('<Shell active="订单回货" mobileNavigation="transaction"><ReworkInitiationV2Form /></Shell>');
     expect(app).toContain("<ReceivingReworkEntryRedirect />");
-    expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>');
-    expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
+    expect(app).toMatch(/<Shell active="返工单看板" mobileNavigation="transaction">[^\n<]*<IeReworkReturn\/>\}<ProcessConfigurationForm \/><\/Shell>/);
+    expect(app).toMatch(/<Shell active="返工单看板" mobileNavigation="transaction">[^\n<]*<IeReworkReturn\/>\}<WorkReportingForm \/><\/Shell>/);
   });
 });

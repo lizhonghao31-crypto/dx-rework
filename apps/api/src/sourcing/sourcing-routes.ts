@@ -5,6 +5,7 @@ import { registerProductionDashboardRoutes } from "./production-dashboard-routes
 import type { ProductionDashboardService } from "./production-dashboard-service.js";
 import { registerProductionReportingRoutes } from "./production-reporting-routes.js";
 import type { ProductionReportingService } from "./production-reporting-service.js";
+import { sourcingCaseStages,type SourcingCaseStage } from "./sourcing-case-read.js";
 import {
   CorrectSourcingCaseSchema, ReturnSourcingCaseSchema,
   CreateSourcingCaseSchema,
@@ -266,7 +267,7 @@ export function registerSourcingRoutes(
       validationError("订单状态筛选无效");
     }
     const stage = request.query.stage ?? "all";
-    if (!["all","ie","management","owner","finance","factory_change","exception"].includes(stage)) {
+    if (!sourcingCaseStages.includes(stage as SourcingCaseStage)) {
       validationError("流程状态筛选无效");
     }
     const gender = request.query.gender ?? "all";
@@ -281,7 +282,7 @@ export function registerSourcingRoutes(
       statusFilter,
       page,
       {
-        stage: stage as "all"|"ie"|"management"|"owner"|"finance"|"factory_change"|"exception",
+        stage: stage as SourcingCaseStage,
         gender: gender as "all"|"男装"|"女装"|"missing",
         styleName: request.query.styleName ?? "",
         ...(contractReturn !== undefined ? { contractReturn: contractReturn as "all"|"pending"|"returned_on_time"|"overdue_pending"|"returned_late"|"all_overdue" } : {}),

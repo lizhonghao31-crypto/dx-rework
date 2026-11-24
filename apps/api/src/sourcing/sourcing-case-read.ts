@@ -12,9 +12,11 @@ import {mapSourcingCase as mapCase,toSourcingIso as toIso,type SourcingCaseRow} 
 const SOURCING_LIST_PAGE_SIZE=15;
 const fail=(message:string,status=400,code="VALIDATION_ERROR"):never=>{throw new ApplicationError(code,message,status);};
 export type SourcingCaseHistory=Readonly<{at:string;node:SourcingHistoryNode;entryId:string}>;
+export const sourcingCaseStages=['all','ie','ie_history','management','owner','finance','factory_change','exception'] as const;
+export type SourcingCaseStage=(typeof sourcingCaseStages)[number];
 export type SourcingCaseListSelection=Readonly<{
  normalizedQuery:string;statusFilter:"all"|"pending"|"closed";page:number;
- stage:"all"|"ie"|"management"|"owner"|"finance"|"factory_change"|"exception";
+ stage:SourcingCaseStage;
  gender:"all"|"男装"|"女装"|"missing";normalizedStyleName:string;contractReturn:ContractReturnFilter|null;
 }>;
 
@@ -240,6 +242,7 @@ export async function readSourcingCase(database:Pool,client:Pick<PoolClient,"que
 /** PERF09 query is intentionally kept independent from detail/history loading. */
 export async function readSourcingCaseList(database:Pool,actor:TrustedActorContext,selection:SourcingCaseListSelection):Promise<SourcingCaseListResponse>{
  const {normalizedQuery,statusFilter,page,stage,gender,normalizedStyleName,contractReturn}=selection;
+ const ieHistory=stage==='ie_history';
     const offset = (page - 1) * SOURCING_LIST_PAGE_SIZE;
     const principalAvailable=Boolean((await database.query("SELECT to_regclass('digital_production_child_links') AS relation")).rows[0]?.relation);
     const principalJoins=principalAvailable?`LEFT JOIN digital_production_child_links principal_link ON principal_link.module='sourcing' AND principal_link.child_id=case_view.sourcing_case_id
@@ -312,6 +315,11 @@ export async function readSourcingCaseList(database:Pool,actor:TrustedActorConte
          AND (
            $3::text='all'
            OR ($3::text='ie' AND case_view.status='pending_ie_quote')
+           ${ieHistory?`OR (case_view.status<>'pending_ie_quote' AND EXISTS (
+             SELECT 1 FROM sourcing_ie_quotes history_quote
+             WHERE history_quote.sourcing_case_id=case_view.sourcing_case_id
+               AND ($9::boolean OR history_quote.quoted_by=$8::uuid)
+           ))`:''}
            OR ($3::text='management' AND case_view.status='pending_management_decision')
            OR ($3::text='owner' AND case_view.status='pending_owner_approval')
            OR ($3::text='finance' AND case_view.status IN ('pending_contract','pending_finance_reconciliation'))
@@ -535,6 +543,7 @@ export async function readSourcingCaseList(database:Pool,actor:TrustedActorConte
         normalizedStyleName,
         contractReturn,
         offset,
+        ...(ieHistory?[actor.actorId,actor.actorRoles.some(role=>role==='root_superuser'||role==='production_management'||role==='owner_group')]:[]),
       ],
     );
     const pageRows = result.rows.filter(row => row.sourcing_case_id != null);

@@ -13,7 +13,7 @@ describe("UAT interface closure", () => {
       read("apps/web/src/App.tsx"),
     ]);
     expect(navigation).not.toContain('name: "返工上数"');
-    expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
+    expect(app).toMatch(/<Shell active="返工单看板" mobileNavigation="transaction">[^\n<]*<IeReworkReturn\/>\}<WorkReportingForm \/><\/Shell>/);
     expect(app).toContain('<WorkflowQueuePage active="返工单看板"');
   });
 

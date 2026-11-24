@@ -1,105 +1,109 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "e2c32dd3bee6e8f3e834f4f3023730e0a1d64bbb",
-  "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
+  "base": "d8a1a6ee9843e5cb0ab1c45cea9f86a56c1e72c5",
+  "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
   "rules": [
     {
-      "rule": "Read the exact signed-in designer’s current quotation and calculate the proposal in both directions without recording customer confirmation.",
-      "source": "Approved workbench v10.1 §7.1 and §7.1A on authoritative source costs, strict fixed decimals and last valid amount input.",
+      "rule": "Read assigned IE product quotation lines from the complete authorized, searched result set.",
+      "source": "Approved workbench v10.1 §8.1, §8.2 and I01/I04/I05.",
       "writes": [
-        "apps/api/src/production-platform/quotation-routes.ts#workbench-pricing",
-        "apps/api/src/production-platform/quotation-service.ts#workbenchPreview",
-        "apps/api/src/production-platform/quotation-workbench.ts#readWorkbenchQuotation",
-        "apps/web/src/quotation-workbench-pricing.tsx#QuotationWorkbenchPricing",
-        "apps/web/src/digital-quotation-panel.tsx#QuotationWorkbenchPricing",
-        "apps/web/src/digital-quotation.css",
-        "packages/contracts/src/digital-quotation.ts#calculateQuotationPricing",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/customer-quotation.test.ts"
+        "apps/api/src/production-platform/ie-processing-directory.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-assembly.ts#quotationComplete",
-        "apps/api/src/production-platform/identity-routes.ts#cache-control",
-        "apps/web/src/use-foreground-read.ts#useForegroundRead",
-        "docs/requirements/platform-permission-golden-source-v1.0.md"
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "oldTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/customer-quotation.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "initialization": "A read-only snapshot binds the single quotation and version. Without eligible published technical evidence a new automatic material line does not contribute a trusted complete cost.",
-      "dateAndPermission": "The original currently assigned designer’s active role determines preview access. The projection makes no time or production state change. Signed IE and merchandiser cannot read this private proposal.",
-      "expectation": "Signed browsers computed 130% and the precise manual unit price, confirmed no original confirmation-input changes and validated 1165/390px layout, original no-store policy and spacing from the programmatic focus ring. The PostgreSQL contrast distinguishes legacy IE, missing line facts and a real craft approval.",
+      "initialization": "No new tables or backfill. The projection selects current persisted assembly, assignment and admitted acceptance scope before total and paging.",
+      "dateAndPermission": "Read paths keep the original quote scope, active roles, assignments and business clock. A different row or an unrelated actor cannot access the selected entry.",
+      "expectation": "The signed IE sees 16 assigned rows over two pages despite unassigned rows sorting first. The selected resource and original quote/row IDs agree. Root has the original unassigned view. A non-IE and a nonmatching row fail authorization.",
       "checks": [
         "native-business",
-        "quotation-nondb",
+        "nondb",
         "api-types",
-        "web-types",
         "lint"
       ]
     },
     {
-      "rule": "Stage personal pricing and independent line return, explicit resubmission and resolution behind the joint release boundary.",
-      "source": "Approved workbench v10.1 §7.2, §7.2A and §13.1 on original field owners, exact versions, independent state and no new writes before joint validation.",
+      "rule": "Use the original row command, version and idempotency key and preserve a confirmed quote across a failed re-read.",
+      "source": "Approved workbench v10.1 §8.2, §12.2 and I02/I04/I05.",
       "writes": [
-        "apps/api/migrations/0300_workbench_quotation_review.sql",
-        "apps/api/src/production-platform/quotation-workbench.ts#applyWorkbenchLineReview",
-        "apps/api/src/production-platform/quotation-service.ts#reviewWorkbenchLine",
-        "packages/contracts/src/digital-quotation.ts#QuotationLineReviewCommandSchema",
+        "apps/web/src/ie-processing-center.tsx",
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/quotation-service.ts#fillRow",
-        "apps/api/src/production-platform/access-policy.ts#lockActiveRole",
-        "apps/api/src/production-platform/quotation-budget-basis.ts#ensureQuotationBudget",
-        "apps/api/migrations/0267_customer_quotation_budget_basis.sql"
+        "apps/web/src/submission-feedback.tsx",
+        "apps/web/src/use-foreground-read.ts"
       ],
       "oldTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "initialization": "Additive storage starts empty with no backfill. The internal commands use the existing quote transaction and idempotency receipt. No draft or line-review writer is registered before R6.",
-      "dateAndPermission": "The business clock records exact return and review events. Exact source/round/row/field and the current assigned role are checked, and craft resolution still requires R6.",
-      "expectation": "The signed app rejects every unregistered new write. Tests of the actual isolated transactions verify idempotent replay, stale draft rejection, one field at a time and no new confirmation, adopted budget or budget row.",
+      "initialization": "Existing quotations, budget and control boundaries continue from the release base. Writes remain on the original scoped request and idempotent receipt path.",
+      "dateAndPermission": "Only the currently authorized IE row is editable in the center. UI pending/retry state neither upgrades authorization nor creates another business write.",
+      "expectation": "A lost receipt reuses the exact version, original body and key. The stored price increments one version, an interrupted re-read keeps the success receipt and retry recovers the saved price with only GET.",
       "checks": [
         "native-business",
-        "quotation-nondb",
-        "api-types",
-        "preflight"
+        "nondb",
+        "lint",
+        "web-types"
       ]
     },
     {
-      "rule": "Retain existing confirmation, confirmed versions and budget adoption while staging the additive next schema.",
-      "source": "Approved workbench v10.1 §7.3 and §13.1 on original budget rules and the disabled new confirmation until R6 joint verification.",
+      "rule": "Open the original sourcing and rework actions and return to the same authorized page, search and row.",
+      "source": "Approved workbench v10.1 §8.1, §8.2 and I02/I03/I05; DXUI T02.",
       "writes": [
-        "apps/api/migrations/0300_workbench_quotation_review.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
+        "apps/api/src/sourcing/sourcing-case-read.ts",
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "apps/web/src/ie-processing-center.tsx",
+        "apps/web/src/App.tsx",
+        "apps/web/src/components.tsx",
+        "apps/web/src/navigation-icons.tsx",
+        "apps/web/src/platform-modules.ts",
+        "tests/helpers/business-anchor-fixture.ts",
         "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
+        "tests/unit/business-chain-ui-contract.test.ts",
+        "tests/unit/mobile-bottom-navigation.test.ts",
+        "tests/unit/uat-interface-closure.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-routes.ts#registerQuotationRoutes",
-        "apps/api/src/production-platform/quotation-budget-basis.ts#readBudgetQuoteComparison",
-        "apps/api/src/production-platform/budget-service.ts#adoptQuotation",
-        "scripts/acceptance/time-site-inventory.mjs"
+        "apps/web/src/internal-navigation.ts",
+        "apps/web/src/reporting/reporting-client.ts",
+        "apps/web/src/astryx-page-controls.tsx",
+        "apps/api/src/sourcing/sourcing-case-mapping.ts",
+        "docs/ui/ASTRYX_UI_SPEC.md"
       ],
       "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/unit/current-migration-manifest-checksum.test.ts"
+        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
+        "tests/integration/sourcing-routes.test.ts",
+        "tests/unit/sourcing-list-pagination.test.ts",
+        "tests/unit/sourcing-list-query.test.ts",
+        "tests/unit/business-chain-ui-contract.test.ts",
+        "tests/unit/mobile-bottom-navigation.test.ts",
+        "tests/unit/uat-interface-closure.test.ts"
       ],
-      "initialization": "Schema 0300 adds storage and a nullable confirmed-basis field. Existing agreements, history and orders remain untouched.",
-      "dateAndPermission": "No role or existing confirmation/budget write authority changes. The original trusted confirmation time and budget criteria remain operative until the common R6 release.",
-      "expectation": "A forged next-protocol confirmation is rejected with no persisted effects. Original explicit confirmation, two-tab idempotency, lost-receipt recovery and the existing approved budget and history still pass in real PostgreSQL.",
+      "initialization": "Reuse current sourcing quotes and rework queue facts. Original source-module routes and readers retain their state machines and permissions.",
+      "dateAndPermission": "No deadlines, financial calculations or new vendor permissions. Sourcing records are selected before the count and page; ordinary IE history uses the original quote author. Return URLs are same-site and require normal authorization.",
+      "expectation": "Signed native tests submit the original outside quote once, reopen its saved price in history, and return to exact context. The rework link opens the exact original row, and the standard direct URL still opens that row without an IE link or mobile navigation. Existing contract tests keep both original forms in their order-centered transaction shell. Native product views fit 1165px and 390px.",
       "checks": [
         "native-business",
-        "quotation-nondb",
+        "nondb",
         "api-types",
+        "web-types",
+        "lint",
         "inventory",
         "preflight"
       ]
@@ -109,46 +113,46 @@
     {
       "id": "native-business",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r4-evidence/ie-verified/verify-native.mjs native-business",
+      "command": "node /tmp/dx-workbench-v101-r5-evidence/rework-route-contract/verify-native.mjs native-business",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:12:42.519Z",
-      "endedAt": "2026-11-24T00:13:39.178Z",
-      "testedHead": "036213cc571b04176bb3d4490722d99014369de3",
-      "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
-      "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints. The canonical two-worker business-chain config used both marked low-privilege PostgreSQL 16.14 databases and signed Chromium sessions. Resource cleanup verified.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/ie-verified/native-business.log",
-      "logSha256": "94d8c083d7549e94cbaf3d2a7b4ee19b0df0e125e0980f84c42e7728f6784244",
-      "passed": 63,
+      "startedAt": "2026-11-24T00:53:27.359Z",
+      "endedAt": "2026-11-24T00:53:51.597Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+      "context": "Signed Chromium with the canonical two-worker business-chain config and dual marked isolated PostgreSQL databases. Product quotation, sourcing and rework native flows. Cleanup verified.",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/native-business.log",
+      "logSha256": "73e89ac554ad68e2378d7c27b3a4bd32a8e541ece48a3f67663b3b53fc8c3830",
+      "passed": 3,
       "failed": 0,
-      "skipped": 0,
+      "skipped": 14,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0d89e9eb5601a59f2d72db5aeebc27082d07c065de883fff5a7080cd6d801e0e"
+          "sha256": "b31618229cbc91651fa9f3b0fee169d6b08c1fca331480d0f31ef74800608623"
         }
       ]
     },
     {
-      "id": "quotation-nondb",
+      "id": "nondb",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/customer-quotation.test.ts tests/unit/digital-budget.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/current-migration-manifest-checksum.test.ts with JSON and default reporters",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-query.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/integration/sourcing-routes.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:12:42Z",
-      "endedAt": "2026-11-24T00:12:46Z",
-      "testedHead": "036213cc571b04176bb3d4490722d99014369de3",
-      "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
-      "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/ie-verified/quotation-nondb.log",
-      "logSha256": "8acb0fd2024222edf4f8eabaf7b55408b0eb5209c5ae06d4246e5a61df942609",
-      "passed": 58,
+      "startedAt": "2026-11-24T00:53:27Z",
+      "endedAt": "2026-11-24T00:53:37Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/nondb.log",
+      "logSha256": "18a46e89079d5cb8abc933ddf9bcadbc809475c81e6cb4d7cded3261249e13c7",
+      "passed": 99,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8d71e25ca3148ccb9589ba6ff97ff1166d8754ca3717ac1aa8b311fe02b6eede"
+          "sha256": "13e3695065b729ba56df62b09ca8756dcfeae0932908adb1e760e55fca721297"
         }
       ]
     },
@@ -158,12 +162,12 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:12:46Z",
-      "endedAt": "2026-11-24T00:13:01Z",
-      "testedHead": "036213cc571b04176bb3d4490722d99014369de3",
-      "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
-      "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/ie-verified/api-types.log",
+      "startedAt": "2026-11-24T00:53:37Z",
+      "endedAt": "2026-11-24T00:53:53Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/api-types.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -172,26 +176,26 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:13:01Z",
-      "endedAt": "2026-11-24T00:13:24Z",
-      "testedHead": "036213cc571b04176bb3d4490722d99014369de3",
-      "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
-      "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/ie-verified/web-types.log",
+      "startedAt": "2026-11-24T00:53:53Z",
+      "endedAt": "2026-11-24T00:54:14Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/web-types.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js (the eight changed TypeScript files) --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 for changed TypeScript sources and tests",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:13:24Z",
-      "endedAt": "2026-11-24T00:13:25Z",
-      "testedHead": "036213cc571b04176bb3d4490722d99014369de3",
-      "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
-      "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/ie-verified/lint.log",
+      "startedAt": "2026-11-24T00:54:14Z",
+      "endedAt": "2026-11-24T00:54:15Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -200,12 +204,12 @@
       "command": "node scripts/acceptance/time-site-inventory.mjs",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:13:25Z",
-      "endedAt": "2026-11-24T00:13:25Z",
-      "testedHead": "036213cc571b04176bb3d4490722d99014369de3",
-      "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
-      "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/ie-verified/inventory.log",
+      "startedAt": "2026-11-24T00:54:15Z",
+      "endedAt": "2026-11-24T00:54:15Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/inventory.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
     },
     {
@@ -214,13 +218,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:13:25Z",
-      "endedAt": "2026-11-24T00:13:32Z",
-      "testedHead": "036213cc571b04176bb3d4490722d99014369de3",
-      "sourceFingerprint": "930ca330614bc2c2a9c7ec93c2d428dc606a14aaf2e2aed5396abb115f838502",
-      "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/ie-verified/preflight.log",
-      "logSha256": "6a3d3c7ca367846d654242ca00c51092037f538c3517a5bbec83665ddfdcd3c0"
+      "startedAt": "2026-11-24T00:54:15Z",
+      "endedAt": "2026-11-24T00:54:21Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/preflight.log",
+      "logSha256": "77c81216e8eb32544451847321aa2ee95418a8ea551e09d53847fb602cec13b5"
     }
   ]
 }

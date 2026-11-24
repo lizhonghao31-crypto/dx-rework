@@ -19,6 +19,7 @@ import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {applyWorkbenchLineReview,persistWorkbenchPricing,readWorkbenchQuotation} from './quotation-workbench.js';
+import {readIeProcessingDirectory} from './ie-processing-directory.js';
 
 type Database=Pick<Pool|PoolClient,'query'>;
 type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
@@ -211,6 +212,18 @@ export class DigitalQuotationService{
   // Respect Acceptance actor isolation as well as employment/role state.
   const result=[];for(const user of users)if(await new DigitalProductionAccessPolicy(this.database).activeRole(user.id,user.role))result.push(user);
   return {items:result};
+ }
+ async ieProcessingDirectory(actor:TrustedActorContext,input:Parameters<typeof readIeProcessingDirectory>[2],target?:{quoteId:string;rowId:string}){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const active=await quotationRoles(db,actor,['ie_reviewer','production_management','owner_group']);
+   const root=isRootActor(actor),canPrice=active.has('ie_reviewer');
+   const canReadAll=root||active.has('production_management')||active.has('owner_group');
+   if(!canReadAll&&!canPrice)digitalForbidden();
+   const result=await readIeProcessingDirectory(db,this.database,input,{id:actor.actorId,canPrice,canReadAll,isRoot:root},target);
+   await db.query('COMMIT');return result;
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  private async command(actor:TrustedActorContext,resource:QuotationResource,action:string,key:string,payload:unknown,work:(db:PoolClient,c:Awaited<ReturnType<DigitalQuotationService['context']>>)=>Promise<void>){
   if(!this.creationEnabled)throw new ApplicationError('FORBIDDEN','新报价维护尚未启用',403);
