@@ -1,9 +1,25 @@
+import type {PoolClient} from 'pg';
+
+type Db=Pick<PoolClient,'query'>;
 const priorCalculation='journey-facts-material-investment-v19';
+const installed=new WeakSet<Db>();
+
+async function canProvePriorSource(db:Db){
+ if(installed.has(db))return true;
+ const {rows}=await db.query<{available:boolean}>(`SELECT to_regclass('digital_timeline_adoptions') IS NOT NULL
+  AND to_regclass('digital_order_time_plan_versions') IS NOT NULL AS available`);
+ if(!rows[0]?.available)return false;
+ installed.add(db);
+ return true;
+}
 
 /** Only a current source-only graph can prove that the v19 model never used
  * order-scoped label readiness. All other old models are rebuilt by the existing queue.
  * Arguments are repository-owned SQL column expressions, never request values. */
-export function styleLabelModelVersionSql(model:string,current:string,kind:string,id:string){
+export async function styleLabelModelVersionSql(db:Db,model:string,current:string,kind:string,id:string){
+ // Older schemas can serve the current calculation without parsing SQL for
+ // missing tables. Reusing a prior model requires the complete proof below.
+ if(!await canProvePriorSource(db))return `(${model} IS NOT DISTINCT FROM ${current})`;
  const labelWork=`'$.work[*] ? (@.parameterKey == "style_label_ready" || @.id like_regex "^style_label_ready(:.*)?$" || @.dependsOn[*] like_regex "^style_label_ready(:.*)?$")'`;
  return `(CASE WHEN ${model}=${current} THEN true
   WHEN ${model} IS DISTINCT FROM '${priorCalculation}' OR ${kind} IS DISTINCT FROM 'source' THEN false

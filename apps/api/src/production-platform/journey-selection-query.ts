@@ -62,7 +62,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    CASE WHEN m.resource_id IS NULL THEN CASE WHEN EXISTS(SELECT 1 FROM digital_journey_fact_retries retry JOIN digital_journey_fact_changes change USING(resource_kind,resource_id) WHERE retry.resource_kind=r.kind AND retry.resource_id=r.id) THEN 'failed' ELSE 'missing' END
     WHEN EXISTS(SELECT 1 FROM digital_journey_fact_changes c WHERE c.resource_kind=r.kind AND c.resource_id=r.id)
      OR m.source_version IS DISTINCT FROM m.applied_source_version OR m.clock_scenario_id IS DISTINCT FROM r.scenario OR m.clock_revision<>r.revision THEN CASE WHEN EXISTS(SELECT 1 FROM digital_journey_fact_retries retry JOIN digital_journey_fact_changes change USING(resource_kind,resource_id) WHERE retry.resource_kind=r.kind AND retry.resource_id=r.id) THEN 'failed' ELSE 'pending' END
-    WHEN NOT ${styleLabelModelVersionSql('m.calculation_version','$2','r.kind','r.id')} THEN 'obsolete'
+    WHEN NOT ${await styleLabelModelVersionSql(db,'m.calculation_version','$2','r.kind','r.id')} THEN 'obsolete'
     WHEN (${selection}) IS NULL OR (${selection})->>'version' IS DISTINCT FROM 'journey-selection-v2' OR m.selection_expires_at<=r.now THEN 'pending'
     WHEN (CASE WHEN ${fullView} THEN m.selection_full_integrity ELSE m.selection_integrity END) IS DISTINCT FROM md5((${selection})::text||m.selection_fingerprint)
      OR jsonb_typeof((${selection})->'frames') IS DISTINCT FROM 'array' THEN 'failed' ELSE 'ready' END AS status,

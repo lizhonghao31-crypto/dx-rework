@@ -107,7 +107,7 @@ export class JourneyFactRepository{
   */
   async readStoredWithClient(db:PoolClient,resource:BusinessTimeScope):Promise<JourneyStoredFact>{
   const row=(await db.query<Row&{pending:boolean;version_compatible:boolean}>(`SELECT m.*,
-   ${styleLabelModelVersionSql('m.calculation_version','$3','m.resource_kind','m.resource_id')} AS version_compatible,EXISTS(SELECT 1 FROM digital_journey_fact_changes c
+   ${await styleLabelModelVersionSql(db,'m.calculation_version','$3','m.resource_kind','m.resource_id')} AS version_compatible,EXISTS(SELECT 1 FROM digital_journey_fact_changes c
    WHERE c.resource_kind=m.resource_kind AND c.resource_id=m.resource_id) AS pending
    FROM digital_journey_fact_models m WHERE resource_kind=$1 AND resource_id=$2`,[resource.kind,resource.id,JOURNEY_FACT_CALCULATION_VERSION])).rows[0];
   if(!row)return {sourceVersion:'0',appliedSourceVersion:null,status:'missing',model:null};
@@ -129,7 +129,7 @@ export class JourneyFactRepository{
   const rows=(await db.query<SelectionRow>(`SELECT requested.kind AS resource_kind,requested.id AS resource_id,m.resource_id AS model_id,
    m.source_version,m.applied_source_version,m.calculation_version,m.clock_scenario_id,m.clock_revision,
    m.selection_json,m.selection_fingerprint,m.selection_expires_at,
-   ${styleLabelModelVersionSql('m.calculation_version','$3','requested.kind','requested.id')} AS version_compatible,
+   ${await styleLabelModelVersionSql(db,'m.calculation_version','$3','requested.kind','requested.id')} AS version_compatible,
    EXISTS(SELECT 1 FROM digital_journey_fact_changes c WHERE c.resource_kind=requested.kind AND c.resource_id=requested.id) AS pending,
    EXISTS(SELECT 1 FROM digital_journey_fact_retries retry JOIN digital_journey_fact_changes change USING(resource_kind,resource_id)
     WHERE retry.resource_kind=requested.kind AND retry.resource_id=requested.id) AS build_failed

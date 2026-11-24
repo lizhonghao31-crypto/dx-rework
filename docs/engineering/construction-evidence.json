@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "019d6990c55473d8c66f7160ad91c821abb7342a",
-  "sourceFingerprint": "e394e07be4e22d29d2b063d16e1a2b4d2e851a498443f2dfd1b1019588002ceb",
+  "sourceFingerprint": "e331e90676f22bf3e34ead183db147b0138f61c7328ca3f8724d5c1a472ac7cc",
   "rules": [
     {
       "rule": "按原当前材料版本和真实 PO 核实有效款号唛数量，完成日期只来自可核实的本 PO 原记录。实际开裁继续使用原实裁数量。",
@@ -88,7 +88,8 @@
         "apps/api/src/production-platform/journey-selection-query.ts",
         "apps/api/src/production-platform/journey-fact-updates.ts",
         "apps/api/src/production-platform/style-label-model-compatibility.ts",
-        "tests/integration/journey-fact-updates-postgres.test.ts"
+        "tests/integration/journey-fact-updates-postgres.test.ts",
+        "tests/integration/fixed-timeline-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-fact-generation.ts",
@@ -99,15 +100,17 @@
       "oldTests": [
         "tests/integration/journey-fact-updates-postgres.test.ts",
         "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/fixed-timeline-postgres.test.ts",
         "tests/unit/journey-compatible-fallback.test.ts"
       ],
       "newTests": [
         "tests/integration/journey-fact-updates-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/fixed-timeline-postgres.test.ts"
       ],
       "initialization": "仅切换新计算版本 v20，沿原两并发、每批16、启动游标200上限及独立失败重试；不用旧正式单结果、批量删除、GET 重建或伪造分页总数。",
-      "dateAndPermission": "三个读入口和两个调度入口复用同一个版本兼容判断。原授权、脏记录、时间与完整性守卫逐项保留；来源正式关联后重新判断。",
-      "expectation": "新旧 A/B/C/D 对照，原查询展示未知统计而不显示零；真实子进程分别在 COMMIT 前后被中断，原 dirty 不遗失、提交后不重复重建。",
+      "dateAndPermission": "三个读入口和两个调度入口复用同一个版本兼容判断。原授权、脏记录、时间与完整性守卫逐项保留；来源正式关联后重新判断。隔离的 0282 历史结构缺新版计划表，按同一读取连接核迁移能力，缺证只能使用当前计算版。",
+      "expectation": "新旧 A/B/C/D 对照，原查询展示未知统计而不显示零；真实子进程分别在 COMMIT 前后被中断，原 dirty 不遗失、提交后不重复重建。旧库结构不装新表，原 worker 隔离失败并重试，读回已重建原 model 和 selector 为 ready。",
       "checks": [
         "native",
         "journey",
@@ -153,46 +156,46 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-style-label-evidence/exact/verified/run.mjs native",
+      "command": "node /tmp/dx-gov-style-label-evidence/candidate-fix/verified/run.mjs native",
       "context": "Node 22.22.2, npm 10.9.9, identical repository business-chain config and two-worker guard, current fresh isolated PostgreSQL plus the signed Playwright App; actual native operations and owned cleanup.",
-      "startedAt": "2026-11-24T04:31:07.826Z",
-      "endedAt": "2026-11-24T04:33:55.055Z",
+      "startedAt": "2026-11-24T05:29:35.976Z",
+      "endedAt": "2026-11-24T05:32:13.232Z",
       "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "e394e07be4e22d29d2b063d16e1a2b4d2e851a498443f2dfd1b1019588002ceb",
+      "sourceFingerprint": "e331e90676f22bf3e34ead183db147b0138f61c7328ca3f8724d5c1a472ac7cc",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-style-label-evidence/exact/verified/native.log",
-      "logSha256": "3d85d9435459f39ea1272c8fd65f5948df82027efa68ec4f8316ef960294cdc6",
-      "passed": 127,
+      "log": "/tmp/dx-gov-style-label-evidence/candidate-fix/verified/native.log",
+      "logSha256": "faaadd3438981b85122d6d5af85fe8ecf79b29c092f621fede2d794485e174c2",
+      "passed": 142,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "7bb7fb0e590b45989a18e5f30c6ad827f9985dac5b74ef2a928cfe4d4935d0e7"
+          "sha256": "50b05146dd610c100154d41be657cec4d646e57d1fb3bc4980082484df8b305e"
         }
       ]
     },
     {
       "id": "journey",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-style-label-evidence/exact/verified/run.mjs journey",
+      "command": "node /tmp/dx-gov-style-label-evidence/candidate-fix/verified/run.mjs journey",
       "context": "Ordinary canonical PostgreSQL config for digital-journey-postgres, real query and native mutations on a separately owned disposable database.",
-      "startedAt": "2026-11-24T04:33:55.173Z",
-      "endedAt": "2026-11-24T04:34:41.787Z",
+      "startedAt": "2026-11-24T05:29:35.909Z",
+      "endedAt": "2026-11-24T05:30:49.275Z",
       "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "e394e07be4e22d29d2b063d16e1a2b4d2e851a498443f2dfd1b1019588002ceb",
+      "sourceFingerprint": "e331e90676f22bf3e34ead183db147b0138f61c7328ca3f8724d5c1a472ac7cc",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-style-label-evidence/exact/verified/journey.log",
-      "logSha256": "b07ed26d5daacf053c8a52843f2315168e68eccedd8cb50c3a992e3c180b6f55",
+      "log": "/tmp/dx-gov-style-label-evidence/candidate-fix/verified/journey.log",
+      "logSha256": "d4da7b6943a679cbc89bb320b092bf984ad0619201db65b5d69315bb4a8ef3a9",
       "passed": 38,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "add56ef0aa49f5f869596d81ff52905ce2b1b731c04bfa6ee4064ea399ae2529"
+          "sha256": "aa2ec2c5b06928a292e6949566a0f24e46c90a702b141013ec2257a6a45b6350"
         }
       ]
     },
@@ -201,21 +204,21 @@
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/{order-time-reading,digital-pmc-readonly-access,journey-time-framework,journey-fact-model,style-label-readiness,production-readiness-contract,node-materials,order-time-framework-facts,journey-compatible-fallback}.test.ts",
       "context": "Canonical non-database config with JSON result at the same source fingerprint, including strict PMC readonly rejection.",
-      "startedAt": "2026-11-24T04:31:21Z",
-      "endedAt": "2026-11-24T04:31:28Z",
+      "startedAt": "2026-11-24T05:29:35Z",
+      "endedAt": "2026-11-24T05:29:47Z",
       "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "e394e07be4e22d29d2b063d16e1a2b4d2e851a498443f2dfd1b1019588002ceb",
+      "sourceFingerprint": "e331e90676f22bf3e34ead183db147b0138f61c7328ca3f8724d5c1a472ac7cc",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-style-label-evidence/exact/verified/unit.log",
-      "logSha256": "cd429fe6408f59460d41b20c54ced5040d01b8916eebcef5c9830ae03324e8e1",
+      "log": "/tmp/dx-gov-style-label-evidence/candidate-fix/verified/unit.log",
+      "logSha256": "bf1db7e9c0e77f8d4c3be89b94fe5012b3629ade3f6592d8700bd0c590a3c299",
       "passed": 125,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4c426ea57662023e523b3d8df4c6ae5b164bf0cef5988f3ee3e404c0016d7462"
+          "sha256": "788d965a5546f8ab7c630ecfb9540809bb9bd6bb5b3d50bb3809c52fd7939a21"
         }
       ]
     },
@@ -224,13 +227,13 @@
       "kind": "command",
       "command": "npm run typecheck && eslint (all changed TS/MJS) && node scripts/acceptance/time-site-inventory.mjs --check && git diff --check",
       "context": "Same source and scoped lint, tracked plus new files. Existing time inventory human annotations retained.",
-      "startedAt": "2026-11-24T04:31:29Z",
-      "endedAt": "2026-11-24T04:32:19Z",
+      "startedAt": "2026-11-24T05:29:35Z",
+      "endedAt": "2026-11-24T05:30:26Z",
       "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "e394e07be4e22d29d2b063d16e1a2b4d2e851a498443f2dfd1b1019588002ceb",
+      "sourceFingerprint": "e331e90676f22bf3e34ead183db147b0138f61c7328ca3f8724d5c1a472ac7cc",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-style-label-evidence/exact/verified/static.log",
+      "log": "/tmp/dx-gov-style-label-evidence/candidate-fix/verified/static.log",
       "logSha256": "33fd4540a192c4f441f6fd14a7c134d24142f97306ce7c1f7e0b6805fe5a0226"
     },
     {
@@ -238,14 +241,14 @@
       "kind": "tests",
       "command": "node --test scripts/ci/pr-gate-controller.test.mjs",
       "context": "Repository control protocol, inventory audit, risk-map classification and final gate contract; raw TAP includes real pass/skip totals.",
-      "startedAt": "2026-11-24T04:31:28Z",
-      "endedAt": "2026-11-24T04:31:29Z",
+      "startedAt": "2026-11-24T05:29:47Z",
+      "endedAt": "2026-11-24T05:29:50Z",
       "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "e394e07be4e22d29d2b063d16e1a2b4d2e851a498443f2dfd1b1019588002ceb",
+      "sourceFingerprint": "e331e90676f22bf3e34ead183db147b0138f61c7328ca3f8724d5c1a472ac7cc",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-style-label-evidence/exact/verified/protocol.log",
-      "logSha256": "9603173fa320f43f3dd5e7051c31a8fa7d06d065ab9ea0db50f028e232c070c4",
+      "log": "/tmp/dx-gov-style-label-evidence/candidate-fix/verified/protocol.log",
+      "logSha256": "50c2c7444ac6bf3ba16cb7dd88e93508bc50a0b58f7aec1ec9d5ab8447038479",
       "passed": 39,
       "failed": 0,
       "skipped": 0
