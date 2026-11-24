@@ -2356,5 +2356,32 @@
       "guard_secondary_craft_approver"
     ],
     "sequences": []
+  },
+  "0302_digital_order_number_identity": {
+    "checksum": "94fd8957f69a41ab8c37a098a0a3413afcb5ed08cf7270171087a0a7808f498e",
+    "tables": [
+      "digital_design_code_registry",
+      "digital_production_orders",
+      "digital_production_sources"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_order_number_settings",
+      "digital_order_number_series",
+      "digital_order_number_claims"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "guard_digital_order_number_claim",
+      "guard_digital_source_number_binding",
+      "guard_digital_order_number_history"
+    ],
+    "sequences": []
   }
 }

@@ -13,6 +13,7 @@ import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
 import {journeyMeasure,journeySpan,journeyCandidateCount} from '../platform/journey-diagnostic.js';
 import {readQcExecutionEvidence} from './qc-progress-evidence.js';
+import {issuedOrderNumber} from './order-number-repository.js';
 import {readNodeMaterials} from './node-materials.js';
 import {styleLabelCuttingReason,preparationTestReasons} from './production-readiness-repository.js';
 import {seriesPlanJourney} from './series-plan-journey.js';
@@ -1083,7 +1084,9 @@ export class DigitalJourneyQuery {
     if(!patternKinds){
       // The original ERP-labelled value can be an external request UUID. It is
       // retained for legacy search, never promoted to a formal business number.
-      item.identity={kind:item.orderId?'production':'development',businessNumber:null,reason:item.orderId?'尚未取得本单正式业务号与母单的可信映射':'开发资料视图；尚未取得可见的正式订单'};
+      const businessNumber=orderAccess&&order?await issuedOrderNumber(db,source,order):sourceAccess?await issuedOrderNumber(db,source,null):null;
+      item.identity={kind:item.orderId?'production':'development',businessNumber,
+        reason:businessNumber?null:item.orderId?'尚未取得本单正式业务号与母单的可信映射':'开发资料视图；尚未取得可见的正式订单'};
       const adopted=fullOrder&&oid?await readJourneyAdoptedPlan(db,oid,lines):oid?'unavailable' as const:null;
       const replacements=sourceAccess&&sid&&visibleTasks.some(task=>task.returned)
         ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];

@@ -1,0 +1,5 @@
+.cockpit-order-number-editor { display: grid; justify-items: start; gap: 12px; margin-top: 12px; }
+.cockpit-order-number-editor :is(p, h3) { margin: 0; }
+.cockpit-order-number-fields { display: grid; width: 100%; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); }
+.cockpit-order-number-designers { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; width: 100%; }
+.cockpit-order-number-designers li { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; min-width: 0; }

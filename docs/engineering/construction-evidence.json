@@ -1,294 +1,336 @@
 {
   "version": 1,
+  "base": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
   "risk": "full",
-  "base": "5865c81247b163649cb4ca017a833d49704c8ecf",
-  "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
+  "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
   "rules": [
     {
-      "rule": "保留原有分页能力并统一外观。",
-      "source": "v11.5 §1.2.4、§1.3、V02，ASTRYX_UI_SPEC T02 与 DXUI-PAGE-005。",
+      "rule": "原开发来源从无号保留到一次性绑定并使用可追溯的原子流水。",
+      "source": "v11.5 §2.2、§2.3、§2.4、N08、N49 和 G2 的合并与启用边界。",
       "writes": [
-        "apps/web/src/astryx-page-controls.tsx",
-        "apps/web/src/list-pagination.tsx",
-        "apps/web/src/my-todos.css",
-        "apps/web/src/reporting/rework-query-mobile.css",
-        "packages/ui/src/components.css",
-        "packages/ui/src/production.css",
-        "packages/ui/src/production.tsx",
-        "tests/unit/list-pagination.test.ts",
-        "tests/unit/my-todos-navigation.test.ts",
-        "tests/unit/master-data-process-pagination.test.ts"
+        "apps/api/migrations/0302_digital_order_number_identity.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/api/src/production-platform/order-number-repository.ts",
+        "packages/contracts/src/digital-order-number.ts",
+        "packages/contracts/package.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/digital-order-number-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/sla-history-workspace.tsx",
-        "apps/web/src/order-time-standard-editor.tsx",
-        "packages/ui/src/page-jump.tsx",
-        "apps/web/src/my-todos-page.tsx",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "apps/web/src/order-board-page.tsx"
+        "apps/api/src/production-platform/whole-order-deletion-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/order-time-created.ts",
+        "apps/api/src/production-platform/access-policy.ts"
       ],
       "oldTests": [
-        "tests/unit/list-pagination.test.ts",
-        "tests/unit/my-todos-navigation.test.ts",
-        "tests/unit/master-data-process-pagination.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/m01-sla-history-postgres.test.ts"
-      ],
-      "initialization": "仍使用原总数、页码、当前筛选及 loading 控制器。现有精确跳页继续严格校验，游标页沿原入口。逐个调用点见施工记录。",
-      "dateAndPermission": "保持授权全集、页大小、排序、冻结浏览上界及原快照。C1 只改呈现，公开查询和参数不变。",
-      "expectation": "座舱非法跳页零请求，合法非相邻跳页保留，五宽度居中可用，原设置分页/游标不改。现场两类历史证据另行登记。",
-      "checks": [
-        "native",
-        "unit",
-        "static"
-      ],
-      "newTests": [
-        "tests/unit/list-pagination.test.ts"
-      ]
-    },
-    {
-      "rule": "原单据目录续读保持原请求和既有记录。",
-      "source": "v11.5 §1.2.4、§1.3、V02。",
-      "writes": [
-        "apps/web/src/cockpit-documents.tsx",
-        "apps/web/src/cockpit-documents.css",
-        "apps/web/src/designer-related-originals.tsx"
-      ],
-      "reads": [
-        "apps/web/src/cockpit-documents-production.ts",
-        "apps/web/src/cockpit-documents-model.ts",
-        "apps/web/src/cockpit-document-catalog.ts",
-        "apps/api/src/production-platform/order-document-history.ts"
-      ],
-      "oldTests": [
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/cockpit-document-snapshot.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
-      ],
-      "initialization": "原列表继续使用同一授权快照与原 details 展开控制，仅续读入口挂共享外观。",
-      "dateAndPermission": "真实记录 ID、已有版本、游标、读取权限与撤权原样。没有新增总数、页码和接口。",
-      "expectation": "原文档目录、重读、权限和返回通过定向验收。隔离库真实验布命令生成21条，通过原 GET 读取20＋1，其他订单游标和撤权均拒绝。Acceptance 现场续读同一案例单独登记。",
-      "checks": [
-        "native",
-        "history",
-        "history-ui",
-        "unit",
-        "static"
-      ]
-    },
-    {
-      "rule": "固定版本长表隔离旧控件样式，保原创建和草稿。",
-      "source": "v11.5 §1.2.1–3、V01。",
-      "writes": [
-        "apps/web/src/digital-development-workspace.css",
-        "apps/web/src/document-editor.css",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "tests/integration/digital-production-identity-postgres.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
+      "newTests": [
+        "tests/integration/digital-order-number-postgres.test.ts"
+      ],
+      "initialization": "复用原来源 UUID、现有数字订单身份和注册表。新迁移附加设置版本、前缀流水及编号占用保护，不改旧数据和原设置。",
+      "dateAndPermission": "预留和发号没有有效时效。正式发布及转正仍由原命令行使权限与记录可信事件，提前写和删除后的重用被禁止。",
+      "expectation": "同一来源从空号恢复，并发不同号码，历史编号跳过，删除先取得来源锁则不分号，业务字段空值保留，原事件出现后转正同号，两个 PO 不改。999 后 1000，已发号码不可修改。",
+      "checks": [
+        "pg",
+        "browser",
+        "non-db",
+        "preflight",
+        "lint",
+        "types"
+      ]
+    },
+    {
+      "rule": "原生产管理设置合法角色维护稳定代码，预览只读。",
+      "source": "v11.5 §2.1、§2.2、N09、N49、V03 和 ENT54。",
+      "writes": [
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/package.json",
+        "package-lock.json",
+        "apps/web/src/cockpit-production-settings.tsx",
+        "apps/web/src/order-number-settings.tsx",
+        "apps/web/src/order-number-settings.css",
+        "packages/contracts/src/digital-production-read-requests.ts",
+        "tests/integration/r5-settings-native-browser-postgres.test.ts"
+      ],
       "reads": [
+        "apps/api/src/production-platform/access-service.ts",
+        "apps/api/src/production-platform/customer-merchandiser-defaults.ts",
         "apps/web/src/development-entry-controls.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/workbench-development-sheet-fields.tsx",
-        "apps/web/src/designer-astryx.ts"
+        "apps/web/src/system-dialog.tsx"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/bulk-washing-browser-postgres.test.ts"
-      ],
-      "initialization": "原创建表单、三种入口、局部主题和现有负载；原单据、只读字段和样衣数字输入有明确作用域。已有字段查找用同一原定位与 TextInput，紧凑面辅料表详情跨列数来自其表头。",
-      "dateAndPermission": "输入与日期语义、原角色、SLA、发布和草稿恢复继续经原 API。未动正常大货洗水。",
-      "expectation": "同一原浏览器表单可继续编辑、定位、保存和恢复原数据，两个尺寸的实际截图中，字段查找保单框，样衣件数输入在本格内并保 min/max，技术详情列数与表头一致。旧路由与大货洗水可用。",
-      "checks": [
-        "native",
-        "fields",
-        "static"
+        "tests/integration/r5-settings-native-browser-postgres.test.ts",
+        "tests/integration/order-time-settings-postgres.test.ts",
+        "tests/unit/client-request-id.test.ts"
       ],
       "newTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/r5-settings-native-browser-postgres.test.ts",
+        "tests/integration/digital-order-number-postgres.test.ts"
+      ],
+      "initialization": "原设置模块打开才读取当前配置和有效设计师。服务器按真实姓名生成建议，版本化保存，Astryx 局部渲染和原等待提示。",
+      "dateAndPermission": "Root 和有效供应链总监走原身份校验。普通设计师和 PMC 无写权限，测试时钟上下文不能改公司设置。销售年份必须来自真实输入。",
+      "expectation": "实测原 App 管理员保存、重复流程与冲突反馈、DEV/P00 演算不消耗流水、普通身份不可读设置，1165 和 390 界面内无字段溢出。",
+      "checks": [
+        "pg",
+        "browser",
+        "non-db",
+        "preflight",
+        "lint",
+        "types"
       ]
     },
     {
-      "rule": "同一原队列显示一次结构化提交错误并定位真实字段。",
-      "source": "v11.5 §1.2.5、V07，主规范 DXUI-LAYER-005／008。",
+      "rule": "母单显示与检索同源，专业编号、子单版本、原授权和 UUID 路由保留。",
+      "source": "v11.5 §2.3、§2.4、N10 和现有工作台模块范围。",
       "writes": [
-        "apps/web/src/system-dialog.tsx",
-        "apps/web/src/system-dialog.css",
-        "apps/web/src/digital-development-create-form.tsx",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/development-revision-source.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-search-metadata.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-notification-toast.tsx",
+        "apps/web/src/digital-production-workspaces.tsx",
+        "packages/contracts/src/digital-production-notifications.ts",
+        "tests/unit/digital-notification-child-context.test.ts"
       ],
       "reads": [
-        "apps/web/src/digital-development-validation.ts",
-        "apps/web/src/document-editor.tsx",
-        "apps/web/src/development-submit-recovery.ts",
-        "apps/web/src/digital-production-api.ts"
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/journey-home-projection.ts",
+        "apps/api/src/production-platform/budget-sourcing-adapter.ts",
+        "apps/web/src/digital-development-print.tsx",
+        "apps/web/src/production-instruction-print.tsx"
       ],
       "oldTests": [
-        "tests/unit/system-dialog.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/digital-production-notifications-postgres.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
-      ],
-      "initialization": "保留同一对话队列、原输入/回执，复用建单已存在的步骤及材料定位。",
-      "dateAndPermission": "不制作资料、不改变独立真实写调用、业务日期或权限；未知回执沿原复核。",
-      "expectation": "执行业务错误时只显示一次，Esc回触发点；材料和工艺可直接定位，原输入保留并可继续。拒绝保存不改变版本，修正后正常保存。",
-      "checks": [
-        "native",
-        "unit",
-        "static"
+        "tests/unit/digital-notification-child-context.test.ts"
       ],
       "newTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+        "tests/integration/digital-order-number-postgres.test.ts"
+      ],
+      "initialization": "根来源及正式单继续读取原设计业务号，独立复版通过实际根关系取得母单号。通知只对已授权对象呈现已发号码。",
+      "dateAndPermission": "仍按全体授权搜索再取页，原 ERP 与 PO 等专业号以及任务/子单路由不变，原记录/版本与真实业务时点不由号码派生。",
+      "expectation": "同一已发号和真实关联贯穿来源、确认双 PO、复版、详情、导出、原打印资料及通知。原有无可信映射记录维持原读法。",
+      "checks": [
+        "pg",
+        "browser",
+        "non-db",
+        "preflight",
+        "lint",
+        "types"
+      ]
+    },
+    {
+      "rule": "原座舱详情在宽卡片保水平并排，在紧凑卡片将差值排在日期下，完整、无重叠，原证照仍可读。",
+      "source": "已合入 #1094 的 150px 内容区间、Full 45458446895 R5-08 及相同隔离环境的两版实测。",
+      "writes": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/cockpit-detail-r5.css",
+        "apps/web/src/cockpit-detail.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "initialization": "复用原真实签名 App、隔离低权限 PostgreSQL、原开发资料和真实技术证照。调整既有断言，无业务写入或样式变化。",
+      "dateAndPermission": "原计划发生时间、责任读法、附件授权、历史原版本及返回路径均由既有流程继续核对。",
+      "expectation": "在 1585px 和 1165px 原视口实测两种布局均存在，原日期内容、差值间隔、对齐和边界有几何断言。",
+      "checks": [
+        "responsive",
+        "preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "history-ui",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-21-browser-ready.json tests/integration/workbench-c1-history-local.test.ts",
-      "context": "Exact original application, signed merchandiser identity and 21 real isolated warehouse reports. The temporary local test is archived beside this report with its input identity. Browser clicked the original continuation and retained all 20 previously visible records in their original order.",
-      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
-      "sourceFingerprint": "d66754bb8172b091d21fcdfbf8dd66687b95e8da2903bd94b4792c0b7370d70e",
+      "id": "pg",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-final-pg.json tests/integration/digital-order-number-postgres.test.ts tests/integration/digital-production-identity-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
+      "context": "Canonical PostgreSQL 94 tests retained from the detached previously tested candidate with independently matched complete SQL, API, shared contracts, fixtures and runner input paths. Only the unrelated settings browser request ID caller and non-DB fixture changed. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
+      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T16:51:48.811Z",
-      "endedAt": "2026-11-24T16:52:04.354Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-21-browser-ready.log",
-      "logSha256": "12b27f410806e8ffd99b46b17eba1f247cc34d50dba0f04c701a451e547df25d",
-      "kind": "tests",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "b69278f68e9091bbc88eb0c6396afb72afbe9756f848611688c01c0ff7cd4bd9"
-        }
-      ],
       "inputPaths": [
-        "apps",
+        "apps/api",
+        "apps/web/src/digital-development-editing.ts",
+        "apps/web/src/client-request-id.ts",
         "packages",
-        "scripts",
-        "tests/acceptance",
-        "tests/fixtures",
+        "tests/integration/digital-order-number-postgres.test.ts",
+        "tests/integration/digital-production-identity-postgres.test.ts",
+        "tests/integration/digital-production-notifications-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
         "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "scripts",
         "vitest.config.ts",
         "package.json",
         "package-lock.json"
       ],
-      "inputFingerprint": "21c60d473838b7c0e0e8e62b877de4b1bc4a617119731bd92545bfff8ffaaaef"
-    },
-    {
-      "id": "history",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --testNamePattern \"pages actual fabric history\" --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-21-final.json tests/integration/production-readiness-postgres.test.ts",
-      "context": "Original warehouse commands and real isolated PostgreSQL, exact signed authorized original GET, two pages of 20 and 1 actual events, other orders cursor and revoked roles rejected.",
-      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
-      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T16:48:21.355Z",
-      "endedAt": "2026-11-24T16:48:55.278Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-21-final.log",
-      "logSha256": "11b4785925ca995cfa5dc36da8da860177458c3f8280ff9260c16bf7595dea1e",
-      "kind": "tests",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 48,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "2591eddfcdfcac8e0a6286364db0e20e246546ee2e618b80ce1a7cd4f9c90238"
-        }
-      ]
-    },
-    {
-      "id": "native",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --testNamePattern \"jumps directly to a target page|R3-03 original physical|keeps a failed category read distinct|opens the original live production dashboard directly after transfer with 0 pieces|pages every real published version beyond|returns to the actual craft control|lets the actual merchandiser enter from My Tasks|restores certain_order parent intent|uses the original logistics and QC App|converts the original preorder\" --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-final-targeted.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/m01-sla-history-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/bulk-washing-browser-postgres.test.ts",
-      "context": "Exact change and canonical 2-worker PostgreSQL/Chromium profile. Focused coverage of existing pagination, default cockpit detail, exact permission/current factory, original creation and original washing. No reuse of the failed broad timing observation.",
-      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
-      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T16:52:32.413Z",
-      "endedAt": "2026-11-24T16:53:37.974Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-final-targeted.log",
-      "logSha256": "dfe0e71834c6925ebc509154a57e11532e1b91696e727e08272a84e7b6b12cf1",
-      "kind": "tests",
-      "passed": 11,
-      "failed": 0,
-      "skipped": 53,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "d7e932f2ef40809c8157a80b71e694868ad67cf1491bda752d70297ccb64d33b"
-        }
-      ]
-    },
-    {
-      "id": "fields",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --testNamePattern \"long sheet\" --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-fields-final.json tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-      "context": "Exact final signed browser and PostgreSQL. At both requested widths, computed search and sewing quantity frames are correct, compact detail spans match the header, and successful resume, field location, original size and PO input flows pass.",
-      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
-      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T16:48:21.573Z",
-      "endedAt": "2026-11-24T16:49:09.822Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-fields-final.log",
-      "logSha256": "261f97bed20b2931056614ed0688c3b8f14610e76696f2fdd838570eda8ec51c",
-      "kind": "tests",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 18,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "81dfb9f0df970f94ebaca679ea85989c46c508b875296593b473cbff838d79b3"
-        }
-      ]
-    },
-    {
-      "id": "unit",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/list-pagination.test.ts tests/unit/system-dialog.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/master-data-process-pagination.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-ready-unit.json",
-      "context": "Canonical non-database configuration. Original active pager behavior, strict fallback, real consumer inventory, inherited dialog and raw original-document models.",
-      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
-      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T16:48:21.174Z",
-      "endedAt": "2026-11-24T16:48:29.679Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-ready-unit.log",
-      "logSha256": "d5f20bce2334d14a2ba37d0b9f6ce22b53f8268f6621e5e8a5b792704bf7f0a0",
-      "kind": "tests",
+      "inputFingerprint": "41f771650ae35cdad894f942ed72bebf025500f8d352f1541a66145e661d2cf3",
+      "startedAt": "2026-11-24T17:47:16.736Z",
+      "endedAt": "2026-11-24T17:48:52.162Z",
+      "log": "/workspace/dx-x1-evidence/x1-final-pg.log",
+      "logSha256": "8e1dd34ee54a55ba1f021bda6c34733401c57ef4f9abcd346d5aeae61d6ffa8b",
       "passed": 94,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c26495d10565eb31ddeb8bf63e265054ba43a07a9c50df69098dae56f3708df7"
+          "sha256": "048261433e394061c141a3349fc5d7ab952d8e3c08f8b929eb9b2ed5179486a6"
         }
       ]
     },
     {
-      "id": "static",
-      "command": "git diff --check && node scripts/acceptance/time-site-inventory.mjs && scoped ESLint && npm run typecheck",
-      "context": "Repository Node22 and npm10. Changed TS/TSX lint, workspace types, no time-site drift, and exact diff check.",
-      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
-      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
+      "id": "browser",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-browser.json tests/integration/r5-settings-native-browser-postgres.test.ts",
+      "context": "Canonical real PostgreSQL and signed Chromium. Entire existing settings suite with actual save, typed task preview and manager / normal-role boundary, using the client request helper. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
+      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T16:48:21.186Z",
-      "endedAt": "2026-11-24T16:49:35.016Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-ready-static.log",
-      "logSha256": "b3e315e0bf562521ffe7167ce06aa01843fb3fc848f46c96469f563b74715025",
-      "kind": "command"
+      "startedAt": "2026-11-24T18:08:59.981Z",
+      "endedAt": "2026-11-24T18:09:39.782Z",
+      "log": "/workspace/dx-x1-evidence/x1-ci-browser.log",
+      "logSha256": "5bb97de61195d539c86ff452f434241f5af14ad589d16c6b88a27495ddb90e8e",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "93b281365fe9357b56dfe6b47e1f3e42b34d60527dc3efde7c8cc4515af991ed"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "tests/fixtures",
+        "tests/helpers",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "tests/acceptance",
+        "tests/integration/r5-settings-native-browser-postgres.test.ts"
+      ],
+      "inputFingerprint": "657c0c2f97cdf4a743d03f5eab147db7ba070fff3c63355a66310a41b5a8e744"
+    },
+    {
+      "id": "non-db",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-env-suites.json tests/unit/production-dashboard-query.test.ts tests/unit/responsibility-panels-component.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/client-request-id.test.ts tests/unit/digital-notification-child-context.test.ts",
+      "context": "Exact original Node22 and npm10 with all database URLs empty. Replays the two failing CI guards and the three prior local import-only failures after placing the same locked Astryx files physically under this worktree. The original broad run and complementary suite results stay distinct. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
+      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T18:15:22.044Z",
+      "endedAt": "2026-11-24T18:15:28.989Z",
+      "log": "/workspace/dx-x1-evidence/x1-ci-env-suites.log",
+      "logSha256": "565c84e6eeaec282d6e89af945a41a6f97da88b27a3d87ade77e235f419a5442",
+      "passed": 60,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "939b1a9cb4ab7ba658240d5320cf7839be682366061b846af8c772227bec8ce5"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "tests/fixtures",
+        "tests/helpers",
+        "vitest.config.ts",
+        "tests/unit"
+      ],
+      "inputFingerprint": "8e7be21df2e13094a1151b7c378710bdca17c8617e90b148dda031e08c3b3129"
+    },
+    {
+      "id": "responsive",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+      "context": "Original signed App, guarded CI-shaped dual PostgreSQL and existing two-worker configuration. Exact baseline and pre-fix candidate reproduced the same original R5-08 failure. Fixed assertion verifies both pre-existing layout modes, exact documents, versions and original return.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T18:49:24.046Z",
+      "endedAt": "2026-11-24T18:51:46.020Z",
+      "log": "/workspace/dx-x1-evidence/x1-r508-responsive.log",
+      "logSha256": "6bfd72c7a0702362243920f1b3a81eef37a533084d2e56dc0bab8d5a2a5e6e3f",
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "54c13d6e7620536e2aeb79f76123e4b00e5e9e15248a32fa9478ce6711ce1cc3"
+        }
+      ]
+    },
+    {
+      "id": "preflight",
+      "kind": "command",
+      "command": "git diff --check && npm run test:preflight",
+      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T18:50:07Z",
+      "endedAt": "2026-11-24T18:51:34Z",
+      "log": "/workspace/dx-x1-evidence/x1-responsive-preflight.log",
+      "logSha256": "9f41d9e3382e1a8310d6ed5a4de54e7e48a86aee368e7976722cd226971135e1"
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "command": "npm run lint",
+      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T18:50:07Z",
+      "endedAt": "2026-11-24T18:51:34Z",
+      "log": "/workspace/dx-x1-evidence/x1-responsive-lint.log",
+      "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
+    },
+    {
+      "id": "types",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T18:50:07Z",
+      "endedAt": "2026-11-24T18:51:34Z",
+      "log": "/workspace/dx-x1-evidence/x1-responsive-typecheck.log",
+      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988"
     }
   ]
 }

@@ -1,5 +1,5 @@
 import {developmentSourceLifecycle,effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
-import {wholeOrderActiveSql} from './whole-order-visibility.js';
+import {assertWholeOrderActive,wholeOrderActiveSql} from './whole-order-visibility.js';
 import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {refreshPreparationWindows} from './production-readiness-repository.js';
@@ -27,6 +27,8 @@ import {ensureQuotationBudget} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {acceptsNewOrderTime,approvedOrderTimeSource,approvedOrderTimeCreation,orderTimeAdmission,bindOrderTimeOrder} from './order-time-admission.js';
 import {automaticOrderTime} from './order-time-automatic.js';
+import type {NumberedDraftIdentity,NumberedDraftInput,OrderNumberContext,OrderNumberPreviewInput,OrderNumberSettingsSave} from '@dx-rework/contracts/digital-order-number';
+import {OrderNumberRepository,orderNumberConflict} from './order-number-repository.js';
 
 const fail = (message: string, status = 409): never => { throw new ApplicationError(status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "DIGITAL_PRODUCTION_CONFLICT", message, status); };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -63,7 +65,7 @@ export class DigitalProductionIdentityService {
     const result = await client.query(`SELECT * FROM digital_production_sources WHERE source_id=$1 ${lock ? "FOR UPDATE" : ""}`, [id]);
     return result.rows[0] ?? fail("开发来源不存在或无权访问", 404);
   }
-  private async command<T>(actor: TrustedActorContext, command: string, key: string, payload: unknown, execute: (client: PoolClient) => Promise<T>): Promise<T> {
+  private async command<T>(actor: TrustedActorContext, command: string, key: string, payload: unknown, execute: (client: PoolClient) => Promise<T>, authorize?: (client: PoolClient) => Promise<void>): Promise<T> {
     assertIdentityActor(actor);
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) fail("缺少有效操作标识", 400);
     const client = this.transactionClient??await this.database.connect();
@@ -71,6 +73,7 @@ export class DigitalProductionIdentityService {
       const initialAdoption=newTimelineAdoptionMode(this.database)==='fixed_v2'
         &&(command==='create-source'||command==='direct-order'||command.startsWith('confirm-source:'));
       if(!this.transactionClient)await client.query(initialAdoption?'BEGIN ISOLATION LEVEL REPEATABLE READ':'BEGIN');
+      if(authorize)await authorize(client);
       if(command.startsWith("numbers:")||command.startsWith("confirm-source:")||command.startsWith('attach-source:'))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, command, key])]);
       const hash = digest(payload);
@@ -168,6 +171,20 @@ export class DigitalProductionIdentityService {
     // Never return another designer's source ID, customer, files or ownership.
     return {code:value,available:!result.rowCount};
   }
+  private async insertSource(client: PoolClient, actor: TrustedActorContext, input: Omit<DigitalSourceInput, 'designStyleNo'> & {designStyleNo: string | null}, draft: boolean, generated = false) {
+    const id = randomUUID(), managed = await acceptsNewOrderTime(client);
+    // All variants use the original identity row, creation audit and test-clock registration.
+    await client.query(`INSERT INTO digital_production_sources
+      (source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''}${draft?',draft_reserved':''}${generated?',workbench_generated_number':''})
+      VALUES($1,$2,$3,$4,$5,$6${managed?',true':''}${draft?',true':''}${generated?',true':''})`,
+    [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
+    if (input.designStyleNo && (await client.query("SELECT to_regclass('digital_design_code_registry') AS relation")).rows[0]?.relation)
+      await client.query("INSERT INTO digital_design_code_registry(code_key,source_id,code,created_by) VALUES($1,$2,$3,$4)",
+        [digitalPoKey(input.designStyleNo), id, input.designStyleNo, actor.actorId]);
+    const eventId = await this.audit(client, actor, draft ? "digital_source_draft_reserved" : "digital_source_created", id, null, input);
+    await registerAcceptanceCreated(client,{kind:'source',id},actor.actorId,eventId);
+    return {id,eventId,managed};
+  }
   async createSource(actor: TrustedActorContext, input: DigitalSourceInput, key: string, reserveDraft = false): Promise<{ sourceId: string }> {
     this.assertSourceCreation(actor);
     return this.command(actor, reserveDraft ? "reserve-source-draft" : "create-source", key, input, async client => {
@@ -176,15 +193,7 @@ export class DigitalProductionIdentityService {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-source-style",styleKey])]);
       if ((await client.query("SELECT 1 FROM digital_production_sources WHERE translate(btrim(design_style_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=$1 LIMIT 1", [styleKey])).rowCount)
         fail("该编号已有开发档案，请打开原档案继续办理");
-      const id = randomUUID(),managed=await acceptsNewOrderTime(client);
-      // Source identity is immutable. Record the adoption marker in its original
-      // INSERT; historical schemas retain the original six-column contract.
-      await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''}${reserveDraft?',draft_reserved':''})
-        VALUES($1,$2,$3,$4,$5,$6${managed?',true':''}${reserveDraft?',true':''})`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
-      if((await client.query("SELECT to_regclass('digital_design_code_registry') AS relation")).rows[0]?.relation)
-        await client.query("INSERT INTO digital_design_code_registry(code_key,source_id,code,created_by) VALUES($1,$2,$3,$4)",[styleKey,id,input.designStyleNo,actor.actorId]);
-      const eventId = await this.audit(client, actor, reserveDraft ? "digital_source_draft_reserved" : "digital_source_created", id, null, input);
-      await registerAcceptanceCreated(client,{kind:'source',id},actor.actorId,eventId);
+      const {id,eventId,managed}=await this.insertSource(client,actor,input,reserveDraft);
       if(reserveDraft)return {sourceId:id};
       await enrollPreparation(client,{kind:'source',id},actor.actorId,eventId);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
@@ -195,12 +204,71 @@ export class DigitalProductionIdentityService {
       return { sourceId: id };
     });
   }
+  private async assertNumberedDraftActor(db:PoolClient,actor:TrustedActorContext) {
+    if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'sample_designer'))digitalForbidden();
+  }
+  /** Internal G2 contract. X2/C2 own the publication and create-form entry points. */
+  async reserveNumberedDraft(actor:TrustedActorContext,input:NumberedDraftInput,key:string):Promise<NumberedDraftIdentity> {
+    this.assertSourceCreation(actor);
+    return this.command(actor,'reserve-numbered-draft',key,input,async client=>{
+      const {numbering}=input;
+      if(numbering.customerCode)await this.customer(client,numbering.customerCode,numbering.productGroup??undefined);
+      const {id}=await this.insertSource(client,actor,{
+        developmentType:input.developmentType,temporaryStyleNo:input.temporaryStyleNo,
+        customerCode:numbering.customerCode,designStyleNo:null,
+      },true,true);
+      const orderNumber=await new OrderNumberRepository(client).bind(id,{...numbering,designerId:actor.actorId});
+      return {sourceId:id,orderNumber};
+    },client=>this.assertNumberedDraftActor(client,actor));
+  }
+  async bindDraftNumber(actor:TrustedActorContext,sourceId:string,input:OrderNumberContext,key:string):Promise<NumberedDraftIdentity> {
+    this.assertSourceCreation(actor);
+    return this.command(actor,'bind-draft-number:'+sourceId,key,input,async client=>{
+      const source=await this.visibleSource(client,actor,sourceId,true);
+      if(!isRootActor(actor)&&source.created_by!==actor.actorId)digitalForbidden();
+      // Deletion can commit while the original authorization read waits for this source lock.
+      await assertWholeOrderActive(client,'source',sourceId);
+      if(!source.workbench_generated_number)orderNumberConflict('原开发档案已使用原编号');
+      if(source.design_style_no)return {sourceId,orderNumber:String(source.design_style_no)};
+      if(!(await developmentSourceLifecycle(client,sourceId))?.is_draft)orderNumberConflict('仅未编号草稿可绑定订单ID');
+      if(source.customer_code&&source.customer_code!==input.customerCode)orderNumberConflict('发号客户须对应原开发档案');
+      const orderNumber=await new OrderNumberRepository(client).bind(sourceId,{...input,designerId:source.created_by});
+      return {sourceId,orderNumber};
+    },client=>this.assertNumberedDraftActor(client,actor));
+  }
+  private async assertOrderNumberAdministrator(client:PoolClient,actor:TrustedActorContext,write=false) {
+    if(isRootActor(actor))return;
+    const policy=new DigitalProductionAccessPolicy(client);
+    if(!actor.actorRoles.includes('production_management')
+      || !await (write?policy.lockActiveRole(actor.actorId,'production_management'):policy.activeRole(actor.actorId,'production_management')))digitalForbidden();
+  }
+  async orderNumberSettings(actor:TrustedActorContext) {
+    return this.readSnapshot(async client=>{
+      await this.assertOrderNumberAdministrator(client,actor);
+      return new OrderNumberRepository(client).readSettings();
+    });
+  }
+  async previewOrderNumber(actor:TrustedActorContext,input:OrderNumberPreviewInput) {
+    return this.readSnapshot(async client=>{
+      await this.assertOrderNumberAdministrator(client,actor);
+      return new OrderNumberRepository(client).preview(input);
+    });
+  }
+  async saveOrderNumberSettings(actor:TrustedActorContext,input:OrderNumberSettingsSave,key:string) {
+    if(acceptanceBusinessContext())orderNumberConflict('测试时钟场景不能修改公司设置');
+    return this.command(actor,'save-order-number-settings',key,input,async client=>{
+      const {expectedVersion,...values}=input;
+      const result=await new OrderNumberRepository(client).saveSettings(expectedVersion,values,actor.actorId);
+      await this.audit(client,actor,'digital_order_number_settings_saved',String(result.version),{version:expectedVersion},{version:result.version,values});
+      return result;
+    },client=>this.assertOrderNumberAdministrator(client,actor,true));
+  }
   async developmentDrafts(actor:TrustedActorContext,page:number,search:string,countOnly=false){
     this.assertSourceCreation(actor);
     return this.readSnapshot(async db=>{
     if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
     const scope=`WHERE lifecycle.is_draft AND ${await wholeOrderActiveSql(db,"source","s.source_id")}
-      AND ($1 OR s.created_by=$2) AND strpos(lower(s.design_style_no),lower($3))>0`;
+      AND ($1 OR s.created_by=$2) AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)`;
     const params=[isRootActor(actor),actor.actorId,search];
     const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total FROM digital_production_sources s
       JOIN digital_development_source_lifecycle lifecycle USING(source_id) ${scope}`,params)).rows[0]!.total;

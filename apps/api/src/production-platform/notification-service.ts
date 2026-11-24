@@ -1,4 +1,5 @@
 import {bulkWashingTodos} from './bulk-washing-todos.js';
+import {issuedOrderNumber} from './order-number-repository.js';
 import {specialCraftQuotationTodos,specialCraftQuotationNotification} from './special-craft-quotation-todos.js';
 import {secondaryCraftApprovalTodos,secondaryCraftApprovalNotification} from './secondary-craft-approval-todos.js';
 import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
@@ -452,7 +453,10 @@ export class DigitalProductionNotificationService {
     let context:DigitalNotification["context"];
     const parentReadable=contextTarget&&(includeContext||ownChildResource)&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical");
     if(includeContext&&contextTarget&&parentReadable){
-      const resource=(await database.query(contextTarget.kind==='order'?"SELECT design_style_no,production_order_id FROM digital_production_orders WHERE production_order_id=$1":"SELECT design_style_no,NULL::uuid AS production_order_id FROM digital_production_sources WHERE source_id=$1",[contextTarget.id])).rows[0];
+      const resource=(await database.query(contextTarget.kind==='order'?`SELECT o.design_style_no,o.production_order_id,o.source_id,row_to_json(s) AS number_source
+        FROM digital_production_orders o LEFT JOIN digital_production_sources s USING(source_id) WHERE o.production_order_id=$1`
+        :`SELECT s.design_style_no,NULL::uuid AS production_order_id,row_to_json(s) AS number_source
+        FROM digital_production_sources s WHERE source_id=$1`,[contextTarget.id])).rows[0];
       if(resource){
         // PO date notices describe only the immutable request's affected lines.
         // Legacy whole-order notices retain their original scope.
@@ -462,7 +466,10 @@ export class DigitalProductionNotificationService {
           OR EXISTS(SELECT 1 FROM digital_instruction_date_requests r WHERE r.request_id=$2 AND r.production_order_id=$1)
           OR EXISTS(SELECT 1 FROM digital_production_delivery_requests r WHERE r.request_id=$2 AND r.production_order_id=$1)) ORDER BY l.position`
           :"SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",requestId?[resource.production_order_id,requestId]:[resource.production_order_id])).rows:[];
-        context={styleNo:resource.design_style_no??null,orderId:resource.production_order_id??null,colors:[...new Set<string>(lines.map(l=>l.color))],poNumbers:[...new Set<string>(lines.map(l=>l.po_number).filter(Boolean))]};
+        const businessNumber=await issuedOrderNumber(database,resource.number_source,resource.production_order_id?resource:null);
+        context={styleNo:resource.design_style_no??null,orderId:resource.production_order_id??null,
+          ...(businessNumber?{businessNumber}:{}),
+          colors:[...new Set<string>(lines.map(l=>l.color))],poNumbers:[...new Set<string>(lines.map(l=>l.po_number).filter(Boolean))]};
       }
     }
     // A valid own task can identify itself without granting source/order technical access.

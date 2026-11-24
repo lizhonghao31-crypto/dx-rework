@@ -34,7 +34,7 @@ import "./digital-development-workspace.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
-type SavedDevelopmentDraft={sourceId:string;designStyleNo:string;version:number;updatedAt:string;approvalState:string|null};
+type SavedDevelopmentDraft={sourceId:string;designStyleNo:string|null;version:number;updatedAt:string;approvalState:string|null};
 type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean;total:number};
 const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
@@ -322,7 +322,7 @@ export function DigitalDesignerWorkspace() {
           onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></div>
         {draftError?<p role="alert">{draftError} <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>刷新草稿</DevelopmentEntryAction></p>
           :!drafts?<p role="status">正在读取草稿…</p>:drafts.items.length===0?<p>暂无开发草稿</p>:<ul>
-            {drafts.items.map(draft=><li key={draft.sourceId}><AstryxButton label={draft.designStyleNo} type="button" variant="secondary" isDisabled={creationBusy} onClick={()=>void openSavedDraft(draft.sourceId)}/> <span>{draft.version?'最后保存':'已预留款号'} {date(draft.updatedAt)}</span>{draft.approvalState==='pending'&&<span> · 时效待审核</span>}{draft.approvalState==='returned'&&<span> · 时效申请已退回</span>}</li>)}
+            {drafts.items.map(draft=><li key={draft.sourceId}><AstryxButton label={draft.designStyleNo??'待生成订单ID'} type="button" variant="secondary" isDisabled={creationBusy} onClick={()=>void openSavedDraft(draft.sourceId)}/> <span>{draft.version?'最后保存':draft.designStyleNo?'已预留款号':'草稿预留'} {date(draft.updatedAt)}</span>{draft.approvalState==='pending'&&<span> · 时效待审核</span>}{draft.approvalState==='returned'&&<span> · 时效申请已退回</span>}</li>)}
           </ul>}
         {drafts&&<ListPagination page={drafts.page} totalPages={appliedDraftQuery===draftQuery?Math.max(1,Math.ceil(drafts.total/15)):null}
           total={!liveSearch.pending&&appliedDraftQuery===draftQuery?drafts.total:null}

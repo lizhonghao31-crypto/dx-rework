@@ -143,5 +143,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.getByRole('button',{name:'保存并使用',exact:true}).isDisabled()).toBe(true);
   }finally{await context.close();}
  });
+ it('opens order ID settings in the original App and previews without assigning a number',async()=>{
+  const designer=h.f.people['sample-designer']!;
+  await h.db.query("UPDATE app_users SET display_name='李俊岳' WHERE id=$1",[designer.actorId]);
+  const {page,context}=await h.open(h.f.people['production-management']!.actorId,1165);
+  try{
+   const entry=page.getByRole('button',{name:'订单ID生成设置',exact:true});
+   await entry.waitFor();
+   await entry.press('Enter');
+   const panel=page.getByRole('region',{name:'订单ID生成设置',exact:true});
+   const suggested=panel.getByRole('button',{name:'填入建议 LJY',exact:true});
+   await suggested.waitFor();
+   await suggested.click();
+   await expect.poll(()=>panel.getByRole('textbox',{name:'李俊岳代码',exact:true}).inputValue()).toBe('LJY');
+   await panel.getByRole('textbox',{name:'男童代码',exact:true}).fill('M');
+   const save=panel.getByRole('button',{name:'保存订单ID设置',exact:true});
+   await save.click();
+   const invalid=page.getByRole('dialog',{name:'保存订单ID设置',exact:false});
+   await invalid.getByText('产品分类代码必须互不重复',{exact:false}).waitFor();
+   await page.keyboard.press('Escape');
+   await panel.getByRole('textbox',{name:'男童代码',exact:true}).fill('B');
+   await save.click();
+   await panel.getByText('订单ID设置已保存',{exact:true}).waitFor();
+   const design=panel.getByRole('combobox',{name:'预览设计师',exact:true});
+   await design.press('Enter');
+   await page.getByRole('option',{name:'李俊岳',exact:true}).click();
+   const preview=panel.getByRole('button',{name:'预览订单ID',exact:true});
+   await preview.click();
+   await panel.getByText('待补发号资料 销售年份',{exact:true}).waitFor();
+   await panel.getByRole('textbox',{name:'预览销售年份',exact:true}).fill('2027');
+   await preview.click();
+   await panel.getByText('DEVWLJY2027P00-001',{exact:true}).waitFor();
+   await preview.click();
+   await panel.getByText('DEVWLJY2027P00-001',{exact:true}).waitFor();
+   expect((await h.db.query('SELECT count(*)::int AS count FROM digital_order_number_series')).rows[0].count).toBe(0);
+   for(const width of [1165,390]){
+    await page.setViewportSize({width,height:747});
+    const panelWidth=await panel.evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth}));
+    expect(panelWidth.scroll).toBeLessThanOrEqual(panelWidth.width+1);
+    await page.screenshot({path:join(h.evidence,'x1-order-number-settings-'+width+'.png')});
+   }
+  }finally{await context.close();}
+  const normal=await h.open(designer.actorId,1165);
+  try{
+   const denied=await normal.page.request.get(h.base+'/api/digital-production/order-number-settings');
+   expect(denied.status()).toBe(403);
+   expect(await normal.page.getByRole('button',{name:'订单ID生成设置',exact:true}).count()).toBe(0);
+  }finally{await normal.context.close();}
+ });
  it('records no runtime exceptions in the original App scenarios',()=>{expect(h.errors).toEqual([]);});
 });

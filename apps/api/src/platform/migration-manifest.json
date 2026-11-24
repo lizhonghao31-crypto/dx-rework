@@ -1263,6 +1263,10 @@
     {
       "version": "0301_secondary_craft_quotation_approval",
       "checksum": "5b95f261516b20be6be19616bf3d3833a7a1a8fe8773ab18ac793ccc8ab5a60c"
+    },
+    {
+      "version": "0302_digital_order_number_identity",
+      "checksum": "94fd8957f69a41ab8c37a098a0a3413afcb5ed08cf7270171087a0a7808f498e"
     }
   ]
 }
