@@ -2,7 +2,8 @@
 .quotation-editor td{min-width:100px;vertical-align:top;overflow-wrap:anywhere}
 .quotation-editor td:nth-child(2),.quotation-editor td:nth-child(8),.quotation-editor td:nth-child(9){min-width:160px}
 .quotation-editor textarea{min-height:80px}
-.quotation-editor :is(input,select,textarea){box-sizing:border-box;max-width:100%;min-height:var(--dx-form-control-height,42px);padding:6px 8px;border:1px solid var(--dx-form-control-border,#c9ced6);border-radius:4px;background:var(--dx-form-control-background,#fff);font:inherit;color:inherit}
+.quotation-editor :is(input,select,textarea):where(:not(.quotation-workbench-pricing *)){box-sizing:border-box;max-width:100%;min-height:var(--dx-form-control-height,42px);padding:6px 8px;border:1px solid var(--dx-form-control-border,#c9ced6);border-radius:4px;background:var(--dx-form-control-background,#fff);font:inherit;color:inherit}
+.quotation-workbench-pricing .quotation-workbench-price-fields{margin-block:var(--dx-v2-space-2,8px)}
 .budget-editor .quotation-delta-up{color:var(--dx-status-danger,#a92c36)}
 .budget-editor .quotation-delta-down{color:var(--dx-status-success,#187347)}
 .budget-editor .quotation-delta{white-space:normal;overflow-wrap:anywhere}

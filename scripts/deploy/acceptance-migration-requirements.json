@@ -2311,5 +2311,24 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0300_workbench_quotation_review": {
+    "checksum": "db9558b3ca328b786104ce3e153a4e6bda0233bd685d9b1f31400a0631ae693a",
+    "tables": [
+      "digital_quotation_versions"
+    ],
+    "functions": [],
+    "references": [
+      "digital_quotation_documents",
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_quotation_pricing_drafts",
+      "digital_quotation_line_reviews"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }

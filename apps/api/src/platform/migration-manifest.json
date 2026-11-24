@@ -1255,6 +1255,10 @@
     {
       "version": "0299_auxiliary_catalog_reference_pricing",
       "checksum": "755456b91d30fa6087540bab940d9da8d24c615da3619637dc28e596ea930f24"
+    },
+    {
+      "version": "0300_workbench_quotation_review",
+      "checksum": "db9558b3ca328b786104ce3e153a4e6bda0233bd685d9b1f31400a0631ae693a"
     }
   ]
 }

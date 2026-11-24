@@ -23,6 +23,107 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true});});
  afterAll(async()=>{await h?.writeEvidence();await h?.dispose();});
+ it('keeps R4 commercial writes unrouted while real staged row reviews and prices use the exact stored version',async()=>{
+  const {f,db}=h,designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!,merch=f.people.merchandiser!;
+  const identity=new DigitalProductionIdentityService(db,true),quotes=new DigitalQuotationService(db,true);
+  const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+   designStyleNo:'TEST-R4-STAGED-'+randomUUID(),orderDate:beijingCalendarDate(new Date()),primaryMerchandiserId:merch.actorId,
+   lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),randomUUID());
+  const id=order.productionOrderId,resource={kind:'order' as const,id},rowId=randomUUID();
+  const document:BudgetDocument={fabricType:'针织',productCategory:'上衣',monthSeries:'',date:null,currency:'人民币',freight:'2',cm:'4',
+   rows:[{rowId,section:'主料',category:'',name:'TEST 面料',specification:'40支',unit:'米',supplier:'TEST',consumption:'',unitPrice:'30'}],
+   salePrice:'',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[]};
+  const draft=await quotes.save(designer,resource,{expectedVersion:0,document,
+   assignments:[{rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:designer.actorId,priceRole:'sample_designer'}]},randomUUID());
+  const first=await quotes.fillRow(worker,resource,rowId,{expectedVersion:draft.version,consumption:'1'},randomUUID());
+  const quoteId=first.quoteId!;
+  const tab=await h.open(designer.actorId,1165,{},'/ui/digital-quotation?kind=order&id='+id);
+  const follow=await h.open(merch.actorId,1165,{},'/ui/digital-production?budget='+id);
+  const base=h.base+'/api/digital-production/orders/'+id;
+  const read=async()=>{const response=await tab.page.request.get(base+'/quotation/workbench-pricing');expect(response.status()).toBe(200);return response.json();};
+  const businessState=async()=>(await db.query(`SELECT
+    (SELECT count(*)::int FROM digital_quotation_versions WHERE quote_id=$1) AS confirmations,
+    (SELECT count(*)::int FROM digital_budget_documents WHERE production_order_id=$2) AS budgets,
+    (SELECT count(*)::int FROM digital_budget_quote_conversions WHERE production_order_id=$2) AS adoptions`,[quoteId,id])).rows[0];
+  try{
+   expect(await read()).toMatchObject({resource,quoteId,version:first.version,unitCost:'30',confirmation:'awaiting_joint_release',saved:null});
+   expect((await follow.page.request.get(base+'/quotation/workbench-pricing')).status()).toBe(404);
+   const preview={field:'customerUnitPrice',value:'49.123456'} as const;
+   expect((await tab.page.request.put(base+'/quotation/workbench-pricing',{data:{expectedVersion:first.version,input:preview}})).status()).toBe(404);
+   expect((await tab.page.request.post(base+'/quotation/line-reviews',{data:{action:'return'}})).status()).toBe(404);
+   const newConfirmation={customerCode:'PD',expectedVersion:first.version,customerConfirmedTotal:preview.value,amountScope:'per_piece',
+    quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',
+    sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST 本次新口径尚未联验',
+    confirmedAt:new Date(Date.now()-1000).toISOString(),pricing:preview};
+   expect((await tab.page.request.post(base+'/quotation/confirm',{headers:{'idempotency-key':randomUUID()},data:newConfirmation})).status()).toBe(400);
+   await follow.page.getByRole('region',{name:'客户报价对照'}).getByText('等待客户确认报价与正式下单，不能发布预算',{exact:false}).waitFor();
+   expect(await follow.page.getByRole('button',{name:'保存预算',exact:true}).count()).toBe(0);
+   expect(await businessState()).toEqual({confirmations:0,budgets:0,adoptions:0});
+
+   const pricingKey=randomUUID(),pricing={expectedVersion:first.version,input:preview};
+   await quotes.saveWorkbenchPricingDraft(designer,resource,pricing,pricingKey);
+   await quotes.saveWorkbenchPricingDraft(designer,resource,pricing,pricingKey);
+   expect((await db.query('SELECT quote_version,pricing FROM digital_quotation_pricing_drafts WHERE quote_id=$1',[quoteId])).rows).toEqual([
+    {quote_version:first.version,pricing:{input:preview,cost:'30',status:'calculated',customerUnitPrice:preview.value,multiplierPercent:'163.7449',
+     exactMultiplierPercent:{numerator:'4912345600000000',denominator:'30000000000000'}}},
+   ]);
+   await expect(quotes.saveWorkbenchPricingDraft(merch,resource,pricing,randomUUID())).rejects.toMatchObject({statusCode:403});
+   const reason='TEST 复核单件用量',returned={action:'return',rowId,field:'consumption',expectedRound:1,
+    expectedFieldVersion:first.version,reason} as const,returnKey=randomUUID();
+   await quotes.reviewWorkbenchLine(designer,resource,returned,returnKey);
+   await quotes.reviewWorkbenchLine(designer,resource,returned,returnKey);
+   await expect(quotes.reviewWorkbenchLine(designer,resource,returned,randomUUID())).rejects.toMatchObject({statusCode:409});
+   await quotes.reviewWorkbenchLine(designer,resource,{...returned,field:'unitPrice',expectedFieldVersion:draft.version,reason:'TEST 复核材料单价'},randomUUID());
+   const open=await read();
+   expect(open).toMatchObject({status:'awaiting_correction',counts:{returned:2,resubmitted:0},saved:{input:preview,version:first.version}});
+   const review=open.reviews.find((item:{field:string})=>item.field==='consumption');
+   expect(review).toMatchObject({rowId,field:'consumption',reason,status:'returned'});
+   const changed=await quotes.fillRow(worker,resource,rowId,{expectedVersion:first.version,consumption:'2'},randomUUID());
+   expect((await read()).counts.returned).toBe(2);
+   await expect(quotes.saveWorkbenchPricingDraft(designer,resource,pricing,randomUUID())).rejects.toMatchObject({statusCode:409});
+   const resubmit={action:'resubmit',reviewId:review.reviewId,expectedFieldVersion:changed.version} as const;
+   await expect(quotes.reviewWorkbenchLine(designer,resource,resubmit,randomUUID())).rejects.toMatchObject({statusCode:403});
+   await quotes.reviewWorkbenchLine(worker,resource,resubmit,randomUUID());
+   expect(await read()).toMatchObject({unitCost:'60',status:'awaiting_correction',counts:{returned:1,resubmitted:1}});
+   await quotes.reviewWorkbenchLine(designer,resource,{...resubmit,action:'resolve'},randomUUID());
+   expect(await read()).toMatchObject({status:'awaiting_correction',counts:{returned:1,resubmitted:0},reviews:[{field:'unitPrice'}]});
+   const events=await db.query('SELECT field,recipient_id,resubmit_actor,resolve_actor FROM digital_quotation_line_reviews WHERE quote_id=$1 ORDER BY field',[quoteId]);
+   expect(events.rows).toEqual([{field:'consumption',recipient_id:worker.actorId,resubmit_actor:worker.actorId,resolve_actor:designer.actorId},
+    {field:'unitPrice',recipient_id:designer.actorId,resubmit_actor:null,resolve_actor:null}]);
+   expect(await businessState()).toEqual({confirmations:0,budgets:0,adoptions:0});
+  }finally{await follow.close();await tab.close();}
+ });
+ it('distinguishes manual IE processing from a craft approval and an unfinished quote',async()=>{
+  const {f,db}=h,designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!,ie=f.people.ie!;
+  const identity=new DigitalProductionIdentityService(db,true),quotes=new DigitalQuotationService(db,true);
+  const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+   designStyleNo:'TEST-R4-IE-AND-CRAFT-'+randomUUID(),orderDate:beijingCalendarDate(new Date()),
+   lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),randomUUID());
+  const resource={kind:'order' as const,id:order.productionOrderId};
+  const ieRow={rowId:randomUUID(),section:'外发工序' as const,category:'',name:'TEST IE 加工',specification:'',unit:'件',supplier:'',consumption:'',unitPrice:''};
+  const document:BudgetDocument={fabricType:'针织',productCategory:'上衣',monthSeries:'',date:null,currency:'人民币',freight:'0',cm:'0',
+   rows:[ieRow],salePrice:'',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[]};
+  const ieAssignment={rowId:ieRow.rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:ie.actorId,priceRole:'ie_reviewer' as const};
+  const saved=await quotes.save(designer,resource,{expectedVersion:0,document,assignments:[ieAssignment]},randomUUID());
+  expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({status:'incomplete',counts:{incomplete:1,pendingCraftApproval:0},unitCost:null});
+  const withUsage=await quotes.fillRow(worker,resource,ieRow.rowId,{expectedVersion:saved.version,consumption:'1'},randomUUID());
+  const withPrice=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:withUsage.version,unitPrice:'9'},randomUUID());
+  expect(withPrice.document).toBeNull();
+  expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({
+   status:'awaiting_customer_confirmation',counts:{incomplete:0,pendingCraftApproval:0},unitCost:'9',confirmation:'awaiting_joint_release',
+  });
+  const craftRow={...ieRow,rowId:randomUUID(),name:'TEST 单项工艺'};
+  const designerCopy=await quotes.read(designer,resource);
+  expect(designerCopy.version).toBe(withPrice.version);
+  const withCraft=await quotes.save(designer,resource,{expectedVersion:designerCopy.version,
+   document:{...designerCopy.document!,rows:[...designerCopy.document!.rows,craftRow]},
+   assignments:[ieAssignment,{rowId:craftRow.rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:worker.actorId,priceRole:'pattern_room_worker'}],
+  },randomUUID());
+  await quotes.fillRow(worker,resource,craftRow.rowId,{expectedVersion:withCraft.version,consumption:'1',unitPrice:'6'},randomUUID());
+  expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({
+   status:'awaiting_craft_approval',counts:{incomplete:0,pendingCraftApproval:1},unitCost:'15',confirmation:'awaiting_joint_release',
+  });
+ });
  it('opens exact saved quotation, budget and instruction originals through the real authorized App without writes or latest substitution',async()=>{
   const f=h.f,designer=f.people['sample-designer']!,merch=f.people.merchandiser!,worker=f.people['pattern-room-worker']!,identity=new DigitalProductionIdentityService(h.db,true),quotes=new DigitalQuotationService(h.db,true),budgets=new DigitalBudgetService(h.db,true),instructions=new ProductionInstructionService(h.db,true);
   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-ORIGINAL-COMMERCIAL-'+randomUUID(),orderDate:beijingCalendarDate(new Date()),primaryMerchandiserId:merch.actorId,lines:[{formalPoNo:'TEST-ORIGINAL-PO',color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),randomUUID());
@@ -296,9 +397,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(await i.page.getByLabel('IE加工单价单件用量',{exact:true}).count()).toBe(0);
     await i.page.getByRole('button',{name:'保存本行负责字段',exact:true}).click();
     await expect.poll(async()=>(await quotes.read(designer,resource)).complete).toBe(true);
+    // The existing editor accepts a responsible worker's manual entry. The
+    // staged R4 cost calculation needs an adopted published artifact.
+    const previewRead=h.base+'/api/digital-production/sources/'+source.sourceId+'/quotation/workbench-pricing';
+    await d.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
+    await expect.poll(()=>d.page.locator('#quote-cost-reference').innerText()).toContain('成本合计 待补齐');
+    const form=await forms.read(designer,source.sourceId),technical=new DevelopmentTechnicalService(h.db,true);
+    const initial=await publishedTechnicalFixture(h.db,h.f.root,source.sourceId,form.document!,form.version,worker.actorId);
+    const published=(await technical.read(worker,source.sourceId)).artifacts.find(record=>record.artifactSetId===initial?.artifactSetId&&record.version===initial?.version)!;
+    await technical.saveArtifact(worker,source.sourceId,{taskId:published.taskId,expectedDocumentVersion:form.version,
+     expectedVersion:published.version,scopeRef:'整款',action:'publish',
+     body:{...published.body,consumptionRows:[{materialId,unit:'米',consumption:'1.5'}]}},randomUUID());
     await d.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
     await expect.poll(()=>d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).isEnabled()).toBe(true);
-    expect(await d.page.locator('#quote-cost-reference').innerText()).toContain('40');
+    await expect.poll(()=>d.page.locator('#quote-cost-reference').innerText()).toContain('成本合计 40.00 元/件');
+    const rate=d.page.getByLabel('报价倍率（%）',{exact:true}),price=d.page.getByLabel('客户单件报价（元/件）',{exact:true});
+    await rate.fill('130');
+    expect(await price.inputValue()).toBe('52.00');
+    await price.fill('49.123456');
+    expect(await rate.inputValue()).toBe('122.8086');
+    expect(await price.inputValue()).toBe('49.123456');
+    expect(await d.page.getByLabel('客户确认金额',{exact:true}).inputValue()).toBe('');
+    expect((await i.page.request.get(previewRead)).status()).toBe(404);
+    const served=await d.page.request.get(previewRead);
+    expect(served.status()).toBe(200);
+    expect(served.headers()['cache-control']).toBe('no-store');
+    expect((await quotes.read(designer,resource)).confirmedVersion).toBeNull();
+    expect(await served.json()).toMatchObject({unitCost:'40',saved:null,confirmation:'awaiting_joint_release'});
+    const panel=d.page.locator('#quote-cost-reference');
+    for(const width of [1165,390]){
+     await d.page.setViewportSize({width,height:960});
+     expect(await panel.evaluate(node=>{
+      const bounds=node.getBoundingClientRect();
+      const fields=node.querySelector('.quotation-workbench-price-fields')!;
+      const following=fields.nextElementSibling!;
+      const separated=following.getBoundingClientRect().top-fields.getBoundingClientRect().bottom>=4;
+      return separated&&Array.from(node.querySelectorAll('input')).every(input=>{
+       const position=input.getBoundingClientRect();
+       return position.width>0&&position.left>=bounds.left-1&&position.right<=bounds.right+1&&getComputedStyle(input).borderTopWidth==='0px';
+      });
+     })).toBe(true);
+     await panel.screenshot({path:join(h.evidence,`r4-pricing-${width}.png`)});
+    }
+    await d.page.setViewportSize({width:1165,height:960});
     await d.page.getByLabel('客户确认金额',{exact:true}).fill('42');
     await d.page.getByLabel('客户真实确认时间',{exact:true}).fill('2026-10-20T09:00');
     await d.page.getByLabel('客户确认依据',{exact:true}).fill('TEST真实确认42，成本40不是客户售价');
