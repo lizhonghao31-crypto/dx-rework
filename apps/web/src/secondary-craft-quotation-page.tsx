@@ -79,7 +79,7 @@ function CraftForm({original,path,href,version}:{original:SecondaryCraftDetail;p
  const [item,setItem]=useState(original),[edited,setEdited]=useState<SecondaryCraftDetail['draft']>(null);
  const [reason,setReason]=useState(''),[search,setSearch]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const [uncertain,setUncertain]=useState<Attempt|null>(null),writing=useRef(false);
- const current=edited??item.draft??{mode:'in_house',supplierId:null,unit:'件',unitPrice:'',applicableQuantity:null,note:'',attachmentIds:item.target.attachmentIds};
+ const current=edited??item.draft??{mode:'in_house',supplierId:null,unit:item.target.pricingUnit,unitPrice:'',applicableQuantity:null,note:'',attachmentIds:item.target.attachmentIds};
  const edit=(value:Partial<typeof current>)=>setEdited({...current,...value} as typeof current);
  const options=useCallback(async(signal:AbortSignal)=>SecondaryCraftSuppliersSchema.parse(await digitalRequest(
   `${path}?supplierSearch=${encodeURIComponent(search.trim())}`,'GET',undefined,undefined,{signal},
@@ -122,7 +122,7 @@ function CraftForm({original,path,href,version}:{original:SecondaryCraftDetail;p
    onChange={value=>{location.assign(value?`${href}&version=${value}`:href);}}/>}
   {item.target.attachmentIds.map((id,index)=><p key={id}><a href={urls.apiUrl(`digital-production/${path}/attachments/${id}`)+(item.historical?`?version=${item.version}`:'')}>查看本项工艺要求附件 {index+1}</a></p>)}
   {item.note&&<p>退回原因：{item.note}</p>}
-  {item.state==='approved'&&item.draft?.unit!=='件'&&<p>本版已批准，缺少可用于客户报价的单件换算依据。</p>}
+  {item.state==='approved'&&item.draft?.unit!==item.target.pricingUnit&&<p>本版已批准，缺少客户报价所用单位的换算依据。</p>}
   {item.canEdit?<div className="budget-heading">
    <Selector label="制作方式" value={current.mode} options={modes} isDisabled={disabled} onChange={value=>{
     if(value==='in_house'||value==='outsourced')edit({mode:value,supplierId:null});

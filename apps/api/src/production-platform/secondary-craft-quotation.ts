@@ -18,11 +18,11 @@ import {lockSecondaryCraftSupplier,readSecondaryCraftSupplierOptions} from './se
 const conflict=(message:string):never=>{throw new ApplicationError('SECONDARY_CRAFT_CONFLICT',message,409);};
 const fingerprint=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 type Target={rowId:string;label:string;round:number;stage:'development'|'bulk';scopeId:string;sourceVersion:number;
- basis:string;authorId:string|null;role:string;attachmentIds:string[];instructions:string};
+ basis:string;authorId:string|null;role:string;attachmentIds:string[];instructions:string;pricingUnit:string};
 type Revision={
  revision_id:string;recorded_at:Date|string;row_id:string;revision:number;round_number:number;stage:Target['stage'];scope_id:string;source_version:number;basis:string;author_id:string;
  submitted:boolean;approver_id:string|null;supplier_id:string|null;supplier_version:number|null;payload:NonNullable<SecondaryCraftDetail['draft']>;
- requirement:{label:string;instructions:string;attachmentIds:string[]};
+ requirement:{label:string;instructions:string;attachmentIds:string[];pricingUnit:string};
  decision_id:string|null;decision:'approved'|'returned'|null;reason:string|null;decision_actor:string|null;
  supplier_code:string|null;supplier_name:string|null;
 };
@@ -58,9 +58,24 @@ export async function hasPublishedSecondaryCraft(db:Pick<PoolClient,'query'>,sou
 
 async function targets(db:Pick<PoolClient,'query'>,quote:AssembledQuotation):Promise<Target[]>{
  const assembly=quote.assembly,sourceId=quote.source_id;
- if(!assembly||!sourceId)return [];
  const rows=requiredCraftRows(quote);
  if(!rows.length)return [];
+ if(!assembly){
+  const scopeId=sourceId??quote.production_order_id;
+  if(!scopeId)return [];
+  const source=sourceId?await developmentDocumentRow(db,sourceId):null;
+  return rows.map(row=>{
+   const assignment=quote.assignments.find(value=>value.rowId===row.rowId)!;
+   const stage=sourceId?'development':'bulk',round=source?.round_number??1;
+   // The original manual quote row is already an exact work and role identity.
+   // The price adopted by this very approval is excluded from its basis.
+   const basisRow={...row,unitPrice:undefined};
+   return {rowId:row.rowId,label:row.name,round,stage,scopeId,sourceVersion:source?.version??quote.version,
+    authorId:assignment.priceAssigneeId,role:assignment.priceRole,attachmentIds:[],instructions:row.specification,
+    pricingUnit:row.unit,basis:fingerprint([quote.quote_id,stage,scopeId,round,basisRow,assignment])};
+  });
+ }
+ if(!sourceId)return [];
  const source=await developmentDocumentRow(db,sourceId);
  const document=source?.status==='published'&&(source.round_number??1)===assembly.roundNumber?source.document as DevelopmentDocument:null;
  const orderId=quote.production_order_id;
@@ -72,7 +87,7 @@ async function targets(db:Pick<PoolClient,'query'>,quote:AssembledQuotation):Pro
  return rows.flatMap<Target>(row=>{
   const ref=assembly.rows[row.rowId]!,assignment=quote.assignments.find(value=>value.rowId===row.rowId);
   const common={rowId:row.rowId,label:row.name,round:assembly.roundNumber,stage:ref.stage,
-   authorId:assignment?.priceAssigneeId??null,role:assignment?.priceRole??''};
+   authorId:assignment?.priceAssigneeId??null,role:assignment?.priceRole??'',pricingUnit:'件'};
   if(ref.stage==='development'&&source&&document){
    if(ref.sourceRef===`craft:${document.washing}`&&document.washing!=='免洗'){
     return [{...common,scopeId:sourceId,sourceVersion:source.version,attachmentIds:[],instructions:document.washingMethod??'',
@@ -112,7 +127,7 @@ function detailFor(actor:TrustedActorContext,roles:ReadonlySet<string>,approver:
  if(!maker&&!approvalView)return null;
  const active=current(target,row)?row:null;
  return {target:{rowId:target.rowId,scopeId:target.scopeId,label:target.label,round:target.round,stage:target.stage,sourceVersion:target.sourceVersion,
-  instructions:target.instructions,attachmentIds:target.attachmentIds},version:row?.revision??0,
+  instructions:target.instructions,attachmentIds:target.attachmentIds,pricingUnit:target.pricingUnit},version:row?.revision??0,
   state:active?active.decision??(active.submitted?'submitted':'draft'):'pending',note:active?.reason??null,
   supplier:active?.supplier_id&&active.supplier_code&&active.supplier_name
    ?{supplierId:active.supplier_id,code:active.supplier_code,name:active.supplier_name}:null,
@@ -160,13 +175,13 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
    WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(q.assignments) a WHERE a->>'priceAssigneeId'=u.id::text)) people
   FROM digital_quotation_documents q
   LEFT JOIN digital_production_orders o USING(production_order_id)
-  JOIN digital_production_sources s ON s.source_id=q.source_id
-  WHERE q.assembly IS NOT NULL AND NOT EXISTS (SELECT 1 FROM digital_production_resource_lifecycle l
+  LEFT JOIN digital_production_sources s ON s.source_id=q.source_id
+  WHERE NOT EXISTS (SELECT 1 FROM digital_production_resource_lifecycle l
    WHERE l.state<>'active' AND ((l.resource_kind='order' AND l.resource_id=q.production_order_id)
     OR (l.resource_kind='source' AND l.resource_id=q.source_id)))
   AND (EXISTS (SELECT 1 FROM jsonb_array_elements(q.assignments) a
     WHERE a->>'priceAssigneeId'=$1::uuid::text AND a->>'priceRole'=ANY($2::text[])
-     AND q.assembly->'rows'->(a->>'rowId')->>'kind'='craft')
+     AND (q.assembly IS NULL OR q.assembly->'rows'->(a->>'rowId')->>'kind'='craft'))
    OR ($3::boolean AND EXISTS (SELECT 1 FROM digital_secondary_craft_quote_revisions r
     WHERE r.quote_id=q.quote_id AND r.approver_id=$1::uuid AND r.submitted
      AND NOT EXISTS (SELECT 1 FROM digital_secondary_craft_quote_revisions n
@@ -212,7 +227,7 @@ export async function saveSecondaryCraft(db:PoolClient,actor:TrustedActorContext
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
  [quote.quote_id,rowId,expectedVersion+1,target.round,target.stage,target.scopeId,target.sourceVersion,target.basis,
   actor.actorId,submit,approver,supplier?.supplierId??null,supplier?.version??null,JSON.stringify(payload),at,revisionId,
-  JSON.stringify({label:target.label,instructions:target.instructions,attachmentIds:target.attachmentIds})]);
+  JSON.stringify({label:target.label,instructions:target.instructions,attachmentIds:target.attachmentIds,pricingUnit:target.pricingUnit})]);
  if(approver){
   const eventId=randomUUID();
   await db.query(`INSERT INTO digital_production_notification_events(event_id,source_key,todo_id,event_kind,created_at)
@@ -236,7 +251,7 @@ export async function decideSecondaryCraft(db:PoolClient,actor:TrustedActorConte
  const at=businessNow().toISOString(),decisionId=randomUUID();
  await db.query(`INSERT INTO digital_secondary_craft_quote_decisions(decision_id,quote_id,row_id,revision,actor_id,decision,reason,decided_at)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[decisionId,quote.quote_id,rowId,row.revision,actor.actorId,input.decision,input.reason??'',at]);
- if(input.decision==='approved'&&row.payload.unit==='件'){
+ if(input.decision==='approved'&&row.payload.unit===target.pricingUnit){
   const version=quote.version+1;
   const document={...quote.document,rows:quote.document.rows.map(value=>value.rowId===rowId?{...value,unitPrice:row.payload.unitPrice}:value)};
   const prices={...quote.price_sources,[rowId]:{actorId:row.author_id,role:target.role,version,recordedAt:at,secondaryCraftDecisionId:decisionId}};
@@ -258,7 +273,7 @@ export async function approvedSecondaryCraftRows(db:Pick<PoolClient,'query'>,quo
  for(const target of selected.sort((a,b)=>a.rowId.localeCompare(b.rowId))){
   const row=rows.get(target.rowId);
   if(!current(target,row)||!row.submitted||row.decision!=='approved'||row.decision_actor!==approver||!row.decision_id||
-   row.payload.unit!=='件'||quote.price_sources[target.rowId]?.secondaryCraftDecisionId!==row.decision_id||
+   row.payload.unit!==target.pricingUnit||quote.price_sources[target.rowId]?.secondaryCraftDecisionId!==row.decision_id||
    required.find(value=>value.rowId===target.rowId)?.unitPrice!==row.payload.unitPrice||!target.authorId)continue;
   if(!await (lock?access.lockActiveRole(target.authorId,target.role):access.activeRole(target.authorId,target.role)))continue;
   if(row.supplier_id){

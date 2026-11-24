@@ -19,7 +19,7 @@ import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR02 customer-confirmed quotation to bounded budget PostgreSQL',()=>{
  const schema=ownedPostgresSchema('customer_quote'),admin=new pg.Pool({connectionString:url}),database=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
- const designer=randomUUID(),other=randomUUID(),root=randomUUID(),merch=randomUUID(),tech=randomUUID(),ie=randomUUID();let legacyId:string,olderSource:{sourceId:string},olderStyle:string;
+ const designer=randomUUID(),other=randomUUID(),root=randomUUID(),merch=randomUUID(),tech=randomUUID(),ie=randomUUID();let legacyId:string,legacyCraftId:string,olderSource:{sourceId:string},olderStyle:string;
  const actor=(actorId=designer,actorRoles=['sample_designer']):TrustedActorContext=>({actorId,actorRoles,requestId:'TEST-quote',authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view','pattern_room:orders:create']});
  const budget=new DigitalBudgetService(database,true),identity=new DigitalProductionIdentityService(database,true),quotes=new DigitalQuotationService(database,true);
  const owner=()=>actor(merch,['order_merchandiser']);
@@ -65,6 +65,7 @@ const url=process.env.TEST_DATABASE_URL;
  await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'order_merchandiser')",[merch]);
  await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_worker'),($2,'ie_reviewer')",[tech,ie]);
  legacyId=await order();await budget.save(actor(),legacyId,{expectedVersion:0,document:baseDocument()},randomUUID());
+ legacyCraftId=await order();await budget.save(actor(),legacyCraftId,{expectedVersion:0,document:baseDocument()},randomUUID());
  await database.query(await readFile(new URL('../../apps/api/migrations/0267_customer_quotation_budget_basis.sql',import.meta.url),'utf8'));
  for(const name of ['0221_digital_production_notifications.sql','0222_digital_development_documents.sql'])await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),'utf8'));
  olderStyle=`TEST-BEFORE-WORKBENCH-${randomUUID()}`;
@@ -78,6 +79,27 @@ const url=process.env.TEST_DATABASE_URL;
    expect((await budget.read(owner(),legacyId)).comparison?.policy).toBe('legacy');
    expect((await budget.publish(owner(),legacyId,1,randomUUID())).status).toBe('published');
    expect((await database.query('SELECT * FROM digital_quotation_versions')).rows).toHaveLength(0);
+ });
+ it('keeps the genuine historical budget writable without inventing a quote for its published craft source',async()=>{
+   const id=legacyCraftId;
+   const original=await identity.read(actor(),id);
+   const source=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:original.designStyleNo,
+    temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const client=await database.connect();
+   try{
+     await client.query('BEGIN');
+     const task=await new DigitalProductionTaskService(database).createWithClient(client,actor(root,['root_superuser']),{
+      resource:{kind:'source',id:source.sourceId},kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null});
+     await client.query("INSERT INTO digital_development_documents(source_id,version,status,document,published_at,task_id,updated_by) VALUES($1,1,'published',$2,CURRENT_TIMESTAMP,$3,$4)",
+      [source.sourceId,JSON.stringify({craft:'绣花',washing:'免洗'}),task.taskId,designer]);
+     await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   await identity.attachSource(actor(),id,source.sourceId,randomUUID());
+   const historical=await budget.read(owner(),id);
+   expect(historical).toMatchObject({status:'draft',canEdit:true,canPublish:true,comparison:{policy:'legacy'}});
+   const saved=await budget.save(owner(),id,{expectedVersion:historical.version,document:{...historical.document!,productCategory:'TEST 历史预算保留原规则'}},randomUUID());
+   expect((await budget.publish(owner(),id,saved.version,randomUUID())).status).toBe('published');
+   expect((await database.query('SELECT 1 FROM digital_quotation_documents WHERE production_order_id=$1 OR source_id=$2',[id,source.sourceId])).rowCount).toBe(0);
  });
  it('applies new designer confirmation only to new roots and preserves the original quotation rules when an existing source converts',async()=>{
    const direct=await order(),directResource={kind:'order' as const,id:direct},quote=await readyQuote(directResource);

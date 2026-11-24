@@ -55,8 +55,8 @@ export class DigitalBudgetService {
     const state=comparison.workbenchBasis===undefined?undefined:(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1",[orderId])).rows[0]?.state;
     const active=state===undefined||state==='active';
     const checkCraftBasis=current&&!linked&&row?.status!=='published'&&(order.canEdit||order.canPublish)
-      &&(comparison.policy==='legacy'||comparison.currentConfirmedVersion!==null);
-    const craftBasis=!checkCraftBasis||await budgetCraftBasisIsCurrent(db,orderId);
+      &&comparison.policy==='quote_v1'&&comparison.currentConfirmedVersion!==null;
+    const craftBasis=!checkCraftBasis||await budgetCraftBasisIsCurrent(db,orderId,comparison.policy);
     if(!craftBasis)comparison={...comparison,state:'incomparable',workbenchBasis:'craft_review_required',
       reason:'请先核对本单当前工艺批准版本及客户确认报价'};
     const writableBasis=craftBasis&&(comparison.workbenchBasis===undefined||comparison.workbenchBasis==='valid'&&active);
@@ -93,7 +93,7 @@ export class DigitalBudgetService {
       }
       if (prior && prior.payload_hash !== hash) conflict("同一操作标识不能用于不同内容");
       if (prior) { await db.query("COMMIT"); return prior.response as T; }
-      await assertBudgetCraftBasis(db,orderId);
+      await assertBudgetCraftBasis(db,orderId,sheet.comparison?.policy??'legacy');
       if(action==='adopt'&&!sheet.canAdoptQuotation)conflict('当前不能切换报价依据；已关联外发的预算和合同保持原批准版本');
       if(sheet.comparison?.workbenchBasis&&action!=='adopt'&&sheet.comparison.workbenchBasis!=='valid')conflict(sheet.comparison.reason);
       if (action === "publish" && !sheet.canPublish) throw new ApplicationError("FORBIDDEN","预算由本单跟单最终发布，发布后内容冻结",403);

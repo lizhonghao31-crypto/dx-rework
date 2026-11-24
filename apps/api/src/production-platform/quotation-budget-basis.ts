@@ -27,7 +27,8 @@ export async function hasCurrentBudgetCraftBasis(db:Database,quote:AssembledQuot
   });
 }
 
-export async function budgetCraftBasisIsCurrent(db:Database,orderId:string,lock=false){
+export async function budgetCraftBasisIsCurrent(db:Database,orderId:string,policy:BudgetQuoteComparison['policy'],lock=false){
+ if(policy==='legacy')return true; // Only the original commercial enrollment governs this budget.
  if(!await hasQuotationSchema(db))return true;
  const result=(await db.query<AssembledQuotation&{approvals:SecondaryCraftApprovalRef[]|null}>(`SELECT q.*,
   to_jsonb(v)->'secondary_craft_approvals' approvals FROM digital_quotation_documents q
@@ -38,8 +39,8 @@ export async function budgetCraftBasisIsCurrent(db:Database,orderId:string,lock=
  return !await hasPublishedSecondaryCraft(db,source?.source_id??null);
 }
 
-export async function assertBudgetCraftBasis(db:PoolClient,orderId:string){
- if(!await budgetCraftBasisIsCurrent(db,orderId,true))
+export async function assertBudgetCraftBasis(db:PoolClient,orderId:string,policy:BudgetQuoteComparison['policy']){
+ if(!await budgetCraftBasisIsCurrent(db,orderId,policy,true))
   throw new ApplicationError('BUDGET_QUOTE_BASIS_CONFLICT','请先核对本单当前工艺批准版本及客户确认报价',409);
 }
 

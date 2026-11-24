@@ -37,7 +37,7 @@ export type SecondaryCraftDecision=z.infer<typeof SecondaryCraftDecisionSchema>;
 const state=z.enum(['pending','draft','submitted','approved','returned']);
 const stage=z.enum(['development','bulk']);
 const target=z.object({rowId:z.uuid(),scopeId:z.uuid(),label:z.string(),round:decisionVersion,stage,
- sourceVersion:decisionVersion,instructions:z.string(),attachmentIds});
+ sourceVersion:decisionVersion,instructions:z.string(),attachmentIds,pricingUnit:z.string()});
 const storedDraft=z.discriminatedUnion('mode',[
  z.object({mode:z.literal('in_house'),supplierId:z.null(),unitPrice:draft.unitPrice,unit,...detail}).strict(),
  z.object({mode:z.literal('outsourced'),supplierId:z.uuid().nullable(),unitPrice:draft.unitPrice,unit,...detail}).strict(),

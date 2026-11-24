@@ -185,6 +185,34 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect((await otherSession.get(external+'?version=2')).status()).toBe(404);
   await write(budgetSession,409,budget,{expectedVersion:updated.version,document:updated.document},key(),'PUT');
   expect((await db.query('SELECT secondary_craft_approvals FROM digital_quotation_versions WHERE quote_id=$1',[sheet.quoteId])).rows[0].secondary_craft_approvals).toEqual(frozen.secondary_craft_approvals);
+
+  const manual=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:'TEST R6 MANUAL '+key(),orderDate:beijingCalendarDate(new Date()),
+   lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}],
+  }),key());
+  const manualResource={kind:'order' as const,id:manual.productionOrderId},manualRow=key();
+  const manualDocument={...sheet.document!,rows:[{rowId:manualRow,section:'外发工序' as const,category:'工艺',name:'手工印花报价',
+   specification:'按原报价单位',unit:'米',supplier:'',unitPrice:'',consumption:''}]};
+  let manualQuote=await quotes.save(designer,manualResource,{expectedVersion:0,document:manualDocument,assignments:[
+   {rowId:manualRow,technicalAssigneeId:maker.actorId,priceAssigneeId:maker.actorId,priceRole:'pattern_room_worker'},
+  ]},key());
+  manualQuote=await quotes.fillRow(maker,manualResource,manualRow,{expectedVersion:manualQuote.version,consumption:'1.5'},key());
+  const manualBase=`${h.base}/api/digital-production/orders/${manual.productionOrderId}/quotation`;
+  const manualCraft=manualBase+'/secondary-craft/'+manualRow;
+  expect((await currentDirectory(makerSession)).map((item:{rowId:string})=>item.rowId)).toContain(manualRow);
+  await write(makerSession,409,manualBase+'/rows/'+manualRow,{expectedVersion:manualQuote.version,unitPrice:'7'});
+  const manualConfirmation={expectedVersion:manualQuote.version,customerCode:'PD',customerConfirmedTotal:'30',amountScope:'per_piece',
+   quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',
+   sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST 手工报价原单',confirmedAt:new Date().toISOString()};
+  await write(designSession,409,manualBase+'/confirm',manualConfirmation);
+  await write(makerSession,200,manualCraft+'/submit',{mode:'in_house',supplierId:null,expectedVersion:0,unit:'米',unitPrice:'7',
+   applicableQuantity:null,note:'按原材料用量报价',attachmentIds:[]});
+  await write(approvalSession,200,manualCraft+'/decision',{expectedVersion:1,decision:'approved'});
+  manualQuote=await quotes.read(designer,manualResource);
+  expect(manualQuote.rows).toEqual(expect.arrayContaining([expect.objectContaining({rowId:manualRow,unit:'米',unitPrice:'7',consumption:'1.5'})]));
+  await write(designSession,200,manualBase+'/confirm',{...manualConfirmation,expectedVersion:manualQuote.version});
+  expect((await db.query('SELECT secondary_craft_approvals FROM digital_quotation_versions WHERE quote_id=$1',[manualQuote.quoteId])).rows[0])
+   .toMatchObject({secondary_craft_approvals:[{rowId:manualRow,revision:1,actorId:wu.actorId}]});
  }finally{
   await Promise.all(sessions.map(session=>session.close()));
   await h.writeEvidence();

@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "97443fa573290647e85338063ef7a929a7a1cbcd",
-  "sourceFingerprint": "d94deccbdbb27be45a0575dfce00f54a2cfa6b0abed235b5a149c789bd932aef",
+  "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
   "rules": [
     {
       "rule": "An employed worker quotes only the exact assigned step and current scope. Factory options come from the active original catalogue and cannot write that catalogue.",
@@ -75,7 +75,8 @@
         "apps/api/src/production-platform/quotation-budget-basis.ts",
         "apps/api/src/production-platform/budget-service.ts",
         "packages/contracts/src/digital-quotation.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/identity-service.ts#ensureQuotationBudget",
@@ -87,9 +88,13 @@
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/integration/customer-quotation-postgres.test.ts"
       ],
+      "newTests": [
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
+      ],
       "initialization": "Require both table/column families for new writes. Infer no craft from missing historical fields. A pure development confirmation has no formal budget until the original formal order command.",
       "dateAndPermission": "Retain original eligibility and lock ordering. The confirmation transaction checks current item, work assignment, version, approval identity and factory eligibility before writing a customer or budget fact.",
-      "expectation": "The staged 0300 fixture rejects enabled-only writes. Two valid 0301 approvals unlock the original confirmation and budget exactly once. The existing 16 customer/budget regressions preserve old sources, factual amounts, transaction boundaries, and historic snapshots.",
+      "expectation": "The staged 0300 fixture rejects enabled-only writes. Two valid 0301 approvals unlock the original confirmation and budget exactly once. The pre-enrollment order with published embroidery and no quotation stays editable and publishes its original budget. An enrolled manual craft row goes through exact approval under its existing unit before confirming. Existing customers, transactions and snapshots remain covered.",
       "checks": [
         "joint",
         "customer",
@@ -157,46 +162,46 @@
     {
       "id": "joint",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r6-evidence/release-97443fab/run.mjs joint",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/review-final/run.mjs joint",
       "context": "Node 22.22.2, canonical two-worker business-chain config, separately owned fresh low-privilege PG fixtures and authenticated Chromium; actual current schema and exact 0300 pre-enable schema; verified resource cleanup.",
-      "startedAt": "2026-11-24T01:31:11.478Z",
-      "endedAt": "2026-11-24T01:32:09.569Z",
-      "testedHead": "190930de278943fb9b2b6952abef494095ab5bc9",
-      "sourceFingerprint": "d94deccbdbb27be45a0575dfce00f54a2cfa6b0abed235b5a149c789bd932aef",
+      "startedAt": "2026-11-24T01:43:38.243Z",
+      "endedAt": "2026-11-24T01:44:39.330Z",
+      "testedHead": "da2600ccb93277dfec381c0deab28711a9455ec1",
+      "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-workbench-v101-r6-evidence/release-97443fab/joint.log",
-      "logSha256": "7b840cc65bdc9f843547e11fad8e4f5e8cc9e17d105b9d015552449ed1c7a278",
+      "log": "/tmp/dx-workbench-v101-r6-evidence/review-final/joint.log",
+      "logSha256": "0eaeb82332026671d69edb5b90b75d1e6e08dc6e168d30703312bd348c4a7686",
       "passed": 10,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "638eec95d1d94509fc103dcb86f51a18b265c92ea874edb98a4d2afd95213112"
+          "sha256": "31640206bcec01c92cf267d422b0e2668ed04cc3cbc525a835cbf14883b10a10"
         }
       ]
     },
     {
       "id": "customer",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r6-evidence/release-97443fab/run.mjs customer",
-      "context": "Node 22.22.2, canonical business-chain config and real low-privilege isolated PostgreSQL. Original commercial cohort, quotation, budget, concurrency and replay checks; verified cleanup.",
-      "startedAt": "2026-11-24T01:31:23.641Z",
-      "endedAt": "2026-11-24T01:31:32.987Z",
-      "testedHead": "190930de278943fb9b2b6952abef494095ab5bc9",
-      "sourceFingerprint": "d94deccbdbb27be45a0575dfce00f54a2cfa6b0abed235b5a149c789bd932aef",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/review-final/run.mjs customer",
+      "context": "Node 22.22.2, canonical business-chain config and real low-privilege isolated PostgreSQL. Original commercial cohort, unenrolled historical budget with a source craft, quotation, budget, concurrency and replay checks; verified cleanup.",
+      "startedAt": "2026-11-24T01:43:38.168Z",
+      "endedAt": "2026-11-24T01:43:45.429Z",
+      "testedHead": "da2600ccb93277dfec381c0deab28711a9455ec1",
+      "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-workbench-v101-r6-evidence/release-97443fab/customer.log",
-      "logSha256": "265415728f54af4c7d3103b24802a34fe690170f13902579d21160421c6dc378",
-      "passed": 16,
+      "log": "/tmp/dx-workbench-v101-r6-evidence/review-final/customer.log",
+      "logSha256": "a0b9e432dc214ddda8e7383c1d5bb1b3276121f41831eaf227234481ea7e347a",
+      "passed": 17,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d2fe8e3d226867f4e1a29d6ebcf0e4a7a215a1a5b85528054789af0a104b6319"
+          "sha256": "487174aaa4e758a4d36997f3ddb22f487dbb0736ecc521900b4354ab6a6c54c8"
         }
       ]
     },
@@ -205,21 +210,21 @@
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/customer-quotation.test.ts tests/unit/quotation-material-unit.test.ts tests/unit/special-craft-steps.test.ts tests/unit/todo-destination-parity.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/business-chain-ui-contract.test.ts",
       "context": "Node 22.22.2 and canonical non-database configuration on the release-aligned local candidate.",
-      "startedAt": "2026-11-24T01:32:49Z",
-      "endedAt": "2026-11-24T01:32:52Z",
-      "testedHead": "190930de278943fb9b2b6952abef494095ab5bc9",
-      "sourceFingerprint": "d94deccbdbb27be45a0575dfce00f54a2cfa6b0abed235b5a149c789bd932aef",
+      "startedAt": "2026-11-24T01:43:37Z",
+      "endedAt": "2026-11-24T01:43:42Z",
+      "testedHead": "da2600ccb93277dfec381c0deab28711a9455ec1",
+      "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-workbench-v101-r6-evidence/release-97443fab/unit.log",
-      "logSha256": "02486e3afa6ffc97a2fefb9385d3eac622a84b254835f25ca0633866901bc2c0",
+      "log": "/tmp/dx-workbench-v101-r6-evidence/review-final/unit.log",
+      "logSha256": "65a04d46b39d0ba1cb1c61887aaf4e62d863cf8243387e0448d5ef1a8843f305",
       "passed": 68,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "897ada08044b5f53b83eb0c820c8e02c4f686a9935c778f2df98140aa14c5c57"
+          "sha256": "f1fd1f0c27a8d2da0a5ac2998dbac32c4a2f8ed5f482e6374f483bfed054f99e"
         }
       ]
     }

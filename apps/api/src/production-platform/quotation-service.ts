@@ -171,7 +171,7 @@ export class DigitalQuotationService{
    const secondaryHistory=c.designerId===actor.actorId&&c.roles.has('sample_designer')&&Boolean(q?.price_sources[row.rowId]?.secondaryCraftDecisionId);
    if(!c.full&&!technical&&!price)return [];
    const basis=assembly?.rows[row.rowId];
-   return [{...row,...(secondaryCraft&&(price||secondaryHistory)&&q?.assembly?{secondaryCraftEntry:true}:{}),...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
+   return [{...row,...(secondaryCraft&&(price||secondaryHistory)?{secondaryCraftEntry:true}:{}),...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
     technicalAssigneeName:a.technicalAssigneeId?names.get(a.technicalAssigneeId)??null:null,priceAssigneeName:a.priceAssigneeId?names.get(a.priceAssigneeId)??null:null,
     canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&!secondaryCraft&&(isRootActor(actor)||price),canEditPricingUnit:version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
   });
