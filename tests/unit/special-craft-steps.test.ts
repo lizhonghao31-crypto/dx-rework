@@ -15,6 +15,8 @@ import {buildOrderTimeWork} from '../../apps/api/src/production-platform/order-t
 import {orderTimeInputFromRoute} from '../../apps/api/src/production-platform/order-time-request-plan.js';
 import {orderTimeStoredBulkSteps,orderTimeBulkSteps} from '../../apps/api/src/production-platform/order-time-route-identities.js';
 import {factoryStepLedger} from '../../apps/api/src/production-platform/factory-step-ledger.js';
+import {secondaryCraftDevelopmentBasis} from '../../apps/api/src/production-platform/secondary-craft-development-basis.js';
+import type {QuotationAssembly} from '@dx-rework/contracts/digital-quotation';
 import type {FixedWorkInputs} from '../../apps/api/src/production-platform/fixed-work-definition.js';
 import type {BatchFact,BatchCheck} from '../../apps/api/src/production-platform/factory-batch-ledger.js';
 const library=(name:string,dev:number,bulk:number):SpecialCraftVersion=>({id:randomUUID(),version:1,recordedAt:'2026-11-13T00:00:00.000Z',definition:{name,enabled:true,development:{minutes:dev,calendar:'continuous',reminder:{enabled:true,percent:70}},bulk:{minutes:bulk,calendar:'continuous',reminder:{enabled:true,percent:70}}}});
@@ -46,6 +48,32 @@ describe('special crafts have distinct native steps rather than another combined
   expect(DevelopmentDocumentSchema.safeParse({...document,files:[{attachmentId,kind:'菲林'}],craftRequirements:[requirement]}).success).toBe(false);
   const nextSteps:CraftStepChoice[]=[{craftKind:'special',sequence:1,specialCraft:{...a,version:a.version+1}},craftSteps[1]!];
   expect(DevelopmentDocumentSchema.safeParse({...document,craftSteps:nextSteps,craftRequirements:[requirement]}).success).toBe(false);
+ });
+ it('binds a secondary-craft approval basis to one development step, board and round',()=>{
+  const board=randomUUID(),otherBoard=randomUUID(),replacement=randomUUID(),sourceId=randomUUID();
+  const document:DevelopmentDocument={...initialDevelopmentDocument(),craft:'特殊工艺',
+   craftSteps:[{craftKind:'special',sequence:1,specialCraft:a},{craftKind:'special',sequence:2,specialCraft:{...b,definition:{...b.definition,name:a.definition.name}}}],
+   files:[{attachmentId:board,kind:'工艺开发板'},{attachmentId:otherBoard,kind:'工艺开发板'}],
+   craftRequirements:[
+    {stepKey:`special:${a.id}:${a.version}`,part:'袖口',specification:'双线',instructions:'',attachmentIds:[board]},
+    {stepKey:`special:${b.id}:${b.version}`,part:'后背',specification:'单线',instructions:'',attachmentIds:[otherBoard]},
+   ],
+  };
+  const row:QuotationAssembly['rows'][string]={kind:'craft',stage:'development',sourceRef:`craft:special:${a.id}`,basis:'unused',
+   craftRef:{libraryId:a.id,libraryVersion:a.version,stepId:randomUUID()}};
+  const snapshot={sourceId,round:1,version:2,document};
+  const original=secondaryCraftDevelopmentBasis(snapshot,row);
+  expect(original).toMatchObject({sourceId,round:1,sourceVersion:2,requirement:{part:'袖口',attachmentIds:[board]}});
+  const changed=structuredClone(document);
+  changed.craftRequirements![1]!.part='下摆';
+  expect(secondaryCraftDevelopmentBasis({...snapshot,version:3,document:changed},row)).toMatchObject({sourceVersion:3,fingerprint:original!.fingerprint});
+  changed.files[0]!.attachmentId=replacement;
+  expect(secondaryCraftDevelopmentBasis({...snapshot,document:changed},row)).toBeNull();
+  changed.craftRequirements![0]!.attachmentIds=[replacement];
+  expect(secondaryCraftDevelopmentBasis({...snapshot,document:changed},row)?.fingerprint).not.toBe(original!.fingerprint);
+  expect(secondaryCraftDevelopmentBasis({...snapshot,round:2},row)?.fingerprint).not.toBe(original!.fingerprint);
+  expect(secondaryCraftDevelopmentBasis(snapshot,{...row,stage:'bulk'})).toBeNull();
+  expect(secondaryCraftDevelopmentBasis(snapshot,{...row,craftRef:{...row.craftRef!,libraryVersion:a.version+1}})).toBeNull();
  });
  it('prints each craft with the selected snapshot requirements and original board links',()=>{
   const originalBoard=randomUUID(),printingBoard=randomUUID(),revisedBoard=randomUUID();
