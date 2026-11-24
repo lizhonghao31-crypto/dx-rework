@@ -172,7 +172,7 @@ export class DigitalProductionNotificationService {
       }
       for(const person of people.filter(actor=>actor.actorRoles.includes('order_merchandiser'))){
         const reminders:Array<{key:string;todoId:string}>=[];
-        await materialInvestmentTodos(client,person,undefined,row=>reminders.push(row));
+        await materialInvestmentTodos(client,person,undefined,row=>reminders.push(row),{database:this.database,transaction:client,scan:true});
         for(const reminder of reminders)await this.notice(client,{...reminder,kind:'material_investment'},[person.actorId]);
       }
       for(const person of people)for(const todo of await bulkWashingTodos(client,person))await this.notice(client,{key:`bulk-washing:${todo.todoId}:${todo.contentToken}`,todoId:todo.todoId,kind:'bulk_washing'},[person.actorId]);
@@ -296,7 +296,7 @@ export class DigitalProductionNotificationService {
     result.push(...await specialCraftQuotationTodos(this.database,actor,projection));
     result.push(...await secondaryCraftApprovalTodos(this.database,actor,projection));
     result.push(...await orderTimeTodos(this.database,actor,projection),...await shortLeadTodos(this.database,actor,projection));
-    result.push(...await materialInvestmentTodos(this.database,actor,projection),...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
+    result.push(...await materialInvestmentTodos(this.database,actor,projection,undefined,{database:this.database}),...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
 
     if(!projection?.todoId)result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor,projection));
     for(const {task,missing} of eligible){
@@ -324,12 +324,13 @@ export class DigitalProductionNotificationService {
   }
   async todoCounts(actor:TrustedActorContext){const rows=await this.todoSelections(actor);return {totalCount:rows.length,pendingCount:rows.length,unreadCount:rows.filter(row=>row.key.contentToken&&row.key.unread===true).length};}
   async todo(actor:TrustedActorContext,id:string){const selected=await this.todoSelections(actor,{todoId:id});return selected[0]?selected[0].load():null;}
-  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
+  private async render(database:Pool|PoolClient,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     if(event.event_kind==='material_investment'){
       if(!event.todo_id)return null;
       const current:{notice?:{key:string;title:string;route:TodoRouteDescriptor}}={};
-      await materialInvestmentTodos(database,actor,{todoId:event.todo_id},row=>{current.notice=row;});
+      await materialInvestmentTodos(database,actor,{todoId:event.todo_id},row=>{current.notice=row;},
+       {database:this.database,...('release' in database?{transaction:database}:{})});
       return current.notice&&event.source_key===current.notice.key?{eventId:event.event_id,title:current.notice.title,actionable:true,
        route:current.notice.route,createdAt:iso(event.created_at)}:null;
     }

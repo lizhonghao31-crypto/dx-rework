@@ -7,7 +7,7 @@ import {SlaOrderService} from '../production-platform/sla-order-service.js';
 import {TodoTimingService} from '../todos/timing-service.js';
 import {DigitalProductionAccessPolicy} from '../production-platform/access-policy.js';
 import {clockConflict,clockHash} from './repository.js';
-import {clockRoots,clockUuid} from './scope.js';
+import {clockMaterialInvestmentRoots,clockRoots,clockUuid} from './scope.js';
 import type {AcceptanceClockRuntime} from './runtime.js';
 
 type Boundary='warning_before'|'warning'|'due_before'|'due'|'due_after';
@@ -121,8 +121,10 @@ export class AcceptanceClockControlService{
    let count=0;
    for(const event of rows){
     let nativeId=event.task_id??event.development_source_id;
-    if(!nativeId&&event.todo_id){const todo=(await db.query('SELECT route_descriptor FROM rework_todos WHERE todo_id=$1',[event.todo_id])).rows[0];nativeId=todo?.route_descriptor?.reworkOrderId??todo?.route_descriptor?.entityId;}
-    if(!clockUuid(nativeId)||!(await clockRoots(db,nativeId)).some(r=>r.scenarioId===id))continue;
+    if(event.event_kind!=='material_investment'&&!nativeId&&event.todo_id){const todo=(await db.query('SELECT route_descriptor FROM rework_todos WHERE todo_id=$1',[event.todo_id])).rows[0];nativeId=todo?.route_descriptor?.reworkOrderId??todo?.route_descriptor?.entityId;}
+    const roots=event.event_kind==='material_investment'?await clockMaterialInvestmentRoots(db,event.todo_id)
+     :clockUuid(nativeId)?await clockRoots(db,nativeId):[];
+    if(!roots.some(root=>root.scenarioId===id)||event.event_kind==='material_investment'&&roots.some(root=>root.scenarioId!==id))continue;
     if(!await this.runtime.isUat(event.recipient_id))throw new Error('Scene notification escaped UAT recipient boundary');
     count+=(await db.query(`INSERT INTO acceptance_sla_clock_receipts(receipt_id,scenario_id,native_kind,native_event_id,recipient_id,business_time,details_json)
      VALUES($1,$2,'digital',$3,$4,$5,$6) ON CONFLICT DO NOTHING`,[randomUUID(),id,event.event_id,event.recipient_id,row.business_now,JSON.stringify({kind:event.event_kind})])).rowCount??0;

@@ -1,311 +1,133 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "90caeca43971aed6803f2e64047fbfa7d0fceef5",
-  "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
+  "base": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
+  "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
   "rules": [
     {
-      "rule": "外发终审批准、驳回与退回时，将原页面真正展示的决定与关键事实绑定到原提交。",
-      "source": "已核《达兴架构治理 PR2 施工单》 §§4–7、9.2 A01–A08、A13–A15，9.3 B01、B05、B07。",
+      "source": "Eric approved Acceptance material clock repair, reproduced on 1bec37d9, work order 2026-11-24 PR A.",
+      "rule": "Recognize the declared source/order only on the readiness read, material record and investment reminder close routes.",
       "writes": [
-        "apps/api/src/sourcing/sourcing-owner-approval-basis.ts",
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/sourcing-service.ts",
-        "packages/contracts/src/sourcing.ts",
-        "apps/api/src/server.ts",
-        "tests/integration/sourcing-routes.test.ts"
+        "apps/api/src/acceptance-clock/hooks.ts",
+        "apps/api/src/acceptance-clock/scope.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/sourcing/sourcing-case-read.ts",
-        "apps/api/src/production-platform/po-factory-date-adapter.ts",
-        "apps/api/src/production-platform/po-customer-date-service.ts",
-        "apps/api/src/access/root-authority.ts"
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/acceptance-clock/runtime.ts",
+        "apps/api/src/acceptance-clock/guard.ts"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts",
-        "tests/integration/sourcing-routes.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
-      ],
-      "initialization": "无迁移或写入新的审批版本。默认详情、历史、列表保原契约。原授权读取可显式取得当前本单的短期视图依据。",
-      "dateAndPermission": "按真实决定对应转厂提议表达日期，仅批量读当前相关 PO 来源。持原锁重查权利、实际所见决定与资料版本，保当前 Root 及普通角色边界。",
-      "expectation": "真实独立老板账户并发仅一份决定，旧拒绝、旧批准、跨单、预算往返、换图、撤权均拒绝；真实 PO 变动和原转厂日期链同时核验。",
-      "checks": [
-        "unit",
-        "core",
-        "native-sourcing",
-        "authority",
-        "query-scope"
-      ]
-    },
-    {
-      "rule": "原审批回执重放只恢复已提交结果。合同后处理和原业务事务保各自实际结果。",
-      "source": "已核施工单 9.2 A09–A12、A14；9.3 B02–B04、B06、B08 及 B04 追加澄清。",
-      "writes": [
-        "tests/helpers/sourcing-owner-approval-fixture.ts",
-        "tests/helpers/acceptance-sourcing-approval-fixture.ts",
-        "tests/helpers/bulk-preparation-fixture.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/integration/member-module-policy-postgres.cases.ts",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/sourcing-page-details-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/sourcing/sourcing-contract-service.ts",
-        "apps/api/src/tools/repositories.ts",
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
-        "apps/api/src/todos/projection-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
         "tests/integration/acceptance-sla-clock-postgres.test.ts",
-        "tests/integration/production-closure-postgres.test.ts"
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts",
-        "tests/integration/acceptance-sla-clock-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "保留一定时限内原格式成功回执。当前失败合同由原人工入口重试。启动仍选择待生成记录并传原文档 ID。",
-      "dateAndPermission": "原合同、裁单、实际 PO 日期、发通知和待办在原事务。成功后只尝试首次批准所准备的精确合同文档，不把历史失败转写成当前文档。",
-      "expectation": "真实签名的两事务等待先后均无错价。实际主合同及下游写入后事务失败全回滚；原成功回执、过期旧格式与回读权限分别验证。",
+      "initialization": "The already guarded Acceptance runtime resolves the native route identity and applies its existing scene lock; no schema, configuration or frozen plan change.",
+      "dateAndPermission": "The existing signed UAT session, mixed-scope rejection and actual role checks still apply. The same time is observed by the UI read and occurrence validation. Untagged ordinary orders and production use wall time.",
+      "expectation": "On an actual adopted B order a simulated later-than-wall occurrence saves for the real follow-up role. An unbound order rejects the same valid-shaped time; another scene is refused and the two supported resource kinds retain original authority.",
       "checks": [
-        "core",
-        "clock",
-        "native-sourcing",
-        "authority"
+        "native-clock",
+        "clock-isolation",
+        "preflight"
       ]
     },
     {
-      "rule": "保持原终审节点与待办、列表进入路径。只将同一详情快照显示为可审批，提交失败与提交后读取失败各保原恢复动作。",
-      "source": "已核施工单 §5、9.2 A07/A09/A11/A15，9.3 B01/B05/B08。",
+      "source": "Eric approved the existing 70-percent, idempotent native reminder and todo lifecycle on the same material basis, work order 2026-11-24 PR A.",
+      "rule": "Use the guarded clock for native material reminder selection, scan receipt, claim, current display and task timing.",
       "writes": [
-        "apps/web/src/sourcing-detail-read.ts",
-        "apps/web/src/sourcing-detail-submission.ts",
-        "apps/web/src/sourcing-order-date-facts.tsx",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
-        "tests/unit/sourcing-pr03-contract.test.ts",
-        "tests/unit/sourcing-transfer-submit-feedback.test.ts",
-        "tests/acceptance/erp-order-layout-browser.mjs",
-        "tests/fixtures/erp-order-layout-sourcing.tsx"
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/acceptance-clock/control-service.ts"
       ],
       "reads": [
-        "apps/web/src/submission-attempt.ts",
-        "apps/web/src/submission-feedback.tsx",
-        "apps/web/src/my-todos-page.tsx",
-        "apps/web/src/sourcing-return-dialog.tsx"
+        "apps/api/src/production-platform/material-investment-reminder.ts",
+        "apps/api/src/production-platform/notification-routes.ts",
+        "apps/api/src/todos/routes.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "oldTests": [
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
-        "tests/unit/sourcing-detail-identity.test.ts",
-        "tests/unit/sourcing-mobile-workspace.test.ts",
-        "tests/unit/sourcing-pr03-contract.test.ts",
-        "tests/unit/sourcing-transfer-submit-feedback.test.ts",
-        "tests/acceptance/erp-order-layout-browser.mjs"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/acceptance-sla-clock-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "沿已有主表、审批动作、退回意见、结果恢复、历史节点同一布局。原客户端读取无额外内容，缺审批依据时仅允许保留原历史或重新读取。",
-      "dateAndPermission": "新视图仅给原可批准角色，提交闭包保存所见版本和原键。确定后失败只重读现订单，绝无自动新审批。",
-      "expectation": "真实页面走三原入口；费用更新后旧退回 409，保留意见；丢失成功回执时同键同体恢复；GET 故障时成功提示可见且只有只读重试。转厂原三种提交结果仍保持原副作用、请求数及恢复方式。",
+      "initialization": "Keep the exact handover entry and event source key. Scanner receipt association now uses the original handover scope and authorized scene instead of expecting a generic rework todo.",
+      "dateAndPermission": "A guarded Pool owns the clock reader; the same transaction serves the notification candidate/open reads when present. Ordinary schedulers exclude clock-bound orders; only an existing signed actor claims a native eligible notice. Existing adopted policy, role eligibility and real receipt audit time are preserved.",
+      "expectation": "The first enabled 70-percent boundary emits exactly one receipt across repeat scans and two sessions. Read and close keep the pending task. Actual completion retains the historical lateness, original cutoff and adopted versions.",
       "checks": [
-        "browser",
-        "unit",
-        "static",
-        "protocol"
+        "native-clock",
+        "clock-isolation",
+        "preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "core",
+      "id": "native-clock",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs core",
-      "context": "Original approval readiness, real independent signed owners, native role revocation, case-row lock waiting in both directions, old native request hashes and three separately verified PDF recovery branches.",
-      "startedAt": "2026-11-24T05:44:45.352Z",
-      "endedAt": "2026-11-24T05:45:00.339Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
+      "command": "node /tmp/dx-acceptance-material-clock-evidence/run.mjs nativeClock",
+      "context": "Isolated native PostgreSQL with the canonical business-chain configuration, dual test URLs, original signed business roles, and native browser rehearsal. The owner approvals, purchase readiness and existing draft order consumers all use the stored original facts.",
+      "startedAt": "2026-11-24T10:29:15.667Z",
+      "endedAt": "2026-11-24T10:30:54.191Z",
+      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
+      "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/core.log",
-      "logSha256": "b4970ce466f7a886e7187e0e29d67b5c713c32540c2eb9225129bd4b9aea0ed1",
-      "passed": 7,
+      "log": "/tmp/dx-acceptance-material-clock-evidence/nativeClock.log",
+      "logSha256": "57402bf17bab80da027b7ee7edbbc929d9685e433bf9c1b1d517d39a54a342a8",
+      "passed": 51,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1883f1eae0da38a20fe3ae35d3688a3a78221a0bf4c75f759d9b029f82b13165"
+          "sha256": "d2c5a61b638063a7c46734cdab3e21f6c438cd40a7bacf390ac708672fca929e"
         }
       ]
     },
     {
-      "id": "clock",
+      "id": "clock-isolation",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs clock",
-      "context": "Canonical Acceptance business-clock suite, native digital PO approvals and a true rollback after persisted downstream writes and receipt. The pre-existing unconditional skipped case is reported as skipped.",
-      "startedAt": "2026-11-24T05:45:00.489Z",
-      "endedAt": "2026-11-24T05:45:39.452Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
+      "command": "node /tmp/dx-acceptance-material-clock-evidence/run.mjs clock",
+      "context": "Isolated guarded Acceptance clock through its own canonical configuration. Real signed HTTP scope and native clock transitions remain covered.",
+      "startedAt": "2026-11-24T10:29:15.664Z",
+      "endedAt": "2026-11-24T10:30:19.973Z",
+      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
+      "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/clock.log",
-      "logSha256": "a6a4ccfcd6832b4cb7bbc996de1c03a6fded8ce5a7f23a89c13bf552bbf6cb8a",
+      "log": "/tmp/dx-acceptance-material-clock-evidence/clock.log",
+      "logSha256": "cb0a5eae73f83b86282dcc02392c4ac645024128391cb89bccb9c6f36a5c597b",
       "passed": 30,
       "failed": 0,
       "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f212dd03e538dcedb337bdc1c75900a15fe0ad61c3af58193f12d6f533446560"
+          "sha256": "2b0763b7d3d24e1deb92db9c0a66ea637894c418ca9ef78a02e055e7cba94fea"
         }
       ]
     },
     {
-      "id": "authority",
-      "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs authority",
-      "context": "Canonical full-business-chain configuration with the existing owner module permission suite selected. Other cases are outside this filtered local run.",
-      "startedAt": "2026-11-24T05:48:50.006Z",
-      "endedAt": "2026-11-24T05:49:03.526Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/authority.log",
-      "logSha256": "70407967f3fee0f1e6367537a8ad0c643c3b68f20806010c54fd072013e0ef4a",
-      "passed": 7,
-      "failed": 0,
-      "skipped": 54,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "178a04eaeaab3a778a8d3fa4e46d70d2bdb3eb5e99f81e929d52ee9e34dcb299"
-        }
-      ]
-    },
-    {
-      "id": "browser",
-      "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs browser",
-      "context": "Production Vite App, signed TEST owner, real pending list, task card and historical URL. Stale return preserves the reason. Real approval loses its first receipt. The same key/body is replayed and a failed subsequent GET is separately retried.",
-      "startedAt": "2026-11-24T05:44:45.344Z",
-      "endedAt": "2026-11-24T05:45:22.480Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/browser.log",
-      "logSha256": "a2873776a1620383fdd72dbe123a0bd25b8efda5530d4e339e1849ab8559a3b0",
-      "passed": 10,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "0cfcd20abd463bd0a8e50675bf2850bbab52f2988d20d097ce67a175e2ed61ed"
-        }
-      ]
-    },
-    {
-      "id": "native-sourcing",
-      "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs nativeSourcing",
-      "context": "Canonical two-worker PostgreSQL configuration for the original sourcing business workflow, detail reads and receipt/closure regression. Includes the original PO dates and same-stage transfer branches.",
-      "startedAt": "2026-11-24T05:48:49.861Z",
-      "endedAt": "2026-11-24T05:51:32.187Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/nativeSourcing.log",
-      "logSha256": "8216d4247d438e068bbb6b61e3f948eea5feab9d9a32e0cf43fbc41ee3fe8d7d",
-      "passed": 167,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "aef6c74ccd6301b02bdbe0d1553b44ea2bdc4f728e0563381b888bdd0965a766"
-        }
-      ]
-    },
-    {
-      "id": "unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json tests/unit/{sourcing-mobile-workspace,sourcing-pr03-contract,sourcing-transfer-submit-feedback,sourcing-detail-identity,full-gate-risk-map,digital-pmc-readonly-access}.test.ts tests/integration/sourcing-routes.test.ts",
-      "context": "Canonical non-database configuration with all three URLs empty; the seven named suites verify original transfer, approval details, mobile contracts and permission boundaries on the combined source.",
-      "startedAt": "2026-11-24T05:44:45.517Z",
-      "endedAt": "2026-11-24T05:44:56.486Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/unit.log",
-      "logSha256": "d5fc4f1fb3eec4a2732a7537877f4bb16aaffeb499011ffe7583cc3c37090ebc",
-      "passed": 233,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "43c15f828bee6c77d82434ca5b9eae3b1594a99c714b148c138e43b8e5f19ea2"
-        }
-      ]
-    },
-    {
-      "id": "protocol",
-      "kind": "tests",
-      "command": "node --test scripts/ci/pr-gate-controller.test.mjs",
-      "context": "Existing repository gate request, receipt and source audit unit tests, no extra remote gate.",
-      "startedAt": "2026-11-24T05:48:49Z",
-      "endedAt": "2026-11-24T05:48:50Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/protocol.log",
-      "logSha256": "96c926d82ed58a3294235c9fe8bbb7458f83d40bb8b7f7f283f7576950503f60",
-      "passed": 39,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "static",
+      "id": "preflight",
       "kind": "command",
-      "command": "npm run typecheck; scoped ESLint; time site inventory check; git diff --check",
-      "context": "Repository Node and npm versions, existing source time-site inventory matches, no migration or new release gates.",
-      "startedAt": "2026-11-24T05:48:49Z",
-      "endedAt": "2026-11-24T05:49:37Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
+      "command": "npm run typecheck; scoped ESLint; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
+      "context": "Repository Node 22 and npm 10. No deployment, database configuration, platform gate or framework change.",
+      "startedAt": "2026-11-24T10:29:15Z",
+      "endedAt": "2026-11-24T10:30:02Z",
+      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
+      "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/static.log",
+      "log": "/tmp/dx-acceptance-material-clock-evidence/static.log",
       "logSha256": "33fd4540a192c4f441f6fd14a7c134d24142f97306ce7c1f7e0b6805fe5a0226"
-    },
-    {
-      "id": "query-scope",
-      "kind": "command",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/query-scope-run.mjs",
-      "context": "Observed the exact driver queries on both native one- and two-PO orders. Default detail executed 17 and opt-in 20 statements in both cases, with zero business writes in GET. Both original approvals succeeded.",
-      "startedAt": "2026-11-24T05:49:03.595Z",
-      "endedAt": "2026-11-24T05:49:11.432Z",
-      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
-      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/query-scope.log",
-      "logSha256": "71d3e86bf9d2065f85203e17e3691aa210349678cd0ec436742338eeec1d12c0"
     }
   ]
 }

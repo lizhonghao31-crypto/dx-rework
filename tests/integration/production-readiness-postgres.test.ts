@@ -34,6 +34,12 @@ import {historicalDigitalOrder} from '../helpers/historical-digital-order-fixtur
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
 import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import Fastify from 'fastify';
+import {AuthService} from '../../apps/api/src/auth/service.js';
+import {PostgresAuthStore} from '../../apps/api/src/auth/postgres-store.js';
+import {AcceptanceDingTalkProvider} from '../../apps/api/src/auth/acceptance-provider.js';
+import {mintAcceptanceControlCode} from '../../apps/api/src/auth/acceptance-control.js';
+import {registerAcceptanceClockRoutes} from '../../apps/api/src/acceptance-clock/routes.js';
+import {registerTodoRoutes} from '../../apps/api/src/todos/routes.js';
 import sharp from 'sharp';
 import {createHash} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
@@ -62,7 +68,7 @@ import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,beijingCalendar
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
-import type {PreparationMaterialKind,PreparationResource} from '@dx-rework/contracts/production-readiness';
+import type {PreparationMaterialKind,PreparationResource,ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('production preparation native lifecycle (TEST_DATABASE_URL isolated only)',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,service:ProductionReadinessService,instruction:ProductionInstructionService,bulk:BulkPreparationService;
@@ -860,10 +866,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
  });
 
- const materialTimerFixture=async()=>{
-  await prepareRewashSettings(f);
-  const patternOrders=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
-  return {f,db:f.db,patternOrders,orderTimeRequests:new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,patternOrders))};
+ const materialTimerFixture=async(fixture=f)=>{
+  await prepareRewashSettings(fixture);
+  const patternOrders=new PatternRoomOrderService(fixture.db,new TodoProjectionService(new TodoService(fixture.db)),{ordersEnabled:true});
+  return {f:fixture,db:fixture.db,patternOrders,orderTimeRequests:new OrderTimeRequestService(fixture.db,orderTimeNativeExecutor(fixture.db,true,patternOrders))};
  };
  it.each([true,false])('keeps the original purchase record and calendar after real formal conversion, preorder=%s',async(preorder)=>{
   const h=await materialTimerFixture();
@@ -956,14 +962,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await materialInvestmentRiskHistory(h.db,orderId,completeAt)).toMatchObject([{at:completeAt,deadline:reminder.dueAt,assessment:'late',overdueSeconds:3600}]);
   });
  });
- const directMaterialOrder=async(poCount=1)=>{
-  const h=await materialTimerFixture();
+ const directMaterialOrder=async(poCount=1,fixture=f,started='2027-04-25T04:00:00.000Z',daysUntilDelivery=5)=>{
+  const h=await materialTimerFixture(fixture);
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,root=h.f.root,style='TEST-DIRECT-MATERIAL-'+randomUUID();
-  const started='2027-04-25T04:00:00.000Z',scene=await h.f.scene(started),requests=h.orderTimeRequests!;
-  const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2027-04-25',
-   requiresColorMatching:false,salesYear:2027,salesSeries:'P03',primaryMerchandiserId:merch.actorId,
+  const scene=await h.f.scene(started),requests=h.orderTimeRequests!,orderDate=beijingCalendarDate(new Date(started));
+  const deliveryDate=beijingCalendarDate(new Date(Date.parse(started)+daysUntilDelivery*86_400_000));
+  const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate,
+   requiresColorMatching:false,salesYear:Number(orderDate.slice(0,4)),salesSeries:'P03',primaryMerchandiserId:merch.actorId,
    lines:Array.from({length:poCount},(_,index)=>({formalPoNo:style+'-PO-'+(index+1),color:index?'白':'黑',
-    customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:2}]}))});
+    customerWarehouseArrivalDate:deliveryDate,sizes:[{size:'M',quantity:2}]}))});
   const operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}};
   const submitted=await h.f.runtime.run(scene,designer,async()=>{
    const check=await requests.check(designer,operation);
@@ -976,6 +983,122 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   return {h,designer,merch,root,style,started,scene,requests,orderId};
  };
+ it('uses the guarded clock on the real material panel, scan, claim and todo through a late B order',async()=>{
+  const fixture=await businessAnchorFixture(url!),app=Fastify({logger:false});
+  try{
+   const future=new Date(Math.max(Date.parse('2027-04-25T04:00:00.000Z'),Date.now()+7*86_400_000)).toISOString();
+   const {h,designer,merch,root,started,scene,orderId,requests}=await directMaterialOrder(1,fixture,future,120);
+   const resource={kind:'order' as const,id:orderId},runtime=h.f.runtime,repo=new OrderTimePlanRepository(h.db);
+   const preparation=new ProductionReadinessService(h.db),instructions=new ProductionInstructionService(h.db,true);
+   const notifications=new DigitalProductionNotificationService(h.db),identity=new DigitalProductionIdentityService(h.db,true);
+   const secret=runtime.secret,corp='anchor-test',authority=new RootAuthority(h.db,corp,'uat-root');
+   const auth=new AuthService(new AcceptanceDingTalkProvider(h.db,corp,secret),new PostgresAuthStore(h.db,corp,'uat-root'),corp,3600000,secret);
+   const authenticate=(token:string|undefined)=>auth.authenticate(token);
+   app.setErrorHandler((error,_request,reply)=>reply.code((error as ApplicationError).statusCode??500).send({error:{message:error.message}}));
+   registerAcceptanceClockRoutes(app,runtime,auth,authority);
+   registerDigitalIdentityRoutes(app,{authenticate,root:authority,service:identity,creationEnabled:true,readinessService:preparation,developmentAttachments:h.f.attachments,notificationService:notifications});
+   registerTodoRoutes(app,{authenticate,root:authority,service:new TodoService(h.db,undefined,undefined,undefined,notifications)});
+   const login=async(role:string)=>{
+    const control=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));
+    const business=await auth.switchAcceptanceIdentity(control,role);
+    return `dx_acceptance_control=${control}; dx_rework_session=${business.token}`;
+   };
+   const rootCookie=await login('root'),firstTab=await login('merchandiser'),secondTab=await login('merchandiser');
+   const get=(url:string,cookie=firstTab)=>app.inject({method:'GET',url,headers:{cookie}});
+   const post=(url:string,cookie:string,payload:object,headers:Record<string,string>={})=>app.inject({method:'POST',url,headers:{cookie,'idempotency-key':randomUUID(),...headers},payload});
+   const check=async<Body,>(result:Awaited<ReturnType<typeof get>>|ReturnType<typeof get>)=>{
+    const response=await result;expect(response.statusCode,response.body).toBe(200);return response.json<Body>();
+   };
+   const fabric=randomUUID(),lining=randomUUID();
+   const handover=async(id:string,at:string)=>{
+    const current=await instructions.read(merch,id);
+    const saved=await instructions.save(merch,id,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,
+     document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',
+      fabrics:[{id:fabric,name:'TEST 主布',part:'本身',colors:{},remarks:''},{id:lining,name:'TEST 配布',part:'里料',colors:{},remarks:''}]}},randomUUID());
+    return preparation.record(root,{kind:'order',id},{kind:'design_handover',scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:at,
+     note:'TEST 原制单按本单交接',quantities:[],evidenceIds:[],sourceDocumentVersion:null,orderInstructionVersion:saved.version,recipientId:merch.actorId},randomUUID());
+   };
+   await runtime.run(scene,root,async()=>{
+    await handover(orderId,started);
+    const operation={kind:'arrangement' as const,resource},proposal=await requests.check(root,operation);
+    expect(proposal.framework?.milestones.find(row=>row.key==='material_investment')).toMatchObject({target:{at:expect.any(String)}});
+    await requests.arrange(root,{resource,fingerprint:proposal.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   });
+   const base=`/digital-production/orders/${orderId}/production-readiness`,initial=await get(base);
+   expect(initial.headers['x-acceptance-clock']).toBe('scenario');
+   const initialState=await check<ProductionReadinessState>(initial),reminder=initialState.materialInvestmentReminder!;
+   expect(reminder).toMatchObject({enabled:true,percent:70,status:'waiting',startedAt:started});
+   const adopted=await repo.current(resource),[plan]=Object.values(adopted?.input.frameworkPlans??{});
+   expect(plan?.input.route).toBe('B');
+   const warningAt=reminder.warningAt!,beforeWarning=new Date(Date.parse(warningAt)-1).toISOString();
+   const partialInput={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'partial' as const,occurredAt:started,
+    note:'TEST 实投主布10米，预计40米',quantities:[{lineId:null,materialId:fabric,name:'TEST 主布',quantity:10,unit:'米'}],
+    evidenceIds:[],sourceDocumentVersion:null,recipientId:null,investmentMaterialId:fabric};
+   expect(Date.parse(started)).toBeGreaterThan(Date.now());
+   const partial=await check<ProductionReadinessState>(post(`${base}/materials`,firstTab,partialInput));
+   const investment=partial.facts.find(fact=>fact.kind==='material_investment')!;
+   expect(investment).toMatchObject({version:1,state:'partial',occurredAt:started,quantities:partialInput.quantities});
+
+   const other=await runtime.create(root,{name:'TEST other preparation scene',requestKey:randomUUID()});
+   const sourceRead=await get(`/digital-production/sources/${other.sourceIds[0]}/production-readiness`,rootCookie);
+   expect(sourceRead.statusCode,sourceRead.body).toBe(200);expect(sourceRead.headers['x-acceptance-clock']).toBe('scenario');
+   expect((await post(`${base}/materials`,firstTab,{...partialInput,expectedVersion:1},{'x-acceptance-scenario':other.scenarioId})).statusCode).toBe(409);
+   const ordinary=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:`TEST-UNBOUND-${randomUUID()}`,
+    orderDate:beijingCalendarDate(businessNow()),requiresColorMatching:false,primaryMerchandiserId:merch.actorId,productionPlanning:{craftSteps:[],preshrink:false},
+    lines:[{formalPoNo:`TEST-UNBOUND-${randomUUID()}`,color:'黑',customerWarehouseArrivalDate:beijingCalendarDate(new Date(Date.parse(future)+30*86_400_000)),sizes:[{size:'M',quantity:40}]}]}),randomUUID());
+   const ordinaryState=await handover(ordinary.productionOrderId,businessNow().toISOString());
+   const ordinaryPath=`/digital-production/orders/${ordinary.productionOrderId}/production-readiness`,ordinaryLine=ordinaryState.lines[0]!.lineId;
+   expect((await get(ordinaryPath)).headers['x-acceptance-clock']).toBeUndefined();
+   const denied=await post(`${ordinaryPath}/materials`,firstTab,{...partialInput,quantities:[{...partialInput.quantities[0]!,lineId:ordinaryLine}]});
+   expect(denied.statusCode,denied.body).toBe(409);expect(denied.body).toContain('实际时间不能在未来');
+   expect((await check<ProductionReadinessState>(get(ordinaryPath))).facts.some(row=>row.kind==='material_investment')).toBe(false);
+
+   const scan=()=>check(post(`/acceptance/clock/scenarios/${scene}/scan`,rootCookie,{requestKey:randomUUID()}));
+   const notices=async()=> (await h.db.query(`SELECT event_id FROM digital_production_notification_events
+    WHERE event_kind='material_investment' AND todo_id=$1`,[reminder.handoverId])).rows.map(row=>row.event_id as string);
+   await h.f.advance(scene,beforeWarning);await scan();expect(await notices()).toEqual([]);
+   await h.f.advance(scene,warningAt);
+   await notifications.runOnce();expect(await notices()).toEqual([]);
+   await Promise.all([scan(),scan()]);
+   const [eventId]=await notices();expect(await notices()).toHaveLength(1);
+   expect((await h.db.query('SELECT business_time,recipient_id FROM acceptance_sla_clock_receipts WHERE scenario_id=$1 AND native_event_id=$2',[scene,eventId])).rows)
+    .toEqual([{business_time:new Date(warningAt),recipient_id:merch.actorId}]);
+   expect((await h.db.query('SELECT count(*)::int n FROM acceptance_sla_clock_receipts WHERE scenario_id=$1 AND native_event_id=$2',[other.scenarioId,eventId])).rows[0].n).toBe(0);
+   expect((await check<ProductionReadinessState>(get(base))).materialInvestmentReminder).toMatchObject({status:'warning',canClose:true});
+   const claim=async(cookie:string)=>check<{notification:{eventId:string;title:string;route:{entityId:string}}|null}>(post('/digital-production/notifications/claim?remaining=1',cookie,{}));
+   const claims=[];
+   for(let batch=0;batch<8;batch++){
+    const pair=await Promise.all([claim(firstTab),claim(secondTab)]);
+    claims.push(...pair);
+    if(pair.every(result=>result.notification===null))break;
+   }
+   expect(claims.filter(row=>row.notification?.eventId===eventId)).toEqual([expect.objectContaining({notification:expect.objectContaining({title:'投面辅料临近截止',route:expect.objectContaining({entityId:orderId})})})]);
+   expect(await check(get(`/digital-production/notifications/${eventId}?remaining=1`,secondTab))).toMatchObject({notification:{eventId}});
+   await check(post(`/digital-production/notifications/${eventId}/acknowledge`,firstTab,{}));
+   const todoUrl=`/todos/mine/${reminder.handoverId}`;
+   const todo=await check<{status:string;contentToken:string;route:object}>(get(todoUrl));
+   expect(todo).toMatchObject({status:'pending',route:{entityId:orderId}});
+   await check(post(`${todoUrl}/read`,secondTab,{contentToken:todo.contentToken,route:todo.route}));
+   expect(await check(get(todoUrl))).toMatchObject({unread:false,status:'pending'});
+   const closed=await check<ProductionReadinessState>(post(`${base}/material-investment-reminder/close`,firstTab,{fingerprint:reminder.fingerprint,reason:'TEST 已联系，继续实际投料'}));
+   expect(closed.materialInvestmentReminder).toMatchObject({status:'warning',closed:{at:warningAt,actorId:merch.actorId}});
+   expect(await check(get(todoUrl))).toMatchObject({status:'pending'});
+
+   const lateAt=new Date(Date.parse(reminder.dueAt)+60_000).toISOString();
+   await h.f.advance(scene,lateAt);await scan();expect(await notices()).toEqual([eventId]);
+   const late=await check<ProductionReadinessState>(get(base));
+   expect(late.materialInvestmentReminder).toMatchObject({status:'overdue',dueAt:reminder.dueAt});
+   expect(late.facts.find(fact=>fact.kind==='material_investment')).toMatchObject({recordId:investment.recordId,state:'partial',occurredAt:started});
+   const fullInput={...partialInput,expectedVersion:1,state:'ready',occurredAt:lateAt,investmentMaterialId:undefined,
+    quantities:[{...partialInput.quantities[0]!,quantity:40},{lineId:null,materialId:lining,name:'TEST 配布',quantity:20,unit:'米'}]};
+   const completed=await check<ProductionReadinessState>(post(`${base}/materials`,firstTab,fullInput));
+   expect(completed.facts.find(fact=>fact.kind==='material_investment')).toMatchObject({recordId:investment.recordId,state:'ready',occurredAt:lateAt});
+   expect(completed.materialInvestmentReminder).toBeUndefined();
+   expect((await get(todoUrl)).statusCode).toBe(404);
+   expect(await repo.current(resource)).toEqual(adopted);
+   expect(await materialInvestmentRiskHistory(h.db,orderId,lateAt)).toMatchObject([{at:lateAt,deadline:reminder.dueAt,assessment:'late',overdueSeconds:60}]);
+  }finally{await app.close();await fixture.dispose();}
+ });
  const attachDirectMaterialOrderSource=async({h,designer,root,style,orderId}:Awaited<ReturnType<typeof directMaterialOrder>>)=>{
    const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
    const owner=(await identity.read(root,orderId)).createdBy===designer.actorId?designer:root;
