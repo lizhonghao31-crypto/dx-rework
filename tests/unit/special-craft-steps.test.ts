@@ -17,6 +17,7 @@ import {orderTimeStoredBulkSteps,orderTimeBulkSteps} from '../../apps/api/src/pr
 import {factoryStepLedger} from '../../apps/api/src/production-platform/factory-step-ledger.js';
 import {secondaryCraftDevelopmentBasis} from '../../apps/api/src/production-platform/secondary-craft-development-basis.js';
 import type {QuotationAssembly} from '@dx-rework/contracts/digital-quotation';
+import {SecondaryCraftDecisionSchema,SecondaryCraftDraftSchema,SecondaryCraftSubmissionSchema} from '../../packages/contracts/src/secondary-craft-quotation.js';
 import type {FixedWorkInputs} from '../../apps/api/src/production-platform/fixed-work-definition.js';
 import type {BatchFact,BatchCheck} from '../../apps/api/src/production-platform/factory-batch-ledger.js';
 const library=(name:string,dev:number,bulk:number):SpecialCraftVersion=>({id:randomUUID(),version:1,recordedAt:'2026-11-13T00:00:00.000Z',definition:{name,enabled:true,development:{minutes:dev,calendar:'continuous',reminder:{enabled:true,percent:70}},bulk:{minutes:bulk,calendar:'continuous',reminder:{enabled:true,percent:70}}}});
@@ -74,6 +75,28 @@ describe('special crafts have distinct native steps rather than another combined
   expect(secondaryCraftDevelopmentBasis({...snapshot,round:2},row)?.fingerprint).not.toBe(original!.fingerprint);
   expect(secondaryCraftDevelopmentBasis(snapshot,{...row,stage:'bulk'})).toBeNull();
   expect(secondaryCraftDevelopmentBasis(snapshot,{...row,craftRef:{...row.craftRef!,libraryVersion:a.version+1}})).toBeNull();
+ });
+ it('keeps a craft draft separate from exact submitted price and approver decisions',()=>{
+  const supplierId=randomUUID();
+  const common={expectedVersion:1,unit:'件',unitPrice:'0.123456',note:'',attachmentIds:[],applicableQuantity:null};
+  const internal={...common,mode:'in_house',supplierId:null};
+  const external={...common,mode:'outsourced',supplierId};
+  const incomplete={...external,expectedVersion:0,supplierId:null,unit:'',unitPrice:''};
+  expect(SecondaryCraftDraftSchema.safeParse(incomplete).success).toBe(true);
+  expect(SecondaryCraftSubmissionSchema.safeParse(incomplete).success).toBe(false);
+  expect(SecondaryCraftSubmissionSchema.safeParse(internal).success).toBe(true);
+  expect(SecondaryCraftSubmissionSchema.safeParse({...internal,supplierId}).success).toBe(false);
+  expect(SecondaryCraftSubmissionSchema.safeParse(external).success).toBe(true);
+  expect(SecondaryCraftSubmissionSchema.safeParse({...external,expectedVersion:0}).success).toBe(true);
+  expect(SecondaryCraftSubmissionSchema.safeParse({...external,supplierId:null}).success).toBe(false);
+  expect(SecondaryCraftSubmissionSchema.safeParse({...external,unitPrice:'0.1234567'}).success).toBe(false);
+  expect(SecondaryCraftSubmissionSchema.safeParse({...external,applicableQuantity:'abc'}).success).toBe(false);
+  expect(SecondaryCraftSubmissionSchema.safeParse({...external,recipientId:randomUUID()}).success).toBe(false);
+  expect(SecondaryCraftDecisionSchema.safeParse({decision:'approved',expectedVersion:1}).success).toBe(true);
+  expect(SecondaryCraftDecisionSchema.safeParse({decision:'approved',expectedVersion:0}).success).toBe(false);
+  expect(SecondaryCraftDecisionSchema.safeParse({decision:'approved',expectedVersion:1,actorId:randomUUID()}).success).toBe(false);
+  expect(SecondaryCraftDecisionSchema.safeParse({decision:'returned',expectedVersion:1,reason:'请核对工艺图'}).success).toBe(true);
+  expect(SecondaryCraftDecisionSchema.safeParse({decision:'returned',expectedVersion:1,reason:''}).success).toBe(false);
  });
  it('prints each craft with the selected snapshot requirements and original board links',()=>{
   const originalBoard=randomUUID(),printingBoard=randomUUID(),revisedBoard=randomUUID();
