@@ -26,3 +26,24 @@ export async function readSecondaryCraftApprover(db:Queryable):Promise<string|nu
 export async function canReadSecondaryCraftApprovalQueue(db:Queryable,actor:TrustedActorContext):Promise<boolean>{
  return !isRootActor(actor)&&actor.actorRoles.includes('owner_group')&&await readSecondaryCraftApprover(db)===actor.actorId;
 }
+
+/** Write callers must keep the membership locks until the quotation transaction commits. */
+export async function lockSecondaryCraftApprover(db:PoolClient):Promise<string|null>{
+ const candidate=await readSecondaryCraftApprover(db);
+ if(!candidate)return null;
+ await db.query("SELECT pg_advisory_xact_lock_shared(hashtext('dx_rework:owner_group_guard'))");
+ // Directory synchronization locks the identity before the account.
+ const identity=await db.query(`SELECT identity.id FROM identity_mappings identity
+  JOIN access_security_policy organization ON organization.policy_key='primary'
+   AND organization.dingtalk_corp_id=identity.corp_id
+  WHERE identity.user_id=$1 AND identity.provider='dingtalk' AND identity.active AND identity.employed
+  FOR SHARE OF identity,organization`,[candidate]);
+ if(identity.rowCount!==1)return null;
+ const eligible=await db.query(`SELECT person.id FROM app_users person
+  JOIN user_role_assignments assignment ON assignment.user_id=person.id
+   AND assignment.role_code='owner_group' AND assignment.revoked_at IS NULL
+  JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled
+  WHERE person.id=$1 AND person.enabled AND NOT person.manual_access_disabled
+  FOR SHARE OF person,assignment,role`,[candidate]);
+ return eligible.rowCount===1&&await readSecondaryCraftApprover(db)===candidate?candidate:null;
+}
