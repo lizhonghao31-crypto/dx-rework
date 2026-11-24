@@ -233,6 +233,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByText("暂无该条件下待核价的外发单。",{exact:true}).waitFor();
    await expect.poll(()=>page.getByRole("textbox",{name:"搜索外发款号或单号",exact:true})
     .evaluate(node=>node===document.activeElement)).toBe(true);
+   const historyResponse=page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return url.pathname.endsWith('/sourcing/cases')&&url.searchParams.get('stage')==='ie_history';
+   });
+   await page.getByRole('combobox',{name:'外发核价范围'}).click();
+   await page.getByRole('option',{name:'已办理记录',exact:true}).click();
+   const listed=await historyResponse;
+   expect(listed.status()).toBe(200);
+   expect(await listed.json()).toMatchObject({totalCount:1,items:[{sourcingCaseId:record.sourcingCaseId,
+    status:'pending_management_decision',ieQuote:{quotedBy:f.people.ie!.actorId}}]});
+   await page.getByRole('link',{name:record.erpOrderNo,exact:true}).click();
+   await page.getByRole('group',{name:'款式明细横向滚动'}).waitFor();
+   expect(await page.getByRole('group',{name:'款式明细横向滚动'}).innerText()).toContain('6.25');
+   expect(await page.getByRole('button',{name:'提交 IE 逐款价格',exact:true}).count()).toBe(0);
+   await page.getByRole('link',{name:'返回 IE 报价与核价中心',exact:true}).click();
+   await expect.poll(()=>page.getByRole('link',{name:record.erpOrderNo,exact:true}).evaluate(node=>node===document.activeElement)).toBe(true);
+   expect(new URL(page.url()).searchParams.get('view')).toBe('history');
   }finally{await context.close();}
  });
  it("reaches the exact original rework queue row as the signed IE and returns to the same filtered queue",async()=>{

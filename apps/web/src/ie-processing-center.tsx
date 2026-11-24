@@ -40,6 +40,7 @@ const sourcingQuery=z.object({
  channel:z.literal('sourcing'),
  search:z.string().trim().max(100).default(''),
  page:z.coerce.number().int().min(1).max(100_000).default(1),
+ view:z.enum(['pending','history']).optional(),
  caseId:z.string().uuid().optional(),
  focus:returnFocus,
 }).strict();
@@ -57,8 +58,9 @@ function reworkHref({channel,queue,page,search,focus}:ReworkQuery){
  if(focus)params.set('focus',focus);
  return urls.pageUrl(`${entryRoute}?${params}`);
 }
-function sourcingHref({channel, page, search, caseId, focus}:SourcingQuery){
+function sourcingHref({channel, page, search, view, caseId, focus}:SourcingQuery){
  const params=new URLSearchParams({channel,page:String(page),search});
+ if(view==='history')params.set('view',view);
  if(caseId)params.set('caseId',caseId);
  if(focus)params.set('focus',focus);
  return urls.pageUrl(`${entryRoute}?${params}`);
@@ -223,13 +225,13 @@ function ReworkDirectory({query}:{query:ReworkQuery}){
 
 function SourcingDirectory({query}:{query:SourcingQuery}){
  const [search,setSearch]=useState(query.search),composing=useRef(false);
- const {page,search:term}=query;
+ const {page,search:term,view}=query,history=view==='history';
  const load=useCallback(async(signal:AbortSignal)=>{
-  const {readPendingIeSourcingCases}=await import('./sourcing-workspace-page.js');
-  const result=await readPendingIeSourcingCases(page,term,signal);
+  const {readIeSourcingCases}=await import('./sourcing-workspace-page.js');
+  const result=await readIeSourcingCases(page,term,history,signal);
   if(result.page!==page)throw Error('读取的外发核价页码有误，请重新读取。');
   return result;
- },[page,term]);
+ },[page,term,history]);
  const read=useForegroundRead('sourcing-ie',sourcingHref(query),load);
  useForegroundWait(read.foregroundKey);
  useDirectoryReturn(read.value!==null,query.focus);
@@ -239,7 +241,7 @@ function SourcingDirectory({query}:{query:SourcingQuery}){
   {key:'erpOrderNo',header:'原业务单号',renderCell:row=><Link id={resultLinkId(row.sourcingCaseId)}
    href={sourcingHref({...query,caseId:row.sourcingCaseId,focus:undefined})}>{row.erpOrderNo}</Link>},
   {key:'version',header:'订单版次',renderCell:row=>`v${row.version}`},
-  {key:'status',header:'当前办理',renderCell:()=> '待 IE 核价'},
+  {key:'status',header:'当前办理',renderCell:row=>row.status==='pending_ie_quote'?'待 IE 核价':row.status==='pending_merchandiser_correction'?'等待跟单修改':'已提交 IE 核价'},
  ];
  return <section aria-label="外发加工核价列表">
   <form id="ie-center-search" onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
@@ -247,10 +249,12 @@ function SourcingDirectory({query}:{query:SourcingQuery}){
    <TextInput label="搜索外发款号或单号" value={search} onChange={setSearch}
     onKeyDown={event=>{if(event.key==='Enter'&&(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229))event.preventDefault();}}/>
    <Button label="搜索" type="submit" isDisabled={search.trim().length>100||search.trim()===term}/>
+   <Selector label="外发核价范围" value={history?'history':'pending'} options={[{value:'pending',label:'待核价'},{value:'history',label:'已办理记录'}]}
+    onChange={value=>{if(value==='history'||value==='pending')change({...query,page:1,view:value});}}/>
   </form>
   {read.error&&<p role="alert">{read.error.message} <Button label="重新读取外发核价" onClick={read.retry}/></p>}
   {read.value?.items.length?<div className="development-table-scroll"><Table columns={columns} data={read.value.items} idKey="sourcingCaseId" density="compact"/></div>:null}
-  {read.value&&!read.value.items.length&&<p>{read.value.totalCount?'本页没有外发核价单，请回到有效页。':'暂无该条件下待核价的外发单。'}</p>}
+  {read.value&&!read.value.items.length&&<p>{read.value.totalCount?'本页没有外发核价单，请回到有效页。':history?'暂无该条件下已办理的外发核价。':'暂无该条件下待核价的外发单。'}</p>}
   {read.value&&<AstryxPageControls page={page} total={read.value.totalCount} pageSize={read.value.pageSize} label="外发核价分页" onPageChange={value=>change({...query,page:value})}/>}
  </section>;
 }

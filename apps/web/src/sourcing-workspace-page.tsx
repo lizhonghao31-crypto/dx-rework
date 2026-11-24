@@ -428,8 +428,9 @@ function SourcingOrderCard({
   </Surface>;
 }
 
-export function readPendingIeSourcingCases(page: number, search: string, signal: AbortSignal) {
-  const query = new URLSearchParams({ page: String(page), q: search, status: 'pending', stage: 'ie' });
+export function readIeSourcingCases(page: number, search: string, history: boolean, signal: AbortSignal) {
+  const query = new URLSearchParams({ page: String(page), q: search, stage: history?'ie_history':'ie' });
+  if (!history) query.set('status','pending');
   return request(`sourcing/cases?${query}`, SourcingCaseListResponseSchema, { signal });
 }
 
@@ -1752,7 +1753,7 @@ function OrderDetailPage({
   if (requestedNode && selectedState === "completed" && !requestedTransferReview) return <SourcingNodeHistoryPage
     sourcingCaseId={sourcingCaseId} node={selectedNode} returnTo={detailReturnPath} />;
 
-  if (item.status === "pending_merchandiser_correction" && new URLSearchParams(window.location.search).get("edit") === "correction"
+  if (!ieCenterBack && item.status === "pending_merchandiser_correction" && new URLSearchParams(window.location.search).get("edit") === "correction"
     && canAct(user,"order_merchandiser","sourcing:inquiry:create") && (user?.isRoot || user?.id===item.createdBy)) {
     return <CreateOrderPage key={`${item.sourcingCaseId}:${item.version}`} user={user} correction={{item,attachments}} />;
   }
@@ -1824,7 +1825,7 @@ function OrderDetailPage({
       </div>
       {!datesValid ? <p role="alert">{SOURCING_DATE_ORDER_ERROR}，请退回跟单纠正后再提交。</p> : null}
       {item.status === "pending_merchandiser_correction" ? <section><p>退回原因：{item.correctionReason}</p>
-        {canAct(user,"order_merchandiser","sourcing:inquiry:create") && (user?.isRoot || user?.id===item.createdBy)
+        {!ieCenterBack && canAct(user,"order_merchandiser","sourcing:inquiry:create") && (user?.isRoot || user?.id===item.createdBy)
           ? <a className="dx-button dx-button--primary" href={`${detailHref(item)}?edit=correction`}>修改订单资料</a> : <p>等待原跟单修改资料</p>}
         <a href={sourcingWorkflowNodeHref(item.sourcingCaseId,"created",detailReturnPath,true)}>查看历次提交资料</a>
       </section> : null}

@@ -1,4 +1,4 @@
-import {readSourcingCase,readSourcingCaseList,type SourcingCaseHistory} from "./sourcing-case-read.js";
+import {readSourcingCase,readSourcingCaseList,sourcingCaseStages,type SourcingCaseHistory,type SourcingCaseStage} from "./sourcing-case-read.js";
 import {toSourcingIso as toIso,SOURCING_LANE_KEY as LANE_KEY} from "./sourcing-case-mapping.js";
 export {canViewSourcingDaxingPrice} from "./sourcing-case-mapping.js";
 import {workflowStateRejection} from "../platform/business-rejection-guidance.js";
@@ -249,7 +249,7 @@ export class SourcingService {
     statusFilter: "all" | "pending" | "closed" = "all",
     page = 1,
     filters: Readonly<{
-      stage?: "all"|"ie"|"management"|"owner"|"finance"|"factory_change"|"exception";
+      stage?: SourcingCaseStage;
       gender?: "all"|"男装"|"女装"|"missing";
       styleName?: string;
       contractReturn?: ContractReturnFilter;
@@ -263,7 +263,7 @@ export class SourcingService {
     const contractReturn = filters.contractReturn ?? null;
     if (normalizedQuery.length > 100) fail("搜索内容不能超过100个字符");
     if (!["all", "pending", "closed"].includes(statusFilter)) fail("订单状态筛选无效");
-    if (!["all","ie","management","owner","finance","factory_change","exception"].includes(stage)) fail("流程状态筛选无效");
+    if (!sourcingCaseStages.includes(stage)) fail("流程状态筛选无效");
     if (!["all","男装","女装","missing"].includes(gender)) fail("性别筛选无效");
     if (normalizedStyleName.length > 100) fail("款式类别不能超过100个字符");
     if (contractReturn !== null && !["all","pending","returned_on_time","overdue_pending","returned_late","all_overdue"].includes(contractReturn)) fail("合同回签状态筛选无效");
