@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-  "sourceFingerprint": "8655a8d5ee9abee445c7c0c4feba787001d73fcd6747c289579f93c057109624",
+  "sourceFingerprint": "8f11a48af49df7494398987e10fff0abca7dcdfac5fede257e40312e8241679f",
   "rules": [
     {
       "source": "Eric approved the cockpit T30 narrow presentation repair with unchanged text, fields, font and areas, work order 2026-11-24 PR B.",
@@ -26,7 +26,7 @@
       ],
       "initialization": "Use the original Astryx-scoped cockpit styles. No schema or navigation data change; the existing narrow PO and flow horizontal scrollers still own their content.",
       "dateAndPermission": "Keep actual, target, scope, sign and font sizes. Only the affected detail cells and date grouping receive narrower wrapping.",
-      "expectation": "Signed native browser with actual two-PO adoption and a lengthened TEST creator verifies 1165, 650 and 360 pixel text bounds, stable full dates and signed values.",
+      "expectation": "Signed native browser with actual two-PO adoption and a lengthened TEST creator verifies 1363, 1165, 681, 650 and 360 pixel text bounds, stable full dates and signed values. Date and delta sizes stay at 12px across the existing 1250px breakpoint.",
       "checks": [
         "native-ui",
         "preflight"
@@ -66,22 +66,22 @@
       "id": "native-ui",
       "kind": "tests",
       "command": "node /tmp/dx-cockpit-return-focus-evidence/run.mjs cockpit",
-      "context": "Canonical two-worker isolated Acceptance PostgreSQL and Chromium, signed original App. Original A/B, dual PO scope, accepted field set, filtered return and the three narrow viewports exercised.",
-      "startedAt": "2026-11-24T10:24:28.485Z",
-      "endedAt": "2026-11-24T10:25:35.969Z",
-      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-      "sourceFingerprint": "8655a8d5ee9abee445c7c0c4feba787001d73fcd6747c289579f93c057109624",
+      "context": "Canonical two-worker isolated Acceptance PostgreSQL and Chromium, signed original App. Original A/B, dual PO scope, accepted field set, filtered return and five different viewport widths exercised, including both sides of the 1250px breakpoint.",
+      "startedAt": "2026-11-24T10:38:42.309Z",
+      "endedAt": "2026-11-24T10:39:33.341Z",
+      "testedHead": "f12d118aae5521f7e861e3a96345d5b8384b0eac",
+      "sourceFingerprint": "8f11a48af49df7494398987e10fff0abca7dcdfac5fede257e40312e8241679f",
       "status": "passed",
       "exitCode": 0,
       "log": "/tmp/dx-cockpit-return-focus-evidence/cockpit-final.log",
-      "logSha256": "6fb214aaf7ae40c942ea568761060a4f6141c4ad014784af8efe9b9efdeda48b",
+      "logSha256": "89bf285c763d0b2d267cf1664b3dcb714b257c6ec06e0887d8076b718144d706",
       "passed": 8,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e876e18ec954c553cb8bbc8915f6816efef27c38d295a7660af1ef0114893005"
+          "sha256": "3742596fad33326fe5e376231aa4ba1331ee6a2460444f8ecffcb8f5cfc08d49"
         }
       ]
     },
@@ -90,10 +90,10 @@
       "kind": "command",
       "command": "npm run typecheck; scoped ESLint; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
       "context": "Repository Node 22 and npm 10. No deployment, database configuration, platform gate or framework change.",
-      "startedAt": "2026-11-24T10:24:28Z",
-      "endedAt": "2026-11-24T10:25:26Z",
-      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-      "sourceFingerprint": "8655a8d5ee9abee445c7c0c4feba787001d73fcd6747c289579f93c057109624",
+      "startedAt": "2026-11-24T10:38:42Z",
+      "endedAt": "2026-11-24T10:39:25Z",
+      "testedHead": "f12d118aae5521f7e861e3a96345d5b8384b0eac",
+      "sourceFingerprint": "8f11a48af49df7494398987e10fff0abca7dcdfac5fede257e40312e8241679f",
       "status": "passed",
       "exitCode": 0,
       "log": "/tmp/dx-cockpit-return-focus-evidence/static.log",

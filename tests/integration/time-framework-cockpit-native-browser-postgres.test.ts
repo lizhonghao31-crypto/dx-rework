@@ -443,7 +443,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('keeps the long creator, both PO identifiers, complete dates and signed differences visible at narrow widths',async()=>{
   await h.f.advance(scene,'2027-02-12T08:00:00.000Z');
-  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?search='+encodeURIComponent(pairedOrder.style));
+  const tab=await h.open(h.f.root.actorId,1363,{},'/ui/digital-cockpit?search='+encodeURIComponent(pairedOrder.style));
   try{
    const page=tab.page,creator='测试长创建人姓名用于验证订单创建与完整年月日布局'.repeat(3);
    await page.route(`**/api/digital-production/journeys/${pairedOrder.id}?*`,async route=>{
@@ -466,8 +466,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const dateValues=await dates.allTextContents(),deltaValues=await deltas.allTextContents();
    expect(dateValues.length).toBeGreaterThan(0);expect(dateValues.every(value=>/^\d{4}-\d{2}-\d{2}$/.test(value))).toBe(true);
    expect(deltaValues.some(value=>/^[+−-].*天/.test(value))).toBe(true);
-   const size=await dates.first().evaluate(element=>getComputedStyle(element).fontSize);
-   for(const width of [1165,650,360]){
+   const fontSizes=async()=>({dates:await dates.evaluateAll(elements=>elements.map(element=>getComputedStyle(element).fontSize)),
+    deltas:await deltas.evaluateAll(elements=>elements.map(element=>getComputedStyle(element).fontSize))});
+   const desktopSizes=await fontSizes();
+   expect([...desktopSizes.dates,...desktopSizes.deltas].every(size=>size==='12px')).toBe(true);
+   for(const width of [1363,1165,681,650,360]){
     await page.setViewportSize({width,height:747});
     const clipped=await detail.evaluate(root=>{
      const groups=[['[data-identity-fact="created"] dd','[data-identity-fact="created"] dd'],['.cockpit-creation-records dd','.cockpit-creation-records dd'],
@@ -479,7 +482,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     });
     expect(clipped,`width=${width}`).toEqual([]);
     expect(await dates.allTextContents()).toEqual(dateValues);expect(await deltas.allTextContents()).toEqual(deltaValues);
-    expect(await dates.first().evaluate(element=>getComputedStyle(element).fontSize)).toBe(size);
+    expect(await fontSizes(),`width=${width}`).toEqual(desktopSizes);
     await page.screenshot({path:join(h.evidence,`creator-two-po-date-delta-${width}.png`),fullPage:true});
    }
   }finally{await tab.close();}
