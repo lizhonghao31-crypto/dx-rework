@@ -193,6 +193,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(savedPrice.rows.find(row=>row.rowId===original.rowId)?.unitPrice).toBe('8');
    expect(await (await ieTab.page.request.get(url(1,prefix,'priced'))).json()).toMatchObject({total:1,items:[{resource,state:'priced'}]});
    await ieTab.page.getByRole('link',{name:'返回报价列表',exact:true}).click();await originalLink.waitFor();
+   await expect.poll(()=>originalLink.evaluate(node=>node===document.activeElement)).toBe(true);
    expect(new URL(ieTab.page.url()).searchParams.get('page')).toBe('2');
    expect(new URL(ieTab.page.url()).searchParams.get('search')).toBe(prefix);
   }finally{await Promise.all([ieTab.context.close(),rootTab.context.close(),designerTab.context.close()]);}

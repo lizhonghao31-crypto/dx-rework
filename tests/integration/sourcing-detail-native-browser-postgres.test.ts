@@ -231,6 +231,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole("link",{name:"返回 IE 报价与核价中心",exact:true}).click();
    expect(new URL(page.url()).searchParams.get("search")).toBe(style);
    await page.getByText("暂无该条件下待核价的外发单。",{exact:true}).waitFor();
+   await expect.poll(()=>page.getByRole("textbox",{name:"搜索外发款号或单号",exact:true})
+    .evaluate(node=>node===document.activeElement)).toBe(true);
   }finally{await context.close();}
  });
  it("reaches the exact original rework queue row as the signed IE and returns to the same filtered queue",async()=>{
@@ -256,6 +258,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(response.status()).toBe(200);
     await page.getByRole("link",{name:"返回 IE 报价与核价中心",exact:true}).click();
     await original.waitFor();
+    await expect.poll(()=>original.evaluate(node=>node===document.activeElement)).toBe(true);
     expect(new URL(page.url()).searchParams.get("search")).toBe(row.rework_no);
     expect(new URL(page.url()).searchParams.get("queue")).toBe("pending_ie_review");
    }finally{await context.close();}
