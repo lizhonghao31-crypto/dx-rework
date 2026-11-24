@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "d8a1a6ee9843e5cb0ab1c45cea9f86a56c1e72c5",
-  "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+  "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
   "rules": [
     {
       "rule": "Read assigned IE product quotation lines from the complete authorized, searched result set.",
@@ -74,7 +74,10 @@
         "apps/web/src/platform-modules.ts",
         "tests/helpers/business-anchor-fixture.ts",
         "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts"
+        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
+        "tests/unit/business-chain-ui-contract.test.ts",
+        "tests/unit/mobile-bottom-navigation.test.ts",
+        "tests/unit/uat-interface-closure.test.ts"
       ],
       "reads": [
         "apps/web/src/internal-navigation.ts",
@@ -87,11 +90,14 @@
         "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
         "tests/integration/sourcing-routes.test.ts",
         "tests/unit/sourcing-list-pagination.test.ts",
-        "tests/unit/sourcing-list-query.test.ts"
+        "tests/unit/sourcing-list-query.test.ts",
+        "tests/unit/business-chain-ui-contract.test.ts",
+        "tests/unit/mobile-bottom-navigation.test.ts",
+        "tests/unit/uat-interface-closure.test.ts"
       ],
       "initialization": "Reuse current sourcing quotes and rework queue facts. Original source-module routes and readers retain their state machines and permissions.",
       "dateAndPermission": "No deadlines, financial calculations or new vendor permissions. Sourcing records are selected before the count and page; ordinary IE history uses the original quote author. Return URLs are same-site and require normal authorization.",
-      "expectation": "Signed native tests submit the original outside quote once, reopen its saved price in history, and return to exact context. The rework link opens the authorized original business row. Native product directory and detail fit 1165px and 390px with separated links and form controls.",
+      "expectation": "Signed native tests submit the original outside quote once, reopen its saved price in history, and return to exact context. The rework link opens the exact original row, and the standard direct URL still opens that row without an IE link or mobile navigation. Existing contract tests keep both original forms in their order-centered transaction shell. Native product views fit 1165px and 390px.",
       "checks": [
         "native-business",
         "nondb",
@@ -107,46 +113,46 @@
     {
       "id": "native-business",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/verify-native.mjs native-business",
+      "command": "node /tmp/dx-workbench-v101-r5-evidence/rework-route-contract/verify-native.mjs native-business",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:34:49.949Z",
-      "endedAt": "2026-11-24T00:35:12.711Z",
-      "testedHead": "331bf5f219957e86a0ee6cc493879e5eac6e970f",
-      "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+      "startedAt": "2026-11-24T00:53:27.359Z",
+      "endedAt": "2026-11-24T00:53:51.597Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
       "context": "Signed Chromium with the canonical two-worker business-chain config and dual marked isolated PostgreSQL databases. Product quotation, sourcing and rework native flows. Cleanup verified.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/native-business.log",
-      "logSha256": "305fc2e6cdc1d7607903c20c5be421dac85f8ebc0b1f40ebb57c5507273a302b",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/native-business.log",
+      "logSha256": "73e89ac554ad68e2378d7c27b3a4bd32a8e541ece48a3f67663b3b53fc8c3830",
       "passed": 3,
       "failed": 0,
       "skipped": 14,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3d42944926a20cc1e13d05a4dc7ce46664d680b2fa851fec0f94c578bcc3975d"
+          "sha256": "b31618229cbc91651fa9f3b0fee169d6b08c1fca331480d0f31ef74800608623"
         }
       ]
     },
     {
       "id": "nondb",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-query.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/integration/sourcing-routes.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-query.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/integration/sourcing-routes.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:34:49Z",
-      "endedAt": "2026-11-24T00:34:57Z",
-      "testedHead": "331bf5f219957e86a0ee6cc493879e5eac6e970f",
-      "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+      "startedAt": "2026-11-24T00:53:27Z",
+      "endedAt": "2026-11-24T00:53:37Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
       "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/nondb.log",
-      "logSha256": "0ae4483cd970ab74273af0b2dac7e93b1e687519aed7766987fa875aee10a90c",
-      "passed": 76,
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/nondb.log",
+      "logSha256": "18a46e89079d5cb8abc933ddf9bcadbc809475c81e6cb4d7cded3261249e13c7",
+      "passed": 99,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "af3cf304a4dd4cfb42222db895abf909351cd4bc7698b224b2c20206f2da97cd"
+          "sha256": "13e3695065b729ba56df62b09ca8756dcfeae0932908adb1e760e55fca721297"
         }
       ]
     },
@@ -156,12 +162,12 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:34:57Z",
-      "endedAt": "2026-11-24T00:35:14Z",
-      "testedHead": "331bf5f219957e86a0ee6cc493879e5eac6e970f",
-      "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+      "startedAt": "2026-11-24T00:53:37Z",
+      "endedAt": "2026-11-24T00:53:53Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
       "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/api-types.log",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/api-types.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -170,12 +176,12 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:35:14Z",
-      "endedAt": "2026-11-24T00:35:36Z",
-      "testedHead": "331bf5f219957e86a0ee6cc493879e5eac6e970f",
-      "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+      "startedAt": "2026-11-24T00:53:53Z",
+      "endedAt": "2026-11-24T00:54:14Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
       "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/web-types.log",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/web-types.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -184,12 +190,12 @@
       "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 for changed TypeScript sources and tests",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:35:36Z",
-      "endedAt": "2026-11-24T00:35:37Z",
-      "testedHead": "331bf5f219957e86a0ee6cc493879e5eac6e970f",
-      "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+      "startedAt": "2026-11-24T00:54:14Z",
+      "endedAt": "2026-11-24T00:54:15Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
       "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/lint.log",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -198,12 +204,12 @@
       "command": "node scripts/acceptance/time-site-inventory.mjs",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:35:37Z",
-      "endedAt": "2026-11-24T00:35:37Z",
-      "testedHead": "331bf5f219957e86a0ee6cc493879e5eac6e970f",
-      "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+      "startedAt": "2026-11-24T00:54:15Z",
+      "endedAt": "2026-11-24T00:54:15Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
       "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/inventory.log",
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/inventory.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
     },
     {
@@ -212,13 +218,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:35:37Z",
-      "endedAt": "2026-11-24T00:35:43Z",
-      "testedHead": "331bf5f219957e86a0ee6cc493879e5eac6e970f",
-      "sourceFingerprint": "2e67ab5b80d3e06c0ef0174440487fdfb715bd89d7813203ba1314d7719568d8",
+      "startedAt": "2026-11-24T00:54:15Z",
+      "endedAt": "2026-11-24T00:54:21Z",
+      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
+      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
       "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/release-d8a1a6ee/preflight.log",
-      "logSha256": "618a9d5e906b60247872157cac0b83fb5f36153184276f94977e477d26ddc335"
+      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/preflight.log",
+      "logSha256": "77c81216e8eb32544451847321aa2ee95418a8ea551e09d53847fb602cec13b5"
     }
   ]
 }
