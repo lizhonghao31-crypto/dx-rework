@@ -1,3 +1,4 @@
+import {decideSeenSourcingOwner} from "./sourcing-owner-approval-fixture.js";
 import {productionReadinessFixture,completeBulkRangeFixture} from './production-readiness-fixture.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {confirmedTechnicalFixture} from './development-technical-fixture.js';
@@ -84,7 +85,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await service.quoteIePrice(actors.ie,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
  if(mode==='none'){await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);if(newRule){order=await identity.read(primary,id);const basis=await productionReadinessFixture(db,actors.root,id,worker.actorId,warehouse);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version,expectedReadinessRevision:basis.revision},randomUUID());}expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_pattern')).toBe(true);}
  if(mode==='none'&&!positivePreparation){
-  await service.decideOwner(actors.owner,caseId,{decision:'rejected'},randomUUID());
+  await decideSeenSourcingOwner(service,actors.owner,caseId,{decision:'rejected'},randomUUID());
   const rejected=await new DigitalJourneyQuery(db).read(actors.root,id),owner=rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_owner');
   expect(owner).toMatchObject({state:'blocked',actualAt:null,completionResult:null,risks:['blocked']});
   expect(owner?.records[0]?.url).toContain('node=owner');expect((await bulk.read(primary,id)).ownerApproved).toBe(false);
@@ -93,7 +94,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   expect(director?.records[0]?.url).toContain('node=management');
   await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,decisionReason:'TEST按原拒绝意见重新确认',cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
  }
- await service.decideOwner(actors.owner,caseId,{decision:'approved'},randomUUID());
+ await decideSeenSourcingOwner(service,actors.owner,caseId,{decision:'approved'},randomUUID());
  if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);if(newRule){order=await identity.read(primary,id);const basis=await productionReadinessFixture(db,actors.root,id,worker.actorId,warehouse);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version,expectedReadinessRevision:basis.revision},randomUUID());}}
  let sheet=await bulk.read(primary,id);
  expect(sheet.preshrink).toBe(mode==='none'?'无需预缩':'需要预缩');

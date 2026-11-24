@@ -37,6 +37,12 @@ window.fetch=async(input,init)=>{const path=String(input),method=init?.method??"
 if(method!=="GET")return Response.json({error:{message:"隔离场景，未提交业务数据"}},{status:403});
 if(path.endsWith("auth/me"))return Response.json({status:"authorized",user});
 if(path.includes("/history/owner"))return Response.json({item:{...item,status:"pending_finance_reconciliation",ownerDecision:{sourcingOwnerDecisionId:id(5),sourcingDecisionId:id(3),decision:"approved",decisionReason:"合成原批准事实",decidedBy:id(1),decidedAt:now}},node:"owner",entry,versions:[entry],relatedEntries:[],attachments,notices:[],contractReference:null});
+if(path.includes("/detail-sections"))return Response.json({sourcingCaseId:item.sourcingCaseId,version:item.version,
+  attachments:{items:attachments},timeline:{items:[]},factoryChange:{item:null},
+  ...(path.endsWith("?ownerReview=1")?{ownerReview:!finance&&params.get("role")!=="readonly"
+    ?{item,basis:{expectedDecisionId:item.decision!.sourcingDecisionId,expectedDecisionVersion:item.decision!.decisionVersion,
+      expectedVersion:item.version,expectedApprovalBasis:"a".repeat(64)},proposal:null}:null}:{}),
+});
 if(path.endsWith("/attachments"))return Response.json({items:attachments});
 if(path.endsWith("/timeline")||path.endsWith("/factories")||path.endsWith("/factory-settlements"))return Response.json({items:[]});
 if(path.endsWith("/dispatch"))return Response.json({item:null,canDispatch:false});

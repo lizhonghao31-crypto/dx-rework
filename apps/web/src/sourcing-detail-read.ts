@@ -2,9 +2,9 @@ import {useCallback,useEffect,useRef,useState} from "react";
 import {useForegroundWait} from "./foreground-loading.js";
 import {SubmissionRequestError} from "./submission-validation.js";
 import {
-  SourcingCaseSummarySchema,SourcingDetailSectionsSchema,SourcingContractStateResponseSchema,
+  SourcingCaseSummarySchema,SourcingDetailSectionsSchema,SourcingOwnerDetailSectionsSchema,SourcingContractStateResponseSchema,
   SourcingAttachmentListResponseSchema,SourcingTimelineResponseSchema,SourcingFactoryChangeStateResponseSchema,
-  type SourcingCaseSummary,type SourcingAttachment,type SourcingContractDocument,
+  type SourcingCaseSummary,type SourcingAttachment,type SourcingContractDocument,type SourcingOwnerReview,
   SourcingDispatchStateSchema,SourcingContractReturnResponseSchema,
 } from "@dx-rework/contracts";
 
@@ -24,7 +24,9 @@ const sameApprovedRevision=(left:SourcingCaseSummary,right:SourcingCaseSummary)=
   left.sourcingCaseId===right.sourcingCaseId&&left.version===right.version&&
   left.approvalSnapshot?.sourcingApprovalSnapshotId===right.approvalSnapshot?.sourcingApprovalSnapshotId;
 
-export async function readSourcingDetail(request:SourcingDetailRequest,caseId:string,signal:AbortSignal,observer?:DetailObserver,nativeRecords=false){
+const compatibleOwnerSections=SourcingOwnerDetailSectionsSchema.partial({ownerReview:true});
+
+export async function readSourcingDetail(request:SourcingDetailRequest,caseId:string,signal:AbortSignal,observer?:DetailObserver,nativeRecords=false,includeOwnerReview=false){
   const path=`sourcing/cases/${caseId}`,init={signal};
   const read=<T>(url:string,schema:{parse(value:unknown):T})=>request(url,schema,init).catch((error:unknown)=>{
     if(isReadDenial(error))observer?.denied?.(error);
@@ -35,7 +37,12 @@ export async function readSourcingDetail(request:SourcingDetailRequest,caseId:st
     observer?.item?.(item);
     return item;
   });
+  const grouped=()=>includeOwnerReview
+    ? read(path+"/detail-sections?ownerReview=1",compatibleOwnerSections)
+    : read(path+"/detail-sections",SourcingDetailSectionsSchema).then(value=>({...value,ownerReview:null}));
   const recordsRead=nativeRecords?summary.then(async item=>{
+    // Only the grouped snapshot can provide a pending approval action.
+    if(includeOwnerReview&&item.status==="pending_owner_approval")return grouped();
     // The ordinary grouped read stays the fast path. On explicit retry,
     // use the established authorized endpoints and verify the order again.
     const [attachments,timeline,factoryChange]=await Promise.all([
@@ -46,10 +53,14 @@ export async function readSourcingDetail(request:SourcingDetailRequest,caseId:st
     const current=await read(path,SourcingCaseSummarySchema);
     if(current.sourcingCaseId!==item.sourcingCaseId||current.version!==item.version)
       throw new SourcingDetailRevisionError("本单已更新，请重新读取原订单资料");
-    return {sourcingCaseId:caseId,version:item.version,attachments,timeline,factoryChange};
-  }):read(path+"/detail-sections",SourcingDetailSectionsSchema);
+    return {sourcingCaseId:caseId,version:item.version,attachments,timeline,factoryChange,ownerReview:null};
+  }):grouped();
   const sections=Promise.all([summary,recordsRead]).then(([item,value])=>{
-    if(value.sourcingCaseId!==caseId||value.version!==item.version)throw new SourcingDetailRevisionError("本单已更新，请重新读取原订单资料");
+    const viewed=value.ownerReview?.item;
+    if(value.sourcingCaseId!==caseId||value.version!==item.version||viewed&&(
+      viewed.sourcingCaseId!==caseId||viewed.status!==item.status||viewed.version!==item.version
+      ||viewed.decision?.sourcingDecisionId!==item.decision?.sourcingDecisionId||viewed.decision?.decisionVersion!==item.decision?.decisionVersion))
+      throw new SourcingDetailRevisionError("本单已更新，请重新读取原订单资料");
     observer?.sections?.({attachments:value.attachments.items});
     return value;
   }).catch((error:unknown)=>{
@@ -71,14 +82,15 @@ export async function readSourcingDetail(request:SourcingDetailRequest,caseId:st
   void supporting.catch(()=>undefined);
   const item=await summary;
   const [records,contractReads,dispatchState]=await supporting;
-  return {item,attachments:records.attachments.items,timeline:records.timeline.items,factoryChange:records.factoryChange.item,
+  const ownerReview:SourcingOwnerReview|null=records.ownerReview??null;
+  return {item:ownerReview?.item??item,ownerReview,attachments:records.attachments.items,timeline:records.timeline.items,factoryChange:records.factoryChange.item,
     factoryRemainingLines:records.factoryChange.remainingLines,...contractReads,dispatchState};
 }
 export type SourcingDetailSnapshot=Awaited<ReturnType<typeof readSourcingDetail>>;
 
 /** One entity lifetime owns writes; a separate monotonic read generation owns
  * GET results. Refreshing or changing chapters never cancels a business write. */
-export function useSourcingDetailRead(caseId:string,request:SourcingDetailRequest,enabled=true){
+export function useSourcingDetailRead(caseId:string,request:SourcingDetailRequest,enabled=true,includeOwnerReview=false){
   const owner=useRef({caseId,epoch:0,live:false}),sequence=useRef(0),controller=useRef<AbortController|null>(null);
   const [state,setState]=useState<{caseId:string;snapshot:SourcingDetailSnapshot|null;overview:SourcingCaseSummary|null;readOnly:ReadOnlySections;loading:boolean;waitingFor:number|null;error:string;recordsFailed:boolean}>({caseId,snapshot:null,overview:null,readOnly:{},loading:enabled,waitingFor:null,error:"",recordsFailed:false});
   const retryingRecords=useRef(false);
@@ -122,7 +134,7 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
           accessLost=true;
           setState(previous=>accepts()?{...previous,snapshot:null,overview:null,readOnly:{},loading:false,waitingFor:null,error:error.message,recordsFailed:false}:previous);
         },
-      },nativeRecords);
+      },nativeRecords,includeOwnerReview);
       if(!accepts()||current.signal.aborted)return null;
       setState(previous=>accepts()?{caseId,snapshot,overview:snapshot.item,readOnly:{},loading:false,waitingFor:null,error:"",recordsFailed:false}:previous);return snapshot;
     }catch(error){
@@ -139,7 +151,7 @@ export function useSourcingDetailRead(caseId:string,request:SourcingDetailReques
       if(controller.current===current)controller.current=null;
       if(accepts())setState(previous=>accepts()&&previous.loading?{...previous,loading:false,waitingFor:null}:previous);
     }
-  },[caseId,request,capture,owns]);
+  },[caseId,request,capture,owns,includeOwnerReview]);
   const reload=useCallback(()=>readAttempt(false),[readAttempt]);
   const reloadForeground=useCallback(()=>readAttempt(false,true),[readAttempt]);
   const retryRecords=useCallback(async()=>{

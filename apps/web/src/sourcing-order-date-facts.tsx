@@ -7,7 +7,9 @@ function DateValue({ value }: { value: string }) {
 }
 
 /** Each date keeps its existing meaning and snapshot source; no current data fills historical gaps. */
-export function SourcingOrderDateFacts({ item, historical = false }: { item: Pick<SourcingCaseSummary, "lineItems" | "deliveryDate">; historical?: boolean }) {
+export function SourcingOrderDateFacts({item,historical=false,approvalProposedDate}:{
+  item:Pick<SourcingCaseSummary,"lineItems"|"deliveryDate">;historical?:boolean;approvalProposedDate?:string|null;
+}) {
   const hasPoDates = item.lineItems.length > 0 && item.lineItems.every(line => Boolean(line.lineId));
   const customerDates = item.lineItems.map(line => line.customerWarehouseArrivalDate);
   const providedHistory = customerDates.filter((date): date is string | null => date !== undefined);
@@ -20,6 +22,7 @@ export function SourcingOrderDateFacts({ item, historical = false }: { item: Pic
   return <>
     <div className="sourcing-key-facts__date"><dt>PO / {customerPoDateLabel}</dt><dd><DateValue value={customer} /></dd></div>
     <div className="sourcing-key-facts__date"><dt>{hasPoDates ? "加工厂交货日" : "要求交货日期"}</dt><dd><DateValue value={factory} />
+      {approvalProposedDate?<small>审批提议：<DateValue value={approvalProposedDate} /></small>:null}
       {historical && hasPoDates && item.deliveryDate && !item.lineItems.every(line => line.factoryDeliveryDate === item.deliveryDate)
         ? <small>当时要求交货：<DateValue value={item.deliveryDate} /></small> : null}
     </dd></div>

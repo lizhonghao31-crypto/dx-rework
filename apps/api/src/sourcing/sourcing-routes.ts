@@ -298,8 +298,11 @@ export function registerSourcingRoutes(
     ),
   );
 
-  app.get<{Params:{sourcingCaseId:string}}>('/sourcing/cases/:sourcingCaseId/detail-sections',async request =>
-    dependencies.service.readDetailSections(await readActor(request),caseId(request.params.sourcingCaseId)));
+  app.get<{Params:{sourcingCaseId:string};Querystring:{ownerReview?:string}}>('/sourcing/cases/:sourcingCaseId/detail-sections',async request => {
+    const actor=await readActor(request),id=caseId(request.params.sourcingCaseId);
+    return request.query.ownerReview==="1"
+      ?dependencies.service.readDetailSections(actor,id,true):dependencies.service.readDetailSections(actor,id);
+  });
 
   app.delete<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId",

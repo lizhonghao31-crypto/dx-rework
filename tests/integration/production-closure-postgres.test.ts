@@ -1,3 +1,4 @@
+import {decideSeenSourcingOwner} from "../helpers/sourcing-owner-approval-fixture.js";
 import {vi as correctnessBudget} from 'vitest';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
@@ -102,7 +103,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const id=created.value.sourcingCaseId,prices=[{position:1,unitPrice:"8.0000"},{position:2,unitPrice:"9.0000"}];
   await sourcing.quoteIePrice(actor(user,["ie_reviewer"],["sourcing:price:quote","sourcing:view"]),id,{linePrices:prices},randomUUID());
   await sourcing.recordManagementDecision(actor(user,["production_management"],["sourcing:decision:record","sourcing:view"]),id,{supplierId,linePrices:prices,craftIds:[craftId]},randomUUID());
-  await sourcing.decideOwner(boss(),id,{decision:"approved"},randomUUID());
+  await decideSeenSourcingOwner(sourcing,boss(),id,{decision:"approved"},randomUUID());
   const cuttingOrders=await database.query<{cutting_order_id:string;quantity:number}>(
     `SELECT cutting.cutting_order_id,snapshot_line.quantity
      FROM cutting_orders cutting

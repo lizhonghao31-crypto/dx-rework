@@ -1,3 +1,4 @@
+import {decideSeenSourcingOwner,readSeenSourcingOwnerReview,seenSourcingOwnerDecision} from "../helpers/sourcing-owner-approval-fixture.js";
 import {vi as correctnessBudget} from 'vitest';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 // Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
@@ -128,9 +129,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   const contractService = new SourcingContractService(database, attachments);
   const contractReturns = new SourcingContractReturnService(database);
-  const service = new SourcingService(
-    database,undefined,undefined,todoProjection,contractService,
-  );
   const cutting = new CuttingSourceService(database);
   const receiving = new ReceivingService(database,undefined,undefined,undefined,{allowLegacyStyleInput:true});
   const production = new SourcingProductionService(database);
@@ -151,6 +149,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const disabledFactoryId = randomUUID();
   const incompleteFactoryId = randomUUID();
   const evidenceId = randomUUID();
+  const sourcingRoot=new RootAuthority(database,"corp",`ding-${merchandiserId}`);
+  const service=new SourcingService(database,undefined,undefined,todoProjection,contractService,undefined,sourcingRoot);
   let returnTodoRecipientConfigured = false;
   const ensureReturnTodoRecipient = async () => {
     if (returnTodoRecipientConfigured) return;
@@ -401,6 +401,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       `);
     }
 
+      await ensureReturnTodoRecipient();
       stageStatus='completed';
     }finally {process.stdout.write(JSON.stringify({suite:'sourcing-pr03-postgres',phase:'fixture_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
 });
@@ -484,7 +485,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         },
         randomUUID(),
       );
-      await service.decideOwner(
+      await decideSeenSourcingOwner(service,
         ownerActor(),
         created.value.sourcingCaseId,
         { decision: "approved" },
@@ -605,7 +606,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         },
         randomUUID(),
       );
-      await service.decideOwner(
+      await decideSeenSourcingOwner(service,
         ownerActor(), created.value.sourcingCaseId,
         { decision: "approved" },
         randomUUID(),
@@ -897,7 +898,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.listCases(readerActor(), "整烫")).items).toHaveLength(1);
     expect(firstDecision.value.processes).toEqual(["净色车缝", "整烫", "按样衣复核"]);
 
-    const rejected = await service.decideOwner(
+    const rejected = await decideSeenSourcingOwner(service,
       ownerActor(),
       created.value.sourcingCaseId,
       { decision: "rejected" },
@@ -941,18 +942,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     });
 
     const approvalKey = randomUUID();
-    const approved = await service.decideOwner(
-      ownerActor(),
-      created.value.sourcingCaseId,
-      { decision: "approved" },
-      approvalKey,
-    );
-    const approvalReplay = await service.decideOwner(
-      ownerActor(),
-      created.value.sourcingCaseId,
-      { decision: "approved" },
-      approvalKey,
-    );
+    const approvalInput=await seenSourcingOwnerDecision(service,ownerActor(),created.value.sourcingCaseId,{decision:"approved"});
+    const approved=await service.decideOwner(ownerActor(),created.value.sourcingCaseId,approvalInput,approvalKey);
+    const approvalReplay=await service.decideOwner(ownerActor(),created.value.sourcingCaseId,approvalInput,approvalKey);
     expect(approvalReplay.reused).toBe(true);
     expect(approved.value).toMatchObject({
       status: "pending_finance_reconciliation",
@@ -1266,11 +1258,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(service.decideOwner(
       ownerActor(),
       created.value.sourcingCaseId,
-      { decision: "approved" },
+      approvalInput,
       randomUUID(),
     )).rejects.toMatchObject({
-      code: "INVALID_STATE_TRANSITION",
-      statusCode: 409,
+      code:"CONFLICT",statusCode:409,message:"审批内容已更新，请刷新后重新核对",
     });
 
     expect(todoProjection.actionableForAllAssignedRole.mock.calls.map((call) => call[2].category))
@@ -1373,6 +1364,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     });
 
     const managementLowCaseId = await openAtFirstDecision("MANAGEMENT-LOW");
+    const originalOwnerView=await readSeenSourcingOwnerReview(service,ownerActor(),managementLowCaseId);
     const managementLow = await service.requestFactoryChange(
       managerActor(),
       managementLowCaseId,
@@ -1380,6 +1372,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supplierId: replacementFactoryId,
         unitPrice: "9.5000",
         changeReason: "生产管理发起低价转厂",
+        deliveryDate:"2026-10-22",
       },
       randomUUID(),
     );
@@ -1405,7 +1398,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "SELECT 1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1",
       [managementLowCaseId],
     )).rowCount).toBe(3);
-    const managementLowOwnerApproved = await service.decideOwner(
+    const review=await readSeenSourcingOwnerReview(service,ownerActor(),managementLowCaseId);
+    expect(review.basis.expectedVersion).toBe(originalOwnerView.basis.expectedVersion);
+    expect(review.basis.expectedDecisionId).not.toBe(originalOwnerView.basis.expectedDecisionId);
+    expect(review.basis.expectedDecisionVersion).toBe(originalOwnerView.basis.expectedDecisionVersion+1);
+    expect(review.proposal).toMatchObject({factoryChangeRequestId:expect.any(String),deliveryDate:"2026-10-22"});
+    const unchanged=await cycleSnapshot(managementLowCaseId);
+    for(const decision of ["approved","rejected"] as const)
+      await expect(service.decideOwner(ownerActor(),managementLowCaseId,{decision,...originalOwnerView.basis},randomUUID())).rejects.toMatchObject({code:"CONFLICT",message:"审批内容已更新，请刷新后重新核对"});
+    expect(await cycleSnapshot(managementLowCaseId)).toEqual(unchanged);
+    const managementLowOwnerApproved = await decideSeenSourcingOwner(service,
       ownerActor(),
       managementLowCaseId,
       { decision: "approved", decisionReason: "确认低价转厂后的最新选厂版本" },
@@ -1422,6 +1424,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       ownerDecision: {
         decision: "approved",
       },
+      approvalSnapshot:{deliveryDate:"2026-10-22"},
     });
 
     const managementHighCaseId = await openAtFirstDecision("MANAGEMENT-HIGH");
@@ -1453,7 +1456,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       status: "pending_owner",
     });
     todoProjection.actionableForAllAssignedRole.mockClear();
-    const managementHighInitialApproved = await service.decideOwner(
+    const managementHighInitialApproved = await decideSeenSourcingOwner(service,
       ownerActor(),
       managementHighCaseId,
       { decision: "approved", decisionReason: "先确认原始选厂决定" },
@@ -1492,7 +1495,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     )).toBe(true);
 
     const resumeCaseId = await openAtFirstDecision("FINANCE-RESUME");
-    await service.decideOwner(
+    await decideSeenSourcingOwner(service,
       ownerActor(),
       resumeCaseId,
       { decision: "approved" },
@@ -1535,7 +1538,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
 
     const legacyCaseId = await openAtFirstDecision("LEGACY-RESUME");
-    await service.decideOwner(
+    await decideSeenSourcingOwner(service,
       ownerActor(),
       legacyCaseId,
       { decision: "approved" },
@@ -1664,7 +1667,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     });
 
     const exceptionCaseId = await openAtFirstDecision("EXCEPTION-TRANSFER");
-    await service.decideOwner(
+    await decideSeenSourcingOwner(service,
       ownerActor(),
       exceptionCaseId,
       { decision: "approved" },
@@ -1879,9 +1882,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       ],
     });
 
+    const seen=await seenSourcingOwnerDecision(service,ownerActor(),created.value.sourcingCaseId,{decision:"approved"});
     const approvals = await Promise.allSettled([
-      service.decideOwner(ownerActor(), created.value.sourcingCaseId, { decision: "approved" }, randomUUID()),
-      service.decideOwner(ownerActor(), created.value.sourcingCaseId, { decision: "approved" }, randomUUID()),
+      service.decideOwner(ownerActor(), created.value.sourcingCaseId,seen,randomUUID()),
+      service.decideOwner(ownerActor(), created.value.sourcingCaseId,seen,randomUUID()),
     ]);
     expect(approvals.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(approvals.filter((result) => result.status === "rejected")).toHaveLength(1);
@@ -2116,7 +2120,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         craftIds: [craftId("净色车缝"), craftId("整烫"), craftId("按样衣复核")],
       supplierId: missingSupplierId,unitPrice: "8.0000",
     }, randomUUID());
-    await expect(service.decideOwner(ownerActor(), created.value.sourcingCaseId, {
+    await expect(decideSeenSourcingOwner(service,ownerActor(), created.value.sourcingCaseId, {
       decision: "approved",
     }, randomUUID())).resolves.toMatchObject({
       value: { status: "pending_finance_reconciliation" },
@@ -2196,7 +2200,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.quoteIePrice(ieActor(), id, { linePrices: prices }, randomUUID());
     await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId,
       craftIds: [craftId("净色车缝"), craftId("整烫")], linePrices: prices }, randomUUID());
-    await service.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(), id, { decision: "approved" }, randomUUID());
     const contract = (await contractService.getCurrent(readerActor(), id)).item!;
     expect(contract.status).toBe("ready");
     expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
@@ -2306,7 +2310,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id = created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(), id, { unitPrice: "8.0000" }, randomUUID());
     await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId, unitPrice: "8.0000", craftIds: [craftId("净色车缝")] }, randomUUID());
-    await service.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(), id, { decision: "approved" }, randomUUID());
     const contract = (await contractService.getCurrent(readerActor(), id)).item!;
     await service.recordFinanceReconciliation(financeActor(), id, { result: "difference", differenceFields: ["quantity"], differenceReason: "对账时记录差异，不是派单审批" }, randomUUID());
     await expect(production.dispatch({ ...rootActor(), actorRoles: ["root_superuser"] }, id, {
@@ -2320,7 +2324,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const caseId=source.sourcingCaseId;
     await service.quoteIePrice(ieActor(),caseId,{unitPrice:'8'},randomUUID());
     await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,unitPrice:'8',craftIds:[craftId('净色车缝')]},randomUUID());
-    await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),caseId,{decision:'approved'},randomUUID());
     const contract=(await contractService.getCurrent(rootActor(),caseId)).item!;
     const order=(await production.dispatch(rootActor(),caseId,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
     const reporting=new ProductionReportingService(database);
@@ -2386,7 +2390,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'8'},{position:2,unitPrice:'9'}];
     await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,linePrices:prices,craftIds:[craftId('净色车缝')]},randomUUID());
-    const approved=await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID()),oldDecisionId=approved.value.decision!.sourcingDecisionId;
+    const approved=await decideSeenSourcingOwner(service,ownerActor(),caseId,{decision:'approved'},randomUUID()),oldDecisionId=approved.value.decision!.sourcingDecisionId;
     const contract=(await contractService.getCurrent(readerActor(),caseId)).item!,oldPdf=(await database.query('SELECT * FROM attachments WHERE attachment_id=$1',[contract.pdfAttachmentId])).rows[0];
     const order=(await production.dispatch(rootActor(),caseId,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value,id=order.productionOrderId;
     const originalProduction=(await database.query('SELECT * FROM sourcing_production_orders WHERE production_order_id=$1',[id])).rows[0];
@@ -2494,7 +2498,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("omits fully reported styles from incoming contracts and preserves each allocation through successive factory changes",async()=>{
     const reporting=new ProductionReportingService(database),businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),serial=randomUUID().slice(0,8);
     const source=(await service.createCase(merchandiserActor(),{gender:'女装',styleName:'TEST连续分款转厂',estimatedCutPieceSendDate:businessDate,deliveryDate:businessDate,lineItems:[{styleNo:`TEST-ZERO-${serial}-A`,color:'蓝',quantity:20},{styleNo:`TEST-ZERO-${serial}-B`,color:'白',quantity:10}],daxingUnitPrice:'8'},randomUUID())).value;
-    const caseId=source.sourcingCaseId,prices=[{position:1,unitPrice:'8'},{position:2,unitPrice:'9'}];await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,linePrices:prices,craftIds:[craftId('净色车缝')]},randomUUID());await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID());
+    const caseId=source.sourcingCaseId,prices=[{position:1,unitPrice:'8'},{position:2,unitPrice:'9'}];await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,linePrices:prices,craftIds:[craftId('净色车缝')]},randomUUID());await decideSeenSourcingOwner(service,ownerActor(),caseId,{decision:'approved'},randomUUID());
     const document=(await contractService.getCurrent(rootActor(),caseId)).item!,order=(await production.dispatch(rootActor(),caseId,{sourcingContractDocumentId:document.sourcingContractDocumentId,confirmed:true},randomUUID())).value,id=order.productionOrderId;
     const cuts=(await database.query('SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows;
     await reporting.report(rootActor(),id,{position:1,businessDate,quantity:20},randomUUID());
@@ -2563,7 +2567,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const id=created.value.sourcingCaseId,prices=[{position:1,unitPrice:"8.0000"},{position:2,unitPrice:"9.0000"}];
       await service.quoteIePrice(ieActor(),id,{linePrices:prices},randomUUID());
       await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,linePrices:prices,craftIds:[craftId("净色车缝")]},randomUUID());
-      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
       const contract=(await contractService.getCurrent(readerActor(),id)).item!;
       return (await production.dispatch(rootActor(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
     };
@@ -2721,7 +2725,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.recordManagementDecision(managerActor(), caseId, input, key)).reused).toBe(true);
     await expect(service.recordManagementDecision(managerActor(), caseId, { ...input, cuttingProcessOther: "不同说明" }, key))
       .rejects.toBeDefined();
-    await service.decideOwner(ownerActor(), caseId, { decision: "approved" }, randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(), caseId, { decision: "approved" }, randomUUID());
     const stored = await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_case_id=$1", [caseId]);
     expect(await readQuoteAnalysis(database,{q:"IE-FIRST-A"})).toMatchObject({missingInitialCount:0,items:[{initialPriceExpected:false,ie:[{version:1}]}]});
     expect(stored.rowCount).toBe(1);
@@ -2783,7 +2787,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const linePrices = input.lineItems.map((_line, index) => ({ position: index + 1, unitPrice: "8.50" }));
     await service.quoteIePrice(ieActor(), id, { linePrices }, randomUUID());
     await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId, craftIds: [craftId("净色车缝")], linePrices, cuttingProcess: "other", cuttingProcessOther: "IMAGE-INTERNAL-CUT" }, randomUUID());
-    await service.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(), id, { decision: "approved" }, randomUUID());
     const original = (await contractService.getCurrent(readerActor(), id)).item!;
     expect(original).toMatchObject({ templateVersion: 4, status: "ready" });
     const query = "SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1";
@@ -2813,7 +2817,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId, craftIds: [craftId("净色车缝")], linePrices: [{ position: 1, unitPrice: "8.50" }] }, randomUUID());
     // Represent an existing V2 contract without preparing a V3 document first.
     const legacyService = new SourcingService(database, undefined, undefined, todoProjection);
-    const approved = (await legacyService.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID())).value.approvalSnapshot!;
+    const approved = (await decideSeenSourcingOwner(legacyService,ownerActor(), id, { decision: "approved" }, randomUUID())).value.approvalSnapshot!;
     const oldId = randomUUID();
     const payload = { gender: "男装", styleName: "历史合同纠版", supplierName: "一号加工厂", contractEntityName: "一号加工厂有限公司", address: null,
       partyBRepresentative: "陈一", payeeName: "陈一", bankAccount: "622201", bankName: "测试银行一支行", quantity: "20", totalAmount: "170.00",
@@ -2859,7 +2863,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"8.50"}]},randomUUID());
     await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
     const generate = vi.spyOn(contractService,"generateIfReady").mockResolvedValueOnce({item:null});
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const pendingCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
     expect(pendingCutting).toMatchObject({formalStyleNo:null,alternateStyleNo:"TEMP-PR03",displayStyleNo:"TEMP-PR03"});
     const stableCuttingOrderId=pendingCutting.cuttingOrderId;
@@ -2999,7 +3003,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const linePrices=input.lineItems.map((_line,index)=>({position:index+1,unitPrice:"8.50"}));
     await service.quoteIePrice(ieActor(),id,{linePrices},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     await service.reviseStyles(managerActor(),id,{expectedRevision:0,lines:[1,2].map(position=>({position,styleNo:"FINAL-DUP-GUARD",alternateStyleNo:null}))},randomUUID());
     await expect(service.createCase(merchandiserActor(),{...input,lineItems:[{styleNo:"dup-guard-a",color:"绿",quantity:1}]},randomUUID()))
       .rejects.toMatchObject({code:"STYLE_NUMBER_EXISTS"});
@@ -3011,7 +3015,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId, linePrices=[{position:1,unitPrice:"8.50"},{position:2,unitPrice:"8.50"}];
     await service.quoteIePrice(ieActor(),id,{linePrices},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const duplicate={expectedRevision:0,lines:[{position:1,styleNo:"REV-DUP-A",alternateStyleNo:null},{position:2,styleNo:"REV-DUP-B",alternateStyleNo:"rev-dup-a"}]};
     await expect(service.reviseStyles(managerActor(),id,duplicate,randomUUID())).rejects.toMatchObject({statusCode:400});
     await expect(database.query(`INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id)
@@ -3120,8 +3124,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT order_quantity FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows[0].order_quantity).toBe(100);
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
-    const current=await service.getCase(readerActor(),id);
-    const secondReturn=await service.returnToMerchandiser(ownerActor(),id,{expectedVersion:current.version,reason:"再次核实颜色"},randomUUID());
+    const current=await readSeenSourcingOwnerReview(service,ownerActor(),id);
+    const secondReturnKey=randomUUID(),secondReturnInput={...current.basis,reason:"再次核实颜色"};
+    const secondReturn=await service.returnToMerchandiser(ownerActor(),id,secondReturnInput,secondReturnKey);
+    expect(await service.returnToMerchandiser(ownerActor(),id,secondReturnInput,secondReturnKey)).toEqual({value:secondReturn.value,reused:true});
     expect(secondReturn.value.ieQuote).toBeNull();
     expect(secondReturn.value.decision).toBeNull();
     const listed=await service.listCases(readerActor(),"CORRECTION-01");
@@ -3135,7 +3141,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.correctCase(merchandiserActor(),id,{...correction,expectedVersion:secondReturn.value.version},randomUUID());
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
-    const approved=await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const approved=await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     expect(approved.value.orderQuantity).toBe(120);
     expect(approved.value.approvalSnapshot?.estimatedCutPieceSendDate).toBe("2026-10-02");
     expect(approved.value.approvalSnapshot?.quantity).toBe(120);
@@ -3181,7 +3187,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await service.recordManagementDecision(managerActor(),id,{
         supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
       },randomUUID());
-      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
       return id;
     };
     const unapproved = await service.createCase(merchandiserActor(), {
@@ -3276,7 +3282,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await service.recordManagementDecision(managerActor(),id,{
         supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
       },randomUUID());
-      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
       const pdfId=randomUUID(),imageId=randomUUID(),wrongOwnerId=randomUUID(),managerFileId=randomUUID();
       await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,
         size_bytes,sha256,uploaded_by,status,ready_at)
@@ -3327,7 +3333,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const document=(await contractService.getCurrent(readerActor(),id)).item!;
     const pdfs=[randomUUID(),randomUUID(),randomUUID()];
     for (const [index,file] of pdfs.entries()) await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
@@ -3367,7 +3373,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const document=(await contractService.getCurrent(readerActor(),id)).item!;
     const ids=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];
     for(const [index,file] of ids.entries()) await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
@@ -3418,7 +3424,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const file=randomUUID();
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'20MB回签.pdf','application/pdf',$3,$4,$5,'ready',CURRENT_TIMESTAMP)`,[file,`return-bytes/${file}`,20*1024*1024,"a".repeat(64),merchandiserId]);
@@ -3449,7 +3455,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const additional={...contractActor(),actorId:additionalId};
     const unrelated={...contractActor(),actorId:ieId};
     const firstFile=await readyCuttingSheet(merchandiserId),secondFile=await readyCuttingSheet(additionalId);
@@ -3487,7 +3493,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.recordManagementDecision(managerActor(),id,{
       supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
     },randomUUID());
-    await approvingService.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(approvingService,ownerActor(),id,{decision:"approved"},randomUUID());
     const rows=await database.query<{todo_id:string;recipient_user_id:string;status:string;due_at:Date|null}>(
       `SELECT todo_id,recipient_user_id,status,due_at FROM rework_todos
        WHERE entity_type='sourcing_case' AND entity_id=$1 AND category='sourcing_contract_return'`,[id]);
@@ -3543,7 +3549,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.recordManagementDecision(managerActor(),id,{
       supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
     },randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id])).rows[0]?.count).toBe(0);
     const migration=await readFile(new URL(
       "../../apps/api/migrations/0211_sourcing_contract_return_todos.sql",import.meta.url),"utf8");
@@ -4055,6 +4061,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
     await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
+    const beforeCustomerDate=await seenSourcingOwnerDecision(service,ownerActor(),caseId,{decision:"approved"});
     const customerDates=new PoCustomerDateService(database),root=rootActor();
     const setCustomer=async(date:string)=>{
       const current=(await database.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0];
@@ -4064,14 +4071,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     };
     await setCustomer("2026-10-25");
     const ownerFacts=await cycleSnapshot(caseId);
-    await expect(service.decideOwner(ownerActor(),caseId,{decision:"approved"},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(service.decideOwner(ownerActor(),caseId,beforeCustomerDate,randomUUID())).rejects.toMatchObject({code:"CONFLICT",message:"审批内容已更新，请刷新后重新核对"});
+    await expect(decideSeenSourcingOwner(service,ownerActor(),caseId,{decision:"approved"},randomUUID())).rejects.toMatchObject({statusCode:409});
     expect(await cycleSnapshot(caseId)).toEqual(ownerFacts);
     expect((await database.query("SELECT count(*)::int AS n FROM digital_po_date_changes WHERE production_order_id=$1 AND date_kind='factory'",[id])).rows[0].n).toBe(0);
     await setCustomer("2026-11-20");
+    await expect(service.decideOwner(ownerActor(),caseId,beforeCustomerDate,randomUUID())).rejects.toMatchObject({code:"CONFLICT",message:"审批内容已更新，请刷新后重新核对"});
     await expect(service.decideOwner({...ownerActor(),actorId:merchandiserId},caseId,{decision:"approved"},randomUUID())).rejects.toMatchObject({statusCode:403});
     const approvalKey=randomUUID();
-    const approved=(await service.decideOwner(ownerActor(),caseId,{decision:"approved"},approvalKey)).value;
-    expect((await service.decideOwner(ownerActor(),caseId,{decision:"approved"},approvalKey)).reused).toBe(true);
+    const approvalInput=await seenSourcingOwnerDecision(service,ownerActor(),caseId,{decision:"approved"});
+    const approved=(await service.decideOwner(ownerActor(),caseId,approvalInput,approvalKey)).value;
+    expect((await service.decideOwner(ownerActor(),caseId,approvalInput,approvalKey)).reused).toBe(true);
     expect(approved.lineItems.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
     expect(approved.approvalSnapshot!.linePrices.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
     const poCuttingIds=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows.map(row=>row.cutting_order_id);
@@ -4245,7 +4255,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const caseId=created.value.sourcingCaseId,prices=prepared.lineItems.map((_,i)=>({position:i+1,unitPrice:'5.50'}));
     await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId('净色车缝')],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
-    await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),caseId,{decision:'approved'},randomUUID());
     const cut=(await bulk.read(rootActor(),id)).tasks.find(t=>t.taskKind==='bulk_cutting');
     expect(cut).toMatchObject({state:'ready',timeQuality:'现场登记',enteredAt:expect.any(String),dueAt:expect.any(String)});
     expect(Date.parse(cut!.dueAt!)-Date.parse(cut!.enteredAt!)).toBe(24*3600000);
@@ -4310,7 +4320,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId('净色车缝')],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
     const owner=(await todo('sourcing_owner_approval'))[0];expect(owner.due_at.getTime()-owner.transitioned_at.getTime()).toBe(7200000);
     await expect(currentService.decideOwner(merchandiserActor(),caseId,{decision:'approved'},randomUUID())).rejects.toMatchObject({statusCode:403});
-    await currentService.decideOwner(approver==="owner"?ownerActor():{...rootActor(),authorizationCapability:"sourcing:owner:approve"},caseId,{decision:'approved'},randomUUID());
+    await decideSeenSourcingOwner(currentService,approver==="owner"?ownerActor():{...rootActor(),authorizationCapability:"sourcing:owner:approve"},caseId,{decision:'approved'},randomUUID());
     expect((await database.query("SELECT * FROM todo_policies WHERE policy_key='general'")).rows).toEqual(general);
     expect((await budget.read(designer,id,undefined,2)).document).toEqual(document);
     const dates=new PoCustomerDateService(database),root=rootActor();
@@ -5338,7 +5348,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const management=contractService.management;
     const original=(await contractService.getCurrent(readerActor(),id)).item!;
     const originalRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]!;
@@ -5469,7 +5479,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const original=(await contractService.getCurrent(rootActor(),id)).item!;
     expect(original.canEditContent).toBe(true);
     expect((await contractService.getCurrent(contractActor(),id)).item?.canEditContent).toBe(false);
@@ -5569,7 +5579,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const original=(await contractService.getCurrent(rootActor(),id)).item!;
     const draft=await contractService.content.get(rootActor(),id);
     const first=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,contractTitle:"初次人工标题",deliveryDate:"2026-11-01"}},randomUUID());
@@ -5629,7 +5639,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const original=(await contractService.getCurrent(rootActor(),id)).item!;
     const draft=await contractService.content.get(rootActor(),id);
     const template=(await contractService.management.templates(rootActor())).item;
@@ -5681,7 +5691,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const contract=(await contractService.getCurrent(rootActor(),id)).item!;
     const order=(await production.dispatch(rootActor(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
     await reporting.report(rootActor(),order.productionOrderId,{position:1,businessDate:dates.today,quantity:10},randomUUID());
@@ -5707,7 +5717,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const draft=await contractService.content.get(rootActor(),id);
     await service.recordFinanceReconciliation(financeActor(),id,result==="match"?{result}:{result,differenceFields:["total_amount"],differenceReason:"财务已核对并发现差异"},randomUUID());
     expect((await contractService.getCurrent(rootActor(),id)).item?.canEditContent).toBe(false);
@@ -5723,7 +5733,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const draft=await contractService.content.get(rootActor(),id);
     const [finance,edit]=await Promise.allSettled([
       service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID()),
@@ -5764,7 +5774,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       cycleTodoRecipientsConfigured = true;
     }
     const projection = new TodoProjectionService(new TodoService(database));
-    return { projection, service: new SourcingService(database, undefined, undefined, projection, contractService) };
+    return { projection, service: new SourcingService(database, undefined, undefined, projection, contractService,undefined,sourcingRoot) };
   };
   const cycleSnapshot = async (id: string) => ({
     facts: (await database.query(`SELECT
@@ -5906,7 +5916,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
     await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
-    await currentService.decideOwner(ownerActor(),caseId,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(currentService,ownerActor(),caseId,{decision:"approved"},randomUUID());
     const completedSla=await new SlaOrderService(database).read(rootActor(),id);expect(completedSla.status).toBe('planned');
     if(completedSla.status!=='planned')throw Error('TEST native mother must retain a frozen SLA plan');
     const completedCockpit=await new DigitalJourneyQuery(database).read(rootActor(),id,undefined,true);
@@ -6046,10 +6056,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     for (let round = 0; round < 2; round++) {
       const actingService = round === 0 ? legacyService : currentService;
       await run(key => actingService.recordManagementDecision(managerActor(), id, management, key));
-      await run(key => actingService.decideOwner(ownerActor(), id, { decision: "rejected" }, key));
-      const decided = await run(key => currentService.recordManagementDecision(managerActor(), id, management, key));
-      const returned = await run(key => currentService.returnToMerchandiser(ownerActor(), id,
-        { expectedVersion: decided.version, reason: "核实颜色" }, key));
+      const rejection=await seenSourcingOwnerDecision(actingService,ownerActor(),id,{decision:"rejected"});
+      await run(key => actingService.decideOwner(ownerActor(),id,rejection,key));
+      const decided=await run(key => currentService.recordManagementDecision(managerActor(),id,management,key));
+      const returnReview=await readSeenSourcingOwnerReview(currentService,ownerActor(),id);
+      expect(returnReview.basis.expectedVersion).toBe(decided.version);
+      const returned=await run(key=>currentService.returnToMerchandiser(ownerActor(),id,{...returnReview.basis,reason:"核实颜色"},key));
       const correction = { gender: original.gender, styleName: original.styleName, estimatedCutPieceSendDate: original.estimatedCutPieceSendDate,
         deliveryDate: original.deliveryDate, lineItems: [{ ...original.lineItems[0]!, color: round === 0 ? "红" : "白" }],
         attachmentIds: original.attachmentIds, expectedVersion: returned.version, reason: "颜色已核实" };
@@ -6060,7 +6072,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await run(key => currentService.quoteIePrice(ieActor(), id, prices, key));
     }
     await run(key => currentService.recordManagementDecision(managerActor(), id, management, key));
-    await run(key => currentService.decideOwner(ownerActor(), id, { decision: "approved" }, key));
+    const approval=await seenSourcingOwnerDecision(currentService,ownerActor(),id,{decision:"approved"});
+    await run(key=>currentService.decideOwner(ownerActor(),id,approval,key));
     const final = await cycleSnapshot(id);
     expect(final.facts).toMatchObject({ quotes: 3, decisions: 5, owners: 3, corrections: 2, approvals: 1 });
     expect(final.todos.find(todo => todo.dedupe_key === `sourcing:${id}:management:2:${managerId}`)?.status).toBe("completed");
@@ -6160,7 +6173,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       lineItems:[{styleNo:"TEST-"+label,color:"蓝",quantity:2020}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
     await currentService.quoteIePrice(ieActor(),id,{unitPrice:"15.5"},randomUUID());
     await currentService.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"15.5"},randomUUID());
-    await currentService.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(currentService,ownerActor(),id,{decision:"approved"},randomUUID());
     return id;
   };
 
@@ -6389,7 +6402,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(created.value.sourcingCaseId).toBe(id);
       await service.quoteIePrice(ieActor(),id,{unitPrice:"15.5"},randomUUID());
       await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"15.5"},randomUUID());
-      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
       await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-historical-fixture"},randomUUID());
     } finally {await database.query("UPDATE sourcing_contract_return_cycle_policy SET enabled_at=clock_timestamp()");}
     const current=(await contractService.getCurrent(rootActor(),id)).item!;
@@ -6423,7 +6436,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"15.5"},randomUUID());
     await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-transfer-before-first-owner-approval"},randomUUID());
     expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
     expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return' AND status='pending'",[id])).rows).toHaveLength(1);
   });
@@ -6592,7 +6605,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const prices=[{position:1,unitPrice:"15"},{position:2,unitPrice:"10"}];
     await service.quoteIePrice(ieActor(),id,{linePrices:prices},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const doc=(await contractService.getCurrent(rootActor(),id)).item!;
     await production.dispatch(contractActor(),id,{sourcingContractDocumentId:doc.sourcingContractDocumentId,confirmed:true},randomUUID());
     const cut=(await cutting.listSources(cuttingOwnerActor())).items.find(order=>order.sourcingCaseId===id)!;
@@ -6614,7 +6627,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       lineItems:[{styleNo:"TEST-PRICE-TOTAL-LIMIT",color:"蓝",quantity:10_000_000}],daxingUnitPrice:"1",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
     await service.quoteIePrice(ieActor(),id,{unitPrice:"1"},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"1"},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     await expect(service.requestPriceReapplication(managerActor(),id,await priceInput(id,"9999999999"),randomUUID())).rejects.toMatchObject({statusCode:400});
     expect((await database.query("SELECT * FROM sourcing_price_reapplications WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
   });
@@ -6849,7 +6862,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("reopens financial review and creates one real finance todo when a fresh unreviewed revision was on a closed order",async()=>{
     const {projection}=await cycleTodoServices();
     const contracts=new SourcingContractService(database,attachments,undefined,undefined,projection);
-    const currentService=new SourcingService(database,undefined,undefined,projection,contracts);
+    const currentService=new SourcingService(database,undefined,undefined,projection,contracts,undefined,sourcingRoot);
     const id=await reviewedContractCase("CLOSED-FRESH",currentService);
     await currentService.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
     await currentService.reviseStyles(merchandiserActor(),id,{expectedRevision:0,lines:[{position:1,styleNo:"TEST-CLOSED-FRESH-REV",alternateStyleNo:null}]},randomUUID());
@@ -6879,7 +6892,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=created.sourcingCaseId,prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
     await service.quoteIePrice(ieActor(),id,{linePrices:prices},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
-    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await decideSeenSourcingOwner(service,ownerActor(),id,{decision:"approved"},randomUUID());
     const old=(await contractService.getCurrent(rootActor(),id)).item!;
     await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
     const history=(await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows;
@@ -7090,7 +7103,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       supplierId: factoryId, craftIds: originalCrafts.map(craftId),
       linePrices: (corrected ? [1, 2] : [1]).map(position => ({ position, unitPrice: "12.8" })),
     }, randomUUID());
-    await currentService.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    await decideSeenSourcingOwner(currentService,ownerActor(), id, { decision: "approved" }, randomUUID());
     await currentService.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
     expect(await currentService.getCase(readerActor(), id)).toMatchObject({
       status: "closed", orderQuantity: corrected ? 1000 : 200,

@@ -14,17 +14,20 @@ import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from "../../apps/api
 import {RootAuthority} from "../../apps/api/src/access/root-authority.js";
 import {ExportJobService} from "../../apps/api/src/tools/exports.js";
 import {SourcingProductionService} from "../../apps/api/src/sourcing/sourcing-production-service.js";
+import {SourcingService} from "../../apps/api/src/sourcing/sourcing-service.js";
 import {SourcingContractReturnService} from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
 import {ManagementReportingService} from "../../apps/api/src/reporting/management-reporting-service.js";
 import {ReportExportService} from "../../apps/api/src/reporting/report-export-service.js";
 import {ProcessConfigurationService} from "../../apps/api/src/rework/process-configuration-service.js";
 import {ProcessWorkerPlanService} from "../../apps/api/src/rework/process-worker-plan-service.js";
+import {TodoService} from "../../apps/api/src/todos/service.js";
+import {TodoProjectionService} from "../../apps/api/src/todos/projection-service.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("architecture C sourcing through production App and native signed TEST identity",()=>{
- let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string,token:string,ieToken:string;
+ let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string,token:string,ieToken:string,ownerToken:string,approvalService:SourcingService;
  const ids:string[]=[],styles:string[]=[],evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"sourcing-detail");
  const open=async(index:number,width=1165)=>{
   const context=await browser.newContext({viewport:{width,height:1003}});await context.addCookies([{name:"dx_rework_session",value:token,url:base}]);
@@ -47,8 +50,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return {...original,downloadUrl:base+"/api/__sourcing-photo-test-storage/"+id};
   };
   const reporting=new ManagementReportingService(f.db);
+  const todos=new TodoService(f.db);
+  approvalService=new SourcingService(f.db,undefined,undefined,new TodoProjectionService(todos),f.contracts,undefined,root);
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},
    sourcing:{authenticate,root,service:f.sourcing,contracts:f.contracts,production:new SourcingProductionService(f.db),contractReturns:new SourcingContractReturnService(f.db)},
+   todos:{authenticate,root,service:todos},
    reporting:{authenticate,root,service:reporting,exportService:new ReportExportService(reporting,f.db,"TEST-ie-center")},
    processConfiguration:{authenticate,root,service:new ProcessConfigurationService(f.db),workerPlan:new ProcessWorkerPlanService(f.db)},
    tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:f.attachments,exports:new ExportJobService(f.db),
@@ -62,6 +68,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const ieIdentity=(await f.db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[f.people.ie!.actorId])).rows[0]?.provider_user_id;
   expect(ieIdentity).toMatch(/^uat-/);
   ieToken=(await auth.loginMobile(mintAcceptanceLoginCode(ieIdentity.slice(4),secret))).token;
+  const ownerIdentity=(await f.db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[f.people.owner!.actorId])).rows[0]?.provider_user_id;
+  expect(ownerIdentity).toMatch(/^uat-/);
+  ownerToken=(await auth.loginMobile(mintAcceptanceLoginCode(ownerIdentity.slice(4),secret))).token;
   for(let index=0;index<3;index++){
    const style="TEST-ARCH-C-"+index+"-"+randomUUID();styles.push(style);
    const created=await f.sourcing.createCase(f.people.merchandiser!,{gender:"男装",styleName:"TEST详情隔离",deliveryDate:"2026-12-20",estimatedCutPieceSendDate:"2026-11-10",daxingUnitPrice:"5",attachmentIds:[await f.image(f.people.merchandiser!)],lineItems:[{styleNo:style,color:"黑",quantity:10}]},randomUUID());
@@ -107,7 +116,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   let release!:()=>void;
   const delay=new Promise<void>(done=>{release=done;});
-  await page.route("**"+casePath+"/detail-sections",async route=>{
+  await page.route("**"+casePath+"/detail-sections*",async route=>{
    await delay;
    await route.fulfill({status:503,contentType:"application/json",
     body:JSON.stringify({error:{message:"TEST 附属记录暂不可用"}})});
@@ -329,4 +338,93 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await context.close();}
  });
 
+ it("freezes the actual pending owner view and restores the exact committed approval before recovering a failed read",async()=>{
+  const merch=f.people.merchandiser!,manager=f.people["production-management"]!,owner=f.people.owner!,prices=[{position:1,unitPrice:"5"}];
+  const craft=(await f.access.ensureCrafts(manager,{craftNames:["TEST车缝"]}))[0]!;
+  const pending=async()=>{
+   const created=await approvalService.createCase(merch,{gender:"男装",styleName:"TEST同版老板审批",deliveryDate:"2026-12-20",
+    estimatedCutPieceSendDate:"2026-11-10",daxingUnitPrice:"5",attachmentIds:[await f.image(merch)],
+    lineItems:[{styleNo:"TEST-SEEN-OWNER-"+randomUUID(),color:"黑",quantity:10}]},randomUUID());
+   const id=created.value.sourcingCaseId;
+   await approvalService.quoteIePrice(f.people.ie!,id,{linePrices:prices},randomUUID());
+   await approvalService.recordManagementDecision(manager,id,{linePrices:prices,craftIds:[craft.craftId],supplierId:f.supplierId,cuttingProcess:"in_house"},randomUUID());
+   return id;
+  };
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  await context.addCookies([{name:"dx_rework_session",value:ownerToken,url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  const approve=page.getByRole("button",{name:"批准方案",exact:true});
+  const waitApproval=async(id:string)=>{
+   await page.goto(base+"/ui/sourcing/orders/"+id+"?node=owner");
+   await expect.poll(()=>approve.isEnabled()).toBe(true);
+  };
+  try{
+   const id=await pending();
+   const openCaseFrom=async(path:string)=>{
+    await page.goto(base+path);
+    await page.locator(`a[href*="/ui/sourcing/orders/${id}"]`).first().click();
+    await page.waitForURL(url=>url.pathname===`/ui/sourcing/orders/${id}`);
+    await expect.poll(()=>approve.isEnabled()).toBe(true);
+   };
+   await openCaseFrom("/ui/sourcing/pending");
+   await openCaseFrom("/ui/my-tasks?module=sourcing");
+   await waitApproval(id);
+   const budget=page.locator(".sourcing-budget-price-value").first();
+   expect(Number((await budget.textContent())?.replace(/[^\d.]/g,""))).toBe(5);
+   const returnButton=page.getByRole("button",{name:"退回跟单修改",exact:true});
+   await returnButton.click();
+   const reason="TEST 保留这条人工意见";
+   const dialog=page.getByRole("dialog",{name:"退回跟单修改",exact:true});
+   await dialog.getByRole("textbox").fill(reason);
+   await f.sourcing.correctBudgetPrice({...f.root,authorizationCapability:"sourcing:inquiry:create"},id,{daxingUnitPrice:"6",reason:"TEST 合法更正"},randomUUID());
+   const stale=page.waitForResponse(response=>response.request().method()==="POST"&&new URL(response.url()).pathname===`/api/sourcing/cases/${id}/return-to-merchandiser`);
+   await dialog.getByRole("button",{name:"确认退回",exact:true}).click();
+   expect((await stale).status()).toBe(409);
+   await page.getByText("审批内容已更新，请刷新后重新核对",{exact:true}).waitFor();
+   expect(await approve.isDisabled()).toBe(true);
+   expect((await f.sourcing.getCase({...owner,authorizationCapability:"sourcing:view"},id)).status).toBe("pending_owner_approval");
+   await page.getByRole("button",{name:"重新读取订单",exact:true}).click();
+   await expect.poll(()=>approve.isEnabled()).toBe(true);
+   expect(Number((await budget.textContent())?.replace(/[^\d.]/g,""))).toBe(6);
+   await returnButton.click();
+   expect(await dialog.getByRole("textbox").inputValue()).toBe(reason);
+   await dialog.getByRole("button",{name:"取消",exact:true}).click();
+
+   const next=await pending();
+   const posts:{body:string|null;key:string|null;status:number;replayed:string|undefined}[]=[];
+   let failRead=false;
+   await page.route(url=>url.pathname===`/api/sourcing/cases/${next}/detail-sections`&&url.searchParams.get("ownerReview")==="1",async route=>{
+    if(!failRead)return route.continue();
+    failRead=false;
+    await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:{code:"TEST_READ_FAILED",message:"TEST 提交成功后读取暂不可用"}})});
+   });
+   await page.route("**/api/sourcing/cases/"+next+"/owner-decisions",async route=>{
+    const response=await route.fetch();
+    posts.push({body:route.request().postData(),key:route.request().headers()["idempotency-key"]??null,status:response.status(),replayed:response.headers()["idempotency-replayed"]});
+    if(posts.length===1){
+     return route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:{code:"TEST_RECEIPT_LOST",message:"TEST 原批准已提交但回执丢失"}})});
+    }
+    failRead=true;
+    return route.fulfill({response});
+   });
+   await waitApproval(next);
+   await approve.click();await dismiss(page);
+   expect(await approve.isDisabled()).toBe(true);
+   const pendingReadFailure=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/sourcing/cases/${next}/detail-sections`&&response.status()===503);
+   await page.getByRole("button",{name:"核对上次提交结果",exact:true}).click();
+   expect((await pendingReadFailure).status()).toBe(503);
+   const confirmedReadWarning=page.getByText("已提交成功，刷新失败，请重新读取",{exact:true});
+   await confirmedReadWarning.waitFor();
+   const successfulRead=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/sourcing/cases/${next}/detail-sections`&&response.status()===200);
+   await page.getByRole("button",{name:"重新读取订单",exact:true}).click();
+   await successfulRead;
+   await confirmedReadWarning.waitFor({state:"hidden"});
+   expect(posts).toHaveLength(2);
+   expect(posts[0]).toMatchObject({status:201});
+   expect(posts[1]).toMatchObject({body:posts[0]!.body,key:posts[0]!.key,status:201,replayed:"true"});
+   expect(JSON.parse(posts[0]!.body!)).toMatchObject({decision:"approved",expectedApprovalBasis:expect.stringMatching(/^[a-f0-9]{64}$/)});
+   expect((await f.db.query("SELECT decision FROM sourcing_owner_decisions WHERE sourcing_case_id=$1",[next])).rows).toEqual([{decision:"approved"}]);
+   expect(await page.getByRole("button",{name:"核对上次提交结果",exact:true}).count()).toBe(0);
+  }finally{await context.close();}
+ });
 });
