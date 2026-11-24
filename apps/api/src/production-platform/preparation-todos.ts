@@ -2,7 +2,7 @@ import {appendSelectedTodo,type TodoSelectionKey,type TodoProjection} from '../t
 import type {Pool,PoolClient} from 'pg';
 import type {TodoResponse} from '@dx-rework/contracts';
 import type {TrustedActorContext} from '../tools/repositories.js';
-import {acceptanceIncludesNative,businessNow} from '../acceptance-clock/business-time.js';
+import {acceptanceBusinessContext,acceptanceIncludesNative,businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {DigitalProductionAccessPolicy} from './access-policy.js';
 import {preparationAvailable,preparationIso,preparationContext,preparationMaterialHistory,currentPreparationMaterials,preparationResponsibility,preparationHandoverCurrent,preparationInvestmentComplete,instructionInvestmentMaterials} from './preparation-material-repository.js';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
@@ -55,7 +55,8 @@ export async function preparationMaterialsTodos(db:DB,actor:TrustedActorContext,
 /** Current native handover recipients and formal primary merchandisers see the
  * same unfinished purchase obligation, keeping its handover ID on conversion. */
 export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,projection?:TodoProjection,
- notice?:(reminder:{key:string;todoId:string;title:string;route:TodoResponse['route']})=>void):Promise<TodoResponse[]>{
+ notice?:(reminder:{key:string;todoId:string;title:string;route:TodoResponse['route']})=>void,
+ observation?:{database:Pool;transaction?:PoolClient;scan?:true}):Promise<TodoResponse[]>{
  if(!actor.actorRoles.includes('order_merchandiser')||!await preparationAvailable(db)||!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'))return [];
  const tables=await developmentReadTables(db);
  type Handover=Pick<PreparationMaterialFact,'sourceDocumentVersion'|'orderInstructionVersion'|'investmentScopeBasis'>;
@@ -101,6 +102,8 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
     AND d.document->'customerOrderDraft'->>'withOrder'='true'))`,
   [actor.actorId,projection?.todoId??null])).rows;
  const result:TodoResponse[]=[];
+ const clock=observation?new ContextBusinessClock(observation.database,observation.transaction):null;
+ const scoped=observation?.scan||acceptanceBusinessContext()||!observation;
  for(const row of rows){
   const id=row.orderId??row.sourceId,at=preparationIso(row.occurredAt)!;
   const source=row.documentVersion===null?null:{version:row.documentVersion,materials:row.materials??[]};
@@ -109,8 +112,9 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
   const current=row.orderHandover
    ?row.handover.orderInstructionVersion===undefined||preparationHandoverCurrent(row.handover,instruction,'instruction')
    :preparationHandoverCurrent(row.handover,source);
-  if(!id||!current||!await acceptanceIncludesNative(db,id)||preparationInvestmentComplete(row.handover,row.investment??undefined))continue;
-  const now=businessNow();
+  if(!id||!current||preparationInvestmentComplete(row.handover,row.investment??undefined))continue;
+  if(scoped&&!await acceptanceIncludesNative(observation?.database??db,id,observation?.transaction))continue;
+  const now=clock?new Date((await clock.read({kind:row.orderId?'order':'source',id})).now):businessNow();
   const reminder=await materialInvestmentReminder(db,{sourceId:row.sourceId,orderId:row.orderId,handoverId:row.handoverId,
    scopeFingerprint:row.handover.investmentScopeBasis?.fingerprint??null},now);
   const route:TodoResponse['route']={routeName:row.orderId?'digital_order_material_investment':'digital_source_material_investment',entityId:id,todoId:row.handoverId};

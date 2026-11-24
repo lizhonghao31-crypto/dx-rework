@@ -1,87 +1,117 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-  "sourceFingerprint": "8f11a48af49df7494398987e10fff0abca7dcdfac5fede257e40312e8241679f",
+  "base": "7edee41985527554e7b02a186277afb1804132e2",
+  "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
   "rules": [
     {
-      "source": "Eric approved the cockpit T30 narrow presentation repair with unchanged text, fields, font and areas, work order 2026-11-24 PR B.",
-      "rule": "Give the original creator, paired PO identity, dates and signed difference enough room to wrap within their group.",
+      "source": "Eric approved Acceptance material clock repair, reproduced on 1bec37d9, work order 2026-11-24 PR A.",
+      "rule": "Recognize the declared source/order only on the readiness read, material record and investment reminder close routes.",
       "writes": [
-        "apps/web/src/cockpit-detail-r5.css",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+        "apps/api/src/acceptance-clock/hooks.ts",
+        "apps/api/src/acceptance-clock/scope.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-stage-progress.tsx",
-        "apps/web/src/cockpit-date.tsx",
-        "apps/web/src/po-delivery-dates.tsx"
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/acceptance-clock/runtime.ts",
+        "apps/api/src/acceptance-clock/guard.ts"
       ],
       "oldTests": [
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/acceptance-sla-clock-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "Use the original Astryx-scoped cockpit styles. No schema or navigation data change; the existing narrow PO and flow horizontal scrollers still own their content.",
-      "dateAndPermission": "Keep actual, target, scope, sign and font sizes. Only the affected detail cells and date grouping receive narrower wrapping.",
-      "expectation": "Signed native browser with actual two-PO adoption and a lengthened TEST creator verifies 1363, 1165, 681, 650 and 360 pixel text bounds, stable full dates and signed values. Date and delta sizes stay at 12px across the existing 1250px breakpoint.",
+      "initialization": "The already guarded Acceptance runtime resolves the native route identity and applies its existing scene lock; no schema, configuration or frozen plan change.",
+      "dateAndPermission": "The existing signed UAT session, mixed-scope rejection and actual role checks still apply. The same time is observed by the UI read and occurrence validation. Untagged ordinary orders and production use wall time.",
+      "expectation": "On an actual adopted B order a simulated later-than-wall occurrence saves for the real follow-up role. An unbound order rejects the same valid-shaped time; another scene is refused and the two supported resource kinds retain original authority.",
       "checks": [
-        "native-ui",
+        "native-clock",
+        "clock-isolation",
         "preflight"
       ]
     },
     {
-      "source": "Eric approved G14 returning keyboard focus to the original filtered overview row or list if the row has disappeared, work order 2026-11-24 PR B.",
-      "rule": "Focus the matching order once its current overview response is applied and leave existing reading/scroll restoration in charge of position.",
+      "source": "Eric approved the existing 70-percent, idempotent native reminder and todo lifecycle on the same material basis, work order 2026-11-24 PR A.",
+      "rule": "Use the guarded clock for native material reminder selection, scan receipt, claim, current display and task timing.",
       "writes": [
-        "apps/web/src/cockpit-reading-context.ts",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/acceptance-clock/control-service.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/digital-journey-cockpit.tsx"
+        "apps/api/src/production-platform/material-investment-reminder.ts",
+        "apps/api/src/production-platform/notification-routes.ts",
+        "apps/api/src/todos/routes.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "oldTests": [
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/acceptance-sla-clock-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "Keep a per-navigation focus target in the current component only; no persistent storage or additional API call.",
-      "dateAndPermission": "Tie the target to the exact identity and applied filter. A focus already moved elsewhere stays there. Focus restoration never scrolls a different order into view.",
-      "expectation": "Enter on a real filtered row, then Enter on the original return action, while the list response is held. The same visible row is focused before Tab; an intentionally missing row falls back to its original list and the return makes exactly the existing one request.",
+      "initialization": "Keep the exact handover entry and event source key. Scanner receipt association now uses the original handover scope and authorized scene instead of expecting a generic rework todo.",
+      "dateAndPermission": "A guarded Pool owns the clock reader; the same transaction serves the notification candidate/open reads when present. Ordinary schedulers exclude clock-bound orders; only an existing signed actor claims a native eligible notice. Existing adopted policy, role eligibility and real receipt audit time are preserved.",
+      "expectation": "The first enabled 70-percent boundary emits exactly one receipt across repeat scans and two sessions. Read and close keep the pending task. Actual completion retains the historical lateness, original cutoff and adopted versions.",
       "checks": [
-        "native-ui",
+        "native-clock",
+        "clock-isolation",
         "preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native-ui",
+      "id": "native-clock",
       "kind": "tests",
-      "command": "node /tmp/dx-cockpit-return-focus-evidence/run.mjs cockpit",
-      "context": "Canonical two-worker isolated Acceptance PostgreSQL and Chromium, signed original App. Original A/B, dual PO scope, accepted field set, filtered return and five different viewport widths exercised, including both sides of the 1250px breakpoint.",
-      "startedAt": "2026-11-24T10:38:42.309Z",
-      "endedAt": "2026-11-24T10:39:33.341Z",
-      "testedHead": "f12d118aae5521f7e861e3a96345d5b8384b0eac",
-      "sourceFingerprint": "8f11a48af49df7494398987e10fff0abca7dcdfac5fede257e40312e8241679f",
+      "command": "node /tmp/dx-acceptance-material-clock-evidence/released-7edee419/run.mjs nativeClock",
+      "context": "Isolated native PostgreSQL with the canonical business-chain configuration, dual test URLs, original signed business roles, and native browser rehearsal of both material and newly released cockpit. The owner approvals, purchase readiness and existing draft order consumers all use the stored original facts.",
+      "startedAt": "2026-11-24T10:58:19.921Z",
+      "endedAt": "2026-11-24T11:00:14.179Z",
+      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
+      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-cockpit-return-focus-evidence/cockpit-final.log",
-      "logSha256": "89bf285c763d0b2d267cf1664b3dcb714b257c6ec06e0887d8076b718144d706",
-      "passed": 8,
+      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/nativeClock.log",
+      "logSha256": "7477c3f99f96292dac35c61cb6d7cd673aec03dd156e50c1622c7ff74179e635",
+      "passed": 59,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3742596fad33326fe5e376231aa4ba1331ee6a2460444f8ecffcb8f5cfc08d49"
+          "sha256": "ebacd2291ae33ab5d19d3d7d33351a14df7f8e819ea291246a1e1bbcaa48a78f"
+        }
+      ]
+    },
+    {
+      "id": "clock-isolation",
+      "kind": "tests",
+      "command": "node /tmp/dx-acceptance-material-clock-evidence/released-7edee419/run.mjs clock",
+      "context": "Isolated guarded Acceptance clock through its own canonical configuration. Real signed HTTP scope and native clock transitions remain covered.",
+      "startedAt": "2026-11-24T10:58:19.929Z",
+      "endedAt": "2026-11-24T10:59:36.599Z",
+      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
+      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/clock.log",
+      "logSha256": "9d6fbae9629b400278c8d926b6fcd2c1d17ddee78155846081ccb69806b5e3aa",
+      "passed": 30,
+      "failed": 0,
+      "skipped": 1,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "49a83ec0916ee0e79180214e3fba3f9fcec6a74ebc54954384899bae2e299a6b"
         }
       ]
     },
@@ -90,13 +120,13 @@
       "kind": "command",
       "command": "npm run typecheck; scoped ESLint; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
       "context": "Repository Node 22 and npm 10. No deployment, database configuration, platform gate or framework change.",
-      "startedAt": "2026-11-24T10:38:42Z",
-      "endedAt": "2026-11-24T10:39:25Z",
-      "testedHead": "f12d118aae5521f7e861e3a96345d5b8384b0eac",
-      "sourceFingerprint": "8f11a48af49df7494398987e10fff0abca7dcdfac5fede257e40312e8241679f",
+      "startedAt": "2026-11-24T10:58:19Z",
+      "endedAt": "2026-11-24T10:59:09Z",
+      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
+      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-cockpit-return-focus-evidence/static.log",
+      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/static.log",
       "logSha256": "33fd4540a192c4f441f6fd14a7c134d24142f97306ce7c1f7e0b6805fe5a0226"
     }
   ]

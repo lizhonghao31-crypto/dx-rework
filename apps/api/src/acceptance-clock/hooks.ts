@@ -34,6 +34,14 @@ export function registerAcceptanceClockHooks(app:FastifyInstance,runtime:Accepta
     const params=request.params as {kind?:unknown;resourceId?:unknown};
     roots.push(...await clockLifecycleRoots(runtime.database,params.kind,params.resourceId));
    }
+   const preparation=path.match(/^\/digital-production\/(orders|sources)\/:resourceId\/production-readiness(?:\/(?:materials|material-investment-reminder\/close))?$/);
+   if(preparation){
+    const {resourceId}=request.params as {resourceId?:unknown};
+    if(clockUuid(resourceId)){
+     const kind=preparation[1]==='orders'?'order':'source';
+     roots.push(...(await clockRoots(runtime.database,resourceId)).filter(root=>root.kind===kind&&root.id===resourceId.toLowerCase()));
+    }
+   }
    if(/^\/digital-production\/order-time\/requests\/:requestId(?:\/|$)/.test(path))roots.push(...await clockOrderTimeRequestRoots(runtime.database,(request.params as {requestId?:unknown}).requestId));
    const scenes=new Set(roots.map(r=>r.scenarioId).filter((id):id is string=>Boolean(id)));
    if(claimed)scenes.add(claimed as string);

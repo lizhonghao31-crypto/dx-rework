@@ -11,14 +11,26 @@ export async function clockOrderTimeRequestRoots(db:Pick<Pool|PoolClient,'query'
  const row=(await db.query('SELECT source_id,production_order_id FROM digital_order_time_requests WHERE request_id=$1',[id])).rows[0];
  return row?.production_order_id?clockRoots(db,row.production_order_id):row?.source_id?clockRoots(db,row.source_id):[];
 }
-/** Only the known lifecycle route may interpret resourceId, and only as the
- * declared native kind. Arbitrary body resourceId fields remain non-roots. */
+/** The lifecycle route interprets resourceId as its declared native kind.
+ * Arbitrary body resourceId fields remain non-roots. */
 export async function clockLifecycleRoots(db:Pick<Pool|PoolClient,'query'>,kind:unknown,id:unknown):Promise<ClockRoot[]>{
  if((kind!=='source'&&kind!=='order')||!clockUuid(id))throw new ApplicationError('VALIDATION_ERROR','请检查生命周期对象类型及标识',400);
  const roots=await clockRoots(db,id),native=roots.filter(root=>root.id===id&&(root.kind==='source'||root.kind==='order'));
  const exact=native.filter(root=>root.kind===kind);
  if(native.length&&!exact.length)throw new ApplicationError('VALIDATION_ERROR','生命周期对象类型与原单不一致',400);
  return exact;
+}
+/** The native investment notice stores its handover ID, not a rework todo ID. */
+export async function clockMaterialInvestmentRoots(db:Pick<Pool|PoolClient,'query'>,handoverId:unknown):Promise<ClockRoot[]>{
+ if(!clockUuid(handoverId))return [];
+ return (await db.query<ClockRoot>(`WITH roots AS (
+  SELECT DISTINCT CASE WHEN o.production_order_id IS NOT NULL THEN 'order' ELSE h.resource_kind END AS kind,
+   coalesce(o.production_order_id,h.resource_id) AS id
+  FROM digital_preparation_material_versions h
+  LEFT JOIN digital_production_orders o ON h.resource_kind='source' AND o.source_id=h.resource_id
+  WHERE h.record_id=$1 AND h.kind='design_handover' AND h.scope_ref='whole'
+ ) SELECT roots.kind,roots.id,m.scenario_id AS "scenarioId" FROM roots
+ LEFT JOIN acceptance_sla_clock_resources m ON m.resource_kind=roots.kind AND m.resource_id=roots.id`,[handoverId])).rows;
 }
 /** Stable native IDs only; never infer lifecycle from a style/PO text search. */
 export async function clockRoots(db:Pick<Pool|PoolClient,'query'>,id:string):Promise<ClockRoot[]>{
