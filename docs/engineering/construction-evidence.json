@@ -2,7 +2,7 @@
   "version": 1,
   "base": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
   "risk": "full",
-  "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+  "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
   "rules": [
     {
       "rule": "原开发来源从无号保留到一次性绑定并使用可追溯的原子流水。",
@@ -125,6 +125,31 @@
         "lint",
         "types"
       ]
+    },
+    {
+      "rule": "原座舱详情在宽卡片保水平并排，在紧凑卡片将差值排在日期下，完整、无重叠，原证照仍可读。",
+      "source": "已合入 #1094 的 150px 内容区间、Full 45458446895 R5-08 及相同隔离环境的两版实测。",
+      "writes": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/cockpit-detail-r5.css",
+        "apps/web/src/cockpit-detail.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "initialization": "复用原真实签名 App、隔离低权限 PostgreSQL、原开发资料和真实技术证照。调整既有断言，无业务写入或样式变化。",
+      "dateAndPermission": "原计划发生时间、责任读法、附件授权、历史原版本及返回路径均由既有流程继续核对。",
+      "expectation": "在 1585px 和 1165px 原视口实测两种布局均存在，原日期内容、差值间隔、对齐和边界有几何断言。",
+      "checks": [
+        "responsive",
+        "preflight"
+      ]
     }
   ],
   "checks": [
@@ -132,7 +157,7 @@
       "id": "pg",
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-final-pg.json tests/integration/digital-order-number-postgres.test.ts tests/integration/digital-production-identity-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
-      "context": "Canonical PostgreSQL 94 tests retained from the detached previously tested candidate with independently matched complete SQL, API, shared contracts, fixtures and runner input paths. Only the unrelated settings browser request ID caller and non-DB fixture changed.",
+      "context": "Canonical PostgreSQL 94 tests retained from the detached previously tested candidate with independently matched complete SQL, API, shared contracts, fixtures and runner input paths. Only the unrelated settings browser request ID caller and non-DB fixture changed. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
       "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
       "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
@@ -172,7 +197,7 @@
       "id": "browser",
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-browser.json tests/integration/r5-settings-native-browser-postgres.test.ts",
-      "context": "Canonical real PostgreSQL and signed Chromium. Entire existing settings suite with actual save, typed task preview and manager / normal-role boundary, using the client request helper.",
+      "context": "Canonical real PostgreSQL and signed Chromium. Entire existing settings suite with actual save, typed task preview and manager / normal-role boundary, using the client request helper. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
       "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
       "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
@@ -189,13 +214,28 @@
           "format": "vitest-json",
           "sha256": "93b281365fe9357b56dfe6b47e1f3e42b34d60527dc3efde7c8cc4515af991ed"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "tests/fixtures",
+        "tests/helpers",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "tests/acceptance",
+        "tests/integration/r5-settings-native-browser-postgres.test.ts"
+      ],
+      "inputFingerprint": "657c0c2f97cdf4a743d03f5eab147db7ba070fff3c63355a66310a41b5a8e744"
     },
     {
       "id": "non-db",
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-env-suites.json tests/unit/production-dashboard-query.test.ts tests/unit/responsibility-panels-component.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/client-request-id.test.ts tests/unit/digital-notification-child-context.test.ts",
-      "context": "Exact original Node22 and npm10 with all database URLs empty. Replays the two failing CI guards and the three prior local import-only failures after placing the same locked Astryx files physically under this worktree. The original broad run and complementary suite results stay distinct.",
+      "context": "Exact original Node22 and npm10 with all database URLs empty. Replays the two failing CI guards and the three prior local import-only failures after placing the same locked Astryx files physically under this worktree. The original broad run and complementary suite results stay distinct. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
       "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
       "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
@@ -212,48 +252,84 @@
           "format": "vitest-json",
           "sha256": "939b1a9cb4ab7ba658240d5320cf7839be682366061b846af8c772227bec8ce5"
         }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "tests/fixtures",
+        "tests/helpers",
+        "vitest.config.ts",
+        "tests/unit"
+      ],
+      "inputFingerprint": "8e7be21df2e13094a1151b7c378710bdca17c8617e90b148dda031e08c3b3129"
+    },
+    {
+      "id": "responsive",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+      "context": "Original signed App, guarded CI-shaped dual PostgreSQL and existing two-worker configuration. Exact baseline and pre-fix candidate reproduced the same original R5-08 failure. Fixed assertion verifies both pre-existing layout modes, exact documents, versions and original return.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T18:49:24.046Z",
+      "endedAt": "2026-11-24T18:51:46.020Z",
+      "log": "/workspace/dx-x1-evidence/x1-r508-responsive.log",
+      "logSha256": "6bfd72c7a0702362243920f1b3a81eef37a533084d2e56dc0bab8d5a2a5e6e3f",
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "54c13d6e7620536e2aeb79f76123e4b00e5e9e15248a32fa9478ce6711ce1cc3"
+        }
       ]
     },
     {
       "id": "preflight",
       "kind": "command",
       "command": "git diff --check && npm run test:preflight",
-      "context": "Canonical repository strict preflight and migration manifest/time-source guard.",
-      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
-      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:08:59.911Z",
-      "endedAt": "2026-11-24T18:09:07.279Z",
-      "log": "/workspace/dx-x1-evidence/x1-ci-preflight.log",
-      "logSha256": "3b927e7bf837c41edc26f3f4821abd3188a51322bf81669ae371564d192dc758"
+      "startedAt": "2026-11-24T18:50:07Z",
+      "endedAt": "2026-11-24T18:51:34Z",
+      "log": "/workspace/dx-x1-evidence/x1-responsive-preflight.log",
+      "logSha256": "9f41d9e3382e1a8310d6ed5a4de54e7e48a86aee368e7976722cd226971135e1"
     },
     {
       "id": "lint",
       "kind": "command",
       "command": "npm run lint",
-      "context": "Node22/npm10 strict whole repository lint, reported raw command. Final source including originally mapped test suites.",
-      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
-      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:09:07.287Z",
-      "endedAt": "2026-11-24T18:10:24.163Z",
-      "log": "/workspace/dx-x1-evidence/x1-ci-lint.log",
+      "startedAt": "2026-11-24T18:50:07Z",
+      "endedAt": "2026-11-24T18:51:34Z",
+      "log": "/workspace/dx-x1-evidence/x1-responsive-lint.log",
       "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
     },
     {
       "id": "types",
       "kind": "command",
       "command": "npm run typecheck",
-      "context": "Node22/npm10 workspace TypeScript check with current built contracts and services.",
-      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
-      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
+      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:09:07.287Z",
-      "endedAt": "2026-11-24T18:10:24.163Z",
-      "log": "/workspace/dx-x1-evidence/x1-ci-typecheck.log",
+      "startedAt": "2026-11-24T18:50:07Z",
+      "endedAt": "2026-11-24T18:51:34Z",
+      "log": "/workspace/dx-x1-evidence/x1-responsive-typecheck.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988"
     }
   ]

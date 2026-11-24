@@ -371,6 +371,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const refreshedFailure=page.waitForResponse(response=>response.url().includes('/technical/history?')&&new URL(response.url()).searchParams.get('kind')==='comments'&&response.status()===503);await docs.locator('[data-category="customer_comments"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await refreshedFailure;await dialog.getByRole('button',{name:'重试读取目录',exact:true}).waitFor();await page.unroute(failurePath);await dialog.getByRole('button',{name:'重试读取目录',exact:true}).click();await dialog.getByText('客户中间评语 v1',{exact:false}).last().waitFor();await page.keyboard.press('Escape');
    await docs.getByRole('tab',{name:'开发',exact:true}).click();
    for(const key of ['development_plt','development_sizes','development_consumption'])await readyDocument(key);
+   const dateLayouts=new Set<string>();
    for(const width of [1585,1165]){
     await page.setViewportSize({width,height:992});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -378,10 +379,37 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(Math.max(...panels)-Math.min(...panels)).toBeLessThanOrEqual(1);
     const dates=await page.locator('.cockpit-stage-dates>div').evaluateAll(elements=>elements.map(element=>({height:element.getBoundingClientRect().height,date:element.querySelector('time')?.textContent??null})));
     for(const row of dates){expect(row.height).toBeLessThan(24);if(row.date)expect(row.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);}
-    const differences=await page.locator('.cockpit-stage-dates-with-delta').evaluateAll(elements=>elements.map(element=>{const dates=element.querySelector('.cockpit-stage-dates')!.getBoundingClientRect(),delta=element.querySelector('.cockpit-target-difference')!.getBoundingClientRect();return {separation:delta.left-dates.right,alignment:Math.abs((delta.top+delta.bottom-dates.top-dates.bottom)/2),overflow:delta.right-element.getBoundingClientRect().right};}));
-    for(const difference of differences){expect(difference.separation).toBeGreaterThanOrEqual(0);expect(difference.alignment).toBeLessThanOrEqual(1);expect(difference.overflow).toBeLessThanOrEqual(1);}
+    const differences=await page.locator('.cockpit-stage-dates-with-delta').evaluateAll(elements=>elements.map(element=>{
+     const stage=element.closest('.cockpit-stage')!;
+     const style=getComputedStyle(stage);
+     const stageWidth=stage.getBoundingClientRect().width
+      -parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)
+      -parseFloat(style.borderLeftWidth)-parseFloat(style.borderRightWidth);
+     const dates=element.querySelector('.cockpit-stage-dates')!.getBoundingClientRect();
+     const delta=element.querySelector('.cockpit-target-difference')!.getBoundingClientRect();
+     const group=element.getBoundingClientRect();
+     return {stageWidth,horizontalGap:delta.left-dates.right,verticalGap:delta.top-dates.bottom,
+      centerOffset:Math.abs((delta.top+delta.bottom-dates.top-dates.bottom)/2),leftOffset:Math.abs(delta.left-dates.left),
+      rightOverflow:Math.max(dates.right,delta.right)-group.right,bottomOverflow:Math.max(dates.bottom,delta.bottom)-group.bottom};
+    }));
+    expect(differences.length).toBeGreaterThan(0);
+    for(const difference of differences){
+     // The existing compact stage layout stacks the delta under the dates below the container breakpoint.
+     if(difference.stageWidth<=150){
+      dateLayouts.add('stacked');
+      expect(difference.verticalGap).toBeGreaterThanOrEqual(0);
+      expect(difference.leftOffset).toBeLessThanOrEqual(1);
+     }else{
+      dateLayouts.add('side by side');
+      expect(difference.horizontalGap).toBeGreaterThanOrEqual(0);
+      expect(difference.centerOffset).toBeLessThanOrEqual(1);
+     }
+     expect(difference.rightOverflow).toBeLessThanOrEqual(1);
+     expect(difference.bottomOverflow).toBeLessThanOrEqual(1);
+    }
     await page.screenshot({path:join(h.evidence,`r508-real-source-${width}.png`),fullPage:true});
    }
+   expect(dateLayouts).toEqual(new Set(['side by side','stacked']));
    await page.setViewportSize({width:1585,height:992});
    await page.locator('.journey-node-panel').getByRole('button',{name:'查看更多 ›',exact:true}).click();const nodes=page.getByRole('dialog',{name:'全部节点明细',exact:true});await nodes.waitFor();expect(await nodes.locator(`#journey-full-node-${paperId}`).count()).toBe(1);const targetHeader=nodes.locator('th').filter({hasText:'原截止 / 节点目标'});await targetHeader.waitFor();expect(await targetHeader.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'r508-full-node-dates-1585.png'),fullPage:true});await page.keyboard.press('Escape');
    const origin=new URL(h.base+'/ui/digital-production?'+new URLSearchParams({workspace:'designer',section:'workspace',development:s.sourceId,
