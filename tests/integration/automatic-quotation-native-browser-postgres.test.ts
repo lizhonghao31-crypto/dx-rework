@@ -398,9 +398,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      await d.page.setViewportSize({width,height:960});
      expect(await panel.evaluate(node=>{
       const bounds=node.getBoundingClientRect();
-      return Array.from(node.querySelectorAll('input')).every(input=>{
+      const fields=node.querySelector('.quotation-workbench-price-fields')!;
+      const following=fields.nextElementSibling!;
+      const separated=following.getBoundingClientRect().top-fields.getBoundingClientRect().bottom>=4;
+      return separated&&Array.from(node.querySelectorAll('input')).every(input=>{
        const position=input.getBoundingClientRect();
-       return position.width>0&&position.left>=bounds.left-1&&position.right<=bounds.right+1;
+       return position.width>0&&position.left>=bounds.left-1&&position.right<=bounds.right+1&&getComputedStyle(input).borderTopWidth==='0px';
       });
      })).toBe(true);
      await panel.screenshot({path:join(h.evidence,`r4-pricing-${width}.png`)});

@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "e2c32dd3bee6e8f3e834f4f3023730e0a1d64bbb",
-  "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+  "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
   "rules": [
     {
       "rule": "Read the exact signed-in designer’s current quotation and calculate the proposal in both directions without recording customer confirmation.",
@@ -13,6 +13,7 @@
         "apps/api/src/production-platform/quotation-workbench.ts#readWorkbenchQuotation",
         "apps/web/src/quotation-workbench-pricing.tsx#QuotationWorkbenchPricing",
         "apps/web/src/digital-quotation-panel.tsx#QuotationWorkbenchPricing",
+        "apps/web/src/digital-quotation.css",
         "packages/contracts/src/digital-quotation.ts#calculateQuotationPricing",
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/unit/customer-quotation.test.ts"
@@ -31,7 +32,7 @@
       ],
       "initialization": "A read-only snapshot binds the single quotation and version. Without eligible published technical evidence a new automatic material line does not contribute a trusted complete cost.",
       "dateAndPermission": "The original currently assigned designer’s active role determines preview access. The projection makes no time or production state change. Signed IE and merchandiser cannot read this private proposal.",
-      "expectation": "Signed browsers computed 130% and the precise manual unit price, confirmed no original confirmation-input changes and validated 1165/390px layout and the original private-data cache boundary.",
+      "expectation": "Signed browsers computed 130% and the precise manual unit price, confirmed no original confirmation-input changes and validated 1165/390px layout, original no-store policy and spacing from the programmatic focus ring.",
       "checks": [
         "native-business",
         "quotation-nondb",
@@ -108,23 +109,23 @@
     {
       "id": "native-business",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r4-evidence/candidate/verify-native.mjs native-business",
+      "command": "node /tmp/dx-workbench-v101-r4-evidence/focused-controls/verify-native.mjs native-business",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-23T23:55:19.368Z",
-      "endedAt": "2026-11-23T23:56:18.889Z",
-      "testedHead": "f522a54f9c8ee4510b9937f5a3381dd714f7b74a",
-      "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+      "startedAt": "2026-11-24T00:04:50.127Z",
+      "endedAt": "2026-11-24T00:05:53.094Z",
+      "testedHead": "c02df2f47584a793d0221989631d1974a74392db",
+      "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
       "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints. The canonical two-worker business-chain config used both marked low-privilege PostgreSQL 16.14 databases and signed Chromium sessions. Resource cleanup verified.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/candidate/native-business.log",
-      "logSha256": "08b17bbb18f7497840bae2390451d4f5163f0bca2d895d56d218478c2a70f2f2",
+      "log": "/tmp/dx-workbench-v101-r4-evidence/focused-controls/native-business.log",
+      "logSha256": "aea446df2c7e70a2d3462eca7571bdc65ceac4cc5c764ca13987889ca86b99b9",
       "passed": 62,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "afa3fa176c6e3d93411cb5d0b878639f6e02cd1252e0fd6b76b8fa2b15044a9b"
+          "sha256": "59c21b211a6216831509ac3fbf45bd8c83d61db0be46e8a7e1b1e2d7924148b0"
         }
       ]
     },
@@ -134,20 +135,20 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/unit/customer-quotation.test.ts tests/unit/digital-budget.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/current-migration-manifest-checksum.test.ts with JSON and default reporters",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-23T23:55:19Z",
-      "endedAt": "2026-11-23T23:55:24Z",
-      "testedHead": "f522a54f9c8ee4510b9937f5a3381dd714f7b74a",
-      "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+      "startedAt": "2026-11-24T00:04:49Z",
+      "endedAt": "2026-11-24T00:04:54Z",
+      "testedHead": "c02df2f47584a793d0221989631d1974a74392db",
+      "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
       "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/candidate/quotation-nondb.log",
-      "logSha256": "e81ccc6a51c7841e3c5af444d76e8ac8e738eef567a1d3cfebf4c407690ad89e",
+      "log": "/tmp/dx-workbench-v101-r4-evidence/focused-controls/quotation-nondb.log",
+      "logSha256": "005dc56c30af274f381fc739c7060dd12883df50e4105c43b1a3141f84052f5c",
       "passed": 58,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ba45354b6194634f87001e49d5495c61b1fd883b08a4d22f912e0a76ad3e1277"
+          "sha256": "5c50599f02a9ae609f097d4ed1480423a2232f72cc56355c99d729efdc36f1e7"
         }
       ]
     },
@@ -157,12 +158,12 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-23T23:55:24Z",
-      "endedAt": "2026-11-23T23:55:38Z",
-      "testedHead": "f522a54f9c8ee4510b9937f5a3381dd714f7b74a",
-      "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+      "startedAt": "2026-11-24T00:04:54Z",
+      "endedAt": "2026-11-24T00:05:12Z",
+      "testedHead": "c02df2f47584a793d0221989631d1974a74392db",
+      "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
       "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/candidate/api-types.log",
+      "log": "/tmp/dx-workbench-v101-r4-evidence/focused-controls/api-types.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -171,12 +172,12 @@
       "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-23T23:55:38Z",
-      "endedAt": "2026-11-23T23:56:03Z",
-      "testedHead": "f522a54f9c8ee4510b9937f5a3381dd714f7b74a",
-      "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+      "startedAt": "2026-11-24T00:05:12Z",
+      "endedAt": "2026-11-24T00:05:40Z",
+      "testedHead": "c02df2f47584a793d0221989631d1974a74392db",
+      "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
       "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/candidate/web-types.log",
+      "log": "/tmp/dx-workbench-v101-r4-evidence/focused-controls/web-types.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -185,12 +186,12 @@
       "command": "node node_modules/eslint/bin/eslint.js (the eight changed TypeScript files) --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-23T23:56:03Z",
-      "endedAt": "2026-11-23T23:56:05Z",
-      "testedHead": "f522a54f9c8ee4510b9937f5a3381dd714f7b74a",
-      "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+      "startedAt": "2026-11-24T00:05:40Z",
+      "endedAt": "2026-11-24T00:05:41Z",
+      "testedHead": "c02df2f47584a793d0221989631d1974a74392db",
+      "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
       "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/candidate/lint.log",
+      "log": "/tmp/dx-workbench-v101-r4-evidence/focused-controls/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
@@ -199,12 +200,12 @@
       "command": "node scripts/acceptance/time-site-inventory.mjs",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-23T23:56:05Z",
-      "endedAt": "2026-11-23T23:56:05Z",
-      "testedHead": "f522a54f9c8ee4510b9937f5a3381dd714f7b74a",
-      "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+      "startedAt": "2026-11-24T00:05:41Z",
+      "endedAt": "2026-11-24T00:05:41Z",
+      "testedHead": "c02df2f47584a793d0221989631d1974a74392db",
+      "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
       "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/candidate/inventory.log",
+      "log": "/tmp/dx-workbench-v101-r4-evidence/focused-controls/inventory.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
     },
     {
@@ -213,13 +214,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-23T23:56:05Z",
-      "endedAt": "2026-11-23T23:56:12Z",
-      "testedHead": "f522a54f9c8ee4510b9937f5a3381dd714f7b74a",
-      "sourceFingerprint": "91e509177417609e1ede6f8ce773c8fcb421d9711f884b714b7d417a91eff1a1",
+      "startedAt": "2026-11-24T00:05:41Z",
+      "endedAt": "2026-11-24T00:05:48Z",
+      "testedHead": "c02df2f47584a793d0221989631d1974a74392db",
+      "sourceFingerprint": "b18c50e15c8a3df8774c68b0b095e84a4d7363acbba2bc2d20f60df4b03c5e0d",
       "context": "Pinned Node 22.22.2. Evidence captured against the assembled candidate worktree on the stated checkout, with unchanged before/after source fingerprints.",
-      "log": "/tmp/dx-workbench-v101-r4-evidence/candidate/preflight.log",
-      "logSha256": "a8fe6a3cf8c7f1d734a0969b9e09c83134f08c2213a508a71ce200cb534e65c2"
+      "log": "/tmp/dx-workbench-v101-r4-evidence/focused-controls/preflight.log",
+      "logSha256": "530667a1c8bd377147575f8404777722574b954bdda503da14847119ab1ec50d"
     }
   ]
 }

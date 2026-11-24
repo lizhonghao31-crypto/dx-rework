@@ -42,7 +42,7 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
   const error=draft&&!composing&&draft.value!==''&&!result?'请输入最多六位小数的非负数字'
     :result?.status==='price_out_of_range'?'按此倍率计算的客户单价超出金额范围':null;
   const unavailable=disabled||read.waiting;
-  return <div id="quote-cost-reference" aria-label="本单报价测算">
+  return <div id="quote-cost-reference" className="quotation-workbench-pricing" aria-label="本单报价测算">
     <p>成本合计 {current.unitCost===null?'待补齐':`${asMoney(current.unitCost)} 元/件`}</p>
     <p>报价状态 {statusLabels[current.status]}</p>
     {(current.counts.returned+current.counts.resubmitted+current.counts.incomplete+current.counts.pendingCraftApproval)>0&&
@@ -51,7 +51,7 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
       <li key={review.reviewId}>{rowNames.get(review.rowId)??'报价行'} · {review.field==='consumption'?'单件用量':'单价'} · {
         review.status==='returned'?'待修改':'待复核'} · {review.reason}</li>)}</ul>}
     <p>填任意一个，另一个自动算</p>
-    <div className="budget-heading" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
+    <div className="budget-heading quotation-workbench-price-fields" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
       <TextInput label="报价倍率（%）" value={rate} isDisabled={unavailable} onChange={value=>setEditing({field:'multiplier',value})}/>
       <TextInput label="客户单件报价（元/件）" value={price} isDisabled={unavailable} onChange={value=>setEditing({field:'customerUnitPrice',value})}/>
     </div>
