@@ -273,11 +273,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(detail.pathname).toBe("/ui/process-configuration");
     expect(detail.searchParams.get("rework")).toBe(id);
     expect(response.status()).toBe(200);
+    await page.setViewportSize({width:390,height:844});
+    expect(await page.locator(".mobile-primary-navigation").count()).toBe(0);
     await page.getByRole("link",{name:"返回 IE 报价与核价中心",exact:true}).click();
     await original.waitFor();
     await expect.poll(()=>original.evaluate(node=>node===document.activeElement)).toBe(true);
     expect(new URL(page.url()).searchParams.get("search")).toBe(row.rework_no);
     expect(new URL(page.url()).searchParams.get("queue")).toBe("pending_ie_review");
+    detail.searchParams.delete("ieReturn");
+    const originalRead=page.waitForResponse(value=>value.request().method()==="GET"
+      &&new URL(value.url()).pathname.endsWith(`/rework-orders/${id}/process-configuration`));
+    await page.goto(detail.href);
+    expect((await originalRead).status()).toBe(200);
+    expect(await page.getByRole("link",{name:"返回 IE 报价与核价中心",exact:true}).count()).toBe(0);
+    expect(await page.locator(".mobile-primary-navigation").count()).toBe(0);
    }finally{await context.close();}
   });
  });

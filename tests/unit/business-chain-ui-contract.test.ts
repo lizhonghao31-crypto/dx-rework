@@ -80,8 +80,8 @@ describe("business-chain UI handoff contracts", () => {
       readFile("apps/web/src/components.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
     ]);
-    expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>');
-    expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
+    expect(app).toMatch(/<Shell active="返工单看板" mobileNavigation="transaction">[^\n<]*<IeReworkReturn\/>\}<ProcessConfigurationForm \/><\/Shell>/);
+    expect(app).toMatch(/<Shell active="返工单看板" mobileNavigation="transaction">[^\n<]*<IeReworkReturn\/>\}<WorkReportingForm \/><\/Shell>/);
     expect(app).toContain('<Shell active="工资管理"><WagePage path={path} /></Shell>');
     for (const label of ["我的待办", "订单回货", "返工单看板", "系统管理", "财务报表", "财务中心"]) {
       expect(shell).toContain(`name: "${label}"`);
@@ -127,7 +127,7 @@ describe("business-chain UI handoff contracts", () => {
   it("routes the removed collective mock URL into the real execution workflow with the same authorization", async () => {
     const app = await readFile("apps/web/src/App.tsx", "utf8");
     expect(app).toContain('path === "/ui/work-reporting" || path === "/ui/piecework/collective"');
-    expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
+    expect(app).toMatch(/<Shell active="返工单看板" mobileNavigation="transaction">[^\n<]*<IeReworkReturn\/>\}<WorkReportingForm \/><\/Shell>/);
     expect(app).not.toContain("<MobileForm piecework />");
   });
 
