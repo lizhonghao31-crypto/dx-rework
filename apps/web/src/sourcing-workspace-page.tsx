@@ -1292,7 +1292,7 @@ function OrderDetailPage({
   const requestedHistory=sourcingWorkflowNodeFromSearch();
   const historyNode=new URLSearchParams(window.location.search).get("view")==="node-history"&&requestedHistory
     &&!(requestedHistory==="finance"&&isMerchandiserOnly(user?.businessRoles,user?.isRoot))?requestedHistory:null;
-  const canOwner=canAct(user,"owner_group","sourcing:owner:approve");
+  const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
   const read=useSourcingDetailRead(sourcingCaseId,request,!historyNode&&Boolean(user),canOwner);
   const item=read.snapshot?.item??null;
   const ownerReview=read.snapshot?.ownerReview??null;

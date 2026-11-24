@@ -177,7 +177,8 @@ describe("sourcing PR03 contracts", () => {
     expect(page).not.toContain("审批说明 / 驳回原因");
     expect(page).not.toContain("ownerReason");
     expect(page).toContain("sourcing-owner-reject");
-    expect(page).toContain('{ decision: "rejected" }');
+    expect(page).toContain('submitOwnerDecision("rejected")');
+    expect(page).toContain('JSON.stringify({decision,...ownerReview.basis})');
     expect(page).not.toContain(">登记合同</button>");
     expect(page).not.toContain("发起中途换厂");
     expect(page).not.toContain("生产管理核实换厂");
