@@ -23,6 +23,7 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  const readKey=context.selected?JSON.stringify([context.selected,context.round]):cockpitQuery(context);
  const quietRefresh=useRef<{revision:number;key:string}|null>(null);
  const reads=useCockpitReads(context,refresh,'home',quietRefresh.current?.revision===refresh&&quietRefresh.current.key===readKey),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
+ const overviewReturn=useRef<{identity:string;query:string;orderId:string;previousList:typeof reads.data}|null>(null);
  const session=cachedVerifiedSession(),canDelete=Boolean(session&&session!=='denied'&&session.status==='authorized'&&session.user.isRoot);
  const ready=context.selected?Boolean(reads.detail)&&!reads.detailLoading:Boolean(reads.data)&&!['preparing','loading'].includes(reads.listPhase);
  // Live observation advances visible time locally, not the whole query.
@@ -42,6 +43,7 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
    const restored=switching?{...cockpitViewPatch({}),...rememberedCockpitView(reads.identity,target??'')}:{},input={...latest.current.context,...restored,...patch,selected:target,page:patch.page??(preserveSelection?latest.current.context.page:1)};
    const parsed=JourneyReturnContextSchema.safeParse(input);
    if(!parsed.success){setContextError(parsed.error.issues.map(issue=>issue.message).join('；'));return;}
+   if(switching)overviewReturn.current=base.selected&&!target?{identity:originIdentity,query:cockpitQuery(parsed.data),orderId:latest.current.canonicalId??base.selected,previousList:reads.data}:null;
    setContextError('');if(switching)setNotice('');setContext(parsed.data);
    window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(returnContextUrl(parsed.data)));
   })().catch(error=>setContextError(error instanceof Error?error.message:'切换失败，请重试'));
@@ -57,7 +59,19 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  },[reads.identity]);
  useEffect(()=>registerInternalNavigationGuard(async()=>{remember();return true;}),[]);
  useLayoutEffect(()=>()=>remember(),[]);
- useLayoutEffect(()=>ready&&(!context.selected||restoreReading)?restoreCockpitReading(reads.identity,context.selected??'',root.current):undefined,[reads.identity,context.selected,ready]);
+ useLayoutEffect(()=>ready&&(!context.selected||restoreReading)?restoreCockpitReading(reads.identity,context.selected??'',root.current,!overviewReturn.current):undefined,[reads.identity,context.selected,ready]);
+ useLayoutEffect(()=>{
+  const target=overviewReturn.current;
+  if(!target)return;
+  if(context.selected||target.identity!==reads.identity||target.query!==readKey){overviewReturn.current=null;return;}
+  // On return, the previous list is visible while the same filter is read again.
+  if(reads.listPhase!=='error'&&(reads.listPhase!=='ready'||reads.data===target.previousList))return;
+  overviewReturn.current=null;
+  if(document.activeElement&&document.activeElement!==document.body)return;
+  const list=root.current?.querySelector<HTMLElement>('.cockpit-home-scroll');
+  const button=list?.querySelector<HTMLButtonElement>(`[data-cockpit-focus="home-order:${CSS.escape(target.orderId)}"]`);
+  (button&&!button.disabled?button:list)?.focus({preventScroll:true});
+ },[context.selected,readKey,reads.identity,reads.data,reads.listPhase]);
  useEffect(()=>{
   if(!reads.detail||reads.detailLoading)return;const patch=reconcileCockpitAnchor(reads.detail,context);
   if(patch){const next={...context,...patch};setContext(next);window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(returnContextUrl(next)));setNotice('原节点已变更，已定位到所属阶段');}
