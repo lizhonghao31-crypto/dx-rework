@@ -17,7 +17,7 @@ import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {ShortLeadPanel} from './short-lead-panel.js';
 import {matchingShortLeadApproval,type ShortLeadState} from '@dx-rework/contracts/short-commitment';
 import {quotationHref} from './digital-quotation-panel.js';
-import {DocumentToolbar,DocumentErrors,DocumentSection} from "./document-editor.js";
+import {DocumentToolbar,DocumentErrors,DocumentSection,useDocumentFieldLocator,type DocumentIssue} from "./document-editor.js";
 import { DevelopmentDocumentFields } from "./development-document-fields.js";
 import { DevelopmentPatternLink, type DevelopmentPatternChoice } from "./development-pattern-link.js";
 import { developmentFieldChapter, developmentIssues } from "./digital-development-validation.js";
@@ -33,7 +33,7 @@ import { digitalRequest, DigitalRequestError } from "./digital-production-api.js
 import { initialDigitalProductGroup } from "./digital-production-defaults.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { registerInternalNavigationGuard } from "./internal-navigation.js";
-import { confirmInApp } from "./system-dialog.js";
+import { businessErrorInApp, confirmInApp, type BusinessDialogIssue } from "./system-dialog.js";
 import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 import type { DevelopmentSheet, DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { sameDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs, developmentOrderInput, developmentQuantityError, developmentQuantityTotal, initialDevelopmentDocument, attachDevelopmentCraftFile, type DevelopmentOrderDraft } from "./digital-development-editing.js";
@@ -83,6 +83,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const withOrder=intent!=='development';
   const stepCount=preorder?1:withOrder?3:2;
   const [locatingField,setLocatingField]=useState<{id:string}|null>(null);
+  const errorDialogOpen=useRef(false);
   const [wizardStep,setWizardStep]=useState<DevelopmentWizardStep>(()=>Math.min(stepCount,creation?.snapshot?.wizardStep??existingDraft?.document?.customerOrderDraft?.wizardStep??1) as DevelopmentWizardStep);
   const stepHeading=useRef<HTMLHeadingElement>(null);
   const [published,setPublished]=useState(existingDraft?.status==="published");
@@ -99,8 +100,11 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     ?{...document,customerOrderDraft:{withOrder,stage:"formal",order:form}}
     :document;
   const workbenchCraftControl=guided&&document.workbenchSheet?"development-workbench-processingSelected":undefined;
+  const resolveIssueField=(issue:DocumentIssue):DocumentIssue=>
+    workbenchCraftControl&&(issue.id==="development-craft"||issue.id==="development-craftSteps")
+      ?{...issue,id:workbenchCraftControl}:issue;
   const issues=validationMode?developmentIssues(validationDocument,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs,false,stepValidation)
-    .map(issue=>workbenchCraftControl&&(issue.id==="development-craft"||issue.id==="development-craftSteps")?{...issue,id:workbenchCraftControl}:issue):[];
+    .map(resolveIssueField):[];
   const [designerName, setDesignerName] = useState<string | null>(existingDraft?.designerName ?? source?.designer ?? null);
   useEffect(() => {
     if (source || existingDraft) return;
@@ -256,9 +260,15 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     setForm(current => ({...current, lines: current.lines.length > 1 ? current.lines.filter((_, position) => position !== index) : current.lines}));
   };
   const save = async (draftOnly = false):Promise<boolean> => {
-    if (writing.current || pendingSubmission.current) return false;
-    if(unavailableDraftAttachments.length){setError('此草稿含失效附件，请移除原附件并重新上传后再保存或发布。');return false;}
-    if(lostLocalFiles.length){setError('本页原本地附件尚未上传，刷新后须重新选择或移除这些本地项；未开始提交，其他资料仍保留。');return false;}
+    if (writing.current || pendingSubmission.current || errorDialogOpen.current) return false;
+    const action=preorder&&!published?"保存预下单备料资料":draftOnly?"保存开发草稿":withOrder?"提交并确认订单":"提交开发单";
+    const attachmentError=unavailableDraftAttachments.length?'此草稿含失效附件，请移除原附件并重新上传后再保存或发布。':
+      lostLocalFiles.length?'本页原本地附件尚未上传，刷新后须重新选择或移除这些本地项；未开始提交，其他资料仍保留。':null;
+    if(attachmentError){
+      setError(attachmentError);
+      showBusinessError(action,[{type:"upload",message:attachmentError}]);
+      return false;
+    }
     const creationScope=creationRef.current;
     const requestCreation=async<T,>(path:string,method:'POST'|'PUT',body:unknown,key:string,sourceId:string|null,beforeVersion:number|null,proof:(value:T)=>{sourceId:string;version:number|null},native?:PendingDevelopmentSubmission):Promise<T>=>{
       const outgoing:CreationOutgoing={path,method,key,body:JSON.stringify(body),sourceId,beforeVersion,...(native?{native}:{})};creationScope?.started(creationScope.viewId,outgoing);
@@ -298,7 +308,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         if(dateError)throw new Error(dateError);
         const errors=calendar.orderTimeEnabled?[]:initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length&&!effectiveApproval)throw new Error(errors.join("；"));
       }
-      if(!source&&!published){setStepValidation(false);setValidationMode(draftOnly?"save":"publish");if(developmentIssues(submissionDocument,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs).length)return false;if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
+      if(!source&&!published){
+        setStepValidation(false);
+        setValidationMode(draftOnly?"save":"publish");
+        const invalid=developmentIssues(submissionDocument,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs);
+        if(invalid.length){showBusinessError(action,documentIssuesForDialog(invalid));return false;}
+        if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");
+      }
       let id = createdSource;
       if (!id) {
         const payload = JSON.stringify(sourceInput);
@@ -395,12 +411,20 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       const issue=validation.issues?.[0];
       const field=issue?.path.at(-1),labels:Record<string,string>={designStyleNo:"设计款号",customerCode:"客户",productGroup:"产品分组",orderDate:"下单日期",color:"颜色",size:"尺码",quantity:"订购数量",lines:"PO 明细"};
       const prefix=issue?.path[0]==="lines"&&typeof issue.path[1]==="number"?`PO ${issue.path[1]+1} `:"";
-      setError(issue?( /[\u3400-\u9fff]/.test(issue.message)?issue.message:`${prefix}${labels[String(field)]??"订购资料"}填写有误，请核实必填内容与允许范围`):(reason instanceof Error?reason.message.replaceAll("出货日期",customerPoDateLabel):"保存失败"));
+      const detail=issue?( /[\u3400-\u9fff]/.test(issue.message)?issue.message:`${prefix}${labels[String(field)]??"订购资料"}填写有误，请核实必填内容与允许范围`):(reason instanceof Error?reason.message.replaceAll("出货日期",customerPoDateLabel):"保存失败");
+      setError(detail);
       setFailedPhase(phase);
       const message=reason instanceof Error?reason.message:"";
       const po=message.match(/PO (\d+)/)?.[1],index=typeof issue?.path[1]==='number'?issue.path[1]+1:null;
       const target=message.includes('客户下单日期')?'development-customer-order-date':field==='designStyleNo'||message.includes('设计款号')?'development-create-style':field==='customerCode'||message.includes('请选择客户')?'development-create-customer':po?`development-po-date-${po}`:index&&field==='color'?`development-po-color-${index}`:null;
-      setErrorField(target);if(target)requestAnimationFrame(()=>window.document.getElementById(target)?.focus());return false;
+      setErrorField(target);
+      const outcome=reason instanceof DigitalRequestError?reason:null;
+      const type=outcome?.resultUnknown?"unknown":outcome?.status===401||outcome?.status===403?"permission":
+        outcome?.status===409?"version":outcome?.operation==="read"?"read":issue?"format":target?"prerequisite":"failure";
+      if(guided)showBusinessError(action,[{type,message:detail,...(target&&type!=="unknown"&&type!=="permission"?
+        {field:{id:target,label:labels[String(field)]??"需核实字段"}}:{})}]);
+      else if(target)requestAnimationFrame(()=>window.document.getElementById(target)?.focus());
+      return false;
     } finally {writing.current = false; setBusy(false);}
   };
   const changeStep=(step:DevelopmentWizardStep)=>{
@@ -417,16 +441,29 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     else if(chapter)setWizardStep(2);
     else if(withOrder)setWizardStep(3);
   };
+  const locateErrorField=useDocumentFieldLocator(locateStep);
+  function documentIssuesForDialog(invalid: readonly DocumentIssue[]): BusinessDialogIssue[] {
+    return invalid.map(resolveIssueField).map(({id,label,message})=>({type:"format",message:`${label}：${message}`,field:{id,label}}));
+  }
+  function showBusinessError(action: string, invalid: readonly BusinessDialogIssue[]): void {
+    if(!guided||errorDialogOpen.current)return;
+    errorDialogOpen.current=true;
+    void businessErrorInApp(action,invalid).then(field=>{
+      errorDialogOpen.current=false;
+      if(field&&window.document.getElementById(formId))locateErrorField(field);
+    });
+  }
   const beginPreorderConfirmation=async()=>{
-    if(!await confirmInApp("客户已确认订单？在原预下单上补齐正式资料；保存草稿不会正式下单。")||writing.current)return;
+    if(!await confirmInApp("客户已确认订单？在原预下单上补齐正式资料；保存草稿不会正式下单。",{presentation:"astryx"})||writing.current)return;
     setPreorder(false);
     changeStep(1);
   };
   const advance=()=>{
+    if(errorDialogOpen.current)return;
     if(wizardStep===1&&!form.designStyleNo.trim()){
       setError('请填写设计款号');
       setErrorField('development-create-style');
-      window.document.getElementById('development-create-style')?.focus();
+      showBusinessError("下一步",[{type:"missing",message:"请填写设计款号",field:{id:"development-create-style",label:"设计款号"}}]);
       return;
     }
     if(wizardStep===1&&document.workbenchSheet){
@@ -437,16 +474,19 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         setValidationMode('save');
         setStepValidation(true);
         const id=first?`development-workbench-${first.field}`:fabric?`development-${fabric.materialId}-${fabric.field}`:undefined;
-        if(id)setLocatingField({id});
+        const invalid=developmentIssues(validationDocument,quantityInput,measurementIds.current,false,null,sizeQuantityInputs,false,true);
+        if(invalid.length)showBusinessError("下一步",documentIssuesForDialog(invalid));
+        else if(id)setLocatingField({id});
         return;
       }
     }
     setStepValidation(false);
     if(wizardStep===2&&document.workbenchSheet&&!published&&(!patternChoice||!document.quantity)){
       const id=document.quantity?"development-pattern-preparation":"development-quantity";
-      setError(document.quantity?"请选择打板品类与有效执行价":"请填写本轮打板数量");
+      const detail=document.quantity?"请选择打板品类与有效执行价":"请填写本轮打板数量";
+      setError(detail);
       setErrorField(id);
-      setLocatingField({id});
+      showBusinessError("下一步",[{type:"missing",message:detail,field:{id,label:document.quantity?"打板品类与执行价":"本轮打板数量"}}]);
       return;
     }
     if(wizardStep<stepCount)changeStep(wizardStep===1?2:3);
@@ -467,7 +507,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     sourceSearchSequence.current++;setDuplicateSource(null);setCodeCheck(null);setCheckingCode(false);
     setForm(current=>({...current,designStyleNo}));
   };
-  const developmentDate=<label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label>;
+  const developmentDate=<label>开发下单日期（固定）<input className="development-create-readonly-input" id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label>;
   const craftControl=<>{fixedCraft?<IndependentCraftField label="工艺" entryControls={guided} firstControlId={workbenchCraftControl} value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={changeCraft}/>:guided?<Selector id={workbenchCraftControl} label="工艺" size="sm" isDisabled={busy||published}
       value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft}
       placeholder="选择加工类型" options={["无","印花","绣花","印绣花"]} onChange={value=>changeCraft(value as DevelopmentDocument["craft"])}/>
@@ -550,7 +590,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       {guided?<DevelopmentEntryText label="代用款号（选填）" visibleLabel maxLength={100} value={form.temporaryStyleNo??''}
         isReadOnly={Boolean(createdSource)} onChange={temporaryStyleNo=>setForm({...form,temporaryStyleNo:temporaryStyleNo||null})}/>
         :<label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>}
-      <label>设计师（只读）<input aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
+      <label>设计师（只读）<input className="development-create-readonly-input" aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
 {guided&&!preorder&&developmentDate}</div><div className="development-create-grid development-create-grid-secondary" hidden={guided&&(preorder||withOrder&&wizardStep===1)}>
       {guided?<div id="development-create-customer" tabIndex={-1}>
         <Selector label="客户" isRequired={withOrder&&!preorder} size="sm" hasSearch searchPlaceholder="搜索客户或编号"

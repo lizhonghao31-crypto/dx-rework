@@ -15,7 +15,6 @@ button.dx-production-kpi { cursor: pointer; }
 .dx-production-stage dl > div { display: flex; gap: 10px; margin-top: 8px; font-size: 12px; }
 .dx-production-stage dt { color: var(--production-muted); }
 .dx-production-stage dd { margin: 0; }
-.dx-production-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; padding: 12px 0; }
 .dx-production-ui :focus-visible { outline: 3px solid #66a5ff; outline-offset: 2px; }
 .dx-production-ui { min-height: 100dvh; min-width: 0; }
 .dx-production-ui .production-command-main,
@@ -29,7 +28,7 @@ button.dx-production-kpi { cursor: pointer; }
 .dx-production-ui .dx-production-table th,
 .dx-production-ui .dx-production-table td { padding: 10px 12px; border-bottom: 1px solid var(--production-border); text-align: left; }
 .dx-production-ui .dx-production-pagination { color: var(--production-muted); }
-@media(max-width:800px) { .dx-production-ui { padding: 12px; } .dx-production-header { align-items: start; flex-wrap: wrap; } .dx-production-pagination { flex-wrap: wrap; } }
+@media(max-width:800px) { .dx-production-ui { padding: 12px; } .dx-production-header { align-items: start; flex-wrap: wrap; } }
 
 /* V2 Golden opt-in: only new workspaces that explicitly adopt this class. */
 .dx-production-refined {font-size:13px;line-height:1.45;color:var(--production-text)}
@@ -46,13 +45,8 @@ button.dx-production-kpi { cursor: pointer; }
 .dx-production-refined .dx-production-kpi strong {font-size:25px;line-height:1.2}
 .dx-production-refined .dx-production-kpi span {font-size:12px}
 .dx-production-refined .dx-production-filters {padding:12px;gap:10px;font-size:12px}
-.dx-production-refined input,.dx-production-refined select {min-height:32px;border:1px solid #c9d8ea;border-radius:5px;padding:5px 8px;background:#fff;color:var(--production-text);font:inherit}
+.dx-production-refined :is(input,select):where(:not(.development-create-wizard *)) {min-height:32px;border:1px solid #c9d8ea;border-radius:5px;padding:5px 8px;background:#fff;color:var(--production-text);font:inherit}
 .dx-production-refined .dx-production-table th,.dx-production-refined .dx-production-table td {padding:7px 8px}
 .dx-production-refined .dx-production-table th {font-size:11px;font-weight:500;background:#f3f7fd}
 .dx-production-refined a {color:var(--production-primary);text-decoration:none}
 .dx-production-refined a:hover {text-decoration:underline}
-.dx-production-refined .dx-production-pagination {padding:10px 0 0;font-size:12px}
-
-.dx-page-jump { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
-.dx-page-jump > input { inline-size: 4rem; max-inline-size: 100%; text-align: center; }
-.dx-page-jump > [role="status"] { flex-basis: 100%; text-align: center; }

@@ -31,7 +31,7 @@ describe("shared list pagination", () => {
     }))).window.document;
     for (const view of [list, production]) {
       const buttons = Array.from(view.querySelectorAll("button"));
-      expect(view.body.textContent).toContain("共 15 条");
+      expect(view.querySelector("nav.dx-pagination-frame")?.textContent).toContain("共 15 条 · 第 2 页");
       expect(buttons.find(button => button.textContent === "上一页")?.disabled).toBe(false);
       expect(buttons.find(button => button.textContent === "下一页")?.disabled).toBe(true);
     }
@@ -62,15 +62,16 @@ describe("shared list pagination", () => {
   });
 
   it("uses My Todos as the only pagination view and does not inherit sidebar layout", async () => {
-    const [source, shellStyles, workbenchStyles, myTodosStyles] = await Promise.all([
+    const [source, shellStyles, workbenchStyles, myTodosStyles, sharedStyles] = await Promise.all([
       read("apps/web/src/list-pagination.tsx"),
       read("apps/web/src/styles.css"),
       read("apps/web/src/rework-workbench.css"),
       read("apps/web/src/my-todos.css"),
+      read("packages/ui/src/components.css"),
     ]);
 
     expect(source).toContain('import "./my-todos.css"');
-    expect(source).toContain('<nav className="my-todos-pagination"');
+    expect(source).toContain('className="my-todos-pagination dx-pagination-frame');
     expect(source).toContain('className="my-todos-pagination__ellipsis"');
     expect(source.match(/<PaginationNav/g)).toHaveLength(1);
     expect(source).toContain('page: 1');
@@ -83,8 +84,9 @@ describe("shared list pagination", () => {
     expect(workbenchStyles).toContain("body .app-shell > aside > nav {");
     expect(workbenchStyles).not.toMatch(/body \.app-shell nav\s*\{/);
     expect(myTodosStyles).toContain(".my-todos-pagination {");
-    expect(myTodosStyles).toContain("width: 34px");
-    expect(myTodosStyles).toContain("width: 32px");
+    expect(myTodosStyles).not.toMatch(/width: (?:32|34)px/);
+    expect(sharedStyles).toMatch(/\.dx-pagination-frame[^}]*justify-content: center/);
+    expect(sharedStyles).toMatch(/\.dx-pagination-frame--native[^}]*white-space: nowrap/);
   });
 
   it("does not retain the oversized legacy pager markup", async () => {

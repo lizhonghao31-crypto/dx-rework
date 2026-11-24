@@ -110,3 +110,15 @@
     flex: 1 1 0;
   }
 }
+.system-dialog-issues {
+  display: grid;
+  gap: var(--spacing-3, .75rem);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.system-dialog-issues :is(h2, ul) { margin: 0; }
+.system-dialog-issues ul { padding-inline-start: 1.25rem; }
+.system-dialog-issues li { margin-block-end: var(--spacing-2, .5rem); }
+.system-dialog-issues li > button { margin-inline-start: var(--spacing-2, .5rem); }
+.system-dialog-issues > button { justify-self: end; }

@@ -247,7 +247,8 @@ export function DesignerRelatedOriginals({order,materials,returnTo}:{order:Order
    {state.data.entries.length?<ul>{state.data.entries.filter(entry=>category!=='receiving'||entry.load?.kind!=='receiving').map(entry=>
     <RecordEvidence key={entry.id} entry={entry} session={current} returnTo={target.pathname+target.search}/>)}</ul>
     :state.phase==='ready'&&<p>{state.data.state==='missing'?'暂无记录':state.data.state==='not_applicable'?'当前没有此类业务来源':'是否存在原记录尚待核实'}</p>}
-   {state.data.nextPage&&<Button label="读取下一页关联单据" isDisabled={state.phase==='loading'} onClick={()=>void current.load(currentCategory!,true)}/>}
+   {state.data.nextPage&&<div className="dx-pagination-frame"><Button label="读取下一页关联单据" size="sm"
+    isDisabled={state.phase==='loading'} onClick={()=>void current.load(currentCategory!,true)}/></div>}
   </>}
  </div>;
 }

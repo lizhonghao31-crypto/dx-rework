@@ -23,6 +23,47 @@
 .dx-button--primary:active:not(:disabled) { background: var(--dx-v2-color-primary-pressed); transform: translateY(1px); }
 .dx-button:focus-visible { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 2px; }
 .dx-button:disabled { cursor: not-allowed; opacity: 0.48; box-shadow: none; }
+
+.dx-pagination-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  gap: var(--spacing-2, .5rem);
+  padding-block: var(--spacing-3, .75rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.dx-page-jump {
+  display: inline-flex;
+  align-items: start;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-2, .5rem);
+}
+
+.dx-pagination-frame--native > button,
+.dx-pagination-frame--native .dx-page-jump > button,
+.dx-pagination-frame--native .dx-page-jump > input {
+  box-sizing: border-box;
+  min-block-size: 2rem;
+  min-inline-size: 2rem;
+  padding: .25rem .625rem;
+  border: 1px solid var(--dx-form-control-border, #d1d7df);
+  border-radius: var(--radius-sm, .375rem);
+  background: var(--dx-v2-color-surface);
+  color: var(--dx-v2-color-text);
+  font: inherit;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.dx-pagination-frame--native .dx-page-jump > input { inline-size: 4rem; text-align: center; }
+.dx-pagination-frame .dx-page-jump > [role="status"] { flex-basis: 100%; text-align: center; }
+.dx-pagination-frame--native button:hover:not(:disabled) { border-color: var(--dx-v2-color-primary); color: var(--dx-v2-color-primary); }
+.dx-pagination-frame--native button[aria-current="page"] { background: var(--dx-v2-color-control); border-color: var(--dx-v2-color-control); color: #fff; }
+.dx-pagination-frame--native :is(button, input):disabled { cursor: not-allowed; opacity: .48; }
 .dx-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
 .dx-badge--neutral { background: #e0e5ea; }
 .dx-badge--info { background: #dbe6ff; color: #245fe9; }
