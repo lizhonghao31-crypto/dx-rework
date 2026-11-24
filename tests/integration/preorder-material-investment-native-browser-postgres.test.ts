@@ -76,6 +76,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(rejection.status()).toBe(400);
    expect(await rejection.text()).toContain('请先填写材料名称');
    expect((await new DigitalDevelopmentService(h.db,true).read(designer,draft.sourceId)).version).toBe(draft.version);
+   const validation=page.getByRole('dialog',{name:'保存预下单备料资料',exact:true});
+   await validation.getByText(/请先填写材料名称/).waitFor();
+   await validation.getByRole('button',{name:'关闭',exact:true}).click();
    await spareName.pressSequentially('TEST spare fabric');
    expect(await sparePrice.inputValue()).toBe('0');
    expect(await spareUnit.inputValue()).toBe('米');

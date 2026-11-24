@@ -226,52 +226,12 @@
 }
 
 .my-todos-pagination {
-  display: flex;
-  justify-content: center; flex-wrap: wrap;
-  gap: 6px;
-  padding: 18px 24px 22px;
   border-top: 1px solid var(--dx-form-control-border);
 }
 
-.my-todos-pagination button {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--dx-form-control-border);
-  border-radius: 8px;
-  background: var(--dx-v2-color-surface);
-  color: var(--dx-v2-color-text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.my-todos-pagination button:hover:not(:disabled) {
-  border-color: var(--dx-v2-color-primary);
-  color: var(--dx-v2-color-primary);
-}
-
-.my-todos-pagination button.is-active {
-  border-color: var(--dx-v2-color-control);
-  background: var(--dx-v2-color-control);
-  color: #fff;
-}
-
 .my-todos-pagination__ellipsis {
-  display: grid;
-  width: 20px;
-  height: 34px;
-  place-items: center;
+  padding-inline: var(--spacing-1, .25rem);
   color: var(--dx-v2-color-text);
-  font-weight: 750;
-}
-
-.my-todos-pagination button:disabled {
-  cursor: not-allowed;
-  opacity: .35;
 }
 
 .task-guidance {
@@ -395,21 +355,6 @@
     display: none;
   }
 
-  .my-todos-pagination {
-    flex-wrap: wrap;
-    gap: 5px;
-    padding: 14px 10px 18px;
-  }
-
-  .my-todos-pagination button {
-    width: 32px;
-    height: 32px;
-    color: var(--dx-v2-color-text);
-  }
-
-  .my-todos-pagination__ellipsis {
-    height: 32px;
-  }
 }
 
 
@@ -423,7 +368,3 @@
 /* P07: approved personal list only; never applies to the cockpit. */
 .my-todos-page .my-todo-title { column-gap:10px; row-gap:8px; flex-wrap:wrap; }
 .my-todos-page .my-todos-intro .my-todos-search { order:-1; margin-left:0; }
-
-.dx-page-jump { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
-.dx-page-jump > input { inline-size: 4rem; max-inline-size: 100%; text-align: center; }
-.dx-page-jump > [role="status"] { flex-basis: 100%; text-align: center; }

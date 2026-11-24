@@ -44,8 +44,8 @@ function PaginationNav({ items, ariaLabel, page, totalPages, total, busy, pendin
 }>) {
   const previousPage = totalPages === null ? page - 1 : Math.min(page - 1, Math.max(1, totalPages));
   return (
-    <nav className="my-todos-pagination" aria-label={ariaLabel}>
-      {total!=null&&<span>共 {total} 条</span>}
+    <nav className="my-todos-pagination dx-pagination-frame dx-pagination-frame--native" aria-label={ariaLabel}>
+      {total!=null&&<span>共 {total} 条 · 第 {page} 页</span>}
       <button type="button" className="my-todos-pagination__direction" disabled={busy || totalPages === null || page <= 1 || pendingPage === previousPage} onClick={() => onPageChange(previousPage)}>上一页</button>
       {totalPages!==null&&items.map((item) => item.kind === "ellipsis"
         ? <span className="my-todos-pagination__ellipsis" aria-hidden="true" key={item.key}>…</span>

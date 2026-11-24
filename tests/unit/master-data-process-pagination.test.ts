@@ -24,12 +24,15 @@ describe("master-data process catalog pagination", () => {
 
   it("uses the My Todos pager on desktop and mobile", async () => {
     const page = await read("apps/web/src/master-data-page.tsx");
-    const styles = await read("apps/web/src/my-todos.css");
+    const [pager, styles] = await Promise.all([
+      read("apps/web/src/list-pagination.tsx"),
+      read("packages/ui/src/components.css"),
+    ]);
 
     expect(page).toContain("<ListPagination");
     expect(page).not.toContain("<CursorListPagination");
-    expect(styles).toContain("width: 34px");
-    expect(styles).toContain("width: 32px");
-    expect(styles).toContain("@media (max-width: 800px)");
+    expect(pager).toContain("dx-pagination-frame dx-pagination-frame--native");
+    expect(styles).toMatch(/\.dx-pagination-frame[^}]*flex-wrap: wrap/);
+    expect(styles).toMatch(/\.dx-pagination-frame--native[^}]*white-space: nowrap/);
   });
 });

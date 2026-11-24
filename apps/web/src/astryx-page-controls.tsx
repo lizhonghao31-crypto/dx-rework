@@ -11,15 +11,15 @@ export function AstryxPageControls({page,total,pageSize,label,busy=false,onPageC
  const last=total===null?null:Math.max(1,Math.ceil(total/pageSize));
  useEffect(()=>{setInput(String(page));setError('');},[page,last]);
  if(last===null||last===1&&page===1)return null;
- if(page>last)return <div role="group" aria-label={label}>
+ if(page>last)return <div className="dx-pagination-frame" role="group" aria-label={label}>
   <p>共 {total} 条。当前页超出最新范围。</p>
   <Button label={`返回第 ${last} 页`} isDisabled={busy} onClick={()=>onPageChange(last)}/>
  </div>;
  const go=(target:number)=>{
   if(!busy&&Number.isSafeInteger(target)&&target>=1&&target<=last&&target!==page)onPageChange(target);
  };
- return <div className="my-todos-pagination">
-  <span>共 {total} 条</span>
+ return <div className="my-todos-pagination dx-pagination-frame">
+  <span>共 {total} 条 · 第 {page} 页</span>
   <Pagination label={label} page={page} totalPages={last} onChange={go} isDisabled={busy} size="sm"/>
   <form className="dx-page-jump" onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
    onSubmit={event=>{

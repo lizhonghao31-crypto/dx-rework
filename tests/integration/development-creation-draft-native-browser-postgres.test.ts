@@ -289,6 +289,9 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect(await quantity.inputValue()).toBe('1.');
     await page.getByRole('button',{name:'提交并确认订单',exact:true}).click();
     await page.getByRole('alert').filter({hasText:/填写有误|请选择客户/}).waitFor();
+    const validation=page.getByRole('dialog',{name:'提交并确认订单',exact:true});
+    await validation.getByText(/填写有误|请选择客户/).waitFor();
+    await validation.getByRole('button',{name:'关闭',exact:true}).click();
     await page.getByRole('button',{name:'上一步',exact:true}).click();
    }
    if(mode!=='preorder'){
@@ -437,12 +440,28 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const docs=page.getByRole('heading',{name:'版单资料',exact:true});
    await docs.waitFor();
    const lookup=page.getByRole('searchbox',{name:'查找字段'});
+   const quantity=page.getByRole('spinbutton',{name:'第 1 行 件数',exact:true});
+   const materialsTable=page.locator('#development-materials .development-technical-table').first();
+   for(const [width,height] of [[1165,747],[1440,900]] as const){
+    await page.setViewportSize({width,height});
+    expect(await lookup.evaluate(input=>[getComputedStyle(input).borderTopWidth,getComputedStyle(input.parentElement!).borderTopWidth])).toEqual(['0px','1px']);
+    expect(await quantity.evaluate((input:HTMLInputElement)=>{
+     const field=input.getBoundingClientRect(),cell=input.closest('td')!.getBoundingClientRect();
+     return {frame:getComputedStyle(input).borderTopWidth,inside:field.left>=cell.left&&field.right<=cell.right+1,min:input.min,max:input.max};
+    })).toEqual({frame:'1px',inside:true,min:'1',max:'100000'});
+    expect(await materialsTable.evaluate((table:HTMLTableElement)=>table.tBodies[0]!.rows[1]!.cells[0]!.colSpan)).toBe(await materialsTable.locator('thead th').count());
+    await page.screenshot({path:join(h.evidence,`c1-order-sheet-${template}-${width}.png`),fullPage:true});
+   }
+   await page.setViewportSize({width:1165,height:747});
    await lookup.fill('针距');
    await page.getByRole('button',{name:'针距',exact:true}).click();
    expect(await page.getByLabel('针距',{exact:true}).inputValue()).toBe('12针');
    const firstRow=page.locator('#development-'+bad.materialId+'-supplier');
    expect(await firstRow.count()).toBe(0);
-   await page.getByRole('button',{name:'下一步',exact:true}).click();
+   const next=page.getByRole('button',{name:'下一步',exact:true});
+   await next.click();
+   const validation=page.getByRole('dialog',{name:'下一步',exact:true});
+   await validation.getByRole('button',{name:/^去填写 .*供应方/}).click();
    const dialog=page.getByRole('dialog',{name:'全部面辅料'});
    await dialog.waitFor();
    await expect.poll(()=>firstRow.evaluate(el=>document.activeElement===el)).toBe(true);
@@ -492,10 +511,20 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await page.getByRole('button',{name:'下一步',exact:true}).click();
    await steps.getByRole('heading',{name:'开发需求',exact:true}).waitFor();
    await page.getByText(/^执行单价：/).waitFor();
-   await page.getByRole('button',{name:'提交开发单',exact:true}).click();
+   const submit=page.getByRole('button',{name:'提交开发单',exact:true});
+   const writes=()=>h.requests.filter(row=>row.session===tab.session&&['POST','PUT'].includes(row.method)&&row.path.includes('/sources'));
+   const beforeSubmit=writes().length;
+   await submit.click();
+   const validation=page.getByRole('dialog',{name:'提交开发单',exact:true});
+   await validation.getByText(/工艺开发板仅适用于印花或绣花/).waitFor();
+   await page.keyboard.press('Escape');
+   await validation.waitFor({state:'hidden'});
+   await expect.poll(()=>submit.evaluate(el=>document.activeElement===el)).toBe(true);
+   expect(writes()).toHaveLength(beforeSubmit);
+   await submit.click();
+   await validation.getByRole('button',{name:'去填写 工艺',exact:true}).click();
    const issue=page.getByRole('button',{name:'工艺：工艺开发板仅适用于印花或绣花',exact:true});
-   await issue.click();
-   expect(await steps.getByRole('heading',{name:'版单资料',exact:true}).isVisible()).toBe(true);
+   await steps.getByRole('heading',{name:'版单资料',exact:true}).waitFor();
    const checkbox=page.getByRole('checkbox',{name:'绣花',exact:true}),native=await checkbox.isVisible();
    const craft=native?checkbox:page.getByRole('combobox',{name:'工艺',exact:true});
    await expect.poll(()=>craft.evaluate(el=>document.activeElement===el)).toBe(true);

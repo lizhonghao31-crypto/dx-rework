@@ -52,7 +52,6 @@
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__activity { font-size:12px!important; line-height:18px!important; }
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-delete { width:32px!important; height:32px!important; right:12px!important; top:16px!important; }
 .rework-query-content[data-legacy-ui="rework-board"] .my-todos-pagination { justify-content:center; gap:8px; margin-top:16px; }
-.rework-query-content[data-legacy-ui="rework-board"] .my-todos-pagination button { min-width:36px; min-height:36px; padding:6px; font-size:14px; line-height:20px; }
 @media(min-width:761px) {
  .rework-query-content[data-legacy-ui="rework-board"] .reporting-filters { display:flex; flex-wrap:wrap; align-items:end; }
  .rework-query-content[data-legacy-ui="rework-board"] .reporting-filters > label,

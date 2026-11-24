@@ -40,7 +40,7 @@ export function Pagination({ page, pageSize, total, onPage, className = "", busy
   const disabled = busy || totalPages === null || totalPages === 0;
   const previousPage = totalPages === null ? page - 1 : Math.min(page - 1, totalPages);
   return (
-    <nav className={`dx-production-pagination ${className}`} aria-label="分页">
+    <nav className={`dx-production-pagination dx-pagination-frame dx-pagination-frame--native ${className}`} aria-label="分页">
       <span>{total === null ? "读取中" : `共 ${total} 条`} · 第 {page} 页</span>
       <Button type="button" disabled={disabled || page <= 1} onClick={() => onPage(previousPage)}>上一页</Button>
       <Button type="button" disabled={disabled || totalPages === null || page >= totalPages} onClick={() => onPage(page + 1)}>下一页</Button>
