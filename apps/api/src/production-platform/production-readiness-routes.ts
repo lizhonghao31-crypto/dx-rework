@@ -32,8 +32,16 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
   app.post(`${base}/adoption`,async r=>service.adopt(await actor(r),resource(r),parse(PreparationAdoptionSchema,r.body),key(r)));
   if(kind==='order')app.post(`${base}/instruction-deliveries`,async r=>service.deliver(await actor(r),resource(r).id,parse(InstructionDeliverySchema,r.body),key(r)));
   app.get(`${base}/upload-limits`,async r=>{await service.authorize(await actor(r),resource(r));return files.uploadLimits();});
-  app.post(`${base}/upload-intents`,async r=>{const trusted=await actor(r);await service.authorize(trusted,resource(r));return files.createUploadIntent(trusted,parse(CreateUploadIntentSchema,r.body));});
-  app.post(`${base}/attachments/:attachmentId/finalize`,async r=>{const trusted=await actor(r);await service.authorize(trusted,resource(r));return files.finalize(trusted,parse(z.uuid(),(r.params as {attachmentId:unknown}).attachmentId));});
+  app.post(`${base}/upload-intents`,async r=>{
+   const trusted=await actor(r),target=resource(r);
+   await service.authorizeAttachmentUpload(trusted,target);
+   return files.createUploadIntent(trusted,parse(CreateUploadIntentSchema,r.body),db=>service.authorizeAttachmentUpload(trusted,target,db));
+  });
+  app.post(`${base}/attachments/:attachmentId/finalize`,async r=>{
+   const trusted=await actor(r),target=resource(r);
+   await service.authorizeAttachmentUpload(trusted,target);
+   return files.finalize(trusted,parse(z.uuid(),(r.params as {attachmentId:unknown}).attachmentId),db=>service.authorizeAttachmentUpload(trusted,target,db));
+  });
   app.get(`${base}/attachments/:attachmentId`,async(r,reply)=>{const trusted=await actor(r),target=resource(r),id=parse(z.uuid(),(r.params as {attachmentId:unknown}).attachmentId);await service.authorize(trusted,target);const grant=await files.createDownloadIntent(trusted,id,()=>service.canDownload(trusted,target,id),'attachment');return reply.redirect(grant.downloadUrl);});
  }
 }

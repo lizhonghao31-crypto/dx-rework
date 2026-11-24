@@ -50,6 +50,8 @@ export type AttachmentCleanupResult = Readonly<{
   failed: number;
 }>;
 
+type AttachmentWriteGuard = (client: PoolClient) => Promise<void>;
+
 export class AttachmentService {
   private readonly activeFinalizationsByActor = new Map<string, number>();
   private readonly imagePreviews:AttachmentImagePreviews;
@@ -196,10 +198,10 @@ export class AttachmentService {
     return {bytes,sha256};
   }
 
-  async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent): Promise<UploadIntentResponse> {
+  async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent, beforeWrite?: AttachmentWriteGuard): Promise<UploadIntentResponse> {
     if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     this.validate(input);
-    return this.createUploadIntentCore(actor,input);
+    return this.createUploadIntentCore(actor,input,false,beforeWrite);
   }
   /** Scoped PLT entry only. Generic /tools upload schema and MIME allowlist remain unchanged. */
   async createTechnicalPlotUploadIntent(actor:TrustedActorContext,sourceId:string,taskId:string,raw:unknown):Promise<UploadIntentResponse>{
@@ -216,7 +218,7 @@ export class AttachmentService {
       WHERE t.task_id=$1 AND a.source_id=$2`,[taskId,sourceId])).rows[0];
     if(!task||task.state!=='ready'||!['development_pattern','development_size_review'].includes(task.task_kind)||!await technicalEnrollment(this.pool,sourceId))throw new ApplicationError('FORBIDDEN','当前任务不具备PLT原件上传权限',403);
   }
-  private async createUploadIntentCore(actor:TrustedActorContext,input:Omit<CreateUploadIntent,'mimeType'>&{mimeType:string},plot=false):Promise<UploadIntentResponse>{
+  private async createUploadIntentCore(actor:TrustedActorContext,input:Omit<CreateUploadIntent,'mimeType'>&{mimeType:string},plot=false,beforeWrite?:AttachmentWriteGuard):Promise<UploadIntentResponse>{
     const attachmentId = randomUUID();
     const objectKey = createPrivateObjectKey(this.options.prefix, input.filename,undefined,plot?{technicalPlot:true}:{});
     const uploadGrant = await this.storageCall(() => this.storage.createExactSizeNonOverwritableUploadGrant(objectKey, {
@@ -229,6 +231,7 @@ export class AttachmentService {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      if (beforeWrite) await beforeWrite(client);
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
         [`attachment-upload:${actor.actorId}`],
@@ -277,7 +280,7 @@ export class AttachmentService {
     };
   }
 
-  async finalize(actor: TrustedActorContext, attachmentId: string): Promise<AttachmentResponse> {
+  async finalize(actor: TrustedActorContext, attachmentId: string, beforeWrite?: AttachmentWriteGuard): Promise<AttachmentResponse> {
     if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     const row = await this.owned(attachmentId, actor.actorId);
     if (row.status === "ready") return this.dto(row);
@@ -295,7 +298,7 @@ export class AttachmentService {
     }
     this.activeFinalizationsByActor.set(actor.actorId, active + 1);
     try {
-      const result=await this.finalizePending(actor, row, attachmentId);
+      const result=await this.finalizePending(actor, row, attachmentId, beforeWrite);
       // The ready transaction and connection have already completed. A failed
       // derivative must never undo or misreport a successful original upload.
       await this.prepareImagePreview(row).catch(()=>null);
@@ -311,6 +314,7 @@ export class AttachmentService {
     actor: TrustedActorContext,
     row: AttachmentRow,
     attachmentId: string,
+    beforeWrite?: AttachmentWriteGuard,
   ): Promise<AttachmentResponse> {
     if(row.mime_type==='application/octet-stream'){
       const purpose=(await this.pool.query("SELECT source_id,task_id FROM digital_development_upload_purposes WHERE attachment_id=$1 AND purpose='纸样成果' AND task_id IS NOT NULL AND uploaded_by=$2",[attachmentId,actor.actorId])).rows[0];
@@ -352,6 +356,7 @@ export class AttachmentService {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      if (beforeWrite) await beforeWrite(client);
       const updated = await client.query<AttachmentRow>(
         `UPDATE attachments SET status='ready',ready_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1 AND status='pending' RETURNING *`,
         [attachmentId],

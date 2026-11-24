@@ -1,133 +1,155 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "7edee41985527554e7b02a186277afb1804132e2",
-  "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
+  "base": "616bb00a3fba4853e381987f8094c7a2b21b6226",
+  "sourceFingerprint": "cc4e6460f8e66814d9c5933f742e961d50c57496d9b8b7e1de4cd8cc2835047b",
   "rules": [
     {
-      "source": "Eric approved Acceptance material clock repair, reproduced on 1bec37d9, work order 2026-11-24 PR A.",
-      "rule": "Recognize the declared source/order only on the readiness read, material record and investment reminder close routes.",
+      "rule": "投料凭证上传的开始及确认使用原办理生命周期，并与取消事务串行化。",
+      "source": "Eric 批准的 SLA 验收第 3 项，现场为 release 616bb00a。",
       "writes": [
-        "apps/api/src/acceptance-clock/hooks.ts",
-        "apps/api/src/acceptance-clock/scope.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/tools/attachments.ts",
         "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/acceptance-clock/runtime.ts",
-        "apps/api/src/acceptance-clock/guard.ts"
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/web/src/digital-development-upload.ts",
+        "apps/web/src/attachment-upload-recovery.ts"
       ],
       "oldTests": [
         "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/acceptance-sla-clock-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+        "tests/unit/attachment-service-failures.test.ts",
+        "tests/integration/attachment-image-preview-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "newTests": [
         "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "The already guarded Acceptance runtime resolves the native route identity and applies its existing scene lock; no schema, configuration or frozen plan change.",
-      "dateAndPermission": "The existing signed UAT session, mixed-scope rejection and actual role checks still apply. The same time is observed by the UI read and occurrence validation. Untagged ordinary orders and production use wall time.",
-      "expectation": "On an actual adopted B order a simulated later-than-wall occurrence saves for the real follow-up role. An unbound order rejects the same valid-shaped time; another scene is refused and the two supported resource kinds retain original authority.",
+      "initialization": "沿用原订单和来源生命周期、原共享状态锁及附件事务。对象存储验证在锁外；在短事务中重新读取生命周期，书写前发生的取消会拒绝。",
+      "dateAndPermission": "现有资源读取、角色、附件持有者、文件验证和历史访问照旧。复用同一有效性判断，保留真实发生时间、时效算法及命令幂等。",
+      "expectation": "活动单可以创建、完成及绑定凭证；旧会话和关联来源在取消之后均停止新上传。挂起的验证在取消后返回冲突，文件不转为可用、不写物料。历史和旧附件按原权限继续可读。",
       "checks": [
-        "native-clock",
-        "clock-isolation",
+        "native-lifecycle",
+        "attachment-and-pmc",
         "preflight"
       ]
     },
     {
-      "source": "Eric approved the existing 70-percent, idempotent native reminder and todo lifecycle on the same material basis, work order 2026-11-24 PR A.",
-      "rule": "Use the guarded clock for native material reminder selection, scan receipt, claim, current display and task timing.",
+      "rule": "刷新取消订单时，现有办理面板读取原历史并隐藏不能提交的投料表单。",
+      "source": "Eric 批准的 SLA 验收第 3 项的刷新、历史和活动订单回归。",
       "writes": [
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/acceptance-clock/control-service.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/material-investment-reminder.ts",
-        "apps/api/src/production-platform/notification-routes.ts",
-        "apps/api/src/todos/routes.ts",
-        "apps/api/src/acceptance-clock/business-time.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/acceptance-sla-clock-postgres.test.ts",
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/production-readiness-postgres.test.ts"
+      "reads": [
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/web/src/production-readiness-panel.tsx",
+        "apps/web/src/digital-production-page.tsx",
+        "tests/acceptance/supplychain-settings-browser.ts"
       ],
-      "initialization": "Keep the exact handover entry and event source key. Scanner receipt association now uses the original handover scope and authorized scene instead of expecting a generic rework todo.",
-      "dateAndPermission": "A guarded Pool owns the clock reader; the same transaction serves the notification candidate/open reads when present. Ordinary schedulers exclude clock-bound orders; only an existing signed actor claims a native eligible notice. Existing adopted policy, role eligibility and real receipt audit time are preserved.",
-      "expectation": "The first enabled 70-percent boundary emits exactly one receipt across repeat scans and two sessions. Read and close keep the pending task. Actual completion retains the historical lateness, original cutoff and adopted versions.",
+      "oldTests": [
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/production-readiness-contract.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+      ],
+      "initialization": "继续使用原签名跟单入口和原面板，由服务端同一有效状态给出可登记动作。没有新增页面字段或改变原路由。",
+      "dateAndPermission": "取消单仅保留原角色有权读取的事实、历史记录与凭证。原发生时间、数量和可见范围保留。",
+      "expectation": "实测跟单取消前能看到上传控件，真实取消并重载原页面后控件和表单消失；历史仍展开且原有凭证请求获得授权跳转。",
       "checks": [
-        "native-clock",
-        "clock-isolation",
+        "signed-browser",
+        "native-lifecycle",
         "preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native-clock",
-      "kind": "tests",
-      "command": "node /tmp/dx-acceptance-material-clock-evidence/released-7edee419/run.mjs nativeClock",
-      "context": "Isolated native PostgreSQL with the canonical business-chain configuration, dual test URLs, original signed business roles, and native browser rehearsal of both material and newly released cockpit. The owner approvals, purchase readiness and existing draft order consumers all use the stored original facts.",
-      "startedAt": "2026-11-24T10:58:19.921Z",
-      "endedAt": "2026-11-24T11:00:14.179Z",
-      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
-      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
+      "id": "native-lifecycle",
+      "command": "node /tmp/dx-cancelled-material-evidence-results/run-pg.mjs target",
+      "context": "Repository business-chain Vitest config, guarded PostgreSQL and private test object storage. Active native operation, deterministic held verification across actual cancel, original uploads and readonly retrieval.",
+      "startedAt": "2026-11-24T14:04:52.250Z",
+      "endedAt": "2026-11-24T14:05:02.798Z",
+      "testedHead": "616bb00a3fba4853e381987f8094c7a2b21b6226",
+      "sourceFingerprint": "cc4e6460f8e66814d9c5933f742e961d50c57496d9b8b7e1de4cd8cc2835047b",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/nativeClock.log",
-      "logSha256": "7477c3f99f96292dac35c61cb6d7cd673aec03dd156e50c1622c7ff74179e635",
-      "passed": 59,
+      "log": "/tmp/dx-cancelled-material-evidence-results/target.log",
+      "logSha256": "6cae354fb719d926adfb9c33425bf7c7af6864a80ffddf1dcd0b6ca65d1500d0",
+      "kind": "tests",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 47,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "97ea5925a4267bb5a400313b1c1d26c5cd1c097f4d4e3572bbe5f0f1e847ed4f"
+        }
+      ]
+    },
+    {
+      "id": "signed-browser",
+      "command": "node /tmp/dx-cancelled-material-evidence-results/run-pg.mjs browser",
+      "context": "Existing full signed App fixture, actual isolated PostgreSQL, original business roles and Chromium. Real order cancellation, reload and historical evidence link.",
+      "startedAt": "2026-11-24T14:04:52.251Z",
+      "endedAt": "2026-11-24T14:05:23.838Z",
+      "testedHead": "616bb00a3fba4853e381987f8094c7a2b21b6226",
+      "sourceFingerprint": "cc4e6460f8e66814d9c5933f742e961d50c57496d9b8b7e1de4cd8cc2835047b",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-cancelled-material-evidence-results/browser.log",
+      "logSha256": "fa47f53e41bf3feb5fde91a46a4a1383eeb0b1b8d27e22424bd6b71566ba6568",
+      "kind": "tests",
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ebacd2291ae33ab5d19d3d7d33351a14df7f8e819ea291246a1e1bbcaa48a78f"
+          "sha256": "057a7388ce2ec54aef290a18cc6065b268818d164a9aac89e2fbe50fc32cd80e"
         }
       ]
     },
     {
-      "id": "clock-isolation",
-      "kind": "tests",
-      "command": "node /tmp/dx-acceptance-material-clock-evidence/released-7edee419/run.mjs clock",
-      "context": "Isolated guarded Acceptance clock through its own canonical configuration. Real signed HTTP scope and native clock transitions remain covered.",
-      "startedAt": "2026-11-24T10:58:19.929Z",
-      "endedAt": "2026-11-24T10:59:36.599Z",
-      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
-      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
+      "id": "attachment-and-pmc",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/production-readiness-contract.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/attachment-service-failures.test.ts tests/unit/attachment-upload-pipeline.test.ts tests/unit/attachment-upload-recovery.test.ts tests/unit/digital-attachment-metadata.test.ts tests/unit/attachment-image-preview.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-cancelled-material-evidence-results/unit.json",
+      "context": "Existing attachment verification, recovery, read authority and PMC access tests.",
+      "startedAt": "2026-11-24T14:04:52Z",
+      "endedAt": "2026-11-24T14:05:00Z",
+      "testedHead": "616bb00a3fba4853e381987f8094c7a2b21b6226",
+      "sourceFingerprint": "cc4e6460f8e66814d9c5933f742e961d50c57496d9b8b7e1de4cd8cc2835047b",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/clock.log",
-      "logSha256": "9d6fbae9629b400278c8d926b6fcd2c1d17ddee78155846081ccb69806b5e3aa",
-      "passed": 30,
+      "log": "/tmp/dx-cancelled-material-evidence-results/unit.log",
+      "logSha256": "6e3ce1ebfb8fdf526a0051f2cfa329b479c49178648b0856d7d4251d6ca88d6b",
+      "kind": "tests",
+      "passed": 102,
       "failed": 0,
-      "skipped": 1,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "49a83ec0916ee0e79180214e3fba3f9fcec6a74ebc54954384899bae2e299a6b"
+          "sha256": "60803cfd2bbb35a66c4ab3b43533938db58d5a0ef87d0b50448a315223b54704"
         }
       ]
     },
     {
       "id": "preflight",
-      "kind": "command",
-      "command": "npm run typecheck; scoped ESLint; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
-      "context": "Repository Node 22 and npm 10. No deployment, database configuration, platform gate or framework change.",
-      "startedAt": "2026-11-24T10:58:19Z",
-      "endedAt": "2026-11-24T10:59:09Z",
-      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
-      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
+      "command": "node scripts/acceptance/time-site-inventory.mjs && git diff --check && npm run typecheck && scoped ESLint",
+      "context": "Repository Node22 and npm10. Time occurrence inventory, workspace typecheck and lint of every changed TS source and test file.",
+      "startedAt": "2026-11-24T14:05:34Z",
+      "endedAt": "2026-11-24T14:06:14Z",
+      "testedHead": "616bb00a3fba4853e381987f8094c7a2b21b6226",
+      "sourceFingerprint": "cc4e6460f8e66814d9c5933f742e961d50c57496d9b8b7e1de4cd8cc2835047b",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/static.log",
-      "logSha256": "33fd4540a192c4f441f6fd14a7c134d24142f97306ce7c1f7e0b6805fe5a0226"
+      "log": "/tmp/dx-cancelled-material-evidence-results/static.log",
+      "logSha256": "b3e315e0bf562521ffe7167ce06aa01843fb3fc848f46c96469f563b74715025",
+      "kind": "command"
     }
   ]
 }
