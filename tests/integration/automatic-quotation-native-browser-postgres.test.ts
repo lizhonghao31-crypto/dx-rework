@@ -184,8 +184,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await ieTab.page.getByRole('button',{name:'保存加工单价',exact:true}).click();
    await ieTab.page.getByRole('button',{name:'知道了',exact:true}).click();
    expect(await price.isDisabled()).toBe(true);
+   let readbacks=0;
+   await ieTab.page.route(directoryDetail,async route=>{
+    readbacks++;
+    if(readbacks!==1){await route.continue();return;}
+    await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'TEST 暂时无法重新读取报价'}})});
+   });
    await ieTab.page.getByRole('button',{name:'核对上次提交结果',exact:true}).click();
    await ieTab.page.getByText(`本行报价已保存 · v${assigned.version+1}`,{exact:true}).waitFor();
+   await ieTab.page.getByRole('alert').filter({hasText:'报价已保存，重新读取失败。'}).waitFor();
+   await ieTab.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
+   await price.waitFor();
+   expect(await price.inputValue()).toBe('8');
+   expect(readbacks).toBe(2);
    expect(attempts).toHaveLength(2);expect(attempts[0]?.key).toBeTruthy();expect(attempts[1]).toEqual(attempts[0]);
    expect(attempts[0]?.body).toEqual({expectedVersion:assigned.version,unitPrice:'8'});
    const savedPrice=await quotes.read(ie,resource);

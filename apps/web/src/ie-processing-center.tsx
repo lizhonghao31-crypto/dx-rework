@@ -133,7 +133,7 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
  };
  return <section aria-label="产品加工报价">
   <Link href={back}>返回报价列表</Link>
-  {read.error&&<p role="alert">{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
+  {read.error&&<p role="alert">{receipt!==null?'报价已保存，重新读取失败。 ':''}{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
   {sheet&&row&&<>
    <h2>{sheet.designStyleNo} · 产品加工报价</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
    <form onSubmit={event=>{event.preventDefault();save();}}>
