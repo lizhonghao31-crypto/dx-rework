@@ -166,6 +166,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const center=new URL('/ui/ie-processing',h.base);center.searchParams.set('page','2');center.searchParams.set('search',prefix);
    await ieTab.page.goto(center.href);
    const originalLink=ieTab.page.getByRole('link',{name:`${prefix}-target`,exact:true});
+   await originalLink.waitFor();
+   for(const width of [1165,390]){
+    await ieTab.page.setViewportSize({width,height:844});
+    expect(await ieTab.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+    expect(await ieTab.page.getByRole('navigation',{name:'报价来源'}).getByRole('link').evaluateAll(links=>{
+     const bounds=links.map(node=>node.getBoundingClientRect());
+     return bounds.length===3&&bounds.slice(1).every((current,index)=>{
+      const previous=bounds[index]!;
+      return current.top>=previous.bottom+4||current.left>=previous.right+4;
+     });
+    })).toBe(true);
+    await ieTab.page.screenshot({path:join(h.evidence,`r5-ie-directory-${width}.png`)});
+   }
+   await ieTab.page.setViewportSize({width:1165,height:844});
    await originalLink.click();
    const selected=new URL(ieTab.page.url());expect(selected.searchParams.get('id')).toBe(source.sourceId);
    const directoryDetail=h.base+`/api/digital-production/quotations/ie-processing/${assigned.quoteId}/${original.rowId}`;
@@ -173,6 +187,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await ieTab.page.request.get(directoryDetail.replace(original.rowId,randomUUID()))).status()).toBe(404);
    expect((await designerTab.page.request.get(directoryDetail)).status()).toBe(403);
    const price=ieTab.page.getByRole('textbox',{name:'加工单价',exact:true});await price.fill('8');
+   for(const width of [1165,390]){
+    await ieTab.page.setViewportSize({width,height:844});
+    expect(await ieTab.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+    const priceBox=await price.boundingBox();
+    const saveBox=await ieTab.page.getByRole('button',{name:'保存加工单价',exact:true}).boundingBox();
+    expect(saveBox!.y-priceBox!.y-priceBox!.height).toBeGreaterThanOrEqual(4);
+    await ieTab.page.screenshot({path:join(h.evidence,`r5-ie-price-${width}.png`)});
+   }
+   await ieTab.page.setViewportSize({width:1165,height:844});
    const submit=`**/sources/${source.sourceId}/quotation/rows/${original.rowId}`;
    const attempts:{key:string;body:unknown}[]=[];
    await ieTab.page.route(submit,async route=>{

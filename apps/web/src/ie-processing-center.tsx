@@ -2,6 +2,7 @@ import {lazy,useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {Link} from '@astryxdesign/core/Link';
 import {Selector} from '@astryxdesign/core/Selector';
+import {Stack} from '@astryxdesign/core/Stack';
 import {Table,type TableColumn} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {z} from 'zod';
@@ -139,11 +140,13 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   {sheet&&row&&<>
    <h2>{sheet.designStyleNo} · 产品加工报价</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
    <form onSubmit={event=>{event.preventDefault();save();}}>
-    <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
-     isDisabled={read.waiting||busy||feedback.uncertain||!canEdit||receipt!==null}
-     onChange={value=>{setDraft(value);setFieldError('');}}
-     {...(fieldError?{status:{type:'error',message:fieldError}}:{})}/>
-    {canEdit&&receipt===null&&<Button type="submit" label="保存加工单价" variant="primary" isDisabled={!changed||busy||feedback.uncertain||read.waiting}/>}
+    <Stack gap={2} maxWidth={480}>
+     <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
+      isDisabled={read.waiting||busy||feedback.uncertain||!canEdit||receipt!==null}
+      onChange={value=>{setDraft(value);setFieldError('');}}
+      {...(fieldError?{status:{type:'error',message:fieldError}}:{})}/>
+     {canEdit&&receipt===null&&<div><Button type="submit" label="保存加工单价" variant="primary" isDisabled={!changed||busy||feedback.uncertain||read.waiting}/></div>}
+    </Stack>
    </form>
   </>}
   {feedback.notice&&<p role="status">{feedback.notice}</p>}
@@ -212,9 +215,9 @@ function ReworkDirectory({query}:{query:ReworkQuery}){
     onKeyDown={event=>{if(event.key==='Enter'&&(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229))event.preventDefault();}}/>
    <Button label="搜索" type="submit" isDisabled={search.trim().length>100||search.trim()===query.search}/>
   </form>
-  {read.value&&<nav aria-label="返工核价与复核队列">{read.value.statuses.flatMap(({status,totalCount})=>Object.hasOwn(reworkQueues,status)
+  {read.value&&<nav aria-label="返工核价与复核队列"><Stack direction="horizontal" gap={3} wrap="wrap" paddingBlockEnd={3}>{read.value.statuses.flatMap(({status,totalCount})=>Object.hasOwn(reworkQueues,status)
    ?[<Link key={status} href={reworkHref({...query,page:1,queue:status as ReworkQuery['queue'],focus:undefined})}
-     aria-current={status===queue?'page':undefined}>{reworkQueues[status as ReworkQuery['queue']]} · {totalCount}</Link>]:[])}</nav>}
+     hasUnderline={status===queue} aria-current={status===queue?'page':undefined}>{reworkQueues[status as ReworkQuery['queue']]} · {totalCount}</Link>]:[])}</Stack></nav>}
   {read.error&&<p role="alert">{read.error.message} <Button label="重新读取返工队列" onClick={read.retry}/></p>}
   {read.value&&!active&&<p>所选返工队列无权读取，请选择有权查看的队列。</p>}
   {active?.items.length?<div className="development-table-scroll"><Table columns={columns} data={active.items} idKey="reworkOrderId" density="compact"/></div>:null}
@@ -272,11 +275,11 @@ export function IeProcessingCenter({search}:{search:string}){
   ||!query.success||detail&&!selected.success;
  return <div className="development-workspace digital-production dx-designer-astryx">
   <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><h1>IE 报价与核价中心</h1>
-  <nav aria-label="报价来源">
-   <Link href={urls.pageUrl(entryRoute)} aria-current={!channel?'page':undefined}>产品加工报价</Link>
-   <Link href={sourcingHref({channel:'sourcing',search:'',page:1})} aria-current={sourcing?.success?'page':undefined}>外发加工核价</Link>
-   <Link href={reworkHref({channel:'rework',queue:'pending_ie_review',search:'',page:1})} aria-current={rework?.success?'page':undefined}>返工核价与复核</Link>
-  </nav>
+  <nav aria-label="报价来源"><Stack direction="horizontal" gap={3} wrap="wrap">
+   <Link href={urls.pageUrl(entryRoute)} hasUnderline={!channel} aria-current={!channel?'page':undefined}>产品加工报价</Link>
+   <Link href={sourcingHref({channel:'sourcing',search:'',page:1})} hasUnderline={Boolean(sourcing?.success)} aria-current={sourcing?.success?'page':undefined}>外发加工核价</Link>
+   <Link href={reworkHref({channel:'rework',queue:'pending_ie_review',search:'',page:1})} hasUnderline={Boolean(rework?.success)} aria-current={rework?.success?'page':undefined}>返工核价与复核</Link>
+  </Stack></nav>
   {invalid||!query.success||!focus.success?<p role="alert">报价列表或明细链接无效。 <Link href={urls.pageUrl(entryRoute)}>返回报价列表</Link></p>
    :rework?.success?<ReworkDirectory key={reworkHref(rework.data)} query={rework.data}/>
    :sourcing?.success?(sourcing.data.caseId
