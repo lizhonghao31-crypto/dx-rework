@@ -171,6 +171,34 @@ const draft=(changes:Partial<OrderNumberContext>={}):NumberedDraftInput=>({
     expect(await service.bindDraftNumber(designer,saved.sourceId,context({customerCode:'PD',salesYear:2028,salesSeries:'P03'}),randomUUID())).toEqual(saved);
   });
 
+  it('does not bind a number after the original delete command wins the source lock',async()=>{
+    const current=await service.orderNumberSettings(f.root);
+    if(!current.version)await service.saveOrderNumberSettings(f.root,{
+      expectedVersion:0,boys:null,girls:null,designers:[{userId:designer.actorId,code:'LH'}],
+    },randomUUID());
+    const {sourceId}=await service.reserveNumberedDraft(designer,draft({salesYear:null}),randomUUID());
+    const plan=await service.deletions().preview(f.root,{ids:[sourceId]});
+    const blocker=await f.db.connect();
+    const awaiting=(query:string)=>expect.poll(async()=>Boolean((await f.db.query(`SELECT 1 FROM pg_stat_activity
+      WHERE application_name=current_setting('application_name') AND wait_event_type='Lock' AND btrim(query)=$1`,[query])).rowCount),
+      {timeout:2000}).toBe(true);
+    let deletion:Promise<unknown>|undefined;
+    let bind:Promise<unknown>|undefined;
+    try{
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT * FROM digital_production_sources WHERE source_id=$1 FOR UPDATE',[sourceId]);
+      deletion=service.deletions().remove(f.root,{orders:plan.orders.map(({id,revision})=>({id,revision}))},randomUUID()).catch(error=>error);
+      await awaiting('SELECT source_id FROM digital_production_sources WHERE source_id=$1 FOR UPDATE');
+      bind=service.bindDraftNumber(designer,sourceId,context(),randomUUID()).catch(error=>error);
+      await awaiting('SELECT * FROM digital_production_sources WHERE source_id=$1 FOR UPDATE');
+    }finally{await blocker.query('ROLLBACK');blocker.release();}
+    expect(await deletion).toEqual({results:[{id:sourceId,status:'deleted'}]});
+    expect(await bind).toMatchObject({statusCode:410});
+    expect((await f.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows)
+      .toEqual([{design_style_no:null}]);
+    expect((await f.db.query('SELECT 1 FROM digital_order_number_claims WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+  });
+
   it('expands to 1000, keeps counter history monotonic and refuses reusing an issued stem for another account',async()=>{
     const input=draft({customerCode:null,salesSeries:null,productGroup:'男装'});
     const prefix='DEVMLH2027P00';

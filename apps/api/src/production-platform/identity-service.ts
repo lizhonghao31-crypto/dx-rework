@@ -1,5 +1,5 @@
 import {developmentSourceLifecycle,effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
-import {wholeOrderActiveSql} from './whole-order-visibility.js';
+import {assertWholeOrderActive,wholeOrderActiveSql} from './whole-order-visibility.js';
 import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {refreshPreparationWindows} from './production-readiness-repository.js';
@@ -226,6 +226,8 @@ export class DigitalProductionIdentityService {
     return this.command(actor,'bind-draft-number:'+sourceId,key,input,async client=>{
       const source=await this.visibleSource(client,actor,sourceId,true);
       if(!isRootActor(actor)&&source.created_by!==actor.actorId)digitalForbidden();
+      // Deletion can commit while the original authorization read waits for this source lock.
+      await assertWholeOrderActive(client,'source',sourceId);
       if(!source.workbench_generated_number)orderNumberConflict('原开发档案已使用原编号');
       if(source.design_style_no)return {sourceId,orderNumber:String(source.design_style_no)};
       if(!(await developmentSourceLifecycle(client,sourceId))?.is_draft)orderNumberConflict('仅未编号草稿可绑定订单ID');

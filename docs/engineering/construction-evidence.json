@@ -2,7 +2,7 @@
   "version": 1,
   "base": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
   "risk": "full",
-  "sourceFingerprint": "e2e55fdbe8051f927bc73c8e17352705edfe85fdadb9d88c4ee832852b12062f",
+  "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
   "rules": [
     {
       "rule": "原开发来源从无号保留到一次性绑定并使用可追溯的原子流水。",
@@ -33,7 +33,7 @@
       ],
       "initialization": "复用原来源 UUID、现有数字订单身份和注册表。新迁移附加设置版本、前缀流水及编号占用保护，不改旧数据和原设置。",
       "dateAndPermission": "预留和发号没有有效时效。正式发布及转正仍由原命令行使权限与记录可信事件，提前写和删除后的重用被禁止。",
-      "expectation": "同一来源从空号恢复，并发不同号码，历史编号跳过，业务字段空值保留，原事件出现后转正同号，两个 PO 不改。999 后 1000，已发号码不可修改。",
+      "expectation": "同一来源从空号恢复，并发不同号码，历史编号跳过，删除先取得来源锁则不分号，业务字段空值保留，原事件出现后转正同号，两个 PO 不改。999 后 1000，已发号码不可修改。",
       "checks": [
         "pg",
         "browser",
@@ -125,46 +125,46 @@
     {
       "id": "pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-freeze-pg.json tests/integration/digital-order-number-postgres.test.ts tests/integration/digital-production-identity-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-final-pg.json tests/integration/digital-order-number-postgres.test.ts tests/integration/digital-production-identity-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
       "context": "Node22/npm10 canonical PostgreSQL suites, source-bound vocabulary, guarded real databases and exact owned cleanup. Original identity, notifications and Journey cover the backward reads.",
-      "sourceFingerprint": "e2e55fdbe8051f927bc73c8e17352705edfe85fdadb9d88c4ee832852b12062f",
-      "testedHead": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
+      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
+      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:38:00.177Z",
-      "endedAt": "2026-11-24T17:39:00.316Z",
-      "log": "/workspace/dx-x1-evidence/x1-freeze-pg.log",
-      "logSha256": "c4e6dcc0a0a0388945b046033a5cfd5417d0d2e7bd7f08ba629ba2e7f2143e88",
-      "passed": 93,
+      "startedAt": "2026-11-24T17:47:16.736Z",
+      "endedAt": "2026-11-24T17:48:52.162Z",
+      "log": "/workspace/dx-x1-evidence/x1-final-pg.log",
+      "logSha256": "8e1dd34ee54a55ba1f021bda6c34733401c57ef4f9abcd346d5aeae61d6ffa8b",
+      "passed": 94,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "7eda5c20201662f74df3f9168384b51c29270419812a6dfa4e8b1b4b8a8f4943"
+          "sha256": "048261433e394061c141a3349fc5d7ab952d8e3c08f8b929eb9b2ed5179486a6"
         }
       ]
     },
     {
       "id": "browser",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-freeze-browser.json tests/integration/r5-settings-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-final-browser.json tests/integration/r5-settings-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts",
       "context": "Canonical real PostgreSQL and signed Chromium, two workers. The original management and creation paths include narrow window and carried original draft access.",
-      "sourceFingerprint": "e2e55fdbe8051f927bc73c8e17352705edfe85fdadb9d88c4ee832852b12062f",
-      "testedHead": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
+      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
+      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:39:00.371Z",
-      "endedAt": "2026-11-24T17:41:35.568Z",
-      "log": "/workspace/dx-x1-evidence/x1-freeze-browser.log",
-      "logSha256": "fef00725d4a26a922240826edc66773f61fe4837e67b9e5fb204ab04d4378820",
+      "startedAt": "2026-11-24T17:47:06.073Z",
+      "endedAt": "2026-11-24T17:49:49.367Z",
+      "log": "/workspace/dx-x1-evidence/x1-final-browser.log",
+      "logSha256": "e5006fae46ce7a677c696ecd1851302a04e1a3f89ba96db0664ec9645e62febb",
       "passed": 29,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a568f440628d9d117362273ae55575e5e29335192d61ebefb92890782f72e8e6"
+          "sha256": "0ab1fdcf03f3ce0155151cf77ffbf3077895ad34254e8f71f5a4e66a6e83bfb0"
         }
       ]
     },
@@ -173,27 +173,27 @@
       "kind": "command",
       "command": "git diff --check && npm run test:preflight",
       "context": "Canonical repository strict preflight and migration manifest/time-source guard.",
-      "sourceFingerprint": "e2e55fdbe8051f927bc73c8e17352705edfe85fdadb9d88c4ee832852b12062f",
-      "testedHead": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
+      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
+      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:38:00.046Z",
-      "endedAt": "2026-11-24T17:38:06.854Z",
-      "log": "/workspace/dx-x1-evidence/x1-freeze-preflight.log",
-      "logSha256": "be919c17a46f90efaebdd7c01fe5da476ce49755bf3387c110b71a011fd77897"
+      "startedAt": "2026-11-24T17:47:05.969Z",
+      "endedAt": "2026-11-24T17:47:13.523Z",
+      "log": "/workspace/dx-x1-evidence/x1-final-preflight.log",
+      "logSha256": "143de612bedefd8a10180aaa69b06094a9513849924797ff00ea8e6660c45282"
     },
     {
       "id": "lint",
       "kind": "command",
       "command": "npm run lint",
       "context": "Node22/npm10 strict whole repository lint, reported raw command. Final source including originally mapped test suites.",
-      "sourceFingerprint": "e2e55fdbe8051f927bc73c8e17352705edfe85fdadb9d88c4ee832852b12062f",
-      "testedHead": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
+      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
+      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:38:49.406Z",
-      "endedAt": "2026-11-24T17:40:10.935Z",
-      "log": "/workspace/dx-x1-evidence/x1-freeze-lint.log",
+      "startedAt": "2026-11-24T17:47:13.529Z",
+      "endedAt": "2026-11-24T17:48:44.427Z",
+      "log": "/workspace/dx-x1-evidence/x1-final-lint.log",
       "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
     },
     {
@@ -201,13 +201,13 @@
       "kind": "command",
       "command": "npm run typecheck",
       "context": "Node22/npm10 workspace TypeScript check with current built contracts and services.",
-      "sourceFingerprint": "e2e55fdbe8051f927bc73c8e17352705edfe85fdadb9d88c4ee832852b12062f",
-      "testedHead": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
+      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
+      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:38:49.406Z",
-      "endedAt": "2026-11-24T17:40:10.935Z",
-      "log": "/workspace/dx-x1-evidence/x1-freeze-typecheck.log",
+      "startedAt": "2026-11-24T17:47:13.529Z",
+      "endedAt": "2026-11-24T17:48:44.427Z",
+      "log": "/workspace/dx-x1-evidence/x1-final-typecheck.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988"
     }
   ]
