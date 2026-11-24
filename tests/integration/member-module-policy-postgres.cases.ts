@@ -1,11 +1,12 @@
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { canReadSecondaryCraftApprovalQueue,readSecondaryCraftApprover } from "../../apps/api/src/production-platform/secondary-craft-approval-authority.js";
+import { lockSecondaryCraftSupplier,readSecondaryCraftSupplierOptions } from "../../apps/api/src/production-platform/secondary-craft-suppliers.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
-import { CreateSupplierSchema } from "@dx-rework/contracts";
+import { CreateSupplierSchema,ReviseSupplierSchema } from "@dx-rework/contracts";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
@@ -217,6 +218,27 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       await access.assignRole(actor(ids.li_junyue,"access:admin"),{userId:ids.wu_yunfeng,roleCode:"production_management",reason:"恢复隔离验收原兼职身份"});
     }
     expect(await permission(extraOwner)).toBe(false);
+  });
+
+  it("reads only active secondary craft factories and returns minimal chooser fields",async()=>{
+    const access=new AccessMasterDataService(database,"corp");
+    const manager=actor(ids.li_junyue,"supplier_profile:write");
+    const supplierName="测试工艺目录";
+    const newSupplier=(supplierCode:string,supplierType:"factory"|"fabric")=>CreateSupplierSchema.parse({
+      supplierCode,supplierType,supplierName,active:true,changeReason:"隔离验收",
+      contactPhone:"测试电话",bankAccount:"测试账号",
+    });
+    const factory=await access.createSupplier(manager,newSupplier("MEMBER-R6-FACTORY","factory"));
+    const fabric=await access.createSupplier(manager,newSupplier("MEMBER-R6-FABRIC","fabric"));
+    const expected={supplierId:factory.supplierId,code:"MEMBER-R6-FACTORY",name:supplierName};
+    expect(await readSecondaryCraftSupplierOptions(database,supplierName)).toEqual([expected]);
+    expect(await tx(client=>lockSecondaryCraftSupplier(client,factory.supplierId))).toEqual(expected);
+    expect(await tx(client=>lockSecondaryCraftSupplier(client,fabric.supplierId))).toBeNull();
+    await access.reviseSupplier(manager,factory.supplierId,ReviseSupplierSchema.parse({
+      expectedVersion:factory.version,active:false,changeReason:"隔离验收停用",
+    }));
+    expect(await readSecondaryCraftSupplierOptions(database,"member-r6")).toEqual([]);
+    expect(await tx(client=>lockSecondaryCraftSupplier(client,factory.supplierId))).toBeNull();
   });
 
   it("keeps a real sourcing order readable while only Li can approve and rejected writes leave the exact state intact", async () => {
