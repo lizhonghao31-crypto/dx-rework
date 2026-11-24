@@ -7,13 +7,14 @@ import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import type {BulkWashingAdoption} from '@dx-rework/contracts/bulk-washing';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
-import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
+import {supplychainSettingsBrowser,type SettingsBrowserFault} from '../acceptance/supplychain-settings-browser.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {admittedFrameworkProductionFixture} from '../helpers/order-time-rewash-fixture.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -326,4 +327,83 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.locator(`[data-cockpit-focus="node:${rework.id}"]`).getAttribute('aria-pressed')).toBe('true');
   }finally{await tab.context.close();}
  });
+ it('keeps label materials on their exact PO and recovers the assigned warehouse save through the original panel',async()=>{
+  const f=h.f,order=pairedOrder,warehouse=f.people.warehouse!,manager=f.people['production-management']!;
+  const resource={kind:'order' as const,id:order.id},readiness=new ProductionReadinessService(h.db);
+  await f.runtime.run(scene,f.root,()=>readiness.assign(f.root,resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,
+   colorConfirmationWorkerId:null,colorConfirmationRole:null,reason:'TEST assign existing warehouse role on this order'},randomUUID()));
+  const base=`/api/digital-production/orders/${order.id}/production-readiness`,materials=base+'/materials';
+  const bulk=`/api/digital-production/orders/${order.id}/bulk-preparation`;
+  const fault:SettingsBrowserFault={readPath:bulk};
+  const warehouseTab=await h.open(warehouse.actorId,1165,fault,`/ui/digital-production?bulk=${order.id}&materialKind=style_label_ready`);
+  try{
+   const [first,second]=(await f.runtime.run(scene,f.root,()=>readiness.read(warehouse,resource))).lines;
+   const t1='2027-01-07T15:00:00.000Z',t2='2027-01-08T00:00:00.000Z';
+   // First receipt arrives as one whole quantity snapshot. Use the authorized
+   // HTTP route to seed both real quantities with the same observation time.
+   const post=await warehouseTab.page.request.post(h.base+materials,{headers:{'idempotency-key':randomUUID()},data:{kind:'style_label_ready',scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:t1,note:'TEST first warehouse label snapshot',quantities:[first!,second!].map((line,index)=>({lineId:line.lineId,materialId:null,name:'TEST款号唛',quantity:index===0?10:9,unit:'枚'})),evidenceIds:[],sourceDocumentVersion:null,recipientId:null}});
+   expect(post.status(),await post.text()).toBe(200);
+   await warehouseTab.page.reload();
+
+   const managerTab=await h.open(manager.actorId,1165,{},`/ui/digital-cockpit?selected=${order.id}`);
+   try{
+    const page=managerTab.page,selector=page.getByRole('combobox',{name:'里程碑PO范围'});
+    await selector.waitFor();
+    const response=await page.request.get(h.base+`/api/digital-production/journeys/${order.id}?view=cockpit`);
+    expect(response.ok()).toBe(true);
+    const dto=await response.json() as OrderJourney,labels=dto.stages.flatMap(stage=>stage.nodes).filter(node=>node.key==='style_label_ready');
+    const blue=labels.find(node=>node.fixedTargets?.some(target=>target.lineId===first!.lineId))!;
+    const green=labels.find(node=>node.fixedTargets?.some(target=>target.lineId===second!.lineId))!;
+    expect(blue).toMatchObject({state:'completed',actualAt:t1});
+    expect(green).toMatchObject({state:'pending',actualAt:null});
+    expect(green.instanceId).not.toBe(blue.instanceId);
+    const scope=`po:${second!.lineId}`;
+    await selector.selectOption(scope);
+    await page.getByRole('button',{name:'大货产前准备节点明细',exact:true}).click();
+    await page.locator(`[data-cockpit-focus="node:${green.instanceId}"]`).click();
+    const read=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith(`/journeys/${order.id}/node-materials`)&&response.ok());
+    await page.getByRole('button',{name:'该节点所需材料一览',exact:true}).click();
+    const materialResponse=await read;
+    expect(materialResponse.headers()['cache-control']).toContain('no-store');
+    const result=await materialResponse.json();
+    expect(result.rows.filter((row:{id:string})=>row.id.startsWith('style-label-'))).toEqual([expect.objectContaining({id:'style-label-'+second!.lineId,state:'missing',versionLabel:'款号唛记录 v1'})]);
+    const dialog=page.getByRole('dialog',{name:'该节点所需材料一览',exact:true});
+    await dialog.getByText('款号唛还缺 1 枚',{exact:true}).waitFor();
+    await page.keyboard.press('Escape');
+    expect(await selector.inputValue()).toBe(scope);
+    expect(await page.locator(`[data-cockpit-focus="node:${green.instanceId}"]`).getAttribute('aria-pressed')).toBe('true');
+   }finally{await managerTab.close();}
+
+   await f.advance(scene,t2);
+   fault.losePath=materials;fault.afterWriteRead=materials;
+   const page=warehouseTab.page,form=page.locator('.preparation-readiness fieldset').filter({has:page.locator('legend').getByText('款号唛实物备齐',{exact:true})});
+   await form.getByLabel('本次修改的物料明细').selectOption('1');
+   await form.getByLabel('实际数量').fill('10');
+   await form.getByLabel('实际发生时间（北京时间）').fill('2027-01-08T08:00');
+   await form.getByLabel('本次情况 / 订正原因').fill('TEST second PO label completed');
+   const offset=h.requests.length;
+   const receipt=()=>page.waitForResponse(response=>new URL(response.url()).pathname===materials&&response.request().method()==='POST');
+   const firstReceipt=receipt();
+   await form.getByRole('button',{name:'保存本项记录',exact:true}).click();
+   const lost=await firstReceipt;
+   expect(lost.status(),await lost.text()).toBe(503);
+   const panel=page.locator('.preparation-readiness');
+   await panel.getByRole('button',{name:'使用原内容核对提交结果',exact:true}).waitFor();
+   const recovered=receipt(),failedRead=page.waitForResponse(response=>new URL(response.url()).pathname===bulk&&response.status()===503);
+   await panel.getByRole('button',{name:'使用原内容核对提交结果',exact:true}).click();
+   expect((await recovered).status()).toBe(200);
+   await panel.getByText('已保存原业务记录',{exact:true}).waitFor();
+   expect((await failedRead).status()).toBe(503);
+   await expect.poll(()=>page.locator('.bulk-preparation-reference > [role=alert]').count()).toBe(1);
+   await panel.getByRole('button',{name:'刷新物料记录',exact:true}).click();
+   await panel.getByText('已记录 · 第2版',{exact:true}).waitFor();
+   const writes=h.requests.slice(offset).filter(request=>request.path===materials&&request.method==='POST');
+   expect(writes).toHaveLength(2);expect(writes[1]?.key).toBe(writes[0]?.key);expect(writes[1]?.bodyHash).toBe(writes[0]?.bodyHash);
+   const saved=(await f.runtime.run(scene,f.root,()=>readiness.read(warehouse,resource))).history.filter(item=>item.kind==='style_label_ready');
+   expect(saved.map(item=>item.version)).toEqual([2,1]);
+   expect(saved[0]?.styleLabelOccurrences?.[first!.lineId]?.completedAt).toBe(t1);
+   expect(saved[0]?.styleLabelOccurrences?.[second!.lineId]?.completedAt).toBe(t2);
+  }finally{await warehouseTab.close();}
+ });
+
 });

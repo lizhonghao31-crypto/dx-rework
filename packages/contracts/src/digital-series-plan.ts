@@ -1,4 +1,5 @@
 import type {FrameworkMilestoneResultSchema} from './order-time-framework.js';
+import type {StyleLabelRecordRef} from './production-readiness.js';
 import {z} from 'zod';
 import {isCalendarDate} from './series-calendar.js';
 
@@ -49,7 +50,9 @@ export type SeriesProfile={customerCode:string|null;version:number;monthOffset:n
 export type SeriesMilestone={id:string;key:SeriesMilestoneKey;label:string;role:string;scopeRef:string;offsetDays:number;templateDate:string;
  targetDate:string|null;retainedFromRevision:number|null;frozenReason:string|null};
 export type SeriesObservedFact={key:SeriesMilestoneKey;scopeRef:string;sourceDomain:string;sourceRecordId:string;sourceVersion:number;
- completed:boolean;started:boolean;occurredAt:string|null;occurredDate:string|null;precision:'instant'|'date'|'unknown';reason:string|null};
+ completed:boolean;started:boolean;occurredAt:string|null;occurredDate:string|null;precision:'instant'|'date'|'unknown';reason:string|null;
+ derivation?:{requirementsRevision:string;evidenceRevision:string;lineId:string|null;startedAt:string|null;
+  materialRecords:StyleLabelRecordRef[];completionRecords:StyleLabelRecordRef[]}};
 /** Internal producer contract. PR05 supplies native evidence; there is no generic HTTP fact writer. */
 export const SeriesSourceEventSchema=z.object({eventId:z.uuid(),orderId:z.uuid(),key:SeriesMilestoneKeySchema,scopeRef:z.string().trim().min(1).max(150),
  sourceDomain:z.enum(['development','bulk-preparation','production-instruction','cutting','factory-flow','receiving']),sourceRecordId:z.uuid(),sourceVersion:z.number().int().positive(),

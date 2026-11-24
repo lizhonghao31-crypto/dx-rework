@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {isStyleLabelPieceUnit} from '@dx-rework/contracts/production-readiness';
+import {readStyleLabelReadiness} from './style-label-readiness.js';
 import type {PreparationWindow} from '@dx-rework/contracts/production-readiness';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {bulkFabricFacts} from './bulk-fabric-facts.js';
@@ -16,7 +16,7 @@ export async function productionReadiness(db:PreparationDB,orderId:string){
  const adoption=await preparationAdoption(db,{kind:'order',id:orderId});
  const document=context.sourceId?await developmentDocumentRow(db,context.sourceId):null;
  const technical=context.sourceId&&document?await effectiveTechnicalEvidence(db,context.sourceId,document.round_number,'整款',context.order.customer_code):null;
- const materials=currentPreparationMaterials(await preparationMaterialHistory(db,context),orderId);
+ const materialHistory=await preparationMaterialHistory(db,context),materials=currentPreparationMaterials(materialHistory,orderId);
  const receipt=materials.find(f=>f.kind==='fabric_receipt'&&f.scopeRef==='whole')??null;
  const fabric=await bulkFabricFacts(db,orderId);
  const basis=context.sourceId&&document?(await db.query('SELECT * FROM digital_development_preparation_basis WHERE source_id=$1 AND round_number=$2 ORDER BY version DESC LIMIT 1',[context.sourceId,document.round_number])).rows[0]:null;
@@ -44,7 +44,7 @@ export async function productionReadiness(db:PreparationDB,orderId:string){
  const revision=preparationHash({adoption:adoption?.adoption_id??null,source:document?[document.round_number,document.version]:null,
   technical:technical?.revision??null,tail:tail??null,repeat,basis:basis?[basis.version,basis.sample_evidence_ids,basis.customer_fabric_evidence_ids]:null,
   materials:materials.map(f=>[f.recordId,f.version,f.valid]),fabric});
- return {context,adoption,document,technical,materials,receipt,fabric,receiptAt,finalReasons,readyAt,revision};
+ return {context,adoption,document,technical,materials,materialHistory,receipt,fabric,receiptAt,finalReasons,readyAt,revision};
 }
 
 export async function refreshPreparationWindows(db:PreparationDB,orderId:string){
@@ -96,11 +96,9 @@ export async function instructionTechnicalCurrent(db:PreparationDB,orderId:strin
 /** Physical labels belong to the concrete cutting range, not the global preparation/production gate. */
 export async function styleLabelCuttingReason(db:PreparationDB,orderId:string,lineIds:string[],requiredQuantity?:number){
  if(!await preparationAdoption(db,{kind:'order',id:orderId}))return null;
- const context=await preparationContext(db,{kind:'order',id:orderId});
- const facts=currentPreparationMaterials(await preparationMaterialHistory(db,context),orderId).filter(f=>f.kind==='style_label_ready'&&f.state==='ready'&&f.valid);
  if(!lineIds.length)return '开裁款色关联不完整，请从原裁床单核对，不推断款号唛已齐';
- const missing=lineIds.filter(id=>!facts.some(f=>f.quantities.filter(q=>q.lineId===id&&Number.isSafeInteger(q.quantity)&&isStyleLabelPieceUnit(q.unit)).reduce((n,q)=>n+q.quantity,0)>=(requiredQuantity??context.lines.find(l=>l.line_id===id)?.order_quantity??1)));
- return missing.length?'本次开裁款色的款号唛实物尚未有效备齐，请指定仓管核实物料；不影响无关纸样唛架准备':null;
+ const {result}=await readStyleLabelReadiness(db,orderId,lineIds.map(lineId=>({kind:'actual_cut',lineId,...(requiredQuantity!==undefined?{requiredQuantity}:{})})),{adopted:true});
+ return result.every(row=>row&&'status' in row&&row.status==='sufficient')?null:'本次开裁款色的款号唛实物尚未有效备齐，请指定仓管核实物料；不影响无关纸样唛架准备';
 }
 
 /** Technical department owns the existing report; warehouse completion does not stand in for technical confirmation. */

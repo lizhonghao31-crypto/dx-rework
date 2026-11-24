@@ -19,7 +19,7 @@ export function attachFrameworkEvents(item:OrderJourney,basis:FixedScheduleBasis
  for(const scope of basis.scopes)for(const work of scope.work){
   const key=work.id.split(':')[0]!,definition=events[key],fact=scope.facts[work.id],target=progress.scopes.find(row=>row.scopeRef===scope.scopeRef)?.nodes.find(row=>row.id===work.id);
   if(!definition||!fact||!target)continue;
-  const identity=JSON.stringify([work.canonicalWorkRef,fact.businessCompleted,fact.completed,fact.evidenceRefs]);
+  const identity=JSON.stringify([work.canonicalWorkRef,fact.businessCompleted,fact.completed,fact.evidenceRefs,...(key==='style_label_ready'?[scope.scopeRef]:[])]);
   const existing=shared.get(identity);
   if(existing){existing.fixedTargets!.push({scopeRef:scope.scopeRef,lineId:scope.lineId,progress:target});existing.subject='整款共用';for(const record of existing.records)record.lineId=null;if(target.goalDelta.kind==='late'&&!existing.risks.includes('overdue'))existing.risks.push('overdue');continue;}
   const at=Date.parse(progress.asOf),material=key==='material_investment'&&!fact.businessCompleted&&!basis.termination?basis.materialInvestmentTiming:undefined;

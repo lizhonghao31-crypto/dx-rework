@@ -10,6 +10,7 @@ import {readBulkWashing} from './bulk-washing-service.js';
 import {washingPlans} from './bulk-washing-repository.js';
 import type {SeriesObservedFact} from '@dx-rework/contracts/digital-series-plan';
 import {readSeriesPlanFacts} from './series-plan-facts.js';
+import {styleLabelObservedFact} from './style-label-readiness.js';
 import {frameworkJourneyBasis} from './journey-time-framework.js';
 import {orderTimeCompletionTarget,inheritedSourcePolicyAt,isInheritedSourceWork,type InheritedOrderTimeHistory} from './order-time-completion-target.js';
 import {materialInvestmentReminder} from './material-investment-reminder.js';
@@ -236,7 +237,12 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const frozenFactory=own.task?.state==='cancelled'&&!own.task.source_id&&['process_logistics','bulk_qc','warehouse_dispatch'].includes(own.task.task_kind)&&Boolean(fact.ownWindows?.length);
    if(own.task&&(own.task.source_id||own.task.state==='cancelled'))fact={...fact,...(frozenFactory?{}:{ready:own.fact.ready,clockStart:own.fact.clockStart}),notYetReady:own.fact.notYetReady===true,ownTaskId:own.task.task_id,evidenceRefs:[...new Set([...fact.evidenceRefs,...own.fact.evidenceRefs])]};
    if(evidence.washing?.[source.id])fact=structuredClone(evidence.washing[source.id]!);
-   if(framework){
+   if(framework&&source.parameterKey==='style_label_ready'){
+    const label=styleLabelObservedFact(evidence.frameworkFacts??[],scope.lineId);
+    fact.businessCompleted=label.completed;
+    fact.completed=label.completed?instant(label.occurredAt):unknown;
+    fact.evidenceRefs=label.evidenceRefs;
+   }else if(framework){
     const names:Record<string,string>={fabric_receipt_a:'fabric_receipt',fabric_receipt_b:'fabric_receipt',warehouse_accessories:'accessories_ready',warehouse_dispatch:'processing_dispatch'};
     const rows=evidence.frameworkFacts?.filter(row=>row.key===(names[source.parameterKey]??source.parameterKey))??[];
     const exact=rows.filter(row=>row.scopeRef===scope.scopeRef),selected=exact.length?exact:rows.filter(row=>row.scopeRef==='whole');

@@ -8,6 +8,7 @@ import {PREPARATION_RULE_VERSION,preparationInvestmentRowKey as investmentRowKey
 import {businessNow,acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import {digitalNotFound} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
+import {deriveStyleLabelOccurrences} from './style-label-evidence.js';
 
 export type PreparationDB=Pick<Pool|PoolClient,'query'>;
 export const preparationHash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -224,8 +225,11 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
  }
  const snapshot={...input};
  delete snapshot.investmentQuantityCorrection;
+ const labels=input.kind==='style_label_ready'&&context.orderId?deriveStyleLabelOccurrences(context.orderId,
+  context.lines.map(row=>({lineId:String(row.line_id),quantity:Number(row.order_quantity)})),
+  {...input,recordId,version,resource:target,valid:true},prior):null;
  await db.query(`INSERT INTO digital_preparation_material_versions(record_id,version,resource_kind,resource_id,kind,scope_ref,state,occurred_at,body,actor_id,recorded_at)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...snapshot,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),...(investmentQuantityOccurrences?{investmentQuantityOccurrences}:{}),materialBasis:await preparationMaterialBasis(db,context,input.kind)}),actorId]);
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...snapshot,...labels,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),...(investmentQuantityOccurrences?{investmentQuantityOccurrences}:{}),materialBasis:await preparationMaterialBasis(db,context,input.kind)}),actorId]);
  return {recordId,version};
 }
 

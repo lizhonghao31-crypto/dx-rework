@@ -1,8 +1,8 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "019d6990c55473d8c66f7160ad91c821abb7342a",
-  "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+  "base": "90caeca43971aed6803f2e64047fbfa7d0fceef5",
+  "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
   "rules": [
     {
       "rule": "外发终审批准、驳回与退回时，将原页面真正展示的决定与关键事实绑定到原提交。",
@@ -127,138 +127,138 @@
     {
       "id": "core",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-current/run.mjs core",
+      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs core",
       "context": "Original approval readiness, real independent signed owners, native role revocation, case-row lock waiting in both directions, old native request hashes and three separately verified PDF recovery branches.",
-      "startedAt": "2026-11-24T05:37:38.082Z",
-      "endedAt": "2026-11-24T05:37:57.938Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:44:45.352Z",
+      "endedAt": "2026-11-24T05:45:00.339Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/core.log",
-      "logSha256": "ebfe71a4a907300e0c63469ad3859b9a05512c564b936d74b51d029aaa8f4c44",
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/core.log",
+      "logSha256": "b4970ce466f7a886e7187e0e29d67b5c713c32540c2eb9225129bd4b9aea0ed1",
       "passed": 7,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2c89b4cf75689126c2c1290779aee2c881574a0ee8ec1e083e60ca894c21b9c3"
+          "sha256": "1883f1eae0da38a20fe3ae35d3688a3a78221a0bf4c75f759d9b029f82b13165"
         }
       ]
     },
     {
       "id": "clock",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-current/run.mjs clock",
+      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs clock",
       "context": "Canonical Acceptance business-clock suite, native digital PO approvals and a true rollback after persisted downstream writes and receipt. The pre-existing unconditional skipped case is reported as skipped.",
-      "startedAt": "2026-11-24T05:37:58.079Z",
-      "endedAt": "2026-11-24T05:39:00.855Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:45:00.489Z",
+      "endedAt": "2026-11-24T05:45:39.452Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/clock.log",
-      "logSha256": "54923359671e4b66ee66bba64139cb0825b6ff858eadcc882d95cae04cb52967",
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/clock.log",
+      "logSha256": "a6a4ccfcd6832b4cb7bbc996de1c03a6fded8ce5a7f23a89c13bf552bbf6cb8a",
       "passed": 30,
       "failed": 0,
       "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "98cd9446d392f344e2cd4c9c2aa3096733ec99fec8e8584957f80e7a721246d6"
+          "sha256": "f212dd03e538dcedb337bdc1c75900a15fe0ad61c3af58193f12d6f533446560"
         }
       ]
     },
     {
       "id": "authority",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-current/run.mjs authority",
+      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs authority",
       "context": "Canonical full-business-chain configuration with the existing owner module permission suite selected. Other cases are outside this filtered local run.",
-      "startedAt": "2026-11-24T05:39:00.976Z",
-      "endedAt": "2026-11-24T05:39:09.852Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:48:50.006Z",
+      "endedAt": "2026-11-24T05:49:03.526Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/authority.log",
-      "logSha256": "35ac8a647630c06b95863e9d7dcbf371e10e561b6ecc4e9e60de1bcb376d360b",
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/authority.log",
+      "logSha256": "70407967f3fee0f1e6367537a8ad0c643c3b68f20806010c54fd072013e0ef4a",
       "passed": 7,
       "failed": 0,
       "skipped": 54,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "48e87a243edc942aa6cb8aea569ebfd22e581be45e5a7fdd3ccb0dec5721b025"
+          "sha256": "178a04eaeaab3a778a8d3fa4e46d70d2bdb3eb5e99f81e929d52ee9e34dcb299"
         }
       ]
     },
     {
       "id": "browser",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-current/run.mjs browser",
+      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs browser",
       "context": "Production Vite App, signed TEST owner, real pending list, task card and historical URL. Stale return preserves the reason. Real approval loses its first receipt. The same key/body is replayed and a failed subsequent GET is separately retried.",
-      "startedAt": "2026-11-24T05:39:09.968Z",
-      "endedAt": "2026-11-24T05:39:49.706Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:44:45.344Z",
+      "endedAt": "2026-11-24T05:45:22.480Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/browser.log",
-      "logSha256": "d1eb6b84d659b5bd91deeb553f96fd31a9b5a79e1b5e6cecd5245f5bf1ec07e8",
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/browser.log",
+      "logSha256": "a2873776a1620383fdd72dbe123a0bd25b8efda5530d4e339e1849ab8559a3b0",
       "passed": 10,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "597d5ba8d3c75186be74c16f1a3b413e555dd31fccf5cbd7b63ecc1a15922805"
+          "sha256": "0cfcd20abd463bd0a8e50675bf2850bbab52f2988d20d097ce67a175e2ed61ed"
         }
       ]
     },
     {
       "id": "native-sourcing",
       "kind": "tests",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-current/run.mjs nativeSourcing",
+      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/run.mjs nativeSourcing",
       "context": "Canonical two-worker PostgreSQL configuration for the original sourcing business workflow, detail reads and receipt/closure regression. Includes the original PO dates and same-stage transfer branches.",
-      "startedAt": "2026-11-24T05:37:37.850Z",
-      "endedAt": "2026-11-24T05:41:16.361Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:48:49.861Z",
+      "endedAt": "2026-11-24T05:51:32.187Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/nativeSourcing.log",
-      "logSha256": "b5172be9542850654b118954f3b09024b00a530a9e108848771dc76deaf9f400",
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/nativeSourcing.log",
+      "logSha256": "8216d4247d438e068bbb6b61e3f948eea5feab9d9a32e0cf43fbc41ee3fe8d7d",
       "passed": 167,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "89bf1da37834b37b627d276b9b7dc5aa3429e6ea59cbcbbadcd2581372b2fd88"
+          "sha256": "aef6c74ccd6301b02bdbe0d1553b44ea2bdc4f728e0563381b888bdd0965a766"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json",
-      "context": "Canonical complete non-database suite with all three database URL variables empty. Covers all three original transfer submission cases and existing mobile and contract tests.",
-      "startedAt": "2026-11-24T05:37:08Z",
-      "endedAt": "2026-11-24T05:43:00Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json tests/unit/{sourcing-mobile-workspace,sourcing-pr03-contract,sourcing-transfer-submit-feedback,sourcing-detail-identity,full-gate-risk-map,digital-pmc-readonly-access}.test.ts tests/integration/sourcing-routes.test.ts",
+      "context": "Canonical non-database configuration with all three URLs empty; the seven named suites verify original transfer, approval details, mobile contracts and permission boundaries on the combined source.",
+      "startedAt": "2026-11-24T05:44:45.517Z",
+      "endedAt": "2026-11-24T05:44:56.486Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/unit.log",
-      "logSha256": "47ce362a73926783b4fa412de10e0cf36f3902b74ac9308068738f92c2efbabb",
-      "passed": 4538,
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/unit.log",
+      "logSha256": "d5fc4f1fb3eec4a2732a7537877f4bb16aaffeb499011ffe7583cc3c37090ebc",
+      "passed": 233,
       "failed": 0,
-      "skipped": 15,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a914bad7ceb17504a2a882ab4bda7e68988d355f002e9a63279bcbc71179891b"
+          "sha256": "43c15f828bee6c77d82434ca5b9eae3b1594a99c714b148c138e43b8e5f19ea2"
         }
       ]
     },
@@ -267,14 +267,14 @@
       "kind": "tests",
       "command": "node --test scripts/ci/pr-gate-controller.test.mjs",
       "context": "Existing repository gate request, receipt and source audit unit tests, no extra remote gate.",
-      "startedAt": "2026-11-24T05:37:37Z",
-      "endedAt": "2026-11-24T05:37:38Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:48:49Z",
+      "endedAt": "2026-11-24T05:48:50Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/protocol.log",
-      "logSha256": "9192c757a8a20819c6fd685c169a5a3d8a1204b755aa118e2fc7dd625c245af1",
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/protocol.log",
+      "logSha256": "96c926d82ed58a3294235c9fe8bbb7458f83d40bb8b7f7f283f7576950503f60",
       "passed": 39,
       "failed": 0,
       "skipped": 0
@@ -284,28 +284,28 @@
       "kind": "command",
       "command": "npm run typecheck; scoped ESLint; time site inventory check; git diff --check",
       "context": "Repository Node and npm versions, existing source time-site inventory matches, no migration or new release gates.",
-      "startedAt": "2026-11-24T05:37:37Z",
-      "endedAt": "2026-11-24T05:38:38Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:48:49Z",
+      "endedAt": "2026-11-24T05:49:37Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/static.log",
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/static.log",
       "logSha256": "33fd4540a192c4f441f6fd14a7c134d24142f97306ce7c1f7e0b6805fe5a0226"
     },
     {
       "id": "query-scope",
       "kind": "command",
-      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-current/query-scope-run.mjs",
+      "command": "node /tmp/dx-gov-owner-approval-evidence/followup-combined/query-scope-run.mjs",
       "context": "Observed the exact driver queries on both native one- and two-PO orders. Default detail executed 17 and opt-in 20 statements in both cases, with zero business writes in GET. Both original approvals succeeded.",
-      "startedAt": "2026-11-24T05:38:15.250Z",
-      "endedAt": "2026-11-24T05:38:29.376Z",
-      "testedHead": "a063704c71a1c057f91d4cccbc080472642ef218",
-      "sourceFingerprint": "f892ea6ea7adabe8dee99e79f183f248dae304e54e176327d5948bfc5c6cb829",
+      "startedAt": "2026-11-24T05:49:03.595Z",
+      "endedAt": "2026-11-24T05:49:11.432Z",
+      "testedHead": "019d6990c55473d8c66f7160ad91c821abb7342a",
+      "sourceFingerprint": "618151be6276f0c04d03e8abcba2d311117c46d387a75624a9113d21a7eca01c",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-gov-owner-approval-evidence/followup-current/query-scope.log",
-      "logSha256": "6451cb5d6e0e145f9530303043a93867b6dc73c118a2112925133c890f518503"
+      "log": "/tmp/dx-gov-owner-approval-evidence/followup-combined/query-scope.log",
+      "logSha256": "71d3e86bf9d2065f85203e17e3691aa210349678cd0ec436742338eeec1d12c0"
     }
   ]
 }
