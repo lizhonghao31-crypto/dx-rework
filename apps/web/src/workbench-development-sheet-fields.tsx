@@ -54,7 +54,8 @@ export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange,c
             <DocumentField id={`${prefix}-${key}`} label={`第 ${index+1} 行 ${column===0?'颜色':'尺码'}`} value={row[key]} readonly={readonly}
               issue={issue(`${prefix}-${key}`)} onValue={value=>editRow(row.rowId,{[key]:value})}/>
           </td>)}
-          <td>{readonly?row.quantity??'未登记':<><input aria-label={`第 ${index+1} 行 件数`} id={quantityId} type="number" min={1} max={100000} step={1}
+          <td>{readonly?row.quantity??'未登记':<><input className={creation?"development-sewing-quantity":undefined}
+            aria-label={`第 ${index+1} 行 件数`} id={quantityId} type="number" min={1} max={100000} step={1}
             value={row.quantity??''} onChange={event=>editRow(row.rowId,{quantity:event.target.value===''?null:Number(event.target.value)})}
             aria-invalid={Boolean(message)} aria-describedby={message?`${quantityId}-error`:undefined}/>{message&&<small id={`${quantityId}-error`}>{message}</small>}</>}</td>
           {!readonly&&<td><Button type="button" onClick={async()=>{

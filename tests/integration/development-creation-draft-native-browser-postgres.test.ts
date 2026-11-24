@@ -440,6 +440,19 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const docs=page.getByRole('heading',{name:'版单资料',exact:true});
    await docs.waitFor();
    const lookup=page.getByRole('searchbox',{name:'查找字段'});
+   const quantity=page.getByRole('spinbutton',{name:'第 1 行 件数',exact:true});
+   const materialsTable=page.locator('#development-materials .development-technical-table').first();
+   for(const [width,height] of [[1165,747],[1440,900]] as const){
+    await page.setViewportSize({width,height});
+    expect(await lookup.evaluate(input=>[getComputedStyle(input).borderTopWidth,getComputedStyle(input.parentElement!).borderTopWidth])).toEqual(['0px','1px']);
+    expect(await quantity.evaluate((input:HTMLInputElement)=>{
+     const field=input.getBoundingClientRect(),cell=input.closest('td')!.getBoundingClientRect();
+     return {frame:getComputedStyle(input).borderTopWidth,inside:field.left>=cell.left&&field.right<=cell.right+1,min:input.min,max:input.max};
+    })).toEqual({frame:'1px',inside:true,min:'1',max:'100000'});
+    expect(await materialsTable.evaluate((table:HTMLTableElement)=>table.tBodies[0]!.rows[1]!.cells[0]!.colSpan)).toBe(await materialsTable.locator('thead th').count());
+    await page.screenshot({path:join(h.evidence,`c1-order-sheet-${template}-${width}.png`),fullPage:true});
+   }
+   await page.setViewportSize({width:1165,height:747});
    await lookup.fill('针距');
    await page.getByRole('button',{name:'针距',exact:true}).click();
    expect(await page.getByLabel('针距',{exact:true}).inputValue()).toBe('12针');

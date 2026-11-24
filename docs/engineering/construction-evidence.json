@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "5865c81247b163649cb4ca017a833d49704c8ecf",
-  "sourceFingerprint": "25c8b381a9c268c3db02965109f54f51c13c2455a0bf0c91975e4034db45fc6b",
+  "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
   "rules": [
     {
       "rule": "保留原有分页能力并统一外观。",
@@ -64,13 +64,16 @@
         "tests/unit/cockpit-document-directory.test.ts",
         "tests/unit/cockpit-document-new-sources.test.ts",
         "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
       "initialization": "原列表继续使用同一授权快照与原 details 展开控制，仅续读入口挂共享外观。",
       "dateAndPermission": "真实记录 ID、已有版本、游标、读取权限与撤权原样。没有新增总数、页码和接口。",
-      "expectation": "原文档目录、重读、权限和返回通过定向验收。现场实测首批20条及第21条按验收表另行登记。",
+      "expectation": "原文档目录、重读、权限和返回通过定向验收。隔离库真实验布命令生成21条，通过原 GET 读取20＋1，其他订单游标和撤权均拒绝。Acceptance 现场续读同一案例单独登记。",
       "checks": [
         "native",
+        "history",
+        "history-ui",
         "unit",
         "static"
       ]
@@ -82,6 +85,8 @@
         "apps/web/src/digital-development-workspace.css",
         "apps/web/src/document-editor.css",
         "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
@@ -96,11 +101,12 @@
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
         "tests/integration/bulk-washing-browser-postgres.test.ts"
       ],
-      "initialization": "原创建表单、三种入口、局部主题和现有负载；原单据、只读字段和旧 CSS 有明确作用域。",
+      "initialization": "原创建表单、三种入口、局部主题和现有负载；原单据、只读字段和样衣数字输入有明确作用域。已有字段查找用同一原定位与 TextInput，紧凑面辅料表详情跨列数来自其表头。",
       "dateAndPermission": "输入与日期语义、原角色、SLA、发布和草稿恢复继续经原 API。未动正常大货洗水。",
-      "expectation": "同一原浏览器表单可继续编辑、定位、保存和恢复原数据，旧路由与大货洗水可用。",
+      "expectation": "同一原浏览器表单可继续编辑、定位、保存和恢复原数据，两个尺寸的实际截图中，字段查找保单框，样衣件数输入在本格内并保 min/max，技术详情列数与表头一致。旧路由与大货洗水可用。",
       "checks": [
         "native",
+        "fields",
         "static"
       ],
       "newTests": [
@@ -144,54 +150,121 @@
   ],
   "checks": [
     {
-      "id": "native",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-assembled-pg.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/m01-sla-history-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/bulk-washing-browser-postgres.test.ts",
-      "context": "Canonical business-chain Vitest config at two workers, Chromium and guarded isolated PostgreSQL, signed original browser identities. Covers current and old workbench, actual pre-order procurement, fixed-bound legacy SLA API, actual cockpit and original bulk washing. The Vitest command passed. The outer wrapper reported a later unit-test-only edit, so these results bind the separately captured, unchanged PG inputs and verified cleanup. Acceptance site evidence is tracked separately.",
-      "testedHead": "5865c81247b163649cb4ca017a833d49704c8ecf",
-      "sourceFingerprint": "36c8af020bfe94580006c746381a25646ba1c922b47b2df3e3e30fc3d92dfb5e",
+      "id": "history-ui",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-21-browser-ready.json tests/integration/workbench-c1-history-local.test.ts",
+      "context": "Exact original application, signed merchandiser identity and 21 real isolated warehouse reports. The temporary local test is archived beside this report with its input identity. Browser clicked the original continuation and retained all 20 previously visible records in their original order.",
+      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
+      "sourceFingerprint": "d66754bb8172b091d21fcdfbf8dd66687b95e8da2903bd94b4792c0b7370d70e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T16:34:23.571Z",
-      "endedAt": "2026-11-24T16:38:10.255Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-assembled-pg.log",
-      "logSha256": "52755cae00ed908676a6996682a9045ae1383082d4461af4dd030296cfe647f9",
+      "startedAt": "2026-11-24T16:51:48.811Z",
+      "endedAt": "2026-11-24T16:52:04.354Z",
+      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-21-browser-ready.log",
+      "logSha256": "12b27f410806e8ffd99b46b17eba1f247cc34d50dba0f04c701a451e547df25d",
       "kind": "tests",
-      "passed": 64,
+      "passed": 1,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b7968bf85125d6f613de97542fb1f3152cadb9ba95f1b9fcd499e7530486a92b"
+          "sha256": "b69278f68e9091bbc88eb0c6396afb72afbe9756f848611688c01c0ff7cd4bd9"
         }
       ],
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
-        "tests/integration",
         "tests/acceptance",
         "tests/fixtures",
         "tests/helpers",
-        "vitest.business-chain.config.ts",
         "vitest.config.ts",
         "package.json",
         "package-lock.json"
       ],
-      "inputFingerprint": "a6ea3fb1deffc20348515770f41498463357649f50b27164f8a5c99f5e74944b"
+      "inputFingerprint": "21c60d473838b7c0e0e8e62b877de4b1bc4a617119731bd92545bfff8ffaaaef"
+    },
+    {
+      "id": "history",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --testNamePattern \"pages actual fabric history\" --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-21-final.json tests/integration/production-readiness-postgres.test.ts",
+      "context": "Original warehouse commands and real isolated PostgreSQL, exact signed authorized original GET, two pages of 20 and 1 actual events, other orders cursor and revoked roles rejected.",
+      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
+      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T16:48:21.355Z",
+      "endedAt": "2026-11-24T16:48:55.278Z",
+      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-21-final.log",
+      "logSha256": "11b4785925ca995cfa5dc36da8da860177458c3f8280ff9260c16bf7595dea1e",
+      "kind": "tests",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 48,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2591eddfcdfcac8e0a6286364db0e20e246546ee2e618b80ce1a7cd4f9c90238"
+        }
+      ]
+    },
+    {
+      "id": "native",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --testNamePattern \"jumps directly to a target page|R3-03 original physical|keeps a failed category read distinct|opens the original live production dashboard directly after transfer with 0 pieces|pages every real published version beyond|returns to the actual craft control|lets the actual merchandiser enter from My Tasks|restores certain_order parent intent|uses the original logistics and QC App|converts the original preorder\" --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-final-targeted.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/m01-sla-history-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/bulk-washing-browser-postgres.test.ts",
+      "context": "Exact change and canonical 2-worker PostgreSQL/Chromium profile. Focused coverage of existing pagination, default cockpit detail, exact permission/current factory, original creation and original washing. No reuse of the failed broad timing observation.",
+      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
+      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T16:52:32.413Z",
+      "endedAt": "2026-11-24T16:53:37.974Z",
+      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-final-targeted.log",
+      "logSha256": "dfe0e71834c6925ebc509154a57e11532e1b91696e727e08272a84e7b6b12cf1",
+      "kind": "tests",
+      "passed": 11,
+      "failed": 0,
+      "skipped": 53,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d7e932f2ef40809c8157a80b71e694868ad67cf1491bda752d70297ccb64d33b"
+        }
+      ]
+    },
+    {
+      "id": "fields",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --testNamePattern \"long sheet\" --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-fields-final.json tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+      "context": "Exact final signed browser and PostgreSQL. At both requested widths, computed search and sewing quantity frames are correct, compact detail spans match the header, and successful resume, field location, original size and PO input flows pass.",
+      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
+      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T16:48:21.573Z",
+      "endedAt": "2026-11-24T16:49:09.822Z",
+      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-fields-final.log",
+      "logSha256": "261f97bed20b2931056614ed0688c3b8f14610e76696f2fdd838570eda8ec51c",
+      "kind": "tests",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 18,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "81dfb9f0df970f94ebaca679ea85989c46c508b875296593b473cbff838d79b3"
+        }
+      ]
     },
     {
       "id": "unit",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/list-pagination.test.ts tests/unit/system-dialog.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/master-data-process-pagination.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-assembled-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/list-pagination.test.ts tests/unit/system-dialog.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/master-data-process-pagination.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-workbench-v115-c1-evidence/c1-ready-unit.json",
       "context": "Canonical non-database configuration. Original active pager behavior, strict fallback, real consumer inventory, inherited dialog and raw original-document models.",
-      "testedHead": "5865c81247b163649cb4ca017a833d49704c8ecf",
-      "sourceFingerprint": "25c8b381a9c268c3db02965109f54f51c13c2455a0bf0c91975e4034db45fc6b",
+      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
+      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T16:36:16.324Z",
-      "endedAt": "2026-11-24T16:36:20.887Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-assembled-unit.log",
-      "logSha256": "b335ab03c535a5d5fcfd005f3d2937e244753dcf0ac464e07765c0391ffccde1",
+      "startedAt": "2026-11-24T16:48:21.174Z",
+      "endedAt": "2026-11-24T16:48:29.679Z",
+      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-ready-unit.log",
+      "logSha256": "d5f20bce2334d14a2ba37d0b9f6ce22b53f8268f6621e5e8a5b792704bf7f0a0",
       "kind": "tests",
       "passed": 94,
       "failed": 0,
@@ -199,7 +272,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3089b6734b7cf6dfe007ab0eebb7f47f498080ead9ad05e4c7b0cfb0d4867250"
+          "sha256": "c26495d10565eb31ddeb8bf63e265054ba43a07a9c50df69098dae56f3708df7"
         }
       ]
     },
@@ -207,13 +280,13 @@
       "id": "static",
       "command": "git diff --check && node scripts/acceptance/time-site-inventory.mjs && scoped ESLint && npm run typecheck",
       "context": "Repository Node22 and npm10. Changed TS/TSX lint, workspace types, no time-site drift, and exact diff check.",
-      "testedHead": "5865c81247b163649cb4ca017a833d49704c8ecf",
-      "sourceFingerprint": "25c8b381a9c268c3db02965109f54f51c13c2455a0bf0c91975e4034db45fc6b",
+      "testedHead": "478df0f7233818037c05554c75714ed48ab27b58",
+      "sourceFingerprint": "f3980cc36d3f7135bb64aa186928dcbbeb7b8944626a9c3258b4b3ccda87615e",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T16:36:16.327Z",
-      "endedAt": "2026-11-24T16:37:06.352Z",
-      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-static.log",
+      "startedAt": "2026-11-24T16:48:21.186Z",
+      "endedAt": "2026-11-24T16:49:35.016Z",
+      "log": "/tmp/dx-workbench-v115-c1-evidence/c1-ready-static.log",
       "logSha256": "b3e315e0bf562521ffe7167ce06aa01843fb3fc848f46c96469f563b74715025",
       "kind": "command"
     }
