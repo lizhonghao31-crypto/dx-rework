@@ -17,8 +17,9 @@ function asMoney(value:string){
   return `${whole}.${fraction.padEnd(2,'0')}`;
 }
 
-export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled,rowNames}:{
+export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled,rowNames,onAdopt}:{
   path:string;quoteId:string;version:number;refresh:number;disabled:boolean;rowNames:ReadonlyMap<string,string>;
+  onAdopt:(input:QuotationPricingInput,price:string)=>void;
 }){
   const [editing,setEditing]=useState<QuotationPricingInput|null>(null);
   const [composing,setComposing]=useState(false);
@@ -58,6 +59,8 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
     {current.saved&&current.saved.version!==current.version&&<p>成本版本已更新，已按原输入重新测算。</p>}
     {error&&<p role="alert">{error}</p>}
     {result?.status==='zero_cost'&&<p>成本为零，报价倍率无法计算。</p>}
-    <p>当前仅供测算。新版报价确认将在工艺审批接通后开放。</p>
+    {current.confirmation==='awaiting_joint_release'?<p>当前仅供测算。新版报价确认将在工艺审批接通后开放。</p>:
+     <Button label="用于本单客户确认" isDisabled={unavailable||current.status!=='awaiting_customer_confirmation'||!result?.customerUnitPrice}
+      onClick={()=>{if(draft&&result?.customerUnitPrice)onAdopt(draft,result.customerUnitPrice);}}/>}
   </div>;
 }

@@ -1,10 +1,12 @@
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
+import { canReadSecondaryCraftApprovalQueue,lockSecondaryCraftApprover,readSecondaryCraftApprover } from "../../apps/api/src/production-platform/secondary-craft-approval-authority.js";
+import { lockSecondaryCraftSupplier,readSecondaryCraftSupplierOptions } from "../../apps/api/src/production-platform/secondary-craft-suppliers.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
-import { CreateSupplierSchema } from "@dx-rework/contracts";
+import { CreateSupplierSchema,ReviseSupplierSchema } from "@dx-rework/contracts";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
@@ -100,10 +102,36 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     const preview = await binder.run(ids.li_junyue, ids);
     expect(preview.pendingTodoIds).toHaveLength(2);
     expect((await database.query("SELECT * FROM business_module_owner_bindings")).rows).toEqual([]);
+    expect(await readSecondaryCraftApprover(database)).toBeNull();
+    expect(await tx(lockSecondaryCraftApprover)).toBeNull();
     await expect(binder.run(ids.wu_yunfeng, ids, true)).rejects.toMatchObject({ statusCode: 403 });
     await expect(binder.run(ids.li_junyue, { ...ids, li_zhonghao: ids.wu_yunfeng }, true)).rejects.toMatchObject({ statusCode: 400 });
     const applied = await binder.run(ids.li_junyue, ids, true);
     expect(applied.cancelled).toBe(2);
+    expect(await readSecondaryCraftApprover(database)).toBe(ids.wu_yunfeng);
+    await tx(async client=>{
+      expect(await lockSecondaryCraftApprover(client)).toBe(ids.wu_yunfeng);
+      const {rows:[competingOwnerWrite]}=await database.query<{acquired:boolean}>(
+        "SELECT pg_try_advisory_xact_lock(hashtext('dx_rework:owner_group_guard')) acquired",
+      );
+      expect(competingOwnerWrite?.acquired).toBe(false);
+      await expect(database.query("SELECT id FROM identity_mappings WHERE user_id=$1 FOR UPDATE NOWAIT",[ids.wu_yunfeng]))
+        .rejects.toMatchObject({code:"55P03"});
+    });
+    expect(await canReadSecondaryCraftApprovalQueue(database,actor(ids.wu_yunfeng))).toBe(true);
+    for(const id of [ids.li_zhonghao,ids.li_junyue,extraOwner]){
+      expect(await canReadSecondaryCraftApprovalQueue(database,actor(id))).toBe(false);
+    }
+    await tx(async client=>{
+      await client.query("UPDATE app_users SET display_name=(SELECT display_name FROM app_users WHERE id=$1) WHERE id=$2",[ids.wu_yunfeng,extraOwner]);
+      expect(await canReadSecondaryCraftApprovalQueue(client,actor(extraOwner))).toBe(false);
+      await client.query("UPDATE identity_mappings SET employed=false WHERE user_id=$1 AND corp_id='corp'",[ids.wu_yunfeng]);
+      expect(await readSecondaryCraftApprover(client)).toBeNull();
+      expect(await lockSecondaryCraftApprover(client)).toBeNull();
+      expect(await canReadSecondaryCraftApprovalQueue(client,actor(ids.wu_yunfeng))).toBe(false);
+      await client.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1 AND corp_id='corp'",[ids.wu_yunfeng]);
+      await client.query("UPDATE app_users SET display_name=$2 WHERE id=$1",[extraOwner,'测试映射-extra_owner']);
+    });
     expect((await binder.run(ids.li_junyue, ids, true)).cancelled).toBe(0);
     const session = (await oldSession.findSession(token, new Date()))!.user;
     expect(session.readOnlyModules).toEqual(["rework", "sourcing"]);
@@ -201,6 +229,27 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       await access.assignRole(actor(ids.li_junyue,"access:admin"),{userId:ids.wu_yunfeng,roleCode:"production_management",reason:"恢复隔离验收原兼职身份"});
     }
     expect(await permission(extraOwner)).toBe(false);
+  });
+
+  it("reads only active secondary craft factories and returns minimal chooser fields",async()=>{
+    const access=new AccessMasterDataService(database,"corp");
+    const manager=actor(ids.li_junyue,"supplier_profile:write");
+    const supplierName="测试工艺目录";
+    const newSupplier=(supplierCode:string,supplierType:"factory"|"fabric")=>CreateSupplierSchema.parse({
+      supplierCode,supplierType,supplierName,active:true,changeReason:"隔离验收",
+      contactPhone:"测试电话",bankAccount:"测试账号",
+    });
+    const factory=await access.createSupplier(manager,newSupplier("MEMBER-R6-FACTORY","factory"));
+    const fabric=await access.createSupplier(manager,newSupplier("MEMBER-R6-FABRIC","fabric"));
+    const expected={supplierId:factory.supplierId,code:"MEMBER-R6-FACTORY",name:supplierName};
+    expect(await readSecondaryCraftSupplierOptions(database,supplierName)).toEqual([expected]);
+    expect(await tx(client=>lockSecondaryCraftSupplier(client,factory.supplierId))).toEqual({...expected,version:factory.version});
+    expect(await tx(client=>lockSecondaryCraftSupplier(client,fabric.supplierId))).toBeNull();
+    await access.reviseSupplier(manager,factory.supplierId,ReviseSupplierSchema.parse({
+      expectedVersion:factory.version,active:false,changeReason:"隔离验收停用",
+    }));
+    expect(await readSecondaryCraftSupplierOptions(database,"member-r6")).toEqual([]);
+    expect(await tx(client=>lockSecondaryCraftSupplier(client,factory.supplierId))).toBeNull();
   });
 
   it("keeps a real sourcing order readable while only Li can approve and rejected writes leave the exact state intact", async () => {

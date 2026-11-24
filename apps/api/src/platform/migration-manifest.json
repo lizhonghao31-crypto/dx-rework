@@ -1259,6 +1259,10 @@
     {
       "version": "0300_workbench_quotation_review",
       "checksum": "db9558b3ca328b786104ce3e153a4e6bda0233bd685d9b1f31400a0631ae693a"
+    },
+    {
+      "version": "0301_secondary_craft_quotation_approval",
+      "checksum": "5b95f261516b20be6be19616bf3d3833a7a1a8fe8773ab18ac793ccc8ab5a60c"
     }
   ]
 }

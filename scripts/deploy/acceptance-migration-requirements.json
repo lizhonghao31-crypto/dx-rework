@@ -2330,5 +2330,31 @@
     ],
     "execute": [],
     "sequences": []
+  },
+  "0301_secondary_craft_quotation_approval": {
+    "checksum": "5b95f261516b20be6be19616bf3d3833a7a1a8fe8773ab18ac793ccc8ab5a60c",
+    "tables": [
+      "digital_quotation_versions",
+      "digital_production_notification_receipts"
+    ],
+    "functions": [],
+    "references": [
+      "digital_quotation_documents",
+      "app_users",
+      "supplier_catalog_items",
+      "supplier_catalog_versions"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_secondary_craft_quote_revisions",
+      "digital_secondary_craft_quote_decisions"
+    ],
+    "execute": [
+      "reject_operation_event_mutation",
+      "guard_secondary_craft_approval_notification",
+      "guard_secondary_craft_approver"
+    ],
+    "sequences": []
   }
 }

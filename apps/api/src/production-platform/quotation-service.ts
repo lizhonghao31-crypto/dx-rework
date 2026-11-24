@@ -8,6 +8,7 @@ import type {Pool,PoolClient} from 'pg';
 import type {z} from 'zod';
 import {BudgetDocumentSchema,type BudgetDocument} from '@dx-rework/contracts/digital-budget';
 import {QuotationConfirmationSchema,SaveQuotationSchema,QuotationRowInputSchema,SaveQuotationPricingDraftSchema,QuotationLineReviewCommandSchema,
+ calculateQuotationPricing,quotationExact,
  type QuotationLineReviewCommand,type QuotationResource,type QuotationAssignment,type QuotationConsumptionSource,type QuotationSheet} from '@dx-rework/contracts/digital-quotation';
 import {acceptanceBusinessContext,acceptanceIncludesNative,businessNow} from '../acceptance-clock/business-time.js';
 import {publishedTechnicalArtifact,technicalDocumentFingerprint} from './development-technical-repository.js';
@@ -18,8 +19,10 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './access-policy.js';
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
-import {applyWorkbenchLineReview,persistWorkbenchPricing,readWorkbenchQuotation} from './quotation-workbench.js';
 import {readIeProcessingDirectory} from './ie-processing-directory.js';
+import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
+import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
+import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
 
 type Database=Pick<Pool|PoolClient,'query'>;
 type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
@@ -76,11 +79,43 @@ export class DigitalQuotationService{
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
 
- // Staged transaction primitives. No public writer is registered until R6 can
- // enforce the common release boundary for confirmation and budget adoption.
+ async readSecondaryCraft(actor:TrustedActorContext,resource:QuotationResource,rowId:string,
+  query:{supplierSearch?:string|undefined;version?:number|undefined}={}){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const context=await this.context(db,actor,resource,true);
+   const result=await secondaryCraftDetail(db,actor,context.quote??digitalNotFound(),context.roles,rowId,query,
+    context.designerId===actor.actorId&&context.roles.has('sample_designer'));
+   await db.query('COMMIT');
+   return result;
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+ async secondaryCraftDirectory(actor:TrustedActorContext){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const result=await secondaryCraftDirectory(db,actor,await quotationRoles(db,actor,readRoles));
+   await db.query('COMMIT');
+   return result;
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+ async writeSecondaryCraft(actor:TrustedActorContext,resource:QuotationResource,rowId:string,
+  action:'draft'|'submit'|'decision',input:SecondaryCraftQuoteInput|SecondaryCraftDecision,key:string){
+  const result=await this.command(actor,resource,`secondary-craft:${rowId}:${action}`,key,input,async(db,c)=>{
+   const quote=c.quote??digitalNotFound();
+   if(action==='decision'&&'decision' in input)return decideSecondaryCraft(db,actor,quote,c.roles,rowId,input);
+   if(action!=='decision'&&'mode' in input)return saveSecondaryCraft(db,actor,quote,c.roles,rowId,input,action==='submit');
+   return conflict('工艺报价操作不匹配');
+  });
+  // Receipt replay is scoped again to the exact current item, never a cached quote sheet.
+  return {...await this.readSecondaryCraft(actor,resource,rowId),receipt:{action,appliedVersion:result.commandReceipt.appliedVersion}};
+ }
+
  async saveWorkbenchPricingDraft(actor:TrustedActorContext,resource:QuotationResource,raw:z.infer<typeof SaveQuotationPricingDraftSchema>,key:string){
   const input=SaveQuotationPricingDraftSchema.parse(raw);
   return this.command(actor,resource,'workbench-pricing-draft',key,input,async(db,context)=>{
+   if(!await secondaryCraftReady(db))conflict('联合报价流程尚未就绪');
    if(context.designerId!==actor.actorId||!context.roles.has('sample_designer'))digitalForbidden();
    const quote=context.quote??digitalNotFound();
    if(quote.version!==input.expectedVersion||quote.version===quote.confirmed_version)conflict('报价依据已更新或本版已确认，请读取当前报价');
@@ -91,6 +126,7 @@ export class DigitalQuotationService{
  async reviewWorkbenchLine(actor:TrustedActorContext,resource:QuotationResource,raw:QuotationLineReviewCommand,key:string){
   const input=QuotationLineReviewCommandSchema.parse(raw);
   return this.command(actor,resource,`workbench-review:${input.action}`,key,input,async(db,context)=>{
+   if(!await secondaryCraftReady(db))conflict('联合报价流程尚未就绪');
    const quote=context.quote??digitalNotFound();
    if(quote.version===quote.confirmed_version)conflict('客户已确认的报价版本不能退回或改写');
    await applyWorkbenchLineReview(db,quote,actor.actorId,context.designerId===actor.actorId&&context.roles.has('sample_designer'),input);
@@ -111,6 +147,12 @@ export class DigitalQuotationService{
   const confirmedBy=c.full&&c.workbenchPolicy&&confirmed?.confirmed_by_internal
    ?(await db.query('SELECT display_name FROM app_users WHERE id=$1',[confirmed.confirmed_by_internal])).rows[0]?.display_name:undefined;
   const budget=c.orderId?(await db.query('SELECT version,quote_id,quote_version,status FROM digital_budget_documents WHERE production_order_id=$1',[c.orderId])).rows[0]:null;
+  const assessed=q&&version===undefined&&c.confirm;
+  const craftRows=q&&version===undefined?requiredCraftRows(q):[];
+  const released=q&&craftRows.length>0?await releasedCraftRows(db,q):[];
+  const approved=assessed&&released.length>0?await approvedSecondaryCraftRows(db,q,false):null;
+  const craftApprovalState=assessed&&(craftRows.length>0||await hasUnmappedSecondaryCraft(db,q))
+   ?approved?.required.length&&approved.confirmed.size===approved.required.length?'complete' as const:'waiting' as const:undefined;
   let workbenchBudget:QuotationSheet['budget']['workbench'];
   if(c.workbenchPolicy&&c.full&&c.orderId&&version===undefined){
    const canOpen=await new DigitalProductionAccessPolicy(db).allowed(actor,'order',c.orderId,'budget');
@@ -125,11 +167,13 @@ export class DigitalQuotationService{
    const current=q?.assignments.find(x=>x.rowId===row.rowId);
    const technical=current?.technicalAssigneeId===actor.actorId&&c.roles.has('pattern_room_worker');
    const price=current?.priceAssigneeId===actor.actorId&&c.roles.has(current.priceRole);
+   const secondaryCraft=released.some(craft=>craft.rowId===row.rowId);
+   const secondaryHistory=c.designerId===actor.actorId&&c.roles.has('sample_designer')&&Boolean(q?.price_sources[row.rowId]?.secondaryCraftDecisionId);
    if(!c.full&&!technical&&!price)return [];
    const basis=assembly?.rows[row.rowId];
-   return [{...row,...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
+   return [{...row,...(secondaryCraft&&(price||secondaryHistory)?{secondaryCraftEntry:true}:{}),...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
     technicalAssigneeName:a.technicalAssigneeId?names.get(a.technicalAssigneeId)??null:null,priceAssigneeName:a.priceAssigneeId?names.get(a.priceAssigneeId)??null:null,
-    canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&(isRootActor(actor)||price),canEditPricingUnit:version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
+    canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&!secondaryCraft&&(isRootActor(actor)||price),canEditPricingUnit:version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
   });
   const technicalConsumptionOptions:NonNullable<QuotationSheet['technicalConsumptionOptions']>=[];
   const canReadOptions=rows.some(row=>row.canEditConsumption);
@@ -148,7 +192,7 @@ export class DigitalQuotationService{
   return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...((original?assembly:q?.assembly)?{automatic:true,complete:quotationComplete({...q!,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q!.price_sources,assembly:assembly!})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
-   document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),
+   document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),...(craftApprovalState?{craftApprovalState}:{}),
    canStructure:version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&c.confirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
    budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null,...(workbenchBudget?{workbench:workbenchBudget}:{})}};
  }
@@ -225,21 +269,25 @@ export class DigitalQuotationService{
    await db.query('COMMIT');return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
- private async command(actor:TrustedActorContext,resource:QuotationResource,action:string,key:string,payload:unknown,work:(db:PoolClient,c:Awaited<ReturnType<DigitalQuotationService['context']>>)=>Promise<void>){
+ private async command(actor:TrustedActorContext,resource:QuotationResource,action:string,key:string,payload:unknown,work:(db:PoolClient,c:Awaited<ReturnType<DigitalQuotationService['context']>>)=>Promise<number|void>){
   if(!this.creationEnabled)throw new ApplicationError('FORBIDDEN','新报价维护尚未启用',403);
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
   const db=await this.database.connect();try{
    await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    const c=await this.context(db,actor,resource);
-   for(const role of c.roles)if(!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,role))digitalForbidden();
+   for(const role of c.roles){
+    if(action.startsWith('secondary-craft:')&&action.endsWith(':decision')&&role==='owner_group')continue;
+    if(!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,role))digitalForbidden();
+   }
    const lifecycle=(await db.query('SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2',[c.orderId?'order':'source',c.orderId??c.sourceId])).rows[0];
    if(lifecycle&&lifecycle.state!=='active')conflict('原单已暂停或取消，报价暂不能修改；保留历史依据');
    const command=`quotation:${resource.kind}:${resource.id}:${action}`,hash=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
    const prior=(await db.query('SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
    if(prior?.payload_hash!==undefined&&prior.payload_hash!==hash)conflict('同一操作标识不能用于不同内容');
    // Reauthorize each response. Do not replay a cached full-cost body after role revocation.
-   if(!prior){if(c.quote?.assembly&&c.sourceId)c.quote=await assembleQuotation(db,c.sourceId,actor.actorId)??c.quote;await work(db,c);}
-   const current=await this.read(actor,resource,db),receipt=prior?.response?.commandReceipt??{action,appliedVersion:current.version};
+   let applied:number|void=undefined;
+   if(!prior){if(c.quote?.assembly&&c.sourceId)c.quote=await assembleQuotation(db,c.sourceId,actor.actorId)??c.quote;applied=await work(db,c);}
+   const current=await this.read(actor,resource,db),receipt=prior?.response?.commandReceipt??{action,appliedVersion:applied??current.version};
    if(!prior){await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify({resource,commandReceipt:receipt})]);
     await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'customer_quotation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`quotation_${action}`,resource.id,JSON.stringify({resource,commandReceipt:receipt})]);}
    await db.query('COMMIT');return {...current,commandReceipt:receipt};
@@ -300,6 +348,8 @@ export class DigitalQuotationService{
    const tech=a.technicalAssigneeId===actor.actorId&&c.roles.has('pattern_room_worker'),price=a.priceAssigneeId===actor.actorId&&c.roles.has(a.priceRole);
    if((input.consumption!==undefined||input.artifactConsumption)&&!isRootActor(actor)&&!tech||input.unitPrice!==undefined&&!isRootActor(actor)&&!price)digitalForbidden();
    const component=q.assembly?.rows[rowId];
+   if(input.unitPrice!==undefined&&(await releasedCraftRows(db,q)).some(value=>value.rowId===rowId))
+    conflict('请在本项二次工艺报价入口送审，批准后再采用单价');
    if(component&&component.kind!=='material'&&(input.consumption!==undefined||input.artifactConsumption))conflict('材料价格从原开发资料读取；IE与工艺均按每件单价计入，不重复填写用量');
    const version=q.version+1,sources={...q.consumption_sources},priceSources={...q.price_sources};
    const unit=input.pricingUnit??row.unit,unitChanged=unit!==row.unit;
@@ -350,9 +400,32 @@ export class DigitalQuotationService{
    if(new Date(input.confirmedAt).getTime()>businessNow().getTime())conflict('客户确认时间不能晚于当前时间');
    const document=BudgetDocumentSchema.parse(q.document);
    if(!document.rows.length)conflict('报价须有实际明细');
+   const joint=await secondaryCraftReady(db),applicable=requiredCraftRows(q).length>0||await hasUnmappedSecondaryCraft(db,q);
+   if(!joint&&(applicable||input.workbenchPricing))conflict('联合报价流程尚未就绪');
+   let approvals:unknown[]=[],pricing=null;
+   if(joint){
+    await assertNoOpenQuotationReviews(db,q);
+    if(applicable){
+     const {required,confirmed}=await approvedSecondaryCraftRows(db,q,true);
+     if(!required.length||confirmed.size!==required.length)conflict('请先完成本报价采用的全部工艺版本审批');
+     approvals=[...confirmed.values()];
+    }
+    if(input.workbenchPricing){
+     if(c.designerId!==actor.actorId||!c.roles.has('sample_designer'))digitalForbidden();
+     const cost=workbenchCost(q),proposal=calculateQuotationPricing(cost,input.workbenchPricing);
+     if(cost===null||proposal.customerUnitPrice===null||input.amountScope!=='per_piece'||input.taxBasis!=='excludes_tax'
+      ||quotationExact(proposal.customerUnitPrice)!==quotationExact(input.customerConfirmedTotal))conflict('报价方案与当前成本或实际客户确认金额不一致');
+     pricing={cost,quoteVersion:q.version,input:input.workbenchPricing,...proposal};
+    }
+   }
    if(!quotationComplete(q))conflict('请各负责岗位补齐报价明细、单件用量、单价与填写依据');
-   await db.query(`INSERT INTO digital_quotation_versions(quote_id,version,document,assignments,consumption_sources,price_sources,confirmation,customer_code,confirmed_quote_total,confirmed_by_internal${q.assembly?',assembly':''})
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10${q.assembly?',$11':''})`,[q.quote_id,q.version,JSON.stringify(document),JSON.stringify(q.assignments),JSON.stringify(q.consumption_sources),JSON.stringify(q.price_sources),JSON.stringify(input),c.customerCode,input.customerConfirmedTotal,actor.actorId,...(q.assembly?[JSON.stringify(q.assembly)]:[])]);
+   const values=[q.quote_id,q.version,JSON.stringify(document),JSON.stringify(q.assignments),JSON.stringify(q.consumption_sources),
+    JSON.stringify(q.price_sources),JSON.stringify(input),c.customerCode,input.customerConfirmedTotal,actor.actorId] as unknown[];
+   const extras:string[]=[];
+   if(q.assembly){extras.push('assembly');values.push(JSON.stringify(q.assembly));}
+   if(joint){extras.push('secondary_craft_approvals','workbench_pricing');values.push(JSON.stringify(approvals),pricing===null?null:JSON.stringify(pricing));}
+   await db.query(`INSERT INTO digital_quotation_versions(quote_id,version,document,assignments,consumption_sources,price_sources,confirmation,customer_code,confirmed_quote_total,confirmed_by_internal${extras.length?','+extras.join(','):''})
+    VALUES(${values.map((_,index)=>'$'+(index+1)).join(',')})`,values);
    await db.query('UPDATE digital_quotation_documents SET confirmed_version=$2 WHERE quote_id=$1',[q.quote_id,q.version]);
    if(c.orderId)await ensureQuotationBudget(db,c.orderId,actor.actorId);
    if(c.orderId&&c.sourceId)await shareApprovedDesignVersions(db,actor,c.sourceId);

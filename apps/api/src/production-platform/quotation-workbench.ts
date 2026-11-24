@@ -7,6 +7,7 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
 import type {AssembledQuotation} from './quotation-assembly.js';
+import {approvedSecondaryCraftRows,requiredCraftRows,secondaryCraftReady} from './secondary-craft-quotation.js';
 
 const conflict=(message:string):never=>{throw new ApplicationError('QUOTATION_CONFLICT',message,409);};
 
@@ -17,7 +18,8 @@ function fieldSource(quote:AssembledQuotation,rowId:string,field:QuotationReview
 function rowKind(quote:AssembledQuotation,row:BudgetRow,assignment:QuotationAssignment|undefined){
   if(quote.assembly)return quote.assembly.rows[row.rowId]?.kind;
   if(row.section!=='外发工序')return 'material';
-  if(assignment)return assignment.priceRole==='ie_reviewer'?'ie':'craft';
+  if(assignment?.priceRole==='ie_reviewer')return 'ie';
+  if(assignment)return requiredCraftRows(quote).some(craft=>craft.rowId===row.rowId)?'craft':'processing';
 }
 
 function costRows(quote:AssembledQuotation) {
@@ -32,7 +34,7 @@ function costRows(quote:AssembledQuotation) {
   });
 }
 
-function workbenchCost(quote:AssembledQuotation){
+export function workbenchCost(quote:AssembledQuotation){
   return costRows(quote).every(value=>value.complete) ? calculateQuotationUnitCost(quote.document) : null;
 }
 
@@ -67,16 +69,26 @@ export async function readWorkbenchQuotation(db:PoolClient,quote:AssembledQuotat
     group.push(review.status);
     reviewsByRow.set(review.rowId,group);
   }
+  const ready=await secondaryCraftReady(db),approved=ready?(await approvedSecondaryCraftRows(db,quote,false)).confirmed:new Map();
   const states=audited.map(({row,complete,requiresCraftReview})=>({
     complete,reviews:reviewsByRow.get(row.rowId)??[],
-    craftApproval:requiresCraftReview?'pending' as const:'not_applicable' as const,
+    craftApproval:requiresCraftReview?approved.has(row.rowId)?'approved' as const:'pending' as const:'not_applicable' as const,
   }));
   // A review of a retired row is retained for history. It cannot be resolved against another row.
   const result=quotationDraftReviewSummary(states);
   const unitCost=audited.every(value=>value.complete)?calculateQuotationUnitCost(quote.document):null;
   return {resource,quoteId:quote.quote_id,version:quote.version,unitCost,...result,
     saved:draft?{input:QuotationPricingInputSchema.parse(draft.pricing.input),version:draft.quote_version}:null,reviews:visibleReviews,
-    confirmation:'awaiting_joint_release' as const};
+    confirmation:ready?'joint_release_ready' as const:'awaiting_joint_release' as const};
+}
+
+export async function assertNoOpenQuotationReviews(db:PoolClient,quote:AssembledQuotation){
+ const round=roundFor(quote);
+ if(round===null)return;
+ const open=await db.query(`SELECT 1 FROM digital_quotation_line_reviews WHERE quote_id=$1
+  AND round_number=$2 AND resolve_at IS NULL AND row_id=ANY($3::uuid[]) LIMIT 1`,
+  [quote.quote_id,round,quote.document.rows.map(row=>row.rowId)]);
+ if(open.rowCount)conflict('请完成本报价当前项目的退回处理后再确认');
 }
 
 export async function persistWorkbenchPricing(db:PoolClient,quote:AssembledQuotation,actorId:string,input:QuotationPricingInput){
@@ -135,6 +147,7 @@ export async function applyWorkbenchLineReview(db:PoolClient,quote:AssembledQuot
   }
   if(!designer)digitalForbidden();
   if(target.version!==command.expectedFieldVersion||review.resubmit_field_version!==target.version)conflict('本字段没有可复核的当前重报版本');
-  if(target.craft)conflict('工艺报价须先核对本项当前版本的有效审批');
+  if(target.craft&&(!await secondaryCraftReady(db)||!(await approvedSecondaryCraftRows(db,quote,true)).confirmed.has(review.row_id)))
+    conflict('工艺报价须先核对本项当前版本的有效审批');
   await db.query('UPDATE digital_quotation_line_reviews SET resolve_actor=$2,resolve_at=$3 WHERE review_id=$1',[review.review_id,actorId,at]);
 }

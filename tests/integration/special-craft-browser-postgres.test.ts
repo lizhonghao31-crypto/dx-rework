@@ -24,6 +24,7 @@ import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import type {Page} from 'playwright-core';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
+import {bindFixtureCraftApprover} from '../helpers/secondary-craft-approval-fixture.js';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 
 async function saveDraftAndReadReceipt(page:Page,sourceId:string,expectedVersion:number){
@@ -46,6 +47,12 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
  const result=await receipt.json();
  expect(receipt.status(),result.error?.code).toBe(200);
  return {result,body:receipt.request().postDataJSON()};
+}
+
+async function submitCraftFromOriginalQuote(page:Page,name:string,amount:string,path:string){
+ await page.getByRole('link',{name:`${name}报价与选厂`,exact:true}).click();
+ await page.getByRole('textbox',{name:'工艺单价',exact:true}).fill(amount);
+ return quotationWriteReceipt(page,path,'POST',()=>page.getByRole('button',{name:'提交伍云峰审批',exact:true}).click());
 }
 
 (url?describe:describe.skip)('special craft library original App settings',()=>{
@@ -109,6 +116,7 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
  it('keeps the same printing session authorized after another artisan starts a special craft',async()=>{
   configureTimelineAdoption(h.db,'fixed_v2');
   const f=h.f,worker=f.people['pattern-room-worker']!,other=await h.dedicated('pattern_room_worker');
+  const approver=await bindFixtureCraftApprover(f),quotes=new DigitalQuotationService(f.db,true);
   const standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
   const craft=await new SpecialCraftLibraryService(h.db).save(f.root,{id:null,expectedVersion:0,definition:{name:'TEST session special',enabled:true,development:standard,bulk:standard}},randomUUID());
   let session:Awaited<ReturnType<typeof h.open>>|undefined,foreign:Awaited<ReturnType<typeof h.open>>|undefined,dispatches=0,rowId='';
@@ -116,24 +124,30 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
    await exerciseDevelopmentSlaNative(h.db,new TodoProjectionService(new TodoService(h.db)),f.root,worker.actorId,undefined,[['特殊工艺','免洗']],{automaticQuotation:true,fixedCraftSteps:[{craftKind:'printing',sequence:1},{craftKind:'special',sequence:2,specialCraft:craft}],onRouteComplete:async(sourceId,kind)=>{
     if(kind!=='development_craft_dispatch')return;dispatches++;
     const path='/ui/digital-quotation?kind=source&id='+sourceId,api=h.base+'/api/digital-production/sources/'+sourceId+'/quotation';
+    const resource={kind:'source' as const,id:sourceId};
     if(dispatches===1){
      session=await h.open(worker.actorId,1165,{},path);
-     await session.page.getByLabel('印花负责单价',{exact:true}).fill('5');
-     await session.page.locator('.quotation-row-input').filter({has:session.page.getByLabel('印花负责单价',{exact:true})}).getByRole('button',{name:'保存本行负责字段',exact:true}).click();
-     await expect.poll(async()=>{const q=await (await session!.page.request.get(api)).json();rowId=q.rows.find((r:{name:string})=>r.name==='印花').rowId;return q.rows.find((r:{rowId:string})=>r.rowId===rowId).unitPrice;}).toBe('5');
+     const q=await (await session.page.request.get(api)).json();
+     rowId=q.rows.find((r:{name:string})=>r.name==='印花').rowId;
+     const receipt=await submitCraftFromOriginalQuote(session.page,'印花','5',new URL(api+'/secondary-craft/'+rowId+'/submit').pathname);
+     expect(receipt.result).toMatchObject({state:'submitted',receipt:{action:'submit',appliedVersion:1}});
+     await quotes.writeSecondaryCraft(approver,resource,rowId,'decision',{expectedVersion:1,decision:'approved'},randomUUID());
+     await expect.poll(async()=>{const current=await (await session!.page.request.get(api)).json();return current.rows.find((r:{rowId:string})=>r.rowId===rowId).unitPrice;}).toBe('5');
     }else{
      const pending=(await h.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_printing' AND t.state='ready'",[sourceId])).rows[0];
      const execution=new DevelopmentExecutionService(h.db,true),input=await arrangementInput(h.db,execution,f.root,sourceId,worker.actorId);
      input.entries=input.entries.map(entry=>entry.expectedTask?.taskId===pending.task_id?{...entry,assigneeId:other.id,reason:'TEST separate special artisan'}:entry);
      await execution.arrange(f.root,sourceId,input,randomUUID());
      const q=await (await session!.page.request.get(api)).json();
-     expect(q.rows.find((r:{rowId:string})=>r.rowId===rowId)).toMatchObject({unitPrice:'5',canEditPrice:true});
-     const write=await session!.page.request.post(api+'/rows/'+rowId,{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:q.version,unitPrice:'6'}});expect(write.status()).toBe(200);
+     expect(q.rows.find((r:{rowId:string})=>r.rowId===rowId)).toMatchObject({unitPrice:'5',canEditPrice:false,secondaryCraftEntry:true});
+     const priceInput={expectedVersion:1,mode:'in_house',supplierId:null,unitPrice:'6',unit:'件',applicableQuantity:null,note:'',attachmentIds:[]};
+     const write=await session!.page.request.post(api+'/secondary-craft/'+rowId+'/submit',{headers:{'idempotency-key':randomUUID()},data:priceInput});
+     expect(write.status(),await write.text()).toBe(200);
      foreign=await h.open(other.id,1165,{},path);
-     await foreign.page.getByLabel('TEST session special负责单价',{exact:true}).waitFor();
-     expect(await foreign.page.getByLabel('印花负责单价',{exact:true}).count()).toBe(0);
-     const latest=await (await foreign.page.request.get(api)).json();
-     const denied=await foreign.page.request.post(api+'/rows/'+rowId,{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:latest.version,unitPrice:'99'}});expect(denied.status()).toBe(403);
+     await foreign.page.getByRole('link',{name:'TEST session special报价与选厂',exact:true}).waitFor();
+     expect(await foreign.page.getByRole('link',{name:'印花报价与选厂',exact:true}).count()).toBe(0);
+     const denied=await foreign.page.request.post(api+'/secondary-craft/'+rowId+'/submit',{headers:{'idempotency-key':randomUUID()},data:{...priceInput,expectedVersion:2,unitPrice:'99'}});
+     expect(denied.status()).toBe(403);
     }
    }});expect(dispatches).toBe(2);
   }finally{await session?.context.close();await foreign?.context.close();}
@@ -192,16 +206,15 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
    expect(assigned.result.commandReceipt).toMatchObject({action:'save',appliedVersion:assigned.body.expectedVersion+1});
    const stored=await quotes.read(f.root,bulk),row=stored.rows.find(value=>value.name==='TEST 仅大货压花');
    expect(row?.assignment.priceAssigneeId).toBe(worker.actorId);
+   expect(row?.craftBasis).toMatchObject({stage:'bulk',libraryId:craft.id,libraryVersion:craft.version,stepId:null});
    const rowId=row!.rowId;
    const own=await h.open(worker.actorId,1165,{},path);
    try{
-    const price=own.page.getByLabel('TEST 仅大货压花负责单价',{exact:true});
-    await price.fill('8');
     expect(await own.page.getByLabel('IE加工单价负责单价',{exact:true}).count()).toBe(0);
-    const save=own.page.locator('.quotation-row-input').filter({has:price}).getByRole('button',{name:'保存本行负责字段',exact:true});
-    const priced=await quotationWriteReceipt(own.page,`${api}/rows/${rowId}`,'POST',()=>save.click());
-    expect(priced.body).toEqual({expectedVersion:stored.version,unitPrice:'8'});
-    expect(priced.result.commandReceipt).toMatchObject({action:`row:${rowId}`,appliedVersion:stored.version+1});
+    const priced=await submitCraftFromOriginalQuote(own.page,'TEST 仅大货压花','8',`${api}/secondary-craft/${rowId}/submit`);
+    expect(priced.body).toMatchObject({expectedVersion:0,mode:'in_house',unitPrice:'8',unit:'件'});
+    expect(priced.result).toMatchObject({target:{rowId,stage:'bulk',scopeId:bulk.id,sourceVersion:saved.version},state:'submitted',receipt:{action:'submit',appliedVersion:1}});
+    await quotes.writeSecondaryCraft(await bindFixtureCraftApprover(f),bulk,rowId,'decision',{expectedVersion:1,decision:'approved'},randomUUID());
     expect((await quotes.read(f.root,bulk)).rows.find(value=>value.rowId===rowId)?.unitPrice).toBe('8');
     await own.page.screenshot({path:join(h.evidence,'special-craft-bulk-price-1165.png'),fullPage:true});
     const assignment=(await h.db.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[worker.actorId])).rows[0];
@@ -209,6 +222,7 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
     await f.access.revokeRole(h.admin,assignment.assignment_id,'TEST bulk special craft current role withdrawal');
     const response=await own.page.request.get(h.base+api);
     expect([403,404]).toContain(response.status());
+    expect([403,404]).toContain((await own.page.request.get(h.base+`${api}/secondary-craft/${rowId}`)).status());
 
    }finally{await own.context.close();}
    expect(h.errors).toEqual([]);

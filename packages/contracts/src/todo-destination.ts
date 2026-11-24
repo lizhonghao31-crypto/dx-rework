@@ -54,6 +54,13 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
       path = "/ui/digital-quotation";
       query.set("kind", "order");query.set("id", route.entityId);
       break;
+    case "digital_secondary_craft_order":
+    case "digital_secondary_craft_source":
+      path="/ui/secondary-craft-quotation";
+      query.set("kind",route.routeName==="digital_secondary_craft_order"?"order":"source");
+      query.set("id",route.entityId);
+      if(route.craftRowId)query.set("craft",route.craftRowId);
+      break;
     case "digital_order_time":
       path = "/ui/digital-production";
       query.set("timeRequest", route.entityId);

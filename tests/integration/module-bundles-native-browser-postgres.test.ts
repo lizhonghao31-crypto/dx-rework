@@ -245,7 +245,7 @@ function expectStyledShell(frames:Awaited<ReturnType<typeof shellFrames>>){
    await page.evaluate(()=>{history.replaceState(null,'',location.pathname+location.search+'#TEST-preserve-unsaved');dispatchEvent(new PopStateEvent('popstate'));});
    expect(await input.inputValue()).toBe(next);expect(await page.getByRole('region',{name:'开发纸样设置',exact:true}).count()).toBe(1);
    await page.getByRole('region',{name:'开发纸样设置',exact:true}).getByRole('button',{name:'取消',exact:true}).click();await page.getByRole('region',{name:'开发纸样设置',exact:true}).waitFor({state:'detached'});
-   await page.goBack();await homeReady(page);expect(page.url()).toBe(originalUrl);expect(await page.locator('.journey-kpis .dx-production-kpi').count()).toBe(6);expect(await layout()).toEqual(before);
+   await page.goBack();await homeReady(page);expect(page.url()).toBe(originalUrl);expect(await page.getByRole('dialog').count()).toBe(0);expect(await page.locator('.journey-kpis .dx-production-kpi').count()).toBe(6);expect(await layout()).toEqual(before);
    await page.screenshot({path:join(h.evidence,'production-home-after-settings.png'),fullPage:true});
   }finally{await context.close();}
  });

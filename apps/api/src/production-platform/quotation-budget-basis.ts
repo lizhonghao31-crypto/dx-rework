@@ -2,6 +2,8 @@ import type {Pool,PoolClient} from 'pg';
 import {compareQuotationBudget,type BudgetQuoteComparison,type QuotationConfirmation} from '@dx-rework/contracts/digital-quotation';
 import type {BudgetDocument} from '@dx-rework/contracts/digital-budget';
 import {ApplicationError} from '../platform/errors.js';
+import {approvedSecondaryCraftRows,hasPublishedSecondaryCraft,hasUnmappedSecondaryCraft,requiredCraftRows,secondaryCraftReady,type SecondaryCraftApprovalRef} from './secondary-craft-quotation.js';
+import type {AssembledQuotation} from './quotation-assembly.js';
 type Database=Pick<Pool|PoolClient,'query'>;
 export async function hasQuotationSchema(db:Database){return Boolean((await db.query("SELECT to_regclass('digital_quotation_documents') AS relation")).rows[0]?.relation);}
 export const designerQuotationPolicy='designer_quote_v1';
@@ -14,7 +16,35 @@ export async function formalOrderQuantity(db:Database,orderId:string):Promise<nu
 }
 // Called only inside an authenticated command transaction holding the shared
 // lifecycle lock. GET/read operations never create drafts or adopt old orders.
-export async function ensureQuotationBudget(db:Database,orderId:string,actorId:string){
+export async function hasCurrentBudgetCraftBasis(db:Database,quote:AssembledQuotation,stored:SecondaryCraftApprovalRef[]|null,lock:boolean){
+ if(!requiredCraftRows(quote).length&&!await hasUnmappedSecondaryCraft(db,quote))return true;
+ if(!Array.isArray(stored)||!await secondaryCraftReady(db))return false;
+ const {required,confirmed}=await approvedSecondaryCraftRows(db,quote,lock);
+ return required.length>0&&confirmed.size===required.length&&stored.length===required.length
+  &&stored.every(item=>{
+   const actual=confirmed.get(item.rowId);
+   return actual?.revision===item.revision&&actual.decisionId===item.decisionId&&actual.actorId===item.actorId;
+  });
+}
+
+export async function budgetCraftBasisIsCurrent(db:Database,orderId:string,policy:BudgetQuoteComparison['policy'],lock=false){
+ if(policy==='legacy')return true; // Only the original commercial enrollment governs this budget.
+ if(!await hasQuotationSchema(db))return true;
+ const result=(await db.query<AssembledQuotation&{approvals:SecondaryCraftApprovalRef[]|null}>(`SELECT q.*,
+  to_jsonb(v)->'secondary_craft_approvals' approvals FROM digital_quotation_documents q
+  LEFT JOIN digital_quotation_versions v ON v.quote_id=q.quote_id AND v.version=q.confirmed_version
+  WHERE q.production_order_id=$1`,[orderId])).rows[0];
+ if(result)return hasCurrentBudgetCraftBasis(db,result,result.approvals,lock);
+ const source=(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0];
+ return !await hasPublishedSecondaryCraft(db,source?.source_id??null);
+}
+
+export async function assertBudgetCraftBasis(db:PoolClient,orderId:string,policy:BudgetQuoteComparison['policy']){
+ if(!await budgetCraftBasisIsCurrent(db,orderId,policy,true))
+  throw new ApplicationError('BUDGET_QUOTE_BASIS_CONFLICT','请先核对本单当前工艺批准版本及客户确认报价',409);
+}
+
+export async function ensureQuotationBudget(db:PoolClient,orderId:string,actorId:string){
  if(!await hasQuotationSchema(db))return;
  const order=(await db.query('SELECT * FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[orderId])).rows[0];
  if(!order)return;
@@ -30,6 +60,7 @@ export async function ensureQuotationBudget(db:Database,orderId:string,actorId:s
  if(current)return; // Revisions must be explicitly adopted; no overwrite.
  const version=(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[quote.quote_id,quote.confirmed_version])).rows[0];
  if(!version||rule.policy===designerQuotationPolicy&&version.customer_code!==order.customer_code)return;
+ if(!await hasCurrentBudgetCraftBasis(db,quote,version.secondary_craft_approvals??null,true))return;
  await db.query('INSERT INTO digital_budget_quote_conversions(production_order_id,quote_id,quote_version,created_budget_version) VALUES($1,$2,$3,1) ON CONFLICT DO NOTHING',[orderId,quote.quote_id,quote.confirmed_version]);
  await db.query(`INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by,quote_id,quote_version)
  VALUES($1,1,'draft',$2,$3,$4,$5)`,[orderId,version.document,actorId,quote.quote_id,quote.confirmed_version]);

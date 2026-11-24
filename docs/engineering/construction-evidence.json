@@ -1,230 +1,264 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "d8a1a6ee9843e5cb0ab1c45cea9f86a56c1e72c5",
-  "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
+  "base": "97443fa573290647e85338063ef7a929a7a1cbcd",
+  "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
   "rules": [
     {
-      "rule": "Read assigned IE product quotation lines from the complete authorized, searched result set.",
-      "source": "Approved workbench v10.1 §8.1, §8.2 and I01/I04/I05.",
+      "rule": "An employed worker quotes only the exact assigned step and current scope. Factory options come from the active original catalogue and cannot write that catalogue.",
+      "source": "Approved workbench v10.1 §9.1–9.2; F01–F04, F08–F12.",
       "writes": [
-        "apps/api/src/production-platform/ie-processing-directory.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/secondary-craft-development-basis.ts",
+        "apps/api/src/production-platform/secondary-craft-suppliers.ts",
+        "apps/api/src/production-platform/secondary-craft-quotation.ts",
         "apps/api/src/production-platform/quotation-routes.ts",
-        "packages/contracts/src/digital-quotation.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "packages/contracts/src/secondary-craft-quotation.ts",
+        "packages/contracts/package.json",
+        "tests/unit/special-craft-steps.test.ts",
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/helpers/secondary-craft-approval-fixture.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/quotation-assembly.ts",
         "apps/api/src/production-platform/access-policy.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "apps/api/src/access/routes.ts"
       ],
       "oldTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/unit/special-craft-steps.test.ts"
       ],
-      "initialization": "No new tables or backfill. The projection selects current persisted assembly, assignment and admitted acceptance scope before total and paging.",
-      "dateAndPermission": "Read paths keep the original quote scope, active roles, assignments and business clock. A different row or an unrelated actor cannot access the selected entry.",
-      "expectation": "The signed IE sees 16 assigned rows over two pages despite unassigned rows sorting first. The selected resource and original quote/row IDs agree. Root has the original unassigned view. A non-IE and a nonmatching row fail authorization.",
+      "initialization": "Use the existing quotation and original development or adopted production step. The schema never supplies missing assignments or fictional suppliers.",
+      "dateAndPermission": "Record occurrence in the existing business clock. Every draft, submission and supplier read independently checks the assigned actor and active role.",
+      "expectation": "Signed worker selects an active factory and opens the exact board; input with a mismatched board, old direct price action, a fake external supplier on in-house and directory writes are rejected. Replay uses the same payload and request key. A current published instruction and its exact craft identity allow assigned bulk quotation independently of timeline step generation; withdrawn or separately assigned artisans cannot write the other craft.",
       "checks": [
-        "native-business",
-        "nondb",
-        "api-types",
-        "lint"
+        "joint",
+        "unit",
+        "fixes"
       ]
     },
     {
-      "rule": "Use the original row command, version and idempotency key and preserve a confirmed quote across a failed re-read.",
-      "source": "Approved workbench v10.1 §8.2, §12.2 and I02/I04/I05.",
+      "rule": "Only the specifically bound approval actor receives an actionable submitted version and can decide it, with an independent database constraint.",
+      "source": "Approved workbench v10.1 §9.3 and §13.1; F03–F07, F11–F12.",
       "writes": [
-        "apps/web/src/ie-processing-center.tsx",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/secondary-craft-approval-authority.ts",
+        "apps/api/src/production-platform/secondary-craft-approval-todos.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/notification-policy.ts",
+        "apps/api/src/todos/deep-link.ts",
+        "packages/contracts/src/todos.ts",
+        "packages/contracts/src/todo-destination.ts",
+        "packages/contracts/src/todo-presentation.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-service.ts#fillRow",
-        "apps/web/src/submission-feedback.tsx",
-        "apps/web/src/use-foreground-read.ts"
+        "apps/api/src/production-platform/secondary-craft-quotation.ts",
+        "apps/api/migrations/0184_business_module_owner_members.sql",
+        "apps/api/src/access/member-module-binding-service.ts"
       ],
       "oldTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/unit/todo-destination-parity.test.ts"
       ],
-      "initialization": "Existing quotations, budget and control boundaries continue from the release base. Writes remain on the original scoped request and idempotent receipt path.",
-      "dateAndPermission": "Only the currently authorized IE row is editable in the center. UI pending/retry state neither upgrades authorization nor creates another business write.",
-      "expectation": "A lost receipt reuses the exact version, original body and key. The stored price increments one version, an interrupted re-read keeps the success receipt and retry recovers the saved price with only GET.",
+      "initialization": "Reuse stable member binding/role and in-app notification receipts. Drafts create no approval todo and no employee or supplier is changed by migration.",
+      "dateAndPermission": "Verify current employed membership, the pending submission version and its bound recipient under transaction locks. Other owner and Root cannot approve or receive the same pending matter.",
+      "expectation": "Actual signed approval view and todo agree on the same item and version. Independent SQL rejects another approval actor and recipient. Return and later submission preserve original decision history.",
       "checks": [
-        "native-business",
-        "nondb",
-        "lint",
-        "web-types"
+        "joint",
+        "unit"
       ]
     },
     {
-      "rule": "Open the original sourcing and rework actions and return to the same authorized page, search and row.",
-      "source": "Approved workbench v10.1 §8.1, §8.2 and I02/I03/I05; DXUI T02.",
+      "rule": "Source publication, customer confirmation and budget commands jointly enforce current approvals while preserving unrelated manual and IE workflows.",
+      "source": "Approved workbench v10.1 §7.2A–7.3 and §13.1; N18–N20.",
       "writes": [
-        "apps/api/src/sourcing/sourcing-case-read.ts",
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/sourcing-service.ts",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "apps/web/src/ie-processing-center.tsx",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-workbench.ts",
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/quotation-budget-basis.ts",
+        "apps/api/src/production-platform/budget-service.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/identity-service.ts#ensureQuotationBudget",
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "apps/api/src/production-platform/ie-processing-directory.ts",
+        "apps/api/src/production-platform/budget-routes.ts"
+      ],
+      "oldTests": [
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
+      ],
+      "initialization": "Require both table/column families for new writes. Infer no craft from missing historical fields. A pure development confirmation has no formal budget until the original formal order command.",
+      "dateAndPermission": "Retain original eligibility and lock ordering. The confirmation transaction checks current item, work assignment, version, approval identity and factory eligibility before writing a customer or budget fact.",
+      "expectation": "The staged 0300 fixture rejects enabled-only writes. Two valid 0301 approvals unlock the original confirmation and budget exactly once. The pre-enrollment order with published embroidery and no quotation stays editable and publishes its original budget. An enrolled manual craft row goes through exact approval under its existing unit before confirming. Before publication, the original tentative development price remains editable without an approval target. Existing customers, transactions and snapshots remain covered.",
+      "checks": [
+        "joint",
+        "customer",
+        "unit",
+        "fixes"
+      ]
+    },
+    {
+      "rule": "Use existing scoped UI and original precise document identities for the craft centre, current and saved versions, without changing R5 IE navigation.",
+      "source": "Approved workbench v10.1 §9.2, §10.3, §11.3A and Appendix E DOC28.",
+      "writes": [
+        "apps/web/src/secondary-craft-quotation-page.tsx",
         "apps/web/src/App.tsx",
         "apps/web/src/components.tsx",
-        "apps/web/src/navigation-icons.tsx",
-        "apps/web/src/platform-modules.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
-        "tests/unit/business-chain-ui-contract.test.ts",
-        "tests/unit/mobile-bottom-navigation.test.ts",
-        "tests/unit/uat-interface-closure.test.ts"
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/quotation-workbench-pricing.tsx",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "apps/web/src/order-time-standard-editor.tsx",
+        "tests/integration/module-bundles-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/reporting/reporting-client.ts",
-        "apps/web/src/astryx-page-controls.tsx",
-        "apps/api/src/sourcing/sourcing-case-mapping.ts",
+        "apps/web/src/designer-astryx.ts",
+        "apps/web/src/use-foreground-read.ts",
+        "apps/web/src/ie-processing-center.tsx",
         "docs/ui/ASTRYX_UI_SPEC.md"
       ],
       "oldTests": [
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
-        "tests/integration/sourcing-routes.test.ts",
-        "tests/unit/sourcing-list-pagination.test.ts",
-        "tests/unit/sourcing-list-query.test.ts",
-        "tests/unit/business-chain-ui-contract.test.ts",
-        "tests/unit/mobile-bottom-navigation.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/unit/uat-interface-closure.test.ts"
       ],
-      "initialization": "Reuse current sourcing quotes and rework queue facts. Original source-module routes and readers retain their state machines and permissions.",
-      "dateAndPermission": "No deadlines, financial calculations or new vendor permissions. Sourcing records are selected before the count and page; ordinary IE history uses the original quote author. Return URLs are same-site and require normal authorization.",
-      "expectation": "Signed native tests submit the original outside quote once, reopen its saved price in history, and return to exact context. The rework link opens the exact original row, and the standard direct URL still opens that row without an IE link or mobile navigation. Existing contract tests keep both original forms in their order-centered transaction shell. Native product views fit 1165px and 390px.",
+      "initialization": "No new theme or global reset. Use existing signed sessions and reporting scopes; historical links select the saved revision rather than requesting a newer version.",
+      "dateAndPermission": "Current work and decision controls come from server authority; historic versions remain read-only and attachments are authorized against the saved step.",
+      "expectation": "Worker and bound approver complete actual browser actions. Safe recovery does not submit another version, older saved approval and attachment remain readable after a change, and original IE directory still works. The already-existing settings editor releases a cancelled inline node edit in the same render; the original back navigation returns without a stale confirmation and actual unsaved input remains protected.",
       "checks": [
-        "native-business",
-        "nondb",
-        "api-types",
-        "web-types",
-        "lint",
-        "inventory",
-        "preflight"
+        "joint",
+        "unit",
+        "fixes"
+      ]
+    },
+    {
+      "rule": "Publish the new storage and exact signed regression together through the repository’s existing release and gate path.",
+      "source": "Approved workbench v10.1 §13.1; AGENTS §§3–4.",
+      "writes": [
+        "apps/api/migrations/0301_secondary_craft_quotation_approval.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/full-gate-risk-map.mjs"
+      ],
+      "reads": [
+        "scripts/check-migrations.mjs",
+        "scripts/ci/prepare-settings-browser.mjs",
+        "docs/governance/construction-evidence-v1.md"
+      ],
+      "oldTests": [
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "scripts/ci/test-execution-contract.test.mjs"
+      ],
+      "initialization": "Checksum-bound additive migration, no backfill, supported settings-browser and existing two-worker Postgres config. The two signed fixtures exercise 0301 and pre-activation 0300 in isolation.",
+      "dateAndPermission": "No effect on SLA or existing account bindings. Existing test resources are local, owned, and cleaned; no deployment access is used.",
+      "expectation": "Exact dated candidates are verified under the existing gate. R4 and R6 writes complete only on the jointly enabled schema; no new runner or lighter risk level.",
+      "checks": [
+        "joint",
+        "unit"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native-business",
+      "id": "joint",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r5-evidence/rework-route-contract/verify-native.mjs native-business",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/run.mjs joint",
+      "context": "Node 22.22.2, canonical two-worker business-chain config, separately owned fresh low-privilege PG fixtures and authenticated Chromium; actual current schema and exact 0300 pre-enable schema; verified resource cleanup.",
+      "startedAt": "2026-11-24T02:28:13.887Z",
+      "endedAt": "2026-11-24T02:29:08.590Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:53:27.359Z",
-      "endedAt": "2026-11-24T00:53:51.597Z",
-      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
-      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
-      "context": "Signed Chromium with the canonical two-worker business-chain config and dual marked isolated PostgreSQL databases. Product quotation, sourcing and rework native flows. Cleanup verified.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/native-business.log",
-      "logSha256": "73e89ac554ad68e2378d7c27b3a4bd32a8e541ece48a3f67663b3b53fc8c3830",
-      "passed": 3,
-      "failed": 0,
-      "skipped": 14,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "b31618229cbc91651fa9f3b0fee169d6b08c1fca331480d0f31ef74800608623"
-        }
-      ]
-    },
-    {
-      "id": "nondb",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-query.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/integration/sourcing-routes.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T00:53:27Z",
-      "endedAt": "2026-11-24T00:53:37Z",
-      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
-      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
-      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/nondb.log",
-      "logSha256": "18a46e89079d5cb8abc933ddf9bcadbc809475c81e6cb4d7cded3261249e13c7",
-      "passed": 99,
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/joint.log",
+      "logSha256": "bc1c4f24e2edcff4c0919aa2832d81ec09214ad8796433067d82275c9a27fe67",
+      "passed": 10,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "13e3695065b729ba56df62b09ca8756dcfeae0932908adb1e760e55fca721297"
+          "sha256": "213813a61433615f8f7953c9aedc748f0e39b713d210e6c28ad98872e9850000"
         }
       ]
     },
     {
-      "id": "api-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit",
+      "id": "fixes",
+      "kind": "tests",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/run.mjs fixes",
+      "context": "Node 22.22.2, canonical two-worker PostgreSQL and Chromium, all four failed Full suites plus original settings browser protection. Separately owned isolated databases, native scopes and verified cleanup.",
+      "startedAt": "2026-11-24T02:26:21.613Z",
+      "endedAt": "2026-11-24T02:28:13.783Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:53:37Z",
-      "endedAt": "2026-11-24T00:53:53Z",
-      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
-      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
-      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/api-types.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/fixes.log",
+      "logSha256": "15b920078bb597049ee43e145bd3692ed404c4db13b8487d9dd549723a3302bf",
+      "passed": 68,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "b9583ecee79c5859086ce6b8b444f3e232c4855c04909c5b00fde3848e561830"
+        }
+      ]
     },
     {
-      "id": "web-types",
-      "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
+      "id": "customer",
+      "kind": "tests",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/run.mjs customer",
+      "context": "Node 22.22.2, canonical business-chain config and real low-privilege isolated PostgreSQL. Original commercial cohort, unenrolled historical budget with a source craft, quotation, budget, concurrency and replay checks; verified cleanup.",
+      "startedAt": "2026-11-24T02:29:08.945Z",
+      "endedAt": "2026-11-24T02:29:12.753Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:53:53Z",
-      "endedAt": "2026-11-24T00:54:14Z",
-      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
-      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
-      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/web-types.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/customer.log",
+      "logSha256": "a31e89fb1c4a326724e2004ed5ac55f2e1a77ab221928afd0b8321b47e2cea18",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d1131a2cc5ca13b8476e55e0f3404e764c14c3a412ca043df1acc872a3499603"
+        }
+      ]
     },
     {
-      "id": "lint",
-      "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 for changed TypeScript sources and tests",
+      "id": "unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/customer-quotation.test.ts tests/unit/quotation-material-unit.test.ts tests/unit/special-craft-steps.test.ts tests/unit/todo-destination-parity.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
+      "context": "Node 22.22.2 and canonical non-database configuration on the release-aligned local candidate.",
+      "startedAt": "2026-11-24T02:26:35Z",
+      "endedAt": "2026-11-24T02:26:46Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T00:54:14Z",
-      "endedAt": "2026-11-24T00:54:15Z",
-      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
-      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
-      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "id": "inventory",
-      "kind": "command",
-      "command": "node scripts/acceptance/time-site-inventory.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T00:54:15Z",
-      "endedAt": "2026-11-24T00:54:15Z",
-      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
-      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
-      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/inventory.log",
-      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
-    },
-    {
-      "id": "preflight",
-      "kind": "command",
-      "command": "npm run test:preflight",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T00:54:15Z",
-      "endedAt": "2026-11-24T00:54:21Z",
-      "testedHead": "0ffc2ae5f96df4d688f120d4642dc2891c0d353a",
-      "sourceFingerprint": "9841e31efdd0f4792ff8d61656a8390d4d2b8d235fa81e4d27f8339ab76b3f19",
-      "context": "Exact release-aligned candidate using pinned Node 22.22.2 and repository configuration.",
-      "log": "/tmp/dx-workbench-v101-r5-evidence/rework-route-contract/preflight.log",
-      "logSha256": "77c81216e8eb32544451847321aa2ee95418a8ea551e09d53847fb602cec13b5"
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/unit.log",
+      "logSha256": "99ab746d8a9676c0bc855bca374dfcd21d08aecfab428d7b6ef52fd064d8a4da",
+      "passed": 110,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9eeeb52f9e265113fecdd40746724beb600300372ff31973207cd29fca113f9a"
+        }
+      ]
     }
   ]
 }

@@ -23,7 +23,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true});});
  afterAll(async()=>{await h?.writeEvidence();await h?.dispose();});
- it('keeps R4 commercial writes unrouted while real staged row reviews and prices use the exact stored version',async()=>{
+ it('keeps jointly enabled R4 row reviews and prices on the exact stored version and leaves the budget locked before customer confirmation',async()=>{
   const {f,db}=h,designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!,merch=f.people.merchandiser!;
   const identity=new DigitalProductionIdentityService(db,true),quotes=new DigitalQuotationService(db,true);
   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
@@ -46,10 +46,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     (SELECT count(*)::int FROM digital_budget_documents WHERE production_order_id=$2) AS budgets,
     (SELECT count(*)::int FROM digital_budget_quote_conversions WHERE production_order_id=$2) AS adoptions`,[quoteId,id])).rows[0];
   try{
-   expect(await read()).toMatchObject({resource,quoteId,version:first.version,unitCost:'30',confirmation:'awaiting_joint_release',saved:null});
+   expect(await read()).toMatchObject({resource,quoteId,version:first.version,unitCost:'30',confirmation:'joint_release_ready',saved:null});
    expect((await follow.page.request.get(base+'/quotation/workbench-pricing')).status()).toBe(404);
    const preview={field:'customerUnitPrice',value:'49.123456'} as const;
-   expect((await tab.page.request.put(base+'/quotation/workbench-pricing',{data:{expectedVersion:first.version,input:preview}})).status()).toBe(404);
+   expect((await follow.page.request.put(base+'/quotation/workbench-pricing',{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:first.version,input:preview}})).status()).toBe(403);
    expect((await tab.page.request.post(base+'/quotation/line-reviews',{data:{action:'return'}})).status()).toBe(404);
    const newConfirmation={customerCode:'PD',expectedVersion:first.version,customerConfirmedTotal:preview.value,amountScope:'per_piece',
     quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',
@@ -110,7 +110,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const withPrice=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:withUsage.version,unitPrice:'9'},randomUUID());
   expect(withPrice.document).toBeNull();
   expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({
-   status:'awaiting_customer_confirmation',counts:{incomplete:0,pendingCraftApproval:0},unitCost:'9',confirmation:'awaiting_joint_release',
+   status:'awaiting_customer_confirmation',counts:{incomplete:0,pendingCraftApproval:0},unitCost:'9',confirmation:'joint_release_ready',
   });
   const craftRow={...ieRow,rowId:randomUUID(),name:'TEST 单项工艺'};
   const designerCopy=await quotes.read(designer,resource);
@@ -119,9 +119,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    document:{...designerCopy.document!,rows:[...designerCopy.document!.rows,craftRow]},
    assignments:[ieAssignment,{rowId:craftRow.rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:worker.actorId,priceRole:'pattern_room_worker'}],
   },randomUUID());
-  await quotes.fillRow(worker,resource,craftRow.rowId,{expectedVersion:withCraft.version,consumption:'1',unitPrice:'6'},randomUUID());
+  await expect(quotes.fillRow(worker,resource,craftRow.rowId,{expectedVersion:withCraft.version,consumption:'1',unitPrice:'6'},randomUUID()))
+   .rejects.toMatchObject({statusCode:409});
   expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({
-   status:'awaiting_craft_approval',counts:{incomplete:0,pendingCraftApproval:1},unitCost:'15',confirmation:'awaiting_joint_release',
+   status:'incomplete',counts:{incomplete:1,pendingCraftApproval:1},unitCost:null,confirmation:'joint_release_ready',
   });
  });
  it('paginates real assigned IE processing rows after authorization without changing the original quote readers',async()=>{
@@ -531,7 +532,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(served.status()).toBe(200);
     expect(served.headers()['cache-control']).toBe('no-store');
     expect((await quotes.read(designer,resource)).confirmedVersion).toBeNull();
-    expect(await served.json()).toMatchObject({unitCost:'40',saved:null,confirmation:'awaiting_joint_release'});
+    expect(await served.json()).toMatchObject({unitCost:'40',saved:null,confirmation:'joint_release_ready'});
     const panel=d.page.locator('#quote-cost-reference');
     for(const width of [1165,390]){
      await d.page.setViewportSize({width,height:960});

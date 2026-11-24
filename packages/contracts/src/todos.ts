@@ -20,6 +20,8 @@ export const TodoRouteDescriptorSchema = z.object({
     "digital_short_lead",
     "digital_order_time",
     "digital_order_quotation",
+    "digital_secondary_craft_order",
+    "digital_secondary_craft_source",
     "digital_production_instruction",
     "digital_bulk_preparation",
     "digital_source_material_investment",
@@ -37,6 +39,7 @@ export const TodoRouteDescriptorSchema = z.object({
   roundId: TodoIdSchema.optional(),
   developmentRound: z.number().int().positive().optional(),
   factoryDecisionId: TodoIdSchema.optional(),
+  craftRowId: TodoIdSchema.optional(),
   contractReturn: z.object({
     documentId: TodoIdSchema,version:z.number().int().positive(),supplierName:z.string().min(1),source:z.literal("price_reapplication"),
   }).strict().optional(),

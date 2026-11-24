@@ -50,6 +50,7 @@ import {ManagementReportingService} from '../../apps/api/src/reporting/managemen
 import {ReportQuerySchema} from '@dx-rework/contracts/reporting';
 import {arrangeTestRound} from '../helpers/development-arrangement-fixture.js';
 import {developmentNativeRound} from '../../apps/api/src/production-platform/development-native-round.js';
+import {approveFixtureCraftPrice,bindFixtureCraftApprover,submitFixtureCraftPrice} from '../helpers/secondary-craft-approval-fixture.js';
 
 // This fixture exercises the real Acceptance business clock and original UAT
 // initializer, so use the existing clock-test database rather than the CI app DB.
@@ -139,7 +140,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   let q=await quotes.read(p.designer,resource);const ie=q.document!.rows.find(row=>row.name==='IE加工单价')!,craft=q.document!.rows.find(row=>row.name==='印花')!;
   q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.rowId===ie.rowId?{...a,priceAssigneeId:person('ie').actorId}:a)},randomUUID());
   q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
-  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'3'},randomUUID());
+  const approver=await bindFixtureCraftApprover(f);
+  await approveFixtureCraftPrice(quotes,p.worker,approver,resource,craft.rowId,'3');
+  q=await quotes.read(p.designer,resource);
   q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,unitPrice:'22'},randomUUID());
   expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'',consumption:'',unitPrice:'22',canEditPricingUnit:true});
   await expect(quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'米'},randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -218,7 +221,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(q.document!.rows).toHaveLength(4);
   const ie=q.document!.rows.find(r=>r.name==='IE加工单价')!,craft=q.document!.rows.find(r=>r.name==='印花')!;
   q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.rowId===ie.rowId?{...a,priceAssigneeId:person('ie').actorId}:a)},randomUUID());
-  const own=await quotes.read(p.worker,resource);expect(own.document).toBeNull();expect(own.rows.find(r=>r.rowId===p.materialId)!.unitPrice).toBeNull();expect(own.rows.find(r=>r.rowId===craft.rowId)!.canEditPrice).toBe(true);
+  const own=await quotes.read(p.worker,resource);expect(own.document).toBeNull();expect(own.rows.find(r=>r.rowId===p.materialId)!.unitPrice).toBeNull();
+  expect(own.rows.find(r=>r.rowId===craft.rowId)).toMatchObject({canEditPrice:false,secondaryCraftEntry:true});
   const technicalDocument=(await forms.read(p.worker,p.sourceId)).document!;
   expect(technicalDocument.materials.every(m=>m.unitPrice===undefined)).toBe(true);
   const adopted=(await forms.read(p.designer,p.sourceId)).document!.materials.find(row=>row.materialId===p.accessoryId)!;
@@ -227,7 +231,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'1.5'},randomUUID());
   q=await quotes.fillRow(p.worker,resource,p.accessoryId!,{expectedVersion:q.version,consumption:'1'},randomUUID());
   q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
-  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'3'},randomUUID());
+  const approver=await bindFixtureCraftApprover(f);
+  await approveFixtureCraftPrice(quotes,p.worker,approver,resource,craft.rowId,'3');
   q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('45');
   await expect(quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,consumption:'2'},randomUUID())).rejects.toMatchObject({statusCode:403});
   const confirmation=QuotationConfirmationSchema.parse({expectedVersion:q.version,customerCode:'PD',customerConfirmedTotal:'45',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST independently confirmed 45, not assumed from cost',confirmedAt:businessNow().toISOString()});
@@ -245,13 +250,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await expect(quotes.confirm(p.designer,resource,{...confirmation,expectedVersion:confirmedVersion},randomUUID())).rejects.toMatchObject({statusCode:409});
   const body:TechnicalArtifactBody={pltAttachmentIds:[await plot(p)],consumptionRows:[{materialId:p.materialId,unit:'米',consumption:'1.6'},{materialId:p.accessoryId!,unit:'件',consumption:'1'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['48']}],gradingNote:'TEST',templateRef:null},note:'TEST source version',basedOnFinalComment:null};
   await artifact(p,{body});q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('50.2');
-  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'5'},randomUUID());
+  await approveFixtureCraftPrice(quotes,p.worker,approver,resource,craft.rowId,'5');
   q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('52.2');
   const preserved=await quotes.read(p.designer,resource,undefined,confirmedVersion);expect(calculateBudget(preserved.document!).cost).toBe('45');
   expect((await budgets.read(f.root,order.productionOrderId)).document).toEqual(originalBudget.document);
-  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:''},randomUUID());
-  expect(q.complete).toBe(false);await expect(quotes.confirm(p.designer,resource,{...confirmation,expectedVersion:q.version},randomUUID())).rejects.toMatchObject({statusCode:409});
-  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'0'},randomUUID());
+  await submitFixtureCraftPrice(quotes,p.worker,resource,craft.rowId,'');
+  q=await quotes.read(p.designer,resource);
+  expect(q.craftApprovalState).toBe('waiting');
+  await expect(quotes.confirm(p.designer,resource,{...confirmation,expectedVersion:q.version},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await approveFixtureCraftPrice(quotes,p.worker,approver,resource,craft.rowId,'0');
   q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('47.2');
   const before=q.version;await quotes.read(p.designer,resource);expect((await quotes.read(p.designer,resource)).version).toBe(before);
  });
@@ -328,6 +335,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    VALUES($1,1,1,$2,$3,$3,$4)`,[source.sourceId,JSON.stringify({development_printing:p.worker.actorId}),f.root.actorId,saved.version]);
   saved=await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document},randomUUID());
   q=await quotes.read(p.designer,resource);
+  await expect(quotes.readSecondaryCraft(p.worker,resource,printing.rowId)).rejects.toMatchObject({statusCode:404});
   q=await quotes.fillRow(p.worker,resource,printing.rowId,{expectedVersion:q.version,unitPrice:'5'},randomUUID());
   q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'2'},randomUUID());
   q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('55');
