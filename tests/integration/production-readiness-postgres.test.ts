@@ -648,6 +648,66 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await productionReadiness(f.db,created.productionOrderId)).finalReasons).toContain('当前主料到仓记录尚未有效备齐');
  });
 
+ it('blocks readiness evidence writes across cancellation and keeps the original authorized receipt',async()=>{
+  const p=await setup(),created=await order(p),resource={kind:'order' as const,id:created.productionOrderId};
+  const users={primary:p.primary,unrelated:f.people['worker-a']!};
+  const deps={service:identity,creationEnabled:true,authenticate:async(token:string|undefined)=>{
+   const who=users[token as keyof typeof users];if(!who)throw new ApplicationError('UNAUTHORIZED','TEST login required',401);
+   return {id:who.actorId,displayName:'TEST current user',businessRoles:who.actorRoles,capabilities:['digital_production:view']};
+  }};
+  const app=Fastify();
+  app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(e.statusCode??500).send({code:e.code,message:e.message});});
+  registerProductionReadinessRoutes(app,deps,service,f.attachments);await app.ready();
+  const orderBase=`/digital-production/orders/${resource.id}/production-readiness`,sourceBase=`/digital-production/sources/${p.sourceId}/production-readiness`;
+  const headers={cookie:'dx_rework_session=primary'},post=(url:string,payload:object,key=randomUUID())=>app.inject({method:'POST',url,payload,headers:{...headers,'idempotency-key':key}});
+  const bytes=await sharp({create:{width:2,height:2,channels:3,background:'white'}}).png().toBuffer(),sha256=createHash('sha256').update(bytes).digest('hex');
+  const file={filename:'TEST material evidence.png',mimeType:'image/png',sizeBytes:bytes.length,sha256};
+  const create=async(base:string)=>{const result=await post(base+'/upload-intents',file);expect(result.statusCode,result.body).toBe(200);
+   const upload=result.json<{objectKey:string;attachmentId:string}>();await f.storage.writeImmutable(upload.objectKey,bytes,file);return upload;};
+  try{
+   const original=await create(orderBase),finalize=(id:string,base=orderBase)=>post(`${base}/attachments/${id}/finalize`,{});
+   const finished=await finalize(original.attachmentId);expect(finished.statusCode,finished.body).toBe(200);
+   expect((await finalize(original.attachmentId)).json()).toEqual(finished.json());
+   const material=p.document.materials[0]!,key=randomUUID();
+   const input={kind:'material_investment',scopeRef:'whole',expectedVersion:0,state:'partial',occurredAt:businessNow().toISOString(),note:'TEST existing material investment',
+    quantities:[{lineId:null,materialId:material.materialId,name:material.name,quantity:10,unit:'米'}],evidenceIds:[original.attachmentId],sourceDocumentVersion:null,recipientId:null,investmentMaterialId:material.materialId};
+   const saved=await post(orderBase+'/materials',input,key);expect(saved.statusCode,saved.body).toBe(200);
+   const current=saved.json<ProductionReadinessState>();expect(current.canRecord).toContain('material_investment');
+   const pending=await create(sourceBase);
+   const head=f.storage.head.bind(f.storage);
+   let startVerification!:()=>void,resumeVerification!:()=>void;
+   const verifying=new Promise<void>(resolve=>{startVerification=resolve;});
+   const released=new Promise<void>(resolve=>{resumeVerification=resolve;});
+   const probe=vi.spyOn(f.storage,'head').mockImplementation(async objectKey=>{
+    if(objectKey===pending.objectKey){startVerification();await released;}
+    return head(objectKey);
+   });
+   const inFlight=Promise.resolve(finalize(pending.attachmentId,sourceBase));
+   const attachmentsBefore=(await f.db.query('SELECT count(*)::int count FROM attachments WHERE uploaded_by=$1',[p.primary.actorId])).rows[0].count;
+   try{
+    await Promise.race([verifying,inFlight.then(response=>{throw Error(`Verification did not start: ${response.statusCode} ${response.body}`);})]);
+    const control=new DigitalProductionTaskService(f.db,'TEST native cancellation');
+    expect(await control.controlResource(p.primary,resource,'cancel','TEST cancelled during evidence verification',randomUUID())).toMatchObject({state:'cancelled'});
+   }finally{resumeVerification();probe.mockRestore();}
+   const stopped=await inFlight;expect(stopped.statusCode,stopped.body).toBe(409);
+   const conflict={code:'PREPARATION_CONFLICT',message:'订单或开发来源已暂停、取消，不能新增办理事实'};
+   expect(stopped.json()).toMatchObject(conflict);
+   for(const base of [orderBase,sourceBase]){
+    const blocked=await post(base+'/upload-intents',file);expect(blocked.statusCode,blocked.body).toBe(409);expect(blocked.json()).toMatchObject(conflict);
+    expect((await finalize(pending.attachmentId,base)).json()).toMatchObject(conflict);
+    const read=await app.inject({method:'GET',url:base,headers});expect(read.statusCode,read.body).toBe(200);
+    expect(read.json()).toMatchObject({canRecord:[],canAssign:false,canDeliverInstruction:false,canAcknowledgeAdoption:false,canAdopt:false,history:current.history});
+   }
+   expect((await post(orderBase+'/materials',input,key)).json()).toMatchObject(conflict);
+   expect((await f.db.query('SELECT count(*)::int count FROM attachments WHERE uploaded_by=$1',[p.primary.actorId])).rows[0].count).toBe(attachmentsBefore);
+   expect((await f.db.query('SELECT status,entity_type,entity_id FROM attachments WHERE attachment_id=$1',[pending.attachmentId])).rows[0])
+    .toEqual({status:'pending',entity_type:null,entity_id:null});
+   const url=orderBase+'/attachments/'+original.attachmentId;
+   const download=await app.inject({method:'GET',url,headers});expect(download.statusCode,download.body).toBe(302);expect(download.headers.location).toBeTruthy();
+   expect((await app.inject({method:'GET',url,headers:{cookie:'dx_rework_session=unrelated'}})).statusCode).toBe(403);
+  }finally{await app.close();}
+ });
+
  it('keeps an unfinished paper/marker clock when the same round receives another instruction version',async()=>{
   const scene=await f.scene('2026-11-20T00:00:00Z');let ready!:Awaited<ReturnType<typeof f.bulkReady>>,oldDue='';
   await f.runtime.run(scene,f.root,async()=>{ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});oldDue=(await bulk.read(f.root,ready.id)).tasks.find(t=>t.taskKind==='bulk_pattern')!.dueAt!;});

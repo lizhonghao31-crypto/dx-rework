@@ -8,6 +8,7 @@ import {initialInstruction} from '@dx-rework/contracts/production-instruction';
 import type {ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
@@ -403,6 +404,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     occurredAt:'2026-11-19T05:06:00.000Z',
     investmentMaterialOccurrences:{[revisedFabricId]:{occurredAt:'2026-11-19T05:06:00.000Z'},[secondFabricId]:{occurredAt:'2026-11-19T05:05:00.000Z'}},
    });
-  }finally{await merchTab.context.close();}
+   await form.getByLabel('补充凭证（可选，图片或PDF）').waitFor();
+   const tasks=new DigitalProductionTaskService(h.db,'TEST native browser cancellation');
+   await h.f.runtime.run(scene,merch,()=>tasks.controlResource(merch,resource,'cancel','TEST cancel from original workflow',randomUUID()));
+   const readinessPath=`/api/digital-production/orders/${orderId}/production-readiness`;
+   const reloaded=page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname===readinessPath);
+   await page.reload();
+   const response=await reloaded;
+   expect(response.status()).toBe(200);
+   expect(await response.json()).toMatchObject({canRecord:[],history:changedTime.saved.history});
+   const panel=page.locator('.preparation-readiness');
+   await panel.locator('[data-preparation-kind="material_investment"]').waitFor();
+   expect(await form.count()).toBe(0);
+   expect(await panel.getByLabel('补充凭证（可选，图片或PDF）').count()).toBe(0);
+   const history=panel.getByText(/^原记录与历史版本/).locator('..');
+   await history.locator('summary').click();
+   await history.getByText(/^TEST 明确订正 A 的实际时刻 · /).waitFor();
+   await history.locator('article').filter({hasText:'TEST 原正式制单交接'}).locator(`a[href$="/attachments/${original.attachmentId}"]`).waitFor();
+   expect((await page.request.get(h.base+readinessPath+'/attachments/'+original.attachmentId,{maxRedirects:0})).status()).toBe(302);
+  }finally{await merchTab.close();}
  });
 });

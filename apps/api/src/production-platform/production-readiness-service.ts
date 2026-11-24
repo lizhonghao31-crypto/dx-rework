@@ -73,6 +73,25 @@ export class ProductionReadinessService{
    leader,designer,merch,warehouse,color};
  }
  async authorize(actor:TrustedActorContext,resource:PreparationResource){await this.access(this.database,actor,resource);}
+ async authorizeAttachmentUpload(actor:TrustedActorContext,resource:PreparationResource,transaction?:PoolClient){
+  const db=transaction??this.database;
+  // Serialize the attachment write with cancellation, after any object storage I/O.
+  if(transaction)await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+  const {context}=await this.access(db,actor,resource);
+  await this.assertPreparationActive(db,context);
+ }
+ private async preparationWriteBlock(db:PreparationDB,{orderId,sourceId}:Awaited<ReturnType<typeof preparationContext>>){
+  const {rows:[state]}=await db.query<{inactive:boolean;closed:boolean}>(`SELECT
+   EXISTS(SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1)
+    OR (resource_kind='source' AND resource_id=$2)) AND state<>'active') AS inactive,
+   EXISTS(SELECT 1 FROM digital_order_closures WHERE production_order_id=$1) AS closed`,[orderId,sourceId]);
+  if(state!.inactive)return '订单或开发来源已暂停、取消，不能新增办理事实';
+  return state!.closed?'本单已结案，原资料和实际记录保持不变':null;
+ }
+ private async assertPreparationActive(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>){
+  const blocked=await this.preparationWriteBlock(db,context);
+  if(blocked)conflict(blocked);
+ }
  async readResponsibility(actor:TrustedActorContext,resource:PreparationResource,db:PreparationDB){
   return (await this.access(db,actor,resource)).responsibility;
  }
@@ -160,15 +179,18 @@ export class ProductionReadinessService{
   const readiness=orderId?await productionReadiness(db,orderId):null;
   const adoption=await preparationAdoption(db,resource),enrolled=Boolean(orderId?readiness?.adoption:adoption);
   const revision=readiness?.revision??preparationHash({source:resource.id,facts:a.facts.map(f=>[f.recordId,f.version,f.valid]),responsibility:a.responsibility});
+  const writable=!await this.preparationWriteBlock(db,a.context);
   const canRecord:PreparationMaterialKind[]=[];
   const originalHandover=a.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole');
   const instructionHandover=usesInstructionHandover(a.context,originalHandover,a.history);
   const root=isRootActor(actor);
-  const canRecordInstructionHandover=instructionHandover&&resource.kind==='order'&&root;
-  if(canRecordInstructionHandover||!instructionHandover&&(root||a.designer))canRecord.push('design_handover');
-  if(a.merch||isRootActor(actor))canRecord.push('material_investment');
-  if(a.warehouse||isRootActor(actor))canRecord.push('fabric_receipt','accessories_ready','style_label_ready');
-  if(a.color||isRootActor(actor))canRecord.push('color_confirmation');
+  const canRecordInstructionHandover=writable&&instructionHandover&&resource.kind==='order'&&root;
+  if(writable){
+   if(canRecordInstructionHandover||!instructionHandover&&(root||a.designer))canRecord.push('design_handover');
+   if(a.merch||root)canRecord.push('material_investment');
+   if(a.warehouse||root)canRecord.push('fabric_receipt','accessories_ready','style_label_ready');
+   if(a.color||root)canRecord.push('color_confirmation');
+  }
   const acknowledged=orderId&&await preparationAvailable(db)?Boolean((await db.query('SELECT 1 FROM digital_preparation_adoption_acknowledgements WHERE production_order_id=$1 AND basis_revision=$2',[orderId,revision])).rowCount):false;
   const deliveries=orderId&&await preparationAvailable(db)?(await db.query('SELECT * FROM digital_instruction_deliveries WHERE production_order_id=$1 ORDER BY recorded_at,event_id',[orderId])).rows:[];
   const ranges=orderId&&await preparationAvailable(db)?(await db.query('SELECT r.* FROM digital_bulk_work_ranges r JOIN digital_bulk_preparations p USING(preparation_id) WHERE p.production_order_id=$1 ORDER BY r.preparation_id,r.kind,r.version,r.range_id',[orderId])).rows:[];
@@ -177,9 +199,9 @@ export class ProductionReadinessService{
   const investment=a.facts.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
   const reminder=handover&&orderId&&!(investment?.state==='ready'&&investment.valid)?await materialInvestmentReminder(db,{sourceId:a.context.sourceId,orderId,handoverId:handover.recordId,scopeFingerprint:handover.investmentScopeBasis!.fingerprint}):null;
   const orderInstruction=canRecordInstructionHandover&&orderId?await directInvestmentInstruction(db,orderId):null;
-  return {...(reminder?{materialInvestmentReminder:{...reminder,canClose:!reminder.termination&&reminder.enabled
-   &&reminder.status!=='waiting'&&(a.merch||isRootActor(actor))}}:{}),...(canRecordInstructionHandover?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
-   canDeliverInstruction:a.merch||isRootActor(actor),canAcknowledgeAdoption:!enrolled&&Boolean(orderId)&&(a.merch||isRootActor(actor)),canAdopt:!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
+  return {...(reminder?{materialInvestmentReminder:{...reminder,canClose:writable&&!reminder.termination&&reminder.enabled
+   &&reminder.status!=='waiting'&&(a.merch||root)}}:{}),...(canRecordInstructionHandover?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:writable&&a.leader,
+   canDeliverInstruction:writable&&(a.merch||root),canAcknowledgeAdoption:writable&&!enrolled&&Boolean(orderId)&&(a.merch||root),canAdopt:writable&&!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
    adoptionReason:enrolled?null:'历史单未自动套用；主跟单核对预览后由供应链总监、老板或 Root 明确采用，完成实绩不重算',finalReasons:readiness?.finalReasons??[],technicalRevision:readiness?.technical?.revision??null,
    draftWindow:orderId?await preparationWindow(db,orderId,'draft'): {startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:'正式单形成前保留真实投料及到仓记录',status:'waiting'},
    finalWindow:orderId?await preparationWindow(db,orderId,'final',readiness?.finalReasons):{startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:null,status:'waiting'},
@@ -194,9 +216,7 @@ export class ProductionReadinessService{
    if(!await preparationAvailable(db))conflict('产前资料版本尚未安装');
    if(a.context.orderId)await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[a.context.orderId]);
    if(a.context.sourceId)await db.query('SELECT source_id FROM digital_production_sources WHERE source_id=$1 FOR UPDATE',[a.context.sourceId]);
-   const inactive=(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)) AND state<>'active'",[a.context.orderId,a.context.sourceId])).rowCount;
-   if(inactive)conflict('订单或开发来源已暂停、取消，不能新增办理事实');
-   if(a.context.orderId&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[a.context.orderId])).rowCount)conflict('本单已结案，原资料和实际记录保持不变');
+   await this.assertPreparationActive(db,a.context);
    const record=action==='record'?input as PreparationMaterialRecord:null;
    const instructionHandover=record?.kind==='design_handover'&&usesInstructionHandover(a.context,
     a.facts.find(f=>f.kind===record.kind&&f.scopeRef===record.scopeRef),a.history);
