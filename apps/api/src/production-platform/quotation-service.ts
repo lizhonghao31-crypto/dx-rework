@@ -21,7 +21,7 @@ import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPo
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {readIeProcessingDirectory} from './ie-processing-directory.js';
 import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
-import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
+import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
 import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
 
 type Database=Pick<Pool|PoolClient,'query'>;
@@ -149,8 +149,8 @@ export class DigitalQuotationService{
   const budget=c.orderId?(await db.query('SELECT version,quote_id,quote_version,status FROM digital_budget_documents WHERE production_order_id=$1',[c.orderId])).rows[0]:null;
   const assessed=q&&version===undefined&&c.confirm;
   const craftRows=q&&version===undefined?requiredCraftRows(q):[];
-  const craftEnabled=craftRows.length>0&&await secondaryCraftReady(db);
-  const approved=assessed&&craftEnabled?await approvedSecondaryCraftRows(db,q,false):null;
+  const released=q&&craftRows.length>0?await releasedCraftRows(db,q):[];
+  const approved=assessed&&released.length>0?await approvedSecondaryCraftRows(db,q,false):null;
   const craftApprovalState=assessed&&(craftRows.length>0||await hasUnmappedSecondaryCraft(db,q))
    ?approved?.required.length&&approved.confirmed.size===approved.required.length?'complete' as const:'waiting' as const:undefined;
   let workbenchBudget:QuotationSheet['budget']['workbench'];
@@ -167,7 +167,7 @@ export class DigitalQuotationService{
    const current=q?.assignments.find(x=>x.rowId===row.rowId);
    const technical=current?.technicalAssigneeId===actor.actorId&&c.roles.has('pattern_room_worker');
    const price=current?.priceAssigneeId===actor.actorId&&c.roles.has(current.priceRole);
-   const secondaryCraft=craftEnabled&&craftRows.some(craft=>craft.rowId===row.rowId);
+   const secondaryCraft=released.some(craft=>craft.rowId===row.rowId);
    const secondaryHistory=c.designerId===actor.actorId&&c.roles.has('sample_designer')&&Boolean(q?.price_sources[row.rowId]?.secondaryCraftDecisionId);
    if(!c.full&&!technical&&!price)return [];
    const basis=assembly?.rows[row.rowId];
@@ -348,7 +348,7 @@ export class DigitalQuotationService{
    const tech=a.technicalAssigneeId===actor.actorId&&c.roles.has('pattern_room_worker'),price=a.priceAssigneeId===actor.actorId&&c.roles.has(a.priceRole);
    if((input.consumption!==undefined||input.artifactConsumption)&&!isRootActor(actor)&&!tech||input.unitPrice!==undefined&&!isRootActor(actor)&&!price)digitalForbidden();
    const component=q.assembly?.rows[rowId];
-   if(input.unitPrice!==undefined&&requiredCraftRows(q).some(value=>value.rowId===rowId)&&await secondaryCraftReady(db))
+   if(input.unitPrice!==undefined&&(await releasedCraftRows(db,q)).some(value=>value.rowId===rowId))
     conflict('请在本项二次工艺报价入口送审，批准后再采用单价');
    if(component&&component.kind!=='material'&&(input.consumption!==undefined||input.artifactConsumption))conflict('材料价格从原开发资料读取；IE与工艺均按每件单价计入，不重复填写用量');
    const version=q.version+1,sources={...q.consumption_sources},priceSources={...q.price_sources};

@@ -16,6 +16,7 @@ import {DigitalBudgetService} from '../../apps/api/src/production-platform/budge
 import {randomUUID} from 'node:crypto';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
+import {approveFixtureCraftPrice,bindFixtureCraftApprover} from '../helpers/secondary-craft-approval-fixture.js';
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
@@ -70,11 +71,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await new JourneyFactRepository(f.db).buildOne({kind:'source',id:sid});
   expect((await f.db.query('SELECT calculation_version FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2',['source',sid])).rows[0]?.calculation_version).toBe(JOURNEY_FACT_CALCULATION_VERSION);
   const quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:created[0]!.sourceId},worker=f.people['pattern-room-worker']!;
+  const approver=await bindFixtureCraftApprover(f);
   let quote=await quotes.read(worker,resource);
   const own=quote.rows.filter(row=>row.name==='TEST 激光'||row.name==='TEST 烫钻');
-  expect(own).toHaveLength(2);expect(own.map(row=>row.craftBasis)).toEqual(steps.map(step=>({stage:'development',libraryId:step.specialCraft!.id,libraryVersion:1,stepId:expect.any(String)})));expect(own.every(row=>row.canEditPrice&&row.assignment.priceAssigneeId===worker.actorId)).toBe(true);
+  expect(own).toHaveLength(2);expect(own.map(row=>row.craftBasis)).toEqual(steps.map(step=>({stage:'development',libraryId:step.specialCraft!.id,libraryVersion:1,stepId:expect.any(String)})));expect(own.every(row=>!row.canEditPrice&&row.secondaryCraftEntry&&row.assignment.priceAssigneeId===worker.actorId)).toBe(true);
   for(const [index,row]of own.entries()){
-   await quotes.fillRow(worker,resource,row.rowId,{expectedVersion:quote.version,unitPrice:String(index+3)},randomUUID());
+   await approveFixtureCraftPrice(quotes,worker,approver,resource,row.rowId,String(index+3));
    quote=await quotes.read(worker,resource);
   }
   expect(quote.rows.filter(row=>own.some(own=>own.rowId===row.rowId)).map(row=>row.unitPrice)).toEqual(['3','4']);
@@ -130,7 +132,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   for(const [index,row] of bulkRows.entries()){
    const ownBulk=await quotes.read(worker,bulkResource);
    expect(ownBulk.rows.some(value=>value.name==='IE加工单价')).toBe(false);
-   await quotes.fillRow(worker,bulkResource,row.rowId,{expectedVersion:ownBulk.version,unitPrice:String(7+index*2)},randomUUID());
+   await approveFixtureCraftPrice(quotes,worker,approver,bulkResource,row.rowId,String(7+index*2));
   }
   expect((await notifications.todos(worker)).filter(todo=>bulkRows.some(row=>row.rowId===todo.todoId))).toHaveLength(0);
   expect((await quotes.read(f.root,bulkResource)).complete).toBe(true);
@@ -187,26 +189,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const saved=await library.save(f.root,{id:null,expectedVersion:0,definition:{name,enabled:true,development:{minutes:60,calendar:'continuous',reminder:{enabled:false,percent:70}},bulk:{minutes:120,calendar:'continuous',reminder:{enabled:false,percent:70}}}},randomUUID());
    steps.push({craftKind:'special',sequence:index+2,specialCraft:saved});
   }
-  const quotes=new DigitalQuotationService(f.db,true);let dispatches=0,printingId='';
+  const quotes=new DigitalQuotationService(f.db,true),approver=await bindFixtureCraftApprover(f);let dispatches=0,printingId='';
   await exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,worker.actorId,undefined,[['特殊工艺','免洗']],{fixedCraftSteps:steps,automaticQuotation:true,onRouteComplete:async(sourceId,kind)=>{
    if(kind!=='development_craft_dispatch')return;
    const resource={kind:'source' as const,id:sourceId};dispatches++;
    if(dispatches===1){
     const quote=await quotes.read(worker,resource),printing=quote.rows.find(row=>row.name==='印花')!;printingId=printing.rowId;
-    expect(printing.canEditPrice).toBe(true);
-    await quotes.fillRow(worker,resource,printingId,{expectedVersion:quote.version,unitPrice:'5'},randomUUID());
+    expect(printing).toMatchObject({canEditPrice:false,secondaryCraftEntry:true});
+    await approveFixtureCraftPrice(quotes,worker,approver,resource,printingId,'5');
    }else{
     const pending=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_printing' AND t.state='ready'",[sourceId])).rows[0];
     const execution=new DevelopmentExecutionService(f.db,true),input=await arrangementInput(f.db,execution,f.root,sourceId,worker.actorId);
     input.entries=input.entries.map(entry=>entry.expectedTask?.taskId===pending.task_id?{...entry,assigneeId:other.actorId,reason:'TEST separate special artisan'}:entry);
     await execution.arrange(f.root,sourceId,input,randomUUID());
     const own=await quotes.read(worker,resource),foreign=await quotes.read(other,resource);
-    expect(own.rows.find(row=>row.rowId===printingId)).toMatchObject({unitPrice:'5',canEditPrice:true,assignment:{priceAssigneeId:worker.actorId}});
-    expect(foreign.rows.some(row=>row.rowId===printingId&&row.canEditPrice)).toBe(false);
+    expect(own.rows.find(row=>row.rowId===printingId)).toMatchObject({unitPrice:'5',canEditPrice:false,secondaryCraftEntry:true,assignment:{priceAssigneeId:worker.actorId}});
+    expect(foreign.rows.some(row=>row.rowId===printingId&&(row.canEditPrice||row.secondaryCraftEntry))).toBe(false);
     await expect(quotes.fillRow(other,resource,printingId,{expectedVersion:foreign.version,unitPrice:'99'},randomUUID())).rejects.toMatchObject({statusCode:403});
     const special=foreign.rows.find(row=>row.name===steps[dispatches-1]!.specialCraft!.definition.name)!;
-    expect(special.canEditPrice).toBe(true);
-    await quotes.fillRow(other,resource,special.rowId,{expectedVersion:foreign.version,unitPrice:String(dispatches)},randomUUID());
+    expect(special).toMatchObject({canEditPrice:false,secondaryCraftEntry:true});
+    await approveFixtureCraftPrice(quotes,other,approver,resource,special.rowId,String(dispatches));
     expect((await quotes.read(worker,resource)).rows.find(row=>row.rowId===printingId)?.unitPrice).toBe('5');
    }
   }});

@@ -44,6 +44,17 @@ export function requiredCraftRows(quote:AssembledQuotation){
    (entry.priceRole==='pattern_room_worker'||entry.priceRole==='embroidery_washing_merchandiser')));
 }
 
+/** Before publication, the original development worksheet may still hold
+ * draft prices. Such an input cannot be submitted or adopted as a decision. */
+export async function releasedCraftRows(db:Pick<PoolClient,'query'>,quote:AssembledQuotation){
+ const rows=requiredCraftRows(quote);
+ if(!rows.length||!await secondaryCraftReady(db))return [];
+ if(!quote.assembly||!quote.source_id||rows.every(row=>quote.assembly?.rows[row.rowId]?.stage!=='development'))return rows;
+ const source=await developmentDocumentRow(db,quote.source_id);
+ return source?.status==='published'&&(source.round_number??1)===quote.assembly.roundNumber
+  ?rows:rows.filter(row=>quote.assembly?.rows[row.rowId]?.stage==='bulk');
+}
+
 export async function hasUnmappedSecondaryCraft(db:Pick<PoolClient,'query'>,quote:AssembledQuotation){
  return !quote.assembly&&hasPublishedSecondaryCraft(db,quote.source_id);
 }
@@ -97,11 +108,13 @@ async function targets(db:Pick<PoolClient,'query'>,quote:AssembledQuotation):Pro
    return basis?[{...common,scopeId:sourceId,sourceVersion:basis.sourceVersion,basis:basis.fingerprint,
     attachmentIds:basis.requirement?.attachmentIds??[],instructions:[basis.requirement?.part,basis.requirement?.specification,basis.requirement?.instructions].filter(Boolean).join(' ')}]:[];
   }
-  if(ref.stage!=='bulk'||!orderId||!instruction||!ref.craftRef?.stepId)return [];
+  if(ref.stage!=='bulk'||!orderId||!instruction||!ref.craftRef)return [];
   const step=instruction.document.craftSteps?.find(item=>`craft:bulk:${craftStepIdentity(item)}`===ref.sourceRef);
   if(step?.specialCraft?.id!==ref.craftRef.libraryId||step?.specialCraft?.version!==ref.craftRef.libraryVersion)return [];
+  // A published instruction identifies the quotation item before production
+  // assigns a timeline step. Adopting that timeline does not change the quote.
   return [{...common,scopeId:orderId,sourceVersion:instruction.version,attachmentIds:[],instructions:instruction.document.process,
-   basis:fingerprint([orderId,assembly.roundNumber,ref.stage,ref.sourceRef,ref.craftRef, instruction.document.process])}];
+   basis:fingerprint([orderId,assembly.roundNumber,ref.stage,instruction.version,ref.sourceRef,step, instruction.document.process])}];
  });
 }
 

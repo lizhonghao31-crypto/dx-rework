@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "97443fa573290647e85338063ef7a929a7a1cbcd",
-  "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
+  "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
   "rules": [
     {
       "rule": "An employed worker quotes only the exact assigned step and current scope. Factory options come from the active original catalogue and cannot write that catalogue.",
@@ -15,7 +15,10 @@
         "packages/contracts/src/secondary-craft-quotation.ts",
         "packages/contracts/package.json",
         "tests/unit/special-craft-steps.test.ts",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/helpers/secondary-craft-approval-fixture.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/quotation-assembly.ts",
@@ -28,10 +31,11 @@
       ],
       "initialization": "Use the existing quotation and original development or adopted production step. The schema never supplies missing assignments or fictional suppliers.",
       "dateAndPermission": "Record occurrence in the existing business clock. Every draft, submission and supplier read independently checks the assigned actor and active role.",
-      "expectation": "Signed worker selects an active factory and opens the exact board; input with a mismatched board, old direct price action, a fake external supplier on in-house and directory writes are rejected. Replay uses the same payload and request key.",
+      "expectation": "Signed worker selects an active factory and opens the exact board; input with a mismatched board, old direct price action, a fake external supplier on in-house and directory writes are rejected. Replay uses the same payload and request key. A current published instruction and its exact craft identity allow assigned bulk quotation independently of timeline step generation; withdrawn or separately assigned artisans cannot write the other craft.",
       "checks": [
         "joint",
-        "unit"
+        "unit",
+        "fixes"
       ]
     },
     {
@@ -76,7 +80,8 @@
         "apps/api/src/production-platform/budget-service.ts",
         "packages/contracts/src/digital-quotation.ts",
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts"
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/identity-service.ts#ensureQuotationBudget",
@@ -94,11 +99,12 @@
       ],
       "initialization": "Require both table/column families for new writes. Infer no craft from missing historical fields. A pure development confirmation has no formal budget until the original formal order command.",
       "dateAndPermission": "Retain original eligibility and lock ordering. The confirmation transaction checks current item, work assignment, version, approval identity and factory eligibility before writing a customer or budget fact.",
-      "expectation": "The staged 0300 fixture rejects enabled-only writes. Two valid 0301 approvals unlock the original confirmation and budget exactly once. The pre-enrollment order with published embroidery and no quotation stays editable and publishes its original budget. An enrolled manual craft row goes through exact approval under its existing unit before confirming. Existing customers, transactions and snapshots remain covered.",
+      "expectation": "The staged 0300 fixture rejects enabled-only writes. Two valid 0301 approvals unlock the original confirmation and budget exactly once. The pre-enrollment order with published embroidery and no quotation stays editable and publishes its original budget. An enrolled manual craft row goes through exact approval under its existing unit before confirming. Before publication, the original tentative development price remains editable without an approval target. Existing customers, transactions and snapshots remain covered.",
       "checks": [
         "joint",
         "customer",
-        "unit"
+        "unit",
+        "fixes"
       ]
     },
     {
@@ -110,7 +116,9 @@
         "apps/web/src/components.tsx",
         "apps/web/src/digital-quotation-panel.tsx",
         "apps/web/src/quotation-workbench-pricing.tsx",
-        "tests/acceptance/supplychain-settings-browser.ts"
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "apps/web/src/order-time-standard-editor.tsx",
+        "tests/integration/module-bundles-native-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/web/src/designer-astryx.ts",
@@ -124,10 +132,11 @@
       ],
       "initialization": "No new theme or global reset. Use existing signed sessions and reporting scopes; historical links select the saved revision rather than requesting a newer version.",
       "dateAndPermission": "Current work and decision controls come from server authority; historic versions remain read-only and attachments are authorized against the saved step.",
-      "expectation": "Worker and bound approver complete actual browser actions. Safe recovery does not submit another version, older saved approval and attachment remain readable after a change, and original IE directory still works.",
+      "expectation": "Worker and bound approver complete actual browser actions. Safe recovery does not submit another version, older saved approval and attachment remain readable after a change, and original IE directory still works. The already-existing settings editor releases a cancelled inline node edit in the same render; the original back navigation returns without a stale confirmation and actual unsaved input remains protected.",
       "checks": [
         "joint",
-        "unit"
+        "unit",
+        "fixes"
       ]
     },
     {
@@ -162,69 +171,92 @@
     {
       "id": "joint",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r6-evidence/review-final/run.mjs joint",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/run.mjs joint",
       "context": "Node 22.22.2, canonical two-worker business-chain config, separately owned fresh low-privilege PG fixtures and authenticated Chromium; actual current schema and exact 0300 pre-enable schema; verified resource cleanup.",
-      "startedAt": "2026-11-24T01:43:38.243Z",
-      "endedAt": "2026-11-24T01:44:39.330Z",
-      "testedHead": "da2600ccb93277dfec381c0deab28711a9455ec1",
-      "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
+      "startedAt": "2026-11-24T02:28:13.887Z",
+      "endedAt": "2026-11-24T02:29:08.590Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-workbench-v101-r6-evidence/review-final/joint.log",
-      "logSha256": "0eaeb82332026671d69edb5b90b75d1e6e08dc6e168d30703312bd348c4a7686",
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/joint.log",
+      "logSha256": "bc1c4f24e2edcff4c0919aa2832d81ec09214ad8796433067d82275c9a27fe67",
       "passed": 10,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "31640206bcec01c92cf267d422b0e2668ed04cc3cbc525a835cbf14883b10a10"
+          "sha256": "213813a61433615f8f7953c9aedc748f0e39b713d210e6c28ad98872e9850000"
         }
       ]
     },
     {
-      "id": "customer",
+      "id": "fixes",
       "kind": "tests",
-      "command": "node /tmp/dx-workbench-v101-r6-evidence/review-final/run.mjs customer",
-      "context": "Node 22.22.2, canonical business-chain config and real low-privilege isolated PostgreSQL. Original commercial cohort, unenrolled historical budget with a source craft, quotation, budget, concurrency and replay checks; verified cleanup.",
-      "startedAt": "2026-11-24T01:43:38.168Z",
-      "endedAt": "2026-11-24T01:43:45.429Z",
-      "testedHead": "da2600ccb93277dfec381c0deab28711a9455ec1",
-      "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/run.mjs fixes",
+      "context": "Node 22.22.2, canonical two-worker PostgreSQL and Chromium, all four failed Full suites plus original settings browser protection. Separately owned isolated databases, native scopes and verified cleanup.",
+      "startedAt": "2026-11-24T02:26:21.613Z",
+      "endedAt": "2026-11-24T02:28:13.783Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-workbench-v101-r6-evidence/review-final/customer.log",
-      "logSha256": "a0b9e432dc214ddda8e7383c1d5bb1b3276121f41831eaf227234481ea7e347a",
-      "passed": 17,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "487174aaa4e758a4d36997f3ddb22f487dbb0736ecc521900b4354ab6a6c54c8"
-        }
-      ]
-    },
-    {
-      "id": "unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/customer-quotation.test.ts tests/unit/quotation-material-unit.test.ts tests/unit/special-craft-steps.test.ts tests/unit/todo-destination-parity.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/business-chain-ui-contract.test.ts",
-      "context": "Node 22.22.2 and canonical non-database configuration on the release-aligned local candidate.",
-      "startedAt": "2026-11-24T01:43:37Z",
-      "endedAt": "2026-11-24T01:43:42Z",
-      "testedHead": "da2600ccb93277dfec381c0deab28711a9455ec1",
-      "sourceFingerprint": "4285820a4810f70910e4aa2719deddb91324f38436e318562e352008ee0ca005",
-      "status": "passed",
-      "exitCode": 0,
-      "log": "/tmp/dx-workbench-v101-r6-evidence/review-final/unit.log",
-      "logSha256": "65a04d46b39d0ba1cb1c61887aaf4e62d863cf8243387e0448d5ef1a8843f305",
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/fixes.log",
+      "logSha256": "15b920078bb597049ee43e145bd3692ed404c4db13b8487d9dd549723a3302bf",
       "passed": 68,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f1fd1f0c27a8d2da0a5ac2998dbac32c4a2f8ed5f482e6374f483bfed054f99e"
+          "sha256": "b9583ecee79c5859086ce6b8b444f3e232c4855c04909c5b00fde3848e561830"
+        }
+      ]
+    },
+    {
+      "id": "customer",
+      "kind": "tests",
+      "command": "node /tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/run.mjs customer",
+      "context": "Node 22.22.2, canonical business-chain config and real low-privilege isolated PostgreSQL. Original commercial cohort, unenrolled historical budget with a source craft, quotation, budget, concurrency and replay checks; verified cleanup.",
+      "startedAt": "2026-11-24T02:29:08.945Z",
+      "endedAt": "2026-11-24T02:29:12.753Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/customer.log",
+      "logSha256": "a31e89fb1c4a326724e2004ed5ac55f2e1a77ab221928afd0b8321b47e2cea18",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d1131a2cc5ca13b8476e55e0f3404e764c14c3a412ca043df1acc872a3499603"
+        }
+      ]
+    },
+    {
+      "id": "unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/unit/customer-quotation.test.ts tests/unit/quotation-material-unit.test.ts tests/unit/special-craft-steps.test.ts tests/unit/todo-destination-parity.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
+      "context": "Node 22.22.2 and canonical non-database configuration on the release-aligned local candidate.",
+      "startedAt": "2026-11-24T02:26:35Z",
+      "endedAt": "2026-11-24T02:26:46Z",
+      "testedHead": "2269e8c2c157727c144db466dd9ecb73f292080a",
+      "sourceFingerprint": "1c461cd39958a8197c9a1c859e63873538ec7fb6ed3f2979a098e9e4006eafea",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-workbench-v101-r6-evidence/full-pg-fixes/final/unit.log",
+      "logSha256": "99ab746d8a9676c0bc855bca374dfcd21d08aecfab428d7b6ef52fd064d8a4da",
+      "passed": 110,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9eeeb52f9e265113fecdd40746724beb600300372ff31973207cd29fca113f9a"
         }
       ]
     }
