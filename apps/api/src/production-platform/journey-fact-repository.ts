@@ -10,6 +10,7 @@ import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint,journeyValueFing
 import {journeyFactGenerationEnabled} from './journey-fact-generation.js';
 import type {JourneySelectionFacts} from './journey-selection-facts.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {styleLabelModelVersionSql} from './style-label-model-compatibility.js';
 
 type Row={source_version:string;applied_source_version:string|null;calculation_version:string|null;source_fingerprint:string|null;payload:JourneyFactModel|null;clock_scenario_id:string|null;clock_revision:string;observed_at:Date|null};
 export class JourneyFactBusy extends Error{constructor(){super('Journey fact construction is already running');}}
@@ -105,12 +106,13 @@ export class JourneyFactRepository{
   * clock and time-sensitive rules again. Pending/obsolete never returns old facts.
   */
   async readStoredWithClient(db:PoolClient,resource:BusinessTimeScope):Promise<JourneyStoredFact>{
-  const row=(await db.query<Row&{pending:boolean}>(`SELECT m.*,EXISTS(SELECT 1 FROM digital_journey_fact_changes c
+  const row=(await db.query<Row&{pending:boolean;version_compatible:boolean}>(`SELECT m.*,
+   ${await styleLabelModelVersionSql(db,'m.calculation_version','$3','m.resource_kind','m.resource_id')} AS version_compatible,EXISTS(SELECT 1 FROM digital_journey_fact_changes c
    WHERE c.resource_kind=m.resource_kind AND c.resource_id=m.resource_id) AS pending
-   FROM digital_journey_fact_models m WHERE resource_kind=$1 AND resource_id=$2`,[resource.kind,resource.id])).rows[0];
+   FROM digital_journey_fact_models m WHERE resource_kind=$1 AND resource_id=$2`,[resource.kind,resource.id,JOURNEY_FACT_CALCULATION_VERSION])).rows[0];
   if(!row)return {sourceVersion:'0',appliedSourceVersion:null,status:'missing',model:null};
   const time=await new ContextBusinessClock(this.database,db).read(resource);
-  const status=row.pending||row.source_version!==row.applied_source_version||!row.payload||row.clock_scenario_id!==time.scenarioId||row.clock_revision!==String(time.revision)?'pending':row.calculation_version!==JOURNEY_FACT_CALCULATION_VERSION?'obsolete':'ready';
+  const status=row.pending||row.source_version!==row.applied_source_version||!row.payload||row.clock_scenario_id!==time.scenarioId||row.clock_revision!==String(time.revision)?'pending':!row.version_compatible?'obsolete':'ready';
   if(status==='ready'&&journeyFactFingerprint(row.payload!)!==row.source_fingerprint)throw new Error('Journey fact payload fingerprint mismatch');
   return {sourceVersion:row.source_version,appliedSourceVersion:row.applied_source_version,status,model:status==='ready'?row.payload:null};
  }
@@ -123,21 +125,22 @@ export class JourneyFactRepository{
   const clocks=await new ContextBusinessClock(this.database,db).readMany([...unique.values()],()=>new Date(asOf));
   if(!unique.size)return {items,clocks};
   type SelectionRow=Pick<Row,'source_version'|'applied_source_version'|'calculation_version'|'clock_scenario_id'|'clock_revision'>&{
-   resource_kind:'source'|'order';resource_id:string;model_id:string|null;pending:boolean;build_failed:boolean;selection_json:JourneySelectionFacts|null;selection_fingerprint:string|null;selection_expires_at:Date|null};
+   resource_kind:'source'|'order';resource_id:string;model_id:string|null;pending:boolean;build_failed:boolean;version_compatible:boolean;selection_json:JourneySelectionFacts|null;selection_fingerprint:string|null;selection_expires_at:Date|null};
   const rows=(await db.query<SelectionRow>(`SELECT requested.kind AS resource_kind,requested.id AS resource_id,m.resource_id AS model_id,
    m.source_version,m.applied_source_version,m.calculation_version,m.clock_scenario_id,m.clock_revision,
    m.selection_json,m.selection_fingerprint,m.selection_expires_at,
+   ${await styleLabelModelVersionSql(db,'m.calculation_version','$3','requested.kind','requested.id')} AS version_compatible,
    EXISTS(SELECT 1 FROM digital_journey_fact_changes c WHERE c.resource_kind=requested.kind AND c.resource_id=requested.id) AS pending,
    EXISTS(SELECT 1 FROM digital_journey_fact_retries retry JOIN digital_journey_fact_changes change USING(resource_kind,resource_id)
     WHERE retry.resource_kind=requested.kind AND retry.resource_id=requested.id) AS build_failed
    FROM unnest($1::text[],$2::uuid[]) AS requested(kind,id)
    LEFT JOIN digital_journey_fact_models m ON m.resource_kind=requested.kind AND m.resource_id=requested.id`,
-  [[...unique.values()].map(scope=>scope.kind),[...unique.values()].map(scope=>scope.id)])).rows;
+  [[...unique.values()].map(scope=>scope.kind),[...unique.values()].map(scope=>scope.id),JOURNEY_FACT_CALCULATION_VERSION])).rows;
   for(const row of rows){
    const key=businessScopeKey({kind:row.resource_kind,id:row.resource_id}),time=clocks.get(key)!;
    let status:JourneyStoredSelection['status']=!row.model_id?'missing':row.pending||row.source_version!==row.applied_source_version
     ||row.clock_scenario_id!==time.scenarioId||row.clock_revision!==String(time.revision)?'pending'
-    :row.calculation_version!==JOURNEY_FACT_CALCULATION_VERSION?'obsolete'
+    :!row.version_compatible?'obsolete'
     :!row.selection_json||!row.selection_fingerprint||row.selection_expires_at&&row.selection_expires_at.getTime()<=Date.parse(time.now)?'pending':'ready';
    if(row.build_failed&&(row.pending||!row.model_id))status='failed';
    if(status==='ready'){

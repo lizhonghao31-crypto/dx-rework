@@ -6,6 +6,7 @@ import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import {orderTimeCreated} from './order-time-created.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {frameworkScopeInputs,overlayFrameworkCompletion} from './order-time-framework-route.js';
+import {styleLabelObservedFact} from './style-label-readiness.js';
 import {orderTimeWashingReworkState,attachWashingReworkInput,retainedWashingReworkTargets} from './order-time-washing-rework.js';
 import type {OrderTimeWashingReworkChanges} from '@dx-rework/contracts/order-time-washing-rework';
 import {evaluateFrameworkSubmission} from './order-time-framework-submission.js';
@@ -319,11 +320,17 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    const aliases:Record<string,string>={fabric_receipt_a:'fabric_receipt',fabric_receipt_b:'fabric_receipt',warehouse_accessories:'accessories_ready',warehouse_dispatch:'processing_dispatch'};
    for(const scope of value.scopes)for(const work of value.work){
     const key=aliases[work.parameterKey]??work.parameterKey;
+    const ref=work.canonicalWorkRef??work.id,scoped=scope.scopeRef+'|'+ref;
+    const previous=progress.get(scoped)??progress.get(ref);
+    if(key==='style_label_ready'){
+     const fact=styleLabelObservedFact(native.facts,scope.lineId);
+     progress.set(scoped,{...previous,completed:fact.completed,actualAt:fact.occurredAt,actualDate:null,readyAt:previous?.readyAt??null,deadline:previous?.deadline??null});
+     continue;
+    }
     const rows=native.facts.filter(fact=>fact.key===key&&(fact.scopeRef===scope.scopeRef||fact.scopeRef==='whole'));
     const exact=rows.filter(fact=>fact.scopeRef===scope.scopeRef),selected=exact.length?exact:rows.filter(fact=>fact.scopeRef==='whole');
     if(selected.length!==1)continue;const fact=selected[0]!;
-    const ref=work.canonicalWorkRef??work.id,scoped=scope.scopeRef+'|'+ref;
-    progress.set(scoped,overlayFrameworkCompletion(progress.get(scoped)??progress.get(ref),fact));
+    progress.set(scoped,overlayFrameworkCompletion(previous,fact));
    }
    sourceVersion.frameworkFactRevisions=native.revisions;
   }

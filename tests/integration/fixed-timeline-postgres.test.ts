@@ -166,6 +166,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{configureTimelineAdoption(f.db,'legacy');}
  });
  it('isolates a target storage failure in the original bounded worker after business commit and retries the original input',()=>run(async()=>{
+  expect((await f.db.query("SELECT to_regclass('digital_order_time_plan_versions') AS relation")).rows[0].relation).toBeNull();
   const bad=await make(),good=await make(),save=async(p:Awaited<ReturnType<typeof make>>)=>tx(async db=>new FixedTimelineAdoptionRepository(db).capture(p.resource,1,f.root.actorId,p.eventRef,await new ContextBusinessClock(f.db,db).read(p.resource),'fixed_v2',()=>input(db,p)));
   const badAdoption=(await save(bad))!,goodAdoption=(await save(good))!;
   const originalVersion=(await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[bad.resource.id])).rows[0].version;
@@ -189,6 +190,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT targets_json,business_time FROM digital_timeline_target_revisions WHERE adoption_id=$1',[badAdoption.adoptionId])).rows[0]).toMatchObject({business_time:badAdoption.time,targets_json:[{start:{at:'2027-03-01T15:00:00.000Z'}}]});
   expect((await f.db.query("SELECT 1 FROM digital_journey_fact_changes WHERE resource_kind='order' AND resource_id=$1",[bad.resource.id])).rowCount).toBe(0);
   expect((await f.db.query("SELECT 1 FROM digital_journey_fact_retries WHERE resource_kind='order' AND resource_id=$1",[bad.resource.id])).rowCount).toBe(0);
+  await tx(async db=>{
+   const repository=new JourneyFactRepository(f.db);
+   const stored=await repository.readStoredWithClient(db,bad.resource);
+   expect(stored.status).toBe('ready');
+   const selections=await repository.readSelectionsWithClient(db,[bad.resource],badAdoption.time.now);
+   expect(selections.items.get(`order:${bad.resource.id}`)?.status).toBe('ready');
+  });
  }));
  it('freezes native source and order creation inputs and keeps their v2 identity when only new adoption is stopped',async()=>{
   let sourceId='',orderId='';

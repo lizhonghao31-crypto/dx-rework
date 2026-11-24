@@ -24,6 +24,7 @@ import {OrderClosureService} from '../../apps/api/src/production-platform/order-
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {nativeTaskReadiness,nativeCuttingReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {journeyFactFingerprint} from '../../apps/api/src/production-platform/journey-fact-model.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
 import {SlaOrderApplicationService} from '../../apps/api/src/production-platform/sla-order-application.js';
@@ -44,7 +45,7 @@ import {readCockpitInstructionActions,readCockpitMaterialActions,readCockpitMate
 import {materialInvestmentTodos,preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from '../../apps/api/src/production-platform/preparation-todos.js';
 import {completeBulkRangeFixture} from '../helpers/production-readiness-fixture.js';
 import {randomUUID} from 'node:crypto';
-import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {r5RoleFixture} from '../helpers/r5-role-fixture.js';
 import {confirmedTechnicalFixture} from '../helpers/development-technical-fixture.js';
@@ -205,6 +206,106 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.advance(scene,'2026-11-09T12:00:00.000Z');
   await run(()=>technical.saveMaterialDecision(f.root,ready.sourceId,{roundNumber:1,materialId:ready.material.materialId,expectedVersion:ready.material.version+1,highTemperatureRequired:false,preshrinkMethod:ready.material.preshrinkMethod,basis:'TEST actual technical applicability now confirmed',supplierEvidenceIds:[],warpShrinkPercent:null,weftShrinkPercent:null},randomUUID()));
   expect((await nativeCuttingReadiness(f.db,[task.task_id]))[0]?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+ });
+ it('keeps two native label receipt dates independent and refuses an old cached false completion',async()=>{
+  const t1='2026-11-02T00:00:00.000Z',t2='2026-11-02T03:00:00.000Z';
+  const scene=await f.scene(t1),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
+  const p=await run(setup);
+  const created=await run(()=>identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:p.style,orderDate:'2026-11-02',salesYear:2026,salesSeries:'P12',requiresColorMatching:false,primaryMerchandiserId:p.primary.actorId,lines:[['蓝',35],['绿',25]].map(([color,quantity])=>({formalPoNo:`TEST-${randomUUID()}`,color,customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity}]}))}),randomUUID(),p.sourceId));
+  const resource={kind:'order' as const,id:created.productionOrderId};
+  const [blue,green]=(await run(()=>service.read(p.warehouse,resource))).lines;
+  const originalFile=await f.image(p.warehouse);
+  const save=(expectedVersion:number,greenQty:number,key=randomUUID())=>service.record(p.warehouse,resource,{kind:'style_label_ready',scopeRef:'whole',expectedVersion,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST actual label quantities',quantities:[blue!,green!].map((line,index)=>({lineId:line.lineId,materialId:null,name:'TEST款号唛',quantity:index===0?35:greenQty,unit:'枚'})),evidenceIds:expectedVersion===0?[originalFile]:[],sourceDocumentVersion:null,recipientId:null},key);
+  const actual=async()=>(await readSeriesPlanFacts(f.db,resource.id,p.sourceId,'PD')).facts.filter(value=>value.key==='style_label_ready');
+  const whole=async()=>(await new DigitalJourneyQuery(f.db).read(f.root,resource.id)).stages.flatMap(stage=>stage.nodes).find(node=>node.key==='series_style_label_ready');
+  const byScope=(rows:Awaited<ReturnType<typeof actual>>,scope:string)=>rows.find(row=>row.scopeRef===(scope==='whole'?scope:`po:${scope}`));
+  const firstKey=randomUUID();
+  const [first,replay]=await run(()=>Promise.all([save(0,24,firstKey),save(0,24,firstKey)]));
+  expect(replay).toEqual(first);
+  await expect(run(()=>save(0,25,firstKey))).rejects.toMatchObject({statusCode:409});
+  const original=first.facts.find(row=>row.kind==='style_label_ready')!;
+  expect(original).toMatchObject({version:1,state:'ready',occurredAt:t1});
+  expect(await styleLabelCuttingReason(f.db,resource.id,[blue!.lineId])).toBeNull();
+  expect(await styleLabelCuttingReason(f.db,resource.id,[green!.lineId])).toContain('款号唛');
+  const firstRead=await run(actual);
+  expect.soft(byScope(firstRead,blue!.lineId)).toMatchObject({started:true,completed:true,occurredAt:t1});
+  expect.soft(byScope(firstRead,green!.lineId)).toMatchObject({started:true,completed:false,occurredAt:null});
+  expect.soft(byScope(firstRead,'whole')).toMatchObject({completed:false,occurredAt:null});
+  expect.soft(await run(whole)).toMatchObject({state:'active',actualAt:null});
+  const repo=new JourneyFactRepository(f.db),built=await run(()=>repo.buildOne(resource));
+  const oldModel=structuredClone(built.model),label=oldModel.nodes.find(node=>node.key==='series_style_label_ready')!;
+  expect(label).toBeDefined();label.state='completed';label.actualAt=t1;
+  await f.db.query(`UPDATE digital_journey_fact_models SET calculation_version='journey-facts-material-investment-v19',payload=$2,source_fingerprint=$3 WHERE resource_kind='order' AND resource_id=$1`,[resource.id,JSON.stringify(oldModel),journeyFactFingerprint(oldModel)]);
+  await run(async()=>{const db=await f.db.connect();try{
+   expect.soft(await repo.readStoredWithClient(db,resource)).toMatchObject({status:'obsolete',model:null});
+   const selections=await repo.readSelectionsWithClient(db,[resource],t1);
+   expect.soft(selections.items.get('order:'+resource.id)).toMatchObject({status:'obsolete',facts:null});
+  }finally{db.release();}});
+  await f.advance(scene,t2);
+  const key2=randomUUID(),beforeRollback=await nodeMaterialsFootprint(f.db);
+  const dirtyBefore=(await f.db.query('SELECT * FROM digital_journey_fact_changes WHERE resource_id=$1 ORDER BY transaction_id',[resource.id])).rows;
+  const failing=vi.spyOn(BulkPreparationService.prototype,'sync').mockRejectedValueOnce(new Error('TEST real transaction interrupted after label append and bridge'));
+  try{await expect(run(()=>save(1,25,key2))).rejects.toThrow('TEST real transaction interrupted');}finally{failing.mockRestore();}
+  expect(await nodeMaterialsFootprint(f.db)).toEqual(beforeRollback);
+  expect((await f.db.query('SELECT * FROM digital_journey_fact_changes WHERE resource_id=$1 ORDER BY transaction_id',[resource.id])).rows).toEqual(dirtyBefore);
+  const second=await run(()=>save(1,25,key2));
+  await expect(run(()=>save(1,24))).rejects.toMatchObject({statusCode:409});
+  expect(second.facts.find(row=>row.kind==='style_label_ready')).toMatchObject({recordId:original.recordId,version:2,state:'ready',occurredAt:t2});
+  expect(second.history.find(row=>row.recordId===original.recordId&&row.version===1)).toEqual(original);
+  const secondRead=await run(actual);
+  expect.soft(byScope(secondRead,blue!.lineId)).toMatchObject({completed:true,occurredAt:t1});
+  expect.soft(byScope(secondRead,green!.lineId)).toMatchObject({completed:true,occurredAt:t2});
+  expect.soft(byScope(secondRead,'whole')).toMatchObject({completed:true,occurredAt:t2});
+  await run(()=>repo.buildOne(resource));
+  expect(await run(whole)).toMatchObject({state:'completed',actualAt:t2});
+  const receiptRows=async()=> (await f.db.query(`SELECT source_version,business_completed,occurred_at FROM digital_series_source_events
+   WHERE production_order_id=$1 AND source_record_id=$2 AND node_key='style_label_ready' ORDER BY source_version`,[resource.id,original.recordId])).rows;
+  expect(await receiptRows()).toEqual([
+   {source_version:1,business_completed:false,occurred_at:new Date(t1)},
+   {source_version:2,business_completed:true,occurred_at:new Date(t2)},
+  ]);
+
+  await f.db.query("UPDATE attachments SET status='rejected',ready_at=NULL,rejection_reason='TEST T1 evidence unavailable' WHERE attachment_id=$1",[originalFile]);
+  const invalidated=await run(actual);
+  expect(byScope(invalidated,blue!.lineId)).toMatchObject({completed:true,occurredAt:null});
+  expect(byScope(invalidated,green!.lineId)).toMatchObject({completed:true,occurredAt:t2});
+  expect(byScope(invalidated,'whole')).toMatchObject({completed:true,occurredAt:null});
+  expect(byScope(invalidated,'whole')?.derivation?.evidenceRevision).not.toBe(byScope(secondRead,'whole')?.derivation?.evidenceRevision);
+  await run(async()=>{const db=await f.db.connect();try{
+   expect(await repo.readStoredWithClient(db,resource)).toMatchObject({status:'pending',model:null});
+  }finally{db.release();}});
+
+  // Append a fixture record in the old JSON format through the same immutable table.
+  await f.db.query(`INSERT INTO digital_preparation_material_versions
+   (record_id,version,resource_kind,resource_id,kind,scope_ref,state,occurred_at,body,actor_id,recorded_at)
+   SELECT record_id,3,resource_kind,resource_id,kind,scope_ref,state,occurred_at,
+    body-'styleLabelOccurrences'-'styleLabelRequirementsBasis',actor_id,recorded_at
+   FROM digital_preparation_material_versions WHERE record_id=$1 AND version=2`,[original.recordId]);
+  const oldReceipt=(await run(()=>service.read(p.warehouse,resource))).facts.find(row=>row.kind==='style_label_ready')!;
+  const requirementRevision=(rows:Awaited<ReturnType<typeof actual>>)=>byScope(rows,'whole')?.derivation?.requirementsRevision;
+  const oldSatisfied=await run(actual);
+  expect(byScope(oldSatisfied,'whole')).toMatchObject({completed:true,occurredAt:null,precision:'unknown'});
+  await f.db.query('UPDATE digital_production_po_sizes SET quantity=26 WHERE line_id=$1',[green!.lineId]);
+  const larger=await run(actual);
+  expect(byScope(larger,'whole')).toMatchObject({completed:false,occurredAt:null});
+  expect(requirementRevision(larger)).not.toBe(requirementRevision(oldSatisfied));
+  expect(await styleLabelCuttingReason(f.db,resource.id,[green!.lineId])).toContain('款号唛');
+  await f.db.query('UPDATE digital_production_po_sizes SET quantity=25 WHERE line_id=$1',[green!.lineId]);
+  const restored=await run(actual);
+  expect(byScope(restored,'whole')).toMatchObject({completed:true,occurredAt:null,precision:'unknown'});
+  expect(requirementRevision(restored)).toBe(requirementRevision(oldSatisfied));
+  expect((await run(()=>service.read(p.warehouse,resource))).facts.find(row=>row.kind==='style_label_ready')).toEqual(oldReceipt);
+  expect(await receiptRows()).toHaveLength(2);
+
+  await f.advance(scene,'2026-11-02T04:00:00.000Z');
+  await run(()=>service.record(p.warehouse,resource,{kind:'style_label_ready',scopeRef:'whole',expectedVersion:3,state:'withdrawn',occurredAt:null,
+   note:'TEST withdraw latest warehouse snapshot',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID()));
+  expect(byScope(await run(actual),'whole')).toMatchObject({completed:false,occurredAt:null});
+  expect(await run(whole)).toMatchObject({actualAt:null});
+  const replacement=await run(()=>save(4,25));
+  expect(replacement.history.find(row=>row.kind==='style_label_ready'&&row.version===3)).toEqual(oldReceipt);
+  expect(byScope(await run(actual),'whole')).toMatchObject({completed:true,occurredAt:'2026-11-02T04:00:00.000Z'});
+  expect((await receiptRows()).map(row=>row.business_completed)).toEqual([false,true,false,true]);
  });
  it('projects real two-PO label shortages by scope and does not mutate tasks, plans, facts, reminders or windows',async()=>{
   const scene=await f.scene('2026-11-02T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{

@@ -1,3 +1,4 @@
+import {readStyleLabelReadiness,styleLabelObservedFacts} from './style-label-readiness.js';
 import {commentTimeColumns} from './development-comment-time.js';
 import {preparationAvailable,preparationContext,preparationMaterialHistory,currentPreparationMaterials} from './preparation-material-repository.js';
 import type {PoolClient} from 'pg';
@@ -16,9 +17,17 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
   FROM digital_series_source_events WHERE production_order_id=$1 ORDER BY node_key,scope_ref,source_version DESC`,[orderId])).rows;
  revisions.events=events.map(e=>[e.event_id,e.source_version,e.voided,e.business_completed]);
  const instrumented=new Set(events.map(e=>`${e.node_key}:${e.scope_ref}`));
- const nativeMaterials=await preparationAvailable(db)?currentPreparationMaterials(await preparationMaterialHistory(db,await preparationContext(db,{kind:'order',id:orderId})),orderId):[];
+ const preparation=await preparationAvailable(db)?await preparationContext(db,{kind:'order',id:orderId}):null;
+ const materialHistory=preparation?await preparationMaterialHistory(db,preparation):[];
+ const nativeMaterials=preparation?currentPreparationMaterials(materialHistory,orderId):[];
+ const styleLabelReadiness=preparation?await readStyleLabelReadiness(db,orderId,[],{context:preparation,currentMaterials:nativeMaterials,history:materialHistory}):null;
+ if(styleLabelReadiness){
+  facts.push(...styleLabelObservedFacts(styleLabelReadiness));
+  revisions.styleLabelReadiness={rule:styleLabelReadiness.ruleVersion,adopted:styleLabelReadiness.adopted,
+   requirements:styleLabelReadiness.requirementsRevision,evidence:styleLabelReadiness.evidenceRevision};
+ }
  revisions.materialValidity=nativeMaterials.map(f=>[f.recordId,f.version,f.valid]);
- for(const e of events)if(!e.voided){const native=nativeMaterials.find(f=>f.recordId===e.source_record_id&&f.version===e.source_version);facts.push({key:e.node_key,scopeRef:e.scope_ref,sourceDomain:e.source_domain,sourceRecordId:e.source_record_id,sourceVersion:e.source_version,
+ for(const e of events)if(!e.voided&&e.node_key!=='style_label_ready'){const native=nativeMaterials.find(f=>f.recordId===e.source_record_id&&f.version===e.source_version);facts.push({key:e.node_key,scopeRef:e.scope_ref,sourceDomain:e.source_domain,sourceRecordId:e.source_record_id,sourceVersion:e.source_version,
   completed:e.business_completed!==false&&(!native||native.valid&&(native.kind!=='material_investment'||native.state==='ready')),started:true,occurredAt:iso(e.occurred_at),occurredDate:e.occurred_date?String(e.occurred_date).slice(0,10):null,precision:e.precision,reason:native&&!native.valid?native.invalidReasons.join('；'):e.reason});}
  const fabric=await bulkFabricFacts(db,orderId);revisions.fabric=fabric;
  if(fabric.report&&!instrumented.has('fabric_receipt:whole')){const at=iso(fabric.report.arrivedAt);facts.push({key:'fabric_receipt',scopeRef:'whole',sourceDomain:'bulk-preparation',sourceRecordId:fabric.report.reportId,sourceVersion:1,
