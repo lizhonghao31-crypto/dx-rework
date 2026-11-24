@@ -4,6 +4,11 @@ import type { SubmissionIssue } from "./submission-validation.js";
 
 type Line = { styleNo: string; alternateStyleNo: string; color: string; quantity: string };
 type Price = { position: number; unitPrice: string };
+export function sourcingCreateDuplicateIssue(lines: readonly Line[]): SubmissionIssue | null {
+  const duplicate = findDuplicateSourcingLine(lines);
+  return duplicate ? { fieldId: `sourcing-create-style-${duplicate.index}`, message: duplicate.message } : null;
+}
+
 export function validateSourcingCreate(input: {
   gender: string; styleName: string; estimatedCutPieceSendDate: string; deliveryDate: string;
   lineItems: readonly Line[]; daxingUnitPrice: string; imageCount: number; uploading: boolean; uploadFailed: boolean;
@@ -27,8 +32,8 @@ export function validateSourcingCreate(input: {
     try { calculateSourcingOrderQuantity(input.lineItems.map(line => ({ quantity: Number(line.quantity) }))); }
     catch { add("quantity-0", "订单总数量必须是1至10000000之间的整数"); }
   }
-  const duplicate = findDuplicateSourcingLine(input.lineItems);
-  if (duplicate) add(`style-${duplicate.index}`, duplicate.message);
+  const duplicate = sourcingCreateDuplicateIssue(input.lineItems);
+  if (duplicate) issues.push(duplicate);
   if (input.uploading) add("photos", "照片正在上传，请等待上传完成后提交");
   else if (input.uploadFailed) add("photos", "本次照片上传未完成，请重新选择图片上传成功后提交");
   else if (!input.imageCount) add("photos", "请至少上传一张订单照片");

@@ -1750,7 +1750,7 @@ export class SourcingService {
 
   async reviseStyles(actor: TrustedActorContext, sourcingCaseId: string, input: ReviseSourcingStyles, key: string): Promise<Result<SourcingCaseSummary>> {
     const parsed = ReviseSourcingStylesSchema.safeParse(input);
-    if (!parsed.success || !UUID_PATTERN.test(sourcingCaseId)) fail("款号修改信息无效");
+    if (!parsed.success || !UUID_PATTERN.test(sourcingCaseId)) fail(parsed.error?.issues[0]?.message ?? "款号修改信息无效");
     const root = actor.actorRoles.includes(ROOT_ROLE);
     const caps = actor.authorizationCapabilities ?? [actor.authorizationCapability];
     const manager = actor.actorRoles.includes(MANAGEMENT_DECISION_ROLE) && caps.includes(MANAGEMENT_DECISION_CAPABILITY);
@@ -1778,7 +1778,7 @@ export class SourcingService {
         }
         if ((before.identityRevision ?? 0) !== parsed.data!.expectedRevision) fail("款号已被他人修改，请刷新后重试",409,"CONFLICT");
         if (lines.length !== before.lineItems.length || lines.some((line,index) => line.position !== before.lineItems[index]!.position)) fail("只能修改已有款色行的款号");
-        const previous = before.lineItems.map(line => ({position:line.position,styleNo:line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo,alternateStyleNo:line.alternateStyleNo}));
+        const previous = before.lineItems.map(line => ({position:line.position,styleNo:line.formalStyleNo,alternateStyleNo:line.alternateStyleNo}));
         if (JSON.stringify(previous) === JSON.stringify(lines)) return {statusCode:200,response:before};
         const confirmedDuplicates = await this.checkStyleNumbers(client,
           lines.map(line => ({...line,color:before.lineItems.find(row => row.position===line.position)?.color})),
@@ -1837,7 +1837,8 @@ export class SourcingService {
         if (facts) {
           await client.query("INSERT INTO sourcing_style_catalog(style_id,style_name,created_by) VALUES($1,$2,$3) ON CONFLICT(normalized_name) DO NOTHING",[randomUUID(),facts.styleName,actor.actorId]);
           correctionStyleId=(await client.query<{style_id:string}>("SELECT style_id FROM sourcing_style_catalog WHERE normalized_name=lower(btrim($1))",[facts.styleName])).rows[0]!.style_id;
-          const confirmedDuplicateStyles = await this.checkStyleNumbers(client,facts.lineItems,facts.confirmedDuplicateStyles,sourcingCaseId,before.lineItems);
+          const previous = before.lineItems.map(line => ({styleNo:line.formalStyleNo,alternateStyleNo:line.alternateStyleNo}));
+          const confirmedDuplicateStyles = await this.checkStyleNumbers(client,facts.lineItems,facts.confirmedDuplicateStyles,sourcingCaseId,previous);
           const quantity = calculateSourcingOrderQuantity(facts.lineItems);
           const images = await client.query<{attachment_id:string;entity_type:string|null;entity_id:string|null;uploaded_by:string}>(
             `SELECT attachment_id,entity_type,entity_id,uploaded_by FROM attachments WHERE attachment_id=ANY($1::uuid[])
