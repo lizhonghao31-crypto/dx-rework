@@ -28,7 +28,7 @@ export async function canReadSecondaryCraftApprovalQueue(db:Queryable,actor:Trus
 }
 
 /** Write callers must keep the membership locks until the quotation transaction commits. */
-export async function lockSecondaryCraftApprover(db:PoolClient):Promise<string|null>{
+export async function lockSecondaryCraftApprover(db:Queryable):Promise<string|null>{
  const candidate=await readSecondaryCraftApprover(db);
  if(!candidate)return null;
  await db.query("SELECT pg_advisory_xact_lock_shared(hashtext('dx_rework:owner_group_guard'))");

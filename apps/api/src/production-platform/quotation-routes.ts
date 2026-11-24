@@ -1,6 +1,8 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
-import {IeProcessingQuerySchema,QuotationResourceSchema,QuotationRowInputSchema,QuotationConfirmationSchema,SaveQuotationSchema} from '@dx-rework/contracts/digital-quotation';
+import {IeProcessingQuerySchema,QuotationResourceSchema,QuotationRowInputSchema,QuotationConfirmationSchema,SaveQuotationSchema,
+ QuotationLineReviewCommandSchema,SaveQuotationPricingDraftSchema} from '@dx-rework/contracts/digital-quotation';
+import {SecondaryCraftDecisionSchema,SecondaryCraftDraftSchema,SecondaryCraftSubmissionSchema} from '@dx-rework/contracts/secondary-craft-quotation';
 import {businessActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
 import type {DigitalIdentityDependencies} from './identity-routes.js';
@@ -22,6 +24,10 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
   if(items.length!==1)throw new ApplicationError('NOT_FOUND','当前账号无法查看所选报价行',404);
   return items[0];
  });
+ app.get('/digital-production/secondary-craft-quotations',async(request,reply)=>{
+  reply.header('cache-control','private, no-store');
+  return service.secondaryCraftDirectory(await actor(request));
+ });
  const base='/digital-production/:kind/:id/quotation';
  app.get(`${base}/confirmed-versions`,async(request,reply)=>{const q=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().trim().max(100).default('')}).strict(),request.query);reply.header('cache-control','private, no-store');return service.originalVersions(await actor(request),resource(request),q.page,q.q);});
  const originalBase=`${base}/original-versions/:version`;
@@ -33,6 +39,38 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
   parse(z.object({}).strict(),request.query);
   return service.workbenchPreview(await actor(request),resource(request));
  });
+ app.put(`${base}/workbench-pricing`,async request=>service.saveWorkbenchPricingDraft(await actor(request),resource(request),
+  parse(SaveQuotationPricingDraftSchema,request.body),key(request)));
+ app.post(`${base}/workbench-review`,async request=>service.reviewWorkbenchLine(await actor(request),resource(request),
+  parse(QuotationLineReviewCommandSchema,request.body),key(request)));
+ const craftBase=`${base}/secondary-craft/:rowId`;
+ const craftRow=(request:FastifyRequest)=>parse(z.uuid(),(request.params as {rowId:string}).rowId);
+ const craftVersion=z.coerce.number().int().positive().optional();
+ app.get(craftBase,async(request,reply)=>{
+  const query=parse(z.object({supplierSearch:z.string().trim().max(100).optional(),version:craftVersion}).strict()
+   .refine(value=>value.supplierSearch===undefined||value.version===undefined),request.query);
+  reply.header('cache-control','private, no-store');
+  return service.readSecondaryCraft(await actor(request),resource(request),craftRow(request),query);
+ });
+ const attachments=deps.developmentAttachments;
+ if(attachments)app.get(`${craftBase}/attachments/:attachmentId`,async(request,reply)=>{
+  const trusted=await actor(request);
+  const attachmentId=parse(z.uuid(),(request.params as {attachmentId:string}).attachmentId);
+  const query=parse(z.object({version:craftVersion}).strict(),request.query);
+  const detail=await service.readSecondaryCraft(trusted,resource(request),craftRow(request),query);
+  const target=detail.target;
+  if(!target||target.stage!=='development'||!target.attachmentIds.includes(attachmentId))
+   throw new ApplicationError('NOT_FOUND','工艺附件不存在',404);
+  const grant=await attachments.createDownloadIntent(trusted,attachmentId,async file=>
+   file.entityType==='digital_development'&&file.entityId===target.scopeId,'inline');
+  return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+ });
+ app.put(`${craftBase}/draft`,async request=>service.writeSecondaryCraft(await actor(request),resource(request),craftRow(request),
+  'draft',parse(SecondaryCraftDraftSchema,request.body),key(request)));
+ app.post(`${craftBase}/submit`,async request=>service.writeSecondaryCraft(await actor(request),resource(request),craftRow(request),
+  'submit',parse(SecondaryCraftSubmissionSchema,request.body),key(request)));
+ app.post(`${craftBase}/decision`,async request=>service.writeSecondaryCraft(await actor(request),resource(request),craftRow(request),
+  'decision',parse(SecondaryCraftDecisionSchema,request.body),key(request)));
  app.get(`${base}/participants`,async request=>service.participants(await actor(request),resource(request)));
  app.put(base,async request=>service.save(await actor(request),resource(request),parse(SaveQuotationSchema,request.body),key(request)));
  app.post(`${base}/rows/:rowId`,async request=>service.fillRow(await actor(request),resource(request),parse(z.string().uuid(),(request.params as {rowId:string}).rowId),parse(QuotationRowInputSchema,request.body),key(request)));

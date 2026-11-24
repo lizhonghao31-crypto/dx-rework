@@ -22,6 +22,8 @@ export const todoRouteTaskLabels: Readonly<Record<TodoResponse["route"]["routeNa
   digital_short_lead: "办理短交期正式单特批",
   digital_order_time: "办理本单时效",
   digital_order_quotation: "填写本单工艺报价",
+  digital_secondary_craft_order: "审批本项工艺报价",
+  digital_secondary_craft_source: "审批本项工艺报价",
   digital_production_task: "办理数字生产任务",
   production_detail: "查看生产风险",
   sample_detail: "处理样衣事项",

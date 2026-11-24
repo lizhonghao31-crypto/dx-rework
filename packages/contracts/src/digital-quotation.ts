@@ -18,6 +18,9 @@ export const SaveQuotationSchema=z.object({expectedVersion:z.number().int().nonn
   if(v.document.imageAttachmentIds.length)c.addIssue({code:'custom',message:'报价沿用原单款图；确认依据请填写真实来源，不重复上传预算图片'});
 });
 export const QuotationRowInputSchema=z.object({expectedVersion:z.number().int().positive(),consumption:z.union([QuotationDecimalSchema,z.literal('')]).optional(),unitPrice:z.union([QuotationDecimalSchema,z.literal('')]).optional(),pricingUnit:z.string().trim().min(1,'请填写真实计价单位').max(100).optional(),artifactConsumption:z.object({id:z.string().uuid(),version:z.number().int().positive(),materialId:z.string().uuid()}).strict().optional()}).strict().refine(v=>v.consumption!==undefined||v.unitPrice!==undefined||v.artifactConsumption!==undefined||v.pricingUnit!==undefined,'请填写负责的用量、价格或计价单位').refine(v=>!(v.artifactConsumption&&v.consumption!==undefined),'采用成果时不同时提交另一份手工用量');
+export const QuotationPricingInputSchema=z.object({
+ field:z.enum(['multiplier','customerUnitPrice']),value:QuotationDecimalSchema,
+}).strict();
 export const QuotationConfirmationSchema=z.object({
   customerCode:z.string().trim().min(1).max(30),
   expectedVersion:z.number().int().positive(),customerConfirmedTotal:QuotationDecimalSchema,
@@ -26,10 +29,11 @@ export const QuotationConfirmationSchema=z.object({
   sourceKind:z.literal('explicit_customer_confirmation'),sourceField:z.literal('customerConfirmedTotal'),
   templateVersion:z.literal('online-quotation-v1'),evidenceNote:z.string().trim().min(1).max(2000),
   confirmedAt:z.iso.datetime({offset:true}),
+  workbenchPricing:QuotationPricingInputSchema.optional(),
 }).strict().refine(v=>v.amountScope==='order_total'?v.quantity!==null:v.quantity===null,'整单金额须填确认件数；单件金额不填整单件数');
 export type QuotationConfirmation=z.infer<typeof QuotationConfirmationSchema>;
 export type QuotationConsumptionSource={kind:'technical_manual'|'technical_artifact';actorId:string;version:number;recordedAt:string;artifactRef?:{id:string;version:number;materialId?:string}};
-export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null;technicalConsumptionIssue?:'unit_mismatch'};
+export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {secondaryCraftEntry?:boolean;craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null;technicalConsumptionIssue?:'unit_mismatch'};
 export const IeProcessingStateSchema=z.enum(['needs_assignment','waiting','awaiting_price','priced']);
 export const IeProcessingQuerySchema=z.object({page:z.coerce.number().int().min(1).max(100_000).default(1),
  search:z.string().trim().max(100).default(''),state:z.union([z.literal('all'),IeProcessingStateSchema]).default('all')}).strict();
@@ -43,6 +47,7 @@ export type IeProcessingQuery=z.infer<typeof IeProcessingQuerySchema>;
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;
+  craftApprovalState?:'waiting'|'complete';
   complete?:boolean;
   technicalConsumptionOptions?:Array<{artifactSetId:string;artifactVersion:number;materialId:string;name:string;unit:string;consumption:string}>;
   commandReceipt?:{action:string;appliedVersion:number};
@@ -54,7 +59,7 @@ export type QuotationSheet={
 };
 export type BudgetQuoteComparison={
   pendingQuotationVersion?:number|null;
-  workbenchBasis?:'unconfirmed'|'customer_mismatch'|'adoption_required'|'valid';
+  workbenchBasis?:'unconfirmed'|'customer_mismatch'|'adoption_required'|'craft_review_required'|'valid';
   policy:'legacy'|'quote_v1';quoteId:string|null;quoteVersion:number|null;currentConfirmedVersion:number|null;
   state:'legacy'|'waiting_confirmation'|'review_required'|'incomparable'|'within_limit'|'exceeds';reason:string;
   budgetComparableTotal:string|null;confirmedQuoteTotal:string|null;amountScope:'per_piece'|'order_total'|null;
@@ -70,10 +75,6 @@ export function quotationAmount(value:bigint):string{
   return `${sign}${n/SCALE}${f?'.'+f:''}`;
 }
 
-export const QuotationPricingInputSchema = z.object({
-  field: z.enum(['multiplier', 'customerUnitPrice']),
-  value: QuotationDecimalSchema,
-}).strict();
 export type QuotationPricingInput = z.infer<typeof QuotationPricingInputSchema>;
 export const SaveQuotationPricingDraftSchema = z.object({
   expectedVersion: z.number().int().positive(),
@@ -174,7 +175,7 @@ export const QuotationWorkbenchPreviewSchema = z.object({
     reviewId:z.string().uuid(), rowId:z.string().uuid(), field:quotationReviewField,
     status:z.enum(['returned','resubmitted']), reason:z.string(),
   }).strict()).max(600),
-  confirmation: z.literal('awaiting_joint_release'),
+  confirmation: z.enum(['awaiting_joint_release','joint_release_ready']),
 }).strict();
 
 export function compareQuotationBudget(document:BudgetDocument,confirmation:QuotationConfirmation,quantity:number){

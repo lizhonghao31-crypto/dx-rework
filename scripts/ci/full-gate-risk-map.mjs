@@ -400,6 +400,9 @@ export const classifyFullGatePaths = (inputPaths) => {
   if(paths.some(path=>/quotation|development-commercial-fields|0288_automatic_quotation_sources/.test(path))){
     addAll(mappedTests,['tests/integration/customer-quotation-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/automatic-quotation-native-browser-postgres.test.ts']);
   }
+  if(paths.some(path=>path.includes('secondary-craft-')||path.includes('0301_secondary_craft_quotation_approval'))){
+    addAll(mappedTests,['tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts']);
+  }
   if(paths.some(path=>/order-time-(?:linked-applicability|plan-repository|operation-state|request-service|automatic)|order-time-rewash-fixture/.test(path)))addAll(mappedTests,['tests/integration/order-time-linked-applicability-browser-postgres.test.ts']);
   if(paths.some(path=>/development-comment-time|customer-comment-time-fields/.test(path)))addAll(mappedTests,['tests/integration/development-technical-postgres.test.ts','tests/integration/series-plan-postgres.test.ts','tests/integration/order-time-requests-browser-postgres.test.ts']);
   if(paths.some(path=>path==='apps/api/src/production-platform/task-readiness-facts.ts'))addAll(mappedTests,[

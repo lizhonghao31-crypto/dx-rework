@@ -1,5 +1,6 @@
 import {bulkWashingTodos} from './bulk-washing-todos.js';
 import {specialCraftQuotationTodos,specialCraftQuotationNotification} from './special-craft-quotation-todos.js';
+import {secondaryCraftApprovalTodos,secondaryCraftApprovalNotification} from './secondary-craft-approval-todos.js';
 import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {shortLeadTodos} from './short-lead-todos.js';
 import {orderTimeTodos,orderTimeNotification} from './order-time-todos.js';
@@ -293,6 +294,7 @@ export class DigitalProductionNotificationService {
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor,projection),...await fabricDecisionTodos(this.database,actor,projection)]:[];
     result.push(...await bulkWashingTodos(this.database,actor,projection));
     result.push(...await specialCraftQuotationTodos(this.database,actor,projection));
+    result.push(...await secondaryCraftApprovalTodos(this.database,actor,projection));
     result.push(...await orderTimeTodos(this.database,actor,projection),...await shortLeadTodos(this.database,actor,projection));
     result.push(...await materialInvestmentTodos(this.database,actor,projection),...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
 
@@ -336,6 +338,7 @@ export class DigitalProductionNotificationService {
       return todo&&event.source_key===`bulk-washing:${todo.todoId}:${todo.contentToken}`?{eventId:event.event_id,title:todo.taskTitle!,actionable:true,route:todo.route,createdAt:new Date(event.created_at).toISOString()}:null;
     }
     if(event.event_kind==='special_craft_quotation')return specialCraftQuotationNotification(database,actor,event);
+    if(event.event_kind==='secondary_craft_approval')return secondaryCraftApprovalNotification(database,actor,event);
     if(event.event_kind==='order_time_request')return orderTimeNotification(database,actor,event);
     if(event.event_kind==='qc_progress'){
       const parent=(await database.query('SELECT production_order_id FROM digital_production_task_access WHERE task_id=$1',[event.task_id])).rows[0];

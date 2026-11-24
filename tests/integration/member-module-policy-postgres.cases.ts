@@ -243,7 +243,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     const fabric=await access.createSupplier(manager,newSupplier("MEMBER-R6-FABRIC","fabric"));
     const expected={supplierId:factory.supplierId,code:"MEMBER-R6-FACTORY",name:supplierName};
     expect(await readSecondaryCraftSupplierOptions(database,supplierName)).toEqual([expected]);
-    expect(await tx(client=>lockSecondaryCraftSupplier(client,factory.supplierId))).toEqual(expected);
+    expect(await tx(client=>lockSecondaryCraftSupplier(client,factory.supplierId))).toEqual({...expected,version:factory.version});
     expect(await tx(client=>lockSecondaryCraftSupplier(client,fabric.supplierId))).toBeNull();
     await access.reviseSupplier(manager,factory.supplierId,ReviseSupplierSchema.parse({
       expectedVersion:factory.version,active:false,changeReason:"隔离验收停用",

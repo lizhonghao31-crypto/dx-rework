@@ -48,11 +48,12 @@ import {mintAcceptanceControlCode} from '../../apps/api/src/auth/acceptance-cont
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {AuxiliaryCatalogService} from '../../apps/api/src/access/auxiliary-catalog-service.js';
 import {registerAuxiliaryCatalogRoutes} from '../../apps/api/src/access/auxiliary-catalog-routes.js';
+import {registerAccessRoutes} from '../../apps/api/src/access/routes.js';
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean;readPath?:string;afterWriteRead?:string};
 /** Original full App, original auth routes/store/membership and actual native
  * services. Only DingTalk and named transport faults are TEST adapters. */
-export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean}){
- const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
+export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean;accessCatalog?:boolean;throughVersion?:string}){
+ const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url,options?.throughVersion?{throughVersion:options.throughVersion}:undefined),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
  const activeRequests=new Map<string,Set<Promise<void>>>(),closedSessions=new Set<string>();
@@ -61,6 +62,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
  try{
   registerAuthRoutes(app,auth,{secureCookie:false,ttlSeconds:3600,appBasePath:'/',corpId:'anchor-test',mobileClientId:'TEST',webClientId:'TEST',qrRedirectUri:'https://acceptance.invalid/auth/qr/callback',isRootUser:id=>root.isRootUser(id)});
   if(options?.auxiliaryCatalog)registerAuxiliaryCatalogRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new AuxiliaryCatalogService(db,root)});
+  if(options?.accessCatalog)registerAccessRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:f.access});
   app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(error instanceof AuthDeniedError?401:e.statusCode??500).send({error:{code:e.code,message:e.message}});});
   const notifications=options?.orderTimeFlow?new DigitalProductionNotificationService(db):undefined,todos=notifications?new TodoService(db,undefined,undefined,undefined,notifications):undefined,patternOrders=todos?new PatternRoomOrderService(db,new TodoProjectionService(todos),{ordersEnabled:true}):undefined;
   const orderTimeRequests=options?.orderTimeFlow?new OrderTimeRequestService(db,orderTimeNativeExecutor(db,true,patternOrders)):undefined;

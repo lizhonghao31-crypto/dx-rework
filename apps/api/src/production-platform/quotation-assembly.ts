@@ -12,7 +12,7 @@ import {developmentDocumentRow} from './development-round-repository.js';
 import {publishedTechnicalArtifact,technicalDocumentFingerprint} from './development-technical-repository.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 
-type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
+type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number;secondaryCraftDecisionId?:string};
 export type AssembledQuotation={quote_id:string;source_id:string|null;production_order_id:string|null;version:number;confirmed_version:number|null;document:BudgetDocument;assignments:QuotationAssignment[];consumption_sources:Record<string,QuotationConsumptionSource>;price_sources:Record<string,PriceSource>;assembly?:QuotationAssembly|null};
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function rowId(sourceId:string,key:string){const h=digest([sourceId,key]);return `${h.slice(0,8)}-${h.slice(8,12)}-5${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;}
@@ -92,7 +92,10 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
  const component=(key:string,name:string,kind:'ie'|'craft',worker:string|null,priceRole:QuotationAssignment['priceRole'],craftRef?:{libraryId:string;libraryVersion:number;stepId:string|null},stage:'development'|'bulk'='development')=>{
   const id=rowId(sourceId,key),basis=digest([key,commercialFingerprint(document),worker,...(craftRef?[craftRef.libraryId,craftRef.libraryVersion,stage]:[])]),prior=old?.document.rows.find(r=>r.rowId===id);
   const same=matches(id,basis,()=>digest([old!.assembly!.roundNumber,key,technicalDocumentFingerprint(legacyDocument!),legacyDocument!.craftSteps??null,worker]))
-   &&(!legacyDocument||old?.assembly?.rows[id]?.dependencyVersion===2||commercialFingerprint(legacyDocument)===commercialFingerprint(document)),unitPrice=same?prior?.unitPrice??'':'';
+   &&(!legacyDocument||old?.assembly?.rows[id]?.dependencyVersion===2||commercialFingerprint(legacyDocument)===commercialFingerprint(document));
+  const approvedPrice=kind==='craft'&&old&&old.assembly?.roundNumber===round&&old.price_sources[id]?.secondaryCraftDecisionId
+   &&old.assignments.find(value=>value.rowId===id)?.priceAssigneeId===worker;
+  const unitPrice=same||approvedPrice?prior?.unitPrice??'':'';
   if(unitPrice!==''&&old?.price_sources[id])prices[id]=old.price_sources[id]!;
   add({rowId:id,section:'外发工序',category:kind==='ie'?'IE加工':'工艺',name,specification:'',unit:'件',supplier:'',consumption:'1',unitPrice},
    {rowId:id,technicalAssigneeId:null,priceAssigneeId:worker,priceRole},{kind,sourceRef:key,basis,dependencyVersion:2,...(stage==='bulk'?{assignmentVersion:same?old?.assembly?.rows[id]?.assignmentVersion??old?.version??nextVersion:nextVersion}:{}),stage,...(craftRef?{craftRef}:{})});

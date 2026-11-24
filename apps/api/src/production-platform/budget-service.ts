@@ -10,7 +10,7 @@ import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
-import {readBudgetQuoteComparison} from './quotation-budget-basis.js';
+import {assertBudgetCraftBasis,budgetCraftBasisIsCurrent,readBudgetQuoteComparison} from './quotation-budget-basis.js';
 import {BudgetWashingFeeService} from './budget-washing-fees.js';
 import {DigitalProductionIdentityService} from './identity-service.js';
 
@@ -48,20 +48,25 @@ export class DigitalBudgetService {
     const linked = (await db.query("SELECT child_id FROM digital_production_child_links WHERE module='sourcing' AND production_order_id=$1", [orderId])).rows[0];
     const row = (await db.query(version === undefined ? "SELECT * FROM digital_budget_documents WHERE production_order_id=$1" : "SELECT *, 'published' AS status FROM digital_budget_versions WHERE production_order_id=$1 AND version=$2", version === undefined ? [orderId] : [orderId, version])).rows[0];
     if (version !== undefined && !row) digitalNotFound();
-    const comparison=await readBudgetQuoteComparison(db,orderId,row,version!==undefined);
+    let comparison=await readBudgetQuoteComparison(db,orderId,row,version!==undefined);
     if(linked&&comparison.state==='review_required')comparison.reason='客户报价有新确认版；原外发合同保留已采用版本，后续调整沿原外发更正入口办理，不自动改变生产流程';
     const current=version===undefined;
     const hasDraft=comparison.policy==='legacy'||Boolean(row);
     const state=comparison.workbenchBasis===undefined?undefined:(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1",[orderId])).rows[0]?.state;
     const active=state===undefined||state==='active';
-    const writableBasis=comparison.workbenchBasis===undefined||comparison.workbenchBasis==='valid'&&active;
+    const checkCraftBasis=current&&!linked&&row?.status!=='published'&&(order.canEdit||order.canPublish)
+      &&(comparison.policy==='legacy'||comparison.currentConfirmedVersion!==null);
+    const craftBasis=!checkCraftBasis||await budgetCraftBasisIsCurrent(db,orderId);
+    if(!craftBasis)comparison={...comparison,state:'incomparable',workbenchBasis:'craft_review_required',
+      reason:'请先核对本单当前工艺批准版本及客户确认报价'};
+    const writableBasis=craftBasis&&(comparison.workbenchBasis===undefined||comparison.workbenchBasis==='valid'&&active);
     const liveEditor=comparison.workbenchBasis===undefined||order.canPublish
       ||order.created_by===actor.actorId&&actor.actorRoles.includes("sample_designer")
         &&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"sample_designer");
     return { metadata:await documentMetadata(db,row), versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document: row?.document ?? null,
       totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && liveEditor && !linked && row?.status !== "published" && current && hasDraft && writableBasis && (Boolean(row) || this.creationEnabled),
       canPublish: order.canPublish && !linked && row?.status !== "published" && current && hasDraft && writableBasis && (Boolean(row) || this.creationEnabled),
-      comparison,canAdoptQuotation:current&&this.creationEnabled&&order.canPublish&&!linked&&comparison.policy==='quote_v1'&&comparison.state==='review_required'&&active,
+      comparison,canAdoptQuotation:current&&craftBasis&&this.creationEnabled&&order.canPublish&&!linked&&comparison.policy==='quote_v1'&&comparison.state==='review_required'&&active,
       canSubmitSourcing: !linked && row?.status === "published" && ['legacy','within_limit'].includes(comparison.state) && (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
       sourcingCaseId: linked?.child_id ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null,
       designerName: order.designer_name, merchandiserName: order.merchandiser_name ?? null };
@@ -88,6 +93,7 @@ export class DigitalBudgetService {
       }
       if (prior && prior.payload_hash !== hash) conflict("同一操作标识不能用于不同内容");
       if (prior) { await db.query("COMMIT"); return prior.response as T; }
+      await assertBudgetCraftBasis(db,orderId);
       if(action==='adopt'&&!sheet.canAdoptQuotation)conflict('当前不能切换报价依据；已关联外发的预算和合同保持原批准版本');
       if(sheet.comparison?.workbenchBasis&&action!=='adopt'&&sheet.comparison.workbenchBasis!=='valid')conflict(sheet.comparison.reason);
       if (action === "publish" && !sheet.canPublish) throw new ApplicationError("FORBIDDEN","预算由本单跟单最终发布，发布后内容冻结",403);
