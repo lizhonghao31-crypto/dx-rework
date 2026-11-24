@@ -1,3 +1,4 @@
+import {seenSourcingOwnerDecision} from "./sourcing-owner-approval-fixture.js";
 import {customerQuotationFixture} from './customer-quotation-fixture.js';
 import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-customer-date-service.js';
 import {AuthService} from '../../apps/api/src/auth/service.js';
@@ -26,6 +27,7 @@ import {AttachmentService} from '../../apps/api/src/tools/attachments.js';
 import {FakeObjectStorage} from '../../apps/api/src/tools/storage.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {IdempotencyRepository,IdempotencyService} from '../../apps/api/src/tools/repositories.js';
 import {businessNow,ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
 import type {AcceptanceClockRuntime} from '../../apps/api/src/acceptance-clock/runtime.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
@@ -53,7 +55,8 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
  const access=new AccessMasterDataService(db,corp),factory=await access.createSupplier(root,CreateSupplierSchema.parse({supplierCode:`TEST-UAT-${suffix.toUpperCase()}-FACTORY2`,supplierType:'factory',supplierName:`TEST factory2 ${suffix}`,address:'TEST address',contractEntityName:'TEST factory2',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0001',bankName:'TEST bank',changeReason:'TEST isolated approval'}));
  const crafts=await access.ensureCrafts(people.manager!,{craftNames:['TEST车缝']});
  const storage=new FakeObjectStorage(),attachments=new AttachmentService(db,storage,{prefix:'TEST',ttlSeconds:60,maxUploadBytes:1000000});
- const service=new SourcingService(db,undefined,undefined,new TodoProjectionService(new TodoService(db)),new SourcingContractService(db,attachments));
+ const receipts=new IdempotencyRepository();
+ const service=new SourcingService(db,new IdempotencyService(receipts),undefined,new TodoProjectionService(new TodoService(db)),new SourcingContractService(db,attachments));
  const scene=mode==='ordinary'?null:await runtime.create(root,{name:`TEST-owner-${mode}`,requestKey:randomUUID()});
  if(scene)for(let step=0;step<5;step++)await runtime.run(scene.scenarioId,root,()=>runtime.repository.change(scene.scenarioId,root.actorId,{expectedVersion:scene.version+step,requestKey:randomUUID(),at:new Date(Date.parse(scene.now)+1+step).toISOString()}));
  const run=<T>(action:()=>Promise<T>)=>scene?runtime.run(scene.scenarioId,root,action):action();
@@ -93,18 +96,31 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
    (SELECT count(*) FROM digital_po_date_changes WHERE production_order_id=$2 AND date_kind='factory')::int dates,
    (SELECT count(*) FROM digital_sla_plans WHERE production_order_id=$2)::int AS plans,
    (SELECT count(*) FROM sourcing_approval_snapshot_lines l JOIN sourcing_approval_snapshots s USING(sourcing_approval_snapshot_id) WHERE s.sourcing_case_id=$1)::int lines,
+   (SELECT jsonb_agg(to_jsonb(d) ORDER BY sourcing_contract_document_id) FROM sourcing_contract_documents d WHERE sourcing_case_id=$1) AS documents,
+   (SELECT jsonb_agg(to_jsonb(c) ORDER BY cutting_order_id) FROM cutting_orders c WHERE sourcing_case_id=$1) AS cutting,
+   (SELECT jsonb_agg(to_jsonb(t) ORDER BY todo_id) FROM rework_todos t WHERE entity_type='sourcing_case' AND entity_id=$1::text) AS todos,
+   (SELECT jsonb_agg(to_jsonb(a) ORDER BY delivery_attempt_id) FROM todo_delivery_attempts a JOIN rework_todos t USING(todo_id) WHERE t.entity_type='sourcing_case' AND t.entity_id=$1::text) AS deliveries,
    (SELECT count(*) FROM idempotency_records WHERE scope='sourcing.owner.approved' AND actor_key=$3 AND idempotency_key=$4)::int receipts,
    (SELECT count(*) FROM operation_events WHERE entity_id=$1::text AND action='sourcing.owner.approve')::int approval_events`,[caseId,id,people.owner!.actorId,key])).rows[0];
+  const approvalInput=await seenSourcingOwnerDecision(service,people.owner!,caseId,{decision:"approved"});
   const before=await snapshot();expect(before).toMatchObject({seq:3,owners:0,snapshots:0,lines:0,receipts:0,approval_events:0});
   if(mode==='scene-rollback'){
    const append=SlaPlanRepository.prototype.appendPlan;
    const fault=vi.spyOn(SlaPlanRepository.prototype,'appendPlan').mockImplementationOnce(async function(this:SlaPlanRepository,...args){await append.apply(this,args);throw new Error('TEST failure after persisted SLA date revision');});
-   try{await expect(service.decideOwner(people.owner!,caseId,{decision:'approved'},key)).rejects.toThrow('TEST failure after persisted SLA date revision');}finally{fault.mockRestore();}
+   try{await expect(service.decideOwner(people.owner!,caseId,approvalInput,key)).rejects.toThrow('TEST failure after persisted SLA date revision');}finally{fault.mockRestore();}
+   expect(await snapshot()).toEqual(before);
+   const complete=receipts.complete.bind(receipts);
+   const afterWrites=vi.spyOn(receipts,'complete').mockImplementationOnce(async(...args)=>{
+    await complete(...args);
+    throw new Error('TEST failure after approval, downstream facts and receipt but before commit');
+   });
+   try{await expect(service.decideOwner(people.owner!,caseId,approvalInput,key)).rejects.toThrow('TEST failure after approval, downstream facts and receipt but before commit');}
+   finally{afterWrites.mockRestore();}
    expect(await snapshot()).toEqual(before);
   }
-  const outcome=await service.decideOwner(people.owner!,caseId,{decision:'approved'},key);
+  const outcome=await service.decideOwner(people.owner!,caseId,approvalInput,key);
   expect(outcome.value.status).toBe('pending_finance_reconciliation');
-  const retry=await service.decideOwner(people.owner!,caseId,{decision:'approved'},key);expect(retry.value).toEqual(outcome.value);expect(retry.reused).toBe(true);
+  const retry=await service.decideOwner(people.owner!,caseId,approvalInput,key);expect(retry.value).toEqual(outcome.value);expect(retry.reused).toBe(true);
   const after=await snapshot();expect(after).toMatchObject({seq:4,owners:1,snapshots:1,dates:1,lines:1,receipts:1,approval_events:1});
   let plan=(await db.query('SELECT business_time FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1',[id])).rows[0].business_time;
   expect(plan.scenarioId).toBe(scene?.scenarioId??null);if(scene){expect(plan.now).toBe(new Date(Date.parse(scene.now)+5).toISOString());expect(plan.revision).toBe(6);}

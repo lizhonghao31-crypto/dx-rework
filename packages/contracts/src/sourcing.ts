@@ -151,7 +151,25 @@ export const CreateSourcingCaseSchema = SourcingCaseInputSchema
   .extend({ digitalBudget: z.object({ productionOrderId: IdSchema, budgetVersion: z.number().int().positive(), orderVersion: z.number().int().positive() }).strict().optional() })
   .refine(validLineImages, "款图必须包含在订单图片中")
   .refine(order => sourcingDatesValid(order.estimatedCutPieceSendDate, order.deliveryDate), { path: ["deliveryDate"], message: SOURCING_DATE_ORDER_ERROR });
-export const ReturnSourcingCaseSchema = z.object({ expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500) }).strict();
+export const SourcingOwnerApprovalBasisSchema = z.object({
+  expectedDecisionId: IdSchema,
+  expectedDecisionVersion: z.number().int().positive(),
+  expectedVersion: z.number().int().positive(),
+  expectedApprovalBasis: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+export type SourcingOwnerApprovalBasis = z.infer<typeof SourcingOwnerApprovalBasisSchema>;
+export const SOURCING_OWNER_APPROVAL_CHANGED = "审批内容已更新，请刷新后重新核对";
+const OwnerApprovalExpectation = SourcingOwnerApprovalBasisSchema.partial().shape;
+const OwnerReturnExpectation = SourcingOwnerApprovalBasisSchema.omit({expectedVersion:true}).partial().shape;
+function requireCompleteApprovalFields(input:Partial<{[Key in keyof SourcingOwnerApprovalBasis]:SourcingOwnerApprovalBasis[Key]|undefined}>,keys:readonly (keyof SourcingOwnerApprovalBasis)[],context:z.RefinementCtx){
+  const supplied=keys.filter(key=>input[key]!==undefined);
+  if(supplied.length>0&&supplied.length<keys.length)context.addIssue({code:"custom",path:["expectedApprovalBasis"],message:"请提交完整审批依据"});
+}
+export const ReturnSourcingCaseSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  reason: z.string().trim().min(1).max(500),
+  ...OwnerReturnExpectation,
+}).strict().superRefine((input,context)=>requireCompleteApprovalFields(input,["expectedDecisionId","expectedDecisionVersion","expectedApprovalBasis"],context));
 export const CorrectSourcingCaseSchema = SourcingCaseInputSchema.omit({ daxingUnitPrice: true, additionalMerchandiserUserId: true }).extend({
   expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500),
 }).strict().refine(validLineImages, "款图必须包含在订单图片中")
@@ -238,12 +256,14 @@ export const DecideSourcingOwnerSchema = z.discriminatedUnion("decision", [
   z.object({
     decision: z.literal("approved"),
     decisionReason: z.string().trim().max(500).optional(),
+    ...OwnerApprovalExpectation,
   }).strict(),
   z.object({
     decision: z.literal("rejected"),
     decisionReason: z.string().trim().max(500).optional(),
+    ...OwnerApprovalExpectation,
   }).strict(),
-]);
+]).superRefine((input,context)=>requireCompleteApprovalFields(input,["expectedDecisionId","expectedDecisionVersion","expectedVersion","expectedApprovalBasis"],context));
 
 export const SourcingContractMissingFieldSchema = z.enum([
   "address",
@@ -670,6 +690,18 @@ export const SourcingDetailSectionsSchema = z.object({
   timeline:SourcingTimelineResponseSchema,
   factoryChange:SourcingFactoryChangeStateResponseSchema,
 });
+
+export const SourcingOwnerReviewSchema=z.object({
+  item:SourcingCaseSummarySchema,
+  basis:SourcingOwnerApprovalBasisSchema,
+  proposal:z.object({
+    factoryChangeRequestId:IdSchema,
+    deliveryDate:BusinessDateSchema.nullable(),
+    poDates:z.array(z.object({lineId:IdSchema,position:z.number().int().positive(),date:BusinessDateSchema}).strict()),
+  }).strict().nullable(),
+}).strict();
+export type SourcingOwnerReview=z.infer<typeof SourcingOwnerReviewSchema>;
+export const SourcingOwnerDetailSectionsSchema=SourcingDetailSectionsSchema.extend({ownerReview:SourcingOwnerReviewSchema.nullable()});
 
 export type SourcingFactoryChangeStateResponse = z.infer<typeof SourcingFactoryChangeStateResponseSchema>;
 export type RecordSourcingFinanceReconciliation = z.infer<

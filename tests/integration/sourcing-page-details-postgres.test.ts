@@ -1,3 +1,4 @@
+import {decideSeenSourcingOwner} from "../helpers/sourcing-owner-approval-fixture.js";
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,it,expect,vi} from 'vitest';
 import {CreateSourcingCaseSchema} from '@dx-rework/contracts';
@@ -18,7 +19,7 @@ if(!Number.isInteger(caseCount)||caseCount<31||caseCount>1000)throw Error('Owned
   for(let i=0;i<caseCount;i++){
    const body=CreateSourcingCaseSchema.parse({gender:i%2?'女装':'男装',styleName:'TEST-PERF09-类型',estimatedCutPieceSendDate:'2026-12-01',deliveryDate:'2027-01-10',daxingUnitPrice:'5',attachmentIds:[await f.image(f.people.merchandiser!)],lineItems:Array.from({length:8},(_,line)=>({styleNo:'TEST-PERF09-'+String(i).padStart(2,'0')+'-'+line,color:'TEST色'+line,quantity:2}))});
    const created=await f.sourcing.createCase(f.people.merchandiser!,body,randomUUID());
-   if(i<5){const linePrices=body.lineItems.map((_,position)=>({position:position+1,unitPrice:'3.25'}));await f.sourcing.quoteIePrice(f.people.ie!,created.value.sourcingCaseId,{linePrices},randomUUID());await f.sourcing.recordManagementDecision(f.people['production-management']!,created.value.sourcingCaseId,{linePrices,craftIds:[craft.craftId],supplierId:f.supplierId,cuttingProcess:'in_house'},randomUUID());if(i===0)await f.sourcing.decideOwner(f.people.owner!,created.value.sourcingCaseId,{decision:'approved'},randomUUID());}
+   if(i<5){const linePrices=body.lineItems.map((_,position)=>({position:position+1,unitPrice:'3.25'}));await f.sourcing.quoteIePrice(f.people.ie!,created.value.sourcingCaseId,{linePrices},randomUUID());await f.sourcing.recordManagementDecision(f.people['production-management']!,created.value.sourcingCaseId,{linePrices,craftIds:[craft.craftId],supplierId:f.supplierId,cuttingProcess:'in_house'},randomUUID());if(i===0)await decideSeenSourcingOwner(f.sourcing,f.people.owner!,created.value.sourcingCaseId,{decision:'approved'},randomUUID());}
   }
   const scene=await f.scene('2026-11-01T02:00:00.000Z');await f.runtime.run(scene,f.root,()=>f.bulkReady('无'));
  });

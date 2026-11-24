@@ -1,3 +1,5 @@
+import {readSourcingOwnerApprovalBasis,requireSourcingOwnerApproval,sourcingOwnerExpectation} from "./sourcing-owner-approval-basis.js";
+import type {RootAuthority} from "../access/root-authority.js";
 import {readSourcingCase,readSourcingCaseList,sourcingCaseStages,type SourcingCaseHistory,type SourcingCaseStage} from "./sourcing-case-read.js";
 import {toSourcingIso as toIso,SOURCING_LANE_KEY as LANE_KEY} from "./sourcing-case-mapping.js";
 export {canViewSourcingDaxingPrice} from "./sourcing-case-mapping.js";
@@ -21,7 +23,7 @@ import {
   sourcingStyleNumbers,
   normalizeSourcingStyleNumber,
   type SourcingStyleIdentity,
-  CorrectSourcingCaseSchema, ReturnSourcingCaseSchema, sourcingDatesValid, SOURCING_DATE_ORDER_ERROR,
+  CorrectSourcingCaseSchema, ReturnSourcingCaseSchema, DecideSourcingOwnerSchema, sourcingDatesValid, SOURCING_DATE_ORDER_ERROR,
   calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   SourcingNewUnitPriceSchema,
@@ -190,6 +192,7 @@ export class SourcingService {
     > & Partial<Pick<TodoProjectionService,"actionableForNamedRecipient">>,
     private readonly contractService?: SourcingContractService,
     private readonly reportFactoryChangeFailure?: (diagnostic: FactoryChangeFailureDiagnostic) => void | Promise<void>,
+    private readonly rootAuthority?: Pick<RootAuthority,"isRootUser">,
   ) {}
 
   private assertActor(
@@ -280,8 +283,38 @@ export class SourcingService {
     return this.readCase(this.database, sourcingCaseId, actor);
   }
 
+  private async mayReadOwnerApproval(client:PoolClient,actor:TrustedActorContext):Promise<boolean>{
+    if(actor.actorRoles.includes(ROOT_ROLE))return Boolean(await this.rootAuthority?.isRootUser(actor.actorId,client));
+    if(!actor.actorRoles.includes(OWNER_DECISION_ROLE)||!actor.authorizationCapabilities?.includes(OWNER_DECISION_CAPABILITY))return false;
+    const active=await client.query<{allowed:boolean}>(`SELECT EXISTS(
+      SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL
+      JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
+      JOIN role_capabilities c ON c.role_code=a.role_code AND c.capability=$3
+      JOIN identity_mappings i ON i.user_id=u.id AND i.provider='dingtalk' AND i.active AND i.employed
+      JOIN access_security_policy p ON p.policy_key='primary' AND p.dingtalk_corp_id=i.corp_id
+      WHERE u.id=$1 AND u.enabled AND NOT u.manual_access_disabled AND a.role_code=$2)
+      AND member_module_can_write($1,'sourcing') AND member_module_capability_allowed($1,$3) AS allowed`,
+      [actor.actorId,OWNER_DECISION_ROLE,OWNER_DECISION_CAPABILITY]);
+    return active.rows[0]?.allowed===true;
+  }
+
+  private async verifyOwnerApprovalAuthority(client:PoolClient,actor:TrustedActorContext):Promise<void>{
+    const allowed=actor.actorRoles.includes(ROOT_ROLE)
+      ? await this.rootAuthority?.isRootUser(actor.actorId,client,true)
+      : (await client.query<{allowed:boolean}>(
+        "SELECT digital_sourcing_actor_can_write($1,ARRAY[$2]::text[],$3) AS allowed",
+        [actor.actorId,OWNER_DECISION_ROLE,OWNER_DECISION_CAPABILITY],
+      )).rows[0]?.allowed;
+    if(!allowed)fail("当前岗位无权执行该报价选厂操作",403,"FORBIDDEN");
+  }
+
+  private async lockOwnerApprovalCase(client:PoolClient,id:string):Promise<void>{
+    const row=await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[id]);
+    if(!row.rowCount)fail("报价选厂询价不存在",404,"NOT_FOUND");
+  }
+
   /** Reuse the original authorized case basis within one read-only snapshot. */
-  async readDetailSections(actor:TrustedActorContext,sourcingCaseId:string){
+  async readDetailSections(actor:TrustedActorContext,sourcingCaseId:string,includeOwnerReview=false){
     this.assertReader(actor);
     if(!UUID_PATTERN.test(sourcingCaseId))fail("报价选厂询价标识无效");
     const client=await this.database.connect();
@@ -291,8 +324,11 @@ export class SourcingService {
       const attachments=await this.readAttachments(client,sourcingCaseId);
       const timeline=await this.readTimeline(client,sourcingCaseId);
       const factoryChange=await this.readFactoryChange(client,sourcingCaseId,source);
+      const ownerReview=includeOwnerReview&&source.status==="pending_owner_approval"&&source.decision
+        &&await this.mayReadOwnerApproval(client,actor)
+        ?await readSourcingOwnerApprovalBasis(client,source,attachments.items.map(item=>item.attachmentId)):null;
       await client.query('COMMIT');
-      return {sourcingCaseId,version:source.version,attachments,timeline,factoryChange};
+      return {sourcingCaseId,version:source.version,attachments,timeline,factoryChange,...(includeOwnerReview?{ownerReview}:{})};
     }catch(error){
       await client.query('ROLLBACK');
       throw error;
@@ -1067,10 +1103,12 @@ export class SourcingService {
 
   private async writeCorrection(actor: TrustedActorContext, sourcingCaseId: string, input: ReturnSourcingCase | CorrectSourcingCase, key: string, correcting: boolean): Promise<Result<SourcingCaseSummary>> {
     const scope = correcting ? "sourcing.case.correct" : "sourcing.case.return";
+    const expectation=correcting?null:sourcingOwnerExpectation(input as ReturnSourcingCase);
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      if(!correcting)await this.verifyOwnerApprovalAuthority(client,actor);
       await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       const root = actor.actorRoles.includes(ROOT_ROLE);
       const source = (await client.query<{created_by: string; additional_merchandiser_user_id: string | null}>(
@@ -1080,12 +1118,15 @@ export class SourcingService {
       const result = await this.idempotency.execute(client, {scope,actorKey:actor.actorId,key,
         requestHash:requestHash(scope,{sourcingCaseId,input:{...input,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000)}, async () => {
         const before = await this.readCase(client,sourcingCaseId,actor);
+        const approvalBasis=!correcting&&(expectation||before.status==="pending_owner_approval")?requireSourcingOwnerApproval(expectation,
+          before.status==="pending_owner_approval"&&expectation?await readSourcingOwnerApprovalBasis(client,before,
+            (await this.readAttachments(client,sourcingCaseId)).items.map(item=>item.attachmentId)):null):null;
         if (before.approvalSnapshot) fail("老板已批准，不能直接退回修改生效订单",409,"INVALID_STATE_TRANSITION");
         if (before.version !== input.expectedVersion) fail("订单已被他人处理，本次未覆盖；请在本单报价选厂页重新读取最新方案与版本，再核对当前待办后提交",409,"CONFLICT");
         if (correcting ? before.status !== "pending_merchandiser_correction"
           : !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(before.status)) fail(workflowStateRejection("外发订单",before.status,correcting?["pending_merchandiser_correction"]:["pending_ie_quote","pending_management_decision","pending_owner_approval"],"本单报价选厂办理页"),409,"INVALID_STATE_TRANSITION");
         const nextStatus = correcting ? "pending_ie_quote" : "pending_merchandiser_correction";
-        let after: Record<string,unknown> = {status:nextStatus};
+        let after: Record<string,unknown> = {status:nextStatus,...(approvalBasis?{ownerReviewBasis:approvalBasis}:{})};
         const facts = correcting ? input as CorrectSourcingCase : null;
         let correctionVersion = 0;
         let correctionStyleId: string | null = null;
@@ -1429,6 +1470,7 @@ export class SourcingService {
         requestHash: requestHash(scope, { sourcingCaseId, daxingUnitPrice: nextPrice, reason }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        await this.lockOwnerApprovalCase(client,sourcingCaseId);
         const current = await client.query<{
           status: string;
           current_price: string | null;
@@ -1450,8 +1492,7 @@ export class SourcingService {
              WHERE transition_row.sourcing_case_id=source_case.sourcing_case_id
              ORDER BY transition_row.sequence DESC LIMIT 1
            ) current_transition ON true
-           WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_lock`,
+           WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL`,
           [sourcingCaseId],
         );
         const source = current.rows[0] ?? fail("报价选厂询价不存在", 404, "NOT_FOUND");
@@ -1980,6 +2021,9 @@ export class SourcingService {
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, OWNER_DECISION_CAPABILITY, OWNER_DECISION_ROLE);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const parsed=DecideSourcingOwnerSchema.safeParse(input);
+    if(!parsed.success)fail(parsed.error.issues[0]?.message??"老板审批信息不完整");
+    const expectation=sourcingOwnerExpectation(parsed.data!);
     const suppliedReason = input.decisionReason?.trim() ?? "";
     const decisionReason = suppliedReason || (
       input.decision === "approved"
@@ -1992,6 +2036,10 @@ export class SourcingService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      await this.verifyOwnerApprovalAuthority(client,actor);
+      if(!(await client.query("SELECT 1 FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL",[sourcingCaseId])).rowCount)
+        fail("报价选厂询价不存在",404,"NOT_FOUND");
+      let contractDocumentId:string|undefined;
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -2000,9 +2048,16 @@ export class SourcingService {
           sourcingCaseId,
           decision: input.decision,
           decisionReason,
+          ...(expectation??{}),
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        if(!expectation)requireSourcingOwnerApproval(null,null);
+        await this.lockOwnerApprovalCase(client,sourcingCaseId);
+        const item=await this.readCase(client,sourcingCaseId,actor);
+        const review=await readSourcingOwnerApprovalBasis(client,item,
+          (await this.readAttachments(client,sourcingCaseId)).items.map(attachment=>attachment.attachmentId));
+        const approvalBasis=requireSourcingOwnerApproval(expectation,review);
         const current = await client.query<{
           status: string;
           sequence: number | string;
@@ -2034,11 +2089,7 @@ export class SourcingService {
                     ORDER BY correction.correction_version DESC LIMIT 1
                   ),source_case.daxing_unit_price)::text AS daxing_unit_price,
                   source_case.estimated_cut_piece_send_date::text AS estimated_cut_piece_send_date,
-                  COALESCE((SELECT (proposal.after_state->>'deliveryDate')::date
-                    FROM sourcing_factory_change_requests request_row
-                    JOIN operation_events proposal ON proposal.event_id=request_row.operation_event_id
-                    WHERE request_row.factory_change_request_id=decision_row.source_change_request_id),
-                    sourcing_effective_delivery_date(source_case.sourcing_case_id,source_case.delivery_date))::text AS delivery_date,
+                  $3::text AS delivery_date,
                   source_case.gender,source_case.style_name_snapshot,
                   CASE WHEN decision_row.crafts IS NULL THEN source_case.process_items
                     ELSE ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(decision_row.crafts) craft) END AS process_items
@@ -2054,14 +2105,11 @@ export class SourcingService {
            LEFT JOIN LATERAL (
              SELECT decision_fact.*
              FROM sourcing_decisions decision_fact
-             WHERE decision_fact.sourcing_case_id=source_case.sourcing_case_id
-             ORDER BY decision_fact.decision_version DESC
-             LIMIT 1
+             WHERE decision_fact.sourcing_case_id=source_case.sourcing_case_id AND decision_fact.sourcing_decision_id=$2
            ) decision_row ON true
            WHERE source_case.sourcing_case_id=$1
-             AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_lock`,
-          [sourcingCaseId],
+             AND source_case.deleted_at IS NULL`,
+          [sourcingCaseId,approvalBasis.expectedDecisionId,review?.proposal?.deliveryDate??item.deliveryDate],
         );
         if(input.decision === "approved") await this.assertValidOrderDates(client,sourcingCaseId);
         const source = current.rows[0];
@@ -2087,6 +2135,7 @@ export class SourcingService {
             status: approved ? "pending_finance_reconciliation" : "pending_management_decision",
             decision: input.decision,
             deliveryDate: source.delivery_date,
+            ownerReviewBasis:approvalBasis,
           },
           reason: decisionReason,
         });
@@ -2159,7 +2208,7 @@ export class SourcingService {
             await approveTransferPoDates(client,actor,sourcingCaseId,request.id,eventId,decisionReason);
           } else await approveFactoryPoDates(client,actor,sourcingCaseId,eventId,decisionReason,false);
           await ensureCuttingOrdersForApproval(client, sourcingCaseId, snapshotId);
-          await this.contractService?.prepareForApproval(client, snapshotId, actor);
+          contractDocumentId=await this.contractService?.prepareForApproval(client,snapshotId,actor)??undefined;
         }
         await client.query(
           `INSERT INTO sourcing_case_transitions(
@@ -2271,8 +2320,8 @@ export class SourcingService {
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
       await client.query("COMMIT");
-      if (input.decision === "approved") {
-        await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
+      if(input.decision==="approved"&&!outcome.reused&&contractDocumentId){
+        await this.contractService?.generateIfReady(actor,sourcingCaseId,contractDocumentId).catch(()=>undefined);
       }
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {

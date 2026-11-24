@@ -7,12 +7,19 @@ type Owner={canSubmit:boolean;capture:()=>SourcingDetailIdentity;owns:(identity:
  * key. Entity ownership governs callbacks, never cancellation of the POST. */
 export function useSourcingDetailSubmission(owner:Owner,setBusy:(busy:boolean)=>void){
   const feedback=useSubmissionFeedback(setBusy);
-  const run=async<T,>(operation:()=>Promise<T>,saved:(value:T,identity:SourcingDetailIdentity)=>Promise<void>|void)=>{
+  const run=async<T,>(operation:()=>Promise<T>,saved:(value:T,identity:SourcingDetailIdentity)=>Promise<void>|void,
+    handleDefinitiveRefusal?:(error:unknown,identity:SourcingDetailIdentity)=>boolean)=>{
     if(!owner.canSubmit)return false;
     const identity=owner.capture();let applied=false;
     await feedback.run(async()=>{
       if(!owner.owns(identity))return;
-      const value=await operation();
+      let value:T;
+      try{value=await operation();}
+      catch(error){
+        // Only the original command can distinguish a refusal reached after replay lookup.
+        if(handleDefinitiveRefusal?.(error,identity))return;
+        throw error;
+      }
       feedback.confirmed();
       if(!owner.owns(identity))return;
       applied=true;

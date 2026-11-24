@@ -632,6 +632,20 @@ describe("sourcing PR03 routes", () => {
       { decision: "rejected", decisionReason: "请重新核对价格" },
       "owner-key-1",
     );
+    owner.service.decideOwner.mockClear();
+    const basis={expectedVersion:3,expectedDecisionId:"00000000-0000-4000-8000-000000000402",expectedDecisionVersion:1,expectedApprovalBasis:"a".repeat(64)};
+    const headers={cookie:"dx_rework_session=trusted","idempotency-key":"owner-versioned"};
+    const ownerUrl=`/sourcing/cases/${caseSummary.sourcingCaseId}/owner-decisions`;
+    const returnUrl=`/sourcing/cases/${caseSummary.sourcingCaseId}/return-to-merchandiser`;
+    expect((await owner.app.inject({method:"POST",url:ownerUrl,headers,payload:{decision:"approved",expectedVersion:3}})).statusCode).toBe(400);
+    expect((await owner.app.inject({method:"POST",url:ownerUrl,headers,payload:{decision:"approved",...basis,expectedApprovalBasis:"invalid"}})).statusCode).toBe(400);
+    expect((await owner.app.inject({method:"POST",url:returnUrl,headers,payload:{reason:"TEST 核对",expectedVersion:3,expectedDecisionId:basis.expectedDecisionId}})).statusCode).toBe(400);
+    expect(owner.service.decideOwner).not.toHaveBeenCalled();
+    expect(owner.service.returnToMerchandiser).not.toHaveBeenCalled();
+    expect((await owner.app.inject({method:"POST",url:ownerUrl,headers,payload:{decision:"approved",...basis}})).statusCode).toBe(201);
+    expect(owner.service.decideOwner).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),caseSummary.sourcingCaseId,{decision:"approved",...basis},"owner-versioned");
+    expect((await owner.app.inject({method:"POST",url:returnUrl,headers,payload:{reason:"TEST 核对",...basis}})).statusCode).toBe(200);
+    expect(owner.service.returnToMerchandiser).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),caseSummary.sourcingCaseId,{reason:"TEST 核对",...basis},"owner-versioned");
 
     const ie = create(["sourcing:view", "sourcing:price:quote"], ["ie_reviewer"]);
     expect((await ie.app.inject({
@@ -641,7 +655,7 @@ describe("sourcing PR03 routes", () => {
         cookie: "dx_rework_session=trusted",
         "idempotency-key": "forbidden-owner",
       },
-      payload: { decision: "approved" },
+      payload: { decision: "approved",...basis },
     })).statusCode).toBe(403);
     expect(ie.service.decideOwner).not.toHaveBeenCalled();
   });

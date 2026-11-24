@@ -37,6 +37,7 @@ import {
   MAX_SOURCING_LINE_ITEMS,
   MAX_SOURCING_PROCESSES,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
+  SOURCING_OWNER_APPROVAL_CHANGED,
   SourcingCaseListResponseSchema,
   SourcingCaseSummarySchema,
   SourcingStyleCatalogSchema,
@@ -53,6 +54,7 @@ import {
   type SourcingAttachment,
   type SourcingCaseStatus,
   type SourcingCaseSummary,
+  type SourcingOwnerApprovalBasis,
   type SourcingContractMissingField,
   type SourcingFactory,
 } from "@dx-rework/contracts";
@@ -1261,7 +1263,9 @@ function sourcingDetailPriceDelta(item:SourcingCaseSummary){
   return item.decision&&comparableIeTotal&&comparableIeTotal!=='—'?subtractFixedPoint(item.decision.totalAmount,comparableIeTotal,2,fixedBusinessCurrency):null;
 }
 
-function SourcingDetailFacts({item,ownerTotalDelta}:{item:SourcingCaseSummary;ownerTotalDelta:string|null}){
+function SourcingDetailFacts({item,ownerTotalDelta,approvalProposedDate=null}:{
+  item:SourcingCaseSummary;ownerTotalDelta:string|null;approvalProposedDate?:string|null;
+}){
   return (
         <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
           <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
@@ -1271,7 +1275,7 @@ function SourcingDetailFacts({item,ownerTotalDelta}:{item:SourcingCaseSummary;ow
           <div><dt>IE 总额</dt><dd>{item.ieQuote ? fixedBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
           <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          <SourcingOrderDateFacts item={item} />
+          <SourcingOrderDateFacts item={item} approvalProposedDate={approvalProposedDate} />
         </KeyFacts>
   );
 }
@@ -1288,8 +1292,10 @@ function OrderDetailPage({
   const requestedHistory=sourcingWorkflowNodeFromSearch();
   const historyNode=new URLSearchParams(window.location.search).get("view")==="node-history"&&requestedHistory
     &&!(requestedHistory==="finance"&&isMerchandiserOnly(user?.businessRoles,user?.isRoot))?requestedHistory:null;
-  const read=useSourcingDetailRead(sourcingCaseId,request,!historyNode);
+  const canOwner=canAct(user,"owner_group","sourcing:owner:approve");
+  const read=useSourcingDetailRead(sourcingCaseId,request,!historyNode&&Boolean(user),canOwner);
   const item=read.snapshot?.item??null;
+  const ownerReview=read.snapshot?.ownerReview??null;
   const attachments=read.snapshot?.attachments??read.readOnly.attachments??[];
   const timeline=read.snapshot?.timeline??[];
   const factoryChange=read.snapshot?.factoryChange??null;
@@ -1318,6 +1324,13 @@ function OrderDetailPage({
   const [returnError, setReturnError] = useState("");
   const returnKey = useRef<string | null>(null);
   const returnReason = useRef("");
+  const returnSnapshot=useRef<{id:string;version:number;basis:SourcingOwnerApprovalBasis|null}|null>(null);
+  const [ownerRefreshRequired,setOwnerRefreshRequired]=useState(false);
+  const [ownerReceiptWarning,setOwnerReceiptWarning]=useState(false);
+  useEffect(()=>{
+    returnSnapshot.current=null;returnKey.current=null;returnReason.current="";
+    setReturnOpen(false);setReturnDraft("");setOwnerRefreshRequired(false);setOwnerReceiptWarning(false);
+  },[sourcingCaseId]);
   const [budgetCorrectionError, setBudgetCorrectionError] = useState("");
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const contractReturnSectionRef=useRef<HTMLDivElement>(null);
@@ -1501,16 +1514,61 @@ function OrderDetailPage({
     finally {if(read.owns(identity)){contractUploadGuard.current=false;setContractUploading(false);}}
   };
   const styleDuplicateMessage = duplicateSourcingLineMessage(styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color})));
+  const ownerActionBlocked=writeBlocked||ownerRefreshRequired||!ownerReview;
+  const handleOwnerRefusal=(error:unknown,identity:SourcingDetailIdentity)=>{
+    if(!(error instanceof SubmissionRequestError)||error.status!==409||error.code!=="CONFLICT"||error.message!==SOURCING_OWNER_APPROVAL_CHANGED)return false;
+    if(read.owns(identity)){
+      setOwnerRefreshRequired(true);
+      setReturnOpen(false);
+      returnSnapshot.current=null;returnKey.current=null;
+      setMessage(SOURCING_OWNER_APPROVAL_CHANGED);
+    }
+    return true;
+  };
+  const refreshOwnerApproval=async()=>{
+    const identity=read.capture();
+    const result=await read.reloadForeground();
+    if(result&&read.owns(identity)){setOwnerRefreshRequired(false);setOwnerReceiptWarning(false);setMessage("");}
+  };
+  const ownerReadWarning=ownerReceiptWarning?<>
+    <p role="status">已提交成功，刷新失败，请重新读取</p>
+    <button type="button" disabled={busy||read.loading} onClick={()=>void refreshOwnerApproval().catch(()=>undefined)}>重新读取订单</button>
+  </>:null;
+  const submitOwnerDecision=async(decision:"approved"|"rejected")=>{
+    if(ownerActionBlocked||!ownerReview)return;
+    const path=`sourcing/cases/${ownerReview.item.sourcingCaseId}/owner-decisions`,key=createClientRequestId();
+    const body=JSON.stringify({decision,...ownerReview.basis});
+    const success=decision==="approved"?"老板已批准":"已驳回供应链总监重新调整";
+    await submission.run(()=>requestSubmission(path,SourcingCaseSummarySchema,{
+      method:"POST",headers:{"idempotency-key":key},body,
+    }),async(updated,identity)=>{
+      read.apply(identity,{item:updated,ownerReview:null});setMessage(success);
+      try{await read.reload();}
+      catch{if(read.owns(identity))setOwnerReceiptWarning(true);}
+    },handleOwnerRefusal);
+  };
+  const openReturn=()=>{
+    if(!item||writeBlocked||item.status==="pending_owner_approval"&&ownerActionBlocked)return;
+    returnSnapshot.current={id:item.sourcingCaseId,version:item.version,basis:item.status==="pending_owner_approval"?ownerReview?.basis??null:null};
+    returnKey.current=null;setReturnOpen(true);setReturnError("");
+  };
   const submitReturn=async(reason:string):Promise<void>=>{
-    if(!item||writeBlocked)return;
+    const seen=returnSnapshot.current;
+    if(!item||writeBlocked||!seen||seen.id!==item.sourcingCaseId||seen.basis&&ownerRefreshRequired)return;
     if(returnReason.current!==reason){returnKey.current=null;returnReason.current=reason;}
     const key=returnKey.current??createClientRequestId();returnKey.current=key;
-    const target=detailHref(item),body=JSON.stringify({expectedVersion:item.version,reason});
-    await submission.run(()=>requestSubmission(`sourcing/cases/${sourcingCaseId}/return-to-merchandiser`,SourcingCaseSummarySchema,{
+    const target=detailHref(item),body=JSON.stringify({expectedVersion:seen.version,reason,...(seen.basis??{})});
+    await submission.run(()=>requestSubmission(`sourcing/cases/${seen.id}/return-to-merchandiser`,SourcingCaseSummarySchema,{
       method:"POST",headers:{"idempotency-key":key},body}),async(updated,identity)=>{
-      read.apply(identity,{item:updated});setReturnDraft("");setReturnOpen(false);returnKey.current=null;
-      await read.reload();if(read.owns(identity))await navigateInternalPage(target);
-    });
+      read.apply(identity,{item:updated,ownerReview:null});setReturnDraft("");setReturnOpen(false);returnKey.current=null;returnSnapshot.current=null;
+      try{await read.reload();}
+      catch(error){
+        if(!seen.basis)throw error;
+        if(read.owns(identity))setOwnerReceiptWarning(true);
+        return;
+      }
+      if(read.owns(identity))await navigateInternalPage(target);
+    },seen.basis?handleOwnerRefusal:undefined);
   };
   const submitBudgetCorrection=async(daxingUnitPrice:string,reason:string):Promise<void>=>{
     if(!item||!canCorrectBudget||writeBlocked)return;
@@ -1537,7 +1595,6 @@ function OrderDetailPage({
         if(read.owns(identity))setMessage("款号已保存；已生成的合同将保留旧版，并更新当前下载版本。");
       });
   };
-  const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
   const canMerchandiserTransfer = item?.createdBy === user?.id && canAct(user, "order_merchandiser", "sourcing:factory_change:request");
   const canManagementTransfer = canManage;
   const canOwnerTransfer = canOwner;
@@ -1661,7 +1718,8 @@ function OrderDetailPage({
           <p role={read.error?"alert":"status"}>{read.error||(read.readOnly.attachments||earlyContract?"正在读取其余业务记录…":"正在读取图片、合同与业务记录…")}</p>
         </section>
       </div>:null}
-      {read.error?<button type="button" disabled={read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reloadForeground()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
+      {ownerReadWarning}
+      {read.error&&!ownerReceiptWarning?<button type="button" disabled={read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reloadForeground()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
       {imageDialog}
     </div>;
   }
@@ -1750,8 +1808,10 @@ function OrderDetailPage({
 
   const requestedTransferReview = factoryChange?.status === "pending_owner" && requestedNode === "owner"
     || factoryChange?.status === "pending_management" && requestedNode === "management";
-  if (requestedNode && selectedState === "completed" && !requestedTransferReview) return <SourcingNodeHistoryPage
-    sourcingCaseId={sourcingCaseId} node={selectedNode} returnTo={detailReturnPath} />;
+  if (requestedNode && selectedState === "completed" && !requestedTransferReview) return <>
+    {ownerReadWarning}
+    <SourcingNodeHistoryPage sourcingCaseId={sourcingCaseId} node={selectedNode} returnTo={detailReturnPath} />
+  </>;
 
   if (!ieCenterBack && item.status === "pending_merchandiser_correction" && new URLSearchParams(window.location.search).get("edit") === "correction"
     && canAct(user,"order_merchandiser","sourcing:inquiry:create") && (user?.isRoot || user?.id===item.createdBy)) {
@@ -1789,7 +1849,10 @@ function OrderDetailPage({
                   {canCorrectBudget && line.position === item.lineItems[0]?.position ? <button type="button" className="sourcing-budget-price-correct"
                     onClick={() => { budgetCorrectionKey.current = null; setBudgetCorrectionError(""); setBudgetCorrectionOpen(true); }}>更正</button> : null}
                 </span> : "历史未维护" }] : []),
-                ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:item.approvalSnapshot?"客户仓到货日":customerPoDateLabel,render:(line:SourcingCaseSummary["lineItems"][number])=><span className="sourcing-date-token">{line.customerWarehouseArrivalDate ?? "未登记"}</span>},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><><span className="sourcing-date-token">{line.factoryDeliveryDate ?? "尚未生效"}</span>{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}<span className="sourcing-date-token">{line.proposedFactoryDeliveryDate}</span></small>:null}</>}]:[]),
+                ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:item.approvalSnapshot?"客户仓到货日":customerPoDateLabel,render:(line:SourcingCaseSummary["lineItems"][number])=><span className="sourcing-date-token">{line.customerWarehouseArrivalDate ?? "未登记"}</span>},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=>{
+                  const proposal=ownerReview?.proposal?ownerReview.proposal.poDates.find(po=>po.lineId===line.lineId&&po.position===line.position)?.date:line.proposedFactoryDeliveryDate;
+                  return <><span className="sourcing-date-token">{line.factoryDeliveryDate ?? "尚未生效"}</span>{proposal&&proposal!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}<span className="sourcing-date-token">{proposal}</span></small>:null}</>;
+                }}]:[]),
                 { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
                 { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
                 { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? fixedBusinessCurrency(price.totalAmount) : "—"; } },
@@ -1797,7 +1860,7 @@ function OrderDetailPage({
             </div>);
   return (
     <div className="sourcing-workspace sourcing-order-detail sourcing-module-layout" data-legacy-ui="sourcing">
-      {returnOpen ? <SourcingReturnDialog recovery={<SubmissionFeedback feedback={feedback} busy={busy}/>} reason={returnDraft} onReasonChange={setReturnDraft} busy={writeBlocked} error={returnError} onClose={()=>{setReturnOpen(false);setReturnDraft("");returnKey.current=null;}} onSubmit={reason=>void submitReturn(reason)} /> : null}
+      {returnOpen ? <SourcingReturnDialog recovery={<SubmissionFeedback feedback={feedback} busy={busy}/>} reason={returnDraft} onReasonChange={setReturnDraft} busy={writeBlocked} error={returnError} onClose={()=>{setReturnOpen(false);setReturnDraft("");returnKey.current=null;returnSnapshot.current=null;}} onSubmit={reason=>void submitReturn(reason)} /> : null}
       {budgetCorrectionOpen && item?.daxingUnitPrice ? <SourcingBudgetPriceCorrectionDialog
         recovery={<SubmissionFeedback feedback={feedback} busy={busy}/>}
         draft={budgetCorrectionDraft} onDraftChange={setBudgetCorrectionDraft}
@@ -1821,7 +1884,7 @@ function OrderDetailPage({
         badge={STATUS_LABELS[item.status]}
         badgePlacement="subtitle"
       />
-        {canReturn ? <button type="button" className="sourcing-order-return" disabled={writeBlocked} onClick={()=>{setReturnOpen(true);setReturnError("");}}>退回跟单修改</button> : null}
+        {canReturn ? <button type="button" className="sourcing-order-return" disabled={item.status==="pending_owner_approval"?ownerActionBlocked:writeBlocked} onClick={openReturn}>退回跟单修改</button> : null}
       </div>
       {!datesValid ? <p role="alert">{SOURCING_DATE_ORDER_ERROR}，请退回跟单纠正后再提交。</p> : null}
       {item.status === "pending_merchandiser_correction" ? <section><p>退回原因：{item.correctionReason}</p>
@@ -1831,7 +1894,7 @@ function OrderDetailPage({
       </section> : null}
       {!item.decision && item.processes.length > 0 ? <p className="sourcing-order-meta">工艺及承包范围：{item.processes.join("、")}</p> : null}
       <div className="sourcing-detail-layout sourcing-reference-layout">
-        <SourcingDetailFacts item={item} ownerTotalDelta={ownerTotalDelta} />
+        <SourcingDetailFacts item={item} ownerTotalDelta={ownerTotalDelta} approvalProposedDate={ownerReview?.proposal?.deliveryDate??null} />
         <div className="sourcing-supporting-overview">
           <SourcingOrderPhotos attachments={attachments} previewUrl={attachment => attachmentUrl(attachment.attachmentId, "preview")} onPreview={setSelectedImage} uploadControl={canSupplementImages&&!writeBlocked ? <SourcingImageSupplementUploader sourcingCaseId={sourcingCaseId} currentAttachmentCount={attachments.length} onUploaded={load} /> : null} />
           <section className="sourcing-workflow-section" aria-label="订单流程">
@@ -1870,7 +1933,8 @@ function OrderDetailPage({
             {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
             <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
                 {!returnOpen&&!budgetCorrectionOpen&&!financeDifferenceOpen?<SubmissionFeedback feedback={feedback} busy={busy||contractUploading}/>:null}
-                {read.error?<button type="button" disabled={busy||read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reloadForeground()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
+                {ownerReadWarning}
+                {read.error&&!ownerReceiptWarning?<button type="button" disabled={busy||read.loading} onClick={()=>void (read.recordsFailed?read.retryRecords():read.reloadForeground()).catch(()=>undefined)}>{read.recordsFailed?"重新读取图片、时间线和转厂记录":"重新读取订单"}</button>:null}
                 {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
                   <h2>IE 给价</h2>
                   <p>逐款核定加工单价；每行金额独立四舍五入到分后汇总。</p>
@@ -2144,8 +2208,9 @@ function OrderDetailPage({
             </p> : null}
             </section> : null}
             {item.status === "pending_owner_approval" && selectedNode === "owner" && canOwner ? <ActionBar className="sourcing-owner-actions" aria-label="老板审批操作">
-              <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={writeBlocked} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回供应链总监重新调整")} aria-label="驳回并退回供应链总监">驳回并退回<span className="sourcing-owner-reject__target">供应链总监</span></button>
-              <button className="dx-button dx-button--primary" type="button" disabled={writeBlocked} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved" }, "老板已批准")}>批准方案</button>
+              {(ownerRefreshRequired||!ownerReview)&&!read.error?<button type="button" disabled={busy||read.loading||feedback.uncertain} onClick={()=>void refreshOwnerApproval().catch(()=>undefined)}>重新读取订单</button>:null}
+              <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={ownerActionBlocked} onClick={() => void submitOwnerDecision("rejected")} aria-label="驳回并退回供应链总监">驳回并退回<span className="sourcing-owner-reject__target">供应链总监</span></button>
+              <button className="dx-button dx-button--primary" type="button" disabled={ownerActionBlocked} onClick={() => void submitOwnerDecision("approved")}>批准方案</button>
             </ActionBar> : null}
             {financialReadView ? <details className="sourcing-order-original-facts"><summary>订单款式与原报价</summary>{orderLineItems}</details> : null}
           </div>

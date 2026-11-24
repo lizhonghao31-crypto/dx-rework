@@ -1,3 +1,5 @@
+import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
+import {seenSourcingOwnerDecision} from './sourcing-owner-approval-fixture.js';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {productionReadinessFixture,completeBulkRangeFixture} from './production-readiness-fixture.js';
 import {customerQuotationFixture} from './customer-quotation-fixture.js';
@@ -65,7 +67,8 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
   await db.query("UPDATE digital_production_customers SET default_merchandiser_id=$1 WHERE code='PD'",[people.merchandiser!.actorId]);
   const root=people.root!,runtime=new AcceptanceClockRuntime(db,await verifyAcceptanceClockServer(db,url,env),'TEST-only-business-anchor-'.repeat(3),true);
   const storage=new FakeObjectStorage(),attachments=new AttachmentService(db,storage,{prefix:'TEST',ttlSeconds:60,maxUploadBytes:1000000});
-  const contracts=new SourcingContractService(db,attachments),sourcing=new SourcingService(db,undefined,undefined,undefined,contracts);
+  const contracts=new SourcingContractService(db,attachments),rootAuthority=new RootAuthority(db,env.DINGTALK_CORP_ID,'uat-root');
+  const sourcing=new SourcingService(db,undefined,undefined,undefined,contracts,undefined,rootAuthority);
   const access=new AccessMasterDataService(db,env.DINGTALK_CORP_ID);
   const supplier=await access.createSupplier(root,CreateSupplierSchema.parse({supplierCode:'TEST-ANCHOR-FACTORY',supplierType:'factory',supplierName:'TEST anchor factory',address:'TEST',contractEntityName:'TEST factory',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0001',bankName:'TEST',changeReason:'TEST isolated native fixture'}));
   const craft=(await access.ensureCrafts(people['production-management']!,{craftNames:['TEST车缝']}))[0]!;
@@ -116,7 +119,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    const key=randomUUID();await beforeCreate?.(input,key,primary);
    const created=await sourcingCommands.createCase(primary,input,key),caseId=created.value.sourcingCaseId;
    const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
-   await sourcingCommands.decideOwner(owner,caseId,{decision:'approved'},randomUUID());
+   await sourcingCommands.decideOwner(owner,caseId,await seenSourcingOwnerDecision(sourcingCommands,owner,caseId,{decision:'approved'}),randomUUID());
    // The final customer/size prerequisites were established before final publication above.
    await bulk.dispatch(people['development-clerk']!,id,{expectedVersion:1,patternWorkerId:people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());
    {const fabric=(await bulk.read(people.warehouse!,id)).fabric;if(!fabric?.usable)throw Error('TEST final instruction prerequisite must retain actual usable fabric');}

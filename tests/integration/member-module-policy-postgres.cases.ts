@@ -1,3 +1,4 @@
+import {decideSeenSourcingOwner} from "../helpers/sourcing-owner-approval-fixture.js";
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { canReadSecondaryCraftApprovalQueue,lockSecondaryCraftApprover,readSecondaryCraftApprover } from "../../apps/api/src/production-platform/secondary-craft-approval-authority.js";
@@ -274,7 +275,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await expect(sourcing.decideOwner(actor(ids.wu_yunfeng,"sourcing:owner:approve"),id,{decision:"approved"},randomUUID())).rejects.toMatchObject({statusCode:403});
     expect((await database.query("SELECT * FROM sourcing_owner_decisions WHERE sourcing_case_id=$1",[id])).rowCount).toBe(before);
     expect((await sourcing.getCase(actor(ids.wu_yunfeng,"sourcing:view"),id)).status).toBe("pending_owner_approval");
-    expect((await sourcing.decideOwner(actor(ids.li_zhonghao,"sourcing:owner:approve"),id,{decision:"approved"},randomUUID())).value.status).toBe("pending_finance_reconciliation");
+    expect((await decideSeenSourcingOwner(sourcing,actor(ids.li_zhonghao,"sourcing:owner:approve"),id,{decision:"approved"},randomUUID())).value.status).toBe("pending_finance_reconciliation");
     expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND recipient_user_id=$2",[id,ids.wu_yunfeng])).rowCount).toBe(0);
     productionCaseId=id; productionSupplierId=supplier.supplierId;
   });

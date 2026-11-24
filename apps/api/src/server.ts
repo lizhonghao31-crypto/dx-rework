@@ -195,6 +195,7 @@ await sourcingContractService.resumePendingContracts();
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
   (diagnostic): void => { app.log.warn({ factoryChangeFailure: diagnostic }, "factory change request failed"); },
+  rootAuthority,
 );
 const reworkService = new ReworkInitiationService(
   database,
