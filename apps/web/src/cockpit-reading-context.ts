@@ -28,7 +28,7 @@ export function rememberCockpitReading(identity:string,context:CockpitContext,ro
  const value:Preferences={view:cockpitViewPatch(context),window:ready&&root?{left:window.scrollX,top:window.scrollY}:previous?.window??{left:0,top:0},outer:ready&&root?ancestors(root).map(point):previous?.outer??[],scrolls:ready&&root?scrollSelectors.flatMap(selector=>{const element=root.querySelector(selector);return element?[{selector,...point(element)}]:[];}):previous?.scrolls??[],disclosures:ready&&root?[...root.querySelectorAll<HTMLDetailsElement>('details[data-cockpit-disclosure]')].map(item=>({key:item.dataset.cockpitDisclosure!,open:item.open})):previous?.disclosures??[],focus:ready?focus:previous?.focus??null};
  views.delete(key);views.set(key,value);if(views.size>40)views.delete(views.keys().next().value!);
 }
-export function restoreCockpitReading(identity:string,id:string,root:HTMLElement|null){
+export function restoreCockpitReading(identity:string,id:string,root:HTMLElement|null,restoreFocus=true){
  const saved=views.get(stamp(identity,id));if(!saved||!root)return()=>{};
  let cancelled=false,frame=0,second=0;const cancel=()=>{cancelled=true;};
  for(const event of ['pointerdown','keydown','wheel','touchstart'])window.addEventListener(event,cancel,{capture:true,passive:true});
@@ -36,7 +36,7 @@ export function restoreCockpitReading(identity:string,id:string,root:HTMLElement
   for(const state of saved.disclosures){const found=[...root.querySelectorAll<HTMLDetailsElement>('details[data-cockpit-disclosure]')].find(item=>item.dataset.cockpitDisclosure===state.key);if(found)found.open=state.open;}
   for(const state of saved.scrolls){const element=root.querySelector(state.selector);if(element){element.scrollLeft=state.left;element.scrollTop=state.top;}}
   ancestors(root).forEach((item,index)=>{const state=saved.outer[index];if(state){item.scrollLeft=state.left;item.scrollTop=state.top;}});window.scrollTo(saved.window.left,saved.window.top);
-  if(saved.focus){const target=[...root.querySelectorAll<HTMLElement>('['+saved.focus.attribute+']')].find(item=>item.getAttribute(saved.focus!.attribute)===saved.focus!.value);if(target&&target.getClientRects().length)target.focus({preventScroll:true});}
+  if(restoreFocus&&saved.focus){const target=[...root.querySelectorAll<HTMLElement>('['+saved.focus.attribute+']')].find(item=>item.getAttribute(saved.focus!.attribute)===saved.focus!.value);if(target&&target.getClientRects().length)target.focus({preventScroll:true});}
  };
  frame=requestAnimationFrame(()=>{restore();second=requestAnimationFrame(restore);});
  return()=>{cancelled=true;cancelAnimationFrame(frame);cancelAnimationFrame(second);for(const event of ['pointerdown','keydown','wheel','touchstart'])window.removeEventListener(event,cancel,true);};

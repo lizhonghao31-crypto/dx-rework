@@ -1,8 +1,8 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-  "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
+  "base": "7edee41985527554e7b02a186277afb1804132e2",
+  "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
   "rules": [
     {
       "source": "Eric approved Acceptance material clock repair, reproduced on 1bec37d9, work order 2026-11-24 PR A.",
@@ -72,46 +72,46 @@
     {
       "id": "native-clock",
       "kind": "tests",
-      "command": "node /tmp/dx-acceptance-material-clock-evidence/run.mjs nativeClock",
-      "context": "Isolated native PostgreSQL with the canonical business-chain configuration, dual test URLs, original signed business roles, and native browser rehearsal. The owner approvals, purchase readiness and existing draft order consumers all use the stored original facts.",
-      "startedAt": "2026-11-24T10:29:15.667Z",
-      "endedAt": "2026-11-24T10:30:54.191Z",
-      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-      "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
+      "command": "node /tmp/dx-acceptance-material-clock-evidence/released-7edee419/run.mjs nativeClock",
+      "context": "Isolated native PostgreSQL with the canonical business-chain configuration, dual test URLs, original signed business roles, and native browser rehearsal of both material and newly released cockpit. The owner approvals, purchase readiness and existing draft order consumers all use the stored original facts.",
+      "startedAt": "2026-11-24T10:58:19.921Z",
+      "endedAt": "2026-11-24T11:00:14.179Z",
+      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
+      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-acceptance-material-clock-evidence/nativeClock.log",
-      "logSha256": "57402bf17bab80da027b7ee7edbbc929d9685e433bf9c1b1d517d39a54a342a8",
-      "passed": 51,
+      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/nativeClock.log",
+      "logSha256": "7477c3f99f96292dac35c61cb6d7cd673aec03dd156e50c1622c7ff74179e635",
+      "passed": 59,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d2c5a61b638063a7c46734cdab3e21f6c438cd40a7bacf390ac708672fca929e"
+          "sha256": "ebacd2291ae33ab5d19d3d7d33351a14df7f8e819ea291246a1e1bbcaa48a78f"
         }
       ]
     },
     {
       "id": "clock-isolation",
       "kind": "tests",
-      "command": "node /tmp/dx-acceptance-material-clock-evidence/run.mjs clock",
+      "command": "node /tmp/dx-acceptance-material-clock-evidence/released-7edee419/run.mjs clock",
       "context": "Isolated guarded Acceptance clock through its own canonical configuration. Real signed HTTP scope and native clock transitions remain covered.",
-      "startedAt": "2026-11-24T10:29:15.664Z",
-      "endedAt": "2026-11-24T10:30:19.973Z",
-      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-      "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
+      "startedAt": "2026-11-24T10:58:19.929Z",
+      "endedAt": "2026-11-24T10:59:36.599Z",
+      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
+      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-acceptance-material-clock-evidence/clock.log",
-      "logSha256": "cb0a5eae73f83b86282dcc02392c4ac645024128391cb89bccb9c6f36a5c597b",
+      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/clock.log",
+      "logSha256": "9d6fbae9629b400278c8d926b6fcd2c1d17ddee78155846081ccb69806b5e3aa",
       "passed": 30,
       "failed": 0,
       "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2b0763b7d3d24e1deb92db9c0a66ea637894c418ca9ef78a02e055e7cba94fea"
+          "sha256": "49a83ec0916ee0e79180214e3fba3f9fcec6a74ebc54954384899bae2e299a6b"
         }
       ]
     },
@@ -120,13 +120,13 @@
       "kind": "command",
       "command": "npm run typecheck; scoped ESLint; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
       "context": "Repository Node 22 and npm 10. No deployment, database configuration, platform gate or framework change.",
-      "startedAt": "2026-11-24T10:29:15Z",
-      "endedAt": "2026-11-24T10:30:02Z",
-      "testedHead": "1bec37d99fe80f0940a9700a83e14a7709b362d4",
-      "sourceFingerprint": "0b5b1779fa34f3c7cbb851cf6b45e2624377878a1dd465c17c6792c515d474c9",
+      "startedAt": "2026-11-24T10:58:19Z",
+      "endedAt": "2026-11-24T10:59:09Z",
+      "testedHead": "fad8cd082b825a7f033695875ca276fce02d2905",
+      "sourceFingerprint": "ed2803812168016b6d0dc4c2b4023bb72bc2fd3160487cfca2c8a5fc1a487efa",
       "status": "passed",
       "exitCode": 0,
-      "log": "/tmp/dx-acceptance-material-clock-evidence/static.log",
+      "log": "/tmp/dx-acceptance-material-clock-evidence/released-7edee419/static.log",
       "logSha256": "33fd4540a192c4f441f6fd14a7c134d24142f97306ce7c1f7e0b6805fe5a0226"
     }
   ]
