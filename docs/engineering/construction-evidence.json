@@ -1,93 +1,197 @@
 {
   "version": 1,
-  "base": "9c73099c161972c3491fb4e90eec52f7f2caed1b",
-  "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
+  "risk": "full",
+  "base": "b3113e5c55b2b3bcbb79b53be8382161b9414688",
+  "sourceFingerprint": "b8399b1ae34c4deed432b3f71b8560c68348defd675c14d616162a8f3927ea8c",
   "rules": [
     {
-      "rule": "恰好六个财务岗位新增订单开裁只读；样衣财务不新增授权；保持裁床岗位和原安全投影",
-      "source": "Eric 已审定 dx-ui-finance-cutting-construction-plan-20261121.md 第6节",
+      "rule": "三个原有入口使用同一正式款号比较，同单不同明细即使不同颜色也不接受重复，代用号仍按原规则。",
+      "source": "用户《main 分支｜外发订单款号防重施工方案》第二节、第三节 3.1。",
+      "writes": [
+        "packages/contracts/src/sourcing-style-identity.ts",
+        "packages/contracts/src/sourcing.ts",
+        "apps/web/src/sourcing-submit-validation.ts",
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "tests/unit/sourcing-style-identity.test.ts"
+      ],
       "reads": [
-        "apps/api/src/cutting/cutting-source-service.ts#CuttingService",
-        "apps/api/src/cutting/cutting-routes.ts#registerCuttingRoutes",
-        "apps/web/src/cutting-access.ts#canAccessCutting",
-        "packages/contracts/src/cutting.ts#canUseCutting"
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/web/src/submission-feedback.tsx",
+        "packages/contracts/src/index.ts"
       ],
       "oldTests": [
-        "tests/unit/cutting-access.test.ts",
-        "tests/unit/cutting-source-contract.test.ts",
-        "tests/integration/pmc-readonly-postgres.test.ts",
+        "tests/unit/sourcing-style-identity.test.ts",
+        "tests/unit/sourcing-submit-validation.test.ts",
+        "tests/unit/sourcing-pr03-contract.test.ts",
+        "tests/integration/sourcing-routes.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/sourcing-style-identity.test.ts"
+      ],
+      "initialization": "保留创建和退回共用表单、草稿恢复和合同位置原审批后改号表单；编辑种子以真实正式字段载入。",
+      "dateAndPermission": "原日期区间、付款、页面权限和提交入口继续按既有逻辑；去空白和 ASCII 小写仅用于比较。",
+      "expectation": "重复立即显示指定行号，创建和退回提交及改号保存拦截；草稿保存仍可用。不同连字符与前导零仍有不同身份，同色旧混合防重继续。",
+      "checks": [
+        "contracts-and-ui",
+        "static",
+        "browser"
+      ]
+    },
+    {
+      "rule": "事务内拒绝同单重复；跨订单仍提示并要求原分批确认，原角色、合同和版本证据保留。",
+      "source": "用户《main 分支｜外发订单款号防重施工方案》3.2。",
+      "writes": [
+        "apps/api/src/sourcing/sourcing-service.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts"
       ],
-      "initialization": "新增 0234 继承 0232 开裁函数，低权限合成库从既有版本增量迁移并验证再执行；新鲜完整迁移和原授予数据独立核验",
-      "dateAndPermission": "当前会话角色与 capability、单纯样衣财务拒绝、多角色并集和失权失效；预览缩略下载保持真实裁床关联",
-      "expectation": "逐个六岗可用原开裁列表、详情和绑定裁床照片，拒所有写和无关图片。PMC、仓库主管、Root 和纯跟单原权限保持",
-      "writes": [
-        "apps/api/migrations/0234_finance_cutting_readonly.sql",
-        "apps/api/src/cutting/cutting-routes.ts",
-        "apps/api/src/cutting/cutting-source-service.ts",
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/tools/attachments.ts",
-        "docs/requirements/platform-permission-golden-source-v1.0.md",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "packages/contracts/src/cutting.ts",
-        "scripts/deploy/main-maintenance-plans.json",
-        "tests/integration/pmc-readonly-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/cutting-access.test.ts",
-        "tests/unit/cutting-source-contract.test.ts"
+      "reads": [
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/api/src/tools/repositories.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts"
       ],
+      "oldTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/sourcing-routes.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "initialization": "沿用原订单事务锁、已授权操作事件、按款号排序的锁和请求幂等，不回填历史。",
+      "dateAndPermission": "按当前可修改角色、实际快照及版本执行写入，保持原交期、数量、合同图和价格。",
+      "expectation": "三路径重复即使带确认标识也拒绝，跨单确认仍可保存并审计，修正后可继续。退回后的新增款色可按当前范围改号。",
       "checks": [
-        "finance-unit",
-        "finance-pg"
+        "sourcing-postgres",
+        "contracts-and-ui"
+      ]
+    },
+    {
+      "rule": "0235 仅限制新增明细、改号和退回后提交，对原生数据库写入补齐同单正式号防重。",
+      "source": "用户《main 分支｜外发订单款号防重施工方案》3.3 及 AGENTS.md 主分支维护契约。",
+      "writes": [
+        "apps/api/migrations/0235_sourcing_formal_style_uniqueness.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/main-maintenance-plans.json"
+      ],
+      "reads": [
+        "apps/api/migrations/0196_sourcing_style_duplicate_guards.sql",
+        "apps/api/migrations/0206_sourcing_merchandiser_corrections.sql",
+        "scripts/deploy/check-main-maintenance-plan.mjs"
+      ],
+      "oldTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/current-migration-manifest-checksum.test.ts",
+        "tests/unit/main-maintenance-plan.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "initialization": "追加原触发器逻辑和退回明细防重，保持旧迁移文件，登记精确哈希和候选维护计划。",
+      "dateAndPermission": "原订单行锁与授权审计校验保留。维护计划要求原函数所有权及新触发器权限；现场安装和升级由部署方另行核。",
+      "expectation": "在完整旧版本库留下异色同号历史，应用 0235 后原行和批准快照不变，可追加修订。直接写三张表按新规则拒绝，修订按当前有效明细和颜色检查。",
+      "checks": [
+        "sourcing-postgres",
+        "historical-upgrade",
+        "contracts-and-ui"
       ]
     }
   ],
   "checks": [
     {
-      "id": "finance-unit",
-      "command": "vitest cutting-access cutting-source-contract current-migration-manifest-checksum",
-      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
-      "kind": "tests",
+      "id": "contracts-and-ui",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sourcing- tests/integration/sourcing-routes.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/main-maintenance-plan.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-sourcing-formal-evidence/unit.json",
+      "context": "Node 22, repository default Vitest config. Existing sourcing frontend, route, assertion and maintenance coverage alongside request schema regressions.",
+      "testedHead": "b3113e5c55b2b3bcbb79b53be8382161b9414688",
+      "sourceFingerprint": "b8399b1ae34c4deed432b3f71b8560c68348defd675c14d616162a8f3927ea8c",
+      "startedAt": "2026-11-24T13:24:24Z",
+      "endedAt": "2026-11-24T13:24:46Z",
       "status": "passed",
       "exitCode": 0,
-      "log": "/dev/shm/dx-finance.IUos5D/d-unit.json",
-      "logSha256": "50066f60bc21f8fbff7b1de6c5edaa44b5e3029fa4183677e17fe8becf6b2c8c",
-      "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
-      "testedHead": "b60fb508112735f74cc86728d0225c4fd7e04037",
-      "passed": 9,
+      "log": "/tmp/dx-sourcing-formal-evidence/unit.log",
+      "logSha256": "3bdbbe78e04bf9b3d9256ac3697afac0dbde6594a58f45de71e547a86210a921",
+      "kind": "tests",
+      "passed": 385,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T04:20:45.401000Z",
-      "endedAt": "2026-11-21T04:20:46.640609Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "50066f60bc21f8fbff7b1de6c5edaa44b5e3029fa4183677e17fe8becf6b2c8c"
+          "sha256": "28fd1bbc45ec467f1df558c38f626881c04e6be72d1d33cc08950e2f4425195a"
         }
       ]
     },
     {
-      "id": "finance-pg",
-      "command": "PG13.23 full sourcing-pr03 and pmc-readonly PostgreSQL files, real auth and original HTTP",
-      "context": "Node 22.22.2 locked dependencies; isolated checkout and application fixture",
-      "kind": "tests",
+      "id": "sourcing-postgres",
+      "command": "node /tmp/dx-sourcing-formal-evidence/run-pg.mjs",
+      "context": "Main canonical business-chain Vitest config with the guarded loopback PostgreSQL 16.14 test database, application role from the CI setup, operation roles and real SQL guards. Owned schema cleanup passed.",
+      "testedHead": "b3113e5c55b2b3bcbb79b53be8382161b9414688",
+      "sourceFingerprint": "b8399b1ae34c4deed432b3f71b8560c68348defd675c14d616162a8f3927ea8c",
+      "startedAt": "2026-11-24T13:24:24Z",
+      "endedAt": "2026-11-24T13:25:09Z",
       "status": "passed",
       "exitCode": 0,
-      "log": "/dev/shm/dx-finance.IUos5D/d-all-pg.json",
-      "logSha256": "fecb867f4c63759e347253145ecc7ce17a5f282099a156772261534102c83141",
-      "sourceFingerprint": "ff1d7849842729c32dddab5ff48d2bf261d05782aaf6bc16b2f81f131fc1c82c",
-      "testedHead": "b60fb508112735f74cc86728d0225c4fd7e04037",
-      "passed": 98,
+      "log": "/tmp/dx-sourcing-formal-evidence/postgres.log",
+      "logSha256": "4b12153282b130db33e561ea57c5ff1e2483356c2188b19049aa9fb7f5bcc234",
+      "kind": "tests",
+      "passed": 92,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-21T04:20:47.966000Z",
-      "endedAt": "2026-11-21T04:21:38.477580Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fecb867f4c63759e347253145ecc7ce17a5f282099a156772261534102c83141"
+          "sha256": "e0d888fd6b3881c764d021f523befa0f345d64fa22f447f9cc8b778c89c19fb3"
         }
       ]
+    },
+    {
+      "id": "historical-upgrade",
+      "command": "node /tmp/dx-sourcing-formal-evidence/run-upgrade.mjs sourcing-formal-upgrade-local",
+      "context": "Detached exact production base with baseline service and complete 0234 manifest, then actual 0235 SQL from candidate in an isolated owned schema; selected one upgrade probe, all other cases intentionally excluded.",
+      "testedHead": "b3113e5c55b2b3bcbb79b53be8382161b9414688",
+      "sourceFingerprint": "b8399b1ae34c4deed432b3f71b8560c68348defd675c14d616162a8f3927ea8c",
+      "startedAt": "2026-11-24T13:26:04Z",
+      "endedAt": "2026-11-24T13:26:07Z",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-sourcing-formal-evidence/upgrade.log",
+      "logSha256": "af00f88bdb45bc351a879a6dba649181f55dc6929e23dabfaa14b669a5f66cde",
+      "kind": "tests",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 91,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e19ff7ef2877110afa45db09452ad02b157877c25ab8f278a1977b43fdbab32c"
+        }
+      ]
+    },
+    {
+      "id": "static",
+      "command": "npm run typecheck && npm run lint && git diff --check && npm run build --workspace @dx-rework/web",
+      "context": "Node 22 with packages constructed from the main lock file. Ran all workspace typecheck, ESLint and production web build.",
+      "testedHead": "b3113e5c55b2b3bcbb79b53be8382161b9414688",
+      "sourceFingerprint": "b8399b1ae34c4deed432b3f71b8560c68348defd675c14d616162a8f3927ea8c",
+      "startedAt": "2026-11-24T13:24:24Z",
+      "endedAt": "2026-11-24T13:24:59Z",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-sourcing-formal-evidence/static.log",
+      "logSha256": "6bd4c1eeb6810597dc5a5cc8da9974a9eb89cc6cbd939f97c7279952cebf137b",
+      "kind": "command"
+    },
+    {
+      "id": "browser",
+      "command": "NODE_ENV=production node /tmp/dx-sourcing-formal-evidence/browser.mjs",
+      "context": "Actual sourcing create, correction and approved style form components in isolated Chromium at 1165 x 747, with synthetic role and order responses. No site access or external write.",
+      "testedHead": "b3113e5c55b2b3bcbb79b53be8382161b9414688",
+      "sourceFingerprint": "b8399b1ae34c4deed432b3f71b8560c68348defd675c14d616162a8f3927ea8c",
+      "startedAt": "2026-11-24T13:26:30Z",
+      "endedAt": "2026-11-24T13:26:33Z",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-sourcing-formal-evidence/browser.log",
+      "logSha256": "25a54cb0c89a9e312a6f8d4c3df6cdc90aefacdbac775cfd504d36203312eb69",
+      "kind": "command"
     }
   ]
 }

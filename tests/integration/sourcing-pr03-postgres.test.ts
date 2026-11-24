@@ -2468,7 +2468,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(JSON.stringify(snapshot)).not.toMatch(/987\.65|IMAGE-INTERNAL-CUT|cuttingProcess|daxing/);
     await service.reviseStyles(merchandiserActor(), id, { expectedRevision: 0, lines: [
       { position: 1, styleNo: "FINAL-PIC-A", alternateStyleNo: "PIC-A" },
-      { position: 2, styleNo: "FINAL-PIC-A", alternateStyleNo: "PIC-A" },
+      { position: 2, styleNo: "FINAL-PIC-A-02", alternateStyleNo: "PIC-A" },
       { position: 3, styleNo: "FINAL-PIC-B", alternateStyleNo: null },
     ] }, randomUUID());
     const revised = (await contractService.getCurrent(readerActor(), id)).item!;
@@ -2476,7 +2476,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(revised.pdfAttachmentId).not.toBe(original.pdfAttachmentId);
     const updated = (await database.query(query, [revised.sourcingContractDocumentId])).rows[0]!.approval_snapshot;
     expect(updated.lines.map((line: { imageAttachmentId: string }) => line.imageAttachmentId)).toEqual(snapshot.lines.map((line: { imageAttachmentId: string }) => line.imageAttachmentId));
-    expect(updated.lines.map((line: { styleNo: string }) => line.styleNo)).toEqual(["FINAL-PIC-A", "FINAL-PIC-A", "FINAL-PIC-B"]);
+    expect(updated.lines.map((line: { styleNo: string }) => line.styleNo)).toEqual(["FINAL-PIC-A", "FINAL-PIC-A-02", "FINAL-PIC-B"]);
     expect(updated.totalAmount).toBe(snapshot.totalAmount);
     await expect(database.query("UPDATE sourcing_case_lines SET image_attachment_id=$2 WHERE sourcing_case_id=$1", [id, imageIds[1]])).rejects.toBeDefined();
   });
@@ -2645,16 +2645,23 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(database.query("UPDATE sourcing_contract_documents SET identity_version=99 WHERE sourcing_case_id=$1",[id])).rejects.toBeDefined();
   });
 
-  it("checks formal/alternate duplicates, permits colors and audits confirmed repeat orders", async () => {
+  it("blocks repeated formal styles across colors and audits confirmed repeat orders", async () => {
     const input={gender:"男装" as const,styleName:"查重测试",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-10",
       lineItems:[{styleNo:"DUP-GUARD-A",alternateStyleNo:"TEMP-DUP-GUARD",color:"黑",quantity:5},
-        {styleNo:"DUP-GUARD-A",alternateStyleNo:"TEMP-DUP-GUARD",color:"白",quantity:7}],daxingUnitPrice:"7.00",attachmentIds:[]};
+        {styleNo:"DUP-GUARD-B",alternateStyleNo:"TEMP-DUP-GUARD",color:"白",quantity:7}],daxingUnitPrice:"7.00",attachmentIds:[]};
+    const duplicateMessage="第1行与第2行正式款号重复，请核对后修改。";
+    const creationKey=randomUUID();
+    await expect(service.createCase(merchandiserActor(),{...input,confirmedDuplicateStyles:["DUP-GUARD-A"],
+      lineItems:[input.lineItems[0]!,{...input.lineItems[1]!,styleNo:"\t dup-guard-a \u00a0"}]},creationKey))
+      .rejects.toMatchObject({statusCode:400,message:duplicateMessage});
     await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map(line => ({...line,color:"黑"}))},randomUUID()))
       .rejects.toMatchObject({statusCode:400,message:expect.stringContaining("第 1 行与第 2 行")});
-    const original=await service.createCase(merchandiserActor(),input,randomUUID());
+    const original=await service.createCase(merchandiserActor(),input,creationKey);
     const id=original.value.sourcingCaseId;
     await expect(database.query(`INSERT INTO sourcing_case_lines(sourcing_case_id,position,style_no,color,quantity)
-      VALUES($1,3,' dup-guard-a ','黑',1)`,[id])).rejects.toMatchObject({code:"23505",message:expect.stringContaining("duplicate style identity")});
+      VALUES($1,3,$2,'绿',1)`,[id,"\t DUP-guard-a \u00a0"])).rejects.toMatchObject({code:"23505",message:expect.stringContaining("duplicate formal style number")});
+    await expect(database.query(`INSERT INTO sourcing_case_lines(sourcing_case_id,position,style_no,color,quantity)
+      VALUES($1,3,' temp-dup-guard ','黑',1)`,[id])).rejects.toMatchObject({code:"23505",message:expect.stringContaining("duplicate style identity")});
     const repeat={...input,lineItems:[{styleNo:"NEW-DUP-GUARD",alternateStyleNo:"temp-dup-guard",color:"蓝",quantity:3}]};
     const key=randomUUID();
     await expect(service.createCase(merchandiserActor(),repeat,key)).rejects.toMatchObject({code:"STYLE_NUMBER_EXISTS"});
@@ -2667,7 +2674,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.quoteIePrice(ieActor(),id,{linePrices},randomUUID());
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices},randomUUID());
     await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
-    await service.reviseStyles(managerActor(),id,{expectedRevision:0,lines:[1,2].map(position=>({position,styleNo:"FINAL-DUP-GUARD",alternateStyleNo:null}))},randomUUID());
+    const revisionKey=randomUUID();
+    const lines=[1,2].map(position=>({position,styleNo:position===1?"FINAL-DUP-GUARD":" final-dup-guard ",alternateStyleNo:null}));
+    await expect(service.reviseStyles(managerActor(),id,{expectedRevision:0,lines,confirmedDuplicateStyles:["FINAL-DUP-GUARD"]},revisionKey))
+      .rejects.toMatchObject({statusCode:400,message:duplicateMessage});
+    await expect(database.query(`INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id)
+      VALUES($1,1,$2::jsonb,$3,$4,'test-duplicate')`,[id,JSON.stringify(lines),managerId,randomUUID()]))
+      .rejects.toMatchObject({code:"23505",message:expect.stringContaining("duplicate formal style number")});
+    expect((await contractService.getCurrent(readerActor(),id)).item!.contractVersion).toBe(1);
+    await service.reviseStyles(managerActor(),id,{expectedRevision:0,lines:[lines[0]!,{...lines[1]!,styleNo:"FINAL-DUP-GUARD-02"}]},revisionKey);
     await expect(service.createCase(merchandiserActor(),{...input,lineItems:[{styleNo:"dup-guard-a",color:"绿",quantity:1}]},randomUUID()))
       .rejects.toMatchObject({code:"STYLE_NUMBER_EXISTS"});
   });
@@ -2878,6 +2893,47 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(approved.value.approvalSnapshot?.quantity).toBe(120);
     expect(approved.value.createdAt).toBe(created.value.createdAt);
     await expect(service.returnToMerchandiser(ownerActor(),id,{expectedVersion:approved.value.version,reason:"不能直接改批准事实"},randomUUID())).rejects.toThrow();
+  });
+
+  it("checks the full returned correction and revises the corrected positions and colors after approval", async () => {
+    const image = await readyCuttingSheet(merchandiserId);
+    const facts = {gender:"男装" as const, styleName:"退回后核对多款", estimatedCutPieceSendDate:"2026-10-01",
+      deliveryDate:"2026-10-12", attachmentIds:[image]};
+    const original = await service.createCase(merchandiserActor(), {...facts, daxingUnitPrice:"7",
+      lineItems:[{styleNo:"CORR-001",color:"白",quantity:770}]}, randomUUID());
+    const id = original.value.sourcingCaseId;
+    const returned = await service.returnToMerchandiser(ownerActor(), id, {expectedVersion:original.value.version, reason:"补款色明细"}, randomUUID());
+    const correction = {...facts, expectedVersion:returned.value.version, reason:"核对正式款号",
+      lineItems:[{styleNo:"CORR-001",color:"白",quantity:770},{styleNo:" corr-001 ",color:"黑",quantity:600}]};
+    const correctionKey = randomUUID();
+    await expect(service.correctCase(merchandiserActor(), id, {...correction,confirmedDuplicateStyles:["CORR-001"]}, correctionKey))
+      .rejects.toMatchObject({statusCode:400,message:"第1行与第2行正式款号重复，请核对后修改。"});
+    await expect(database.query(`INSERT INTO sourcing_case_corrections(sourcing_case_id,lines) VALUES($1,$2::jsonb)`,
+      [id,JSON.stringify(correction.lineItems)])).rejects.toMatchObject({code:"23505",message:expect.stringContaining("duplicate formal style number")});
+    expect((await service.getCase(readerActor(),id)).version).toBe(returned.value.version);
+    const updated = await service.correctCase(merchandiserActor(), id, {...correction,lineItems:[correction.lineItems[0]!,
+      {styleNo:"CORR-002",color:"黑",quantity:600},{styleNo:"CORR-003",color:"黑",quantity:30}]}, correctionKey);
+    expect(updated.value.lineItems.map(line=>[line.position,line.formalStyleNo,line.color,line.quantity]))
+      .toEqual([[1,"CORR-001","白",770],[2,"CORR-002","黑",600],[3,"CORR-003","黑",30]]);
+    const linePrices = updated.value.lineItems.map(line=>({position:line.position,unitPrice:"8.5"}));
+    await service.quoteIePrice(ieActor(),id,{linePrices},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices},randomUUID());
+    const approved = await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const revision = {expectedRevision:0,lines:[
+      {position:1,styleNo:"CORR-001",alternateStyleNo:null},
+      {position:2,styleNo:"CORR-002",alternateStyleNo:null},
+      {position:3,styleNo:"CORR-003-01",alternateStyleNo:"corr-002"},
+    ]};
+    await expect(database.query(`INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id)
+      VALUES($1,1,$2::jsonb,$3,$4,'test-duplicate')`,[id,JSON.stringify(revision.lines),managerId,randomUUID()]))
+      .rejects.toMatchObject({code:"23505",message:expect.stringContaining("duplicate revised style identity")});
+    await expect(service.reviseStyles(managerActor(),id,revision,randomUUID())).rejects.toMatchObject({statusCode:400});
+    const saved = await service.reviseStyles(managerActor(),id,{...revision,lines:revision.lines.map(line=>({...line,alternateStyleNo:null}))},randomUUID());
+    expect(saved.value.identityRevision).toBe(1);
+    expect(saved.value.approvalSnapshot).toEqual(approved.value.approvalSnapshot);
+    expect(saved.value.lineItems.map(line=>[line.formalStyleNo,line.quantity])).toEqual([["CORR-001",770],["CORR-002",600],["CORR-003-01",30]]);
+    const historical = await service.nodeHistory(readerActor(),id,"created",id);
+    expect(historical.item.lineItems.map(line=>[line.styleNo,line.quantity])).toEqual([["CORR-001",770]]);
   });
 
 
@@ -4890,7 +4946,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-22",
         lineItems: [
           { styleNo: `SUMMARY-PAGE-${index}`, color: "蓝", quantity: 40 },
-          { styleNo: `SUMMARY-PAGE-${index}`, color: "白", quantity: 60 + index },
+          { styleNo: `SUMMARY-PAGE-${index}-02`, color: "白", quantity: 60 + index },
         ], daxingUnitPrice: "8", attachmentIds: [],
       }, randomUUID());
     }

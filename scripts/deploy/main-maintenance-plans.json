@@ -204,5 +204,21 @@
     "languages": ["plpgsql"],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0235_sourcing_formal_style_uniqueness",
+    "checksum": "0590b9ff496a30fc6cfa4f325bec37c92acc8ae7997d7170ba308e7592e788fd",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [],
+    "triggerTables": ["public.sourcing_case_corrections"],
+    "schema": "public",
+    "functions": [
+      "public.guard_sourcing_line_duplicate()",
+      "public.guard_sourcing_revision_duplicate()",
+      "public.guard_sourcing_style_revision()"
+    ],
+    "languages": ["sql", "plpgsql"],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]

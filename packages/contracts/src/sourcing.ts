@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ContractContentSchema } from "./contract-management.js";
-import { duplicateSourcingLineMessage } from "./sourcing-style-identity.js";
+import { findDuplicateSourcingFormalStyle, findDuplicateSourcingLine } from "./sourcing-style-identity.js";
 
 const IdSchema = z.string().uuid();
 const ShortTextSchema = z.string().trim().min(1).max(100);
@@ -104,7 +104,11 @@ export const ReviseSourcingStylesSchema = z.object({
     alternateStyleNo: ShortTextSchema.nullable(),
   }).strict().refine(line => !!line.styleNo || !!line.alternateStyleNo, "正式款号与代用款号至少填写一个"))
     .min(1).max(MAX_SOURCING_LINE_ITEMS)
-    .refine(lines => new Set(lines.map(line => line.position)).size === lines.length, "款色行不能重复"),
+    .refine(lines => new Set(lines.map(line => line.position)).size === lines.length, "款色行不能重复")
+    .superRefine((lines, context) => {
+      const duplicate = findDuplicateSourcingFormalStyle(lines);
+      if (duplicate) context.addIssue({ code: z.ZodIssueCode.custom, message: duplicate.message, path: [duplicate.index, "styleNo"] });
+    }),
 }).strict();
 export type ReviseSourcingStyles = z.infer<typeof ReviseSourcingStylesSchema>;
 
@@ -127,8 +131,8 @@ const SourcingCaseInputSchema = z.object({
   deliveryDate: BusinessDateSchema,
   lineItems: z.array(SourcingCaseLineInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
     .superRefine((lines, context) => {
-      const duplicate = duplicateSourcingLineMessage(lines);
-      if (duplicate) context.addIssue({ code: z.ZodIssueCode.custom, message: duplicate });
+      const duplicate = findDuplicateSourcingLine(lines);
+      if (duplicate) context.addIssue({ code: z.ZodIssueCode.custom, message: duplicate.message, path: [duplicate.index] });
       try {
         calculateSourcingOrderQuantity(lines);
       } catch (error) {

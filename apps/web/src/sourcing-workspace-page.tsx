@@ -39,6 +39,7 @@ import {
   SourcingTimelineResponseSchema,
   UploadIntentResponseSchema,
   duplicateSourcingLineMessage,
+  findDuplicateSourcingLine,
   sourcingStyleNumbers,
   type SourcingStyleIdentity,
   calculateSourcingTotalExact,
@@ -92,7 +93,7 @@ import { SourcingBudgetPriceCorrectionDialog } from "./sourcing-budget-price-cor
 import { alertInApp, confirmInApp } from "./system-dialog.js";
 import { SubmissionFeedback, useSubmissionFeedback } from "./submission-feedback.js";
 import { SubmissionCancelled, SubmissionRequestError } from "./submission-validation.js";
-import { validateSourcingCreate, validateSourcingDecision, validateSourcingPrices } from "./sourcing-submit-validation.js";
+import { sourcingCreateDuplicateIssue, validateSourcingCreate, validateSourcingDecision, validateSourcingPrices } from "./sourcing-submit-validation.js";
 import "./rework-detail.css";
 import "./rework-detail-compact.css";
 import "./sourcing-workspace.css";
@@ -488,7 +489,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const [estimatedCutPieceSendDate, setEstimatedCutPieceSendDate] = useState(correction?.item.estimatedCutPieceSendDate ?? "");
   const [deliveryDate, setDeliveryDate] = useState(correction?.item.deliveryDate ?? "");
   const [lineItems, setLineItems] = useState<SourcingLineDraft[]>(correction ? correction.item.lineItems.map(line => ({
-    styleNo:line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo ?? "", alternateStyleNo:line.alternateStyleNo ?? "",
+    styleNo:line.formalStyleNo ?? "", alternateStyleNo:line.alternateStyleNo ?? "",
     color:line.color ?? "", quantity:String(line.quantity), ...(line.imageAttachmentId ? {imageAttachmentId:line.imageAttachmentId} : {}),
   })) : [{
     styleNo: "",
@@ -509,7 +510,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const previewUrls = useRef<string[]>([]);
   const restoredDraftUserId = useRef("");
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
-  const duplicateLinesMessage = duplicateSourcingLineMessage(lineItems);
+  const duplicateLine = sourcingCreateDuplicateIssue(lineItems);
 
   useEffect(() => {
     if (!canCreate) return;
@@ -808,7 +809,9 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
             <div className="sourcing-line-editor__list">
               {lineItems.map((line, index) => <article className="sourcing-line-row" key={index}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
-                <label><span>正式款号</span><input {...feedback.field(`sourcing-create-style-${index}`)} value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
+                <label><span>正式款号</span><input {...feedback.field(`sourcing-create-style-${index}`)}
+                  {...(duplicateLine?.fieldId === `sourcing-create-style-${index}` ? { "aria-invalid": true, "aria-describedby": "sourcing-create-duplicate-style" } : {})}
+                  value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
                 <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
                 <label><span>颜色</span><input {...feedback.field(`sourcing-create-color-${index}`)} value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
                 <label><span>数量</span><input {...feedback.field(`sourcing-create-quantity-${index}`)} value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
@@ -849,11 +852,11 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
         </section>
         {correction ? <label className="sourcing-form-wide"><span>修改说明（必填）</span><textarea {...feedback.field("sourcing-correction-reason")} value={correctionReason} maxLength={500} onChange={event=>{setCorrectionReason(event.target.value);createKey.current=null;}} /></label> : null}
         <div className="sourcing-submit-row">
-          {duplicateLinesMessage || message ? <p role="status">{duplicateLinesMessage ?? message}</p> : null}
+          {duplicateLine || message ? <p id={duplicateLine ? "sourcing-create-duplicate-style" : undefined} role="status">{duplicateLine?.message ?? message}</p> : null}
           {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <ActionBar className="sourcing-create-actions">
             {!correction ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button> : null}
-            <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate} onClick={() => void createOrder()}>
+            <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate || !!duplicateLine} onClick={() => void createOrder()}>
               {busy ? "正在提交…" : "提交并进入审批"}
             </button>
           </ActionBar>
@@ -1497,7 +1500,8 @@ function OrderDetailPage({
     catch(error){if(error instanceof SourcingRequestError&&error.status===403){setContractPendingSubmission(null);setContractReturn(current=>current?{...current,canUpload:false}:current);setContractReturnError("回传权限已撤销或订单已转厂，当前页面无法确认保存结果。请由管理员核对订单记录。");}else if(!releaseSupersededContractReturn(error))setContractReturnError(`回签保存结果尚未确认：${error instanceof Error?error.message:"请求失败"}。可使用原请求再次核对。`);}
     finally {contractUploadGuard.current=false;setContractUploading(false);setContractUploadStage(null);}
   };
-  const styleDuplicateMessage = duplicateSourcingLineMessage(styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color})));
+  const styleLines = styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color}));
+  const duplicateStyleEdit = findDuplicateSourcingLine(styleLines);
   const submitReturn = async (reason:string):Promise<void> => {
     if (!item || busy) return;
     setBusy(true);setReturnError("");
@@ -1534,13 +1538,13 @@ function OrderDetailPage({
   };
 
   const saveStyles = async (): Promise<void> => {
-    if (!item || busy || !canEditStyles) return;
+    if (!item || busy || !canEditStyles || duplicateStyleEdit) return;
     if (styleEdits.some(line => !line.styleNo.trim() && !line.alternateStyleNo.trim())) {setMessage("每行须填写正式款号或代用款号");return;}
     setBusy(true);
     const key=styleEditKey.current ?? createClientRequestId();styleEditKey.current=key;
     try {
       await requestWithStyleCheck(`sourcing/cases/${sourcingCaseId}/styles`,SourcingCaseSummarySchema,{method:"POST",headers:{"idempotency-key":key},
-        body:JSON.stringify({expectedRevision:styleEditRevision,lines:styleEdits.map(line=>({position:line.position,styleNo:line.styleNo.trim()||null,alternateStyleNo:line.alternateStyleNo.trim()||null}))})},styleEdits.map(line => ({...line,color:item.lineItems.find(row => row.position===line.position)?.color})));
+        body:JSON.stringify({expectedRevision:styleEditRevision,lines:styleEdits.map(line=>({position:line.position,styleNo:line.styleNo.trim()||null,alternateStyleNo:line.alternateStyleNo.trim()||null}))})},styleLines);
       setEditingStyles(false);styleEditKey.current=null;
       await load();setMessage("款号已保存；已生成的合同将保留旧版，并更新当前下载版本。");
     } catch(error) {setMessage(error instanceof Error ? error.message : "款号保存失败");}
@@ -1992,7 +1996,7 @@ function OrderDetailPage({
                 <div><dt>合同版本</dt><dd>V{contract.contractVersion} · 模板 V{contract.templateVersion}</dd></div>
               </dl>
               {contract.status === "ready" && contract.pdfAttachmentId && canReadContractData ? <div className="sourcing-contract-bar__actions"><a className="dx-button dx-button--primary" href={attachmentUrl(contract.pdfAttachmentId, "preview")} target="_blank" rel="noreferrer">预览合同 PDF</a><a className="dx-button dx-button--secondary" href={attachmentUrl(contract.pdfAttachmentId, "download")} target="_blank" rel="noreferrer">下载合同</a>{contract.canRefreshInformation ? <ContractInformationRefresh key={contract.sourcingContractDocumentId} caseId={item.sourcingCaseId} disabled={busy} canEditContent={contract.canEditContent === true} onUpdated={load} /> : null}{canEditStyles ? <button className="dx-button dx-button--secondary" type="button" disabled={busy} onClick={() => {
-          setStyleEdits(item.lineItems.map(line => ({position:line.position,styleNo:(line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo) ?? "",alternateStyleNo:line.alternateStyleNo ?? ""})));
+          setStyleEdits(item.lineItems.map(line => ({position:line.position,styleNo:line.formalStyleNo ?? "",alternateStyleNo:line.alternateStyleNo ?? ""})));
           setStyleEditRevision(item.identityRevision ?? 0);styleEditKey.current=null;setEditingStyles(true);
         }}>修改款号</button> : null}</div> : null}
               {contractReturn?.contractReturnMonitoring ? <>
@@ -2033,13 +2037,15 @@ function OrderDetailPage({
                 </details>
               </> : null}
               {editingStyles && canEditStyles ? <form className="sourcing-style-editor" onSubmit={event=>{event.preventDefault();void saveStyles();}}>
-                {styleDuplicateMessage ? <p role="alert">{styleDuplicateMessage}</p> : null}
+                {duplicateStyleEdit ? <p id="sourcing-revise-duplicate-style" role="alert">{duplicateStyleEdit.message}</p> : null}
         {styleEdits.map((line,index)=><div className="sourcing-style-editor__row" key={line.position}>
           <strong>{item.lineItems[index]?.color ?? "款色"} · {formatBusinessDecimal(item.lineItems[index]?.quantity ?? 0)} 件</strong>
-          <label><span>正式款号</span><input maxLength={100} value={line.styleNo} onChange={event=>{setStyleEdits(current=>current.map(row=>row.position===line.position?{...row,styleNo:event.target.value}:row));styleEditKey.current=null;}} /></label>
+          <label><span>正式款号</span><input maxLength={100} value={line.styleNo}
+            aria-invalid={duplicateStyleEdit?.index === index || undefined} aria-describedby={duplicateStyleEdit?.index === index ? "sourcing-revise-duplicate-style" : undefined}
+            onChange={event=>{setStyleEdits(current=>current.map(row=>row.position===line.position?{...row,styleNo:event.target.value}:row));styleEditKey.current=null;}} /></label>
           <label><span>代用款号</span><input maxLength={100} value={line.alternateStyleNo} onChange={event=>{setStyleEdits(current=>current.map(row=>row.position===line.position?{...row,alternateStyleNo:event.target.value}:row));styleEditKey.current=null;}} /></label>
         </div>)}
-        <div className="sourcing-style-editor__actions"><button className="dx-button" disabled={busy || !!styleDuplicateMessage} type="submit">保存款号</button><button className="dx-button dx-button--secondary" disabled={busy} type="button" onClick={()=>setEditingStyles(false)}>取消</button></div>
+        <div className="sourcing-style-editor__actions"><button className="dx-button" disabled={busy || !!duplicateStyleEdit} type="submit">保存款号</button><button className="dx-button dx-button--secondary" disabled={busy} type="button" onClick={()=>setEditingStyles(false)}>取消</button></div>
       </form> : null}
               <div className="sourcing-contract-bar__actions" aria-label="正式派单">
                 {dispatchState.item ? <StatusBadge tone="success">{dispatchState.item.status === "shipped" ? "已发货" : dispatchState.item.status === "production_completed" ? "生产完成" : "已派单 · 生产中"}</StatusBadge>
