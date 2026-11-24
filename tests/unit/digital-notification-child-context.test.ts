@@ -19,14 +19,18 @@ describe("digital notification delegates exact child scope to existing readers",
     const route:TodoRouteDescriptor={routeName,entityId:bound?randomUUID():child,todoId,...(bound?{reworkOrderId:child}:{})};
     const row={todo_type:"business_action",required_role:"order_merchandiser",required_capability:"sourcing:view",entity_type:production?"sourcing_production_order":"rework_order",entity_id:child,route_descriptor:route};
     let boundChild:string|null=child;
-    const query=vi.fn(async(sql:string)=>{
+    const query=vi.fn(async(sql:string,args?:readonly unknown[])=>{
       if(sql.includes("FROM digital_production_notification_events e JOIN"))return {rows:[{event_id:eventId,todo_id:todoId,event_kind:"ready",created_at:new Date()}],rowCount:1};
       if(sql.includes("array_agg(DISTINCT r.role_code)"))return {rows:[{id:actor.actorId,roles:actor.actorRoles}],rowCount:1};
       if(sql.startsWith("SELECT * FROM rework_todos"))return {rows:[row],rowCount:1};
       if(sql.includes("to_regclass('digital_production_child_links')"))return {rows:[{relation:"digital_production_child_links"}],rowCount:1};
       if(sql.includes("SELECT l.production_order_id"))return {rows:[{production_order_id:mother}],rowCount:1};
       if(sql.startsWith("SELECT 1 FROM digital_production_resource_lifecycle"))return {rows:[],rowCount:0};
-      if(sql.startsWith("SELECT design_style_no"))return {rows:[{design_style_no:"TEST-AUTHORIZED-MOTHER",production_order_id:mother}],rowCount:1};
+      if(sql.startsWith("SELECT o.design_style_no,o.production_order_id,o.source_id,row_to_json(s) AS number_source")
+        &&sql.endsWith("FROM digital_production_orders o LEFT JOIN digital_production_sources s USING(source_id) WHERE o.production_order_id=$1")){
+        expect(args).toEqual([mother]);
+        return {rows:[{design_style_no:"TEST-AUTHORIZED-MOTHER",production_order_id:mother,source_id:null,number_source:null}],rowCount:1};
+      }
       if(sql.startsWith("SELECT po_number,color"))return {rows:[],rowCount:0};
       if(sql.startsWith("SELECT rework_order_id FROM"))return {rows:boundChild?[{rework_order_id:boundChild}]:[],rowCount:boundChild?1:0};
       if(sql.startsWith("UPDATE digital_production_notification_receipts"))return {rows:[],rowCount:1};

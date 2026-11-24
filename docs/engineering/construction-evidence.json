@@ -2,7 +2,7 @@
   "version": 1,
   "base": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
   "risk": "full",
-  "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
+  "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
   "rules": [
     {
       "rule": "原开发来源从无号保留到一次性绑定并使用可追溯的原子流水。",
@@ -37,6 +37,7 @@
       "checks": [
         "pg",
         "browser",
+        "non-db",
         "preflight",
         "lint",
         "types"
@@ -63,7 +64,8 @@
       ],
       "oldTests": [
         "tests/integration/r5-settings-native-browser-postgres.test.ts",
-        "tests/integration/order-time-settings-postgres.test.ts"
+        "tests/integration/order-time-settings-postgres.test.ts",
+        "tests/unit/client-request-id.test.ts"
       ],
       "newTests": [
         "tests/integration/r5-settings-native-browser-postgres.test.ts",
@@ -75,6 +77,7 @@
       "checks": [
         "pg",
         "browser",
+        "non-db",
         "preflight",
         "lint",
         "types"
@@ -92,7 +95,8 @@
         "apps/web/src/digital-designer-workspace.tsx",
         "apps/web/src/digital-notification-toast.tsx",
         "apps/web/src/digital-production-workspaces.tsx",
-        "packages/contracts/src/digital-production-notifications.ts"
+        "packages/contracts/src/digital-production-notifications.ts",
+        "tests/unit/digital-notification-child-context.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-selection-query.ts",
@@ -104,7 +108,8 @@
       "oldTests": [
         "tests/integration/digital-journey-postgres.test.ts",
         "tests/integration/digital-production-notifications-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/unit/digital-notification-child-context.test.ts"
       ],
       "newTests": [
         "tests/integration/digital-order-number-postgres.test.ts"
@@ -115,6 +120,7 @@
       "checks": [
         "pg",
         "browser",
+        "non-db",
         "preflight",
         "lint",
         "types"
@@ -126,11 +132,28 @@
       "id": "pg",
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-final-pg.json tests/integration/digital-order-number-postgres.test.ts tests/integration/digital-production-identity-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
-      "context": "Node22/npm10 canonical PostgreSQL suites, source-bound vocabulary, guarded real databases and exact owned cleanup. Original identity, notifications and Journey cover the backward reads.",
+      "context": "Canonical PostgreSQL 94 tests retained from the detached previously tested candidate with independently matched complete SQL, API, shared contracts, fixtures and runner input paths. Only the unrelated settings browser request ID caller and non-DB fixture changed.",
       "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
-      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
       "exitCode": 0,
+      "inputPaths": [
+        "apps/api",
+        "apps/web/src/digital-development-editing.ts",
+        "apps/web/src/client-request-id.ts",
+        "packages",
+        "tests/integration/digital-order-number-postgres.test.ts",
+        "tests/integration/digital-production-identity-postgres.test.ts",
+        "tests/integration/digital-production-notifications-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "scripts",
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json"
+      ],
+      "inputFingerprint": "41f771650ae35cdad894f942ed72bebf025500f8d352f1541a66145e661d2cf3",
       "startedAt": "2026-11-24T17:47:16.736Z",
       "endedAt": "2026-11-24T17:48:52.162Z",
       "log": "/workspace/dx-x1-evidence/x1-final-pg.log",
@@ -148,23 +171,46 @@
     {
       "id": "browser",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-final-browser.json tests/integration/r5-settings-native-browser-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-      "context": "Canonical real PostgreSQL and signed Chromium, two workers. The original management and creation paths include narrow window and carried original draft access.",
-      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
-      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-browser.json tests/integration/r5-settings-native-browser-postgres.test.ts",
+      "context": "Canonical real PostgreSQL and signed Chromium. Entire existing settings suite with actual save, typed task preview and manager / normal-role boundary, using the client request helper.",
+      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:47:06.073Z",
-      "endedAt": "2026-11-24T17:49:49.367Z",
-      "log": "/workspace/dx-x1-evidence/x1-final-browser.log",
-      "logSha256": "e5006fae46ce7a677c696ecd1851302a04e1a3f89ba96db0664ec9645e62febb",
-      "passed": 29,
+      "startedAt": "2026-11-24T18:08:59.981Z",
+      "endedAt": "2026-11-24T18:09:39.782Z",
+      "log": "/workspace/dx-x1-evidence/x1-ci-browser.log",
+      "logSha256": "5bb97de61195d539c86ff452f434241f5af14ad589d16c6b88a27495ddb90e8e",
+      "passed": 9,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0ab1fdcf03f3ce0155151cf77ffbf3077895ad34254e8f71f5a4e66a6e83bfb0"
+          "sha256": "93b281365fe9357b56dfe6b47e1f3e42b34d60527dc3efde7c8cc4515af991ed"
+        }
+      ]
+    },
+    {
+      "id": "non-db",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-env-suites.json tests/unit/production-dashboard-query.test.ts tests/unit/responsibility-panels-component.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/client-request-id.test.ts tests/unit/digital-notification-child-context.test.ts",
+      "context": "Exact original Node22 and npm10 with all database URLs empty. Replays the two failing CI guards and the three prior local import-only failures after placing the same locked Astryx files physically under this worktree. The original broad run and complementary suite results stay distinct.",
+      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-24T18:15:22.044Z",
+      "endedAt": "2026-11-24T18:15:28.989Z",
+      "log": "/workspace/dx-x1-evidence/x1-ci-env-suites.log",
+      "logSha256": "565c84e6eeaec282d6e89af945a41a6f97da88b27a3d87ade77e235f419a5442",
+      "passed": 60,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "939b1a9cb4ab7ba658240d5320cf7839be682366061b846af8c772227bec8ce5"
         }
       ]
     },
@@ -173,27 +219,27 @@
       "kind": "command",
       "command": "git diff --check && npm run test:preflight",
       "context": "Canonical repository strict preflight and migration manifest/time-source guard.",
-      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
-      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
+      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:47:05.969Z",
-      "endedAt": "2026-11-24T17:47:13.523Z",
-      "log": "/workspace/dx-x1-evidence/x1-final-preflight.log",
-      "logSha256": "143de612bedefd8a10180aaa69b06094a9513849924797ff00ea8e6660c45282"
+      "startedAt": "2026-11-24T18:08:59.911Z",
+      "endedAt": "2026-11-24T18:09:07.279Z",
+      "log": "/workspace/dx-x1-evidence/x1-ci-preflight.log",
+      "logSha256": "3b927e7bf837c41edc26f3f4821abd3188a51322bf81669ae371564d192dc758"
     },
     {
       "id": "lint",
       "kind": "command",
       "command": "npm run lint",
       "context": "Node22/npm10 strict whole repository lint, reported raw command. Final source including originally mapped test suites.",
-      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
-      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
+      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:47:13.529Z",
-      "endedAt": "2026-11-24T17:48:44.427Z",
-      "log": "/workspace/dx-x1-evidence/x1-final-lint.log",
+      "startedAt": "2026-11-24T18:09:07.287Z",
+      "endedAt": "2026-11-24T18:10:24.163Z",
+      "log": "/workspace/dx-x1-evidence/x1-ci-lint.log",
       "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
     },
     {
@@ -201,13 +247,13 @@
       "kind": "command",
       "command": "npm run typecheck",
       "context": "Node22/npm10 workspace TypeScript check with current built contracts and services.",
-      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
-      "testedHead": "615b0db65b0f7b7f91a1cd7d3770d315adf8941e",
+      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
+      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T17:47:13.529Z",
-      "endedAt": "2026-11-24T17:48:44.427Z",
-      "log": "/workspace/dx-x1-evidence/x1-final-typecheck.log",
+      "startedAt": "2026-11-24T18:09:07.287Z",
+      "endedAt": "2026-11-24T18:10:24.163Z",
+      "log": "/workspace/dx-x1-evidence/x1-ci-typecheck.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988"
     }
   ]

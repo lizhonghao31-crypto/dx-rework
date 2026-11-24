@@ -8,6 +8,7 @@ import {designerAstryxCss} from './designer-astryx.js';
 import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {businessErrorInApp} from './system-dialog.js';
+import {createClientRequestId} from './client-request-id.js';
 import './order-number-settings.css';
 
 const path='order-number-settings';
@@ -76,7 +77,7 @@ function OrderNumberSettingsEditor() {
     setPending('save');
     setNotice('');
     const body=JSON.stringify(input.data);
-    if(write.current?.body!==body)write.current={body,key:crypto.randomUUID()};
+    if(write.current?.body!==body)write.current={body,key:createClientRequestId()};
     try {
       const result=await digitalRequest<Pick<OrderNumberSettingsRead,'version'|'values'>>(path,'PUT',input.data,write.current.key);
       setRecord({...record,...result});
