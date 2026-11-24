@@ -1,5 +1,6 @@
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
+import { canReadSecondaryCraftApprovalQueue,readSecondaryCraftApprover } from "../../apps/api/src/production-platform/secondary-craft-approval-authority.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
@@ -100,10 +101,25 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     const preview = await binder.run(ids.li_junyue, ids);
     expect(preview.pendingTodoIds).toHaveLength(2);
     expect((await database.query("SELECT * FROM business_module_owner_bindings")).rows).toEqual([]);
+    expect(await readSecondaryCraftApprover(database)).toBeNull();
     await expect(binder.run(ids.wu_yunfeng, ids, true)).rejects.toMatchObject({ statusCode: 403 });
     await expect(binder.run(ids.li_junyue, { ...ids, li_zhonghao: ids.wu_yunfeng }, true)).rejects.toMatchObject({ statusCode: 400 });
     const applied = await binder.run(ids.li_junyue, ids, true);
     expect(applied.cancelled).toBe(2);
+    expect(await readSecondaryCraftApprover(database)).toBe(ids.wu_yunfeng);
+    expect(await canReadSecondaryCraftApprovalQueue(database,actor(ids.wu_yunfeng))).toBe(true);
+    for(const id of [ids.li_zhonghao,ids.li_junyue,extraOwner]){
+      expect(await canReadSecondaryCraftApprovalQueue(database,actor(id))).toBe(false);
+    }
+    await tx(async client=>{
+      await client.query("UPDATE app_users SET display_name=(SELECT display_name FROM app_users WHERE id=$1) WHERE id=$2",[ids.wu_yunfeng,extraOwner]);
+      expect(await canReadSecondaryCraftApprovalQueue(client,actor(extraOwner))).toBe(false);
+      await client.query("UPDATE identity_mappings SET employed=false WHERE user_id=$1 AND corp_id='corp'",[ids.wu_yunfeng]);
+      expect(await readSecondaryCraftApprover(client)).toBeNull();
+      expect(await canReadSecondaryCraftApprovalQueue(client,actor(ids.wu_yunfeng))).toBe(false);
+      await client.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1 AND corp_id='corp'",[ids.wu_yunfeng]);
+      await client.query("UPDATE app_users SET display_name=$2 WHERE id=$1",[extraOwner,'测试映射-extra_owner']);
+    });
     expect((await binder.run(ids.li_junyue, ids, true)).cancelled).toBe(0);
     const session = (await oldSession.findSession(token, new Date()))!.user;
     expect(session.readOnlyModules).toEqual(["rework", "sourcing"]);
