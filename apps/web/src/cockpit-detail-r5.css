@@ -153,6 +153,17 @@
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta>.cockpit-stage-dates>div {grid-template-columns:3.5em minmax(0,1fr);white-space:normal}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta>.cockpit-stage-dates .cockpit-stage-date-colon {display:inline-block;margin-inline:.25em}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates time {white-space:nowrap}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage {container-type:inline-size}
+@container (max-width:150px){
+ .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta {grid-template-columns:minmax(0,1fr)}
+ .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates-with-delta>.cockpit-target-difference {border-left:0;padding-left:0;text-align:left}
+ .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-stage-dates time {white-space:normal;overflow-wrap:anywhere}
+}
+@media(max-width:1250px){
+ .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail :is([data-identity-fact="created"],.cockpit-creation-records) .cockpit-compact-date {white-space:normal;overflow-wrap:anywhere}
+ .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-creation-records dd>small {display:block;white-space:normal;overflow-wrap:anywhere}
+ .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-po-order-facts td[data-label="PO / 款号"] {max-inline-size:22ch;white-space:normal;overflow-wrap:anywhere}
+}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name {display:flex;gap:8px;align-items:baseline}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name>span {font-variant-numeric:tabular-nums}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-framework-node-name .journey-node-toggle {color:#0969e9;min-height:0;padding:0}

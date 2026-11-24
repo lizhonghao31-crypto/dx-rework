@@ -189,6 +189,42 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.errors).toEqual([]);
   }finally{await tab.page.screenshot({path:join(h.evidence,'last-'+route+'.png'),fullPage:true});await writeFile(join(h.evidence,'last-'+route+'.html'),await tab.page.content());await tab.context.close();}
  });
+ it('returns keyboard focus to the exact filtered overview order, or to the list when it is gone',async()=>{
+  for(const missing of [false,true]){
+   const tab=await h.open(h.f.root.actorId,missing?650:1165,{},'/ui/digital-cockpit?'+new URLSearchParams({scope:'production',search:pairedOrder.style,customer:'PD'}));
+   let release=()=>{};
+   try{
+    const page=tab.page,overview=page.locator('[data-view="overview"]'),order=overview.getByRole('button',{name:pairedOrder.style,exact:true});
+    await order.waitFor();
+    const before=new URL(page.url()),originalFocus=await order.getAttribute('data-cockpit-focus');
+    await order.focus();await page.keyboard.press('Enter');
+    await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+    expect(new URL(page.url()).searchParams.get('selected')).toBe(originalFocus!.slice('home-order:'.length));
+    let reads=0,requestArrived!:()=>void;
+    const arrived=new Promise<void>(resolve=>{requestArrived=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+    await page.route('**/api/digital-production/journeys?*',async route=>{
+     reads++;requestArrived();await held;
+     if(!missing)return route.continue();
+     // Only the returning list is changed to exercise the disappearing-row fallback.
+     const response=await route.fetch();expect(response.status()).toBe(200);
+     await route.fulfill({response,json:{...await response.json(),items:[],total:0}});
+    });
+    const back=page.getByRole('button',{name:'‹ 生产管理总览',exact:true});
+    await back.focus();await page.keyboard.press('Enter');await arrived;
+    await overview.locator('[role="status"]').filter({hasText:'正在更新'}).waitFor();
+    release();await overview.locator('[role="status"]').filter({hasText:'正在更新'}).waitFor({state:'detached'});
+    const returned=new URL(page.url());for(const key of ['search','customer','scope','page'])expect(returned.searchParams.get(key)).toBe(before.searchParams.get(key));
+    const focus=missing?overview.getByRole('region',{name:'订单列表，可横向滚动查看全部列'}):order;
+    await expect.poll(()=>focus.evaluate(element=>element===document.activeElement)).toBe(true);
+    expect(await order.count()).toBe(missing?0:1);
+    if(!missing){
+     await page.keyboard.press('Tab');
+     expect(await page.evaluate(()=>document.activeElement?.closest('[data-order-id]')?.getAttribute('data-order-id'))).toBe(originalFocus!.slice('home-order:'.length));
+    }
+    expect(reads).toBe(1);
+   }finally{release();await tab.close();}
+  }
+ });
  it('keeps a PO-only stage on its exact work scope and restores that PO after the original order record',async()=>{
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+pairedOrder.id);
   try{
@@ -404,6 +440,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(saved[0]?.styleLabelOccurrences?.[first!.lineId]?.completedAt).toBe(t1);
    expect(saved[0]?.styleLabelOccurrences?.[second!.lineId]?.completedAt).toBe(t2);
   }finally{await warehouseTab.close();}
+ });
+ it('keeps the long creator, both PO identifiers, complete dates and signed differences visible at narrow widths',async()=>{
+  await h.f.advance(scene,'2027-02-12T08:00:00.000Z');
+  const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-cockpit?search='+encodeURIComponent(pairedOrder.style));
+  try{
+   const page=tab.page,creator='测试长创建人姓名用于验证订单创建与完整年月日布局'.repeat(3);
+   await page.route(`**/api/digital-production/journeys/${pairedOrder.id}?*`,async route=>{
+    const response=await route.fetch();expect(response.status()).toBe(200);
+    const value=await response.json() as OrderJourney;
+    // Only the display name is lengthened. Both PO identities and the adopted dates are native.
+    await route.fulfill({response,json:{...value,cockpitCreationDetails:value.cockpitCreationDetails?.map(entry=>({...entry,creator:{...entry.creator,name:creator}}))}});
+   });
+   await page.getByRole('button',{name:pairedOrder.style,exact:true}).click();
+   const detail=page.locator('[data-view="order"][aria-busy="false"]');await detail.waitFor();
+   await detail.getByRole('combobox',{name:'里程碑PO范围'}).selectOption({index:1});
+   const created=detail.locator('[data-identity-fact="created"]'),po=detail.locator('.journey-po-order-facts tbody tr');
+   expect(await created.innerText()).toContain(creator);
+   expect(await po.locator('td').filter({hasText:'2027-02-20'}).count()).toBe(2);
+   expect((await po.locator('td[data-label="PO / 款号"]').allTextContents()).map(value=>value.split(' / ')[0]).sort()).toEqual([pairedOrder.style+'-PO',pairedOrder.style+'-PO2']);
+   await detail.getByRole('button',{name:'订单创建节点明细',exact:true}).click();
+   expect(await detail.locator('.cockpit-creation-records').innerText()).toContain(creator);
+   const dates=detail.locator('.cockpit-stage-dates time');
+   const deltas=detail.locator('.cockpit-stage-dates-with-delta .cockpit-target-difference');
+   const dateValues=await dates.allTextContents(),deltaValues=await deltas.allTextContents();
+   expect(dateValues.length).toBeGreaterThan(0);expect(dateValues.every(value=>/^\d{4}-\d{2}-\d{2}$/.test(value))).toBe(true);
+   expect(deltaValues.some(value=>/^[+−-].*天/.test(value))).toBe(true);
+   const size=await dates.first().evaluate(element=>getComputedStyle(element).fontSize);
+   for(const width of [1165,650,360]){
+    await page.setViewportSize({width,height:747});
+    const clipped=await detail.evaluate(root=>{
+     const groups=[['[data-identity-fact="created"] dd','[data-identity-fact="created"] dd'],['.cockpit-creation-records dd','.cockpit-creation-records dd'],
+      ['.journey-po-order-facts tbody td[data-label="PO / 款号"]','td'],['.cockpit-stage-dates time','.cockpit-stage'],['.cockpit-stage-dates-with-delta .cockpit-delta-unit','.cockpit-stage']];
+     return groups.flatMap(([selector,container])=>[...root.querySelectorAll(selector!)].filter(element=>{
+      const parent=element.closest(container!)!.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(element);
+      return [...range.getClientRects()].some(rect=>rect.left<parent.left-1||rect.right>parent.right+1||rect.bottom>parent.bottom+1);
+     }).map(element=>element.textContent));
+    });
+    expect(clipped,`width=${width}`).toEqual([]);
+    expect(await dates.allTextContents()).toEqual(dateValues);expect(await deltas.allTextContents()).toEqual(deltaValues);
+    expect(await dates.first().evaluate(element=>getComputedStyle(element).fontSize)).toBe(size);
+    await page.screenshot({path:join(h.evidence,`creator-two-po-date-delta-${width}.png`),fullPage:true});
+   }
+  }finally{await tab.close();}
  });
 
 });
