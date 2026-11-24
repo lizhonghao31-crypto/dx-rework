@@ -6,6 +6,7 @@ const readPosts=new Set([
  '/digital-production/sla-settings/calculation-preview',
  '/digital-production/sla-settings/sets/calculate',
  '/digital-production/order-time-settings/calculate',
+ '/digital-production/order-number-settings/preview',
  '/digital-production/customers/default-merchandisers/selected',
  '/digital-production/order-time/check',
  '/digital-production/order-time/preview',

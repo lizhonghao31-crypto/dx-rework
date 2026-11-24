@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-order-number": { "types": "./src/digital-order-number.ts", "import": "./dist/digital-order-number.js" },
     "./secondary-craft-quotation": { "types": "./src/secondary-craft-quotation.ts", "import": "./dist/secondary-craft-quotation.js" },
     "./digital-production-read-requests": { "types": "./src/digital-production-read-requests.ts", "import": "./dist/digital-production-read-requests.js" },
     "./time-framework-journey": { "types": "./src/time-framework-journey.ts", "import": "./dist/time-framework-journey.js" },

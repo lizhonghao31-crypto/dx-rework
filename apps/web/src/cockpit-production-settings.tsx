@@ -9,6 +9,7 @@ import {SlaSettingsWorkspace} from './sla-settings-workspace.js';
 import {verifySession} from './auth.js';
 import {ProductionRiskReminderSettings} from './production-closure-ui.js';
 import {registerSessionInvalidator,refreshSessionResult} from './auth-session.js';
+import {OrderNumberSettings} from './order-number-settings.js';
 import './cockpit-production-settings.css';
 export const cockpitPolicyStage=(key:string)=>JOURNEY_NODES.find(node=>node.key===(key==="bulk_cutting_external"?"bulk_cutting":key==="production_sheet"?"production_instruction":key))?.stage??"other";
 export function CockpitProductionSettings(){
@@ -23,6 +24,7 @@ export function CockpitProductionSettings(){
   {error&&<p role="alert">{error}</p>}
   {!access&&!error&&<p>正在读取设置…</p>}
   {access&&!canReadDigitalProductionSettings(access)&&!access.customers&&<p>当前岗位无权访问生产管理设置。</p>}
+  {access?.customers&&!historyOpen&&<OrderNumberSettings/>}
   {access&&canReadDigitalProductionSettings(access)?<><SlaSettingsWorkspace riskControl={isRoot?<ProductionRiskReminderSettings/>:undefined} onHistoryChange={setHistoryOpen} customerControl={access.customers?<DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/>:access.roles?.includes('pmc')?<DigitalCockpitPersonnel orderId={null} readOnly onChanged={()=>undefined}/>:undefined} readOnly={!access.manage} onAuthorityChanged={refreshAuthority}/></>:access?.customers&&<div className="cockpit-settings-node-section"><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></div>}
  </div>;
 }

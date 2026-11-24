@@ -50,6 +50,7 @@ import type { DigitalProductionAccessService } from "./access-service.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import { DigitalSourceCreateSchema, DigitalOrderCreateSchema, DigitalNumberCorrectionSchema, DigitalIdSchema, DigitalPageSchema, DigitalDesignCodeCheckSchema } from "@dx-rework/contracts/digital-production";
+import { OrderNumberPreviewSchema, OrderNumberSettingsSaveSchema } from "@dx-rework/contracts/digital-order-number";
 import { businessActor } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
@@ -161,6 +162,11 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     return dependencies.service.sources(trusted,query.page,query.search,id(request,"orderId"));
   });
   app.get("/digital-production/design-codes/check",async request=>dependencies.service.checkDesignCode(await actor(request),parse(DigitalDesignCodeCheckSchema,request.query).code));
+  app.get('/digital-production/order-number-settings',async request=>dependencies.service.orderNumberSettings(await actor(request)));
+  app.put('/digital-production/order-number-settings',async request=>
+    dependencies.service.saveOrderNumberSettings(await actor(request),parse(OrderNumberSettingsSaveSchema,request.body),key(request)));
+  app.post('/digital-production/order-number-settings/preview',async request=>
+    dependencies.service.previewOrderNumber(await actor(request),parse(OrderNumberPreviewSchema,request.body)));
   app.get("/digital-production/sources/drafts",async request=>{
     const trusted=await actor(request),query=parse(DigitalPageSchema.safeExtend({view:cockpitZ.literal('count').optional()}),request.query);
     return dependencies.service.developmentDrafts(trusted,query.page,query.search,query.view==='count');

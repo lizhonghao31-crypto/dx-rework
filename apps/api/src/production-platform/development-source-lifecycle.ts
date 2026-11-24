@@ -32,13 +32,14 @@ export async function effectiveDevelopmentSourceSql(db:DB,column:string){
  * native publication transaction, including application of an approval. */
 export async function activateDevelopmentDraft(db:PoolClient,actor:TrustedActorContext,sourceId:string,time:BusinessTime){
  if(!(await developmentSourceLifecycle(db,sourceId))?.is_draft)return null;
- const facts=(await db.query(`SELECT s.created_by,
+ const facts=(await db.query(`SELECT s.created_by,s.design_style_no,
   EXISTS(SELECT 1 FROM digital_order_time_subjects WHERE source_id=s.source_id AND effective) OR
   EXISTS(SELECT 1 FROM digital_order_time_plan_versions WHERE source_id=s.source_id) OR
   EXISTS(SELECT 1 FROM digital_timeline_adoptions WHERE resource_kind='source' AND source_id=s.source_id) OR
   EXISTS(SELECT 1 FROM digital_development_sla_plans WHERE source_id=s.source_id) OR
   EXISTS(SELECT 1 FROM digital_development_technical_enrollments WHERE source_id=s.source_id) AS previously_adopted
   FROM digital_production_sources s WHERE s.source_id=$1`,[sourceId])).rows[0];
+ if(facts.design_style_no===null)throw new ApplicationError('DIGITAL_ORDER_NUMBER_CONFLICT','请先补齐发号资料，订单ID生成后才能发布',409);
  if(facts.previously_adopted)throw new ApplicationError('DEVELOPMENT_DRAFT_TIMELINE_CONFLICT','原草稿已有生效或冻结的时效记录，请先核对原档案',409);
  const eventId=randomUUID();
  await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
