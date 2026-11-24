@@ -1,7 +1,8 @@
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {calculateQuotationPricing,calculateQuotationUnitCost,quotationDraftReviewSummary,QuotationPricingInputSchema,
-  type QuotationLineReviewCommand,type QuotationPricingInput,type QuotationResource,type QuotationReviewField} from '@dx-rework/contracts/digital-quotation';
+  type QuotationAssignment,type QuotationLineReviewCommand,type QuotationPricingInput,type QuotationResource,type QuotationReviewField} from '@dx-rework/contracts/digital-quotation';
+import type {BudgetRow} from '@dx-rework/contracts/digital-budget';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
@@ -13,15 +14,21 @@ function fieldSource(quote:AssembledQuotation,rowId:string,field:QuotationReview
   return field==='consumption' ? quote.consumption_sources[rowId] : quote.price_sources[rowId];
 }
 
+function rowKind(quote:AssembledQuotation,row:BudgetRow,assignment:QuotationAssignment|undefined){
+  if(quote.assembly)return quote.assembly.rows[row.rowId]?.kind;
+  if(row.section!=='外发工序')return 'material';
+  if(assignment)return assignment.priceRole==='ie_reviewer'?'ie':'craft';
+}
+
 function costRows(quote:AssembledQuotation) {
   return quote.document.rows.map(row=>{
-    const component=quote.assembly?.rows[row.rowId],assignment=quote.assignments.find(value=>value.rowId===row.rowId);
-    const material=component?.kind==='material'||!component&&row.section!=='外发工序';
+    const assignment=quote.assignments.find(value=>value.rowId===row.rowId);
+    const kind=rowKind(quote,row,assignment);
     const usage=quote.consumption_sources[row.rowId];
-    return {row,complete:Boolean(row.name&&row.unit&&row.consumption!==''&&row.unitPrice!==''
+    return {row,complete:Boolean(kind&&row.name&&row.unit&&row.consumption!==''&&row.unitPrice!==''
       &&assignment?.priceAssigneeId&&quote.price_sources[row.rowId]
-      &&(!material||assignment.technicalAssigneeId&&usage&&(!component||usage.kind==='technical_artifact'))),
-      requiresCraftReview:component?.kind==='craft'||!component&&row.section==='外发工序'};
+      &&(kind!=='material'||assignment.technicalAssigneeId&&usage&&(!quote.assembly||usage.kind==='technical_artifact'))),
+      requiresCraftReview:kind==='craft'};
   });
 }
 
@@ -88,12 +95,12 @@ async function lockResponsibleRole(db:PoolClient,userId:string,role:string){
 function fieldTarget(quote:AssembledQuotation,rowId:string,field:QuotationReviewField){
   const row=quote.document.rows.find(value=>value.rowId===rowId)??digitalNotFound();
   const assignment=quote.assignments.find(value=>value.rowId===rowId)??digitalNotFound();
-  const component=quote.assembly?.rows[rowId];
-  if(field==='consumption'&&component&&component.kind!=='material')conflict('按件计价的 IE 或工艺行没有独立用量办理');
+  const kind=rowKind(quote,row,assignment)??conflict('报价行的业务来源待核');
+  if(field==='consumption'&&quote.assembly&&kind!=='material')conflict('按件计价的 IE 或工艺行没有独立用量办理');
   const recipient=field==='consumption'?assignment.technicalAssigneeId:assignment.priceAssigneeId;
   if(!recipient)return conflict('请在原入口核对本字段的有效责任人');
   return {row,recipient,role:field==='consumption'?'pattern_room_worker':assignment.priceRole,
-    version:fieldSource(quote,rowId,field)?.version??null,craft:component?.kind==='craft'||!component&&row.section==='外发工序'&&assignment.priceRole!=='ie_reviewer'};
+    version:fieldSource(quote,rowId,field)?.version??null,craft:kind==='craft'};
 }
 
 /** Called only by the already scoped, idempotent quotation transaction. */

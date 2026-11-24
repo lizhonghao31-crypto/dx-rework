@@ -93,6 +93,37 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await businessState()).toEqual({confirmations:0,budgets:0,adoptions:0});
   }finally{await follow.close();await tab.close();}
  });
+ it('distinguishes manual IE processing from a craft approval and an unfinished quote',async()=>{
+  const {f,db}=h,designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!,ie=f.people.ie!;
+  const identity=new DigitalProductionIdentityService(db,true),quotes=new DigitalQuotationService(db,true);
+  const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+   designStyleNo:'TEST-R4-IE-AND-CRAFT-'+randomUUID(),orderDate:beijingCalendarDate(new Date()),
+   lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),randomUUID());
+  const resource={kind:'order' as const,id:order.productionOrderId};
+  const ieRow={rowId:randomUUID(),section:'外发工序' as const,category:'',name:'TEST IE 加工',specification:'',unit:'件',supplier:'',consumption:'',unitPrice:''};
+  const document:BudgetDocument={fabricType:'针织',productCategory:'上衣',monthSeries:'',date:null,currency:'人民币',freight:'0',cm:'0',
+   rows:[ieRow],salePrice:'',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[]};
+  const ieAssignment={rowId:ieRow.rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:ie.actorId,priceRole:'ie_reviewer' as const};
+  const saved=await quotes.save(designer,resource,{expectedVersion:0,document,assignments:[ieAssignment]},randomUUID());
+  expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({status:'incomplete',counts:{incomplete:1,pendingCraftApproval:0},unitCost:null});
+  const withUsage=await quotes.fillRow(worker,resource,ieRow.rowId,{expectedVersion:saved.version,consumption:'1'},randomUUID());
+  const withPrice=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:withUsage.version,unitPrice:'9'},randomUUID());
+  expect(withPrice.document).toBeNull();
+  expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({
+   status:'awaiting_customer_confirmation',counts:{incomplete:0,pendingCraftApproval:0},unitCost:'9',confirmation:'awaiting_joint_release',
+  });
+  const craftRow={...ieRow,rowId:randomUUID(),name:'TEST 单项工艺'};
+  const designerCopy=await quotes.read(designer,resource);
+  expect(designerCopy.version).toBe(withPrice.version);
+  const withCraft=await quotes.save(designer,resource,{expectedVersion:designerCopy.version,
+   document:{...designerCopy.document!,rows:[...designerCopy.document!.rows,craftRow]},
+   assignments:[ieAssignment,{rowId:craftRow.rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:worker.actorId,priceRole:'pattern_room_worker'}],
+  },randomUUID());
+  await quotes.fillRow(worker,resource,craftRow.rowId,{expectedVersion:withCraft.version,consumption:'1',unitPrice:'6'},randomUUID());
+  expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({
+   status:'awaiting_craft_approval',counts:{incomplete:0,pendingCraftApproval:1},unitCost:'15',confirmation:'awaiting_joint_release',
+  });
+ });
  it('opens exact saved quotation, budget and instruction originals through the real authorized App without writes or latest substitution',async()=>{
   const f=h.f,designer=f.people['sample-designer']!,merch=f.people.merchandiser!,worker=f.people['pattern-room-worker']!,identity=new DigitalProductionIdentityService(h.db,true),quotes=new DigitalQuotationService(h.db,true),budgets=new DigitalBudgetService(h.db,true),instructions=new ProductionInstructionService(h.db,true);
   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-ORIGINAL-COMMERCIAL-'+randomUUID(),orderDate:beijingCalendarDate(new Date()),primaryMerchandiserId:merch.actorId,lines:[{formalPoNo:'TEST-ORIGINAL-PO',color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),randomUUID());
