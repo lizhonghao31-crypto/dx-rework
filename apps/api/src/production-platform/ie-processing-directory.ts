@@ -1,6 +1,7 @@
 import type {PoolClient} from 'pg';
 import {acceptanceBusinessContext,acceptanceClockReaderEnabled} from '../acceptance-clock/business-time.js';
 import type {IeProcessingEntry,IeProcessingQuery} from '@dx-rework/contracts/digital-quotation';
+import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 
 const pageSize=15;
 
@@ -51,5 +52,7 @@ export async function readIeProcessingDirectory(db:PoolClient,database:object,in
   ) ORDER BY page.order_created_at DESC,page.quote_id,page.row_id) FROM page LEFT JOIN app_users u ON u.id=page.assignee_id::uuid),'[]'::json) AS items`,
  [viewer.id,viewer.canReadAll,viewer.canPrice,input.search,input.state,clockEnabled?acceptanceBusinessContext()?.scenarioId??null:null,
   pageSize,(input.page-1)*pageSize,viewer.isRoot,target?.quoteId??null,target?.rowId??null]);
- return {page:input.page,pageSize,total:rows[0]!.total,items:rows[0]!.items};
+ const items=await projectDevelopmentRushResources(db,rows[0]!.items);
+ return {page:input.page,pageSize,total:rows[0]!.total,items:prioritizeWithinRushGroups(items,
+  row=>row.state==='awaiting_price'&&row.canEditPrice?'processing_price':null,row=>row.orderRush===true)};
 }

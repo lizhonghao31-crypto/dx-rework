@@ -192,6 +192,10 @@ function quotationDatabase(roles: string[], assignee = OTHER) {
         primary_merchandiser_id: OTHER, version: 1, confirmed_version: null,
         assignments: [{rowId: ROW, technicalAssigneeId: assignee, priceAssigneeId: OTHER, priceRole: 'sample_designer'}]}] : [];
     }
+    if (sql.startsWith("SELECT to_regclass('digital_development_documents')::text AS development")) {
+      expect(values).toEqual([]);
+      return [{development:null}]; // No development data in the legacy PMC authorization fixture.
+    }
     if (sql === 'SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])') {
       expect(values).toEqual([[...new Set([assignee, OTHER])]]);
       return [{id: ACTOR, display_name: 'TEST reader'}, {id: OTHER, display_name: 'TEST designer'}];

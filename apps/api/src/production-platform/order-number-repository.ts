@@ -56,6 +56,17 @@ export async function issuedOrderNumber(db: Reader, source: {
 export class OrderNumberRepository {
   constructor(private readonly db: Reader) {}
 
+  /** A previously unnumbered draft may bind its initial customer later. The
+   * number claim and its immutable prefix components prove the actual customer
+   * without rewriting the original source row or inferring it from the text. */
+  async boundCustomer(sourceId:string,orderNumber:string){
+    const result=await this.db.query<{customer_code:string|null}>(`SELECT series.components->>'customerCode' AS customer_code
+      FROM digital_order_number_claims claim JOIN digital_order_number_series series
+        ON series.prefix=regexp_replace($2::text,'-[0-9]+$','')
+      WHERE claim.source_id=$1 AND claim.code_key=$3`,[sourceId,orderNumber,digitalPoKey(orderNumber)]);
+    return result.rows[0]?.customer_code??null;
+  }
+
   async lockSettings(write = false) {
     await this.db.query(write
       ? 'SELECT pg_advisory_xact_lock(hashtextextended($1,0))'

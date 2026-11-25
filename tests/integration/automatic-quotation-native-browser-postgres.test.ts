@@ -133,6 +133,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const source=await create('target');
   const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
+   rush:true,
    quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
    files:[{attachmentId:await f.image(designer),kind:'款图'}]});
   const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
@@ -152,12 +153,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const ieTab=await h.open(ie.actorId,1165,{},'/'),rootTab=await h.open(f.root.actorId,1165,{},'/'),designerTab=await h.open(designer.actorId,1165,{},'/');
   const url=(page:number,search=prefix,state='all')=>h.base+'/api/digital-production/quotations/ie-processing?'+new URLSearchParams({page:String(page),search,state});
   try{
+   const originalDirectory=await ieTab.page.request.get(h.base+'/api/digital-production/quotations');
+   expect(originalDirectory.ok(),await originalDirectory.text()).toBe(true);
+   const originalItems=(await originalDirectory.json()).items;
+   expect(originalItems.find(item=>item.resource.id===source.sourceId)).toEqual({resource,designStyleNo:`${prefix}-target`,
+    customerCode:'PD',version:assigned.version,status:'draft',orderRush:true});
    const first=await ieTab.page.request.get(url(1)),second=await ieTab.page.request.get(url(2)),empty=await ieTab.page.request.get(url(3));
    expect(first.ok(),await first.text()).toBe(true);expect(second.ok(),await second.text()).toBe(true);
    const firstPage=await first.json(),secondPage=await second.json();
    expect(firstPage).toMatchObject({page:1,pageSize:15,total:16});expect(firstPage.items).toHaveLength(15);
    expect(secondPage).toMatchObject({page:2,total:16,items:[{resource,quoteId:assigned.quoteId,rowId:original.rowId,
-    version:assigned.version,assigneeId:ie.actorId,canEditPrice:true,state:'awaiting_price'}]});
+    version:assigned.version,assigneeId:ie.actorId,canEditPrice:true,state:'awaiting_price',orderRush:true}]});
+   expect(firstPage.items.every((item:{orderRush?:true})=>item.orderRush===undefined)).toBe(true);
    expect(new Set([...firstPage.items,...secondPage.items].map(item=>item.quoteId)).size).toBe(16);
    expect(await empty.json()).toMatchObject({page:3,total:16,items:[]});
    expect(await (await ieTab.page.request.get(url(1,prefix+'-target'))).json()).toMatchObject({total:1});
@@ -168,6 +175,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await ieTab.page.goto(center.href);
    const originalLink=ieTab.page.getByRole('link',{name:`${prefix}-target`,exact:true});
    await originalLink.waitFor();
+   await ieTab.page.getByRole('row').filter({has:originalLink}).getByText('急单',{exact:true}).waitFor();
    for(const width of [1165,390]){
     await ieTab.page.setViewportSize({width,height:844});
     expect(await ieTab.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -184,7 +192,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await originalLink.click();
    const selected=new URL(ieTab.page.url());expect(selected.searchParams.get('id')).toBe(source.sourceId);
    const directoryDetail=h.base+`/api/digital-production/quotations/ie-processing/${assigned.quoteId}/${original.rowId}`;
-   expect(await (await ieTab.page.request.get(directoryDetail)).json()).toMatchObject({resource,canEditPrice:true});
+   expect(await (await ieTab.page.request.get(directoryDetail)).json()).toMatchObject({resource,canEditPrice:true,orderRush:true});
    expect((await ieTab.page.request.get(directoryDetail.replace(original.rowId,randomUUID()))).status()).toBe(404);
    expect((await designerTab.page.request.get(directoryDetail)).status()).toBe(403);
    const price=ieTab.page.getByRole('textbox',{name:'加工单价',exact:true});await price.fill('8');

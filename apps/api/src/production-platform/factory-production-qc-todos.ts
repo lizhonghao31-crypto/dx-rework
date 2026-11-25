@@ -40,7 +40,7 @@ export async function factoryProductionQcTodos(db:Pick<Pool|PoolClient,'query'>,
    if(plan&&plan.time.scenarioId!==time.scenarioId)throw new Error('SLA clock scope mismatch');
    const timing=todoSlaTiming({dueAt,warningAt:null,enteredAt:null,exclusive:earliest?.exclusive??true,asOf:time.now});
    if(targets.some(t=>!t.at))timing.reason='部分PO没有可信工厂目标，已知日期仍监督；进入原工厂记录核对';
-   return {...selectionKey,sourceEventId:row.task_id,entityType:'digital_task',entityId:row.task_id,requiredRole:'quality_control',requiredCapability:null,policyKey:null,timing,reminderCount:0,blockedReason:missing?'QC主办缺失或已失效，请重新分配':null,version:1,updatedAt:at};});
+   return {...selectionKey,sourceEventId:row.task_id,entityType:'digital_task',entityId:row.task_id,requiredRole:'quality_control',requiredCapability:null,policyKey:null,timing,reminderCount:0,blockedReason:missing?'QC主办缺失或已失效，请重新分配':null,version:1,updatedAt:at};},{sourceId:null,orderId:row.production_order_id});
  }
  return result;
 }

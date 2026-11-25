@@ -2,7 +2,7 @@ import {SaveDevelopmentAmendmentSchema,SubmitDevelopmentAmendmentSchema} from "@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
+import { DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, PublishDevelopmentPreorderSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -22,7 +22,7 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   const id = (request: FastifyRequest, name: string) => parse(z.string().uuid(), (request.params as Record<string, unknown>)[name]);
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const base = "/digital-production/sources/:sourceId/development";
-  app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),id(request,"sourceId"),undefined,query.round);});
+  app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.readDocument(await actor(request),id(request,"sourceId"),query.round);});
   app.get(`${base}/published-versions`,async(request,reply)=>{
     const query=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().max(100).default('')}).strict(),request.query);
     reply.header('cache-control','private, no-store');return service.publishedVersions(await actor(request),id(request,'sourceId'),query.page,query.q);
@@ -61,8 +61,20 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   app.post(`${base}/amendment/submit`,async request=>service.submitAmendment(await actor(request),id(request,"sourceId"),parse(SubmitDevelopmentAmendmentSchema,request.body),key(request)));
   app.get(`${base}/amendment/receipt`,async request=>{const input=parse(z.object({taskId:z.string().uuid(),operation:z.enum(["save","submit"]),key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)}).strict(),request.query);return service.amendmentReceipt(await actor(request),id(request,"sourceId"),input.taskId,input.operation,input.key);});
   app.get(`${base}/amendment/history`,async request=>{const input=parse(z.object({round:z.coerce.number().int().positive()}).strict(),request.query);return service.amendmentHistory(await actor(request),id(request,"sourceId"),input.round);});
-  app.put(base, async request => service.save(await actor(request), id(request,"sourceId"), parse(SaveDevelopmentSchema, request.body), key(request)));
+  app.put(base, async request => service.save(await actor(request), id(request,"sourceId"), parse(SaveDevelopmentSchema, request.body), key(request),dependencies.workbenchNumberedCreation===true));
   app.post(`${base}/publish`, async request => {const input=parse(PublishDevelopmentSchema,request.body);return service.publish(await actor(request), id(request,"sourceId"), input.expectedVersion, key(request),input.patternOrder);});
+  if(dependencies.creationEnabled&&dependencies.workbenchNumberedCreation){
+    app.get('/digital-production/development/material-suppliers',async(request,reply)=>{
+      const trusted=await actor(request),query=parse(z.object({q:z.string().trim().max(100).default('')}).strict(),request.query);
+      dependencies.service.assertSourceCreation(trusted);
+      reply.header('cache-control','private, no-store');
+      return {items:await service.materialSuppliers(trusted,query.q)};
+    });
+    app.post(`${base}/publish-preorder`,async request=>{
+      const input=parse(PublishDevelopmentPreorderSchema,request.body);
+      return service.publishPreorder(await actor(request),id(request,'sourceId'),input.expectedVersion,key(request));
+    });
+  }
   app.post(`${base}/materials/:materialId/events`, async request => service.materialEvent(await actor(request), id(request,"sourceId"), id(request,"materialId"), parse(DevelopmentMaterialEventSchema, request.body), key(request)));
   app.get(`${base}/upload-limits`, async request => { await service.authorizeUpload(await actor(request),id(request,"sourceId")); return attachments.uploadLimits(); });
   app.post(`${base}/upload-intents`, async request => {

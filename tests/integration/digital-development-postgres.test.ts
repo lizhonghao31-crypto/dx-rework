@@ -285,6 +285,13 @@ run("P05 development forms PostgreSQL", () => {
     expect(row.styleImageId).toBe(updated.files[0]!.attachmentId);expect(row.styleImageId).not.toBe(original.files[0]!.attachmentId);
     expect(row.flow?.map(node=>node.key)).toEqual(['development_materials','development_pattern']);
     expect((await development.read(actor(),id,database,1)).document!.files[0]!.attachmentId).toBe(original.files[0]!.attachmentId);
+    const exact=await development.publishedVersion(actor(),id,2,3);
+    expect(exact.printFeedback).toEqual({text:'TEST 新款图',sourceRound:1});
+    expect(exact.printRevision).toEqual({sourceRound:1});
+    expect(exact.printTiming).toBeUndefined();
+    expect((await development.readDocument(actor(),id)).printFeedback).toEqual(exact.printFeedback);
+    expect((await development.publishedVersion(actor(),id,1,2)).printFeedback).toBeUndefined();
+    await expect(development.publishedVersion(actor(other),id,2,3)).rejects.toMatchObject({statusCode:404});
     const rounds=new DevelopmentRoundService(database,true),signal=new AbortController().signal;
     const read=(context:TrustedActorContext,sourceId:string):CockpitDocumentReader=>async path=>{
       if(path.endsWith('/rounds'))return rounds.read(context,sourceId);

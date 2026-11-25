@@ -23,6 +23,7 @@ import {OriginalDocumentDirectory,originalDocumentHref,type OriginalDocumentRef}
 import {navigateInternalPage} from './internal-navigation.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {digitalTaskDisplayStatus} from './digital-workspace-copy.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 
 const labels:Record<DesignerOrderArea,string>={document:'版单资料',development:'开发进度',customer:'客户与报价',handover:'交接与寄样',records:'订单相关单据',history:'操作记录'};
 const labelsId=(area:DesignerOrderArea)=>`designer-order-${area}`;
@@ -155,7 +156,7 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
    <Button label="返回来源" size="sm" onClick={onClose}/>
    <h1>本单资料</h1>
    <div className="designer-order-summary">{image}<div>
-    <h2>{journey?.designStyleNo??sheet?.designStyleNo??'正在读取订单'}</h2>
+    <h2>{journey?.designStyleNo??sheet?.designStyleNo??'正在读取订单'} <OrderRushBadge value={sheet?sheet.orderRush:item?.orderRush}/></h2>
     <dl><div><dt>款名</dt><dd>{journey?.styleName??'—'}</dd></div><div><dt>客户</dt><dd>{journey?.customer??sheet?.customerCode??'—'}</dd></div>
      <div><dt>设计师</dt><dd>{journey?.designer??sheet?.designerName??'—'}</dd></div>
      <div><dt>跟单</dt><dd>{journey?.merchandisers.map(person=>person.name??'姓名未登记').join('、')||'—'}</dd></div>
@@ -194,7 +195,7 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
     handover={content=>region('handover',content)} sheet={sheet} journey={exactRecords}
     timelineError={recordError} retryTimeline={reloadRecords} returnTo={sourceQuery('development')}
     returnToHandover={sourceQuery('handover')} confirmation={confirmation}/>
-   :<>{region('development',<p>当前轮次请从版单资料查看原办理记录。</p>)}{region('customer',<p>请切换到当前已发布轮次办理客户意见或报价。</p>)}
+   :<>{region('development',<p>当前轮次请从版单资料查看原办理记录。</p>)}{region('customer',sheet?.preorderPublication&&confirmation?confirmation:<p>请切换到当前已发布轮次办理客户意见或报价。</p>)}
      {region('handover',<p>请从当前有效资料查看原交接方式。</p>)}</>}
   {region('records',readResult(journey=>{
    const openOriginal=(ref:OriginalDocumentRef)=>{

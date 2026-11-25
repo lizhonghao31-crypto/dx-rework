@@ -16,6 +16,7 @@ export const NumberedDraftInputSchema = z.object({
   temporaryStyleNo: z.string().trim().max(100).nullable(),
   numbering: OrderNumberContextSchema,
 }).strict();
+export const NumberedDraftIdentitySchema=z.object({sourceId:z.uuid(),orderNumber:z.string().min(1).max(100).nullable()}).strict();
 
 const settings = z.object({
   boys: componentCode.nullable(),
@@ -35,7 +36,7 @@ export type OrderNumberSettings = z.infer<typeof settings>;
 export type OrderNumberSettingsSave = z.infer<typeof OrderNumberSettingsSaveSchema>;
 export type OrderNumberPreviewInput = z.infer<typeof OrderNumberPreviewSchema>;
 export type OrderNumberPreview = { prefix: string; example: string } | { missing: string[] };
-export type NumberedDraftIdentity = { sourceId: string; orderNumber: string | null };
+export type NumberedDraftIdentity = z.infer<typeof NumberedDraftIdentitySchema>;
 export type OrderNumberSettingsRead = {
   version: number;
   values: OrderNumberSettings;

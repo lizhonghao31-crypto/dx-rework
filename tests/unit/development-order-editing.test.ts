@@ -56,10 +56,12 @@ describe("creation quantity buffers and development matrix", () => {
     expect(DevelopmentDocumentSchema.safeParse(empty).success).toBe(true);
     expect(developmentPublishErrors(empty)).not.toContain("至少填写一个尺码列，或先保存草稿");
   });
-  it("permits incomplete size names in a draft, locates them at publication, and preserves legacy combined instructions", () => {
+  it("permits unfilled size columns at publication and locates unnamed columns only when they contain a size fact", () => {
     const old=initialDevelopmentDocument();delete old.washingMethod;delete old.ironing;
     old.washingIroning="TEST原洗水整烫说明";old.sizes=["",""];old.sizeQuantities=[null,null];old.measurements=old.measurements.map(row=>({...row,values:["",""]}));
     expect(DevelopmentDocumentSchema.parse(old).washingIroning).toBe("TEST原洗水整烫说明");
+    expect(developmentPublishErrors(old)).not.toContain("请填写尺码列名称，或删除不用的列");
+    old.measurements[0]!.values[1]="24.5";
     expect(developmentPublishErrors(old)).toContain("请填写尺码列名称，或删除不用的列");
     const next=DevelopmentDocumentSchema.parse({...old,washing:"免洗",ironing:"独立整烫",washingMethod:"保留待洗说明"});
     expect(next.ironing).toBe("独立整烫");expect(next.washingIroning).toBe(old.washingIroning);

@@ -1,5 +1,6 @@
 import {Step,Stepper} from '@astryxdesign/core/Stepper';
-import {DevelopmentDocumentSchema,developmentWorkbenchPublishIssues,developmentMaterialPublishIssues,developmentCraftOptions} from '@dx-rework/contracts/digital-development';
+import {z} from 'zod';
+import {DEVELOPMENT_GARMENTS,DEVELOPMENT_STYLE_PICTURE_LIMIT,DevelopmentDocumentSchema,developmentCraftOptions,isDevelopmentStylePicture} from '@dx-rework/contracts/digital-development';
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {Selector} from '@astryxdesign/core/Selector';
@@ -8,6 +9,8 @@ import {DevelopmentEntryAction,DevelopmentEntryDate,DevelopmentEntryText} from '
 import {WorkbenchDevelopmentSheetFields,emptyWorkbenchDevelopmentSheet} from './workbench-development-sheet-fields.js';
 import {DEVELOPMENT_WIZARD_STEPS,type DevelopmentWizardStep} from './development-creation-wizard.js';
 import {developmentSubmissionResult,recoverDevelopmentSubmission,type PendingDevelopmentSubmission} from './development-submit-recovery.js';
+import {developmentSubmissionPath,NUMBERED_DRAFT_PATH} from './development-creation-command-path.js';
+import {NumberedDraftIdentitySchema,NumberedDraftInputSchema} from '@dx-rework/contracts/digital-order-number';
 import type {CreationDraftSnapshot} from './development-creation-draft.js';
 import type {CreationOutgoing} from './use-development-creation-draft.js';
 import {IndependentCraftField} from './independent-craft-field.js';
@@ -36,7 +39,7 @@ import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { businessErrorInApp, confirmInApp, type BusinessDialogIssue } from "./system-dialog.js";
 import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 import type { DevelopmentSheet, DevelopmentDocument } from "@dx-rework/contracts/digital-development";
-import { sameDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs, developmentOrderInput, developmentQuantityError, developmentQuantityTotal, initialDevelopmentDocument, attachDevelopmentCraftFile, type DevelopmentOrderDraft } from "./digital-development-editing.js";
+import { sameDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs, developmentOrderInput, developmentQuantityError, developmentQuantityTotal, initialDevelopmentDocument, attachDevelopmentCraftFile, changeDevelopmentCreationGarment, hasCustomizedDevelopmentSizes, initializeGuidedDevelopmentSizes, initialGuidedDevelopmentDocument, type DevelopmentCreationChoices, type DevelopmentOrderDraft } from "./digital-development-editing.js";
 import { preparePatternMaterial } from "./pattern-material-upload.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { verifySession } from "./auth.js";
@@ -50,6 +53,9 @@ export type DevelopmentCreateIntent = "development" | "certain_order" | "confirm
 type SubmissionPhase='preparing'|'publish_check'|'publish'|'confirm_check'|'confirm';
 export const developmentOrderOptionsPath=(sourceId:string|null)=>sourceId?`options?sourceId=${encodeURIComponent(sourceId)}`:'options';
 const newLine = (): DevelopmentOrderDraft["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: ""}]});
+// Before X1 assigns the order number, validate every formal field except that
+// number with the original PO refinements. This schema is never sent to an API.
+const UnnumberedOrderValidation=DigitalOrderCreateSchema.safeExtend({designStyleNo:z.literal("")});
 export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: OrderJourney): DevelopmentOrderDraft {
   return {customerCode: source?.customer ?? "", designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null,
     productGroup: initialDigitalProductGroup(customers, source?.customer ?? undefined),
@@ -59,19 +65,25 @@ export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: O
 
 /** A facade over the existing source and order commands; no sample approval or route writes. */
 export type DevelopmentCreationBridge={viewId:string;actorId:string;snapshot?:CreationDraftSnapshot|undefined;onSnapshot:(id:string,value:CreationDraftSnapshot)=>void;started:(id:string,outgoing:CreationOutgoing)=>void;acknowledged:(id:string,outgoing:CreationOutgoing,sourceId:string,version:number|null)=>void;refused:(id:string,outgoing:CreationOutgoing)=>void};
-export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, onChooseCreationType, existingDraft, independentCraftsEnabled=false, orderTimeEnabled=false, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表",creation,guidedCreation=false,initialPreorder=false}: {
+export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, onChooseCreationType, existingDraft, independentCraftsEnabled=false, orderTimeEnabled=false, workbenchNumberedCreation=false, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表",creation,guidedCreation=false,initialPreorder=false,initialChoices}: {
   independentCraftsEnabled?:boolean|undefined;orderTimeEnabled?:boolean|undefined;contained?:boolean; intent: DevelopmentCreateIntent; source?: OrderJourney; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; calendarSourceId?:string|null; customers: DigitalCustomer[];
   onCancel: (canReturnToServer?:boolean) => void; onCreated: (sourceId: string, orderId: string | null) => void; cancelLabel?:string;
   onIntentChange?: (intent: "development" | "certain_order") => void;
   onChooseCreationType?: (()=>void)|undefined;
   creation?:DevelopmentCreationBridge|undefined;
   guidedCreation?:boolean;initialPreorder?:boolean;
+  initialChoices?:DevelopmentCreationChoices|undefined;
+  workbenchNumberedCreation?:boolean;
 }) {
   const formId=useId();
   const creationRef=useRef(creation);creationRef.current=creation;
-  const [form, setForm] = useState(() => creation?.snapshot?.form??existingDraft?.document?.customerOrderDraft?.order ?? {...initialDevelopmentOrder(customers, source),...(serverToday?{orderDate:serverToday}:{}),...(existingDraft?{customerCode:existingDraft.customerCode??"",designStyleNo:existingDraft.designStyleNo,temporaryStyleNo:existingDraft.temporaryStyleNo}:{} )});
+  const [form, setForm] = useState(() => {
+    const restored=creation?.snapshot?.form??existingDraft?.document?.customerOrderDraft?.order ?? {...initialDevelopmentOrder(customers, source),...(serverToday?{orderDate:serverToday}:{}),...(existingDraft?{customerCode:existingDraft.customerCode??"",designStyleNo:existingDraft.designStyleNo,temporaryStyleNo:existingDraft.temporaryStyleNo}:{} )};
+    const issued=existingDraft?.numberedIdentity?.orderNumber;
+    return issued?{...restored,designStyleNo:issued}:restored;
+  });
   const [fixedCraft,setFixedCraft]=useState(creation?.snapshot?.fixedCraft??(existingDraft?existingDraft.timelineSchemaVersion===2:independentCraftsEnabled));
-  const [document,setDocument]=useState<DevelopmentDocument>(()=>creation?.snapshot?.document??(existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.draftDocumentDate??existingDraft.developmentCreatedDate??null}):{...initialDevelopmentDocument(),orderDate:existingDraft?.draftDocumentDate??serverToday??null,...(guidedCreation&&!source&&!existingDraft&&!initialPreorder?{workbenchSheet:emptyWorkbenchDevelopmentSheet()}: {})}));
+  const [document,setDocument]=useState<DevelopmentDocument>(()=>creation?.snapshot?.document??(existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.draftDocumentDate??existingDraft.developmentCreatedDate??null}):{...(initialChoices?initialGuidedDevelopmentDocument(initialChoices):initialDevelopmentDocument()),orderDate:existingDraft?.draftDocumentDate??serverToday??null,...(guidedCreation&&!source&&!existingDraft&&!initialPreorder?{workbenchSheet:emptyWorkbenchDevelopmentSheet()}: {})}));
   const [sizeQuantityInputs,setSizeQuantityInputs]=useState(()=>creation?.snapshot?.sizeQuantityInputs??developmentSizeQuantityInputs(document));
   const [quantityInput,setQuantityInput]=useState(()=>creation?.snapshot?.quantityInput??(document.quantity===null?"":String(document.quantity)));
   const [stepValidation,setStepValidation]=useState(false);
@@ -79,12 +91,19 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(creation?.snapshot?.patternChoice??null);
   const guided=guidedCreation&&!source&&!existingDraft?.revisionSource;
   const BasicLayout=guided?FormLayout:Fragment;
-  const [preorder,setPreorder]=useState(creation?.snapshot?.preorder??(existingDraft?.document?existingDraft.document.customerOrderDraft?.stage==='preorder'&&!existingDraft.document.customerOrderDraft.wizardConfirmPreorder:initialPreorder));
+  const [preorder,setPreorder]=useState(intent==='confirm_order'?false:creation?.snapshot?.preorder??(existingDraft?.document?existingDraft.document.customerOrderDraft?.stage==='preorder'&&!existingDraft.document.customerOrderDraft.wizardConfirmPreorder:initialPreorder));
+  const previousCheckpoint=creation?.snapshot;
+  const numberedCreation=Boolean(existingDraft?.numberedIdentity)||guided&&!existingDraft&&(previousCheckpoint
+    ? previousCheckpoint.numbered===true||previousCheckpoint.numbered===undefined&&previousCheckpoint.preorder&&!previousCheckpoint.form.designStyleNo&&workbenchNumberedCreation
+    : workbenchNumberedCreation);
+  const preorderAlreadyPublished=Boolean(existingDraft?.preorderPublication);
+  const safeToWriteNumbered=!numberedCreation||workbenchNumberedCreation;
   const withOrder=intent!=='development';
   const stepCount=preorder?1:withOrder?3:2;
   const [locatingField,setLocatingField]=useState<{id:string}|null>(null);
   const errorDialogOpen=useRef(false);
   const [wizardStep,setWizardStep]=useState<DevelopmentWizardStep>(()=>Math.min(stepCount,creation?.snapshot?.wizardStep??existingDraft?.document?.customerOrderDraft?.wizardStep??1) as DevelopmentWizardStep);
+  const [reachedWizardStep,setReachedWizardStep]=useState(wizardStep);
   const stepHeading=useRef<HTMLHeadingElement>(null);
   const [published,setPublished]=useState(existingDraft?.status==="published");
   const [publishedOrder,setPublishedOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
@@ -96,13 +115,22 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const poSizeIds=useRef(creation?.snapshot?.poSizeIds??Array.from({length:maxPoSizeCount},()=>createClientRequestId()));
   const successfulUploads=useRef(new Map<string,string>()),publishKey=useRef<{payload:string;key:string}|null>(null);
   const edit=(patch:Partial<DevelopmentDocument>)=>setDocument(current=>({...current,...patch}));
+  // Only the first visit to the chosen garment's editor initializes the original
+  // template; an emptied but saved table is already initialized.
+  useLayoutEffect(()=>{
+    if(!guided||preorder||published||wizardStep!==2||!document.templateConfirmed||document.sizeTableInitialized)return;
+    const initialized=initializeGuidedDevelopmentSizes(document);
+    measurementIds.current=initialized.measurements.map(()=>createClientRequestId());
+    setSizeQuantityInputs(developmentSizeQuantityInputs(initialized));
+    setDocument(initialized);
+  },[guided,preorder,published,wizardStep,document]);
   const validationDocument:DevelopmentDocument=document.customerOrderDraft&&validationMode==="publish"&&!preorder
     ?{...document,customerOrderDraft:{withOrder,stage:"formal",order:form}}
     :document;
   const workbenchCraftControl=guided&&document.workbenchSheet?"development-workbench-processingSelected":undefined;
   const resolveIssueField=(issue:DocumentIssue):DocumentIssue=>
     workbenchCraftControl&&(issue.id==="development-craft"||issue.id==="development-craftSteps")
-      ?{...issue,id:workbenchCraftControl}:issue;
+      ?{...issue,id:workbenchCraftControl}:issue.id==='development-craftRequirements'?{...issue,id:'development-craft-requirements',label:'工艺要求'}:issue;
   const issues=validationMode?developmentIssues(validationDocument,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs,false,stepValidation)
     .map(resolveIssueField):[];
   const [designerName, setDesignerName] = useState<string | null>(existingDraft?.designerName ?? source?.designer ?? null);
@@ -151,6 +179,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const writing = useRef(false), sourceKey = useRef<{payload: string; key: string} | null>(null), orderKey = useRef<{payload: string; key: string} | null>(null);
+  const draftNumberKey=useRef<{payload:string;key:string}|null>(null);
   const pendingSubmission=useRef<PendingDevelopmentSubmission|null>(null),[submissionUnknown,setSubmissionUnknown]=useState(false);
   const recoverSubmission=async(replay=false)=>{
     const command=pendingSubmission.current;if(!command||writing.current)return;
@@ -170,9 +199,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const lostLocalFiles=useRef(creation?.snapshot?.localFiles??[]).current.filter(file=>document.files.some(row=>row.attachmentId===file.id));
   useLayoutEffect(()=>{
     const bridge=creationRef.current;if(!bridge||intent==='confirm_order')return;
-    const snapshot:CreationDraftSnapshot={intent,form,document,quantityInput,sizeQuantityInputs,developmentType,preorder,...(guided?{wizardStep}:{}),fixedCraft,measurementIds:measurementIds.current,poSizeIds:poSizeIds.current,sharedPoColumns,dateOverrides:[...customerDateOverrides.current],fileKind,patternChoice,baseline:initial.current,localFiles:[...lostLocalFiles,...picturesRef.current.filter(file=>!file.attachmentId&&document.files.some(row=>row.attachmentId===file.id)).map(file=>({id:file.id,name:file.file.name,type:file.file.type,size:file.file.size,kind:file.kind}))]};
+    const snapshot:CreationDraftSnapshot={intent,form,document,quantityInput,sizeQuantityInputs,developmentType,preorder,...(guided?{wizardStep,numbered:numberedCreation}:{}),fixedCraft,measurementIds:measurementIds.current,poSizeIds:poSizeIds.current,sharedPoColumns,dateOverrides:[...customerDateOverrides.current],fileKind,patternChoice,baseline:initial.current,localFiles:[...lostLocalFiles,...picturesRef.current.filter(file=>!file.attachmentId&&document.files.some(row=>row.attachmentId===file.id)).map(file=>({id:file.id,name:file.file.name,type:file.file.type,size:file.file.size,kind:file.kind}))]};
     try{bridge.onSnapshot(bridge.viewId,snapshot);}catch(reason){setError(reason instanceof Error?reason.message:'本页草稿未能保留，当前输入仍在，尚未提交');}
-  },[creation?.viewId,currentSnapshot,patternChoice,fileKind,fixedCraft,guided,wizardStep,sharedPoColumns]);
+  },[creation?.viewId,currentSnapshot,patternChoice,fileKind,fixedCraft,guided,wizardStep,sharedPoColumns,numberedCreation]);
   const timeApplication=useOrderTimeApplication(()=>{completed.current=true;dirty.current=false;});
   type Calendar={sourceId:string|null;serverToday:string;minimumInitialCustomerDate:string;orderTimeEnabled?:boolean};
   const preloadedCalendar=Boolean(serverToday&&minimumDate&&(createdSource===null||calendarSourceId===createdSource));
@@ -226,21 +255,22 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     return () => {unregister(); documentGuards?.delete(guard); window.removeEventListener("beforeunload", unload);};
   }, [documentGuards]);
   const developmentPublished=published||Boolean(source);
-  const publishStatus=submissionUnknown?(pendingSubmission.current?.operation==='publish'?'开发发布结果待核对':'客户订单确认结果待核对'):preorder&&!developmentPublished?`预下单草稿 · ${dirty.current?"有未保存修改":"可继续补充资料"}`:developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):`开发草稿 · ${dirty.current?"有未保存修改":savedDraft||existingDraft?.document?"已保存，可继续填写":"尚未保存"}`;
-  const submitLabel=preorder&&!published?"保存预下单备料资料":guided?withOrder?"提交并确认订单":"提交开发单":intent==="confirm_order"?"确认下单":published?(withOrder?"确认客户订单":"返回已发布档案"):"发布开发单";
+  const publishStatus=submissionUnknown?(pendingSubmission.current?.operation==='publish_preorder'?'预下单发布结果待核对':pendingSubmission.current?.operation==='publish'?'开发发布结果待核对':'客户订单确认结果待核对'):preorder&&!developmentPublished?`预下单草稿 · ${dirty.current?"有未保存修改":"可继续补充资料"}`:existingDraft?.preorderPublication?'预下单已发布 · 待正式确认':developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):`开发草稿 · ${dirty.current?"有未保存修改":savedDraft||existingDraft?.document?"已保存，可继续填写":"尚未保存"}`;
+  const submitLabel=preorder&&!published?numberedCreation&&!preorderAlreadyPublished?"发布预下单":"保存预下单备料资料":guided?withOrder?"提交并确认订单":"提交开发单":intent==="confirm_order"?"确认下单":published?(withOrder?"确认客户订单":"返回已发布档案"):"发布开发单";
   const title = preorder&&!published?"预下单备料 · 资料可后补":existingDraft?.revisionSource?`复版 ${existingDraft.revisionSource.revisionNumber} · ${existingDraft.designStyleNo}`:intent === "confirm_order" ? "客户确定订单 · 补订购信息" : withOrder ? "产品开发（有确定订单）" : "产品开发（无确定订单）";
   const line = (index: number, patch: Partial<DevelopmentOrderDraft["lines"][number]>) => setForm(current => ({...current, lines: current.lines.map((value, i) => i === index ? {...value, ...patch} : value)}));
   const selectPictures = async (files: File[],kind=fileKind,stepKey?:string) => {
     if (writing.current || !files.length) return;
     writing.current = true; setBusy(true); setError("");
     try {
-      let fileCount=document.files.length;
+      let fileCount=document.files.length,stylePictureCount=document.files.filter(entry=>isDevelopmentStylePicture(entry.kind)).length;
       for (const original of files) {
+        if(guided&&isDevelopmentStylePicture(kind)&&stylePictureCount>=DEVELOPMENT_STYLE_PICTURE_LIMIT)throw new Error("款式图最多 5 张，已选择的图片仍保留。");
         if (fileCount >= 30) throw new Error("开发单最多30个附件，请先移除不用的文件");
         const file = original.type === "application/pdf" ? original : await preparePatternMaterial(original);
         if (["款图","局部图"].includes(kind) && !file.type.startsWith("image/")) throw new Error("款图和局部图请使用 JPG、PNG 或 WebP");
         const preview = URL.createObjectURL(file); previews.current.push(preview);
-        fileCount++; const id=createClientRequestId();
+        fileCount++; if(isDevelopmentStylePicture(kind))stylePictureCount++; const id=createClientRequestId();
         picturesRef.current = [...picturesRef.current, {id, file, preview,kind}];
         setDocument(current=>({...current,files:[...current.files,{attachmentId:id,kind}],
           ...(stepKey?{craftRequirements:attachDevelopmentCraftFile(current,stepKey,id)}:{})}));
@@ -260,8 +290,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     setForm(current => ({...current, lines: current.lines.length > 1 ? current.lines.filter((_, position) => position !== index) : current.lines}));
   };
   const save = async (draftOnly = false):Promise<boolean> => {
-    if (writing.current || pendingSubmission.current || errorDialogOpen.current) return false;
-    const action=preorder&&!published?"保存预下单备料资料":draftOnly?"保存开发草稿":withOrder?"提交并确认订单":"提交开发单";
+    if (writing.current || pendingSubmission.current || errorDialogOpen.current || !safeToWriteNumbered) return false;
+    const action=preorder&&!published?draftOnly?"保存预下单备料资料":submitLabel:draftOnly?"保存开发草稿":withOrder?"提交并确认订单":"提交开发单";
     const attachmentError=unavailableDraftAttachments.length?'此草稿含失效附件，请移除原附件并重新上传后再保存或发布。':
       lostLocalFiles.length?'本页原本地附件尚未上传，刷新后须重新选择或移除这些本地项；未开始提交，其他资料仍保留。':null;
     if(attachmentError){
@@ -281,17 +311,30 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     writing.current = true; setBusy(true); setError("");setErrorField(null);
     let phase:SubmissionPhase='preparing';
     try {
-      if(!form.designStyleNo.trim())throw new Error("请填写设计款号");
+      if(guided&&!draftOnly&&!document.templateConfirmed){
+        const message="请在基本资料明确选择衣类";
+        showBusinessError(action,[{type:"missing",message,field:{id:"development-create-garment",label:"衣类"}}]);
+        setError(message);setErrorField("development-create-garment");
+        return false;
+      }
+      if(!numberedCreation&&!form.designStyleNo.trim())throw new Error("请填写设计款号");
       if(withOrder&&!preorder&&!draftOnly&&!form.customerCode)throw new Error("请选择客户");
-      const sourceInput = DigitalSourceCreateSchema.parse({developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null});
+      const sourceInput = numberedCreation?null:DigitalSourceCreateSchema.parse({developmentType,designStyleNo:form.designStyleNo,temporaryStyleNo:form.temporaryStyleNo,customerCode:form.customerCode||null});
+      const numberingKind=preorder||initialPreorder||preorderAlreadyPublished||document.customerOrderDraft?.stage==='preorder'?'preorder':withOrder?'formal':'development';
+      const numberedInput=numberedCreation?NumberedDraftInputSchema.parse({developmentType,temporaryStyleNo:form.temporaryStyleNo,numbering:{kind:numberingKind,customerCode:form.customerCode||null,productGroup:form.productGroup,salesYear:form.salesYear??null,salesSeries:form.salesSeries??null}}):null;
+      if(numberedInput&&preorder&&!draftOnly&&(!numberedInput.numbering.customerCode||!numberedInput.numbering.salesYear||!numberedInput.numbering.salesSeries||!form.primaryMerchandiserId))throw new Error('请核对客户、销售年份、系列及有效跟单后发布预下单');
+      if(numberedInput&&!draftOnly&&!form.designStyleNo){
+        if(!numberedInput.numbering.salesYear)throw new Error('请填写销售年份后发号');
+        if(numberingKind==='formal'&&!numberedInput.numbering.salesSeries)throw new Error('请填写销售系列后发号');
+      }
       let effectiveApproval=shortApproval;
-      if(!calendar?.orderTimeEnabled&&!draftOnly&&createdSource&&shortInput&&dateMinimum&&initialCustomerDateErrors(shortInput.lines,dateMinimum).length){
+      if(!preorder&&!calendar?.orderTimeEnabled&&!draftOnly&&createdSource&&shortInput&&dateMinimum&&initialCustomerDateErrors(shortInput.lines,dateMinimum).length){
         const actual=await digitalRequest<ShortLeadState>(`sources/${createdSource}/short-lead-requests`);setShortState(actual);effectiveApproval=matchingShortLeadApproval(shortInput,actual.requests);
       }
       const effectiveApprovedCalendar=effectiveApproval?{requestId:effectiveApproval.requestId,facts:effectiveApproval.facts,commitmentDay:effectiveApproval.commitmentDay}:null;
       const effectiveConfirmationCalendar=calendarReady?{...calendar!,approvedShortLead:effectiveApprovedCalendar}:undefined;
-      const shouldConfirmOrder=withOrder&&!draftOnly&&(guided||intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form,effectiveConfirmationCalendar));
-      const orderInput = shouldConfirmOrder ? DigitalOrderCreateSchema.parse({...developmentOrderInput(form),...(document.productionPlanning?{productionPlanning:document.productionPlanning}:{}),...(!calendar?.orderTimeEnabled&&effectiveApproval?{shortLeadApprovalId:effectiveApproval.requestId}:{})}) : null;
+      const shouldConfirmOrder=withOrder&&!preorder&&!draftOnly&&(guided||intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form,effectiveConfirmationCalendar));
+      const orderCandidate = shouldConfirmOrder ? (numberedCreation&&!form.designStyleNo?UnnumberedOrderValidation:DigitalOrderCreateSchema).parse({...developmentOrderInput(form),...(document.productionPlanning?{productionPlanning:document.productionPlanning}:{}),...(!calendar?.orderTimeEnabled&&effectiveApproval?{shortLeadApprovalId:effectiveApproval.requestId}:{})}) : null;
       let liveConfirmationCalendar:CustomerOrderCalendar|undefined=effectiveConfirmationCalendar;
       const savedWizardStep=guided&&draftOnly?wizardStep:document.customerOrderDraft?.wizardStep;
       const keepPreorder=guided&&draftOnly&&!preorder&&document.customerOrderDraft?.stage==='preorder';
@@ -300,38 +343,48 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         ...(keepPreorder?{wizardConfirmPreorder:true as const}:{}),
         ...(savedWizardStep===undefined?{}:{wizardStep:savedWizardStep}),
       }};
-      if(orderInput){
+      if(orderCandidate){
         const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string;orderTimeEnabled?:boolean}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
         liveConfirmationCalendar={...calendar,approvedShortLead:effectiveApprovedCalendar};setCalendar({...calendar,sourceId:createdSource});
-        const dateError=customerOrderDateError(orderInput.orderDate,calendar.serverToday);
+        const dateError=customerOrderDateError(orderCandidate.orderDate,calendar.serverToday);
         if(dateError)throw new Error(dateError);
-        const errors=calendar.orderTimeEnabled?[]:initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length&&!effectiveApproval)throw new Error(errors.join("；"));
+        const errors=calendar.orderTimeEnabled?[]:initialCustomerDateErrors(orderCandidate.lines,calendar.minimumInitialCustomerDate);if(errors.length&&!effectiveApproval)throw new Error(errors.join("；"));
       }
       if(!source&&!published){
         setStepValidation(false);
         setValidationMode(draftOnly?"save":"publish");
-        const invalid=developmentIssues(submissionDocument,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs);
+        const invalid=developmentIssues(submissionDocument,quantityInput,measurementIds.current,!draftOnly&&!preorder,null,sizeQuantityInputs);
         if(invalid.length){showBusinessError(action,documentIssuesForDialog(invalid));return false;}
-        if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");
+        if(!draftOnly&&!preorder&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");
       }
       let id = createdSource;
       if (!id) {
-        const payload = JSON.stringify(sourceInput);
+        const payload = JSON.stringify(numberedInput??sourceInput);
         if (sourceKey.current?.payload !== payload) sourceKey.current = {payload, key: createClientRequestId()};
         // The original creation acknowledgement intentionally contains only
         // sourceId. Retain that known identity before the separate sheet read;
         // a failed read must never authorize creating another source.
-        const next = await requestCreation<Pick<DigitalSource,'sourceId'>>("sources/drafts", "POST", sourceInput, sourceKey.current.key,null,null,value=>{
+        const next = await requestCreation<Pick<DigitalSource,'sourceId'>&{orderNumber?:string|null}>(numberedInput?NUMBERED_DRAFT_PATH:"sources/drafts", "POST", numberedInput??sourceInput, sourceKey.current.key,null,null,value=>{
           if(!DigitalIdSchema.safeParse(value?.sourceId).success)throw Error('SOURCE_RESPONSE_MISMATCH');
-          setCreatedSource(value.sourceId);setFixedCustomer(sourceInput.customerCode);return {sourceId:value.sourceId,version:null};
+          if(numberedInput&&!NumberedDraftIdentitySchema.safeParse(value).success)throw Error('NUMBERED_SOURCE_RESPONSE_MISMATCH');
+          setCreatedSource(value.sourceId);setFixedCustomer(form.customerCode||null);return {sourceId:value.sourceId,version:null};
         });
-        id = next.sourceId; setCreatedSource(id); setFixedCustomer(sourceInput.customerCode);
+        id = next.sourceId; setCreatedSource(id); setFixedCustomer(form.customerCode||null);
       }
-      let persistedDocument=document;
+      let persistedDocument=document,confirmedNumber=existingDraft?.numberedIdentity?.orderNumber??null;
+      const formalOrderInput=()=>{
+        if(!orderCandidate)return null;
+        if(!numberedCreation)return orderCandidate;
+        if(!confirmedNumber)throw new Error('订单ID尚未生成，请补准发号资料；原草稿仍保留');
+        return DigitalOrderCreateSchema.parse({...orderCandidate,designStyleNo:confirmedNumber});
+      };
+      let orderInput=source?formalOrderInput():null;
       if (!source) {
         const base = `sources/${id}/development`;
         let sheet = await digitalRequest<DevelopmentSheet>(base);setFixedCraft(sheet.timelineSchemaVersion===2);
+        if(sheet.sourceId!==id||numberedInput&&!sheet.numberedIdentity)throw new Error('原档案身份未核实，请重新核对来源');
+        confirmedNumber=sheet.numberedIdentity?.orderNumber??null;
         if(loadedVersion.current===null)loadedVersion.current=sheet.version;
         if (sheet.status !== "published") {
           if (!sheet.canEdit) throw new Error("当前没有修改开发单的权限");
@@ -347,7 +400,20 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             }
           }
           const uploaded=new Map(picturesRef.current.flatMap(picture=>picture.attachmentId?[[picture.id,picture.attachmentId] as const]:[]));
+          // Reservation already attempted this exact context. Retry binding only
+          // for an existing draft with the inputs X1 can actually use.
+          if(numberedInput&&createdSource&&!confirmedNumber&&numberedInput.numbering.salesYear&&
+            (numberingKind==='development'||numberedInput.numbering.customerCode&&numberedInput.numbering.salesSeries)){
+            const payload=JSON.stringify(numberedInput.numbering);
+            if(draftNumberKey.current?.payload!==payload)draftNumberKey.current={payload,key:createClientRequestId()};
+            const bound=NumberedDraftIdentitySchema.parse(await digitalRequest<unknown>(`sources/${id}/draft-number`,'POST',numberedInput.numbering,draftNumberKey.current.key));
+            if(bound.sourceId!==id)throw Error('原档案的编号未核实，资料仍保留');
+            confirmedNumber=bound.orderNumber;
+          }
+          if(numberedInput&&!draftOnly&&!confirmedNumber)throw new Error('订单ID尚未生成，请补准发号资料；原草稿仍保留');
+          orderInput=formalOrderInput();
           const preparedDocument:DevelopmentDocument={...submissionDocument,
+            ...(numberedInput?{customerOrderDraft:{...submissionDocument.customerOrderDraft!,order:{...form,designStyleNo:confirmedNumber??''}}}:{}),
             orderDate:sheet.document?.orderDate??sheet.draftDocumentDate??sheet.developmentCreatedDate??document.orderDate,
             files:document.files.map(file=>({...file,attachmentId:uploaded.get(file.attachmentId)??file.attachmentId})),
             materials:document.materials.map(material=>material.sampleAttachmentId&&uploaded.has(material.sampleAttachmentId)
@@ -375,6 +441,17 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             initial.current=snapshot;dirty.current=false;setSavedDraft(snapshot);
           }
           if(!draftOnly){
+            if(preorder&&numberedInput){
+              const body={expectedVersion:sheet.version},payload=JSON.stringify(body);
+              if(publishKey.current?.payload!==payload)publishKey.current={payload,key:createClientRequestId()};
+              const command:PendingDevelopmentSubmission={operation:'publish_preorder',sourceId:id,key:publishKey.current.key,body};
+              phase='publish';
+              try{
+               const value=await requestCreation<unknown>(developmentSubmissionPath(id,command.operation),'POST',body,command.key,id,sheet.version,result=>{developmentSubmissionResult(command,result);return {sourceId:id!,version:sheet.version};},command);
+               if(!creationScope)developmentSubmissionResult(command,value);
+              }catch(reason){if(reason instanceof DigitalRequestError&&reason.resultUnknown){pendingSubmission.current=command;setSubmissionUnknown(true);}throw reason;}
+              completed.current=true;writing.current=false;onCreated(id,null);return true;
+            }
             const body={expectedVersion:sheet.version,...(existingDraft?.revisionSource?.outputKind==='工艺布片'||!patternChoice?{}:{patternOrder:patternChoice})},payload=JSON.stringify(body);
             if(publishKey.current?.payload!==payload)publishKey.current={payload,key:createClientRequestId()};
             phase='publish_check';
@@ -387,7 +464,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             setPublished(true);
             if(publishedSheet.document?.customerOrderDraft?.withOrder){const draft=publishedSheet.document.customerOrderDraft.order;setPublishedOrder(draft);setForm(draft);}
           }
-        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){const draft=sheet.document.customerOrderDraft.order;setPublishedOrder(draft);if(initialCustomerOrderIsReady(draft,liveConfirmationCalendar))setForm(draft);}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
+        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){const draft=sheet.document.customerOrderDraft.order;setPublishedOrder(draft);if(initialCustomerOrderIsReady(draft,liveConfirmationCalendar))setForm(draft);}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;orderInput=formalOrderInput();}
       }
       let orderId: string | null = null;
       if (orderInput) {
@@ -429,17 +506,23 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   const changeStep=(step:DevelopmentWizardStep)=>{
     setWizardStep(step);
+    setReachedWizardStep(current=>step>current?step:current);
     setError('');
     setErrorField(null);
     requestAnimationFrame(()=>stepHeading.current?.focus());
   };
+  const wizardFieldStep=(id:string):DevelopmentWizardStep=>{
+    if(id==='development-workbench-processingSelected'||id==='development-craft-requirements'||id.startsWith('development-craft'))return 2;
+    if(id==='development-create-customer'||id==='development-customer-order-date')return withOrder&&!numberedCreation?3:1;
+    const chapter=developmentFieldChapter(id);
+    if(id.startsWith('development-workbench-')||id==='development-create-style'||id==='development-create-garment'||id==='development-orderDate'
+      ||chapter==='development-images'||chapter==='development-materials'||chapter==='development-labels')return 1;
+    return chapter||!withOrder?2:3;
+  };
   const locateStep=(id:string)=>{
     if(!guided||preorder)return;
     setLocatingField({id});
-    const chapter=developmentFieldChapter(id);
-    if(id.startsWith('development-workbench-')||id==='development-create-style'||chapter==='development-images'||chapter==='development-sizes'||chapter==='development-materials')setWizardStep(1);
-    else if(chapter)setWizardStep(2);
-    else if(withOrder)setWizardStep(3);
+    setWizardStep(wizardFieldStep(id));
   };
   const locateErrorField=useDocumentFieldLocator(locateStep);
   function documentIssuesForDialog(invalid: readonly DocumentIssue[]): BusinessDialogIssue[] {
@@ -456,40 +539,72 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const beginPreorderConfirmation=async()=>{
     if(!await confirmInApp("客户已确认订单？在原预下单上补齐正式资料；保存草稿不会正式下单。",{presentation:"astryx"})||writing.current)return;
     setPreorder(false);
+    setReachedWizardStep(1);
     changeStep(1);
   };
-  const advance=()=>{
-    if(errorDialogOpen.current)return;
-    if(wizardStep===1&&!form.designStyleNo.trim()){
+  const validateStep=(step:DevelopmentWizardStep)=>{
+    if(step===1&&!document.templateConfirmed){
+      const message="请在基本资料明确选择衣类";
+      setError(message);setErrorField("development-create-garment");
+      showBusinessError("下一步",[{type:"missing",message,field:{id:"development-create-garment",label:"衣类"}}]);
+      return false;
+    }
+    if(step===1&&!numberedCreation&&!form.designStyleNo.trim()){
       setError('请填写设计款号');
       setErrorField('development-create-style');
       showBusinessError("下一步",[{type:"missing",message:"请填写设计款号",field:{id:"development-create-style",label:"设计款号"}}]);
-      return;
+      return false;
     }
-    if(wizardStep===1&&document.workbenchSheet){
-      const shape=DevelopmentDocumentSchema.safeParse(validationDocument);
-      const first=developmentWorkbenchPublishIssues(document.workbenchSheet)[0];
-      const fabric=developmentMaterialPublishIssues(document)[0];
-      if(first||fabric||!shape.success){
+    if(document.workbenchSheet){
+      const invalid=developmentIssues(validationDocument,quantityInput,measurementIds.current,false,null,sizeQuantityInputs,false,true)
+        .map(resolveIssueField).filter(issue=>wizardFieldStep(issue.id)===step);
+      if(invalid.length){
         setValidationMode('save');
         setStepValidation(true);
-        const id=first?`development-workbench-${first.field}`:fabric?`development-${fabric.materialId}-${fabric.field}`:undefined;
-        const invalid=developmentIssues(validationDocument,quantityInput,measurementIds.current,false,null,sizeQuantityInputs,false,true);
-        if(invalid.length)showBusinessError("下一步",documentIssuesForDialog(invalid));
-        else if(id)setLocatingField({id});
-        return;
+        showBusinessError("下一步",documentIssuesForDialog(invalid));
+        return false;
       }
     }
     setStepValidation(false);
-    if(wizardStep===2&&document.workbenchSheet&&!published&&(!patternChoice||!document.quantity)){
+    if(step===2&&document.workbenchSheet&&!published&&(!patternChoice||!document.quantity)){
       const id=document.quantity?"development-pattern-preparation":"development-quantity";
       const detail=document.quantity?"请选择打板品类与有效执行价":"请填写本轮打板数量";
       setError(detail);
       setErrorField(id);
       showBusinessError("下一步",[{type:"missing",message:detail,field:{id,label:document.quantity?"打板品类与执行价":"本轮打板数量"}}]);
-      return;
+      return false;
     }
-    if(wizardStep<stepCount)changeStep(wizardStep===1?2:3);
+    return true;
+  };
+  const advance=()=>{
+    if(errorDialogOpen.current||wizardStep>=stepCount||!validateStep(wizardStep))return;
+    changeStep(wizardStep===1?2:3);
+  };
+  const changeGarment=async(value:string)=>{
+    if((value!=="上衣"&&value!=="裤子")||writing.current||published||document.templateConfirmed&&document.template===value)return;
+    const unknown=!document.templateConfirmed;
+    if(hasCustomizedDevelopmentSizes(document,sizeQuantityInputs)&&!await confirmInApp(
+      unknown?`原草稿未明确衣类。确认将保留原尺寸表并归入${value}，不会套用默认行。`
+        :"切换衣类将使用对应尺寸表，已填写的尺寸将保留在本草稿中，可切回恢复。",
+      {presentation:"astryx",title:"更正衣类",confirmLabel:"确认更正"}))return;
+    if(writing.current)return;
+    const next=changeDevelopmentCreationGarment(document,value,sizeQuantityInputs);
+    if(!unknown)measurementIds.current=next.document.measurements.map(()=>createClientRequestId());
+    setSizeQuantityInputs(next.rawQuantities);
+    setDocument(next.document);
+  };
+  const visitReachedStep=(index:number)=>{
+    const target=(index+1) as DevelopmentWizardStep;
+    if(busy||submissionUnknown||errorDialogOpen.current||target===wizardStep||target<1||target>stepCount||target>reachedWizardStep)return;
+    // Earlier input may have changed since this step was last reached. Reuse the
+    // original forward validation so the step rail never skips a failed step.
+    for(let step=wizardStep;step<target;step=(step+1) as DevelopmentWizardStep){
+      if(!validateStep(step)){
+        if(step!==wizardStep)setWizardStep(step);
+        return;
+      }
+    }
+    changeStep(target);
   };
   const rowTotals = form.lines.map(row => developmentQuantityTotal(row.sizes));
   const totalQuantity = rowTotals.some(total => total === null) ? null : rowTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0);
@@ -523,34 +638,36 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         {items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}
       </select></label>;
   const FormAction=guided?DevelopmentEntryAction:Button;
-  return <Surface className={`development-create development-create-reference dx-doc-development${guided?" development-create-wizard":""}`}><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); if(guided&&wizardStep<stepCount)advance();else void save(preorder&&!published);}}>
+  return <Surface className={`development-create development-create-reference dx-doc-development${guided?" development-create-wizard":""}`}><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); if(guided&&wizardStep<stepCount)advance();else void save(preorder&&!published&&(!numberedCreation||preorderAlreadyPublished));}}>
     {creation?.snapshot&&<p role="status">已恢复本页开发资料和订购草稿；未创建新档案、未自动提交。</p>}
     {unavailableDraftAttachments.length>0&&<p role="alert">此草稿有 {unavailableDraftAttachments.length} 份已保存附件已失效，请在附件列表移除原附件并重新上传。</p>}
     {lostLocalFiles.length>0&&<p role="alert">原本地附件尚未上传，浏览器刷新未保留文件内容：{lostLocalFiles.map(file=>file.name).join('、')}。请重新选择，或沿附件列表明确移除原本地项后再办理；其他输入仍保留。</p>}
+    {!safeToWriteNumbered&&<p role="status">此编号档案当前只可读取，原资料和历史仍保留。</p>}
     <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<FormAction type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</FormAction>}
       {guided&&!createdSource&&onChooseCreationType&&<AstryxButton label="更换订单类型" type="button" variant="secondary"
         isDisabled={busy||submissionUnknown} onClick={async()=>{
           if(dirty.current&&!await confirmInApp("更换类型会打开一份新草稿。当前填写保留在原草稿，可从创建页继续。确定更换？"))return;
           if(!writing.current)onChooseCreationType();
         }}/>}
-      {!source&&!published&&!preorder&&<FormAction type="button" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</FormAction>}<FormAction form={formId} type="submit" variant="primary" disabled={busy||submissionUnknown||!calendarReady||Boolean(calendarError)||(!guided&&!source&&!published&&!preorder&&existingDraft?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)}>{busy?"保存中…":guided&&wizardStep<stepCount?"下一步":submitLabel}</FormAction>{guided&&wizardStep>1&&<FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>changeStep(wizardStep===3?2:1)}>上一步</FormAction>}{guided&&preorder&&createdSource&&Boolean(loadedVersion.current)&&!published&&
+      {!source&&!published&&(!preorder||numberedCreation&&!preorderAlreadyPublished)&&<FormAction type="button" disabled={!safeToWriteNumbered||busy||submissionUnknown||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>{preorder?'保存预下单备料资料':'保存开发资料草稿'}</FormAction>}<FormAction form={formId} type="submit" variant="primary" disabled={!safeToWriteNumbered||busy||submissionUnknown||!calendarReady||Boolean(calendarError)||(!guided&&!source&&!published&&!preorder&&existingDraft?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)}>{busy?"保存中…":guided&&wizardStep<stepCount?"下一步":submitLabel}</FormAction>{guided&&preorder&&!numberedCreation&&createdSource&&Boolean(loadedVersion.current)&&!published&&
       <FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>void beginPreorderConfirmation()}>客户确认下单</FormAction>}
       {guided&&!preorder&&!published&&document.customerOrderDraft?.stage==='preorder'&&
-      <FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>{setPreorder(true);setStepValidation(false);changeStep(1);}}>返回预下单备料</FormAction>}
+      <FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>{setPreorder(true);setStepValidation(false);setReachedWizardStep(1);changeStep(1);}}>返回预下单备料</FormAction>}
+      {guided&&!preorder&&wizardStep>1&&<FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>changeStep(wizardStep===3?2:1)}>上一步</FormAction>}
     </DocumentToolbar>
-    {guided&&!preorder&&<section aria-label="建单步骤"><Stepper label="建单进度" className="development-creation-steps" activeStep={wizardStep-1}>
-      {DEVELOPMENT_WIZARD_STEPS.slice(0,stepCount).map((label,index)=><Step key={label} step={index} label={label}/>)}
+    {guided&&!preorder&&<section aria-label="建单步骤"><Stepper label="建单进度" className="development-creation-steps" activeStep={wizardStep-1} onStepClick={visitReachedStep}>
+      {DEVELOPMENT_WIZARD_STEPS.slice(0,stepCount).map((label,index)=><Step key={label} step={index} label={label} isDisabled={busy||submissionUnknown||index+1>reachedWizardStep}/>)}
     </Stepper><h2 ref={stepHeading} tabIndex={-1}>{DEVELOPMENT_WIZARD_STEPS[wizardStep-1]}</h2></section>}
     {preorder?<p className="dx-doc-hint">先记录已知的面料及备料信息，其余客户、PO和配码资料在正式下单时补齐。</p>:!guided&&withOrder&&!published&&!initialCustomerOrderIsReady(form,confirmationCalendar)&&<p className="dx-doc-hint">订购信息待核实，可先发布开发资料；正式确认订单时再核对PO、颜色、尺码数量及客户约定出货日期。</p>}
 
     {!guided&&!source&&!existingDraft?.revisionSource&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['preorder','预下单备料'],['certain_order','有确定客户订单']] as const).map(([value,label])=><FormAction key={value} type="button" aria-pressed={preorder?value==='preorder':intent===value} disabled={busy||published||submissionUnknown||!onIntentChange} onClick={()=>{setPreorder(value==='preorder');onIntentChange?.(value==='preorder'?'certain_order':value);}}>{label}</FormAction>)}</div>}
     {guided&&!preorder&&wizardStep>1&&document.workbenchSheet&&<DocumentSection id="development-prior-steps" title="已填写的版单资料">
       <dl className="development-prior-step-facts">
-        <div><dt>款号 / 款名</dt><dd>{form.designStyleNo} · {document.workbenchSheet.styleName}</dd></div>
+        <div><dt>款号</dt><dd>{form.designStyleNo||"—"}</dd></div>
         <div><dt>附件</dt><dd>{document.files.length} 个</dd></div>
         <div><dt>面辅料</dt><dd>{document.materials.filter(row=>row.name.trim()).length} 项</dd></div>
         <div><dt>工艺</dt><dd>{developmentCraftOptions(document).map(step=>step.label).join("、")||"无"}</dd></div>
-        <div><dt>尺寸模板</dt><dd>{document.template}</dd></div>
+        <div><dt>衣类</dt><dd>{document.templateConfirmed?document.template:"未确认"}</dd></div>
         {wizardStep===3&&<div><dt>预计样板完成日期</dt><dd>{document.returnDate??"未填写"}</dd></div>}
       </dl>
       <AstryxButton label="返回版单" variant="secondary" size="sm" type="button" isDisabled={busy||submissionUnknown} onClick={()=>changeStep(1)}/>
@@ -563,12 +680,18 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {!busy&&!published&&!submissionUnknown&&savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，可返回列表后继续填写；发布和确认订单分别办理。</p>}
     {createdSource&&error&&<p role="status">{failedPhase==='confirm_check'?"本单时效检查未完成，本次客户订单确认尚未发送；资料仍保留，请重新检查。":failedPhase==='publish_check'?"本单时效检查未完成，本次开发发布尚未发送；草稿仍保留，请重新检查。":submissionUnknown||failedPhase==='confirm'||failedPhase==='publish'?developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。":developmentPublished?"开发资料已发布；本次办理尚未完成，请按上方原因处理。":"本次办理尚未完成；已保存内容在原档案，当前输入仍保留。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
-    {submissionUnknown&&<section aria-label="原提交结果待核对"><p role="status">{pendingSubmission.current?.operation==='publish'?'开发发布结果尚未确定，不能据此继续确认下单。':'正式确认结果尚未确定，尚不能显示已下单。'}原资料和操作标识已保留；先只读核对回执，查不到仍保持待核。</p><FormAction disabled={busy} onClick={()=>void recoverSubmission()}>只读核对原提交结果</FormAction><FormAction disabled={busy} onClick={()=>void recoverSubmission(true)}>沿原命令继续核对</FormAction></section>}
+    {submissionUnknown&&<section aria-label="原提交结果待核对"><p role="status">{pendingSubmission.current?.operation==='publish_preorder'?'预下单发布结果尚未确定，不能据此继续交接或确认下单。':pendingSubmission.current?.operation==='publish'?'开发发布结果尚未确定，不能据此继续确认下单。':'正式确认结果尚未确定，尚不能显示已下单。'}原资料和操作标识已保留；先只读核对回执，查不到仍保持待核。</p><FormAction disabled={busy} onClick={()=>void recoverSubmission()}>只读核对原提交结果</FormAction><FormAction disabled={busy} onClick={()=>void recoverSubmission(true)}>沿原命令继续核对</FormAction></section>}
     <fieldset disabled={busy||!calendarReady||submissionUnknown}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card" hidden={guided&&wizardStep===2}><h3>{guided?(wizardStep===3?"客户资料":"基本资料"):"1 · 基本资料"}</h3><BasicLayout><div className="development-create-grid" hidden={guided&&wizardStep!==1}>
-      {intent!=="confirm_order"&&formSelect("开发类型",developmentType,[{value:"头版",label:"头版"},{value:"开发板",label:"开发板"}],
+      {guided&&<><div><Selector id="development-create-garment" label="衣类" placeholder="请选择衣类" size="sm" isRequired
+        value={document.templateConfirmed?document.template:""} isDisabled={busy||published}
+        options={DEVELOPMENT_GARMENTS.map(value=>({value,label:value}))} onChange={value=>void changeGarment(value)}/></div>
+        <div><Selector label="急单" placeholder="请选择急单" size="sm" value={document.rush===undefined?"":document.rush?"yes":"no"} isDisabled={busy||published}
+          options={[{value:"yes",label:"是"},{value:"no",label:"否"}]}
+          onChange={value=>{if(value==="yes"||value==="no")edit({rush:value==="yes"});}}/></div></>}
+      {!guided&&intent!=="confirm_order"&&formSelect("开发类型",developmentType,[{value:"头版",label:"头版"},{value:"开发板",label:"开发板"}],
         value=>setDevelopmentType(value as "头版"|"开发板"),Boolean(createdSource))}
-      <div className="development-code-field">
+      {numberedCreation?<label>订单ID（自动生成）<input aria-label="订单ID" readOnly value={form.designStyleNo||existingDraft?.numberedIdentity?.orderNumber||'待生成'}/></label>:<div className="development-code-field">
         {guided?<span className="development-code-label">设计款号 / 业务ID（必填）</span>
           :<label htmlFor="development-create-style">设计款号 / 业务ID（必填）</label>}
         <div className="development-code-check">
@@ -586,12 +709,12 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         {!createdSource&&<small id="development-code-result" role="status">
           {codeCheck?.code===form.designStyleNo.trim()?codeCheck.message:'填入设计业务ID后可检查是否已使用。'}
         </small>}
-      </div>
+      </div>}
       {guided?<DevelopmentEntryText label="代用款号（选填）" visibleLabel maxLength={100} value={form.temporaryStyleNo??''}
         isReadOnly={Boolean(createdSource)} onChange={temporaryStyleNo=>setForm({...form,temporaryStyleNo:temporaryStyleNo||null})}/>
         :<label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>}
       <label>设计师（只读）<input className="development-create-readonly-input" aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
-{guided&&!preorder&&developmentDate}</div><div className="development-create-grid development-create-grid-secondary" hidden={guided&&(preorder||withOrder&&wizardStep===1)}>
+{guided&&!preorder&&developmentDate}</div><div className="development-create-grid development-create-grid-secondary" hidden={guided&&!numberedCreation&&(preorder||withOrder&&wizardStep===1)}>
       {guided?<div id="development-create-customer" tabIndex={-1}>
         <Selector label="客户" isRequired={withOrder&&!preorder} size="sm" hasSearch searchPlaceholder="搜索客户或编号"
           isDisabled={busy||Boolean(createdSource&&(fixedCustomer||!withOrder))}
@@ -670,21 +793,21 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       <DocumentErrors issues={issues} onLocateField={locateStep}/>
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
       {guided&&!preorder&&wizardStep===1&&document.workbenchSheet&&
-        <WorkbenchDevelopmentSheetFields creation sheet={document.workbenchSheet} readonly={busy||published} issue={id=>issues.find(value=>value.id===id)?.message}
+        <WorkbenchDevelopmentSheetFields creation originalFields={!document.templateConfirmed} sheet={document.workbenchSheet} readonly={busy||published} issue={id=>issues.find(value=>value.id===id)?.message}
           onChange={workbenchSheet=>edit({workbenchSheet})}/>}
-      <div hidden={guided&&wizardStep===3}><DevelopmentDocumentFields craftControls={guided?craftControl:undefined} locatingField={locatingField} creationView={guided?(preorder?"preorder":wizardStep===1?"sheet":"requirements"):undefined} fixedCraft={fixedCraft} materialFactsReadonly={Boolean(creation||existingDraft?.draftDocumentDate||existingDraft?.materialForecastOnly)} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);const missing=lostLocalFiles.find(file=>file.id===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:missing?{filename:missing.name,mimeType:missing.type,sizeBytes:missing.size}:undefined;}} metadataPath={id=>createdSource&&!lostLocalFiles.some(file=>file.id===id)&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>lostLocalFiles.some(file=>file.id===id)?'':picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/></div>
+      <div hidden={guided&&wizardStep===3}><DevelopmentDocumentFields materialSupplierCatalog={guided&&workbenchNumberedCreation} craftControls={guided?craftControl:undefined} locatingField={locatingField} creationView={guided?(preorder?"preorder":wizardStep===1?"sheet":"requirements"):undefined} fixedCraft={fixedCraft} materialFactsReadonly={Boolean(creation||existingDraft?.draftDocumentDate||existingDraft?.materialForecastOnly)} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);const missing=lostLocalFiles.find(file=>file.id===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:missing?{filename:missing.name,mimeType:missing.type,sizeBytes:missing.size}:undefined;}} metadataPath={id=>createdSource&&!lostLocalFiles.some(file=>file.id===id)&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>lostLocalFiles.some(file=>file.id===id)?'':picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/></div>
     </div>}
     </fieldset>
     {calendar?.orderTimeEnabled&&withOrder&&!preorder&&(!guided||wizardStep===3)&&<OrderTimeProductionRoute value={document.productionPlanning} disabled={busy} onChange={productionPlanning=>edit({productionPlanning})}/>}
     {timeApplication.dialog}
     {!calendar?.orderTimeEnabled&&withOrder&&!preorder&&(!guided||wizardStep===3)&&shortInput&&dateMinimum&&initialCustomerDateErrors(shortInput.lines,dateMinimum).length>0&&<ShortLeadPanel key={createdSource??'new'} sourceId={createdSource} order={shortInput} onState={setShortState} readOnly={submissionUnknown} {...(!source&&!published?{saveDraft:async()=>{if(!await save(true))throw new Error("原开发草稿尚未保存成功；请先核对表单错误，再提交本来源的特批申请。");}}:{})}/>}
-  </form>{createdSource&&preorder&&(!guided||Boolean(loadedVersion.current))&&<ProductionReadinessPanel resource={{kind:"source",id:createdSource}} {...(guided?{focusKind:"design_handover",handoverSubmitLabel:"提交备料交接"}:{})} sourceDocumentVersion={loadedVersion.current??undefined} readonly={busy||dirty.current}/>}</Surface>;
+  </form>{createdSource&&preorder&&!numberedCreation&&(!guided||Boolean(loadedVersion.current))&&<ProductionReadinessPanel resource={{kind:"source",id:createdSource}} {...(guided?{focusKind:"design_handover",handoverSubmitLabel:"提交备料交接"}:{})} sourceDocumentVersion={loadedVersion.current??undefined} readonly={busy||dirty.current}/>}</Surface>;
 }
 
 export function ResumeDevelopmentCreateForm({sheet,onClose,onCreated,onViewPublished,contained=false}:{contained?:boolean;sheet:DevelopmentSheet;onClose:()=>void;onCreated:(sourceId:string,orderId:string|null)=>void;onViewPublished?:()=>void}) {
-  const [options,setOptions]=useState<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string;orderTimeEnabled?:boolean}|null>(null);
+  const [options,setOptions]=useState<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string;orderTimeEnabled?:boolean;workbenchNumberedCreation?:boolean}|null>(null);
   const [error,setError]=useState("");
   const [intent,setIntent]=useState<"development"|"certain_order">(sheet.document?.customerOrderDraft?.withOrder?"certain_order":"development");
-  useEffect(()=>{let live=true;setOptions(null);setError('');void digitalRequest<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string;orderTimeEnabled?:boolean}>(developmentOrderOptionsPath(sheet.sourceId)).then(value=>{if(live)setOptions(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:"读取客户资料失败");});return()=>{live=false;};},[sheet.sourceId]);
-  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} guidedCreation={sheet.status==="draft"&&sheet.document?.customerOrderDraft?.wizardStep!==undefined} orderTimeEnabled={options.orderTimeEnabled} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} calendarSourceId={sheet.sourceId} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/>{sheet.canEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:"source",id:sheet.sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}</>;
+  useEffect(()=>{let live=true;setOptions(null);setError('');void digitalRequest<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string;orderTimeEnabled?:boolean;workbenchNumberedCreation?:boolean}>(developmentOrderOptionsPath(sheet.sourceId)).then(value=>{if(live)setOptions(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:"读取客户资料失败");});return()=>{live=false;};},[sheet.sourceId]);
+  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} guidedCreation={sheet.status==="draft"&&sheet.document?.customerOrderDraft?.wizardStep!==undefined} orderTimeEnabled={options.orderTimeEnabled} workbenchNumberedCreation={options.workbenchNumberedCreation===true} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} calendarSourceId={sheet.sourceId} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/>{sheet.canEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:"source",id:sheet.sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}</>;
 }

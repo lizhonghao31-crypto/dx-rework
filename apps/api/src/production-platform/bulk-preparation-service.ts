@@ -16,6 +16,7 @@ import {BulkFabricReportSchema,BulkFabricDecisionSchema,type BulkFabricReport,ty
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { BulkPatternCardPage, BulkPatternCardSummary, BulkPatternCardTask, BulkDispatch, BulkCompletion, BulkPreparationSheet, BulkWorkroomFilter, BulkWorkroomResult } from "@dx-rework/contracts/bulk-preparation";
+import {readDevelopmentOrderRush} from './development-order-rush.js';
 import type { InstructionDocument } from "@dx-rework/contracts/production-instruction";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -238,6 +239,7 @@ export class BulkPreparationService {
    const access=await readJourneySelectionAccess(db,actor,scopes);
    const readable=rows.filter(row=>access.resources.get('order:'+row.production_order_id)?.technical);
    const ids=readable.map(row=>row.production_order_id as string);
+   const rush=await readDevelopmentOrderRush(db,ids.map(orderId=>({orderId,sourceId:null})));
    const pageEvidence=await readJourneyCandidateCohort(db,ids,async(client,id)=>{
     const gates=await this.gates(client,id),preparation=await this.current(client,id,gates);
     return {id,preparationId:preparation?.preparation_id as string|undefined,reasons:gates.reasons};
@@ -275,7 +277,7 @@ export class BulkPreparationService {
    }
    const items=readable.map(row=>{
     const orderId=row.production_order_id as string,preparationId=preparationIds.get(orderId)??null;
-    return {orderId,designStyleNo:row.design_style_no,customer:row.customer_code,card:{preparationId,
+    return {orderId,designStyleNo:row.design_style_no,customer:row.customer_code,...(rush.has(`order:${orderId}`)?{orderRush:true as const}:{}),card:{preparationId,
      reasons:reasons.get(orderId)??[],facts:preparationId?facts.get(preparationId)??[]:[],
      task:preparationId?patternTasks.get(preparationId)??null:null,lines:lines.get(orderId)??[]}};
    });

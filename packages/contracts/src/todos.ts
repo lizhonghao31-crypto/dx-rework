@@ -121,6 +121,7 @@ export const TodoResponseSchema = z.object({
   blockedReason: z.string().nullable(),
   /** Minimal identity of the action's associated business resource. */
   orderContext: TodoOrderContextSchema.nullable(),
+  orderRush: z.literal(true).optional(),
   unread: z.boolean().optional(),
   /** Stable persisted content identity, independent of list query time. */
   contentToken:z.string().regex(/^[a-f0-9]{64}$/).optional(),

@@ -4,10 +4,12 @@ import type {DigitalAccessOptions} from './digital-production-access-panel.js';
 import {createClientRequestId as createLocalViewId} from './client-request-id.js';
 import {digitalRequest} from './digital-production-api.js';
 import {recoverDevelopmentSubmission,type PendingDevelopmentSubmission} from './development-submit-recovery.js';
+import {isDraftReservationPath} from './development-creation-command-path.js';
+import type {DevelopmentCreationChoices} from './digital-development-editing.js';
 import {listCreationDrafts,selectCreationDraft,writeCreationDraft,clearCreationDraft,type CreationDraftIdentity,type CreationDraftRecord,type CreationDraftSnapshot} from './development-creation-draft.js';
 
 export type CreationOutgoing={path:string;method:'POST'|'PUT';key:string;body:string;sourceId:string|null;beforeVersion:number|null;native?:PendingDevelopmentSubmission};
-type CreationView={viewId:string;intent:CreationDraftSnapshot['intent'];preorder:boolean};
+type CreationView={viewId:string;intent:CreationDraftSnapshot['intent'];preorder:boolean;choices?:DevelopmentCreationChoices};
 async function readCreationSource(record:CreationDraftRecord){
  const sheet=record.phase!=='draft'&&record.sourceId?await digitalRequest<DevelopmentSheet>(`sources/${record.sourceId}/development`):undefined;
  if(sheet&&record.phase!=='draft'&&sheet.sourceId!==record.sourceId)throw Error('原开发档案身份不匹配，不能恢复办理');
@@ -88,7 +90,7 @@ export function useDevelopmentCreationDraft(){
    return await resume(requestedView,signal,access);
   }catch(error){if(!signal.aborted&&stamp===epoch.current)setProblem(error instanceof Error?error.message:'本页创建资料尚未核实，不能开启新单');return null;}
  };
- const open=async(saved?:DevelopmentSheet,initialIntent:CreationDraftSnapshot['intent']='development',initialPreorder=false)=>{
+ const open=async(saved?:DevelopmentSheet,initialIntent:CreationDraftSnapshot['intent']='development',initialPreorder=false,choices?:DevelopmentCreationChoices)=>{
   const identity=owner.current;
   if(!identity||!canCreateLocal.current||blocked.current&&!current.current)throw Error(problem||'当前身份或本页草稿尚未核实，不能创建');
   const local=saved&&listCreationDrafts(window.sessionStorage,identity).find(record=>record.phase!=='draft'&&record.sourceId===saved.sourceId);
@@ -98,7 +100,8 @@ export function useDevelopmentCreationDraft(){
   // Local view identity only, never an idempotency key or source identifier.
   const savedOrder=saved?.document?.customerOrderDraft;
   const opened:CreationView={viewId:createLocalViewId(),intent:saved?(savedOrder?.withOrder?'certain_order':'development'):initialIntent,
-   preorder:saved?Boolean(savedOrder?.stage==='preorder'&&!savedOrder.wizardConfirmPreorder):initialPreorder};
+   preorder:saved?Boolean(savedOrder?.stage==='preorder'&&!savedOrder.wizardConfirmPreorder):initialPreorder,
+   ...(!saved&&choices?{choices}:{})};
   openedSource.current=saved;view.current=opened.viewId;setVisibleView(opened);setSourceSheet(saved);setMode('editable');
   refreshLocalDrafts(identity);
   return opened;
@@ -137,6 +140,15 @@ export function useDevelopmentCreationDraft(){
   const next={...record,open:false};persist(next);resetView();blocked.current=false;refreshLocalDrafts(record.identity);
  };
  const retry=()=>{if(current.current){persist(current.current);setProblem('');}};
+ const discardListSnapshot=(record:CreationDraftRecord)=>{
+  const identity=owner.current;
+  if(!identity||!canCreateLocal.current||record.phase==='pending'||current.current?.viewId===record.viewId)return false;
+  const latest=listCreationDrafts(window.sessionStorage,identity).find(entry=>entry.viewId===record.viewId);
+  if(!latest||JSON.stringify(latest)!==JSON.stringify(record))return false;
+  clearCreationDraft(window.sessionStorage,identity,record.viewId);
+  refreshLocalDrafts(identity);
+  return true;
+ };
  const completed=(sourceId:string,id=view.current)=>{
   const record=current.current;if(id!==view.current||record&&record.viewId!==id)return false;if(!record)return true;
   if(record.phase!=='draft'&&record.sourceId!==sourceId)return false;
@@ -145,11 +157,11 @@ export function useDevelopmentCreationDraft(){
  };
  const check=async()=>{
   const record=current.current;
-  if(record?.phase!=='pending'||!record.native&&record.original.path!=='sources/drafts'&&record.original.method!=='PUT')throw Error('本页尚无受支持的原命令只读回执入口；原资料和实际标识保留，不能重发');
+  if(record?.phase!=='pending'||!record.native&&!isDraftReservationPath(record.original.path)&&record.original.method!=='PUT')throw Error('本页尚无受支持的原命令只读回执入口；原资料和实际标识保留，不能重发');
   const stamp=epoch.current,access=await digitalRequest<DigitalAccessOptions>('access/options');if(stamp!==epoch.current||access.actorId!==record.identity.actorId)throw Error('当前身份与原命令不符，不能读取回执');
   if(!record.native){
    const saved=record.original.method==='PUT'&&record.sourceId;
-   const receipt=await digitalRequest<{sourceId:string|null;version?:number|null}>(saved?`sources/${saved}/development/draft-save-receipt`:'sources/drafts/receipt','GET',undefined,record.original.key);
+   const receipt=await digitalRequest<{sourceId:string|null;version?:number|null}>(saved?`sources/${saved}/development/draft-save-receipt`:`${record.original.path}/receipt`,'GET',undefined,record.original.key);
    const expectedVersion=saved?(record.beforeVersion??0)+1:0;
    if(!receipt.sourceId||saved&&(receipt.sourceId!==saved||receipt.version!==expectedVersion))
     throw Error('尚未取得原草稿操作的回执，原输入和标识仍保留');
@@ -168,5 +180,5 @@ export function useDevelopmentCreationDraft(){
   if(result.status!=='completed')throw Error('尚未取得原提交成功回执，不能认为原请求失败；原资料和标识仍保留');
   if(!completed(record.sourceId!,record.viewId))return null;return {sourceId:record.sourceId!,orderId:result.operation==='confirm'?result.productionOrderId:null};
  };
- return {load,open,resume,localDrafts,snapshot,started,acknowledged,refused,close,retry,completed,check,reset,viewId:visibleView?.viewId??'',visibleView,restored,sourceSheet,problem,mode,mayReadSnapshot};
+ return {load,open,resume,localDrafts,snapshot,started,acknowledged,refused,close,retry,discardListSnapshot,completed,check,reset,viewId:visibleView?.viewId??'',visibleView,restored,sourceSheet,problem,mode,mayReadSnapshot};
 }

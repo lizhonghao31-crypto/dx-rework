@@ -186,6 +186,7 @@ export type OrderJourney = {
   /** Versioned business requirements; legacy display/progress remain compatible. */
   businessProgress?: JourneyBusinessProgress;
   identity?: { kind: 'development' | 'production'; businessNumber: string | null; reason: string | null };
+  orderRush?:true;
   seriesPlanVisible?:boolean;
   display?: JourneyDisplay;
   supervision?:JourneySupervision;
@@ -329,7 +330,7 @@ export type CockpitHomeSchedule = Pick<FixedScheduleProgress,'asOf'|'observation
 };
 export type CockpitHomeOrder = Pick<OrderJourney,
   'id'|'orderId'|'designStyleNo'|'styleImageUrl'|'styleName'|'identity'|'customer'|'merchandisers'|'lines'|
-  'poDeliveryDates'|'deliveryRisks'|'stages'|'cockpitFacts'
+  'poDeliveryDates'|'deliveryRisks'|'stages'|'cockpitFacts'|'orderRush'
 > & {
   display?: Pick<JourneyDisplay,'mainState'>;
   fixedSchedule?: FixedScheduleProgress | CockpitHomeSchedule;

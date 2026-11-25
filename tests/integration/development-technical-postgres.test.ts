@@ -1,4 +1,5 @@
 import {developmentNativeFacts} from '../../apps/api/src/production-platform/development-sla-evidence.js';
+import {readDevelopmentOrderRush} from '../../apps/api/src/production-platform/development-order-rush.js';
 import {receivedDevelopmentAccessories} from '../../apps/api/src/production-platform/development-accessory-receipts.js';
 import {journeyTaskSummaries} from '../../apps/api/src/production-platform/journey-task-summary.js';
 import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
@@ -38,11 +39,20 @@ import {DevelopmentExecutionService} from '../../apps/api/src/production-platfor
 import type {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {DevelopmentWorkspaceQuery} from '../../apps/api/src/production-platform/development-workspace-query.js';
+import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
+import {projectCockpitHome} from '../../apps/api/src/production-platform/journey-home-projection.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
 import {RootAwareTodoProjectionService} from '../../apps/api/src/todos/root-aware-projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
+import {registerTodoRoutes} from '../../apps/api/src/todos/routes.js';
+import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
+import {CreateSupplierSchema,TodoListResponseSchema} from '@dx-rework/contracts';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import {DevelopmentWorkspaceFilterSchema,PatternWorkspaceFilterSchema} from '@dx-rework/contracts/digital-development-workspace';
+import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import type {TechnicalArtifactBody,SaveTechnicalArtifact,RecordFinalComment} from '@dx-rework/contracts/digital-development-technical';
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from '@dx-rework/contracts/development-arrangement';
 import {nativeTaskReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
@@ -77,7 +87,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean;workbenchSheet?:boolean;catalogReferencePrice?:boolean;numberedPreorder?:boolean;washing?:'外洗'}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean;workbenchSheet?:boolean;catalogReferencePrice?:boolean;numberedPreorder?:boolean;washing?:'外洗';rush?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   if(options.numberedPreorder){
    const settings=await identity.orderNumberSettings(f.root);
@@ -87,7 +97,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P04'}},randomUUID())
    :await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
-  const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],
+  const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],...(options.rush===undefined?{}:{rush:options.rush}),
    interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST technical garment',craft,washing:options.washing??'免洗',
    materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:!options.numberedPreorder,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
   const accessoryIds=(options.twoMissingAccessories?['纽扣','拉链']:options.missingAccessory?['纽扣']:[]).map(name=>{
@@ -109,6 +119,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    sewingRows:[{rowId:randomUUID(),color:"蓝",size:"",quantity:null}],
   };
   if(options.numberedPreorder&&'orderNumber'in created){
+   const supplier='TEST 预下单技术资料供应商';
+   const supplierReference=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({
+    supplierCode:'TEST-TECH-PREORDER-FABRIC',supplierName:supplier,supplierType:'fabric',changeReason:'TEST 预下单采用有效供应商目录',
+   }));
+   document.materials=document.materials.map(material=>({...material,supplier,supplierReference}));
    document.customerOrderDraft={withOrder:true,stage:'preorder',order:InitialCustomerOrderDraftSchema.parse({
     customerCode:'PD',productGroup:'男装',designStyleNo:created.orderNumber,temporaryStyleNo:null,primaryMerchandiserId:person('merchandiser').actorId,
     orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})};
@@ -617,6 +632,111 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await technical.urgent(person('production-management'),p.sourceId,{roundNumber:1,expectedRevision:1,action:'approve',reason:'TEST供应链总监审批板房加急'},randomUUID());
   const after=await technical.read(p.designer,p.sourceId);expect(after.cycle?.allowedSeconds).toBe(5*86400);expect(after.cycle?.publishedAt).toBe(before.cycle?.publishedAt);
  });
+ it('C2 shows the published rush marker through authorized task and exact formal-order links, without applying SLA urgency',async()=>{
+  const p=await prepare('无',{rush:true}),published=await forms.readDocument(p.designer,p.sourceId);
+  expect(published.orderRush).toBe(true);
+  expect((await technical.read(p.designer,p.sourceId)).cycle).toMatchObject({mode:'normal',urgentState:'none'});
+  const originalTask=await tasks.read(p.worker,p.paper.taskId);
+  const view=await tasks.readWorkItem(p.worker,p.paper.taskId);
+  expect(view).toMatchObject({orderRush:true,taskId:originalTask.taskId,priority:originalTask.priority,dueAt:originalTask.dueAt,enteredAt:originalTask.enteredAt});
+  await expect(tasks.readWorkItem(person('worker-b'),p.paper.taskId)).rejects.toMatchObject({statusCode:404});
+  await new JourneyFactRepository(f.db).buildOne({kind:'source',id:p.sourceId});
+  for(const listReadMode of ['legacy','indexed'] as const){
+   const workspace=new DevelopmentWorkspaceQuery(new DigitalJourneyQuery(f.db,{listReadMode}));
+   const board=await workspace.pattern(p.worker,PatternWorkspaceFilterSchema.parse({search:published.designStyleNo}));
+   expect(board.items.find(item=>item.node.instanceId===p.paper.taskId)).toMatchObject({sourceId:p.sourceId,orderRush:true});
+   const design=await workspace.designer(p.designer,DevelopmentWorkspaceFilterSchema.parse({search:published.designStyleNo,layout:'workbench'}));
+   expect(design.items.find(item=>item.journey.sourceId===p.sourceId)).toMatchObject({orderRush:true});
+  }
+
+  const draft=await identity.createSource(p.designer,{developmentType:'头版',designStyleNo:`TEST-RUSH-DRAFT-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+  const saved=await forms.save(p.designer,draft.sourceId,{expectedVersion:0,document:{...published.document!,materials:[],files:[],orderDate:null}},randomUUID());
+  expect(saved.document?.rush).toBe(true);
+  expect((await forms.readDocument(p.designer,draft.sourceId)).orderRush).toBeUndefined();
+  const formal=await identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:published.designStyleNo,temporaryStyleNo:null,orderDate:'2026-10-20',
+   lines:[{poNumber:'TEST-RUSH-BLUE',color:'蓝',sizes:[{size:'M',quantity:1}],deliveryDate:'2027-03-01'},
+    {poNumber:'TEST-RUSH-GREEN',color:'绿',sizes:[{size:'M',quantity:1}],deliveryDate:'2027-03-02'}],
+  }),randomUUID(),p.sourceId);
+  const client=await f.db.connect();
+  try{
+   const flags=await readDevelopmentOrderRush(client,[
+    {sourceId:p.sourceId,orderId:formal.productionOrderId},{sourceId:draft.sourceId,orderId:null},{sourceId:p.sourceId,orderId:randomUUID()},
+   ]);
+   expect(flags).toEqual(new Set([`order:${formal.productionOrderId}`]));
+  }finally{client.release();}
+
+  const bulk=new BulkPreparationService(f.db);
+  await bulk.dispatch(f.root,formal.productionOrderId,{expectedVersion:0,patternWorkerId:p.worker.actorId,deliverPattern:false},randomUUID());
+  const cardFilter={page:1,search:published.designStyleNo,scope:'all' as const};
+  const [originalCards,cards]=await Promise.all([bulk.workroom(f.root,cardFilter),bulk.workroomCards(f.root,cardFilter)]);
+  expect(cards.total).toBe(originalCards.total);
+  expect(cards.items.map(item=>item.orderId)).toEqual(originalCards.items.map(item=>item.orderId));
+  expect(cards.items.find(item=>item.orderId===formal.productionOrderId)).toMatchObject({orderRush:true,card:{lines:[{poNumber:'TEST-RUSH-BLUE'},{poNumber:'TEST-RUSH-GREEN'}]}});
+  await expect(bulk.workroomCards(p.worker,cardFilter)).rejects.toMatchObject({statusCode:403});
+
+  await new JourneyFactRepository(f.db).buildOne({kind:'order',id:formal.productionOrderId});
+  const filter=JourneyFilterSchema.parse({scope:'production',search:published.designStyleNo});
+  for(const listReadMode of ['legacy','indexed'] as const){
+   const journeys=new DigitalJourneyQuery(f.db,{listReadMode});
+   const original=await journeys.list(f.root,filter);
+   const home=projectCockpitHome(await journeys.list(f.root,filter,false,undefined,{withOrderRush:true}));
+   expect(home.summary).toEqual(original.summary);
+   expect(home.total).toBe(original.total);
+   expect(home.items.map(item=>item.id)).toEqual(original.items.map(item=>item.id));
+   expect(home.items.find(item=>item.orderId===formal.productionOrderId)?.orderRush).toBe(true);
+  }
+ });
+ it('C2 marks published urgent orders on authorized central todo pages and search without changing tasks or deadlines',async()=>{
+  const [urgent,ordinary]=[await prepare('无',{rush:true}),await prepare('无',{rush:false})];
+  const urgentStyle=(await forms.read(urgent.designer,urgent.sourceId)).designStyleNo;
+  const normalStyle=(await forms.read(ordinary.designer,ordinary.sourceId)).designStyleNo;
+  const provider=new DigitalProductionNotificationService(f.db),todos=new TodoService(f.db,undefined,undefined,undefined,provider);
+  const app=Fastify(),sessions={worker:urgent.worker,peer:person('worker-b')};
+  registerTodoRoutes(app,{service:todos,authenticate:async token=>{
+   const viewer=token==='worker'||token==='peer'?sessions[token]:null;
+   if(!viewer)throw new ApplicationError('UNAUTHORIZED','TEST login required',401);
+   return {id:viewer.actorId,displayName:'TEST signed worker',businessRoles:viewer.actorRoles,capabilities:viewer.authorizationCapabilities!};
+  }});
+  const query=async(token:keyof typeof sessions,style?:string,page=1)=>{
+   const response=await app.inject({method:'GET',url:`/todos/mine?module=digital_production&page=${page}${style?`&q=${encodeURIComponent(style)}`:''}`,headers:{cookie:`dx_rework_session=${token}`}});
+   expect(response.statusCode,response.body).toBe(200);
+   return TodoListResponseSchema.parse(response.json());
+  };
+  try{
+   const firstPage=await query('worker');
+   const originalIds=(await provider.todoSelections(urgent.worker)).map(t=>t.key.todoId);
+   expect(firstPage.pageSize).toBe(15);
+   const pages=new Map([[1,firstPage]]);
+   const assertPage=(result:typeof firstPage,number:number)=>{
+    expect(result).toMatchObject({page:number,totalCount:originalIds.length,totalPages:Math.ceil(originalIds.length/15),moduleCounts:{digital_production:originalIds.length}});
+    expect(result.todos.map(t=>t.todoId)).toEqual(originalIds.slice((number-1)*15,number*15));
+   };
+   assertPage(firstPage,1);
+   // This suite shares a worker across earlier cases, so newly created tasks
+   // are not necessarily on the first page of their original deadline order.
+   const moduleItem=async(id:string)=>{
+    const index=originalIds.indexOf(id);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const number=Math.floor(index/15)+1;
+    const result=pages.get(number)??await query('worker',undefined,number);
+    pages.set(number,result);
+    assertPage(result,number);
+    const item=result.todos.find(t=>t.todoId===id);
+    expect(item).toBeDefined();
+    return item!;
+   };
+   expect(await moduleItem(urgent.paper.taskId)).toMatchObject({orderRush:true});
+   expect((await moduleItem(ordinary.paper.taskId)).orderRush).toBeUndefined();
+   const searched=(await query('worker',urgentStyle)).todos.find(t=>t.todoId===urgent.paper.taskId)!;
+   const original=await provider.todo(urgent.worker,urgent.paper.taskId);
+   expect(searched).toMatchObject({status:original!.status,dueAt:original!.dueAt,route:original!.route,contentToken:original!.contentToken,orderRush:true});
+   const notUrgent=(await query('worker',normalStyle)).todos.find(t=>t.todoId===ordinary.paper.taskId);
+   expect(notUrgent).toBeDefined();
+   expect(notUrgent?.orderRush).toBeUndefined();
+   expect((await query('peer',urgentStyle)).todos).toEqual([]);
+  }finally{await app.close();}
+ });
  const sampleToTail=async(options:Parameters<typeof prepare>[1]={})=>{
   const p=await prepare('无',options),published=await artifact(p);
   await execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,attachmentIds:[],artifactRef:{id:published.artifactSetId,version:published.version,scopeRef:'整款'},note:'TEST actual paper'},randomUUID());
@@ -722,6 +842,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('R5 binds a newly submitted first native order to the actual later development round, without inventing a historical link',async()=>{
   const p=await prepare('无',{withoutNative:true}),old=await forms.read(p.designer,p.sourceId),rounds=new DevelopmentRoundService(f.db,true,native);
+  expect((await forms.readDocument(p.designer,p.sourceId)).printTiming).toBeUndefined();
   const saved=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST首个原执行尚未生成前的资料复版',explanation:'TEST真实首次衔接',categories:['版型'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
   await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:saved.draftVersion,basedOnRound:1},randomUUID());
   const created=await execution.patternOrder(p.designer,p.sourceId,category,randomUUID()),order=await native.get(p.designer,created.orderId);
@@ -730,6 +851,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await developmentNativeRound(client,p.sourceId,1)).toBeNull();
   }finally{client.release();}
   expect(order.rounds).toHaveLength(1);expect(order.status).toBe('pending_assignment');
+  expect((await forms.publishedVersion(p.designer,p.sourceId,1,old.version)).printTiming).toBeUndefined();
+  const current=await forms.readDocument(p.designer,p.sourceId,2);
+  expect(current.printTiming).toMatchObject({executionRoundId:order.currentRoundId,dispatchedOn:beijingCalendarDate()});
+  expect(current.printTiming?.returnedOn).toBeUndefined();
  });
  const confirmSample=async(p:Awaited<ReturnType<typeof sampleToTail>>)=>{
   const current=(await forms.read(f.root,p.sourceId)).roundNumber??1;
@@ -740,6 +865,32 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const input={taskId:confirmation.taskId,note:'TEST设计师实际确认本轮',result:'通过' as const,craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},key=randomUUID();
   await execution.route(p.designer,p.sourceId,input,key);await execution.route(p.designer,p.sourceId,input,key);
  };
+ it('C2 print uses the original board dispatch and the designer’s trusted return on different business dates',async()=>{
+  const scene=await f.scene('2026-11-14T15:30:00.000Z');
+  const run=<T>(fn:()=>Promise<T>)=>f.runtime.run(scene,f.root,fn);
+  const p=await run(()=>sampleToTail()),initial=await run(()=>forms.readDocument(p.designer,p.sourceId));
+  expect(initial.printTiming).toMatchObject({dispatchedOn:'2026-11-14',dispatchedDocumentVersion:initial.version});
+  expect(initial.printTiming?.returnedOn).toBeUndefined();
+  // The tail/board was already completed or is awaiting inspection. Only the
+  // later signed designer confirmation supplies the return fact.
+  await f.advance(scene,'2026-11-15T16:15:00.000Z');
+  await run(()=>confirmSample(p));
+  const [current,original]=await run(()=>Promise.all([forms.readDocument(p.designer,p.sourceId),forms.publishedVersion(p.designer,p.sourceId,1,initial.version)]));
+  expect(current.printTiming).toEqual({...initial.printTiming,returnedOn:'2026-11-16'});
+  expect(original.printTiming).toEqual(current.printTiming);
+  await expect(run(()=>forms.publishedVersion(p.designer,p.sourceId,2,initial.version))).rejects.toMatchObject({statusCode:404});
+  await expect(run(()=>forms.publishedVersion(person('worker-b'),p.sourceId,1,initial.version))).rejects.toMatchObject({statusCode:404});
+  const completed=(await f.db.query(`SELECT e.event_id,e.task_id FROM digital_production_task_events e
+   JOIN digital_production_task_access a USING(task_id) WHERE e.resource_kind='source' AND e.resource_id=$1
+   AND e.event_kind='completed' AND a.task_kind='development_confirmation'`,[p.sourceId])).rows[0];
+  await run(()=>tasks.correctTime(f.root,completed.task_id,{eventId:completed.event_id,occurredAt:null,reason:'TEST无可信收板时间'},randomUUID()));
+  expect((await run(()=>forms.readDocument(p.designer,p.sourceId))).printTiming).toEqual(initial.printTiming);
+  await f.advance(scene,'2026-11-16T16:15:00.000Z');
+  await run(()=>tasks.correctTime(f.root,completed.task_id,{
+   eventId:completed.event_id,occurredAt:'2026-11-16T16:00:00.000Z',reason:'TEST核实同一份实物确认时间',
+  },randomUUID()));
+  expect((await run(()=>forms.publishedVersion(p.designer,p.sourceId,1,initial.version))).printTiming).toEqual({...initial.printTiming,returnedOn:'2026-11-17'});
+ });
  it.each([{confirmFirst:true,amount:'7',total:'17.00',reasonLength:2000},{confirmFirst:false,amount:'0',total:'10.00',reasonLength:2001},{confirmFirst:true,amount:'7',total:'17.00',reasonLength:4000}])('R5 creates a separate native whole remake and uses only its explicitly approved amount ($amount, revision $reasonLength)',async({confirmFirst,amount,total,reasonLength})=>{
   const p=await sampleToTail();if(confirmFirst)await confirmSample(p);
   const orderId=(await f.db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[p.sourceId])).rows[0].order_id;
@@ -750,6 +901,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await rounds.publish(p.designer,p.sourceId,input,key);await rounds.publish(p.designer,p.sourceId,input,key);
   let order=await native.get(f.root,orderId);expect(order.currentRoundId).not.toBe(initial);const remake=order.currentRoundId;
   expect(order.status).toBe('pending_assignment');
+  const newPrint=await forms.readDocument(p.designer,p.sourceId,2);
+  expect(newPrint.printTiming).toMatchObject({executionRoundId:remake,dispatchedDocumentVersion:newPrint.version});
   expect((await forms.read(p.designer,p.sourceId)).document!.instructions).toBe(revision.document.instructions);
   expect((await f.db.query('SELECT request_reason FROM pattern_room_rounds WHERE round_id=$1',[remake])).rows[0].request_reason).toBe(revision.internalProblem.slice(0,2000));
   expect((await f.db.query('SELECT internal_problem,explanation FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[p.sourceId])).rows[0]).toEqual({internal_problem:revision.internalProblem,explanation:revision.explanation});
@@ -770,6 +923,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(rows).toHaveLength(2);expect(Number(rows.find(row=>row.round_id===initial).amount)).toBe(10);expect(Number(rows.find(row=>row.round_id===remake).amount)).toBe(Number(amount));
   expect(rows.find(row=>row.round_id===initial).wage_eligible_at).not.toBeNull();
   expect(rows.find(row=>row.round_id===remake).wage_eligible_at===null).toBe(amount==='0');
+  expect((await forms.publishedVersion(p.designer,p.sourceId,2,newPrint.version)).printTiming).toMatchObject({
+   executionRoundId:remake,dispatchedDocumentVersion:newPrint.version,returnedOn:beijingCalendarDate(),
+  });
+  // The second confirmation fills the first round's native wages timestamp
+  // even when no first-round receipt actually occurred.
+  const first=(await forms.publishedVersion(p.designer,p.sourceId,1,old.version)).printTiming;
+  expect(first?.executionRoundId).toBe(initial);
+  expect(Boolean(first?.returnedOn)).toBe(confirmFirst);
   const facts=(await f.db.query("SELECT route_version,kind,payload->>'nativeRoundId' native_id FROM digital_development_route_facts WHERE source_id=$1 AND route_version=2 AND kind IN ('车板完成','最终设计确认')",[p.sourceId])).rows;
   expect(facts).toHaveLength(2);expect(facts.every(row=>row.native_id===remake)).toBe(true);
   const reporting=new ManagementReportingService(f.db),query=ReportQuerySchema.parse({from:'2026-01-01',to:'2026-12-31',q:old.designStyleNo,limit:100});

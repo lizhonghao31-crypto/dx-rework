@@ -16,6 +16,7 @@ export function projectCockpitHome(result:JourneyResult):CockpitHomeResult {
     };
     if(order.styleImageUrl!==undefined)home.styleImageUrl=order.styleImageUrl;
     if(order.identity)home.identity=order.identity;
+    if(order.orderRush)home.orderRush=true;
     if(order.poDeliveryDates)home.poDeliveryDates=order.poDeliveryDates;
     if(order.deliveryRisks)home.deliveryRisks=order.deliveryRisks;
     if(order.cockpitFacts)home.cockpitFacts=order.cockpitFacts;

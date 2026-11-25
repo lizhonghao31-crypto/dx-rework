@@ -38,7 +38,7 @@ export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext,projec
    if(report.decisionId)continue;
    const at=new Date(report.reportedAt).toISOString(),id=report.reportId;
    const selectionKey:TodoSelectionKey={contentToken:todoContentToken(['fabric',id,source.round_number]),todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceAction:"development_fabric_report",recipientUserId:actor.actorId,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id,developmentRound:source.round_number},dueAt:null,status:"pending",orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,createdAt:at};
-  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:id,entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,requiredRole:actor.actorRoles.includes("owner_group")?"owner_group":"production_management",requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:1,updatedAt:at}));
+  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:id,entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,requiredRole:actor.actorRoles.includes("owner_group")?"owner_group":"production_management",requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:1,updatedAt:at}),{sourceId:source.source_id,orderId:null});
   }
  }
  return result;

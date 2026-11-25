@@ -1,13 +1,14 @@
 import type {DevelopmentWizardStep} from './development-creation-wizard.js';
 import {z} from 'zod';
-import {DevelopmentDocumentSchema,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import {DevelopmentDocumentSchema,PublishDevelopmentPreorderSchema,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import {InitialCustomerOrderDraftSchema,type InitialCustomerOrderDraft} from '@dx-rework/contracts/digital-production';
 import type {PendingDevelopmentSubmission} from './development-submit-recovery.js';
+import {developmentSubmissionPath,NUMBERED_DRAFT_PATH} from './development-creation-command-path.js';
 
 /** Local views are scoped by tab, actor and environment.
  * A pure draft has no source, command, key or version. */
 export type CreationDraftIdentity={actorId:string;environment:string};
-export type CreationDraftSnapshot={intent:'development'|'certain_order';form:InitialCustomerOrderDraft;document:DevelopmentDocument;quantityInput:string;sizeQuantityInputs:string[];developmentType:'头版'|'开发板';preorder:boolean;wizardStep?:DevelopmentWizardStep;fixedCraft:boolean;measurementIds:string[];poSizeIds:string[];sharedPoColumns:boolean;dateOverrides:number[];fileKind:DevelopmentDocument['files'][number]['kind'];patternChoice:{categoryId:string;priceVersion:number}|null;baseline:string;localFiles:Array<{id:string;name:string;type:string;size:number;kind:DevelopmentDocument['files'][number]['kind']}>};
+export type CreationDraftSnapshot={intent:'development'|'certain_order';form:InitialCustomerOrderDraft;document:DevelopmentDocument;quantityInput:string;sizeQuantityInputs:string[];developmentType:'头版'|'开发板';preorder:boolean;numbered?:boolean;wizardStep?:DevelopmentWizardStep;fixedCraft:boolean;measurementIds:string[];poSizeIds:string[];sharedPoColumns:boolean;dateOverrides:number[];fileKind:DevelopmentDocument['files'][number]['kind'];patternChoice:{categoryId:string;priceVersion:number}|null;baseline:string;localFiles:Array<{id:string;name:string;type:string;size:number;kind:DevelopmentDocument['files'][number]['kind']}>};
 export type CreationDraftRecord={schemaVersion:1;viewId:string;identity:CreationDraftIdentity;open:boolean;snapshot:CreationDraftSnapshot}&(
  |{phase:'draft'}
  |{phase:'bound';sourceId:string;version:number|null}
@@ -15,10 +16,11 @@ export type CreationDraftRecord={schemaVersion:1;viewId:string;identity:Creation
 );
 const identitySchema=z.object({actorId:z.uuid(),environment:z.string().min(1).max(1000)}).strict();
 const fileKind=DevelopmentDocumentSchema.shape.files.element.shape.kind;
-const textArray=z.array(z.string()),snapshotSchema=z.object({intent:z.enum(['development','certain_order']),form:z.unknown(),document:z.unknown(),quantityInput:z.string(),sizeQuantityInputs:textArray,developmentType:z.enum(['头版','开发板']),preorder:z.boolean(),wizardStep:z.union([z.literal(1),z.literal(2),z.literal(3)]).optional(),fixedCraft:z.boolean(),measurementIds:textArray,poSizeIds:textArray,sharedPoColumns:z.boolean(),dateOverrides:z.array(z.number().int().nonnegative()),fileKind,patternChoice:z.object({categoryId:z.uuid(),priceVersion:z.number().int().positive()}).strict().nullable(),baseline:z.string(),localFiles:z.array(z.object({id:z.string(),name:z.string(),type:z.string(),size:z.number().int().nonnegative(),kind:fileKind}).strict())}).strict();
+const textArray=z.array(z.string()),snapshotSchema=z.object({intent:z.enum(['development','certain_order']),form:z.unknown(),document:z.unknown(),quantityInput:z.string(),sizeQuantityInputs:textArray,developmentType:z.enum(['头版','开发板']),preorder:z.boolean(),numbered:z.boolean().optional(),wizardStep:z.union([z.literal(1),z.literal(2),z.literal(3)]).optional(),fixedCraft:z.boolean(),measurementIds:textArray,poSizeIds:textArray,sharedPoColumns:z.boolean(),dateOverrides:z.array(z.number().int().nonnegative()),fileKind,patternChoice:z.object({categoryId:z.uuid(),priceVersion:z.number().int().positive()}).strict().nullable(),baseline:z.string(),localFiles:z.array(z.object({id:z.string(),name:z.string(),type:z.string(),size:z.number().int().nonnegative(),kind:fileKind}).strict())}).strict();
 const originalSchema=z.object({path:z.string().max(300),method:z.enum(['POST','PUT']),key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/),body:z.string()}).strict();
 const nativeSchema=z.discriminatedUnion('operation',[
  z.object({operation:z.literal('publish'),sourceId:z.uuid(),key:originalSchema.shape.key,body:z.object({expectedVersion:z.number().int().nonnegative(),patternOrder:z.object({categoryId:z.uuid(),priceVersion:z.number().int().positive()}).strict().optional()}).strict()}).strict(),
+ z.object({operation:z.literal('publish_preorder'),sourceId:z.uuid(),key:originalSchema.shape.key,body:PublishDevelopmentPreorderSchema}).strict(),
  z.object({operation:z.literal('confirm'),sourceId:z.uuid(),key:originalSchema.shape.key,body:z.record(z.string(),z.unknown())}).strict(),
 ]);
 const common={schemaVersion:z.literal(1),viewId:z.uuid(),identity:identitySchema,open:z.boolean(),snapshot:snapshotSchema};
@@ -38,10 +40,10 @@ function validate(value:unknown):CreationDraftRecord{
  if(!snapshot.form.lines.length)throw Error('本页原PO行结构不完整，保留草稿，不创建新单');
  if(snapshot.measurementIds.length!==snapshot.document.measurements.length||snapshot.poSizeIds.length<Math.max(...snapshot.form.lines.map(line=>line.sizes.length)))throw Error('本页原草稿行身份不完整；记录保留，不创建新单');
  if(checked.phase==='pending'){
-  const id=checked.sourceId,allowed=id?[`sources/${id}/development`,`sources/${id}/development/publish`,`sources/${id}/confirm`]:['sources','sources/drafts'];
+  const id=checked.sourceId,allowed=id?[`sources/${id}/development`,...(['publish','publish_preorder','confirm'] as const).map(operation=>developmentSubmissionPath(id,operation))]:['sources','sources/drafts',NUMBERED_DRAFT_PATH];
   if(!allowed.includes(checked.original.path)||checked.original.method!==(checked.original.path===`sources/${id}/development`?'PUT':'POST'))throw Error('原创建命令范围不符，保留记录，不能重发');
   JSON.parse(checked.original.body);
-  if(checked.native&&(checked.native.sourceId!==id||checked.native.key!==checked.original.key||checked.original.path!==(checked.native.operation==='publish'?`sources/${id}/development/publish`:`sources/${id}/confirm`)||JSON.stringify(checked.native.body)!==checked.original.body))throw Error('原创建回执身份不一致；记录保留，不能重发');
+  if((checked.native&&(checked.native.sourceId!==id||checked.native.key!==checked.original.key||checked.original.path!==developmentSubmissionPath(checked.native.sourceId,checked.native.operation)||JSON.stringify(checked.native.body)!==checked.original.body))||id&&checked.original.path===developmentSubmissionPath(id,'publish_preorder')&&(!checked.native||checked.native.operation!=='publish_preorder'||checked.beforeVersion!==checked.native.body.expectedVersion))throw Error('原创建回执身份不一致；记录保留，不能重发');
  }
  return checked as CreationDraftRecord;
 }

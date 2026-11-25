@@ -10,6 +10,24 @@ export const DEVELOPMENT_MEASUREMENTS = {
   上衣: ["衫长", "胸围", "腰围", "脚围", "袖长", "袖口", "夹圈", "袖肥", "领阔", "前领深", "领高"],
   裤子: ["腰围（自然平放腰顶直量）", "坐围（浪上2 1/2度）", "坐围（浪上2 3/4度）", "坐围（浪上3 1/4度）", "脾围（浪下0）", "脚口", "前浪（连腰）", "后浪（连腰）", "裤长（连腰）"],
 } as const;
+export const DEVELOPMENT_GARMENTS = ["上衣", "裤子"] as const;
+const DevelopmentGarmentSchema = z.enum(DEVELOPMENT_GARMENTS);
+const SizeTableUnitSchema = z.enum(["cm", "inch"]);
+const SizeTableColumnsSchema = z.array(short).max(20);
+const SizeTableRowsSchema = z.array(z.object({ name: short, values: z.array(short).max(20) }).strict()).max(100);
+const SizeTableQuantitiesSchema = z.array(z.number().int().min(0).max(100000).nullable()).max(20);
+/** An alternate garment is part of the original creation draft, never manufacturing input. */
+const DevelopmentAlternateSizeDraftSchema = z.object({
+  template: DevelopmentGarmentSchema,
+  unit: SizeTableUnitSchema,
+  sizes: SizeTableColumnsSchema,
+  measurements: SizeTableRowsSchema,
+  sampleSize: short,
+  sizeQuantities: SizeTableQuantitiesSchema,
+  rawQuantities: z.array(z.string().max(100)).max(20),
+}).strict().refine(value => value.sizeQuantities.length === value.sizes.length
+  && value.rawQuantities.length === value.sizes.length
+  && value.measurements.every(row => row.values.length === value.sizes.length), "草稿恢复的尺寸须与原尺码列对应");
 export const DEVELOPMENT_SAMPLE_BOARD_TYPES = ["头版", "复版", "产前版", "船头版"] as const;
 export const DEVELOPMENT_SAMPLE_GENDERS = ["男装", "女装"] as const;
 const WorkbenchDevelopmentSheetSchema = z.object({
@@ -26,9 +44,15 @@ const WorkbenchDevelopmentSheetSchema = z.object({
 }).strict();
 export type WorkbenchDevelopmentSheet = z.infer<typeof WorkbenchDevelopmentSheetSchema>;
 
+export const DevelopmentMaterialSupplierOptionSchema=z.object({
+  supplierId:z.uuid(),code:short,name:z.string().min(1).max(200),version:z.number().int().positive(),
+}).strict();
+export type DevelopmentMaterialSupplierOption=z.infer<typeof DevelopmentMaterialSupplierOptionSchema>;
 export const DevelopmentMaterialSchema = z.object({
   pricingUnit: short.optional(),
   unitPrice: z.union([z.literal(""),z.string().regex(/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/,"请输入最多六位小数的非负单价")]).optional(),
+  lineTotal: z.string().max(128).regex(/^\d+(?:\.\d+)?$/).optional(),
+  supplierReference:z.object({supplierId:z.uuid(),version:z.number().int().positive()}).strict().optional(),
   auxiliaryCatalog:AuxiliaryReferenceSchema.optional(),
   garmentColor: short.optional(),
   part: short.optional(),
@@ -36,12 +60,15 @@ export const DevelopmentMaterialSchema = z.object({
   sampleAttachmentId: z.uuid().nullable().optional(),
   materialId: z.string().uuid(), category: z.enum(["主布", "配布", "辅料"]), label: short,
   auxiliaryKind: z.enum(["普通辅料", "拉链", "扁机"]).optional(),
-  supplier: short, name: short, width: short, weight: short, composition: short, consumption: short,
+  supplier: z.string().trim().max(200), name: short, width: short, weight: short, composition: short, consumption: short,
   color: short, specification: short, quantity: short, requiredThisRound: z.boolean(),
+  // Optional design planning only. Never a materials check or receipt fact.
+  designerHasMaterial: z.boolean().optional(),
   available: z.boolean(), expectedDate: z.iso.date().nullable(),
 }).strict().superRefine((value, context) => {
   if(value.auxiliaryCatalog&&value.category!=="辅料")context.addIssue({code:"custom",path:["auxiliaryCatalog"],message:"仅辅料可以引用共享辅料目录"});
   if (value.auxiliaryKind && value.category !== "辅料") context.addIssue({code:"custom",path:["auxiliaryKind"],message:"仅辅料可以设置辅料类型"});
+  if (value.designerHasMaterial!==undefined && value.category !== "辅料") context.addIssue({code:"custom",path:["designerHasMaterial"],message:"仅辅料可以填写设计已有实物计划"});
 });
 const DevelopmentCraftRequirementSchema=z.object({
   stepKey:z.string().min(1).max(100),
@@ -64,11 +91,12 @@ export function developmentCraftOptions(document:{craft:string;craftSteps?:reado
 }
 
 export const DevelopmentDocumentSchema = z.object({
+  materialSupplierCatalog:z.literal(true).optional(),
   quotationMode: z.literal('automatic_v1').optional(),
   workbenchSheet: WorkbenchDevelopmentSheetSchema.optional(),
   // Missing version belongs to frozen historical documents, never an exemption for new publication.
   documentFormatVersion: z.literal(2).optional(),
-  sizeQuantities: z.array(z.number().int().min(0).max(100000).nullable()).max(20).optional(),
+  sizeQuantities: SizeTableQuantitiesSchema.optional(),
   customerOrderDraft: z.object({
     withOrder: z.boolean(),
     stage: z.enum(['preorder','formal']).optional(),
@@ -80,10 +108,16 @@ export const DevelopmentDocumentSchema = z.object({
   // Draft selection only. Publication still obtains and validates the current price quote.
   patternCategoryId: z.string().uuid().nullable().optional(),
   productionPlanning:ProductionRoutePlanSchema.optional(),
-  template: z.enum(["上衣", "裤子"]), quantity: z.number().int().min(1).max(100000).nullable(),
+  template: DevelopmentGarmentSchema, quantity: z.number().int().min(1).max(100000).nullable(),
+  // Legacy documents used a default template even when the designer never chose a garment.
+  templateConfirmed: z.literal(true).optional(),
+  sizeTableInitialized: z.literal(true).optional(),
+  alternateSizeDraft: DevelopmentAlternateSizeDraftSchema.optional(),
+  // Creation priority is independent of the existing SLA acceleration approval.
+  rush: z.boolean().optional(),
   sampleSize: short, orderDate: z.iso.date().nullable(), returnDate: z.iso.date().nullable(),
-  unit: z.enum(["cm", "inch"]), sizes: z.array(short).max(20),
-  measurements: z.array(z.object({ name: short, values: z.array(short).max(20) }).strict()).max(100),
+  unit: SizeTableUnitSchema, sizes: SizeTableColumnsSchema,
+  measurements: SizeTableRowsSchema,
   interlining: text, placketInterlining: text, sewingThread: text, buttonholeThread: text,
   stitchDensity: text, washingIroning: text, washingMethod: text.optional(), ironing: text.optional(), packaging: text,
   formalSizes: short, casualSizes: short, mainLabel: z.boolean(), mainLabelMethod: text,
@@ -100,6 +134,8 @@ export const DevelopmentDocumentSchema = z.object({
   if (new Set(namedSizes).size !== namedSizes.length) context.addIssue({ code: "custom", path: ["sizes"], message: "尺码列不能重复" });
   if (value.measurements.some(row => row.values.length !== value.sizes.length)) context.addIssue({ code: "custom", path: ["measurements"], message: "尺寸数值必须对应尺码列" });
   if (value.sizeQuantities && value.sizeQuantities.length !== value.sizes.length) context.addIssue({code:"custom",path:["sizeQuantities"],message:"制作数量必须逐列对应尺码"});
+  if (value.alternateSizeDraft && (!value.templateConfirmed || value.alternateSizeDraft.template === value.template))
+    context.addIssue({code:"custom",path:["alternateSizeDraft"],message:"仅能在原草稿中保留另一衣类的尺寸"});
   if (new Set(value.materials.map(row => row.materialId)).size !== value.materials.length) context.addIssue({ code: "custom", path: ["materials"], message: "物料行不能重复" });
   if (new Set(value.files.map(row => row.attachmentId)).size !== value.files.length) context.addIssue({ code: "custom", path: ["files"], message: "附件不能重复" });
   if(value.craftRequirements?.length){
@@ -126,14 +162,17 @@ export const DevelopmentDocumentSchema = z.object({
 });
 export const SaveDevelopmentSchema = z.object({ expectedVersion: z.number().int().nonnegative(), document: DevelopmentDocumentSchema }).strict();
 export const PublishDevelopmentSchema = z.object({ expectedVersion: z.number().int().positive(), patternOrder:z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict().optional() }).strict();
-export const DevelopmentSubmissionReceiptQuerySchema=z.object({operation:z.enum(['publish','confirm']),key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)}).strict();
+export const PublishDevelopmentPreorderSchema=PublishDevelopmentSchema.pick({expectedVersion:true});
+export const DevelopmentSubmissionReceiptQuerySchema=z.object({operation:z.enum(['publish','publish_preorder','confirm']),key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)}).strict();
 /** Absence of a committed receipt is not proof that a request failed. */
 export const DevelopmentSubmissionReceiptSchema=z.union([
  z.object({status:z.literal('unconfirmed')}).strict(),
  z.object({status:z.literal('completed'),operation:z.literal('publish'),sourceId:z.string().uuid(),documentVersion:z.number().int().positive()}).strict(),
+ z.object({status:z.literal('completed'),operation:z.literal('publish_preorder'),sourceId:z.string().uuid(),documentVersion:z.number().int().positive(),publishedAt:z.iso.datetime({offset:true})}).strict(),
  z.object({status:z.literal('completed'),operation:z.literal('confirm'),sourceId:z.string().uuid(),productionOrderId:z.string().uuid()}).strict(),
 ]);
 export type DevelopmentSubmissionReceipt=z.infer<typeof DevelopmentSubmissionReceiptSchema>;
+export type DevelopmentSubmissionOperation=z.infer<typeof DevelopmentSubmissionReceiptQuerySchema>['operation'];
 export const DevelopmentOccurrenceSchema=z.discriminatedUnion('precision',[
  z.object({precision:z.literal('instant'),at:z.iso.datetime({offset:true})}).strict(),
  z.object({precision:z.literal('date'),date:z.iso.date()}).strict(),
@@ -145,12 +184,48 @@ export const DevelopmentMaterialEventSchema = z.object({ actualTime:DevelopmentO
   if (value.action === "确认代用" && !value.note) context.addIssue({code:"custom",path:["note"],message:"请填写代用说明"});
 });
 export type DevelopmentDocument = z.infer<typeof DevelopmentDocumentSchema>;
+export const DEVELOPMENT_STYLE_PICTURE_LIMIT=5;
+export const isDevelopmentStylePicture=(kind:DevelopmentDocument['files'][number]['kind'])=>kind==="款图"||kind==="局部图";
+export function developmentStylePictureIssue(files:DevelopmentDocument['files'],basis:DevelopmentDocument['files']=[]){
+  const next=files.filter(file=>isDevelopmentStylePicture(file.kind));
+  if(next.length<=DEVELOPMENT_STYLE_PICTURE_LIMIT)return "";
+  // Old versions can retain or remove their originals. They cannot use
+  // grandfathered slots to attach new images above the agreed cap.
+  const original=new Map(basis.filter(file=>isDevelopmentStylePicture(file.kind)).map(file=>[file.attachmentId,file.kind]));
+  return next.every(file=>original.get(file.attachmentId)===file.kind)?"":"款式图最多 5 张，原历史图片不会自动删除。";
+}
 export const DevelopmentMakingUpgradeSchema=z.object({expectedDocumentVersion:z.number().int().positive(),quantities:z.array(z.number().int().min(0).max(100000)).min(1).max(20)}).strict();
 export type DevelopmentMakingUpgrade=z.infer<typeof DevelopmentMakingUpgradeSchema>;
 export const DevelopmentMakingBasisSchema=z.object({documentVersion:z.number().int().positive(),quantity:z.number().int().positive().nullable(),sizes:z.array(short).max(20),needsUpgrade:z.boolean()}).strict();
 export type DevelopmentMakingBasis=z.infer<typeof DevelopmentMakingBasisSchema>;
 export function developmentMakingBasis(document:DevelopmentDocument,documentVersion:number):DevelopmentMakingBasis{return {documentVersion,quantity:document.quantity,sizes:document.sizes,needsUpgrade:developmentSizeQuantityIssues(document).length>0};}
 export type DevelopmentMaterial = z.infer<typeof DevelopmentMaterialSchema>;
+/** Compare only proven units, then multiply the unrounded decimal strings. */
+export function developmentMaterialLineTotal(material:Pick<DevelopmentMaterial,"quantity"|"quantityUnit"|"unitPrice"|"pricingUnit">):string|null{
+  const price=material.unitPrice?.trim(),priceUnit=material.pricingUnit?.trim();
+  if(!price||!priceUnit||!(/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/.test(price)))return null;
+  const quantity=material.quantity.trim().match(/^(\d+)(?:\.(\d+))?\s*([^\d.].*)?$/);
+  if(!quantity)return null;
+  const explicitUnit=material.quantityUnit?.trim(),suffix=quantity[3]?.trim();
+  if(explicitUnit&&suffix&&explicitUnit!==suffix||(explicitUnit||suffix)!==priceUnit)return null;
+  const [priceWhole,priceFraction=""]=price.split("."),quantityFraction=quantity[2]??"";
+  const scale=priceFraction.length+quantityFraction.length;
+  const digits=(BigInt(priceWhole!+priceFraction)*BigInt(quantity[1]!+quantityFraction)).toString().padStart(scale+1,"0");
+  const fraction=scale?digits.slice(-scale).replace(/0+$/,""):"";
+  return (scale?digits.slice(0,-scale):digits)+(fraction?`.${fraction}`:"");
+}
+export type DevelopmentAlternateSizeDraft = z.infer<typeof DevelopmentAlternateSizeDraftSchema>;
+/** Publish only the selected garment, keeping the explicit choice and intentionally empty table. */
+export function withoutDevelopmentAlternateSizeDraft(document:DevelopmentDocument):DevelopmentDocument {
+  if (!document.alternateSizeDraft) return document;
+  const published={...document};
+  delete published.alternateSizeDraft;
+  return published;
+}
+/** Previously saved data without this opt-in remains historical, not an explicit no. */
+export function usesDevelopmentMaterialPlanning(document:DevelopmentDocument|null|undefined):boolean {
+  return Boolean(document?.templateConfirmed||document?.materialSupplierCatalog||document?.materials.some(row=>row.designerHasMaterial!==undefined));
+}
 /** Legacy/unclassified auxiliaries remain ordinary; never infer exceptions from a name. */
 export function isEarlyMaterialException(material: DevelopmentMaterial): boolean {
   return material.category === "辅料" && (material.auxiliaryKind === "拉链" || material.auxiliaryKind === "扁机");
@@ -159,7 +234,7 @@ export type DevelopmentMaterialEvent = z.infer<typeof DevelopmentMaterialEventSc
 /** Empty template slots are not a declaration that a material is unused. */
 export function isDevelopmentMaterialPlaceholder(item:DevelopmentMaterial):boolean {
   return (!item.auxiliaryKind||item.auxiliaryKind==="普通辅料")&&["","主布","配布","辅料","主布A","配布B","配布C"].includes(item.label.replace(/\s/g,""))&&
-    ![item.name,item.supplier,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate,item.garmentColor,item.part,item.quantityUnit,item.sampleAttachmentId].some(Boolean)&&!item.available;
+    ![item.name,item.supplier,item.supplierReference,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate,item.garmentColor,item.part,item.quantityUnit,item.sampleAttachmentId].some(Boolean)&&!item.available;
 }
 /** Price input makes the row part of the document, independently of physical readiness. */
 export function hasDevelopmentMaterialPricing(item:DevelopmentMaterial):boolean {
@@ -186,15 +261,21 @@ export function developmentSizeQuantityIssues(document:DevelopmentDocument):Arra
 export function developmentPublicationSizeIssues(document:DevelopmentDocument):Array<{index:number|null;message:string}>{
   return document.sizeQuantities?.some(value => value !== null) ? developmentSizeQuantityIssues(document) : [];
 }
+/** Blank placeholder columns are not measurements. Columns containing real input still need names. */
+export function developmentUnlabelledSizeIndex(document:DevelopmentDocument):number{
+  return document.sizes.findIndex((size,index)=>!size.trim()&&(
+    document.sizeQuantities?.[index]!=null||document.measurements.some(row=>Boolean(row.values[index]?.trim()))
+  ));
+}
 /** Only server-proven frozen same-round corrections may opt into historical reading rules. */
 export function developmentPublishErrors(document: DevelopmentDocument, options:{allowLegacySizeQuantities?:boolean;allowMissingOrderDate?:boolean}={}): string[] {
   const errors: string[] = [];
   if(document.customerOrderDraft?.stage==='preorder')errors.push('预下单备料资料仅可保存草稿，请先明确切换为开发单后再发布');
   if (!document.quantity) errors.push("请填写本轮打板数量");
   if(!options.allowLegacySizeQuantities)errors.push(...developmentPublicationSizeIssues(document).map(issue=>issue.message));
-  if (document.sizes.some(size => !size.trim())) errors.push("请填写尺码列名称，或删除不用的列");
+  if (developmentUnlabelledSizeIndex(document)>=0) errors.push("请填写尺码列名称，或删除不用的列");
   if (!document.orderDate&&!options.allowMissingOrderDate) errors.push("缺少服务器开发下单日期，请重新读取本单资料；不要填写客户下单日期替代");
-  if(document.workbenchSheet)errors.push(...developmentWorkbenchPublishIssues(document.workbenchSheet).map(issue=>issue.message));
+  if(document.workbenchSheet)errors.push(...developmentWorkbenchPublishIssues(document.workbenchSheet,{styleNameOptional:document.templateConfirmed===true}).map(issue=>issue.message));
   else if (!document.files.some(file => file.kind === "款图")) errors.push("请上传款图");
   errors.push(...developmentMaterialPublishIssues(document).map(issue=>issue.message));
   if (document.craft === "无" && document.files.some(file => file.kind === "工艺开发板")) errors.push("工艺开发板仅适用于印花或绣花");
@@ -206,8 +287,29 @@ export function developmentAmendmentPublicationOptions(before:DevelopmentDocumen
   JSON.stringify(before.sizes)===JSON.stringify(after.sizes)&&before.quantity===after.quantity&&before.sampleSize===after.sampleSize;
  return {allowLegacySizeQuantities:legacy,allowMissingOrderDate:before.orderDate===null&&after.orderDate===null};
 }
-export type DevelopmentSheet = {
+/** Optional facts from the selected document's own development and execution round. */
+export type DevelopmentPrintTiming = {
+  executionRoundId: string;
+  dispatchedOn?: string;
+  returnedOn?: string;
+  dispatchedDocumentVersion?: number;
+};
+export type DevelopmentPrintFeedback = {
+  text: string;
+  sourceRound: number;
+  version?: number;
+  recordedOn?: string;
+  images?: readonly {attachmentId:string;label?:string;url:string}[];
+};
+export type DevelopmentPrintDetails = {
+  printTiming?: DevelopmentPrintTiming;
+  printFeedback?: DevelopmentPrintFeedback;
+  printRevision?: {sourceRound:number;revisionNumber?:number;motherOrderNumber?:string};
+};
+export type DevelopmentSheet = DevelopmentPrintDetails & {
+  orderRush?:true;
   preorderPublication?:{at:string;documentVersion:number};
+  numberedIdentity?:{orderNumber:string|null};
   orderTimeEnabled?:boolean;
   timelineSchemaVersion?:2;
   independentRevisions?:boolean;
@@ -228,8 +330,9 @@ export type DevelopmentSheet = {
 };
 
 /** A precise published document, without current execution state or edit rights. */
-export type DevelopmentPublishedVersion = {
+export type DevelopmentPublishedVersion = DevelopmentPrintDetails & {
  sourceId:string;designStyleNo:string;temporaryStyleNo:string|null;customerCode:string|null;
+ numberedIdentity?:DevelopmentSheet['numberedIdentity'];
  developmentType:string;designerName:string;roundNumber:number;documentVersion:number;
  document:DevelopmentDocument;publishedAt:string|null;metadata:JourneyDocumentMetadata;
 };
@@ -248,15 +351,20 @@ export function developmentMakingSizes(document:DevelopmentDocument|null|undefin
 const workbenchRequiredFields = {
   styleName: "款名", gender: "性别", boardType: "板类", processingSelected: "加工类型",
 } as const;
-export function developmentWorkbenchPublishIssues(sheet:WorkbenchDevelopmentSheet){
+export function developmentWorkbenchPublishIssues(sheet:WorkbenchDevelopmentSheet,options:{styleNameOptional?:boolean}={}){
   return (Object.entries(workbenchRequiredFields) as Array<[keyof typeof workbenchRequiredFields,string]>)
-    .filter(([field])=>!sheet[field])
+    .filter(([field])=>!sheet[field]&&!(field==='styleName'&&options.styleNameOptional))
     .map(([field,label])=>({field,label,message:`请填写或选择${label}`}));
 }
 
 type DevelopmentMaterialPublishField = "name"|"specification"|"expectedDate"|"composition"|"width"|"supplier";
+export function developmentAuxiliaryPlanningPublishIssues(document:DevelopmentDocument):Array<{materialId:string;field:"expectedDate";message:string}> {
+ return document.materials.filter(row=>row.category==="辅料"&&row.designerHasMaterial===false&&!row.expectedDate)
+  .map(row=>({materialId:row.materialId,field:"expectedDate",message:`${row.label||row.name||row.category}选择了没有实物，请填写预计日期`}));
+}
 export function developmentMaterialPublishIssues(document:DevelopmentDocument):Array<{materialId:string;field:DevelopmentMaterialPublishField;message:string}>{
- const issues:Array<{materialId:string;field:DevelopmentMaterialPublishField;message:string}>=[];
+ const issues:Array<{materialId:string;field:DevelopmentMaterialPublishField;message:string}>=developmentAuxiliaryPlanningPublishIssues(document);
+ const explicitPlanning=Boolean(document.templateConfirmed||document.materialSupplierCatalog);
  for(const row of document.materials){
   const priceIdentityIssue=developmentMaterialPriceIdentityIssue(row);
   if(priceIdentityIssue){issues.push({materialId:row.materialId,field:'name',message:priceIdentityIssue});continue;}
@@ -271,7 +379,7 @@ export function developmentMaterialPublishIssues(document:DevelopmentDocument):A
   }
   if(!row.name.trim())issues.push({materialId:row.materialId,field:"name",message:`${label}缺少品名，请设计师填写材料资料`});
   if(row.category==="主布"&&!row.specification.trim())issues.push({materialId:row.materialId,field:"specification",message:`${label}缺规格，请设计师填写主布规格`});
-  if(row.category==="辅料"&&!row.available&&!row.expectedDate)issues.push({materialId:row.materialId,field:"expectedDate",message:`${label}未到，请填写预计日期`});
+  if(!explicitPlanning&&row.category==="辅料"&&row.designerHasMaterial===undefined&&!row.available&&!row.expectedDate)issues.push({materialId:row.materialId,field:"expectedDate",message:`${label}未到，请填写预计日期`});
  }
  return issues;
 }

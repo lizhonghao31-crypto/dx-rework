@@ -26,7 +26,7 @@ const url=process.env.TEST_DATABASE_URL;
  const baseDocument=():BudgetDocument=>({fabricType:'针织',productCategory:'上衣',monthSeries:'',date:'2026-11-01',currency:'人民币',rows:[],freight:'0',cm:'0',salePrice:'999',outsourcingScope:'车缝',outsourcingUnitPrice:'8',imageAttachmentIds:[]});
  const order=async(sourceId?:string,designStyleNo?:string)=>{const result=await identity.createOrder(actor(),DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:designStyleNo??`TEST-QUOTE-${randomUUID()}`,orderDate:'2026-10-23',lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),randomUUID(),sourceId??null);await database.query('UPDATE digital_production_orders SET primary_merchandiser_id=$2 WHERE production_order_id=$1',[result.productionOrderId,merch]);return result.productionOrderId;};
  const confirmation=(version:number,total='20')=>QuotationConfirmationSchema.parse({expectedVersion:version,customerCode:'PD',customerConfirmedTotal:total,amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST 客户邮件：确认每件20元，不使用内部成本或销售价替代',confirmedAt:'2026-01-01T00:00:00Z'});
- const readyQuote=async(resource:QuotationResource,process=false)=>{const rowId=randomUUID(),document={...baseDocument(),rows:[{rowId,section:process?'外发工序' as const:'主料' as const,category:'',name:'TEST 面料',specification:'TEST',unit:'米',supplier:'TEST',consumption:'',unitPrice:process?'':'10'}]};let sheet=await quotes.save(actor(),resource,{expectedVersion:0,document,assignments:[{rowId,technicalAssigneeId:tech,priceAssigneeId:process?ie:designer,priceRole:process?'ie_reviewer':'sample_designer'}]},randomUUID());sheet=await quotes.fillRow(actor(tech,['pattern_room_worker']),resource,rowId,{expectedVersion:sheet.version,consumption:'1'},randomUUID());if(process)sheet=await quotes.fillRow(actor(ie,['ie_reviewer']),resource,rowId,{expectedVersion:sheet.version,unitPrice:'10'},randomUUID());return {sheet,rowId};};
+ const readyQuote=async(resource:QuotationResource,process=false,technicalAssigneeId=tech)=>{const rowId=randomUUID(),document={...baseDocument(),rows:[{rowId,section:process?'外发工序' as const:'主料' as const,category:'',name:'TEST 面料',specification:'TEST',unit:'米',supplier:'TEST',consumption:'',unitPrice:process?'':'10'}]};let sheet=await quotes.save(actor(),resource,{expectedVersion:0,document,assignments:[{rowId,technicalAssigneeId,priceAssigneeId:process?ie:designer,priceRole:process?'ie_reviewer':'sample_designer'}]},randomUUID());sheet=await quotes.fillRow(actor(technicalAssigneeId,['pattern_room_worker']),resource,rowId,{expectedVersion:sheet.version,consumption:'1'},randomUUID());if(process)sheet=await quotes.fillRow(actor(ie,['ie_reviewer']),resource,rowId,{expectedVersion:sheet.version,unitPrice:'10'},randomUUID());return {sheet,rowId};};
  beforeAll(async()=>{
  await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
@@ -152,24 +152,50 @@ const url=process.env.TEST_DATABASE_URL;
      .toEqual([{created_budget_version:1}]);
  });
  it('requires real technical input and assigned prices, redacts full costs, and rejects cross-order and unauthorized fields',async()=>{
-   const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource,true);
-   const technical=await quotes.read(actor(tech,['pattern_room_worker']),resource);expect(technical.document).toBeNull();expect(technical.confirmation).toBeNull();expect(technical.rows[0]!.unitPrice).toBeNull();
-   const before=new Map<pg.PoolClient,pg.PoolClient['query']>(),queried:string[]=[];
-   const trace=(client:pg.PoolClient)=>{if(before.has(client))return;const query=client.query;before.set(client,query);client.query=function(this:pg.PoolClient,...args:unknown[]){if(typeof args[0]==='string')queried.push(args[0]);return Reflect.apply(query,this,args);} as pg.PoolClient['query'];};
-   database.on('acquire',trace);
-   try{
-    const directory=await quotes.list(actor(tech,['pattern_room_worker']));
-    expect(directory.items.find(item=>item.resource.id===id)).toEqual({resource,version:technical.version,status:technical.status,designStyleNo:technical.designStyleNo,customerCode:technical.customerCode});
-    expect(queried.filter(sql=>sql.includes('WITH candidates AS'))).toHaveLength(1);
-    expect(queried.some(sql=>/digital_budget_documents|digital_quotation_versions|digital_development_documents|technical_artifact/.test(sql))).toBe(false);
-   }finally{database.removeListener('acquire',trace);for(const [client,query] of before)client.query=query;}
+   const scopedTech=randomUUID(),worker=actor(scopedTech,['pattern_room_worker']);
+   await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST scoped pattern worker',true)",[scopedTech]);
+   await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_worker')",[scopedTech]);
+   const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource,true,scopedTech);
+   const technical=await quotes.read(worker,resource);expect(technical.document).toBeNull();expect(technical.confirmation).toBeNull();expect(technical.rows[0]!.unitPrice).toBeNull();
+   const tracedDirectory=async()=>{
+    const before=new Map<pg.PoolClient,pg.PoolClient['query']>(),reads:Array<{sql:string;values:unknown}>=[];
+    const trace=(client:pg.PoolClient)=>{if(before.has(client))return;const query=client.query;before.set(client,query);client.query=function(this:pg.PoolClient,...args:unknown[]){if(typeof args[0]==='string')reads.push({sql:args[0],values:args[1]});return Reflect.apply(query,this,args);} as pg.PoolClient['query'];};
+    database.on('acquire',trace);
+    try{return {directory:await quotes.list(worker),reads};}
+    finally{database.removeListener('acquire',trace);for(const [client,query] of before)client.query=query;}
+   };
+   const narrow={resource,version:technical.version,status:technical.status,designStyleNo:technical.designStyleNo,customerCode:technical.customerCode};
+   const unlinked=await tracedDirectory();
+   expect(unlinked.directory.items).toEqual([narrow]);
+   expect(unlinked.reads.filter(({sql})=>sql.includes('WITH candidates AS'))).toHaveLength(1);
+   expect(unlinked.reads.some(({sql})=>/digital_budget_documents|digital_quotation_versions|digital_development_documents|technical_artifact/.test(sql))).toBe(false);
+   const linkedStyle=`TEST-RUSH-QUOTE-${randomUUID()}`,linked=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:linkedStyle,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const linkedResource={kind:'source' as const,id:linked.sourceId},linkedQuote=await readyQuote(linkedResource,false,scopedTech);
+   const client=await database.connect();try{
+    await client.query('BEGIN');
+    const task=await new DigitalProductionTaskService(database).createWithClient(client,actor(root,['root_superuser']),{resource:linkedResource,kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null});
+    await client.query("INSERT INTO digital_development_documents(source_id,version,status,document,published_at,task_id,updated_by) VALUES($1,1,'published',$2,CURRENT_TIMESTAMP,$3,$4)",[linked.sourceId,JSON.stringify({rush:true}),task.taskId,designer]);
+    await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   const mixed=await tracedDirectory();
+   expect(mixed.directory.items).toEqual([{
+    resource:linkedResource,version:linkedQuote.sheet.version,status:'draft',designStyleNo:linkedStyle,customerCode:'PD',orderRush:true,
+   },narrow]);
+   expect(mixed.reads.some(({sql})=>/digital_budget_documents|digital_quotation_versions|technical_artifact/.test(sql))).toBe(false);
+   const developmentReads=mixed.reads.filter(({sql})=>sql.includes('digital_development_documents'));
+   expect(developmentReads.filter(({sql})=>sql.includes('to_regclass('))).toHaveLength(1);
+   const flagProjection=developmentReads.filter(({sql})=>!sql.includes('to_regclass('));
+   expect(flagProjection).toHaveLength(1);
+   expect(flagProjection[0]!.sql).toContain('SELECT requested.kind,requested.id FROM requested');
+   expect(flagProjection[0]!.sql).toContain("d.document->'rush'");
+   expect(flagProjection[0]!.values).toEqual([[linked.sourceId],[]]);
    expect((await quotes.list(actor(other))).items.some(item=>item.resource.id===id)).toBe(false);
    const price=await quotes.read(actor(ie,['ie_reviewer']),resource);expect(price.rows).toHaveLength(1);expect(price.rows[0]!.unitPrice).toBe('10');expect(price.document).toBeNull();
    await expect(quotes.read(actor(other),resource)).rejects.toMatchObject({statusCode:404});
-   await expect(quotes.read(actor(tech,['pattern_room_worker']),{kind:'order',id:await order()})).rejects.toMatchObject({statusCode:404});
-   await expect(quotes.fillRow(actor(tech,['pattern_room_worker']),resource,ready.rowId,{expectedVersion:ready.sheet.version,unitPrice:'0'},randomUUID())).rejects.toMatchObject({statusCode:403});
+   await expect(quotes.read(worker,{kind:'order',id:await order()})).rejects.toMatchObject({statusCode:404});
+   await expect(quotes.fillRow(worker,resource,ready.rowId,{expectedVersion:ready.sheet.version,unitPrice:'0'},randomUUID())).rejects.toMatchObject({statusCode:403});
    await expect(quotes.fillRow(actor(ie,['ie_reviewer']),resource,ready.rowId,{expectedVersion:ready.sheet.version,consumption:'0'},randomUUID())).rejects.toMatchObject({statusCode:403});
-   await expect(budget.read(actor(tech,['pattern_room_worker']),id)).rejects.toMatchObject({statusCode:404});
+   await expect(budget.read(worker,id)).rejects.toMatchObject({statusCode:404});
  });
  for(const [label,total,passes] of [['below','20',true],['equal','10',true],['above','9.999999',false]] as const)it(`compares only frozen customer total: ${label}, no Root bypass or salePrice substitution`,async()=>{
    const id=await order(),resource={kind:'order' as const,id},ready=await readyQuote(resource);

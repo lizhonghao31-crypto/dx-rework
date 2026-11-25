@@ -288,7 +288,7 @@ export class DigitalProductionNotificationService {
   }
   async todos(actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]> {
     let targetSelected=false;
-    if(projection?.todoId&&projection.select){const select=projection.select;projection={...projection,select:(key,load)=>{if(key.todoId===projection!.todoId)targetSelected=true;select(key,load);}};}
+    if(projection?.todoId&&projection.select){const select=projection.select;projection={...projection,select:(key,load,rushIdentity)=>{if(key.todoId===projection!.todoId)targetSelected=true;select(key,load,rushIdentity);}};}
     const ready=await this.readyTodoTasks(actor,projection?.todoId,Boolean(projection?.select&&!projection.countOnly));
     if(!ready)return [];
     const {people,unified,eligible,contexts}=ready;
@@ -310,7 +310,7 @@ export class DigitalProductionNotificationService {
       if(projection?.select){
        const supplement=metadata?.supplement;
        const key:TodoSelectionKey={todoId:task.task_id,sourceAction:'digital_task',taskTitle:supplement?`${task.label} · ${supplement.ready?'补料已到，请复核补做':'局部已做，仍待补料'}`:task.label,category:missing?'digital_assignment':'digital_task',recipientUserId:actor.actorId,todoType:missing?'recipient_routing_exception':'business_action',route:{routeName:'digital_production_task',entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},dueAt:task.due_at?iso(task.due_at):null,status:missing?'blocked_recipient':'pending',createdAt:iso(task.created_at),orderContext:metadata?.orderContext??null,unread:true};
-       projection.select(key,build);
+       projection.select(key,build,{sourceId:task.source_id,orderId:task.production_order_id});
       }else result.push(await build());
     }
     // Hashed QC-window IDs have no native row key. Resolve their windows only if
@@ -319,9 +319,9 @@ export class DigitalProductionNotificationService {
     return projection?.select?result:applyTodoReadState(this.database,actor,result);
   }
   async todoSelections(actor:TrustedActorContext,options:{metadata?:boolean;todoId?:string}={}){
-    const selected:TodoSelection[]=[];await this.todos(actor,{countOnly:!options.metadata,...(options.todoId?{todoId:options.todoId}:{}),select:(key,load)=>selected.push({key,load})});
+    const selected:TodoSelection[]=[];await this.todos(actor,{countOnly:!options.metadata,...(options.todoId?{todoId:options.todoId}:{}),select:(key,load,rushIdentity)=>selected.push({key,load,...(rushIdentity?{rushIdentity}:{})})});
     const keys=await applyTodoReadState(this.database,actor,selected.map(item=>item.key));
-    return selected.map((item,index)=>({key:keys[index]!,load:async()=>{const todo=await item.load(),key=keys[index]!;if(!key.contentToken)delete todo.contentToken;return {...todo,...(key.contentToken?{contentToken:key.contentToken}:{}),...(key.readAt===undefined?{}:{readAt:key.readAt}),...(key.unread===undefined?{}:{unread:key.unread})};}}));
+    return selected.map((item,index)=>({...item,key:keys[index]!,load:async()=>{const todo=await item.load(),key=keys[index]!;if(!key.contentToken)delete todo.contentToken;return {...todo,...(key.contentToken?{contentToken:key.contentToken}:{}),...(key.readAt===undefined?{}:{readAt:key.readAt}),...(key.unread===undefined?{}:{unread:key.unread})};}}));
   }
   async todoCounts(actor:TrustedActorContext){const rows=await this.todoSelections(actor);return {totalCount:rows.length,pendingCount:rows.length,unreadCount:rows.filter(row=>row.key.contentToken&&row.key.unread===true).length};}
   async todo(actor:TrustedActorContext,id:string){const selected=await this.todoSelections(actor,{todoId:id});return selected[0]?selected[0].load():null;}

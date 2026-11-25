@@ -50,7 +50,7 @@ import type { DigitalProductionAccessService } from "./access-service.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import { DigitalSourceCreateSchema, DigitalOrderCreateSchema, DigitalNumberCorrectionSchema, DigitalIdSchema, DigitalPageSchema, DigitalDesignCodeCheckSchema } from "@dx-rework/contracts/digital-production";
-import { OrderNumberPreviewSchema, OrderNumberSettingsSaveSchema } from "@dx-rework/contracts/digital-order-number";
+import { NumberedDraftInputSchema, OrderNumberContextSchema, OrderNumberPreviewSchema, OrderNumberSettingsSaveSchema } from "@dx-rework/contracts/digital-order-number";
 import { businessActor } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
@@ -74,6 +74,8 @@ export type DigitalIdentityDependencies = {
   factoryFlowService?:FactoryFlowService; qcProgress?:QcProductionProgressService;
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
   developmentQrBase?: string;
+  /** DIs for the joint G2 release candidate. Leave legacy entry points unchanged when off. */
+  workbenchNumberedCreation?: boolean;
   developmentRounds?:DevelopmentRoundService;
   developmentExecution?: DevelopmentExecutionService;
   developmentService?: DigitalDevelopmentService; developmentAttachments?: AttachmentService;
@@ -128,8 +130,10 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     app.get("/digital-production/journeys", async request => {
       const trusted=await journeyMeasure('route_auth',()=>actor(request));
       const {view,...filter}=parse(JourneyListFilterSchema,request.query);
-      const result=await dependencies.journeys!.list(trusted,filter);
-      return view==='home'?projectCockpitHome(result):result;
+      return view==='home'
+        ?projectCockpitHome(await dependencies.journeys!.list(trusted,filter,false,undefined,{withOrderRush:true}))
+        :(filter.stage==='preparation'||filter.stage==='post_cutting')?dependencies.journeys!.list(trusted,filter,false,undefined,{withOrderRush:true})
+        :dependencies.journeys!.list(trusted,filter);
     });
     app.post('/digital-production/journeys/:id/refresh',async request=>dependencies.journeys!.refreshOne(await actor(request),id(request,'id')));
     app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
@@ -151,7 +155,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     const trusted = await actor(request);
     const query=parse(cockpitZ.object({sourceId:DigitalIdSchema.optional()}).strict(),request.query);
     const calendar=await dependencies.service.orderCalendar(trusted,query.sourceId);
-    return { creationEnabled: dependencies.creationEnabled,...calendar,customers: await dependencies.service.customers(trusted) };
+    return { creationEnabled: dependencies.creationEnabled,...(dependencies.creationEnabled&&dependencies.workbenchNumberedCreation?{workbenchNumberedCreation:true as const}:{}),...calendar,customers: await dependencies.service.customers(trusted) };
   });
   app.get("/digital-production/sources", async request => {
     const trusted = await actor(request); const query = parse(DigitalPageSchema, request.query);
@@ -167,11 +171,26 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     dependencies.service.saveOrderNumberSettings(await actor(request),parse(OrderNumberSettingsSaveSchema,request.body),key(request)));
   app.post('/digital-production/order-number-settings/preview',async request=>
     dependencies.service.previewOrderNumber(await actor(request),parse(OrderNumberPreviewSchema,request.body)));
+  if(dependencies.creationEnabled&&dependencies.workbenchNumberedCreation){
+    app.get('/digital-production/sources/numbered-drafts/receipt',async(request,reply)=>{
+      reply.header('cache-control','private, no-store');
+      return dependencies.service.numberedDraftReceipt(await actor(request),key(request));
+    });
+    app.post('/digital-production/sources/numbered-drafts',async request=>
+      dependencies.service.reserveNumberedDraft(await actor(request),parse(NumberedDraftInputSchema,request.body),key(request)));
+    app.post('/digital-production/sources/:sourceId/draft-number',async request=>
+      dependencies.service.bindDraftNumber(await actor(request),id(request,'sourceId'),parse(OrderNumberContextSchema,request.body),key(request)));
+  }
   app.get("/digital-production/sources/drafts",async request=>{
     const trusted=await actor(request),query=parse(DigitalPageSchema.safeExtend({view:cockpitZ.literal('count').optional()}),request.query);
     return dependencies.service.developmentDrafts(trusted,query.page,query.search,query.view==='count');
   });
   app.get("/digital-production/sources/drafts/receipt",async request=>dependencies.service.developmentDraftReceipt(await actor(request),key(request)));
+  app.delete('/digital-production/sources/:sourceId/draft',async request=>{
+    const trusted=await actor(request);
+    const {expectedVersion}=parse(cockpitZ.object({expectedVersion:cockpitZ.number().int().nonnegative()}).strict(),request.body);
+    return dependencies.service.discardDevelopmentDraft(trusted,id(request,'sourceId'),expectedVersion,key(request));
+  });
   app.post("/digital-production/sources/drafts",async request=>dependencies.service.createSource(await actor(request),parse(DigitalSourceCreateSchema,request.body),key(request),true));
   app.post("/digital-production/sources", async request => dependencies.service.createSource(await actor(request), parse(DigitalSourceCreateSchema, request.body), key(request)));
   app.post("/digital-production/sources/:sourceId/confirm", async request => dependencies.service.createOrder(await actor(request), parse(DigitalOrderCreateSchema, request.body), key(request), id(request, "sourceId")));

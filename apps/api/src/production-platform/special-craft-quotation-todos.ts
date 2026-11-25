@@ -37,7 +37,7 @@ export async function specialCraftQuotationTodos(db:DB,actor:TrustedActorContext
    const ref=q.assembly.rows[row.rowId],assignment=q.assignments.find(a=>a.rowId===row.rowId);
    if(ref?.stage!=='bulk'||!ref.craftRef||row.unitPrice!==''||assignment?.priceAssigneeId!==actor.actorId||assignment.priceRole!=='pattern_room_worker'||projection?.todoId&&projection.todoId!==row.rowId)continue;
    const at=new Date(q.updated_at).toISOString(),selection:TodoSelectionKey={todoId:row.rowId,contentToken:todoContentToken([key(q,row.rowId)]),taskTitle:`大货${row.name}报价`,todoType:'business_action',category:'digital_special_craft_quotation',sourceAction:'special_craft_quotation',recipientUserId:actor.actorId,route:{routeName:'digital_order_quotation',entityId:q.production_order_id!,todoId:row.rowId},dueAt:null,status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:q.design_style_no,supplierName:null,status:'待填写本工艺单价',updatedAt:at},unread:true,createdAt:at};
-   appendSelectedTodo(result,projection,selection,()=>({...selection,sourceEventId:row.rowId,entityType:'customer_quotation',entityId:q.quote_id,requiredRole:'pattern_room_worker',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:q.version,updatedAt:at}));
+   appendSelectedTodo(result,projection,selection,()=>({...selection,sourceEventId:row.rowId,entityType:'customer_quotation',entityId:q.quote_id,requiredRole:'pattern_room_worker',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:q.version,updatedAt:at}),{sourceId:q.source_id,orderId:q.production_order_id});
   }
  }
  return result;

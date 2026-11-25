@@ -9,6 +9,9 @@ import type {SaveDevelopmentAmendment,SubmitDevelopmentAmendment} from "@dx-rewo
 import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {documentMetadata} from "./document-metadata.js";
 import {developmentDocumentSnapshot,developmentSnapshotContainsFile,developmentPublishedVersions} from './development-document-snapshot.js';
+import {developmentPrintDetails} from './development-print-details.js';
+import {readDevelopmentOrderRush} from './development-order-rush.js';
+import {readDevelopmentMaterialSuppliers,validateDevelopmentMaterialSuppliers} from './development-material-suppliers.js';
 import {materialReadiness} from "./development-material-readiness.js";
 import { beijingCalendarDate } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
@@ -16,7 +19,7 @@ import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentPublishErrors, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion } from "@dx-rework/contracts/digital-development";
+import { DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentAuxiliaryPlanningPublishIssues,developmentPublishErrors,usesDevelopmentMaterialPlanning,withoutDevelopmentAlternateSizeDraft, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion, type DevelopmentSubmissionOperation } from "@dx-rework/contracts/digital-development";
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -35,6 +38,7 @@ import {assertWholeOrderActive} from './whole-order-visibility.js';
 import {captureTechnicalEnrollment,captureTechnicalRound} from './development-cycle-evidence.js';
 import {captureDeferredDevelopmentRoute} from './development-native-route.js';
 import {digitalSlaDefaults} from '@dx-rework/contracts/digital-sla';
+import {OrderNumberRepository} from './order-number-repository.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("DEVELOPMENT_CONFLICT", message, 409); };
@@ -60,10 +64,22 @@ export class DigitalDevelopmentService {
     return { ...source, lifecycle, can_edit: owner && this.creationEnabled, can_view_order_draft: owner || Boolean(lifecycle?.is_draft&&originalDesigner) };
   }
   async authorizeUpload(actor: TrustedActorContext, sourceId: string) { await this.source(this.database, actor, sourceId, true); }
+  async materialSuppliers(actor:TrustedActorContext,search:string){
+    if(!this.creationEnabled||!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
+    return readDevelopmentMaterialSuppliers(this.database,search);
+  }
   async authorizeAttachmentRead(actor:TrustedActorContext,sourceId:string){await this.source(this.database,actor,sourceId);}
   async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string,db:Database=this.database): Promise<boolean> {
     await this.source(db, actor, sourceId);
     return Boolean((await db.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount)||await inheritedDevelopmentFile(db,sourceId,attachmentId);
+  }
+  private async originalRevisionPrintDetails(db:Database,actor:TrustedActorContext,selection:Parameters<typeof developmentPrintDetails>[1],revision:DevelopmentSheet['revisionSource']){
+    const details=await developmentPrintDetails(db,selection,revision);
+    if(details.printRevision&&revision&&await new DigitalProductionAccessPolicy(db).allowed(actor,'source',revision.rootSourceId,'technical')){
+      const number=(await db.query<{design_style_no:string|null}>('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[revision.rootSourceId])).rows[0]?.design_style_no;
+      if(number)details.printRevision.motherOrderNumber=number;
+    }
+    return details;
   }
   async publishedVersion(actor:TrustedActorContext,sourceId:string,roundNumber:number,documentVersion:number):Promise<DevelopmentPublishedVersion>{
     const db=await this.database.connect();
@@ -71,11 +87,15 @@ export class DigitalDevelopmentService {
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const source=await this.source(db,actor,sourceId);
       const snapshot=await developmentDocumentSnapshot(db,sourceId,roundNumber,documentVersion,Boolean(source.workbench_generated_number&&await workbenchPreorderPublication(db,sourceId)))??digitalNotFound();
-      let document=snapshot.document;
+      let document=withoutDevelopmentAlternateSizeDraft(snapshot.document);
       if(!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;document=withoutDevelopmentPrices(document);}
       const metadata=await documentMetadata(db,snapshot.metadataRecord);
+      const details=await this.originalRevisionPrintDetails(db,actor,{
+        sourceId,round:roundNumber,documentVersion,designerId:source.created_by,asOf:observedBusinessTime(this.now).now,
+      },await developmentRevisionSource(db,sourceId));
       const result={sourceId,designStyleNo:source.design_style_no,temporaryStyleNo:source.temporary_style_no,customerCode:source.customer_code,
-        developmentType:source.development_type,designerName:source.designer_name,roundNumber,documentVersion,document,publishedAt:metadata.published.at,metadata};
+        developmentType:source.development_type,designerName:source.designer_name,roundNumber,documentVersion,document,publishedAt:metadata.published.at,metadata,...details,
+        ...(source.workbench_generated_number?{numberedIdentity:{orderNumber:source.design_style_no??null}}:{})};
       await db.query('COMMIT');return result;
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
@@ -103,7 +123,17 @@ export class DigitalDevelopmentService {
     if(source.draft_reserved)return observedBusinessTime(this.now).now;
     return (await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at;
   }
-  async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number): Promise<DevelopmentSheet> {
+  async readDocument(actor:TrustedActorContext,sourceId:string,roundNumber?:number):Promise<DevelopmentSheet>{
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const result=await this.read(actor,sourceId,db,roundNumber,true);
+      const orderRush=(result.status==='published'||result.preorderPublication)
+        &&(await readDevelopmentOrderRush(db,[{sourceId,orderId:null}])).has(`source:${sourceId}`);
+      await db.query('COMMIT');return orderRush?{...result,orderRush:true as const}:result;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number, includePrintDetails=false): Promise<DevelopmentSheet> {
     const source = await this.source(db, actor, sourceId);
     const adoptedPlan=await developmentSlaPlan(db,sourceId);
     const row = await developmentDocumentRow(db,sourceId,roundNumber);
@@ -119,7 +149,7 @@ export class DigitalDevelopmentService {
     const productionOrderId=source.can_view_order_draft?(await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1",[sourceId])).rows[0]?.production_order_id??null:null;
     let document:DevelopmentDocument|null=row?.document??null;
     if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
-    if(document&&!source.can_view_order_draft)document=withoutDevelopmentPrices(document);
+    if(document&&!source.can_view_order_draft)document=withoutDevelopmentPrices(withoutDevelopmentAlternateSizeDraft(document));
     const unavailableDraftAttachments=source.lifecycle?.is_draft&&document?.files.length
       ?(await db.query<{id:string}>(`SELECT requested.id FROM unnest($2::uuid[]) requested(id) WHERE NOT EXISTS(
         SELECT 1 FROM digital_development_attachment_bindings b JOIN attachments a USING(attachment_id)
@@ -135,15 +165,19 @@ export class DigitalDevelopmentService {
     // on publication. Do not downgrade their draft editor while that plan is absent.
     // An existing plan remains authoritative for historical sources.
     const timelineSchemaVersion=adoptedPlan?.timeline_schema_version??(source.order_time_managed?2:undefined);
-    const forecastOnly=Boolean(adoptedPlan)&&!isRootActor(actor);
+    const forecastOnly=!isRootActor(actor)&&(Boolean(adoptedPlan)||usesDevelopmentMaterialPlanning(document));
     const forecastState=forecastOnly&&source.can_edit&&row?.status==='published'?(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0]?.state:undefined;
-    return { ...(preorder?{preorderPublication:{at:preorder.business_time.now,documentVersion:preorder.document_version}}:{}),...(unavailableDraftAttachments.length?{unavailableDraftAttachments}:{}),orderTimeEnabled:Boolean(source.order_time_managed)||await acceptsNewOrderTime(db),...(timelineSchemaVersion===2?{timelineSchemaVersion:2 as const}:{}),revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(adoptedPlan),...(draftDocumentDate?{draftDocumentDate}:{developmentCreatedDate:beijingCalendarDate(new Date(createdTime??source.created_at))}), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
+    const revisionSource=await developmentRevisionSource(db,sourceId);
+    const details=includePrintDetails&&row?.status==='published'?await this.originalRevisionPrintDetails(db,actor,{
+      sourceId,round:row.round_number??1,documentVersion:row.version,designerId:source.created_by,asOf:observedBusinessTime(this.now).now,
+    },revisionSource):{};
+    return { ...details,...(preorder?{preorderPublication:{at:preorder.business_time.now,documentVersion:preorder.document_version}}:{}),...(source.workbench_generated_number?{numberedIdentity:{orderNumber:source.design_style_no??null}}:{}),...(unavailableDraftAttachments.length?{unavailableDraftAttachments}:{}),orderTimeEnabled:Boolean(source.order_time_managed)||await acceptsNewOrderTime(db),...(timelineSchemaVersion===2?{timelineSchemaVersion:2 as const}:{}),revisionSource,independentRevisions:Boolean(adoptedPlan),...(draftDocumentDate?{draftDocumentDate}:{developmentCreatedDate:beijingCalendarDate(new Date(createdTime??source.created_at))}), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no??'', temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents,
       ...(forecastOnly?{materialForecastOnly:true}:{}),...(forecastState&&forecastState!=='active'?{materialForecastBlocked:'开发单已暂停或取消'}:{}) };
   }
-  async submissionReceipt(actor:TrustedActorContext,sourceId:string,operation:'publish'|'confirm',key:string){
+  async submissionReceipt(actor:TrustedActorContext,sourceId:string,operation:DevelopmentSubmissionOperation,key:string){
     DevelopmentSubmissionReceiptQuerySchema.parse({operation,key});
     const db=await this.database.connect();
     try{
@@ -152,11 +186,13 @@ export class DigitalDevelopmentService {
       // This is the initiating actor's receipt, not a new source of document,
       // price or another actor's command visibility. Recheck current membership.
       if(!source.can_view_order_draft||!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalNotFound();
-      const command=operation==='publish'?`development:${sourceId}:publish`:`confirm-source:${sourceId}`;
+      const command=operation==='confirm'?`confirm-source:${sourceId}`:`development:${sourceId}:${operation}`;
       const stored=(await db.query('SELECT response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0]?.response;
-      const receipt=DevelopmentSubmissionReceiptSchema.parse(!stored?{status:'unconfirmed'}:operation==='publish'
-        ?{status:'completed',operation,sourceId:stored.sourceId===sourceId&&stored.status==='published'?stored.sourceId:null,documentVersion:stored.version}
-        :{status:'completed',operation,sourceId:stored.sourceId===sourceId?stored.sourceId:null,productionOrderId:stored.productionOrderId});
+      const matchingId=stored?.sourceId===sourceId?sourceId:null;
+      const receipt=DevelopmentSubmissionReceiptSchema.parse(!stored?{status:'unconfirmed'}:operation==='confirm'
+        ?{status:'completed',operation,sourceId:matchingId,productionOrderId:stored.productionOrderId}:operation==='publish_preorder'
+        ?{status:'completed',operation,sourceId:matchingId,documentVersion:stored.version,publishedAt:stored.publishedAt}
+        :{status:'completed',operation,sourceId:stored.status==='published'?matchingId:null,documentVersion:stored.version});
       await db.query('COMMIT');return receipt;
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
@@ -201,20 +237,22 @@ export class DigitalDevelopmentService {
       await db.query("INSERT INTO digital_development_attachment_bindings(attachment_id,source_id,bound_by) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", [file.attachmentId, sourceId, actor.actorId]);
     }
   }
-  async save(actor: TrustedActorContext, sourceId: string, input: { expectedVersion: number; document: DevelopmentDocument }, key: string) {
+  async save(actor: TrustedActorContext, sourceId: string, input: { expectedVersion: number; document: DevelopmentDocument }, key: string,enableMaterialSuppliers=false) {
     return this.command(actor, sourceId, "save", key, input, async db => {
       const row = (await db.query("SELECT version,status,document FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0];
       if ((row?.version ?? 0) !== input.expectedVersion) conflict("开发单已更新，请重新打开后再保存");
       if (row?.status === "published") conflict("已发布开发单不可覆盖，请通过复版记录实际修改");
-      const source=(await db.query("SELECT created_at,(to_jsonb(s)->>'draft_reserved')::boolean AS draft_reserved FROM digital_production_sources s WHERE source_id=$1",[sourceId])).rows[0];
-      const document=developmentDraftForSave(input.document,row?.document,await this.draftDocumentOrigin(db,sourceId,source));
+      const source=(await db.query("SELECT created_at,(to_jsonb(s)->>'draft_reserved')::boolean AS draft_reserved,(to_jsonb(s)->>'workbench_generated_number')::boolean AS workbench_generated_number FROM digital_production_sources s WHERE source_id=$1",[sourceId])).rows[0];
+      const catalog=Boolean(enableMaterialSuppliers&&input.document.templateConfirmed||source.workbench_generated_number||row?.document?.materialSupplierCatalog);
+      const document=developmentDraftForSave({...input.document,materialSupplierCatalog:catalog?true:undefined},row?.document,await this.draftDocumentOrigin(db,sourceId,source));
       if(preorderDraftOrder(row?.document)&&!preorderDraftOrder(document)){
         const identity=await this.source(db,actor,sourceId,true);
         if(identity.workbench_generated_number&&await workbenchPreorderPublication(db,sourceId))conflict('已发布的预下单须沿本单补资料或确认正式订单');
       }
-      if(source.draft_reserved&&!isRootActor(actor))validateDevelopmentMaterialPlan(document,row?.document);
+      if(!isRootActor(actor)&&(source.draft_reserved||usesDevelopmentMaterialPlanning(document)||usesDevelopmentMaterialPlanning(row?.document)))validateDevelopmentMaterialPlan(document,row?.document);
       if(document.customerOrderDraft?.withOrder&&await developmentRevisionSource(db,sourceId))conflict('复版沿原开发档案的客户订单，不重复填写大货数量');
       await validateAuxiliaryReferences(db,document,row?.document);
+      await validateDevelopmentMaterialSuppliers(db,document,row?.document,{catalog});
       await validateSpecialCraftChoices(db,document.craftSteps??[],row?.document?.craftSteps??[],'development');
       await this.bindFiles(db, actor, sourceId, document);
       await db.query(`INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)
@@ -239,7 +277,8 @@ export class DigitalDevelopmentService {
       const order=preorderDraftOrder(row?.document);
       if(!source.lifecycle?.is_draft||row?.status!=='draft'||row.version!==expectedVersion||!order)
         return conflict('请重新打开本单的当前预下单草稿再发布');
-      if(order.designStyleNo!==source.design_style_no||order.customerCode!==source.customer_code
+      const originalCustomer=source.customer_code??await new OrderNumberRepository(db).boundCustomer(sourceId,source.design_style_no);
+      if(order.designStyleNo!==source.design_style_no||!originalCustomer||order.customerCode!==originalCustomer
         ||(order.temporaryStyleNo??null)!==(source.temporary_style_no??null))
         conflict('预下单资料与当前开发来源不一致');
       const recipientId=order.primaryMerchandiserId;
@@ -247,6 +286,9 @@ export class DigitalDevelopmentService {
         return conflict('请指定有效订单跟单接收资料');
       await assertAcceptanceAssignee(recipientId);
       const document=row.document as DevelopmentDocument;
+      const planningErrors=developmentAuxiliaryPlanningPublishIssues(document);
+      if(planningErrors.length)throw new ApplicationError('VALIDATION_ERROR',planningErrors.map(issue=>issue.message).join('；'),400);
+      await validateDevelopmentMaterialSuppliers(db,document,document,{catalog:true,publish:true});
       const fabrics=document.materials.filter(material=>material.category!=='辅料'&&(material.name.trim()||material.quantity.trim()||material.supplier.trim()));
       if(!fabrics.length||fabrics.some(material=>!material.name.trim()||!material.supplier.trim()||!/^\s*(?:\d+(?:\.\d+)?|\.\d+)/.test(material.quantity)||Number.parseFloat(material.quantity)<=0))
         conflict('请填写备料面料、实际布量及供应商');
@@ -257,7 +299,7 @@ export class DigitalDevelopmentService {
         VALUES($1,$2,$3,'digital_development_preorder_published','digital_production',$4,$5)`,
       [eventId,actor.requestId,actor.actorId,sourceId,JSON.stringify({businessTime:time,documentVersion:row.version,recipientId})]);
       await db.query(`INSERT INTO digital_development_preorder_publications(source_id,event_id,business_time,document_version,document,recipient_id)
-        VALUES($1,$2,$3,$4,$5,$6)`,[sourceId,eventId,JSON.stringify(time),row.version,JSON.stringify(document),recipientId]);
+        VALUES($1,$2,$3,$4,$5,$6)`,[sourceId,eventId,JSON.stringify(time),row.version,JSON.stringify(withoutDevelopmentAlternateSizeDraft(document)),recipientId]);
       await new ProductionReadinessService(this.database).inTransaction(db).record(actor,{kind:'source',id:sourceId},{
         kind:'design_handover',scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:time.now,note:'发布预下单备料资料',
         quantities:[],evidenceIds:document.files.filter(file=>file.kind==='款图').map(file=>file.attachmentId),sourceDocumentVersion:row.version,recipientId,
@@ -280,6 +322,7 @@ export class DigitalDevelopmentService {
       await validateSpecialCraftChoices(db,row.document.craftSteps??[],[],'development');
       const errors = developmentPublishErrors(numberedPreorder?{...row.document,customerOrderDraft:null}:row.document);
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", errors.join("；"), 400);
+      await validateDevelopmentMaterialSuppliers(db,row.document,row.document,{catalog:Boolean(numberedPreorder||row.document.materialSupplierCatalog),publish:true});
       if(row.document.customerOrderDraft?.withOrder){
         // This is development publication, not formal PO confirmation. Preserve incomplete
         // ordering data for the later strict createOrder command without inventing sizes.
@@ -297,6 +340,7 @@ export class DigitalDevelopmentService {
         [sourceId])).rowCount)throw new ApplicationError('ORDER_TIME_REQUEST_REQUIRED','本开发草稿已有待处理的时效申请，请沿原审批继续',409);
       await this.bindFiles(db, actor, sourceId, row.document);
       const publishOriginalDevelopment=async()=>{
+      const publishedDocument=withoutDevelopmentAlternateSizeDraft(row.document);
       const admission=orderTimeAdmission(db);
       const lifecycle=await developmentSourceLifecycle(db,sourceId);
       const time = numberedPreorder?await (this.businessClock??new ContextBusinessClock(this.database,db)).read({kind:'source',id:sourceId})
@@ -304,7 +348,7 @@ export class DigitalDevelopmentService {
         : observedBusinessTime(this.now);
       const activation=numberedPreorder?null:await activateDevelopmentDraft(db,actor,sourceId,time);
       if (!numberedPreorder&&(activation||await developmentSlaPlan(db, sourceId)||(await db.query("SELECT to_jsonb(s)->>'order_time_managed' AS managed FROM digital_production_sources s WHERE source_id=$1",[sourceId])).rows[0]?.managed==='true'))
-        await captureDevelopmentSla(db, actor, sourceId, row.document, time, `development-publish:${sourceId}:${key}`,activation&&admission?'fixed_v2':'legacy',activation);
+        await captureDevelopmentSla(db, actor, sourceId, publishedDocument, time, `development-publish:${sourceId}:${key}`,activation&&admission?'fixed_v2':'legacy',activation);
       const routeId=randomUUID();
       const publishedPlan=await developmentSlaPlan(db,sourceId);
       if(preorder){
@@ -315,16 +359,16 @@ export class DigitalDevelopmentService {
         await captureTechnicalEnrollment(db,actorSource!.created_by,sourceId,technicalEvent,true);
         await captureTechnicalRound(db,actor.actorId,sourceId,1,time.now,'minutes'in wash?wash.minutes:1440,warning.kind==='ratio'?warning.percent/100:0.7);
         await captureDeferredDevelopmentRoute(db,actor.actorId,sourceId,1,routeId,
-          ['development_materials',...developmentSlaRoute(row.document,craftPiece?'工艺布片':'整件样板',2)],row.document,row.version+1,technicalEvent,time);
+          ['development_materials',...developmentSlaRoute(publishedDocument,craftPiece?'工艺布片':'整件样板',2)],publishedDocument,row.version+1,technicalEvent,time);
       }
       if(publishedPlan?.timeline_schema_version===2)await captureDevelopmentTimeline(db,actor.actorId,sourceId,1,routeId,
-        ['development_materials',...developmentSlaRoute(row.document,craftPiece?'工艺布片':'整件样板',2)],row.document,row.version+1,`development-publish:${sourceId}:${key}`,time);
+        ['development_materials',...developmentSlaRoute(publishedDocument,craftPiece?'工艺布片':'整件样板',2)],publishedDocument,row.version+1,`development-publish:${sourceId}:${key}`,time);
       const candidates = (await db.query(`SELECT DISTINCT u.id FROM app_users u JOIN user_role_assignments r ON r.user_id=u.id AND r.revoked_at IS NULL
         WHERE u.enabled AND r.role_code='development_clerk' ORDER BY u.id`)).rows;
       const eligible: string[] = [];
       for (const user of candidates) if (await new DigitalProductionAccessPolicy(db).activeRole(user.id, "development_clerk")) eligible.push(user.id);
       const { taskId } = await new DigitalProductionTaskService(this.database).createWithClient(db, actor, { resource: { kind: "source", id: sourceId }, kind: "development_materials", routeId, routeVersion: 1, occurrence: 1, assigneeId: eligible.length === 1 ? eligible[0]! : null });
-      await db.query("UPDATE digital_development_documents SET status='published',published_at=$4,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP WHERE source_id=$1", [sourceId, taskId, actor.actorId, time.now]);
+      await db.query("UPDATE digital_development_documents SET status='published',published_at=$4,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP,document=document-'alternateSizeDraft' WHERE source_id=$1", [sourceId, taskId, actor.actorId, time.now]);
       if (preorder||publishedPlan) {
         const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;
         await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:"source",id:sourceId},kind:"development_shipping",routeId:randomUUID(),routeVersion:1,occurrence:1,
@@ -346,7 +390,7 @@ export class DigitalDevelopmentService {
     return this.command(actor, sourceId, "material", key, { materialId, ...input }, async db => {
       const row = await developmentDocumentRow(db,sourceId) ?? digitalNotFound();
       if (row.status !== "published" || row.version !== input.expectedVersion) conflict("请在当前已发布开发单上确认物料");
-      const clerkReceiptRequired=!isRootActor(actor)&&Boolean(await developmentWorkflowVersion(db,sourceId));
+      const clerkReceiptRequired=!isRootActor(actor)&&(usesDevelopmentMaterialPlanning(row.document)||Boolean(await developmentWorkflowVersion(db,sourceId)));
       if(clerkReceiptRequired&&input.action!=='修改预计日期')digitalForbidden();
       if((clerkReceiptRequired||input.expectedRound!==undefined)&&input.expectedRound!==(row.round_number??1))conflict("开发轮次已变化，请刷新后重新确认");
       if(input.action==='修改预计日期'&&(clerkReceiptRequired||input.expectedRound!==undefined)){
