@@ -7,7 +7,7 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {assignedWarehousePreparationResources} from './warehouse-assigned-resources.js';
 import {developmentReadTables} from './development-amendment-repository.js';
-import {currentPreparationMaterials,instructionInvestmentMaterials,preparationHandoverCurrent,preparationHash} from './preparation-material-repository.js';
+import {currentPreparationMaterials,instructionInvestmentMaterials,preparationHandoverCurrent,preparationHash,warehouseReceiptMaterialCurrent} from './preparation-material-repository.js';
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
@@ -22,6 +22,7 @@ const iso=(value:Date|null)=>value?.toISOString()??null;
 
 function validMaterialEvidence(raw:Raw,ctx:Source){
  if(!raw.evidence_valid)return false;
+ if(raw.body.warehouseReceipt)return warehouseReceiptMaterialCurrent(raw.resource_kind,raw.body.warehouseReceipt,ctx.development?.materials??null,ctx.instruction);
  if(raw.kind==='design_handover'){
   const record={...raw.body,sourceDocumentVersion:raw.body.sourceDocumentVersion??null};
   if(raw.body.orderInstructionVersion!==undefined&&ctx.order_id){

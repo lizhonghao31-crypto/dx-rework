@@ -1168,6 +1168,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    });
   }finally{await own.dispose();}
  });
+ it('X3 preserves the same preorder accessory lot for issue and correction after saving the first formal instruction',async()=>{
+  const own=await businessAnchorFixture(url!);
+  try{
+   const fixture=await warehouseOriginalIssueFixture(own,{receiptBeforeFormal:true});
+   const {scene,id,warehouse,bulk,preparation,resource,preorderReceipt,batch,accessory,instructionVersion,scope,now}=fixture;
+   await own.runtime.run(scene,own.root,async()=>{
+    const fact=(await preparation.read(warehouse,resource)).history.find(row=>row.recordId===preorderReceipt!.recordId&&row.version===1);
+    expect(fact).toMatchObject({valid:true,resource:{kind:'source'},warehouseReceipt:{materialId:accessory.materialId,quantity:'500'}});
+    expect(await preparation.warehouseReceiptWork(warehouse,resource)).toMatchObject([{received:{quantity:'500',unit:'米'},activeBatches:[{ref:preorderReceipt}]}]);
+    const listed=await preparation.warehouseReceipts(warehouse,{page:1,search:accessory.name,status:'open'});
+    expect(listed.items).toEqual([expect.objectContaining({resource,materialId:accessory.materialId,received:{quantity:'500',unit:'米'}})]);
+    await bulk.dispatchMaterials(warehouse,id,{supplierId:own.supplierId,instructionVersion,occurredAt:now,note:'TEST original source receipt reused',
+     items:[{materialId:scope.id,quantity:300,unit:'米',scope:{scopeRef:'whole',lineId:null,allocations:[{receipt:preorderReceipt!,quantity:'300'}]}}]},randomUUID());
+    await expect(preparation.recordWarehouseReceiptBatch(warehouse,resource,{...batch,expectedReceiptVersion:1,replaces:preorderReceipt,quantity:'299'},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const correction=await preparation.recordWarehouseReceiptBatch(warehouse,resource,{...batch,expectedReceiptVersion:1,replaces:preorderReceipt,quantity:'490'},randomUUID());
+    expect(correction.history.filter(row=>row.recordId===preorderReceipt!.recordId).map(row=>[row.version,row.valid,row.warehouseReceipt?.quantity])).toEqual([[2,true,'490'],[1,true,'500']]);
+    expect(await preparation.warehouseReceiptWork(warehouse,resource)).toMatchObject([{received:{quantity:'490',unit:'米'}}]);
+   });
+  }finally{await own.dispose();}
+ });
  it('X3 uses the same assigned warehouse report and management decision for exact fabric receipt versions',async()=>{
   const own=await businessAnchorFixture(url!);
   try{

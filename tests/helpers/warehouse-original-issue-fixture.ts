@@ -17,7 +17,7 @@ import {prepareRewashSettings} from './order-time-rewash-fixture.js';
 
 /** Actual publishes, assignment, approval and original investment. Caller
  * chooses when to exercise the warehouse's first real incoming batch. */
-export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:{fabricPurchase:boolean}){
+export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:{fabricPurchase?:boolean;receiptBeforeFormal?:boolean}){
  await prepareRewashSettings(f);
  const root=f.root,warehouse=f.people.warehouse!,primary=f.people.merchandiser!;
  const capabilities=(await f.db.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='sample_designer'")).rows.map(row=>row.capability);
@@ -56,6 +56,18 @@ export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof 
    note:'TEST procurement is not available stock',quantities:[{lineId:null,materialId:accessory.materialId,name:accessory.name,quantity:520,unit:'米'},
     ...(options?.fabricPurchase?[{lineId:null,materialId:material.materialId,name:material.name,quantity:520,unit:'米'}]:[])],
    evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+  const originalBatch=(task:Awaited<ReturnType<typeof preparation.warehouseReceiptWork>>[number])=>({kind:task.kind,scopeRef:task.scopeRef,materialId:task.materialId,lineId:task.lineId,unit:'米',supplierId:task.basis.supplierId,
+   investment:task.purchase.original,materialFingerprint:task.basis.adoptedRef,expectedReceiptVersion:0,quantity:'500',occurredAt:now,
+   note:'TEST original physical batch',evidenceIds:[]});
+  let preorderReceipt:null|{recordId:string;version:number}=null;
+  if(options?.receiptBeforeFormal){
+   await preparation.assign(root,source,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,colorConfirmationRole:null,reason:'TEST source warehouse assignment before formalization'},randomUUID());
+   const work=(await preparation.warehouseReceiptWork(warehouse,source)).find(row=>row.materialId===accessory.materialId)!;
+   const saved=await preparation.recordWarehouseReceiptBatch(warehouse,source,originalBatch(work),randomUUID());
+   const fact=saved.history.find(row=>row.warehouseReceipt?.materialId===accessory.materialId);
+   if(!fact?.valid)throw Error('TEST source receipt must be valid before the formal instruction');
+   preorderReceipt={recordId:fact.recordId,version:fact.version};
+  }
   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),
    requiresColorMatching:false,productionPlanning:{craftSteps:[],preshrink:false},primaryMerchandiserId:primary.actorId,
    lines:[{formalPoNo:style+'-PO1',color:'黑',customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:300}]},
@@ -65,11 +77,8 @@ export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof 
   const resource={kind:'order' as const,id};
   const before=await bulk.read(warehouse,id),scoped=before.materials!.items.find(item=>item.name===accessory.name)!;
   const tasks=await preparation.warehouseReceiptWork(warehouse,resource),work=tasks.find(item=>item.materialId===accessory.materialId)!;
-  const originalBatch=(task:typeof work)=>({kind:task.kind,scopeRef:task.scopeRef,materialId:task.materialId,lineId:task.lineId,unit:'米',supplierId:task.basis.supplierId,
-   investment:task.purchase.original,materialFingerprint:task.basis.adoptedRef,expectedReceiptVersion:0,quantity:'500',occurredAt:now,
-   note:'TEST original physical batch',evidenceIds:[]});
   const batch=originalBatch(work),fabric=tasks.find(item=>item.materialId===material.materialId);
   return {scene,id,warehouse,primary,bulk,preparation,scope:scoped,resource,batch,work,accessory,now,instructionVersion:before.instructionVersion!,
-   fabricBatch:fabric?originalBatch(fabric):null};
+   fabricBatch:fabric?originalBatch(fabric):null,preorderReceipt};
  });
 }

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "7e61cad8bebed19dd91160f7739a5c9a3882a0c8",
-  "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+  "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
   "risk": "full",
   "rules": [
     {
@@ -169,30 +169,30 @@
     {
       "id": "pg-native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-final-native-warehouse-chain.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 79,
+      "passed": 80,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ea7770361b4daf5d2fe24aca8fd86d308bcb38220bea4e4170dc5fdf8f8142ca"
+          "sha256": "053b7cdf3b4614e87ff119999b8a4a9174734157d2b748591b7f6ce0b55c9e2e"
         }
       ],
-      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
-      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
+      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
       "context": "isolated PostgreSQL dual test databases, canonical two-worker setting, signed Chromium where the original browser suit is used",
-      "startedAt": "2026-11-25T12:45:40.788Z",
-      "endedAt": "2026-11-25T12:48:08.498Z",
-      "logSha256": "95dbec249d2aa0b83d34f74b2ed2177ed1203fbe1ed6a9996c3b75473335c506",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-native-warehouse-chain.log"
+      "startedAt": "2026-11-25T12:59:07.748Z",
+      "endedAt": "2026-11-25T13:02:06.953Z",
+      "logSha256": "9a0335d3fa7d26db37158bb6e8b8b5b6e4cd951c3dd1b5433b9d6e40829b2a5b",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.log"
     },
     {
       "id": "signed-creation",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-final-warehouse-creation-browser.json tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'resumes an unnumbered draft'",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.json tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'resumes an unnumbered draft'",
       "status": "passed",
       "exitCode": 0,
       "passed": 1,
@@ -201,39 +201,39 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4c7b43be6d621613655de747ba5269bd6ad29ec05871a90a38e4d7bc985948bf"
+          "sha256": "1a53dfe8468958239b47f3bf195cea1242df58f9aac3f7a0c9d898571e8647b9"
         }
       ],
-      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
-      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
+      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
       "context": "isolated PostgreSQL dual test databases and signed real warehouse/merchandiser browser through original preorder, transfer, historical receipt and return context",
-      "startedAt": "2026-11-25T12:47:06.286Z",
-      "endedAt": "2026-11-25T12:47:40.138Z",
-      "logSha256": "9ba64fd15e4f9b2a45ed580f503f328bf16eb19ae0973fd17a2c8e90a3ad0669",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-warehouse-creation-browser.log"
+      "startedAt": "2026-11-25T12:59:07.768Z",
+      "endedAt": "2026-11-25T12:59:58.793Z",
+      "logSha256": "d0648284b5833db0a8a2d5e6376194dc27ee452e30b9cac5713066a388d8798e",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.log"
     },
     {
       "id": "warehouse-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-final-unit.json tests/unit/warehouse-*.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-reviewed-unit.json tests/unit/warehouse-*.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 67,
+      "passed": 68,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e8dae35e592bb30c3c57266616d830d21f175e6ae0526ddd5a266ad47216bb45"
+          "sha256": "b5c7fc5f8f1322d1856224215e62f8bcb44dcbebb12522134c5b30d2d6de6813"
         }
       ],
-      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
-      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
+      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
       "context": "canonical Vitest base config with two workers; X3 quantity and current exact authorization negative cases",
-      "startedAt": "2026-11-25T12:46:22.604Z",
-      "endedAt": "2026-11-25T12:46:27.571Z",
-      "logSha256": "1e3faec360e4ceeec4b61532bb1be146b748e49ae598204e939f8afe491d99ce",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-unit.log"
+      "startedAt": "2026-11-25T12:59:07.406Z",
+      "endedAt": "2026-11-25T12:59:17.357Z",
+      "logSha256": "9dfa1123d2098e06462d11d064af8d41bb33f855862d49ee0e9f22e3c0ad24bd",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-unit.log"
     },
     {
       "id": "typecheck",
@@ -241,13 +241,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
-      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
+      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
       "context": "repository command across contracts, UI, API and web workspaces",
-      "startedAt": "2026-11-25T12:45:40.487Z",
-      "endedAt": "2026-11-25T12:46:26.099Z",
+      "startedAt": "2026-11-25T12:59:07.097Z",
+      "endedAt": "2026-11-25T13:00:08.193Z",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-typecheck.log"
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-typecheck.log"
     },
     {
       "id": "scoped-lint",
@@ -255,13 +255,13 @@
       "command": "git diff --name-only -z 7e61cad8bebed19dd91160f7739a5c9a3882a0c8 -- '*.ts' '*.tsx' | xargs -0 node node_modules/eslint/bin/eslint.js --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
-      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
+      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
       "context": "scoped original ESLint configuration over actual release X3 diff",
-      "startedAt": "2026-11-25T12:47:06.030Z",
-      "endedAt": "2026-11-25T12:47:06.030Z",
+      "startedAt": "2026-11-25T12:59:07.053Z",
+      "endedAt": "2026-11-25T12:59:07.053Z",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-source-lint.log"
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-source-lint.log"
     },
     {
       "id": "preflight",
@@ -269,13 +269,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
-      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
+      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
       "context": "repository preflight, currently pinned migration manifest and time occurrence inventory; no migration added",
-      "startedAt": "2026-11-25T12:47:06.018Z",
-      "endedAt": "2026-11-25T12:47:15.062Z",
-      "logSha256": "73edb49bf543be1eff23f91390e9fe1ecfd5a9bd18ccb742ef617c2b08358337",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-preflight.log"
+      "startedAt": "2026-11-25T12:59:07.105Z",
+      "endedAt": "2026-11-25T12:59:22.244Z",
+      "logSha256": "ee192d6d999a0c98f172c58d5bdf00dfe6e3fef39d3ff00f8dca264e84e6f27f",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-preflight.log"
     }
   ]
 }

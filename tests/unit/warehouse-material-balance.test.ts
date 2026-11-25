@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { currentWarehouseReceiptQuantity, warehouseMaterialBalance, warehouseReceiptBatches, scopedWarehouseReceiptQuantity, warehouseReceiptTaskBasis, type WarehouseReceiptBasis, type WarehouseReceiptMovement } from '../../apps/api/src/production-platform/warehouse-material-balance.js';
+import {preparationHash,preparationInvestmentScope,warehouseReceiptMaterialCurrent} from '../../apps/api/src/production-platform/preparation-material-repository.js';
 
 const metres = (quantity: string) => ({ quantity, unit: '米' });
 const original = {
@@ -34,6 +35,16 @@ describe('warehouse material balances for one verified basis', () => {
 });
 
 describe('original current authorized material receipt', () => {
+  it('keeps source accessory receipts through unrelated changes but not the same material with changed specifications',()=>{
+    const material={materialId:'lace-1',category:'辅料' as const,quantity:'520',name:'TEST original',color:'黑',specification:'2m',supplier:'TEST supplier'};
+    const evidence={kind:'accessories_ready' as const,scopeRef:'whole',materialId:material.materialId,lineId:null,supplierId:null,
+     unit:'米',investment:{recordId:'TEST purchase',version:1},materialFingerprint:preparationHash(preparationInvestmentScope([material]).rows[0]),quantity:'500'};
+    expect(warehouseReceiptMaterialCurrent('source',evidence,[material,{...material,materialId:'lace-2',specification:'new unrelated material'}],null)).toBe(true);
+    expect(warehouseReceiptMaterialCurrent('source',evidence,[{...material,specification:'3m'}],null)).toBe(false);
+    expect(warehouseReceiptMaterialCurrent('source',evidence,[{...material,supplier:'different supplier'}],null)).toBe(false);
+    expect(warehouseReceiptMaterialCurrent('source',evidence,[material,material],null)).toBe(false);
+    expect(warehouseReceiptMaterialCurrent('order',evidence,[material],null)).toBe(false);
+  });
   const scope = { resource: { kind: 'order' as const, id: 'TEST-PARENT' }, kind: 'fabric_receipt' as const,
     scopeRef: 'whole', materialId: 'TEST-COTTON', lineId: null, unit: '米' };
   const part = { materialId: scope.materialId, lineId: null, quantity: 300.25, unit: '米' };
