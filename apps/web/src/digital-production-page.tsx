@@ -22,6 +22,7 @@ import { createClientRequestId } from "./client-request-id.js";
 import {ProductionReadinessPanel} from "./production-readiness-panel.js";
 import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailRoute, digitalLandingPath } from "./digital-detail-route.js";
 import {readTechnicalOriginalSearch} from './technical-original-route.js';
+import {warehouseWorkbenchReturnTab} from './warehouse-workbench-route.js';
 import "./pattern-room.css";
 import "./digital-production.css";
 import "./digital-detail.css";
@@ -34,6 +35,7 @@ const BulkTaskWorkbench=lazyBusinessPage(()=>import('./bulk-task-workbench.js').
 const OrderDocumentContainer=lazyBusinessPage(()=>import('./order-document-container.js').then(module=>({default:module.OrderDocumentContainer})),{shellOnError:false});
 const DevelopmentOriginalReader=lazyBusinessPage(()=>import('./development-original-reader.js').then(module=>({default:module.DevelopmentOriginalReader})),{shellOnError:false});
 const DevelopmentTechnicalOriginal=lazyBusinessPage(()=>import('./development-technical-original.js').then(module=>({default:module.DevelopmentTechnicalOriginal})),{shellOnError:false});
+const WarehouseReceiptBatchPanel=lazyBusinessPage(()=>import('./warehouse-receipt-batch-panel.js').then(module=>({default:module.WarehouseReceiptBatchPanel})),{shellOnError:false});
 const PreparationMaterialOriginal=lazyBusinessPage(()=>import('./preparation-material-original.js').then(module=>({default:module.PreparationMaterialOriginal})),{shellOnError:false});
 const OrderHistoryOriginal=lazyBusinessPage(()=>import('./order-history-original.js').then(module=>({default:module.OrderHistoryOriginal})),{shellOnError:false});
 const ProductionOriginalReader=lazyBusinessPage(()=>import('./production-original-reader.js').then(module=>({default:module.ProductionOriginalReader})),{shellOnError:false});
@@ -165,7 +167,12 @@ function TaskDetail({ id }: { id: string }) {
     });
     return()=>controller.abort();
   },[id,attempt]);
-  if(task?.orderId&&task.taskKind==='bulk_pattern'&&digitalTaskView(window.location.search)!=='correct')return <BulkTaskWorkbench key={id} task={task} onClose={()=>void closeDetail()}/>;
+  const taskView=digitalTaskView(window.location.search);
+  const warehouseTab=task?.taskKind==='warehouse_preshrink'||task?.taskKind==='warehouse_dispatch'
+    ?warehouseWorkbenchReturnTab(digitalDetailClosePath(window.location.search,urls.base),urls.base):null;
+  if(task?.orderId&&(task.taskKind==='bulk_pattern'||task.taskKind==='warehouse_preshrink'&&warehouseTab==='preshrink')&&taskView!=='correct')return <BulkTaskWorkbench key={id} task={task} onClose={()=>void closeDetail()}/>;
+  if(task?.orderId&&task.taskKind==='warehouse_dispatch'&&warehouseTab==='dispatch'&&taskView==='handle'&&task.canExecute&&!task.paused)
+    return <FactoryFlowPanel key={id} orderId={task.orderId} warehouseDispatchTask={id} onClose={()=>void closeDetail()}/>;
   if(task?.sourceId&&task.taskKind.startsWith('development_')&&digitalTaskView(window.location.search)!=='correct')return <TaskWorkbenchSample key={id} task={task} onClose={()=>void closeDetail()}/>;
   return <><div className="pattern-actions"><Button onClick={() => void closeDetail()}>返回</Button></div>{error&&<><p role="alert">{error}</p><Button onClick={()=>setAttempt(value=>value+1)}>重新读取</Button></>}{access ? task?.taskKind.startsWith("development_") ? <DigitalPatternWorkspace key={id} selectedOnly initialTask={task} initialAccess={access}/> : <DigitalTasksPanel options={access} taskId={id} {...(task?.taskId===id?{initialTask:task}:{})} compact view={digitalTaskView(window.location.search)} /> : !error && <p role="status">正在读取原任务…</p>}</>;
 }
@@ -191,6 +198,9 @@ function DigitalProductionPageContent() {
       const query=new URLSearchParams(window.location.search);
       detail = query.has('originalMaterial')||query.has('originalMaterialVersion')?
        <PreparationMaterialOriginal resource={{kind:route.kind==='materialSource'?'source':'order',id:route.id}} onClose={()=>void closeDetail()}/>:
+       query.getAll('warehouseReceipt').length===1&&query.get('warehouseReceipt')==='1'?
+        <WarehouseReceiptBatchPanel key={`${route.kind}:${route.id}`} resource={{kind:route.kind==='materialSource'?'source':'order',id:route.id}}
+         onClose={()=>void closeDetail()}/>:
        <section aria-label="投面辅料办理"><Button variant="secondary" onClick={()=>void closeDetail()}>返回来源</Button>
         <ProductionReadinessPanel key={`${route.kind}:${route.id}`}
           resource={{kind:route.kind==='materialSource'?'source':'order',id:route.id}} focusKind="material_investment"/></section>;

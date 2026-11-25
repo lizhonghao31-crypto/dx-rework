@@ -245,6 +245,10 @@ export class SourcingProductionService {
     const source=await this.source(client,fact.sourcing_case_id,true);
     if(source.workflow_generation!=='digital_production_v1')fail('发厂事实与数字生产来源不一致');
     if(!source.sourcing_contract_document_id||source.contract_status!=='ready')fail('当前批准合同尚未就绪；请订单跟单在本单合同页处理已列缺项并等待文件生成，生成失败时按该页重试，不能用旧版合同派单');
+    const dispatchEvidence=fact.payload.dispatchEvidence;
+    if(dispatchEvidence&&(dispatchEvidence.sourcingCaseId!==source.sourcing_case_id||
+       dispatchEvidence.approvalSnapshotId!==source.sourcing_approval_snapshot_id||dispatchEvidence.contractDocumentId!==source.sourcing_contract_document_id))
+      fail('批准加工厂或合同已变化，请重新读取后登记本批实际发厂');
     // A physical remainder is not a new production dispatch. Keep the first
     // execution's immutable contract, quantities and start, including after repricing.
     const existing=(await client.query<ProductionRow>(`${selectProduction} WHERE production.sourcing_case_id=$1`,[fact.sourcing_case_id])).rows[0];

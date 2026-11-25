@@ -571,11 +571,14 @@ export function Shell({
   ];
   const preparationNavigation: NavigationEntry[] = isRoot || ["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","pmc","owner_group"].some(hasRole) ? [{name:"客户报价协作",description:"按分工填写用量与价格，记录客户确认",href:"/ui/digital-quotation"}] : [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
+  const warehouseNavigation:NavigationEntry[]=digital&&['warehouse_receiver','warehouse_supervisor'].some(hasRole)?
+   [{name:'仓库中心',description:'本人收料、预缩及发厂原任务',href:'/ui/digital-production?workspace=warehouse',activeKey:'digital-warehouse'}]:[];
   const navigation: NavigationEntry[] = [
     ...designerNavigation,
     ...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry)),
     ...preparationNavigation,
     ...factoryNavigation,
+    ...warehouseNavigation,
     ...globalNavigation,
     ...reworkNavigation,
     ...mobileSourcingNavigation,

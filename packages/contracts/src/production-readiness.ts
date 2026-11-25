@@ -33,6 +33,48 @@ export const PreparationMaterialRecordSchema=z.object({
  if(new Set(x.quantities.map(q=>JSON.stringify([q.lineId,q.materialId,q.name,q.unit]))).size!==x.quantities.length)c.addIssue({code:'custom',path:['quantities'],message:'同一款色物料及单位不能重复，请合并实际数量'});
  if(new Set(x.evidenceIds).size!==x.evidenceIds.length)c.addIssue({code:'custom',path:['evidenceIds'],message:'凭证不可重复'});
 });
+const WarehouseReceiptRefSchema=z.object({recordId:z.uuid(),version:z.number().int().positive()}).strict();
+export const WarehouseReceiptBatchSchema=z.object({
+ kind:z.enum(['fabric_receipt','accessories_ready']),
+ scopeRef:z.string().trim().min(1).max(150).default('whole'),
+ materialId:z.uuid(),lineId:z.uuid().nullable(),supplierId:z.uuid().nullable(),unit:z.string().trim().min(1).max(20),
+ investment:WarehouseReceiptRefSchema,materialFingerprint:z.string().regex(/^[a-f0-9]{64}$/),
+ expectedReceiptVersion:z.number().int().nonnegative(),
+ replaces:WarehouseReceiptRefSchema.optional(),
+ quantity:z.string().regex(/^(?:0|[1-9][0-9]{0,7})(?:\.[0-9]{1,6})?$/).refine(value=>Number(value)<=10000000,'实收数量超出允许范围'),
+ occurredAt:z.iso.datetime({offset:true}),note:z.string().trim().min(1).max(1000),
+ evidenceIds:z.array(z.uuid()).max(40).refine(ids=>new Set(ids).size===ids.length,'凭证不可重复').default([]),
+}).strict().refine(value=>Number(value.quantity)>0||Boolean(value.replaces),'只有订正已登记的原收料才能记录零');
+export const WarehouseNativeTaskQuerySchema=z.object({
+ kind:z.enum(['preshrink','dispatch']),status:z.enum(['open','completed']).default('open'),
+ page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
+}).strict();
+export const WarehouseReceiptPageQuerySchema=z.object({
+ status:z.enum(['open','completed']).default('open'),
+ page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
+}).strict();
+export type WarehouseReceiptPageQuery=z.infer<typeof WarehouseReceiptPageQuerySchema>;
+export type WarehouseNativeTaskQuery=z.infer<typeof WarehouseNativeTaskQuerySchema>;
+export type WarehouseReceiptBatch=z.infer<typeof WarehouseReceiptBatchSchema>;
+export type WarehouseReceiptBatchEvidence=Pick<WarehouseReceiptBatch,'kind'|'scopeRef'|'materialId'|'lineId'|'supplierId'|'unit'|'investment'|
+ 'materialFingerprint'|'replaces'|'quantity'>;
+type WarehouseQuantity={quantity:string;unit:string};
+type WarehouseReceiptRef=z.infer<typeof WarehouseReceiptRefSchema>;
+export type WarehouseReceiptWorkItem={
+ kind:WarehouseReceiptBatch['kind'];materialId:string;name:string;scopeRef:string;lineId:string|null;supplier:string|null;
+ basis:{resource:PreparationResource;kind:WarehouseReceiptBatch['kind'];scopeRef:string;materialId:string;lineId:string|null;adoptedRef:string;supplierId:string|null;unit:string};
+ purchase:{invested:WarehouseQuantity;investedAt:string;original:WarehouseReceiptRef;handover:WarehouseReceiptRef};
+ received:WarehouseQuantity|null;
+ productionRequired:WarehouseQuantity|null;
+ balance:{unit:string|null;procurementRemaining:string|null;excessReceived:string|null;productionShortage:string|null;dispatchRemaining:string|null};
+ receiptVersion:number;
+ activeBatches:{ref:WarehouseReceiptRef;quantity:WarehouseQuantity;occurredAt:string}[];
+};
+export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'productionRequired'|'balance'> & {
+ id:string;resource:PreparationResource;orderNumber:string|null;customerCode:string|null;orderRush?:true;
+ poNumber:string|null; assigneeName:string|null; invested:WarehouseQuantity; investedAt:string;
+};
+export type WarehouseReceiptPage={items:WarehouseReceiptListItem[];page:number;total:number};
 export type PreparationMaterialRecord=z.infer<typeof PreparationMaterialRecordSchema>;
 export const preparationInvestmentRowKey=(row:PreparationMaterialRecord['quantities'][number])=>
  JSON.stringify([row.materialId,row.lineId,row.unit,row.materialId?null:row.name]);
@@ -45,7 +87,7 @@ export type MaterialInvestmentScopeBasis={
  export type StyleLabelRecordRef={recordId:string;version:number;resource:PreparationResource;scopeRef:string;occurredAt:string|null};
  export type StyleLabelOccurrence={ruleVersion:number;orderId:string;lineId:string;requiredQuantity:number;requirementFingerprint:string;quantityFingerprint:string;
    record:StyleLabelRecordRef;completedAt:string|null;precision:'instant'|'unknown';source:StyleLabelRecordRef|null;reason:string|null};
- export type PreparationMaterialFact=Omit<PreparationMaterialRecord,'investmentQuantityCorrection'>&{styleLabelOccurrences?:Record<string,StyleLabelOccurrence>;styleLabelRequirementsBasis?:{orderId:string;fingerprint:string};investmentScopeBasis?:MaterialInvestmentScopeBasis;investmentMaterialOccurrences?:Record<string,InvestmentOccurrence>;investmentQuantityOccurrences?:Record<string,InvestmentOccurrence>;handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string;materialId?:string;category?:'主布'|'配布'|'辅料';supplier?:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
+ export type PreparationMaterialFact=Omit<PreparationMaterialRecord,'investmentQuantityCorrection'>&{warehouseReceipt?:WarehouseReceiptBatchEvidence;styleLabelOccurrences?:Record<string,StyleLabelOccurrence>;styleLabelRequirementsBasis?:{orderId:string;fingerprint:string};investmentScopeBasis?:MaterialInvestmentScopeBasis;investmentMaterialOccurrences?:Record<string,InvestmentOccurrence>;investmentQuantityOccurrences?:Record<string,InvestmentOccurrence>;handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string;materialId?:string;category?:'主布'|'配布'|'辅料';supplier?:string;supplierId?:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
 export const PreparationResponsibilitySchema=z.object({expectedVersion:z.number().int().nonnegative(),warehouseWorkerId:z.uuid().nullable(),colorConfirmationWorkerId:z.uuid().nullable(),colorConfirmationRole:z.string().trim().min(1).max(100).nullable(),reason:z.string().trim().min(1).max(1000)}).strict().refine(x=>Boolean(x.colorConfirmationWorkerId)===Boolean(x.colorConfirmationRole),'对色确认人和现有岗位须同时选择');
 export type PreparationResponsibility=z.infer<typeof PreparationResponsibilitySchema>;
 export const PreparationAdoptionSchema=z.object({previewRevision:z.string().min(1),reason:z.string().trim().min(1).max(1000)}).strict();

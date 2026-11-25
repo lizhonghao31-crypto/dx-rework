@@ -4,6 +4,7 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {journeyTaskSummaries} from '../../apps/api/src/production-platform/journey-task-summary.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
@@ -31,9 +32,25 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const r=await prepare(2);await f.runtime.run(r.scene,f.root,async()=>{
    const flow=new FactoryFlowService(f.db),tasks=new DigitalProductionTaskService(f.db),state=await flow.read(f.root,r.id),lineIds=state.lines.map(line=>line.lineId);
    const first=await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,lines:[{lineId:lineIds[0]!,quantity:10}],occurredAt:'2026-11-20T19:38:00.000Z',supplierId:f.supplierId,note:'TEST first real PO dispatch'},randomUUID());
+   const firstScope=await readWarehouseFactoryDispatchScopes(f.db,r.id);
+   expect(firstScope).toEqual([{orderId:r.id,productionId:first.productionId,factoryDecisionId:null,quantity:10,lineId:lineIds[0],
+    cuttingOrderId:r.cuts[0]!.cutting_order_id,factId:first.facts.find(fact=>fact.kind==='仓库实际发厂')!.factId,dispatchedAt:'2026-11-20T19:38:00.000Z'}]);
    const taskId=first.tasks.find(task=>task.taskKind==='warehouse_dispatch')!.taskId;expect((await tasks.read(f.root,taskId)).state).not.toBe('completed');
+   const contract=(await f.contracts.getCurrent(f.root,r.caseId)).item!,beforeDecision=(await f.db.query('SELECT sourcing_decision_id FROM sourcing_production_orders WHERE production_order_id=$1',[first.productionId])).rows[0].sourcing_decision_id;
+   await f.sourcing.requestPriceReapplication(f.people['production-management']!,r.caseId,{unitPrice:'4.90',changeReason:'TEST同厂改价不另派单',expectedDecisionId:beforeDecision,expectedContractDocumentId:contract.sourcingContractDocumentId},randomUUID());
+   const price=(await f.sourcing.getCurrentPriceReapplication({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
+   if(price.status==='pending')await f.sourcing.decidePriceReapplication(f.people.owner!,r.caseId,price.priceRequestId,{decision:'approved',verificationReason:'TEST同厂已批准新价格'},randomUUID());
+   const repriced=(await f.contracts.getCurrent(f.root,r.caseId)).item!;
+   expect(repriced.sourcingContractDocumentId).not.toBe(contract.sourcingContractDocumentId);
+   expect(await readWarehouseFactoryDispatchScopes(f.db,r.id)).toEqual(firstScope);
    const input={expectedRevision:first.revision,lines:[{lineId:lineIds[1]!,quantity:10}],occurredAt:'2026-11-20T19:39:00.123Z',supplierId:f.supplierId,note:'TEST late registration of last real PO dispatch'},key=randomUUID();
    const last=await flow.dispatch(f.people.warehouse!,r.id,input,key);expect((await flow.dispatch(f.people.warehouse!,r.id,input,key))).toEqual(last);
+   expect(await readWarehouseFactoryDispatchScopes(f.db,r.id)).toEqual([...firstScope,{orderId:r.id,productionId:first.productionId,
+    factoryDecisionId:null,quantity:10,lineId:lineIds[1],cuttingOrderId:r.cuts[1]!.cutting_order_id,
+    factId:last.facts.filter(fact=>fact.kind==='仓库实际发厂')[1]!.factId,dispatchedAt:input.occurredAt}]);
+   expect(last.facts.filter(fact=>fact.kind==='仓库实际发厂').map(fact=>fact.payload.dispatchEvidence)).toMatchObject([
+    {contractDocumentId:contract.sourcingContractDocumentId},{contractDocumentId:repriced.sourcingContractDocumentId},
+   ]);
    expect(await tasks.read(f.root,taskId)).toMatchObject({state:'completed',completedAt:input.occurredAt});
    const original=(await tasks.history(f.root,taskId)).events.find(event=>event.kind==='completed')!;
    expect(new Date(original.occurredAt!).toISOString()).toBe(input.occurredAt);

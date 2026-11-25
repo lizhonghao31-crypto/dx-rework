@@ -1,7 +1,7 @@
 import {ApplicationError} from '../platform/errors.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import type {PreparationMaterialFact,PreparationMaterialKind,PreparationResource,PreparationMaterialRecord,MaterialInvestmentScopeBasis} from '@dx-rework/contracts/production-readiness';
+import type {PreparationMaterialFact,PreparationMaterialKind,PreparationResource,PreparationMaterialRecord,MaterialInvestmentScopeBasis,WarehouseReceiptBatchEvidence} from '@dx-rework/contracts/production-readiness';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
 import {PREPARATION_RULE_VERSION,preparationInvestmentRowKey as investmentRowKey} from '@dx-rework/contracts/production-readiness';
@@ -31,7 +31,7 @@ export async function enrollPreparation(db:PreparationDB,resource:PreparationRes
   VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$8,$9,$10)`,[randomUUID(),resource.kind,resource.id,PREPARATION_RULE_VERSION,`creation:${creationEventId}`,'新建档案采用本次产前规则；没有补造物料、批复或完成事实',JSON.stringify({draftMinutes:1440,finalMinutes:1440}),actorId,creationEventId,JSON.stringify({now:businessNow().toISOString(),scenarioId:acceptanceBusinessContext()?.scenarioId??null})]);
 }
 type InvestmentMaterial=Pick<DevelopmentMaterial,'materialId'|'category'|'name'|'quantity'|'color'|'specification'|'supplier'>
- &Partial<Pick<DevelopmentMaterial,'width'|'weight'|'composition'>>
+ &Partial<Pick<DevelopmentMaterial,'width'|'weight'|'composition'|'supplierReference'>>
  &{instructionSpecifications?:readonly string[]};
 
 export function instructionInvestmentMaterials(document:Pick<InstructionDocument,'fabrics'|'accessories'|'fabricType'|'composition'>):InvestmentMaterial[]{
@@ -61,6 +61,18 @@ export function preparationInvestmentScope(materials:readonly InvestmentMaterial
   .sort((a,b)=>a[0].localeCompare(b[0],'en'));
  return {rows,fingerprint:preparationHash(rows),fabric:rows.some(row=>row[1]==='主布'||row[1]==='配布'),accessories:rows.some(row=>row[1]==='辅料')};
 }
+/** A physical batch belongs to the original invested material, not to every
+ * accessory in the current instruction. Source batches keep that origin when
+ * carried into the formal order. Actual changes to that same material still
+ * exclude the old batch from the current scope. */
+export function warehouseReceiptMaterialCurrent(kind:PreparationResource['kind'],evidence:WarehouseReceiptBatchEvidence,
+ source:readonly InvestmentMaterial[]|null,instruction:InstructionDocument|null){
+ const rows=(kind==='source'?source:instruction?instructionInvestmentMaterials(instruction):null)?.filter(row=>row.materialId===evidence.materialId);
+ if(rows?.length!==1)return false;
+ if((rows[0]?.supplierReference?.supplierId??null)!==evidence.supplierId)return false;
+ const row=preparationInvestmentScope(rows,kind==='source'?'source':'instruction').rows[0];
+ return Boolean(row&&preparationHash(row)===evidence.materialFingerprint);
+}
 export function preparationInvestmentComplete(handover:Pick<PreparationMaterialFact,'investmentScopeBasis'>|undefined,investment:Pick<PreparationMaterialFact,'state'|'valid'|'quantities'|'investmentMaterialOccurrences'>|undefined){
  if(investment?.state!=='ready'||!investment.valid)return false;
  const required=handover?.investmentScopeBasis?.materialIds;
@@ -84,12 +96,15 @@ export async function preparationMaterialHistory(db:PreparationDB,context:Awaite
   WHERE (resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)
   ORDER BY recorded_at DESC,version DESC,record_id`,[context.orderId,context.sourceId])).rows;
  const result:PreparationMaterialFact[]=[];
- const orderInstruction=context.orderId&&rows.some(row=>row.kind==='design_handover'&&row.body.orderInstructionVersion!==undefined)
+ const orderInstruction=context.orderId&&rows.some(row=>row.kind==='design_handover'&&row.body.orderInstructionVersion!==undefined||row.resource_kind==='order'&&row.body.warehouseReceipt)
   ?await directInvestmentInstruction(db,context.orderId):null;
+ const receiptSource=context.sourceId&&rows.some(row=>row.resource_kind==='source'&&row.body.warehouseReceipt)?await developmentDocumentRow(db,context.sourceId):null;
  const instructionBasis=orderInstruction?{version:orderInstruction.version,materials:instructionInvestmentMaterials(orderInstruction.document)}:null;
  for(const row of rows){
   const missing: string[]=[];
-  if(row.body.materialBasis&&row.body.materialBasis!==await preparationMaterialBasis(db,context,row.kind))missing.push('物料要求已变化，请核对本轮实际适用性；原物料记录保留');
+  const receipt=row.body.warehouseReceipt as WarehouseReceiptBatchEvidence|undefined;
+  if(receipt?!warehouseReceiptMaterialCurrent(row.resource_kind,receipt,receiptSource?.document.materials??null,orderInstruction?.document??null)
+   :row.body.materialBasis&&row.body.materialBasis!==await preparationMaterialBasis(db,context,row.kind))missing.push('物料要求已变化，请核对本轮实际适用性；原物料记录保留');
   if(row.kind==='design_handover'){
    if(row.body.orderInstructionVersion!==undefined&&context.orderId){
     if(!preparationHandoverCurrent(row.body,instructionBasis,'instruction'))
@@ -108,7 +123,11 @@ export async function preparationMaterialHistory(db:PreparationDB,context:Awaite
 /** An existing order stream keeps authority after source attachment. Source-only records are adopted by reference, never copied as receipts. */
 export function currentPreparationMaterials(history:PreparationMaterialFact[],orderId:string|null){
  const heads=new Map<string,PreparationMaterialFact>();
- for(const row of history){const key=`${row.kind}:${row.scopeRef}`,prior=heads.get(key);
+ for(const row of history){
+  // Physical receipt batches have their own exact stream in this original
+  // evidence table. They are not whole-order QA or preparation clearance.
+  if(row.warehouseReceipt)continue;
+  const key=`${row.kind}:${row.scopeRef}`,prior=heads.get(key);
   if(!prior||row.resource.kind==='order'&&row.resource.id===orderId&&prior.resource.kind!=='order'||row.recordId===prior.recordId&&row.version>prior.version)heads.set(key,row);
  }
  return [...heads.values()].map(row=>{
@@ -176,20 +195,23 @@ function investmentQuantitiesWithEvidence(input:PreparationMaterialRecord,prior:
  return {rowOccurrences,materialOccurrences};
 }
 /** Internal native producer; callers retain original transaction, authorization and optimistic version guards. */
-export async function appendPreparationMaterial(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>,actorId:string,input:PreparationMaterialRecord){
- const current=currentPreparationMaterials(await preparationMaterialHistory(db,context),context.orderId);
- const prior=current.find(f=>f.kind===input.kind&&f.scopeRef===input.scopeRef);
+export async function appendPreparationMaterial(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>,actorId:string,input:PreparationMaterialRecord,warehouse?:{target:PreparationResource;evidence:WarehouseReceiptBatchEvidence}){
+ const history=await preparationMaterialHistory(db,context),current=currentPreparationMaterials(history,context.orderId);
+ const prior=warehouse?history.filter(f=>f.warehouseReceipt&&f.kind===input.kind&&f.scopeRef===input.scopeRef&&
+  f.resource.kind===warehouse.target.kind&&f.resource.id===warehouse.target.id).sort((a,b)=>b.version-a.version)[0]:
+  current.find(f=>f.kind===input.kind&&f.scopeRef===input.scopeRef);
  if((prior?.version??0)!==input.expectedVersion)throw new ApplicationError('PREPARATION_CONFLICT','物料原记录已变化，请重新读取',409);
  const handedDocument=input.kind==='design_handover'&&context.sourceId?await developmentDocumentRow(db,context.sourceId):null;
  const directInstruction=input.kind==='design_handover'&&input.orderInstructionVersion!==undefined&&context.orderId
   ?await directInvestmentInstruction(db,context.orderId):null;
  const materialInputs:readonly InvestmentMaterial[]|undefined=directInstruction?instructionInvestmentMaterials(directInstruction.document):handedDocument?.document.materials;
  const handoverMaterials=materialInputs?.map(m=>({
-  materialId:m.materialId,category:m.category,supplier:m.supplier,name:m.name,quantity:m.quantity,color:m.color,specification:m.specification
+  materialId:m.materialId,category:m.category,supplier:m.supplier,name:m.name,quantity:m.quantity,color:m.color,specification:m.specification,
+  ...(m.supplierReference?{supplierId:m.supplierReference.supplierId}:{})
  }));
  const investmentHandover=input.kind==='material_investment'?current.find(row=>row.kind==='design_handover'
   &&row.scopeRef===input.scopeRef&&row.state==='ready'&&row.valid):undefined;
- const target=prior?.resource??investmentHandover?.resource??(context.sourceId?{kind:'source' as const,id:context.sourceId}:context.resource),recordId=prior?.recordId??randomUUID(),version=input.expectedVersion+1;
+ const target=prior?.resource??warehouse?.target??investmentHandover?.resource??(context.sourceId?{kind:'source' as const,id:context.sourceId}:context.resource),recordId=prior?.recordId??randomUUID(),version=input.expectedVersion+1;
  let scopeBasis:MaterialInvestmentScopeBasis|undefined;
  let investmentMaterialOccurrences:PreparationMaterialFact['investmentMaterialOccurrences'];
  let investmentQuantityOccurrences:PreparationMaterialFact['investmentQuantityOccurrences'];
@@ -229,7 +251,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
   context.lines.map(row=>({lineId:String(row.line_id),quantity:Number(row.order_quantity)})),
   {...input,recordId,version,resource:target,valid:true},prior):null;
  await db.query(`INSERT INTO digital_preparation_material_versions(record_id,version,resource_kind,resource_id,kind,scope_ref,state,occurred_at,body,actor_id,recorded_at)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...snapshot,...labels,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),...(investmentQuantityOccurrences?{investmentQuantityOccurrences}:{}),materialBasis:await preparationMaterialBasis(db,context,input.kind)}),actorId]);
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...snapshot,...(warehouse?{warehouseReceipt:warehouse.evidence}:{materialBasis:await preparationMaterialBasis(db,context,input.kind)}),...labels,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),...(investmentQuantityOccurrences?{investmentQuantityOccurrences}:{})}),actorId]);
  return {recordId,version};
 }
 

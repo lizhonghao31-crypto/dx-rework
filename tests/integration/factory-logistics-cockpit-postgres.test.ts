@@ -12,6 +12,7 @@ import {CreateSupplierSchema} from '@dx-rework/contracts';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
 import {nativeFactoryTimeline} from '../../apps/api/src/production-platform/factory-production-facts.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
@@ -155,6 +156,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST current factory after full transfer',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST original factory zero allocation'}));
   await ctx.run(async()=>{
    expect((await new FactoryFlowService(f.db).read(f.root,r.id)).currentProduction).toEqual({productionId:r.productionId,factoryDecisionId:null});
+   const originalDispatches=await readWarehouseFactoryDispatchScopes(f.db,r.id);
+   expect(originalDispatches).toMatchObject([{productionId:r.productionId,factoryDecisionId:null,cuttingOrderId:r.cuts[0]!.cutting_order_id,quantity:10}]);
    await f.sourcing.requestFactoryChange(f.people['production-management']!,r.caseId,{supplierId:supplier.supplierId,unitPrice:'6',changeReason:'TEST transfer all unstarted quantities'},randomUUID());
    const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
    const changed=await f.sourcing.decideFactoryChange(f.people.owner!,r.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST exact current factory'},randomUUID());
@@ -169,6 +172,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const repriced=await f.sourcing.decidePriceReapplication(f.people.owner!,r.caseId,price.priceRequestId,{decision:'approved',verificationReason:'TEST same native execution'},randomUUID());
    expect(repriced.value.decision!.sourcingDecisionId).not.toBe(factoryDecision);
    expect((await new FactoryFlowService(f.db).read(f.root,r.id)).currentProduction).toEqual({productionId:r.productionId,factoryDecisionId:factoryDecision});
+   expect(await readWarehouseFactoryDispatchScopes(f.db,r.id)).toEqual(originalDispatches);
 
   });
  });

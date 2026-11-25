@@ -1,3 +1,4 @@
+import type {WarehouseNativeTaskQuery} from '@dx-rework/contracts/production-readiness';
 import {readTechnicalTaskListPage} from './journey-selection-access.js';
 import {developmentRushKey,readDevelopmentOrderRush} from './development-order-rush.js';
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow} from './development-responsibility-window.js';
@@ -981,11 +982,11 @@ export class DigitalProductionTaskService {
     for (const id of ids) if (await policy.allowed(actor, "task", id, "technical")) tasks.push(await this.read(actor, id, db));
     return tasks;
   }
-  async list(actor: TrustedActorContext, page: number) {
+  async list(actor: TrustedActorContext, page: number, warehouse?:WarehouseNativeTaskQuery) {
     const db=await this.database.connect();
     try{
     await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const target=await readTechnicalTaskListPage(db,actor,page);
+    const target=await readTechnicalTaskListPage(db,actor,page,warehouse);
     const items=[...(await this.readPage(actor,target.ids,db)).values()];
     if(items.length!==target.ids.length)throw new ApplicationError('TASK_SCOPE_CHANGED','任务查看范围已变化，请刷新重试',409);
     await db.query('COMMIT');return {items,page,total:target.total};

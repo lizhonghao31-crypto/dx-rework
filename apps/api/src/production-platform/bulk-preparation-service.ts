@@ -28,6 +28,10 @@ import { isRootActor } from "../access/business-authority.js";
 import {journeyTaskSummaries} from './journey-task-summary.js';
 import {readJourneySelectionAccess} from './journey-selection-access.js';
 import {readJourneyCandidateCohort} from './journey-snapshot-reads.js';
+import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
+import {materialIssueOptions,freezeMaterialIssueBasis,originalMaterialIssueHistory,readMaterialIssueDestination} from './warehouse-material-issue.js';
+import {warehouseIssueFits} from './warehouse-issue-allocation.js';
+import {warehouseFabricReportLots} from './warehouse-fabric-report-lots.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 type DB=Pick<Pool|PoolClient,"query">;
 const fail=(message:string):never=>{throw new ApplicationError("BULK_PREPARATION_CONFLICT",message,409);};
@@ -198,10 +202,25 @@ export class BulkPreparationService {
    styleImageUrl:styleImage?`/api/digital-production/orders/${id}/instruction/attachments/${styleImage.attachmentId}`:null,instructionVersion:referenceInstruction?.version??null,sourceRound:referenceInstruction?.source_round??null};
   const canReportFabric=!terminal&&await this.warehouseAllowed(db,actor,id)&&(isRootActor(actor)||await policy.activeRole(actor.actorId,'warehouse_receiver')||await policy.activeRole(actor.actorId,'warehouse_supervisor'));
   const canDecideFabric=!terminal&&(isRootActor(actor)||await policy.activeRole(actor.actorId,'production_management')||await policy.activeRole(actor.actorId,'owner_group'));
-  const materialHistory=(await db.query("SELECT e.event_id,e.occurred_at,e.payload,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='bulk_materials_dispatched' ORDER BY e.recorded_at,e.event_id",[id])).rows;
-  const materials={canDispatch:canReportFabric&&Boolean(g.approval)&&g.instructionValid,supplierId:g.approval?.supplier_id??null,supplierName:g.approval?.supplier_name_snapshot??null,instructionVersion:g.instruction?.version??null,items:(g.instruction?.document.accessories??[]).map((m:InstructionDocument['accessories'][number])=>({id:m.id,name:m.name,specification:m.specification,materialColor:m.materialColor,group:m.group})),history:materialHistory.map(e=>({eventId:e.event_id,occurredAt:new Date(e.occurred_at).toISOString(),operatorName:e.display_name,note:e.payload.note,items:e.payload.items}))};
+  const materialHistory=await originalMaterialIssueHistory(db,id);
+  const materialCanDispatch=canReportFabric&&Boolean(g.approval)&&g.instructionValid;
+  const readiness=adoption?await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db):null;
+  const currentAccessories=(g.instruction?.document.accessories??[]) as InstructionDocument['accessories'];
+  const scopedFabric=g.fabric?.report?.receiptBatches as BulkFabricReport['receiptBatches'];
+  const currentFabric=(scopedFabric?g.instruction?.document.fabrics??[]:[]) as InstructionDocument['fabrics'];
+  const availableFabric=g.fabric?.usable&&'warehouseCoverageCurrent' in g.fabric&&g.fabric.warehouseCoverageCurrent?scopedFabric:undefined;
+  const active=readiness&&materialCanDispatch&&(currentAccessories.length||currentFabric.length)?(await readWarehouseInstructionDemands(db,[id])).get(id):undefined;
+  const options=active&&readiness&&g.ownerApproved?materialIssueOptions(readiness,active,materialHistory,businessNow().toISOString(),
+   await readMaterialIssueDestination(db,id,g.approval,readiness.lines.map(line=>line.lineId)),
+   new Map(cuttingRows.map(row=>[row.lineId,row.poNumber??row.formalStyleNo??row.color])),availableFabric):undefined;
+  const fabricItems=currentFabric.filter(row=>active?.demand.rows.some(binding=>binding.instructionMaterialId===row.id&&scopedFabric?.some(lot=>lot.materialId===binding.sourceMaterialId)))
+   .map(row=>({id:row.id,name:row.name,specification:row.remarks,materialColor:[...new Set(Object.values(row.colors))].join('、'),group:row.part,kind:'fabric' as const,
+    issueOptions:options?.get(row.id)?.map(value=>value.option)??[]}));
+  const materials={canDispatch:materialCanDispatch,supplierId:g.approval?.supplier_id??null,supplierName:g.approval?.supplier_name_snapshot??null,instructionVersion:g.instruction?.version??null,items:[...fabricItems,...currentAccessories.map(m=>({id:m.id,name:m.name,specification:m.specification,materialColor:m.materialColor,group:m.group,
+   ...(active?.demand.tracked.includes(m.id)?{issueOptions:options?.get(m.id)?.map(value=>value.option)??[]}:{}),
+  }))],history:materialHistory.map(e=>({eventId:e.event_id,occurredAt:new Date(e.occurred_at).toISOString(),operatorName:e.display_name,note:e.payload.note,items:e.payload.items.map(({materialId,name,quantity,unit})=>({materialId,name,quantity,unit}))}))};
   const uncutLines=cuttingRows.filter(r=>r.actualCutCount===null).map(r=>r.lineId as string);const physicalCuttingReasons=uncutLines.length?[...(await styleLabelCuttingReason(db,id,uncutLines)?[await styleLabelCuttingReason(db,id,uncutLines) as string]:[]),...await preparationTestReasons(db,id)]:[];
-  return {publishedBasis,physicalCuttingReasons,...(adoption?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}),materials,...(g.fabric?{fabric:g.fabric}:{}),canReportFabric,canDecideFabric,reference,cutting:{mode:g.approval?.cutting_process??null,completed:cuttingRows.length>0&&cuttingRows.every(r=>r.actualCutCount!==null),lines:cuttingRows.map(r=>({...r,actualCutCount:r.actualCutCount===null?null:Number(r.actualCutCount),pieceCount:r.pieceCount===null?null:Number(r.pieceCount)})) as BulkPreparationSheet['cutting']['lines']},orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,adoptedRound:g.instruction?.source_round??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:(await readBulkPreshrinkRequirement(db,prep,g.instruction?.document)).requirement,
+  return {publishedBasis,physicalCuttingReasons,...(readiness?{readiness}:{}),materials,...(g.fabric?{fabric:g.fabric}:{}),canReportFabric,canDecideFabric,reference,cutting:{mode:g.approval?.cutting_process??null,completed:cuttingRows.length>0&&cuttingRows.every(r=>r.actualCutCount!==null),lines:cuttingRows.map(r=>({...r,actualCutCount:r.actualCutCount===null?null:Number(r.actualCutCount),pieceCount:r.pieceCount===null?null:Number(r.pieceCount)})) as BulkPreparationSheet['cutting']['lines']},orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,adoptedRound:g.instruction?.source_round??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:(await readBulkPreshrinkRequirement(db,prep,g.instruction?.document)).requirement,
    dispatch:{version:row?.version??0,patternWorkerId:dispatchPerson(row?.pattern_worker_id),warehouseWorkerId:dispatchPerson(row?.warehouse_worker_id),cuttingWorkerId:dispatchPerson(row?.cutting_worker_id)},canDispatchPattern,canDispatchWarehouse,
    facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks};
  }
@@ -288,6 +307,7 @@ export class BulkPreparationService {
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');const db=await this.database.connect();try{
    await db.query('BEGIN');await lock(db);await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');
    await db.query("SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE",[id]);
+   if(action==='materials-dispatch'&&(!await this.warehouseAllowed(db,actor,id)||!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'warehouse_receiver')))digitalForbidden();
    const hash=createHash('sha256').update(JSON.stringify(input)).digest('hex'),command=`bulk:${id}:${action}`;
    const prior=(await db.query('SELECT * FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
    if(prior&&prior.payload_hash!==hash)fail('操作标识已用于不同内容');
@@ -336,14 +356,34 @@ export class BulkPreparationService {
  async dispatchMaterials(actor:TrustedActorContext,id:string,input:BulkMaterialsDispatch,key:string){
   input=BulkMaterialsDispatchSchema.parse(input);
   return this.command(actor,id,'materials-dispatch',input,key,async db=>{
-   const policy=new DigitalProductionAccessPolicy(db);
-   if(!await this.warehouseAllowed(db,actor,id))digitalForbidden();
-   if(!isRootActor(actor)&&!await policy.lockActiveRole(actor.actorId,'warehouse_receiver'))digitalForbidden();
    const g=await this.gates(db,id);
    if(!g.instructionValid||g.instruction?.version!==input.instructionVersion||!g.approval||g.approval.supplier_id!==input.supplierId)fail('制单或批准加工厂已变化，请刷新本单材料信息');
    if(Date.parse(input.occurredAt)>businessNow().getTime()||Date.parse(input.occurredAt)<new Date(g.instruction.published_at).getTime())fail('实际发出时间不能在未来或早于本版制单发布');
    if(new Set(input.items.map(i=>i.materialId)).size!==input.items.length)fail('本次辅料不可重复');
-   const items=input.items.map(item=>{const material=g.instruction.document.accessories.find((m:InstructionDocument['accessories'][number])=>m.id===item.materialId);if(!material)fail('辅料必须来自本单当前制单');return {...item,name:material.name};});
+   const active=(await preparationAdoption(db,{kind:'order',id}))?(await readWarehouseInstructionDemands(db,[id])).get(id):undefined;
+   const hasScopedItems=input.items.some(item=>active?.demand.tracked.includes(item.materialId));
+   if(hasScopedItems&&!g.ownerApproved)fail('当前加工厂审批已失效，请核对');
+   const scopedState=hasScopedItems&&active?await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db):null;
+   const availableFabric=g.fabric?.usable&&'warehouseCoverageCurrent' in g.fabric&&g.fabric.warehouseCoverageCurrent?g.fabric.report?.receiptBatches as BulkFabricReport['receiptBatches']:undefined;
+   const scoped=active&&scopedState?materialIssueOptions(scopedState,active,await originalMaterialIssueHistory(db,id),businessNow().toISOString(),
+    await readMaterialIssueDestination(db,id,g.approval,scopedState.lines.map(line=>line.lineId)),undefined,availableFabric):undefined;
+   const items=input.items.map(item=>{
+    const accessory=g.instruction.document.accessories.find((m:InstructionDocument['accessories'][number])=>m.id===item.materialId);
+    const fabric:InstructionDocument['fabrics'][number]|undefined=item.scope?g.instruction.document.fabrics.find((m:InstructionDocument['fabrics'][number])=>m.id===item.materialId):undefined;
+    const material=accessory??fabric;
+    if(!material||accessory&&fabric)fail('面辅料必须来自本单当前制单，面料须引用当前已有效验布的实际批次');
+    const requiresBasis=active?.demand.tracked.includes(item.materialId);
+    if(!requiresBasis){if(item.scope)fail('原授权物料批次和采用依据已变化，请刷新');return {...item,name:material.name};}
+    const allocation=item.scope;
+    if(!allocation)return fail('请选择本项当前实际收料批次，不能按采购数直接发料');
+    const eligible=scoped?.get(item.materialId)?.find(value=>value.option.lineId===allocation.lineId&&value.option.scopeRef===allocation.scopeRef);
+    if(!eligible?.item.productionRequired||eligible.item.kind!==(fabric?'fabric_receipt':'accessories_ready')||!warehouseIssueFits(eligible.ledger,eligible.item.productionRequired,
+     {unit:item.unit,quantity:String(item.quantity)},{occurredAt:input.occurredAt,allocations:allocation.allocations}))return fail('实际批次、单位、时间或可发数量已变化，请核对原收料和本项余量');
+    return {...item,name:material.name,warehouseBasis:freezeMaterialIssueBasis(eligible.item.basis),
+     ...(fabric?{warehouseFabricReport:{id:g.fabric?.report?.reportId,decisionId:g.fabric?.decision?.decisionId??null}}:{}),
+     warehouseDestination:{sourcingCaseId:g.approval.sourcing_case_id,sourcingDecisionId:g.approval.sourcing_decision_id,
+      approvalSnapshotId:g.approval.sourcing_approval_snapshot_id,supplierId:g.approval.supplier_id}};
+   });
    await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,'order',$2,'bulk_materials_dispatched',$3,$4,'补报未核实',$5)`,[randomUUID(),id,actor.actorId,input.occurredAt,JSON.stringify({...input,items})]);
    // A warehouse issue is not a factory receipt, task completion or extra 24h deadline.
   });
@@ -357,14 +397,19 @@ export class BulkPreparationService {
    for(const at of [input.arrivedAt,input.inspectedAt])if(at&&Date.parse(at)>businessNow().getTime())fail('实际时间不能在未来');
    if(!(await this.gates(db,id)).parallel)fail('旧路线保留原办理方式，不能自动套用新验布规则');
    let receiptRef:{recordId:string;version:number}|null=null;
-   if(await preparationAdoption(db,{kind:'order',id})){
+   const adopted=await preparationAdoption(db,{kind:'order',id});
+   if(input.receiptBatches&&!adopted)fail('本单尚无可核的原验布及收料依据');
+   if(adopted){
     const priorReceipt=await currentPreparationMaterial(db,id,'fabric_receipt');
     if((priorReceipt?.version??0)!==(input.expectedReceiptVersion??0))fail('实际到仓记录已变化，请刷新当前物料版本');
+    if(input.receiptBatches&&(!priorReceipt||!input.inspectedAt||!await warehouseFabricReportLots(db,id,input.receiptBatches,input.inspectedAt,businessNow().toISOString())))
+     fail('验布须对应本单当前有效实收批次及原到仓依据，不得用已订正或其他物料的批次');
     if(priorReceipt){if(priorReceipt.state!=='ready'||!priorReceipt.valid||priorReceipt.occurredAt!==input.arrivedAt)fail('请先在原物料记录订正主料实际到仓依据，再办理本次验布');receiptRef={recordId:priorReceipt.recordId,version:priorReceipt.version};}
     else if(input.arrivedAt){const context=await preparationContext(db,{kind:'order',id});receiptRef=await appendPreparationMaterial(db,context,actor.actorId,{kind:'fabric_receipt',scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:input.arrivedAt,note:input.note,quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null});await bridgePreparationMaterials(db,context,actor.actorId);}
    }
    const prior=await bulkFabricFacts(db,id);
    if((prior.report?.reportId??null)!==input.expectedReportId)fail('验布报告已更新，请刷新');
+   if(prior.report?.receiptBatches&&!input.receiptBatches)fail('原报告引用了实际收料批次，请重新选择本次验布范围');
    await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,corrects_event_id,payload)
      VALUES($1,'order',$2,'bulk_fabric_report',$3,$4,$5,$6,$7)`,[randomUUID(),id,actor.actorId,input.inspectedAt,input.inspectedAt?'补报未核实':'缺失',input.expectedReportId,JSON.stringify({...input,...(receiptRef?{receiptRef}:{}),snapshotId:prior.report?.snapshotId??(await this.gates(db,id)).snapshotId})]);
    await this.sync(db,actor,id);
@@ -377,6 +422,7 @@ export class BulkPreparationService {
    if(!isRootActor(actor)&&!await policy.activeRole(actor.actorId,'production_management')&&!await policy.activeRole(actor.actorId,'owner_group'))digitalForbidden();
    const state=await bulkFabricFacts(db,id);
    if(state.report?.reportId!==input.reportId||state.report.result!=='不合格'||(state.decision?.decisionId??null)!==input.expectedDecisionId)fail('验布报告或质量决定已更新，请刷新');
+   if('warehouseCoverageCurrent' in state&&state.warehouseCoverageCurrent===false)fail('本报告所用的原实收批次已变化，请重新验布');
    await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
      VALUES($1,'order',$2,'bulk_fabric_decision',$3,$5,'现场登记',$4)`,[randomUUID(),id,actor.actorId,JSON.stringify(input),businessNow().toISOString()]);
    await this.sync(db,actor,id);

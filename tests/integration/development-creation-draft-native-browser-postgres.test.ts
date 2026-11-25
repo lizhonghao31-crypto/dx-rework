@@ -94,7 +94,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
    try{
     const page=tab.page;
-    await openNewWizard(page,'预下单');
+    await openNewWizard(page,'预下单','上衣',true);
     const code=page.getByRole('textbox',{name:'订单ID',exact:true});
     await code.waitFor();expect(await code.inputValue()).toBe('待生成');
     const reservedResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/sources/numbered-drafts'));
@@ -183,6 +183,57 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
     const handover=(await h.db.query(`SELECT record_id,version,occurred_at FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover'`,[sourceId])).rows;
     expect(handover).toHaveLength(1);
+    const warehouse=h.f.people.warehouse!,merch=h.f.people.merchandiser!,preparation=new ProductionReadinessService(h.db);
+    const receivingSource={kind:'source' as const,id:sourceId},material=published[0]!.document.materials[0];
+    await preparation.assign(h.f.root,receivingSource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,
+     colorConfirmationWorkerId:null,colorConfirmationRole:null,reason:'TEST original warehouse for published X2 preorder'},randomUUID());
+    const purchaseAt=new Date(Date.now()-1000).toISOString();
+    await preparation.record(merch,receivingSource,{kind:'material_investment',scopeRef:'whole',expectedVersion:0,state:'partial',
+     occurredAt:purchaseAt,note:'TEST binding actual ordered material',quantities:[{lineId:null,materialId:material.materialId,name:material.name,quantity:20,unit:'米'}],
+     evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+    const receiving=await h.open(warehouse.actorId,1165,{},'/ui/digital-production?workspace=warehouse');
+    try{
+     await receiving.page.getByRole('heading',{name:'仓库中心',exact:true}).waitFor();
+     const queue=receiving.page.getByRole('region',{name:'待收料',exact:true});
+     await queue.getByRole('textbox',{name:'搜索订单ID、PO 或物料',exact:true}).fill(issued);
+     await queue.getByRole('button',{name:'搜索',exact:true}).click();
+     const open=queue.getByRole('link',{name:'实际收料',exact:true});
+     await queue.getByRole('row').filter({has:receiving.page.getByRole('link',{name:'实际收料',exact:true})}).getByText('急单',{exact:true}).waitFor();
+     const requested=new URL((await open.getAttribute('href'))!,receiving.page.url()).searchParams;
+     expect(requested.get('materialSource')).toBe(sourceId);
+     expect(requested.get('warehouseMaterial')).toBe(material.materialId);
+     await open.click();
+     const work=receiving.page.getByRole('region',{name:'仓库实际收料',exact:true});
+     await work.getByRole('textbox',{name:'本次数量（米）',exact:true}).fill('12');
+     await work.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(new Date(Date.now()+8*3600000).toISOString().slice(0,19));
+     await work.getByRole('textbox',{name:'本次收料说明 / 订正原因',exact:true}).fill('TEST signed browser registers the first warehouse batch');
+     const target=`/sources/${sourceId}/production-readiness/warehouse-receipts`,receiptKeys:string[]=[];
+     await receiving.page.route(url=>url.pathname.endsWith(target),async route=>{
+      receiptKeys.push(route.request().headers()['idempotency-key']??'');
+      if(receiptKeys.length===1){
+       const result=await route.fetch();expect(result.status()).toBe(200);
+       await route.abort('failed');
+      }else await route.continue();
+     });
+     await work.getByRole('button',{name:'保存实际收料',exact:true}).click();
+     const retry=work.getByRole('button',{name:'核对并重试原提交',exact:true});
+     await retry.waitFor();
+     expect(await work.getByRole('textbox',{name:'本次数量（米）',exact:true}).inputValue()).toBe('12');
+     await retry.click();
+     await work.getByText(/已实收：12 米/).waitFor();
+     expect(receiptKeys).toHaveLength(2);expect(receiptKeys[0]).toBeTruthy();expect(receiptKeys[1]).toBe(receiptKeys[0]);
+     expect(await work.getByText(/采购待收：8/).isVisible()).toBe(true);
+     await receiving.page.setViewportSize({width:390,height:747});
+     expect(await receiving.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+     await receiving.page.screenshot({path:join(evidence,'x3-warehouse-receipt-native-390.png'),fullPage:true});
+     await work.getByRole('button',{name:'返回来源',exact:true}).click();
+     await queue.getByText(/20 米 \/ 12 米 \/ 8 米/).waitFor();
+     expect(new URL(receiving.page.url()).searchParams.get('search')).toBe(issued);
+     expect(await queue.getByRole('textbox',{name:'搜索订单ID、PO 或物料',exact:true}).inputValue()).toBe(issued);
+    }finally{await receiving.close();}
+    expect((await h.db.query("SELECT count(*)::int AS n FROM digital_preparation_material_versions WHERE resource_id=$1 AND kind='fabric_receipt'",[sourceId])).rows[0]?.n).toBe(1);
+    expect(await orderTimeCreated(h.db,receivingSource)).toBeNull();
+
     await page.getByRole('button',{name:'客户确认下单',exact:true}).click();
     const formalForm=page.getByRole('region',{name:'客户意见',exact:true});
     await formalForm.getByRole('button',{name:'确认下单',exact:true}).waitFor();
@@ -202,6 +253,35 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect((await h.db.query('SELECT production_order_id,design_style_no FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows).toEqual([{production_order_id:productionOrderId,design_style_no:issued}]);
     expect(await orderTimeCreated(h.db,{kind:'order',id:productionOrderId})).toBeTruthy();
     expect((await h.db.query(`SELECT record_id,version,occurred_at FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover'`,[sourceId])).rows).toEqual(handover);
+    const inherited=await h.open(warehouse.actorId,1165,{},`/ui/digital-production?workspace=warehouse&search=${encodeURIComponent(issued)}`);
+    try{
+     const queue=inherited.page.getByRole('region',{name:'待收料',exact:true});
+     await queue.getByText(/20 米 \/ 12 米 \/ 8 米/).waitFor();
+     const links=queue.getByRole('link',{name:'实际收料',exact:true});
+     expect(await links.count()).toBe(1);
+     const exact=new URL((await links.getAttribute('href'))!,inherited.page.url()).searchParams;
+     expect(exact.get('materialOrder')).toBe(productionOrderId);
+     expect(exact.has('materialSource')).toBe(false);
+     await links.click();
+     const formalReceipt=inherited.page.getByRole('region',{name:'仓库实际收料',exact:true});
+     await formalReceipt.getByText(/已实收：12 米/).waitFor();
+     expect((await h.db.query("SELECT resource_id,version FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt'",[[sourceId,productionOrderId]])).rows).toEqual([{resource_id:sourceId,version:1}]);
+     await formalReceipt.getByRole('textbox',{name:'本次数量（米）',exact:true}).fill('8');
+     await formalReceipt.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(new Date(Date.now()+8*3600000).toISOString().slice(0,19));
+     await formalReceipt.getByRole('textbox',{name:'本次收料说明 / 订正原因',exact:true}).fill('TEST formal order receives the remaining quantity');
+     await formalReceipt.getByRole('button',{name:'保存实际收料',exact:true}).click();
+     await formalReceipt.getByText(/已实收：20 米/).waitFor();
+     await formalReceipt.getByRole('button',{name:'返回来源',exact:true}).click();
+     await queue.getByText('没有符合授权及筛选的收料事项。',{exact:true}).waitFor();
+     await queue.getByRole('combobox',{name:'收料状态',exact:true}).click();
+     await inherited.page.getByRole('option',{name:'采购收足',exact:true}).click();
+     await queue.getByText('采购已收足',{exact:true}).waitFor();
+     const finished=queue.getByRole('link',{name:'查看原收料与订正',exact:true});
+     expect(new URL((await finished.getAttribute('href'))!,inherited.page.url()).searchParams.get('materialOrder')).toBe(productionOrderId);
+     expect((await h.db.query("SELECT resource_id,version,state FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt' ORDER BY version",[[sourceId,productionOrderId]])).rows).toEqual([
+      {resource_id:sourceId,version:1,state:'partial'},{resource_id:sourceId,version:2,state:'partial'},
+     ]);
+    }finally{await inherited.close();}
    }catch(error){
     const body=tab.page.locator('body');
     await writeFile(join(evidence,'preorder-entry-failure.txt'),await body.innerText());

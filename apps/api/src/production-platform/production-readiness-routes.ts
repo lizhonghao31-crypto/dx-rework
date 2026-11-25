@@ -1,6 +1,6 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
-import {PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
+import {WarehouseReceiptBatchSchema,WarehouseReceiptPageQuerySchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
 import {CreateUploadIntentSchema} from '@dx-rework/contracts';
 import {ConfirmDevelopmentSampleHandoverSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {businessActor} from '../access/business-authority.js';
@@ -12,6 +12,10 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError('VALIDATION_ERROR',result.error.issues[0]?.message??'请核对办理内容',400);return result.data;};
  const actor=async(r:FastifyRequest)=>businessActor(deps.root,await deps.authenticate(r.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18)),r.id,'digital_production:view');
  const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
+ if(deps.workbenchNumberedCreation)app.get('/digital-production/warehouse/receipts',async(r,reply)=>{
+  reply.header('cache-control','private, no-store');
+  return service.warehouseReceipts(await actor(r),parse(WarehouseReceiptPageQuerySchema,r.query));
+ });
  for(const [route,kind] of [['orders','order'],['sources','source']] as const){
   const base=`/digital-production/${route}/:resourceId/production-readiness`;
   const resource=(r:FastifyRequest):PreparationResource=>({kind,id:parse(z.uuid(),(r.params as {resourceId:unknown}).resourceId)});
@@ -26,6 +30,16 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
    });
   }
   app.post(`${base}/material-investment-reminder/close`,async r=>service.closeMaterialInvestmentReminder(await actor(r),resource(r),r.body,key(r)));
+  if(deps.workbenchNumberedCreation){
+   app.get(`${base}/warehouse-receipt-work`,async(r,reply)=>{
+    reply.header('cache-control','private, no-store');
+    return service.warehouseReceiptWork(await actor(r),resource(r));
+   });
+   app.post(`${base}/warehouse-receipts`,async(r,reply)=>{
+    reply.header('cache-control','private, no-store');
+    return service.recordWarehouseReceiptBatch(await actor(r),resource(r),parse(WarehouseReceiptBatchSchema,r.body),key(r));
+   });
+  }
   app.post(`${base}/materials`,async r=>service.record(await actor(r),resource(r),parse(PreparationMaterialRecordSchema,r.body),key(r)));
   app.put(`${base}/responsibility`,async r=>service.assign(await actor(r),resource(r),parse(PreparationResponsibilitySchema,r.body),key(r)));
   app.post(`${base}/adoption-acknowledgement`,async r=>service.adopt(await actor(r),resource(r),parse(PreparationAdoptionSchema,r.body),key(r),true));

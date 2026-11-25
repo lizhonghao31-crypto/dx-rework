@@ -1,3 +1,4 @@
+import {WarehouseNativeTaskQuerySchema} from '@dx-rework/contracts/production-readiness';
 import {SettingsCalculationSchema,SettingsSetSaveSchema,SettingsSetDraftSchema,SettingsSetBasisSchema,SettingsSetPublishSchema,SettingsSetRestoreSchema} from '@dx-rework/contracts/sla-settings-sets';
 import {SpecialCraftSaveSchema} from '@dx-rework/contracts/digital-craft';
 import {OrderTimeCalculationSchema,OrderTimeSettingsSaveSchema,OrderTimeSettingsUseSchema} from '@dx-rework/contracts/order-time-settings';
@@ -29,6 +30,11 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   });
   app.post("/digital-production/tasks/:taskId/priority", async request => service.prioritize(await actor(request), id(request), parse(z.object({ priority: z.enum(["normal", "urgent"]) }).strict(), request.body).priority, key(request)));
   app.get("/digital-production/tasks", async request => service.list(await actor(request), parse(z.object({ page: z.coerce.number().int().min(1).max(100000).default(1) }).strict(), request.query).page));
+  if(dependencies.workbenchNumberedCreation)app.get("/digital-production/warehouse/native-tasks",async(request,reply)=>{
+    const trusted=await actor(request),input=parse(WarehouseNativeTaskQuerySchema,request.query);
+    reply.header('cache-control','private, no-store');
+    return service.list(trusted,input.page,input);
+  });
   app.get("/digital-production/tasks/:taskId", async request => service.readWorkItem(await actor(request), id(request)));
   app.get("/digital-production/tasks/:taskId/documents", async request => service.documents(await actor(request), id(request)));
   app.get("/digital-production/tasks/:taskId/history", async request => service.history(await actor(request), id(request)));
