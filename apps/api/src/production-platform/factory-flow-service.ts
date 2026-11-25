@@ -27,7 +27,7 @@ import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 import {warehouseFactoryDispatchEvidence} from './warehouse-factory-dispatch-evidence.js';
 import {readWarehouseCraftFactoryBasis} from './warehouse-craft-factory-basis.js';
 import {availableWarehouseCraftQuantities,qualifyWarehouseCraftMovement,type WarehouseCraftMotion,type WarehouseCraftOccupationReader} from './warehouse-craft-movement.js';
-import {canReadExactOriginalQualityPhoto,type OriginalQualityPhotoReference} from './original-quality-photo.js';
+import {canReadExactOriginalQualityPhoto,exactUnboundQualityPhotos,factoryInspectionQualityAttachment,type OriginalQualityPhotoReference} from './original-quality-photo.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);};
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
@@ -346,9 +346,12 @@ export class FactoryFlowService{
   if(input.checks.some(c=>c.result==='需处理'&&!c.problem.trim()))fail('不合格检查须保留具体质量问题');
   const task=s.tasks.find(t=>t.task_kind==='factory_production_qc');
   if(!task||task.state==='cancelled')fail('工厂检查任务已取消或尚未建立');
+  const photos=input.checks.flatMap(check=>check.attachmentIds??[]);
+  if(!await exactUnboundQualityPhotos(db,actor.actorId,photos))fail('检查图片须由本人上传并可用，不可跨PO或复用原检查图片');
   const eventId=randomUUID(),checks=input.checks.map(c=>({...c,allocationQuantity:Number(scopes.find(r=>r.line_id===c.lineId).quantity)}));
   await db.query(`INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
    VALUES($1,$2,'order',$3,'factory_garment_qc',$4,$5,'补报未核实',$6)`,[eventId,task.task_id,id,actor.actorId,input.occurredAt,JSON.stringify({productionId:scopes[0].production_order_id,factoryDecisionId:input.factoryDecisionId,checks,note:input.note})]);
+  if(photos.length)await db.query('UPDATE attachments SET entity_type=$1,entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=ANY($3::uuid[])',[factoryInspectionQualityAttachment,eventId,photos]);
   const after=await factoryProductionFacts(db,id);
   if(after.complete&&task.state!=='completed'){
    const completedAt=new Date(Math.max(...after.checks.map(c=>Date.parse(c.completedAt!)))).toISOString();
@@ -368,7 +371,21 @@ export class FactoryFlowService{
   const hasReturnedScope=s.batch?s.batch.batches.some(batch=>batch.rows.some(row=>row.available>0)):Boolean(s.returned);
   if(!await this.authorized(this.database,actor,s,'bulk_qc')||s.dispatched||!hasReturnedScope)digitalForbidden();
  }
- async canDownloadOriginal(actor:TrustedActorContext,ref:Extract<OriginalQualityPhotoReference,{kind:'craft-return'}>){
+ async authorizeProductionQcPhoto(actor:TrustedActorContext,id:string,ref:{productionId:string;factoryDecisionId:string|null;lineId:string}){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const policy=new DigitalProductionAccessPolicy(db);
+   await policy.assert(actor,'order',id,'technical');
+   const state=await this.state(db,id);
+   if(!await this.authorized(db,actor,state,'factory_production_qc')||!actor.actorRoles.includes(ROOT)&&!await policy.activeRole(actor.actorId,'quality_control'))digitalForbidden();
+   if(state.gate.terminal)fail('本单已停止办理，保留原检查事实');
+   const scopes=await factoryProductionScopes(db,id);
+   if(scopes.filter(row=>row.production_order_id===ref.productionId&&row.factory_decision_id===ref.factoryDecisionId&&row.line_id===ref.lineId).length!==1)fail('本工厂检查范围已变，请重新读取');
+   await db.query('COMMIT');
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+ async canDownloadOriginal(actor:TrustedActorContext,ref:Extract<OriginalQualityPhotoReference,{kind:'craft-return'|'factory-inspection'}>){
   return canReadExactOriginalQualityPhoto(this.database,actor,ref);
  }
  async canDownload(actor:TrustedActorContext,id:string,attachmentId:string){if(!await new DigitalProductionAccessPolicy(this.database).allowed(actor,'order',id,'technical'))return false;return Boolean((await this.database.query("SELECT 1 FROM digital_factory_qc q JOIN digital_factory_routes r USING(preparation_id) JOIN attachments a ON a.attachment_id=ANY(q.attachment_ids) AND a.entity_type='digital_factory_qc' AND a.entity_id=q.check_id::text WHERE r.production_order_id=$1 AND a.attachment_id=$2 AND a.status='ready'",[id,attachmentId])).rowCount);}

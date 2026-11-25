@@ -16,6 +16,29 @@ export function registerFactoryFlowRoutes(app: FastifyInstance, dependencies: Di
   app.get(base,async request=>service.read(await actor(request),id(request,"orderId")));
   app.post(`${base}/logistics`,async request=>service.logistics(await actor(request),id(request,"orderId"),parse(FactoryLogisticsSchema,request.body),key(request)));
   app.post(`${base}/production-qc`,async request=>service.productionQc(await actor(request),id(request,"orderId"),parse(FactoryProductionQcSchema,request.body),key(request)));
+  const factoryPhoto=`${base}/production-qc/:productionId/:factoryKey/:lineId`;
+  const factoryRef=(request:FastifyRequest)=>{
+    const factoryKey=parse(z.union([z.uuid(),z.literal('original')]),(request.params as Record<string,unknown>).factoryKey);
+    return {productionId:id(request,'productionId'),factoryDecisionId:factoryKey==='original'?null:factoryKey,lineId:id(request,'lineId')};
+  };
+  app.post(`${factoryPhoto}/upload-intents`,async request=>{
+    const trusted=await actor(request);await service.authorizeProductionQcPhoto(trusted,id(request,'orderId'),factoryRef(request));
+    const input=parse(CreateUploadIntentSchema,request.body);
+    if(!['image/jpeg','image/png','image/webp'].includes(input.mimeType))throw new ApplicationError('VALIDATION_ERROR','QC图片仅支持 JPG、PNG、WebP',400);
+    return attachments.createUploadIntent(trusted,input);
+  });
+  app.post(`${factoryPhoto}/attachments/:attachmentId/finalize`,async request=>{
+    const trusted=await actor(request);await service.authorizeProductionQcPhoto(trusted,id(request,'orderId'),factoryRef(request));
+    return attachments.finalize(trusted,id(request,'attachmentId'));
+  });
+  app.get(`${factoryPhoto}/history/:eventId/attachments/:attachmentId`,async(request,reply)=>{
+    const trusted=await actor(request),attachmentId=id(request,'attachmentId');
+    const ref={kind:'factory-inspection' as const,orderId:id(request,'orderId'),eventId:id(request,'eventId'),attachmentId,...factoryRef(request)};
+    const allowed=()=>service.canDownloadOriginal(trusted,ref);
+    if(!await allowed())throw new ApplicationError('NOT_FOUND','原检查图片不可查看',404);
+    const grant=await attachments.createDownloadIntent(trusted,attachmentId,allowed,'inline');
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  });
   app.post(`${base}/qc`,async request=>service.qc(await actor(request),id(request,"orderId"),parse(FactoryQcSchema,request.body),key(request)));
   app.post(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request,"orderId"),parse(FactoryDispatchSchema,request.body),key(request)));
   app.post(`${base}/followup`,async request=>service.followup(await actor(request),id(request,"orderId"),parse(FactoryFollowupSchema,request.body),key(request)));

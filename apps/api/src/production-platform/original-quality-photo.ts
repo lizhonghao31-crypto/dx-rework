@@ -8,7 +8,22 @@ type OriginalPhoto = Readonly<{orderId:string; attachmentId:string}>;
 export type OriginalQualityPhotoReference = OriginalPhoto & (
   | Readonly<{kind:'craft-return'; checkId:string; returnFactId:string; lineId:string; stepRef:string|null}>
   | Readonly<{kind:'factory-progress'; productionId:string; factoryDecisionId:string|null; recordId:string; revision:number; scopeRevision:string}>
+  | Readonly<{kind:'garment-receipt'; eventId:string; receiptId:string; quantityVersion:string}>
+  | Readonly<{kind:'factory-inspection'; eventId:string; productionId:string; factoryDecisionId:string|null; lineId:string}>
 );
+
+export const garmentReceiptQualityAttachment='digital_garment_receipt_qc';
+export const factoryInspectionQualityAttachment='digital_factory_garment_qc';
+
+/** The original QC transaction must lock the user's pending photos before
+ * binding them to its event. Completion/replay uses the original event. */
+export async function exactUnboundQualityPhotos(db:DB,actorId:string,attachmentIds:readonly string[]){
+ if(attachmentIds.length>10||new Set(attachmentIds).size!==attachmentIds.length)return false;
+ if(!attachmentIds.length)return true;
+ return (await db.query(`SELECT a.attachment_id FROM attachments a WHERE a.attachment_id=ANY($1::uuid[])
+  AND a.uploaded_by=$2 AND a.status='ready' AND a.entity_type IS NULL AND a.entity_id IS NULL
+  AND a.mime_type IN('image/jpeg','image/png','image/webp') ORDER BY a.attachment_id FOR UPDATE`,[attachmentIds,actorId])).rowCount===attachmentIds.length;
+}
 
 /** Check an exact, already bound historical photo under the original order read
  * policy. This does not assert quality, quantity or progress. Factory progress
@@ -29,6 +44,23 @@ export async function canReadExactOriginalQualityPhoto(db:DB, actor:TrustedActor
         AND fact.payload->>'stepRef' IS NOT DISTINCT FROM $5::text AND a.attachment_id=$6 AND a.status='ready'`,
     [ref.orderId,ref.checkId,ref.returnFactId,ref.lineId,ref.stepRef,ref.attachmentId])).rowCount);
   }
+
+  if(ref.kind==='garment-receipt')return Boolean((await db.query(`SELECT 1 FROM digital_production_task_events q
+     JOIN digital_production_child_lines link ON link.production_order_id=q.resource_id AND link.module='receiving' AND link.child_id::text=q.payload->>'receiptId'
+     JOIN attachments a ON q.payload->'attachmentIds' ? a.attachment_id::text AND a.entity_type=$6 AND a.entity_id=q.event_id::text
+     WHERE q.resource_kind='order' AND q.resource_id=$1 AND q.event_id=$2 AND q.event_kind='garment_receipt_qc'
+       AND q.payload->>'receiptId'=$3 AND q.payload->>'quantityVersion'=$4 AND a.attachment_id=$5 AND a.status='ready'`,
+    [ref.orderId,ref.eventId,ref.receiptId,ref.quantityVersion,ref.attachmentId,garmentReceiptQualityAttachment])).rowCount);
+
+  if(ref.kind==='factory-inspection')return Boolean((await db.query(`SELECT 1 FROM digital_production_task_events q
+      JOIN digital_production_child_links link ON link.production_order_id=q.resource_id AND link.module='production' AND link.child_id::text=q.payload->>'productionId'
+      JOIN digital_production_po_lines po ON po.production_order_id=q.resource_id AND po.line_id=$5
+      JOIN attachments a ON a.attachment_id=$6 AND a.entity_type=$7 AND a.entity_id=q.event_id::text AND a.status='ready'
+      WHERE q.resource_kind='order' AND q.resource_id=$1 AND q.event_id=$2 AND q.event_kind='factory_garment_qc'
+       AND q.payload->>'productionId'=$3 AND q.payload->>'factoryDecisionId' IS NOT DISTINCT FROM $4::text
+       AND EXISTS(SELECT 1 FROM jsonb_array_elements(q.payload->'checks') c(value)
+        WHERE c.value->>'lineId'=po.line_id::text AND c.value->'attachmentIds' ? a.attachment_id::text)`,
+     [ref.orderId,ref.eventId,ref.productionId,ref.factoryDecisionId,ref.lineId,ref.attachmentId,factoryInspectionQualityAttachment])).rowCount);
 
   // Null identifies the recorded original factory only within the exact
   // native production ID. Never substitute the order's current factory.
