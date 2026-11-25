@@ -412,7 +412,7 @@ function routeContent(navigation:InternalLocation){
   if (path === "/ui/digital-production"&&new URLSearchParams(navigation.search).get('workspace')==='warehouse')
     return <AuthGate requiredAnyOf={['warehouse_receiver','warehouse_supervisor'].map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
   if (path === "/ui/digital-production"&&new URLSearchParams(navigation.search).get('workspace')==='merchandiser')
-    return <AuthGate requiredRole="order_merchandiser" requiredCapability="todo:view">{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={['order_merchandiser','embroidery_washing_merchandiser'].map(requiredRole=>({requiredRole,requiredCapability:'todo:view'}))}>{page}</AuthGate>;
   if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {

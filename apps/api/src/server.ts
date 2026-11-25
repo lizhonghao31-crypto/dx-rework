@@ -446,7 +446,7 @@ const app = buildApp({
     exportService: new WageExportService(database),
     root: rootAuthority,
   },
-  todos: { authenticate: (token) => auth.authenticate(token), service: todoService,
+  todos: { authenticate: (token) => auth.authenticate(token), service: todoService,merchandiserWorkbench:config.digitalProduction?.enabled===true,
     root:rootAuthority,transferContractReconciliation:new SourcingTransferContractReconciliation(database) },
   reporting: {
     authenticate: (token) => auth.authenticate(token),

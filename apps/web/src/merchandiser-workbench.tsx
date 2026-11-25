@@ -5,12 +5,15 @@ import {Link} from '@astryxdesign/core/Link';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Table} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {MerchandiserOrderResponseSchema,MerchandiserWorkActionFilterSchema,MerchandiserWorkKindSchema,MerchandiserWorkResponseSchema,type MerchandiserOrderResponse,type MerchandiserWorkResponse} from '@dx-rework/contracts';
+import {MerchandiserOrderResponseSchema,MerchandiserWorkActionFilterSchema,MerchandiserWorkKindSchema,MerchandiserWorkResponseSchema,type MerchandiserCraftCommunication,type MerchandiserOrderResponse,type MerchandiserWorkResponse} from '@dx-rework/contracts';
 import {DigitalIdSchema} from '@dx-rework/contracts/digital-production';
+import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {todoDestination} from '@dx-rework/contracts/todo-destination';
 import {createWebUrls} from '../url-contract.js';
 import {designerAstryxCss} from './designer-astryx.js';
 import {digitalChildDetailHref} from './digital-detail-route.js';
+import {digitalRequest} from './digital-production-api.js';
+import {registerSessionInvalidator} from './auth-session.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {ListPagination} from './list-pagination.js';
 import {MerchandiserContractReturn} from './merchandiser-contract-return.js';
@@ -18,6 +21,7 @@ import {OrderRushBadge} from './order-rush-badge.js';
 import {OriginalDocumentDirectory,originalDocumentHref} from './original-document-directory.js';
 import {navigateInternalPage} from './internal-navigation.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
+import {WorkbenchFactoryCommunicationPanel} from './workbench-factory-communication-panel.js';
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
 import {DocumentGuardContext} from './use-digital-detail-navigation-guard.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
@@ -26,7 +30,9 @@ import {merchandiserWorkbenchPath,readMerchandiserWorkbenchRoute,type Merchandis
 const labels={preparation:'接资料与投料',commercial:'预算与制单',sourcing:'外发与合同',delivery:'生产与交付',exceptions:'差异处理及返工协同'} as const;
 const states={mine:'待我办理',waiting:'等待其他岗位',returned:'退回要改',completed:'已办理'} as const;
 const urls=createWebUrls(import.meta.env.BASE_URL);
-type OpenAction={kind:'contract';caseId:string;documentId:string|null}|{kind:'investment';resource:{kind:'source'|'order';id:string}};
+type OriginalWorkRow=MerchandiserWorkResponse['items'][number];
+type OpenAction=({kind:'contract';caseId:string;documentId:string|null}|{kind:'investment';resource:{kind:'source'|'order';id:string}}|
+ {kind:'craft';scope:MerchandiserCraftCommunication})&{row:OriginalWorkRow};
 export function MerchandiserWorkbench({search}:{search:string}){
  const [route,setRoute]=useState(()=>readMerchandiserWorkbenchRoute(new URLSearchParams(search)));
  const change=useCallback((next:MerchandiserWorkbenchRoute)=>{
@@ -57,6 +63,37 @@ function useOriginalReturnFocus(focus:string|undefined,ready:boolean){
   return()=>cancelAnimationFrame(frame);
  },[ready,focus]);
  return region;
+}
+
+/** Business identity for an inline action only. The original Journey read
+ * independently authorizes its details; its failure cannot block the original
+ * narrow handover/contract form or let another task supply its facts. */
+function OriginalWorkSummary({action}:{action:OpenAction}){
+ const {row}=action,sourceId=action.kind==='investment'&&action.resource.kind==='source'?action.resource.id:undefined;
+ const originalId=row.originalOrderId??sourceId;
+ const [read,setRead]=useState<{id:string;journey:OrderJourney}|null>(null),[revision,setRevision]=useState(0);
+ useEffect(()=>registerSessionInvalidator(()=>{setRead(null);setRevision(value=>value+1);}),[]);
+ useEffect(()=>{
+  if(!originalId)return;
+  const abort=new AbortController();
+  void digitalRequest<OrderJourney>(`journeys/${originalId}`,'GET',undefined,undefined,{signal:abort.signal}).then(journey=>{
+   if(!abort.signal.aborted&&Array.isArray(journey.lines)&&Array.isArray(journey.merchandisers)&&
+      (row.originalOrderId?journey.orderId===row.originalOrderId:journey.sourceId===sourceId))setRead({id:originalId,journey});
+  }).catch(()=>undefined);
+  return()=>abort.abort();
+ },[originalId,revision,row.originalOrderId,sourceId]);
+ const journey=read&&read.id===originalId?read.journey:null,styleImage=journey?.styleImageUrl;
+ const image=styleImage&&/^\/api\/digital-production\/(?:sources|orders)\/[0-9a-f-]{36}\/(?:development|instruction)\/attachments\/[0-9a-f-]{36}$/i.test(styleImage)?urls.pageUrl(styleImage):null;
+ const po=journey?.lines.map(line=>line.po).filter((value):value is string=>Boolean(value))??row.poNumbers;
+ return <section aria-label="本单摘要"><h2>本单摘要</h2>
+  {image&&<img alt="本单款图" src={image} width={96} height={96} style={{objectFit:'contain'}} loading="lazy"/>}
+  <p>{row.orderNumber??row.styleNo??journey?.designStyleNo??'原订单编号待核'} <OrderRushBadge value={row.urgent}/></p>
+  <p>{journey?.customer??row.customer??'客户待核'} · {row.originalOrderId?'已下单':journey?.orderId?'已下单':'按原资料类型办理'}</p>
+  <p>跟单 {journey?.merchandisers?.map(person=>person.name).join('、')||row.responsibleName||'待核'} · 工厂 {row.factory??'待核'}</p>
+  <p>PO {po.join('、')||'待核'} · 原交期 {journey?.deliveryDate??'未登记'} · 原期限 {row.dueAt?new Date(row.dueAt).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'}):'未记录'}</p>
+  {journey?.poDeliveryDates?.length?<ul aria-label="本单各 PO 原交期">{journey.poDeliveryDates.map(po=><li key={po.lineId}>
+   {po.poNumber??'PO 待核'} · 客户入仓 {po.customerWarehouseArrivalDate??'未登记'} · 加工厂交货 {po.factoryDeliveryDate??'未登记'}</li>)}</ul>:null}
+ </section>;
 }
 /** A second view of original orders, not a fifth todo state and never a new
  * instruction/contract/receiving form. Each existing domain rechecks access. */
@@ -140,14 +177,19 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
  const close=async()=>{for(const guard of guards.current)if(!await guard())return;setAction(null);};
  const saved=()=>setRetry(attempt=>attempt+1);
  return <>
+  {action&&<OriginalWorkSummary key={action.row.itemId} action={action}/>}
   {action?.kind==='contract'&&<MerchandiserContractReturn key={`${action.caseId}:${action.documentId}`} caseId={action.caseId}
    requestedDocumentId={action.documentId} onClose={()=>setAction(null)} onSaved={saved}/>}
   {action?.kind==='investment'&&<DocumentGuardContext.Provider value={guards.current}><section aria-label="本单投面辅料">
    <h2>本单投面辅料</h2><Button label="返回跟单列表" variant="secondary" onClick={()=>void close()}/>
    <ProductionReadinessPanel key={`${action.resource.kind}:${action.resource.id}`} resource={action.resource} investmentOnly onChanged={saved}/>
   </section></DocumentGuardContext.Provider>}
+  {action?.kind==='craft'&&<DocumentGuardContext.Provider value={guards.current}><section aria-label="本单工艺沟通">
+   <Button label="返回跟单列表" variant="secondary" onClick={()=>void close()}/>
+   <WorkbenchFactoryCommunicationPanel {...action.scope} onSaved={saved}/>
+  </section></DocumentGuardContext.Provider>}
   <section ref={region} hidden={Boolean(action)} aria-label={states[route.state]}><h2 ref={listHeading} tabIndex={-1}>{states[route.state]}</h2>
-  <div className="pattern-actions"><Button label="查找原授权订单" variant="secondary" onClick={()=>change({...route,page:1,view:'orders'})}/>
+  <div className="pattern-actions">{exact&&!exact.craftOnly&&<Button label="查找原授权订单" variant="secondary" onClick={()=>change({...route,page:1,view:'orders'})}/>}
    <TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
    <Selector label="办理状态" value={route.state} options={Object.entries(states).map(([value,label])=>({value,label}))}
     onChange={value=>{const state=MerchandiserWorkActionFilterSchema.safeParse(value).data;if(state)change({...route,page:1,state});}}/>
@@ -156,7 +198,7 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
   </div>
   {error&&<p role="alert">{error} <Button label="重试读取" variant="secondary" onClick={()=>setRetry(value=>value+1)}/></p>}
   {exact&&(exact.items.length===0?<p>没有符合当前授权及筛选的原跟单事项。</p>:<div className="development-table-scroll"><Table data={exact.items} idKey="itemId" density="balanced" columns={[
-   {key:'orderNumber',header:'订单ID',renderCell:row=><>{row.orderNumber??'待核'} <OrderRushBadge value={row.urgent}/></>},
+   {key:'orderNumber',header:'订单ID / 原款号',renderCell:row=><>{row.orderNumber??row.styleNo??'待核'} <OrderRushBadge value={row.urgent}/></>},
    {key:'customer',header:'客户 / PO',renderCell:row=><>{row.customer??'客户待核'}<small>{row.poNumbers.join('、')||'PO 待核'}</small></>},
    {key:'factory',header:'加工厂',renderCell:row=>row.factory??'待核'},
    {key:'title',header:'当前事项',renderCell:row=><>{row.title}<small>{labels[row.kind]}</small></>},
@@ -173,9 +215,11 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
     const inlineInvestment=workRoute.routeName==='digital_source_material_investment'||workRoute.routeName==='digital_order_material_investment';
     if((inlineContract||inlineInvestment)&&!DigitalIdSchema.safeParse(workRoute.entityId).success)return <span>原办理范围待核</span>;
     if(inlineContract)return <Button label="办理本单回签" size="sm" variant="secondary" onClick={event=>open(event.currentTarget,
-     {kind:'contract',caseId:workRoute.entityId,documentId:workRoute.contractReturn?.documentId??workRoute.transferContract?.documentId??null})}/>;
+     {kind:'contract',caseId:workRoute.entityId,documentId:workRoute.contractReturn?.documentId??workRoute.transferContract?.documentId??null,row})}/>;
     if(inlineInvestment)return <Button label="办理本单投面辅料" size="sm" variant="secondary"
-     onClick={event=>open(event.currentTarget,{kind:'investment',resource:{kind:workRoute.routeName==='digital_source_material_investment'?'source':'order',id:workRoute.entityId}})}/>;
+     onClick={event=>open(event.currentTarget,{kind:'investment',row,resource:{kind:workRoute.routeName==='digital_source_material_investment'?'source':'order',id:workRoute.entityId}})}/>;
+    if(row.craftCommunication)return <Button label="办理本项工艺沟通" size="sm" variant="secondary"
+      onClick={event=>open(event.currentTarget,{kind:'craft',scope:row.craftCommunication!,row})}/>;
     return <MerchandiserOriginalLink route={route} rowId={row.itemId} target={todoDestination(workRoute)} label="打开原办理"/>;
    }},
   ]}/></div>)}

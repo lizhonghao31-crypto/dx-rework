@@ -432,6 +432,9 @@ export function Shell({
       description: "查看所有模块当前轮到你的事项",
       href: "/ui/my-tasks",
     });
+    if(isRoot||hasRole('order_merchandiser')||hasRole('embroidery_washing_merchandiser'))globalNavigation.push({
+      name:'跟单工作区',description:'处理本人原跟单事项与工艺沟通',href:'/ui/digital-production?workspace=merchandiser',activeKey:'digital-merchandiser',
+    });
   }
   if(cockpitNavigation.length)globalNavigation.push({name:'供应链总看板',description:'供应链进度与交付',href:cockpitNavigation[0]!.href,expandOnly:true,children:cockpitNavigation});
   globalNavigation.push({

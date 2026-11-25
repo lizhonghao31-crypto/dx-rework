@@ -17,6 +17,7 @@ import { isRootActor } from "../access/business-authority.js";
 import {merchandiserWorkCandidate,merchandiserWorkPage,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories,type AuthorizedMerchandiserWorkItem} from '../production-platform/merchandiser-work-candidates.js';
 import {readMerchandiserTaskProgress} from '../production-platform/merchandiser-task-progress.js';
 import {readMerchandiserOriginalOrders} from '../production-platform/merchandiser-original-orders.js';
+import type {MerchandiserCraftCommunication} from '@dx-rework/contracts';
 import { randomUUID } from "node:crypto";
 import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
 
@@ -326,31 +327,46 @@ export class TodoService {
 
   /** Original actionable sources only. Other workbench states come from the
    * original business domain, never from guessing what a missing todo means. */
+  private async workbenchMerchandiserRoles(actor:TrustedActorContext,policy:DigitalProductionAccessPolicy){
+    const root=isRootActor(actor);
+    const order=root||actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser');
+    const craft=root||actor.actorRoles.includes('embroidery_washing_merchandiser')&&await policy.activeRole(actor.actorId,'embroidery_washing_merchandiser');
+    if(!order&&!craft)throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+    return {order,craft};
+  }
   async merchandiserActionSources(actor:TrustedActorContext) {
     this.requireCapability(actor,'todo:view');
-    if(!isRootActor(actor)&&(!actor.actorRoles.includes('order_merchandiser')||
-      !await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'order_merchandiser'))){
-      throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
-    }
-    const context=await this.contextSql();
+    const roles=await this.workbenchMerchandiserRoles(actor,new DigitalProductionAccessPolicy(this.database));
+    const context=roles.order?await this.contextSql():null;
     const [native,stored]=await Promise.all([
       this.providerSelections(this.digital,actor,true),
-      this.database.query<TodoPageRow>(`WITH todo_view AS (${context})
+      context?this.database.query<TodoPageRow>(`WITH todo_view AS (${context})
         SELECT todo_view.* FROM todo_view WHERE recipient_user_id=$1 AND required_role='order_merchandiser'
          AND entity_type='sourcing_case' AND todo_type='business_action' AND status='pending' AND category=ANY($2::text[])
          AND route_descriptor->>'routeName'='sourcing_detail' AND route_descriptor->>'entityId'=entity_id
          AND member_module_can_write($1,'sourcing')
          AND required_capability IS NOT NULL AND todo_user_has_direct_role($1,'order_merchandiser',required_capability)
          AND (category<>'sourcing_merchandiser_correction' OR sourcing_status='pending_merchandiser_correction')`,
-      [actor.actorId,originalMerchandiserTodoCategories]),
+      [actor.actorId,originalMerchandiserTodoCategories]):{rows:[] as TodoPageRow[]},
     ]);
     const peopleTasks=native.filter(item=>item.key.category==='digital_task'&&item.key.route.routeName==='digital_production_task');
-    const identities=peopleTasks.length?await this.database.query<{task_id:string;task_kind:string}>(`SELECT t.task_id,a.task_kind
+    const identities=peopleTasks.length?await this.database.query<{task_id:string;task_kind:string;order_id:string|null;preparation_id:string|null;
+      route_version:number|null;steps:string[]}>(`SELECT t.task_id,a.task_kind,a.production_order_id AS order_id,
+        route.preparation_id,route.route_schema_version AS route_version,
+        ARRAY(SELECT DISTINCT p.step_id FROM digital_timeline_task_positions p WHERE p.task_id=t.task_id
+          AND p.route_ref=route.preparation_id AND p.step_id IS NOT NULL) AS steps
       FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
-      WHERE t.task_id=ANY($1::uuid[]) AND a.task_kind=ANY($2::text[]) AND a.assignee_id=$3 AND a.required_role='order_merchandiser'`,
-    [peopleTasks.map(item=>item.key.todoId),originalMerchandiserTaskKinds,actor.actorId]):{rows:[]};
-    const taskById=new Map(identities.rows.map(row=>[row.task_id,{taskId:row.task_id,taskKind:row.task_kind}]));
-    const selected=native.filter(item=>taskById.has(item.key.todoId)||originalMerchandiserTodoCategories.includes(item.key.category));
+      LEFT JOIN digital_factory_routes route ON a.task_kind='process_logistics' AND route.production_order_id=a.production_order_id
+        AND (t.route_instance_id IS NULL OR t.route_instance_id=route.preparation_id)
+      WHERE t.task_id=ANY($1::uuid[]) AND a.assignee_id=$3 AND (($4 AND a.task_kind=ANY($2::text[]) AND a.required_role='order_merchandiser')
+        OR ($5 AND a.task_kind='process_logistics' AND a.required_role='embroidery_washing_merchandiser'))`,
+    [peopleTasks.map(item=>item.key.todoId),originalMerchandiserTaskKinds,actor.actorId,roles.order,roles.craft]):{rows:[]};
+    const taskById=new Map(identities.rows.map(row=>{
+      const craftCommunication:MerchandiserCraftCommunication|undefined=row.task_kind==='process_logistics'&&row.order_id&&row.preparation_id&&
+       (row.route_version===2?row.steps.length===1:row.steps.length===0)?{taskId:row.task_id,orderId:row.order_id,preparationId:row.preparation_id,stepRef:row.steps[0]??null}:undefined;
+      return [row.task_id,{taskId:row.task_id,taskKind:row.task_kind,...(craftCommunication?{craftCommunication}:{})}] as const;
+    }));
+    const selected=native.filter(item=>taskById.has(item.key.todoId)||roles.order&&originalMerchandiserTodoCategories.includes(item.key.category));
     const originals=[...await sourcingTodoPresentation(this.database,stored.rows.map(todoResponse)),...await Promise.all(selected.map(item=>item.load()))];
     const nativeScopes=new Map(selected.flatMap(item=>item.rushIdentity?[[item.key.todoId,item.rushIdentity] as const]:[]));
     const actions=new Map<string,{candidate:NonNullable<ReturnType<typeof merchandiserWorkCandidate>>;todo:TodoResponse;identity:RushIdentity|null}>();
@@ -374,31 +390,38 @@ export class TodoService {
     const actions=progress?[]:await this.merchandiserActionSources(actor),db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const policy=new DigitalProductionAccessPolicy(db);
-      if(!isRootActor(actor)&&(!actor.actorRoles.includes('order_merchandiser')||!await policy.activeRole(actor.actorId,'order_merchandiser')))throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+      const roles=await this.workbenchMerchandiserRoles(actor,new DigitalProductionAccessPolicy(db));
+      const audience=roles.order?{}:{craftOnly:true as const};
       if(progress){
-        const rows=await readMerchandiserTaskProgress(db,actor,state);
+        const rows=roles.order?await readMerchandiserTaskProgress(db,actor,state):[];
         await db.query('COMMIT');
-        return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state});
+        return {...merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state}),...audience};
       }
-      const scopes=[...new Set(actions.flatMap(row=>row.identity?.orderId?[row.identity.orderId]:[]))].map(id=>({kind:'order' as const,id}));
+      const cases=actions.flatMap(row=>row.todo.entityType==='sourcing_case'&&row.candidate.route.routeName==='sourcing_detail'?[row.candidate.route.entityId]:[]);
+      const linked=cases.length?(await db.query<{child_id:string;production_order_id:string}>(`SELECT child_id,production_order_id
+        FROM digital_production_child_links WHERE module='sourcing' AND child_id=ANY($1::uuid[])`,[cases])).rows:[];
+      const originalCaseOrder=new Map(linked.map(row=>[row.child_id,row.production_order_id]));
+      const parent=(row:typeof actions[number])=>row.identity?.orderId??(row.todo.entityType==='sourcing_case'?originalCaseOrder.get(row.candidate.route.entityId):undefined);
+      const scopes=[...new Set(actions.flatMap(row=>{const id=parent(row);return id?[id]:[];}))].map(id=>({kind:'order' as const,id}));
       const {resources}=await readJourneySelectionAccess(db,actor,scopes);
-      const allowed=scopes.flatMap(scope=>resources.get(businessScopeKey(scope))?.technical?[scope.id]:[]);
-      const deep=allowed.length?(await db.query<{id:string;order_no:string;customer_code:string;po_numbers:string[]}>(`SELECT o.production_order_id AS id,o.design_style_no AS order_no,o.customer_code,
+      const allowed=scopes.flatMap(scope=>resources.get(businessScopeKey(scope))?.fullOrder?[scope.id]:[]);
+      const deep=allowed.length?(await db.query<{id:string;source_id:string|null;issued_number:string|null;style_no:string;customer_code:string;po_numbers:string[]}>(`SELECT o.production_order_id AS id,
+        o.source_id,o.design_style_no AS style_no,o.customer_code,CASE WHEN s.workbench_generated_number AND s.design_style_no=o.design_style_no THEN s.design_style_no END AS issued_number,
         ARRAY(SELECT p.po_number FROM digital_production_po_lines p WHERE p.production_order_id=o.production_order_id AND p.po_number IS NOT NULL ORDER BY p.position,p.line_id) AS po_numbers
-        FROM digital_production_orders o WHERE o.production_order_id=ANY($1::uuid[])`,[allowed])).rows:[];
+        FROM digital_production_orders o LEFT JOIN digital_production_sources s ON s.source_id=o.source_id WHERE o.production_order_id=ANY($1::uuid[])`,[allowed])).rows:[];
       const byId=new Map(deep.map(row=>[row.id,row]));
-      const authorized=actions.flatMap(row=>row.identity&&(!row.identity.orderId||byId.has(row.identity.orderId))?[row.identity]:[]);
+      const authorized=[...deep.map(row=>({orderId:row.id,sourceId:row.source_id})),...actions.flatMap(row=>row.identity&&!row.identity.orderId?[row.identity]:[])];
       const rush=await readDevelopmentOrderRush(db,authorized);
       const responsibleName=actions.length?(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[actor.actorId])).rows[0]?.display_name??null:null;
-      const rows=actions.map(({candidate,todo,identity}):AuthorizedMerchandiserWorkItem=>{
-        const order=identity?.orderId?byId.get(identity.orderId):undefined;
-        const context=todo.orderContext,key=identity&&developmentRushKey(identity);
-        return {...candidate,state:todo.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.order_no??context?.orderNo??context?.styleNo??null,styleNo:context?.styleNo??null,
-          customer:order?.customer_code??null,poNumbers:order?.po_numbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key)),responsibleName};
+      const rows=actions.filter(row=>row.candidate.craftCommunication?roles.craft:roles.order).map((row):AuthorizedMerchandiserWorkItem=>{
+        const {candidate,todo,identity}=row,order=byId.get(parent(row)??'');
+        const context=todo.orderContext,key=order?'order:'+order.id:identity&&developmentRushKey(identity);
+        return {...candidate,state:todo.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.issued_number??context?.orderNo??null,
+          styleNo:order?.style_no??context?.styleNo??null,...(order?{originalOrderId:order.id}:{}),
+          customer:order?.customer_code??null,poNumbers:order?.po_numbers??context?.poNumbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key)),responsibleName};
       });
       await db.query('COMMIT');
-      return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state});
+      return {...merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state}),...audience};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 

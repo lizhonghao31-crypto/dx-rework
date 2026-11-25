@@ -146,6 +146,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const home=`${base}/ui/digital-production?workspace=merchandiser&kind=sourcing&search=${encodeURIComponent(style)}`;
    await page.goto(home);const list=page.getByRole('region',{name:'待我办理',exact:true});
    await list.getByRole('button',{name:'办理本单回签',exact:true}).click();
+   const summary=page.getByRole('region',{name:'本单摘要',exact:true});
+   await summary.getByText(/工厂 TEST anchor factory/).waitFor();
    const panel=page.getByRole('region',{name:'本单合同回传',exact:true});
    await panel.getByRole('link',{name:'下载本版合同',exact:true}).waitFor();
    expect(new URL(page.url()).searchParams.get('search')).toBe(style);

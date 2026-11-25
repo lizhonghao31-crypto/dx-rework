@@ -7,6 +7,7 @@ import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-bro
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
@@ -26,8 +27,62 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('frozen double-special factory supervision through original App',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
- beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-factory-supervision-app-')),{fullApp:true,workbenchNumberedCreation:true});configureTimelineAdoption(h.f.db,'fixed_v2');});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-factory-supervision-app-')),{fullApp:true,workbenchNumberedCreation:true,merchandiserWorkbench:true});configureTimelineAdoption(h.f.db,'fixed_v2');});
  afterAll(async()=>{if(h){configureTimelineAdoption(h.f.db,'legacy');await h.writeEvidence();await h.dispose();}});
+ it('opens and records only the assigned original craft communication from the live merchandiser menu',async()=>{
+  const f=h.f,original=await f.bulkReady('印花');
+  const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[original.caseId])).rows[0]!;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await original.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const flow=new FactoryFlowService(f.db),sheet=await flow.read(f.root,original.id),task=sheet.tasks.find(row=>row.taskKind==='process_logistics')!;
+  const assignee=Object.values(f.people).find(person=>person.actorId!==f.root.actorId&&person.actorRoles.includes(task.requiredRole))!;
+  await new DigitalProductionTaskService(f.db).reassign(f.root,task.taskId,assignee.actorId,randomUUID());
+  const tab=await h.open(assignee.actorId,1165,{},'/ui/my-tasks');
+  try{
+   const originalList=tab.page.waitForResponse(response=>new URL(response.url()).pathname==='/api/todos/merchandiser/current');
+   await tab.page.locator('nav[aria-label="主导航"]').getByRole('link',{name:'跟单工作区',exact:true}).click();
+   const listed=await originalList;expect(listed.status(),await listed.text()).toBe(200);
+   expect(await listed.json()).toMatchObject({craftOnly:true,items:[{itemId:task.taskId,craftCommunication:{taskId:task.taskId,
+    orderId:original.id,preparationId:sheet.preparationId,stepRef:task.stepRef??null}}]});
+   expect(await tab.page.getByRole('button',{name:'查找原授权订单',exact:true}).count()).toBe(0);
+   await tab.page.getByRole('button',{name:'办理本项工艺沟通',exact:true}).click();
+   const panel=tab.page.getByRole('region',{name:'本项工艺沟通',exact:true}),note='TEST only this exact physical craft scope';
+   const input=panel.getByRole('textbox',{name:'本次沟通内容',exact:true});
+   await input.fill(note);
+   expect(await panel.getByText(/工艺发出|工艺回仓/).count()).toBe(0);
+   const submissions:Array<{body:unknown;key:string|undefined}>=[];
+   const path=`/orders/${original.id}/factory-flow/logistics`;
+   await tab.page.route('**'+path,async route=>{
+    if(route.request().method()!=='POST')return route.continue();
+    submissions.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});
+    if(submissions.length!==1)return route.continue();
+    const real=await route.fetch();expect(real.status(),await real.text()).toBe(200);await route.abort('failed');
+   });
+   await panel.getByRole('button',{name:'记录沟通',exact:true}).click();
+   await panel.getByRole('alert').waitFor();
+   const sent=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/orders/${original.id}/factory-flow/logistics`));
+   await panel.getByRole('button',{name:'使用原内容核对提交结果',exact:true}).click();
+   const saved=await sent;expect(saved.status(),await saved.text()).toBe(200);
+   expect(saved.request().postDataJSON()).toMatchObject({kind:'工艺沟通',note,...(task.stepRef?{stepRef:task.stepRef}:{})});
+   expect(submissions).toEqual([submissions[0],submissions[0]]);expect(submissions[0]?.key).toBeTruthy();
+   await panel.getByText(note,{exact:true}).waitFor();
+   expect((await flow.read(f.root,original.id)).facts.map(fact=>fact.kind)).toEqual(['工艺沟通']);
+   const wrong=await tab.context.request.get(h.base+`/api/digital-production/orders/${original.id}/factory-flow/workbench-communication?`+
+    new URLSearchParams({taskId:randomUUID(),preparationId:sheet.preparationId!,...(task.stepRef?{stepRef:task.stepRef}:{})}));
+   expect(wrong.status()).toBe(404);
+  }finally{await tab.close();}
+  const ordinary=await h.open(f.people.merchandiser!.actorId,1165,{},'/ui/my-tasks');
+  try{
+   const candidate=await ordinary.context.request.get(h.base+'/api/todos/merchandiser/current');
+   expect(candidate.status(),await candidate.text()).toBe(200);
+   expect((await candidate.json()).items.map((item:{itemId:string})=>item.itemId)).not.toContain(task.taskId);
+   const denied=await ordinary.context.request.post(h.base+`/api/digital-production/orders/${original.id}/factory-flow/logistics`,{
+    headers:{'idempotency-key':randomUUID()},data:{kind:'工艺沟通',note:'TEST other role',supplier:'',occurredAt:businessNow().toISOString(),
+      expectedRevision:(await flow.read(f.root,original.id)).revision,...(task.stepRef?{stepRef:task.stepRef}:{})},
+   });
+   expect(denied.status()).toBe(403);
+  }finally{await ordinary.close();}
+ });
  it('reads before/after cutting and keeps each process/QC window through Journey, selector rebuild and authenticated rendering',async()=>{
   const f=h.f,steps:CraftStepChoice[]=[],library=new SpecialCraftLibraryService(f.db);
   for(const [index,name]of ['TEST A exact laser','TEST A exact stones'].entries()){

@@ -23,6 +23,16 @@ describe('only native actionable merchandiser work is eligible for the new workb
   expect(merchandiserWorkCandidate({...actor,actorRoles:['warehouse_receiver']},task)).toBeNull();
   expect(merchandiserWorkCandidate(actor,{...task,category:'digital_preparation_materials',route:route('digital_bulk_preparation')})).toBeNull();
  });
+ it('permits only a current assigned craft follow-up identity for the original communication',()=>{
+  const requiredRole='embroidery_washing_merchandiser';
+  const craft={...task,requiredRole,category:'digital_task',taskTitle:'工艺沟通',route:{...route('digital_production_task'),entityId:task.todoId}};
+  const actual={taskId:task.todoId,taskKind:'process_logistics',craftCommunication:{taskId:task.todoId,orderId:'exact-order',preparationId:'exact-route',stepRef:'exact-step'}};
+  const assignee={...actor,actorRoles:[requiredRole]};
+  expect(merchandiserWorkCandidate(assignee,craft,actual)).toMatchObject({kind:'delivery',craftCommunication:actual.craftCommunication});
+  expect(merchandiserWorkCandidate(actor,craft,actual)).toBeNull();
+  expect(merchandiserWorkCandidate(assignee,craft,{...actual,craftCommunication:{...actual.craftCommunication,taskId:'other'}})).toBeNull();
+  expect(merchandiserWorkCandidate(assignee,task)).toBeNull();
+ });
  it('preserves the exact contract-return route and does not turn an approval into a merchandiser action',()=>{
   const doc={documentId:'test-document',version:2,supplierName:'TEST factory',source:'price_reapplication' as const};
   const candidate={...task,category:'sourcing_contract_return',route:{...route('sourcing_detail'),tab:'contract_return' as const,contractReturn:doc}};

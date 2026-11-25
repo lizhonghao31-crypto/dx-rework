@@ -36,8 +36,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const original={id:order.productionOrderId};
   await new ShipSampleService(f.db).record(merch,original.id,{occurredAt:new Date().toISOString(),trackingNumber:'TEST-X6-ORIGINAL',note:'TEST completes the native pending task before original order lookup'},randomUUID());
   const listPath='/api/todos/merchandiser/orders?'+new URLSearchParams({search,page:'1'});
-  const tab=await h.open(merch.actorId,1165,{},`/ui/digital-production?workspace=merchandiser&search=${encodeURIComponent(search)}`);
+  const tab=await h.open(merch.actorId,1165,{},'/ui/my-tasks');
   try{
+   await tab.page.locator('nav[aria-label="主导航"]').getByRole('link',{name:'跟单工作区',exact:true}).click();
+   await tab.page.getByRole('textbox',{name:'搜索订单ID、PO、客户或工厂',exact:true}).fill(search);
+   await expect.poll(()=>new URL(tab.page.url()).searchParams.get('search')).toBe(search);
    const ordinary=await tab.context.request.get(h.base+'/api/todos/merchandiser/current?'+new URLSearchParams({search,state:'mine'}));
    expect(ordinary.status(),await ordinary.text()).toBe(200);
    expect(await ordinary.json()).toEqual({items:[],page:1,total:0});
@@ -176,6 +179,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const queue=work.page.getByRole('region',{name:'待我办理',exact:true}),row=queue.getByRole('row').filter({hasText:style});
    const original=row.getByRole('button',{name:'办理本单投面辅料',exact:true});
    await original.click();
+   await work.page.getByRole('region',{name:'本单摘要',exact:true}).getByText(style,{exact:false}).waitFor();
    const panel=work.page.getByRole('region',{name:'本单投面辅料',exact:true});
    const form=panel.getByRole('group',{name:'投面辅料',exact:true});await form.waitFor();
    expect(new URL(work.page.url()).searchParams.get('workspace')).toBe('merchandiser');

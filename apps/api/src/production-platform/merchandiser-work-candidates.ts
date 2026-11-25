@@ -1,11 +1,11 @@
-import type {TodoResponse} from '@dx-rework/contracts';
+import type {MerchandiserCraftCommunication,TodoResponse} from '@dx-rework/contracts';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {isRootActor} from '../access/business-authority.js';
 
 type NativeWork=Pick<TodoResponse,'todoId'|'route'|'category'|'requiredRole'|'recipientUserId'|'todoType'|'status'|'dueAt'|'taskTitle'>;
 type WorkKind='preparation'|'commercial'|'sourcing'|'delivery'|'exceptions';
-type Candidate={itemId:string;kind:WorkKind;title:string;route:TodoResponse['route'];dueAt:string|null};
-export type AuthorizedMerchandiserWorkItem=Candidate&{orderNumber:string|null;styleNo:string|null;poNumbers:readonly string[];
+type Candidate={itemId:string;kind:WorkKind;title:string;route:TodoResponse['route'];dueAt:string|null;craftCommunication?:MerchandiserCraftCommunication};
+export type AuthorizedMerchandiserWorkItem=Candidate&{orderNumber:string|null;styleNo:string|null;originalOrderId?:string;poNumbers:readonly string[];
  customer:string|null;factory:string|null;urgent:boolean;state:'mine'|'waiting'|'returned'|'completed';responsibleName?:string|null};
 
 const nativeIntents=[
@@ -26,19 +26,22 @@ export function originalMerchandiserTaskKind(taskKind:string):WorkKind|undefined
  return Object.hasOwn(taskIntents,taskKind)?taskIntents[taskKind as keyof typeof taskIntents]:undefined;
 }
 export const originalMerchandiserTodoCategories:readonly string[]=nativeIntents.map(intent=>intent.category);
-type OriginalTaskIdentity={taskId:string;taskKind:string};
+type OriginalTaskIdentity={taskId:string;taskKind:string;craftCommunication?:MerchandiserCraftCommunication};
 
 /** Only after the original provider authorizes the item. A module/route
  * alone does not make the task a merchandiser action. In particular, a
  * multifunction user still opens each entry in its original business role. */
 export function merchandiserWorkCandidate(actor:TrustedActorContext,item:NativeWork,task?:OriginalTaskIdentity):Candidate|null{
- if((!isRootActor(actor)&&!actor.actorRoles.includes('order_merchandiser'))||item.recipientUserId!==actor.actorId||
-  item.requiredRole!=='order_merchandiser'||item.todoType!=='business_action'||item.status!=='pending'||
+ const craft=item.category==='digital_task'&&task?.taskKind==='process_logistics';
+ const role=craft?'embroidery_washing_merchandiser':'order_merchandiser';
+ if((!isRootActor(actor)&&!actor.actorRoles.includes(role))||item.recipientUserId!==actor.actorId||
+  item.requiredRole!==role||item.todoType!=='business_action'||item.status!=='pending'||
   item.route.todoId!==item.todoId)return null;
  if(item.category==='digital_task'){
-  const kind=task&&originalMerchandiserTaskKind(task.taskKind);
+  const kind=craft?'delivery':task&&originalMerchandiserTaskKind(task.taskKind);
   if(!task||!kind||item.route.routeName!=='digital_production_task'||item.route.entityId!==task.taskId||item.todoId!==task.taskId||!item.taskTitle)return null;
-  return {itemId:item.todoId,kind,title:item.taskTitle,route:item.route,dueAt:item.dueAt};
+  if(craft&&task.craftCommunication?.taskId!==task.taskId)return null;
+  return {itemId:item.todoId,kind,title:item.taskTitle,route:item.route,dueAt:item.dueAt,...(craft&&task.craftCommunication?{craftCommunication:task.craftCommunication}:{})};
  }
  const intent=nativeIntents.find(row=>row.category===item.category&&row.route===item.route.routeName);
  if(item.category==='sourcing_contract_return'&&item.route.tab!=='contract_return')return null;
