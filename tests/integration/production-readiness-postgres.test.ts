@@ -1,3 +1,4 @@
+import {assignedWarehousePreparationResources} from '../../apps/api/src/production-platform/warehouse-assigned-resources.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {orderTimeCreated} from '../../apps/api/src/production-platform/order-time-created.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
@@ -151,6 +152,95 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await expect(forms.publishPreorder(designer,sourceId,draft.version,randomUUID())).rejects.toMatchObject({statusCode:409});
   expect((await f.db.query('SELECT 1 FROM digital_development_preorder_publications WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
   expect((await f.db.query("SELECT 1 FROM audit_events WHERE entity_id=$1 AND action='digital_development_preorder_published'",[sourceId])).rowCount).toBe(0);
+ });
+ it('X3 reads work for an effectively published and assigned X2 preorder only after its real scoped investment, without a formal SLA',async()=>{
+  const designer=f.people['sample-designer']!,primary=f.people.merchandiser!,warehouse=f.people.warehouse!;
+  const settings=await identity.orderNumberSettings(f.root);
+  await identity.saveOrderNumberSettings(f.root,{expectedVersion:settings.version,...settings.values,
+   designers:[{userId:designer.actorId,code:'LH'}]},randomUUID());
+  const {sourceId,orderNumber}=await identity.reserveNumberedDraft(designer,{developmentType:'头版',temporaryStyleNo:null,
+   numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2028,salesSeries:'P05'}},randomUUID());
+  const resource={kind:'source' as const,id:sourceId},photo=await f.image(designer);
+  const document=documentFixture(photo,{available:false}),supplier=await preorderFabricSupplier('TEST-X3-PREORDER-FABRIC');
+  const material={...document.materials[0]!,...supplier};
+  const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:{...document,materials:[material],
+    quantity:null,sampleSize:'',sizes:[],sizeQuantities:[],measurements:[],customerOrderDraft:{withOrder:true,stage:'preorder',
+     order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,primaryMerchandiserId:primary.actorId,
+      temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,lines:[{color:'',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,
+       colorForeign:null,deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}}},randomUUID());
+  await expect(service.warehouseReceiptWork(warehouse,resource)).rejects.toMatchObject({statusCode:403});
+  const published=await forms.publishPreorder(designer,sourceId,saved.version,randomUUID());
+  expect(await orderTimeCreated(f.db,resource)).toBeNull();
+  expect((await f.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+  await service.assign(f.root,resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,colorConfirmationRole:null,
+   reason:'TEST original warehouse assigned after real X2 publication'},randomUUID());
+  expect(await service.warehouseReceiptWork(warehouse,resource)).toEqual([]);
+  const actual=businessNow().toISOString();
+  const deposited=await service.record(primary,resource,{kind:'material_investment',scopeRef:'whole',expectedVersion:0,state:'partial',
+    occurredAt:actual,note:'TEST real partial purchase, warehouse work originates here',quantities:[{lineId:null,materialId:material.materialId,name:material.name,quantity:20,unit:'米'}],
+    evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+  const origin=deposited.facts.find(item=>item.kind==='material_investment')!;
+  expect(await service.warehouseReceiptWork(warehouse,resource)).toMatchObject([{materialId:material.materialId,received:null,
+    purchase:{original:{recordId:origin.recordId,version:origin.version},investedAt:actual,invested:{quantity:'20',unit:'米'}}}]);
+  await expect(service.warehouseReceiptWork(primary,resource)).rejects.toMatchObject({statusCode:403});
+  expect(published.version).toBe(saved.version);
+  expect(await orderTimeCreated(f.db,resource)).toBeNull();
+  expect(await new OrderTimePlanRepository(f.db).current(resource)).toBeNull();
+  expect((await f.db.query("SELECT 1 FROM digital_preparation_material_versions WHERE resource_id=$1 AND kind='fabric_receipt'",[sourceId])).rowCount).toBe(0);
+  const [original]=await service.warehouseReceiptWork(warehouse,resource);
+  expect(original).toBeDefined();
+  const command={kind:'fabric_receipt' as const,scopeRef:'whole',materialId:material.materialId,lineId:null,unit:'米',supplierId:original!.basis.supplierId,
+   investment:original!.purchase.original,materialFingerprint:original!.basis.adoptedRef,expectedReceiptVersion:0,
+   quantity:'12',occurredAt:businessNow().toISOString(),note:'TEST first physical warehouse batch',evidenceIds:[]};
+  expect(command.supplierId).toBe(supplier.supplierReference.supplierId);
+  await expect(service.recordWarehouseReceiptBatch(warehouse,resource,{...command,supplierId:randomUUID()},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const idempotencyKey=randomUUID();
+  await expect(service.recordWarehouseReceiptBatch(primary,resource,command,randomUUID())).rejects.toMatchObject({statusCode:403});
+  const first=await service.recordWarehouseReceiptBatch(warehouse,resource,command,idempotencyKey);
+  expect(await service.recordWarehouseReceiptBatch(warehouse,resource,command,idempotencyKey)).toEqual(first);
+  const recorded=first.history.find(item=>item.warehouseReceipt)!;
+  expect(recorded).toMatchObject({version:1,occurredAt:command.occurredAt,warehouseReceipt:{quantity:'12'}});
+  expect(first.facts.some(item=>item.kind==='fabric_receipt')).toBe(false); // new batch alone is not old quality/production clearance
+  expect(await service.warehouseReceiptWork(warehouse,resource)).toMatchObject([{received:{quantity:'12',unit:'米'},
+   balance:{procurementRemaining:'8',productionShortage:null}}]);
+  const incoming={...command,expectedReceiptVersion:1,quantity:'5',note:'TEST another independent physical warehouse batch'};
+  await service.recordWarehouseReceiptBatch(warehouse,resource,incoming,randomUUID());
+  const correction={...command,expectedReceiptVersion:2,quantity:'10',replaces:{recordId:recorded.recordId,version:1},
+   note:'TEST correct only the first batch original evidence'};
+  await service.recordWarehouseReceiptBatch(warehouse,resource,correction,randomUUID());
+  await expect(service.recordWarehouseReceiptBatch(warehouse,resource,{...correction,expectedReceiptVersion:3},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(service.recordWarehouseReceiptBatch(warehouse,resource,{...incoming,expectedReceiptVersion:3,unit:'码'},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(service.recordWarehouseReceiptBatch(warehouse,resource,{...incoming,expectedReceiptVersion:3,
+   occurredAt:new Date(Date.parse(actual)-60000).toISOString()},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const after=await service.read(warehouse,resource);
+  expect(after.history.filter(item=>item.kind==='fabric_receipt').map(item=>[item.version,item.warehouseReceipt?.quantity]).sort((a,b)=>Number(a[0])-Number(b[0])))
+   .toEqual([[1,'12'],[2,'5'],[3,'10']]);
+  expect(after.facts.some(item=>item.kind==='fabric_receipt')).toBe(false);
+  expect(await service.warehouseReceiptWork(warehouse,resource)).toMatchObject([{received:{quantity:'15',unit:'米'},
+   balance:{procurementRemaining:'5',productionShortage:null}}]);
+  const next={...incoming,expectedReceiptVersion:3,quantity:'1',note:'TEST concurrent next physical receipt'};
+  const race=await Promise.allSettled([service.recordWarehouseReceiptBatch(warehouse,resource,next,randomUUID()),
+   service.recordWarehouseReceiptBatch(warehouse,resource,{...next,note:'TEST simultaneous different receipt'},randomUUID())]);
+  expect(race.filter(row=>row.status==='fulfilled')).toHaveLength(1);
+  const rejected=race.find(row=>row.status==='rejected');
+  expect(rejected&&rejected.reason).toMatchObject({statusCode:409});
+  expect(await service.warehouseReceiptWork(warehouse,resource)).toMatchObject([{received:{quantity:'16',unit:'米'},
+   balance:{procurementRemaining:'4',productionShortage:null}}]);
+  expect(await orderTimeCreated(f.db,resource)).toBeNull();
+
+ });
+ it('X3 native warehouse list candidates follow the original active assignment, not a role or an old source assignment',async()=>{
+  const p=await setup();
+  expect(await assignedWarehousePreparationResources(f.db,p.warehouse)).toContainEqual(p.resource);
+  await expect(assignedWarehousePreparationResources(f.db,p.primary)).rejects.toMatchObject({statusCode:403});
+  const target=await order(p),formal={kind:'order' as const,id:target.productionOrderId};
+  const after=await assignedWarehousePreparationResources(f.db,p.warehouse);
+  expect(after).toContainEqual(formal);expect(after).not.toContainEqual(p.resource);
+  const version=(await service.read(f.root,formal)).responsibility.version;
+  await service.assign(f.root,formal,{expectedVersion:version,warehouseWorkerId:null,colorConfirmationWorkerId:null,colorConfirmationRole:null,
+   reason:'TEST active formal assignment deliberately does not leave an obsolete source match'},randomUUID());
+  expect(await assignedWarehousePreparationResources(f.db,p.warehouse)).not.toContainEqual(formal);
+  expect(await assignedWarehousePreparationResources(f.db,p.warehouse)).not.toContainEqual(p.resource);
  });
  for(const external of [false,true])it(`P01 records each PO cutting gate only after its actual labels and retains earlier PO readiness (${external?'external':'internal'})`,async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
@@ -1159,6 +1249,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(Boolean(await orderTimeCreated(h.db,resource))).toBe(!preorder);
    return {sourceId,resource,category,price,document,version,handoverId:fact.recordId,material,secondMaterial};
   });
+  const warehouse=h.f.people.warehouse!;
+  if(!preorder){
+   await h.f.runtime.run(scene,root,()=>preparation.assign(root,original.resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,
+    colorConfirmationWorkerId:null,colorConfirmationRole:null,reason:'TEST assigned native receiving role before any actual investment'},randomUUID()));
+   expect(await h.f.runtime.run(scene,warehouse,()=>preparation.warehouseReceiptWork(warehouse,original.resource))).toEqual([]);
+  }
   const actual={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'partial' as const,
    occurredAt:started,note:'TEST 首批部分投料，保留在同一投料记录',quantities:[{lineId:null,materialId:original.material.materialId,
     name:original.material.name,quantity:20,unit:'米'}],evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
@@ -1167,6 +1263,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await materialInvestmentTodos(h.db,merch,{todoId:original.handoverId})).toMatchObject([{dueAt:null,route:{routeName:'digital_source_material_investment'}}]);
    return result.facts.find(record=>record.kind==='material_investment')!;
   });
+  if(preorder){
+   // This original legacy draft has not passed the later X2 publication boundary.
+   await expect(h.f.runtime.run(scene,warehouse,()=>preparation.warehouseReceiptWork(warehouse,original.resource))).rejects.toMatchObject({statusCode:403});
+  }else{
+   expect(await h.f.runtime.run(scene,warehouse,()=>preparation.warehouseReceiptWork(warehouse,original.resource)))
+    .toMatchObject([{materialId:original.material.materialId,received:null,purchase:{original:{recordId:initial.recordId,version:1},investedAt:started,invested:{quantity:'20',unit:'米'}}}]);
+  }
   await h.f.advance(scene,preorder?'2026-11-20T04:00:00.000Z':'2026-11-19T04:10:00.000Z');
   const pending=await h.f.runtime.run(scene,designer,async()=>{
    const operation=preorder?await (async()=>{
@@ -1185,6 +1288,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(applied.state).toBe('applied');return applied.result!.orderId!;
   });
   const resource={kind:'order' as const,id:orderId};
+  if(preorder)await h.f.runtime.run(scene,root,async()=>{
+   const before=await preparation.read(root,resource);
+   await preparation.assign(root,resource,{expectedVersion:before.responsibility.version,warehouseWorkerId:warehouse.actorId,
+    colorConfirmationWorkerId:null,colorConfirmationRole:null,reason:'TEST assign warehouse after this legacy draft becomes a real order'},randomUUID());
+  });
+  const [warehouseTask]=await h.f.runtime.run(scene,warehouse,()=>preparation.warehouseReceiptWork(warehouse,resource));
+  expect(warehouseTask).toMatchObject({kind:'fabric_receipt',materialId:original.material.materialId,lineId:null,received:null,
+   purchase:{original:{recordId:initial.recordId,version:1},investedAt:started,invested:{quantity:'20',unit:'米'}},
+   balance:{procurementRemaining:null,productionShortage:null}});
+  await expect(h.f.runtime.run(scene,merch,()=>preparation.warehouseReceiptWork(merch,resource))).rejects.toMatchObject({statusCode:403});
   const reminder=await h.f.runtime.run(scene,merch,async()=>{
    const plan=await new OrderTimePlanRepository(h.db).current(resource);
    const predecessor=plan?.input.work.find(work=>work.parameterKey==='material_investment')?.dependsOn;

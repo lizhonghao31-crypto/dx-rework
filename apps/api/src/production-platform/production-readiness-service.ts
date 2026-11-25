@@ -1,3 +1,7 @@
+import {WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence} from '@dx-rework/contracts/production-readiness';
+import {readWarehouseReceiptWork} from './warehouse-receipt-work.js';
+import {scopedWarehouseReceiptQuantity} from './warehouse-material-balance.js';
+import {deriveWarehouseReceiptWork,warehouseReceiptMovements,warehouseReceiptScope,warehouseReceiptScopePrefix} from './warehouse-receipt-projection.js';
 import {BulkPreparationService} from './bulk-preparation-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {randomUUID} from 'node:crypto';
@@ -280,8 +284,50 @@ export class ProductionReadinessService{
    await db.query("UPDATE attachments SET entity_type='digital_preparation',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[id,resource.id]);
   }
  }
+ warehouseReceiptWork(actor:TrustedActorContext,resource:PreparationResource){
+  return readWarehouseReceiptWork(this.database,actor,resource,db=>this.read(actor,resource,db));
+ }
+ /** One real batch uses the original evidence table, original role and
+  * transaction. It does not certify inspection/quality or imply readiness. */
+ async recordWarehouseReceiptBatch(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string){
+  const input=WarehouseReceiptBatchSchema.parse(raw);
+  return this.command(actor,resource,'record',input,key,async(db,a)=>{
+   if(!a.warehouse&&!isRootActor(actor))digitalForbidden();
+   if(a.context.orderId&&resource.kind!=='order')conflict('请从当前正式单办理，原预下单凭证保留');
+   const now=businessNow().toISOString(),asOf=Date.parse(now),occurred=Date.parse(input.occurredAt);
+   if(occurred>asOf)conflict('实收时间不能在未来');
+   if(resource.kind==='source'&&(await developmentDocumentRow(db,resource.id))?.status!=='published'&&
+    !await workbenchPreorderPublication(db,resource.id))conflict('未发布开发来源不能办理实收');
+   const view=await this.read(actor,resource,db);
+   if(!view.canRecord.includes(input.kind))digitalForbidden();
+   const item=deriveWarehouseReceiptWork(view,now).find(row=>row.kind===input.kind&&row.scopeRef===input.scopeRef&&
+    row.materialId===input.materialId&&row.lineId===input.lineId&&row.basis.supplierId===input.supplierId&&row.basis.unit===input.unit&&
+    row.basis.adoptedRef===input.materialFingerprint&&row.purchase.original.recordId===input.investment.recordId&&
+    row.purchase.original.version===input.investment.version);
+   if(!item)return conflict('原投料、款色、单位或采用资料已变化，请重新读取');
+   if(occurred<Date.parse(item.purchase.investedAt))conflict('实收不能早于本项真实投料');
+   const scopeRef=warehouseReceiptScope(item.materialId,item.lineId),target=item.basis.resource;
+   const original=view.history.filter(row=>row.warehouseReceipt&&row.kind===input.kind&&row.scopeRef===scopeRef&&
+    row.resource.kind===target.kind&&row.resource.id===target.id).sort((left,right)=>right.version-left.version)[0];
+   if((original?.version??0)!==input.expectedReceiptVersion)conflict('收料批次已更新，请重新读取');
+   const movement=warehouseReceiptMovements(view.history,item.basis),nextVersion=input.expectedReceiptVersion+1;
+   const valid=scopedWarehouseReceiptQuantity(item.basis,[...movement,{basis:item.basis,
+    original:{recordId:original?.recordId??'first-native-batch',version:nextVersion},
+    ...(input.replaces?{replaces:input.replaces}:{}),quantity:{unit:input.unit,quantity:input.quantity},occurredAt:input.occurredAt,valid:true}],now);
+   if(!valid)conflict('订正目标不是本项当前有效收料批次，或原实收资料需要核对');
+   const evidence:WarehouseReceiptBatchEvidence={kind:input.kind,scopeRef:input.scopeRef,materialId:input.materialId,
+    lineId:input.lineId,supplierId:input.supplierId,unit:input.unit,investment:input.investment,materialFingerprint:input.materialFingerprint,quantity:input.quantity,
+    ...(input.replaces?{replaces:input.replaces}:{})};
+   await this.bindFiles(db,actor,resource,input.evidenceIds);
+   const quantity=Number(input.quantity);
+   await appendPreparationMaterial(db,a.context,actor.actorId,{kind:input.kind,scopeRef,expectedVersion:input.expectedReceiptVersion,
+    state:'partial',occurredAt:input.occurredAt,note:input.note,quantities:quantity?[{lineId:input.lineId,materialId:input.materialId,
+     name:item.name,quantity,unit:input.unit}]:[],evidenceIds:input.evidenceIds,sourceDocumentVersion:null,recipientId:null},{target,evidence});
+  });
+ }
  async record(actor:TrustedActorContext,resource:PreparationResource,raw:PreparationMaterialRecord,key:string){
   const input=PreparationMaterialRecordSchema.parse(raw);
+  if(input.scopeRef.startsWith(warehouseReceiptScopePrefix))conflict('请从原收料批次办理入口登记或订正');
   return this.command(actor,resource,'record',input,key,async(db,a)=>{
    const state=await this.read(actor,resource,db);if(!state.canRecord.includes(input.kind))digitalForbidden();
    if(input.occurredAt&&Date.parse(input.occurredAt)>businessNow().getTime())conflict('实际时间不能在未来');
