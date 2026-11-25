@@ -23,4 +23,13 @@ export function registerFactoryFlowRoutes(app: FastifyInstance, dependencies: Di
   app.post(`${base}/upload-intents`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request,"orderId"));const input=parse(CreateUploadIntentSchema,request.body);if(!["image/jpeg","image/png","image/webp"].includes(input.mimeType))throw new ApplicationError("VALIDATION_ERROR","QC图片仅支持 JPG、PNG、WebP",400);return attachments.createUploadIntent(trusted,input);});
   app.post(`${base}/attachments/:attachmentId/finalize`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request,"orderId"));return attachments.finalize(trusted,id(request,"attachmentId"));});
   app.get(`${base}/attachments/:attachmentId`,async(request,reply)=>{const trusted=await actor(request),orderId=id(request,"orderId"),attachmentId=id(request,"attachmentId");const grant=await attachments.createDownloadIntent(trusted,attachmentId,()=>service.canDownload(trusted,orderId,attachmentId),"inline");return reply.redirect(grant.downloadUrl);});
+  app.get(`${base}/original-attachments/:attachmentId`,async(request,reply)=>{
+    const trusted=await actor(request),attachmentId=id(request,'attachmentId'),orderId=id(request,'orderId');
+    const query=parse(z.object({checkId:z.string().uuid(),returnFactId:z.string().uuid(),lineId:z.string().uuid(),stepRef:z.union([z.string().uuid(),z.literal('original')])}).strict(),request.query);
+    const ref={kind:'craft-return' as const,orderId,attachmentId,...query,stepRef:query.stepRef==='original'?null:query.stepRef};
+    const authorize=()=>service.canDownloadOriginal(trusted,ref);
+    if(!await authorize())throw new ApplicationError('NOT_FOUND','所选原检查照片或范围不可查看',404);
+    const grant=await attachments.createDownloadIntent(trusted,attachmentId,authorize,'inline');
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  });
 }

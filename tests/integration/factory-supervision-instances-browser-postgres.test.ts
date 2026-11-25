@@ -40,6 +40,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
   await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await f.image(cutter)]},randomUUID());
   const flow=new FactoryFlowService(f.db);let state=await flow.read(f.root,ready.id);const lineId=state.lines[0]!.lineId;let prior:string|undefined;
+  const qcPhotos:{stepRef:string;returnFactId:string;attachmentId:string}[]=[];
   const unchanged=async()=> (await f.db.query(`SELECT
    (SELECT count(*) FROM digital_factory_facts)::int AS facts,(SELECT count(*) FROM digital_factory_qc)::int AS qc,
    (SELECT count(*) FROM digital_production_tasks)::int AS tasks,(SELECT count(*) FROM digital_timeline_adoptions)::int AS adoptions,
@@ -75,11 +76,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    state=await flow.read(f.root,ready.id);await verify();const send=state.facts.filter(fact=>fact.kind==='工艺发出'&&fact.payload.stepRef===step.stepId).at(-1)!;
    await flow.logistics(f.root,ready.id,{expectedRevision:state.revision,stepRef:step.stepId,kind:'工艺回仓',occurredAt:businessNow().toISOString(),supplier:'TEST',note:'TEST',sendFactId:send.factId,lines:[{lineId,quantity:100}]},randomUUID());
    state=await flow.read(f.root,ready.id);prior=state.facts.filter(fact=>fact.kind==='工艺回仓'&&fact.payload.stepRef===step.stepId).at(-1)!.factId;
-   await flow.qc(f.root,ready.id,{expectedRevision:state.revision,stepRef:step.stepId,returnFactId:prior,note:'TEST real original QC',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[]}]},randomUUID());
+   const attachmentId=await f.image(f.root);qcPhotos.push({stepRef:step.stepId,returnFactId:prior,attachmentId});
+   await flow.qc(f.root,ready.id,{expectedRevision:state.revision,stepRef:step.stepId,returnFactId:prior,note:'TEST real original QC',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[attachmentId]}]},randomUUID());
    state=await flow.read(f.root,ready.id);await verify();
   }
   const {detail}=await verify(),tab=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+ready.id);
   try{
+   const [first,second]=qcPhotos,check=state.checks.find(row=>row.returnFactId===first!.returnFactId)!;
+   const original=`${h.base}/api/digital-production/orders/${ready.id}/factory-flow/original-attachments/`;
+   const selected=new URLSearchParams({lineId,checkId:check.checkId,returnFactId:first!.returnFactId,stepRef:first!.stepRef});
+   const exact=await tab.context.request.get(original+first!.attachmentId+'?'+selected,{maxRedirects:0});
+   expect(exact.status()).toBe(302);expect(exact.headers()['cache-control']?.split(',').map(value=>value.trim())).toContain('no-store');
+   expect((await tab.context.request.get(original+second!.attachmentId+'?'+selected,{maxRedirects:0})).status()).toBe(404);
+   selected.set('stepRef',second!.stepRef);
+   expect((await tab.context.request.get(original+first!.attachmentId+'?'+selected,{maxRedirects:0})).status()).toBe(404);
    await tab.page.getByRole('button',{name:'本单全部节点',exact:true}).click();
    for(const node of detail.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&['process_logistics','bulk_qc'].includes(node.key))){
     const row=tab.page.locator('.cockpit-node-summary').locator(`[id="journey-node-${node.instanceId}"]`);await row.waitFor();expect(await row.innerText()).toContain(node.label);

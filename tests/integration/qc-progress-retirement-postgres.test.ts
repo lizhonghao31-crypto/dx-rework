@@ -312,6 +312,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await app.inject({method:'POST',url,headers,payload:body})).json()).toEqual(saved.json());expect((await service.read(qc,ready.id)).executions[0]!.records).toHaveLength(1);
    const download=await app.inject({method:'GET',url:url+`/attachments/${intent.attachmentId}`,headers});expect(download.statusCode).toBe(302);expect(download.headers.location).toContain('https://private.example.test/');
    expect((await app.inject({method:'GET',url:`/digital-production/orders/${randomUUID()}/qc-progress/attachments/${intent.attachmentId}`,headers})).statusCode).toBeGreaterThanOrEqual(400);
+   const record=(await service.read(qc,ready.id)).executions[0]!.records[0]!,originalPath=url+`/original-attachments/${intent.attachmentId}`,original=new URLSearchParams({
+    productionId:e.productionId,factoryDecisionId:e.factoryDecisionId??'original',recordId:record.recordId,revision:String(record.revision),scopeRevision:e.scopeRevision,
+   });
+   const exact=await app.inject({method:'GET',url:originalPath+'?'+original,headers});
+   expect(exact.statusCode).toBe(302);expect(exact.headers.location).toContain('https://private.example.test/');
+   expect(exact.headers['cache-control']).toBe('private, no-store');
+   for(const [parameter,value] of [['revision',String(record.revision+1)],['factoryDecisionId',randomUUID()],['scopeRevision','e'.repeat(64)]] as const){
+    const wrong=new URLSearchParams(original);wrong.set(parameter,value);
+    expect((await app.inject({method:'GET',url:originalPath+'?'+wrong,headers})).statusCode).toBe(404);
+   }
+   const unbound=await f.image(qc);
+   expect((await app.inject({method:'GET',url:url+`/original-attachments/${unbound}?`+original,headers})).statusCode).toBe(404);
    const denied=await app.inject({method:'POST',url,headers:{cookie:'dx_rework_session=TEST-primary'},payload:{...body,submissionId:randomUUID()}});expect(denied.statusCode).toBe(403);
   }finally{await app.close();}
  });
