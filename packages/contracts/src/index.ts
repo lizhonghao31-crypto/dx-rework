@@ -631,6 +631,7 @@ export type InspectionReportImageExtraction = z.infer<typeof InspectionReportIma
 
 export const ProcessPricingUnitSchema = z.enum(["piece", "hour"]);
 export const ProcessExecutionKindSchema = z.enum(["worker", "tail_inspection"]);
+const ConfiguredProcessExecutionKindSchema = z.enum([...ProcessExecutionKindSchema.options,"external_craft"]);
 export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("catalog"),
@@ -698,7 +699,7 @@ export const ProcessConfigurationItemResponseSchema = z.object({
   processId: IdSchema.nullable(),
   processVersion: z.number().int().positive().nullable(),
   processName: z.string().min(1),
-  executionKind: z.enum([...ProcessExecutionKindSchema.options,"external_craft"]).optional().default("worker"),
+  executionKind: ConfiguredProcessExecutionKindSchema.optional().default("worker"),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
   // Historical configurations created before N02 pricing was mandatory may
@@ -1245,7 +1246,7 @@ export const ResponsibilityDeterminationResponseSchema = z.object({
     configurationItemId: IdSchema,
     processName: z.string().min(1),
     pricingUnit: ProcessPricingUnitSchema,
-    executionKind: ProcessExecutionKindSchema,
+    executionKind: ConfiguredProcessExecutionKindSchema,
     includedInResponsibility: z.boolean(),
     baseAmount: z.string(),
   }).strict()),

@@ -11,7 +11,7 @@ import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
-import {CreateResponsibilityDraftSchema,CreateSupplierSchema} from '@dx-rework/contracts';
+import {CreateResponsibilityDraftSchema,CreateSupplierSchema,ResponsibilityDeterminationResponseSchema} from '@dx-rework/contracts';
 import {FactoryLogisticsSchema} from '@dx-rework/contracts/factory-flow';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
@@ -366,7 +366,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(sentAfterQc.facts.at(-1)).toMatchObject({kind:'仓库实际发厂',payload:{returnFactId:lastFact.factId,lines:[{lineId,quantity:1}]}});
   const responsibility=new AuthorizedResponsibilityDeterminationService(f.db),responsibilityHandler={...manager,
    authorizationCapability:'responsibility:determine',authorizationCapabilities:['responsibility:determine']};
-  const target=await responsibility.get(responsibilityHandler,draftId);
+  const target=ResponsibilityDeterminationResponseSchema.parse(await responsibility.get(responsibilityHandler,draftId));
   expect(target).toMatchObject({reworkStatus:'pending_responsibility_determination',canDetermine:true,sourceProcesses:[
    {configurationItemId:activated.configuration!.items[0]!.configurationItemId,executionKind:'external_craft',includedInResponsibility:true},
   ]});
@@ -379,7 +379,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(Number(determination.value.determination?.calculationTotal)).toBe(0);
   const finalResponsibility=await responsibility.finalize(responsibilityHandler,draftId,{expectedOrderVersion:determination.value.orderVersion,
    expectedCurrentDeterminationVersion:determination.value.determination!.version},randomUUID());
-  expect(finalResponsibility.value).toMatchObject({reworkStatus:'completed',determination:{stage:'finalized'}});
+  expect(ResponsibilityDeterminationResponseSchema.parse(finalResponsibility.value)).toMatchObject({reworkStatus:'completed',determination:{stage:'finalized'}});
   expect(Number(finalResponsibility.value.determination?.calculationTotal)).toBe(0);
   expect((await f.db.query("SELECT count(*)::int AS count FROM rework_work_tasks WHERE rework_order_id=$1",[draftId])).rows[0].count).toBe(0);
  });

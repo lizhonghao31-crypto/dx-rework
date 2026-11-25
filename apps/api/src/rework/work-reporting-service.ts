@@ -41,7 +41,7 @@ type ReturnedReportRow = Readonly<{
 }>;
 type OrderRow = Readonly<{
   rework_order_id: string; rework_no: string | null; status: string; version: number;
-  craft_rework_execution?: "factory" | "inhouse" | null;
+  craft_rework_execution?: "factory" | "internal" | null;
   special_process_type?: "none" | "inspection" | "other_craft" | null; other_craft_description?: string | null;
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;

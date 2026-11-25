@@ -31,7 +31,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type OrderRow = Readonly<{
   rework_order_id: string; rework_no: string | null; status: string; version: number;
-  craft_rework_execution?: "factory" | "inhouse" | null;
+  craft_rework_execution?: "factory" | "internal" | null;
   rework_kind: "qc_rework" | "inhouse_finishing";
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
