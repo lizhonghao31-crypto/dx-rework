@@ -2,51 +2,51 @@
   "version": 1,
   "base": "244ea83c391dbc7248fef491b9afbf3476f3d1b7",
   "risk": "full",
-  "sourceFingerprint": "c89f5adcb04a611d7f4ee0d810854ef04f0a19d7d22a0dec38263386cf6377e6",
+  "sourceFingerprint": "58b0d37fcf2a07cec06919313643ec7e2c0d9f17001e1e78c318a3d741484c80",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "vitest run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/sourcing-detail-native-browser-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts",
+      "command": "vitest run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/sourcing-detail-native-browser-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 60,
+      "passed": 133,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "d021ac8adad1188e0d3753736033c9d7d251f86b",
-      "sourceFingerprint": "c89f5adcb04a611d7f4ee0d810854ef04f0a19d7d22a0dec38263386cf6377e6",
+      "testedHead": "4f4a2c750d6ec4fc506264b878172f4ecb7804d4",
+      "sourceFingerprint": "58b0d37fcf2a07cec06919313643ec7e2c0d9f17001e1e78c318a3d741484c80",
       "context": "Exact merged release base, matching dual database routing, two workers, authenticated original Chromium, synthetic data. No on-site acceptance.",
-      "startedAt": "2026-11-25T19:50:03.140Z",
-      "endedAt": "2026-11-25T19:53:02.681Z",
+      "startedAt": "2026-11-25T20:06:57.082Z",
+      "endedAt": "2026-11-25T20:11:11.805Z",
       "log": "/workspace/dx-v115-x6-evidence/x6-release-final-native.log",
-      "logSha256": "bdc45705128bb0a8f8690593425728e4e7486f4817b66c4ecb8be282de56d9dd",
+      "logSha256": "edf5142b79373a021ec3c165282c177aa62b4743b1ea2ec3fcd0535767b7c143",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ac39fcb607748278c9527303cfdc3d9362ddd1296c6e85682733a6a493be2ed9"
+          "sha256": "9dbb5bc719cd322faf573f1c98e4ee26feec396bf0c0d64ef29ea7bb187d1dd2"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-unit.json tests/unit/merchandiser-work-candidates.test.ts tests/unit/workbench-factory-communication.test.ts",
+      "command": "vitest run --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-unit.json tests/unit/merchandiser-work-candidates.test.ts tests/unit/workbench-factory-communication.test.ts tests/unit/todo-read-split.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 8,
+      "passed": 13,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "d021ac8adad1188e0d3753736033c9d7d251f86b",
-      "sourceFingerprint": "c89f5adcb04a611d7f4ee0d810854ef04f0a19d7d22a0dec38263386cf6377e6",
+      "testedHead": "4f4a2c750d6ec4fc506264b878172f4ecb7804d4",
+      "sourceFingerprint": "58b0d37fcf2a07cec06919313643ec7e2c0d9f17001e1e78c318a3d741484c80",
       "context": "Exact release-bound workbench role, work identity, pagination and original fabric/craft facts consumers.",
-      "startedAt": "2026-11-25T19:50:03.196Z",
-      "endedAt": "2026-11-25T19:50:03.534Z",
+      "startedAt": "2026-11-25T20:06:57.108Z",
+      "endedAt": "2026-11-25T20:06:59.962Z",
       "log": "/workspace/dx-v115-x6-evidence/x6-release-final-unit.log",
-      "logSha256": "c1bc05821e8c62b51e15702b8223ee0e3259ad2918d9a3d9dd43460b0ebcccbb",
+      "logSha256": "7050af4b5be1491a8b3e326c1322169cab3dbbf4299526bd068dc89745e51f1d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3ac13b0b685152bc82c5985b3b51644c02245957913cba0a7e9b74314198b70f"
+          "sha256": "fdc9870a890477a4451395ab3ff826d87f2aa6f20961643a37ce962b2494edfa"
         }
       ]
     }
@@ -61,6 +61,7 @@
         "apps/api/src/production-platform/merchandiser-work-candidates.ts",
         "apps/api/src/server.ts",
         "apps/api/src/todos/routes.ts",
+        "apps/api/src/todos/selection.ts",
         "apps/api/src/todos/service.ts",
         "packages/contracts/src/todos.ts"
       ],
@@ -148,6 +149,7 @@
         "tests/integration/factory-logistics-cockpit-postgres.test.ts",
         "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
         "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
         "tests/unit/merchandiser-work-candidates.test.ts",
@@ -166,6 +168,34 @@
       "initialization": "Existing original menus and warm/cold route behaviors remain. No third shell or startup feature gate.",
       "dateAndPermission": "Existing original domain reads revalidate access and exact version; closing a current action does not silently discard unacknowledged changes.",
       "expectation": "Real signed role menu, existing order document directory GET, exact budget/instruction GET and return to the same order, exact original row/focus and retained IE archive route. Confirm cold browser resources where selected.",
+      "checks": [
+        "native",
+        "unit"
+      ]
+    },
+    {
+      "rule": "Choose the complete original authorized candidate set using lightweight facts without hydrating native todos; original detail and notification clocks remain in their existing domain.",
+      "source": "v11.5 §12.1–12.2 and AGENTS §98",
+      "writes": [
+        "apps/api/src/production-platform/material-investment-reminder.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/preparation-todos.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-selection-access.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/todos/selection.ts"
+      ],
+      "oldTests": [
+        "tests/integration/digital-my-todo-context-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-production-notifications-postgres.test.ts",
+        "tests/unit/todo-read-split.test.ts"
+      ],
+      "initialization": "Original pending task and handover readiness, actual adopted original plan and saved preorder document are authoritative on one read-only snapshot.",
+      "dateAndPermission": "Remember selected Acceptance scene and exact current handover role. No original plan writes or clock reset. A preorder remains untimed and unowned drafts do not become searchable.",
+      "expectation": "One, fifteen and fifty native tasks require zero per-task hydrated clock reads and bounded physical SQL. Original ready preorder returns its saved customer and PO only to the active recipient. Formal conversion preserves exact adopted due times for old and new paths.",
       "checks": [
         "native",
         "unit"
