@@ -6,7 +6,7 @@ type NativeWork=Pick<TodoResponse,'todoId'|'route'|'category'|'requiredRole'|'re
 type WorkKind='preparation'|'commercial'|'sourcing'|'delivery'|'exceptions';
 type Candidate={itemId:string;kind:WorkKind;title:string;route:TodoResponse['route'];dueAt:string|null};
 export type AuthorizedMerchandiserWorkItem=Candidate&{orderNumber:string|null;styleNo:string|null;poNumbers:readonly string[];
- customer:string|null;factory:string|null;urgent:boolean;state:'mine'|'waiting'|'returned'|'completed'};
+ customer:string|null;factory:string|null;urgent:boolean;state:'mine'|'waiting'|'returned'|'completed';responsibleName?:string|null};
 
 const nativeIntents=[
  {category:'digital_material_investment',route:'digital_source_material_investment',kind:'preparation',label:'投面辅料'},
@@ -22,6 +22,9 @@ const taskIntents={
  bulk_cutting_external:'preparation',color_confirmation:'preparation',production_sheet:'commercial',
 } as const satisfies Record<string,WorkKind>;
 export const originalMerchandiserTaskKinds=Object.keys(taskIntents);
+export function originalMerchandiserTaskKind(taskKind:string):WorkKind|undefined{
+ return Object.hasOwn(taskIntents,taskKind)?taskIntents[taskKind as keyof typeof taskIntents]:undefined;
+}
 export const originalMerchandiserTodoCategories:readonly string[]=nativeIntents.map(intent=>intent.category);
 type OriginalTaskIdentity={taskId:string;taskKind:string};
 
@@ -33,9 +36,9 @@ export function merchandiserWorkCandidate(actor:TrustedActorContext,item:NativeW
   item.requiredRole!=='order_merchandiser'||item.todoType!=='business_action'||item.status!=='pending'||
   item.route.todoId!==item.todoId)return null;
  if(item.category==='digital_task'){
-  if(!task||item.route.routeName!=='digital_production_task'||item.route.entityId!==task.taskId||item.todoId!==task.taskId||
-   !Object.hasOwn(taskIntents,task.taskKind)||!item.taskTitle)return null;
-  return {itemId:item.todoId,kind:taskIntents[task.taskKind as keyof typeof taskIntents],title:item.taskTitle,route:item.route,dueAt:item.dueAt};
+  const kind=task&&originalMerchandiserTaskKind(task.taskKind);
+  if(!task||!kind||item.route.routeName!=='digital_production_task'||item.route.entityId!==task.taskId||item.todoId!==task.taskId||!item.taskTitle)return null;
+  return {itemId:item.todoId,kind,title:item.taskTitle,route:item.route,dueAt:item.dueAt};
  }
  const intent=nativeIntents.find(row=>row.category===item.category&&row.route===item.route.routeName);
  if(item.category==='sourcing_contract_return'&&item.route.tab!=='contract_return')return null;

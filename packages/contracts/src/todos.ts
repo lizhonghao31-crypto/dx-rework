@@ -195,13 +195,13 @@ export const TodoCountIndicatorSchema = z.object({
 
 export const MarkTodoReadSchema=z.object({contentToken:z.string().regex(/^[a-f0-9]{64}$/),route:TodoRouteDescriptorSchema}).strict();
 export const MerchandiserWorkKindSchema=z.enum(['preparation','commercial','sourcing','delivery','exceptions']);
-export const MerchandiserWorkActionFilterSchema=z.enum(['mine','returned']);
+export const MerchandiserWorkActionFilterSchema=z.enum(['mine','waiting','returned','completed']);
 export const MerchandiserWorkQuerySchema=z.object({kind:MerchandiserWorkKindSchema.optional(),search:z.string().trim().max(100).default(''),
  state:MerchandiserWorkActionFilterSchema.default('mine'),page:z.coerce.number().int().min(1).max(100000).default(1)}).strict();
 export const MerchandiserWorkItemSchema=z.object({itemId:z.string().min(1),kind:MerchandiserWorkKindSchema,title:z.string().min(1),
  route:TodoRouteDescriptorSchema,dueAt:z.string().nullable(),orderNumber:z.string().nullable(),styleNo:z.string().nullable(),
  poNumbers:z.array(z.string()),customer:z.string().nullable(),factory:z.string().nullable(),urgent:z.boolean(),
- state:z.enum(['mine','waiting','returned','completed'])}).strict();
+ state:MerchandiserWorkActionFilterSchema,responsibleName:z.string().nullable().optional()}).strict();
 export const MerchandiserWorkResponseSchema=z.object({items:z.array(MerchandiserWorkItemSchema),page:z.number().int().positive(),total:z.number().int().nonnegative()}).strict();
 export type MerchandiserWorkResponse=z.infer<typeof MerchandiserWorkResponseSchema>;
 export const TodoReadReceiptSchema=z.object({read:z.literal(true),contentToken:z.string().regex(/^[a-f0-9]{64}$/),readAt:z.string().datetime()}).strict();

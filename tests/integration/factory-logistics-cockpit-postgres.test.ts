@@ -28,6 +28,7 @@ import {SlaOrderApplicationService} from '../../apps/api/src/production-platform
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
+import {ShipSampleService} from '../../apps/api/src/production-platform/ship-sample-service.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('native factory shipment date ranges in authorized cockpit reads',()=>{
@@ -70,6 +71,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect(readWorkbenchFactoryCommunication(flow,operator,{...scope,taskId:randomUUID()})).rejects.toMatchObject({statusCode:404});
    await expect(readWorkbenchFactoryCommunication(flow,operator,{...scope,preparationId:randomUUID()})).rejects.toMatchObject({statusCode:404});
    expect((await flow.read(operator,original.id)).facts.map(row=>row.kind)).toEqual(['工艺沟通']);
+   const merch={...f.people.merchandiser!,authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']};
+   const todos=new TodoService(f.db),search=(await f.db.query('SELECT design_style_no FROM digital_production_orders WHERE production_order_id=$1',[original.id])).rows[0].design_style_no;
+   const waiting=await todos.merchandiserActionPage(merch,{state:'waiting',search,page:1});
+   expect(waiting.items).toContainEqual(expect.objectContaining({state:'waiting',itemId:task.taskId,route:{routeName:'digital_production_task',entityId:task.taskId,todoId:task.taskId},responsibleName:expect.any(String)}));
+   const wrong={...f.people.warehouse!,authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']};
+   await expect(todos.merchandiserActionPage(wrong,{state:'waiting',search,page:1})).rejects.toMatchObject({statusCode:403});
+   const previous=await todos.merchandiserActionPage(merch,{state:'completed',kind:'delivery',search,page:1});
+   expect(previous).toEqual({page:1,items:[],total:0});
+   const shipSample=new ShipSampleService(f.db);
+   await shipSample.record(merch,original.id,{occurredAt:at,trackingNumber:'TEST-SAMPLE-FOLLOWUP',note:'TEST original parcel for all POs'},randomUUID());
+   const shipped=(await f.db.query("SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[original.id])).rows[0].task_id;
+   expect(await todos.merchandiserActionPage(merch,{state:'completed',kind:'delivery',search,page:1})).toMatchObject({page:1,total:1,items:[{itemId:shipped,state:'completed',route:{entityId:shipped}}]});
+   expect((await todos.merchandiserActionPage(merch,{state:'waiting',search,page:1})).items.map(row=>row.itemId)).not.toContain(shipped);
   });
  });
  it('does not treat earlier native factory QC as production completion',async()=>f.runtime.run(sundayScene,f.root,async()=>{

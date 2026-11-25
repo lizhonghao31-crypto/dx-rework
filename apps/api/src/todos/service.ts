@@ -15,6 +15,7 @@ import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import { DigitalProductionAccessPolicy } from "../production-platform/access-policy.js";
 import { isRootActor } from "../access/business-authority.js";
 import {merchandiserWorkCandidate,merchandiserWorkPage,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories,type AuthorizedMerchandiserWorkItem} from '../production-platform/merchandiser-work-candidates.js';
+import {readMerchandiserTaskProgress} from '../production-platform/merchandiser-task-progress.js';
 import { randomUUID } from "node:crypto";
 import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
 
@@ -366,12 +367,19 @@ export class TodoService {
 
   /** Request-local directory of current original actions. Order details are
    * supplemental and may never widen a task or contract recipient's scope. */
-  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind']|undefined;state?:'mine'|'returned';search:string;page:number}){
-    const actions=await this.merchandiserActionSources(actor),db=await this.database.connect();
+  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind']|undefined;state?:AuthorizedMerchandiserWorkItem['state'];search:string;page:number}){
+    this.requireCapability(actor,'todo:view');
+    const state=filter.state??'mine',progress=state==='waiting'||state==='completed';
+    const actions=progress?[]:await this.merchandiserActionSources(actor),db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const policy=new DigitalProductionAccessPolicy(db);
-      if(!isRootActor(actor)&&!await policy.activeRole(actor.actorId,'order_merchandiser'))throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+      if(!isRootActor(actor)&&(!actor.actorRoles.includes('order_merchandiser')||!await policy.activeRole(actor.actorId,'order_merchandiser')))throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+      if(progress){
+        const rows=await readMerchandiserTaskProgress(db,actor,state);
+        await db.query('COMMIT');
+        return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state});
+      }
       const scopes=[...new Set(actions.flatMap(row=>row.identity?.orderId?[row.identity.orderId]:[]))].map(id=>({kind:'order' as const,id}));
       const {resources}=await readJourneySelectionAccess(db,actor,scopes);
       const allowed=scopes.flatMap(scope=>resources.get(businessScopeKey(scope))?.technical?[scope.id]:[]);
@@ -381,14 +389,15 @@ export class TodoService {
       const byId=new Map(deep.map(row=>[row.id,row]));
       const authorized=actions.flatMap(row=>row.identity&&(!row.identity.orderId||byId.has(row.identity.orderId))?[row.identity]:[]);
       const rush=await readDevelopmentOrderRush(db,authorized);
+      const responsibleName=actions.length?(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[actor.actorId])).rows[0]?.display_name??null:null;
       const rows=actions.map(({candidate,todo,identity}):AuthorizedMerchandiserWorkItem=>{
         const order=identity?.orderId?byId.get(identity.orderId):undefined;
         const context=todo.orderContext,key=identity&&developmentRushKey(identity);
         return {...candidate,state:todo.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.order_no??context?.orderNo??context?.styleNo??null,styleNo:context?.styleNo??null,
-          customer:order?.customer_code??null,poNumbers:order?.po_numbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key))};
+          customer:order?.customer_code??null,poNumbers:order?.po_numbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key)),responsibleName};
       });
       await db.query('COMMIT');
-      return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state:filter.state??'mine'});
+      return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 

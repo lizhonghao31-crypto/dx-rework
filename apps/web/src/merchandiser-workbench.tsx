@@ -21,6 +21,7 @@ import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {merchandiserWorkbenchPath,readMerchandiserWorkbenchRoute,type MerchandiserWorkbenchRoute} from './merchandiser-workbench-route.js';
 
 const labels={preparation:'接资料与投料',commercial:'预算与制单',sourcing:'外发与合同',delivery:'生产与交付',exceptions:'差异处理及返工协同'} as const;
+const states={mine:'待我办理',waiting:'等待其他岗位',returned:'退回要改',completed:'已办理'} as const;
 const urls=createWebUrls(import.meta.env.BASE_URL);
 type OpenAction={kind:'contract';caseId:string;documentId:string|null}|{kind:'investment';resource:{kind:'source'|'order';id:string}};
 export function MerchandiserWorkbench({search}:{search:string}){
@@ -76,9 +77,9 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    <h2>本单投面辅料</h2><Button label="返回跟单列表" variant="secondary" onClick={()=>void close()}/>
    <ProductionReadinessPanel key={`${action.resource.kind}:${action.resource.id}`} resource={action.resource} investmentOnly onChanged={saved}/>
   </section></DocumentGuardContext.Provider>}
-  <section hidden={Boolean(action)} aria-label={route.state==='returned'?'退回要改':'待我办理'}><h2 ref={listHeading} tabIndex={-1}>{route.state==='returned'?'退回要改':'待我办理'}</h2>
+  <section hidden={Boolean(action)} aria-label={states[route.state]}><h2 ref={listHeading} tabIndex={-1}>{states[route.state]}</h2>
   <div className="pattern-actions"><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
-   <Selector label="办理状态" value={route.state} options={[{value:'mine',label:'待我办理'},{value:'returned',label:'退回要改'}]}
+   <Selector label="办理状态" value={route.state} options={Object.entries(states).map(([value,label])=>({value,label}))}
     onChange={value=>{const state=MerchandiserWorkActionFilterSchema.safeParse(value).data;if(state)change({...route,page:1,state});}}/>
    <Selector label="业务类型" value={route.kind??'all'} options={[{value:'all',label:'全部业务'},...Object.entries(labels).map(([value,label])=>({value,label}))]}
     onChange={value=>change({...route,page:1,kind:MerchandiserWorkKindSchema.safeParse(value).data})}/>
@@ -89,9 +90,15 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    {key:'customer',header:'客户 / PO',renderCell:row=><>{row.customer??'客户待核'}<small>{row.poNumbers.join('、')||'PO 待核'}</small></>},
    {key:'factory',header:'加工厂',renderCell:row=>row.factory??'待核'},
    {key:'title',header:'当前事项',renderCell:row=><>{row.title}<small>{labels[row.kind]}</small></>},
+   {key:'responsibleName',header:'负责人',renderCell:row=>row.responsibleName??'待核'},
    {key:'dueAt',header:'原期限',renderCell:row=>row.dueAt?new Date(row.dueAt).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'}):'未记录'},
    {key:'itemId',header:'操作',renderCell:row=>{
     const {route}=row;
+    if(row.state==='waiting'||row.state==='completed'){
+     if(route.routeName!=='digital_production_task'||!DigitalIdSchema.safeParse(route.entityId).success)return <span>原任务范围待核</span>;
+     const original=`/ui/digital-production?task=${encodeURIComponent(route.entityId)}&taskView=read`;
+     return <Link type="inherit" href={digitalChildDetailHref(original,returnTo,urls.base)}>查看原任务</Link>;
+    }
     const inlineContract=route.routeName==='sourcing_detail'&&route.tab==='contract_return';
     const inlineInvestment=route.routeName==='digital_source_material_investment'||route.routeName==='digital_order_material_investment';
     if((inlineContract||inlineInvestment)&&!DigitalIdSchema.safeParse(route.entityId).success)return <span>原办理范围待核</span>;
