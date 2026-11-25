@@ -263,8 +263,24 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      expect(exact.get('materialOrder')).toBe(productionOrderId);
      expect(exact.has('materialSource')).toBe(false);
      await links.click();
-     await inherited.page.getByRole('region',{name:'仓库实际收料',exact:true}).getByText(/已实收：12 米/).waitFor();
+     const formalReceipt=inherited.page.getByRole('region',{name:'仓库实际收料',exact:true});
+     await formalReceipt.getByText(/已实收：12 米/).waitFor();
      expect((await h.db.query("SELECT resource_id,version FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt'",[[sourceId,productionOrderId]])).rows).toEqual([{resource_id:sourceId,version:1}]);
+     await formalReceipt.getByRole('textbox',{name:'本次数量（米）',exact:true}).fill('8');
+     await formalReceipt.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(new Date(Date.now()+8*3600000).toISOString().slice(0,19));
+     await formalReceipt.getByRole('textbox',{name:'本次收料说明 / 订正原因',exact:true}).fill('TEST formal order receives the remaining quantity');
+     await formalReceipt.getByRole('button',{name:'保存实际收料',exact:true}).click();
+     await formalReceipt.getByText(/已实收：20 米/).waitFor();
+     await formalReceipt.getByRole('button',{name:'返回来源',exact:true}).click();
+     await queue.getByText('没有符合授权及筛选的收料事项。',{exact:true}).waitFor();
+     await queue.getByRole('combobox',{name:'收料状态',exact:true}).click();
+     await inherited.page.getByRole('option',{name:'采购收足',exact:true}).click();
+     await queue.getByText('采购已收足',{exact:true}).waitFor();
+     const finished=queue.getByRole('link',{name:'查看原收料与订正',exact:true});
+     expect(new URL((await finished.getAttribute('href'))!,inherited.page.url()).searchParams.get('materialOrder')).toBe(productionOrderId);
+     expect((await h.db.query("SELECT resource_id,version,state FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt' ORDER BY version",[[sourceId,productionOrderId]])).rows).toEqual([
+      {resource_id:sourceId,version:1,state:'partial'},{resource_id:sourceId,version:2,state:'partial'},
+     ]);
     }finally{await inherited.close();}
    }catch(error){
     const body=tab.page.locator('body');

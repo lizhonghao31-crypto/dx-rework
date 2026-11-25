@@ -50,6 +50,7 @@ export const WarehouseNativeTaskQuerySchema=z.object({
  page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
 }).strict();
 export const WarehouseReceiptPageQuerySchema=z.object({
+ status:z.enum(['open','completed']).default('open'),
  page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
 }).strict();
 export type WarehouseReceiptPageQuery=z.infer<typeof WarehouseReceiptPageQuerySchema>;

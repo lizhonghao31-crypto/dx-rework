@@ -97,7 +97,8 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     const facts=currentPreparationMaterials(materialHistory,scope.order_id);
     for(const item of deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf)){
      const line=scope.lines.find(row=>row.lineId===item.lineId);
-     if(item.balance.procurementRemaining==='0'&&item.balance.excessReceived==='0')continue;
+     const procurementComplete=item.balance.procurementRemaining==='0'&&item.balance.excessReceived==='0';
+     if((input.status==='completed')!==procurementComplete)continue;
      if(search&&![scope.order_number,line?.poNumber,item.name,item.supplier].some(value=>value?.toLowerCase().includes(search)))continue;
      out.push({id:JSON.stringify([scope.kind,scope.id,item.materialId,item.lineId,item.scopeRef,item.kind]),
       resource:{kind:scope.kind,id:scope.id},orderNumber:scope.order_number,customerCode:scope.customer_code,poNumber:line?.poNumber??null,
@@ -108,7 +109,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
   }
   out.sort((a,b)=>Date.parse(b.investedAt)-Date.parse(a.investedAt)||a.id.localeCompare(b.id));
   const prioritized=prioritizeWithinRushGroups(await projectDevelopmentRushResources(db,out),
-   row=>row.balance.procurementRemaining==='0'?null:row.kind,row=>row.orderRush===true);
+   row=>input.status==='completed'||row.balance.procurementRemaining==='0'?null:row.kind,row=>row.orderRush===true);
   const offset=(input.page-1)*15;
   await db.query('COMMIT');return {items:prioritized.slice(offset,offset+15),page:input.page,total:out.length};
  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
