@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "7f4183806f458e163e3d93f5b12a66ceb89efce2",
-  "sourceFingerprint": "00b66d2f3476aee74cfa8ba054cbc67f4b6674b6cd8c33fb3cbdc098a6dc8495",
+  "sourceFingerprint": "f95321c2025ae5d23bcd1a0082c204598eea5ab0a976b207799aecc5e5ec42bf",
   "rules": [
     {
       "source": "Approved Workbench v11.5 §5.1–5.3 and final user clarification that the shared auxiliary catalog must not store or show suppliers; order suppliers only come from the current supplier master.",
@@ -26,6 +26,7 @@
       "checks": [
         "c3-catalog-command",
         "c3-signed-and-technical",
+        "c3-ci-protocol",
         "c3-static"
       ],
       "initialization": "No new migration or existing-data rewrite. New rows store no supplier in the existing column. Keep decoding old replay envelopes and redact the legacy supplier field on the receipt response.",
@@ -64,6 +65,7 @@
       "checks": [
         "c3-catalog-command",
         "c3-signed-and-technical",
+        "c3-ci-protocol",
         "c3-static"
       ],
       "initialization": "Keep original route, default immediate list, page size, exact historical reads and foreground controls. Existing price vs zero vs unknown stays separately represented.",
@@ -106,21 +108,21 @@
       "id": "c3-catalog-command",
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --maxWorkers 2 tests/integration/auxiliary-catalog-postgres.test.ts tests/unit/auxiliary-catalog-price.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-c3-evidence/c3-catalog-command.json",
-      "startedAt": "2026-11-25T07:20:14.369Z",
-      "endedAt": "2026-11-25T07:20:20.233Z",
-      "testedHead": "a94d141858f7539fc20edda920141653835b3f95",
-      "sourceFingerprint": "00b66d2f3476aee74cfa8ba054cbc67f4b6674b6cd8c33fb3cbdc098a6dc8495",
+      "startedAt": "2026-11-25T07:26:40.651Z",
+      "endedAt": "2026-11-25T07:26:46.466Z",
+      "testedHead": "82840aca21b6e3d1298e9d3953c5e6e5ff59d520",
+      "sourceFingerprint": "f95321c2025ae5d23bcd1a0082c204598eea5ab0a976b207799aecc5e5ec42bf",
       "exitCode": 0,
       "status": "passed",
       "log": "/workspace/dx-v115-c3-evidence/c3-catalog-command.log",
-      "logSha256": "a95fd4a65fd5e5898e5e2a9da2ab7f22221247a2b5ba72afeff5877eb4854ec6",
-      "passed": 14,
+      "logSha256": "dfbf765e8fde60378c0edc6076ca8e5162223b297f6e6c8a7722c9a21d57c410",
+      "passed": 15,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4b6f4ae2cb603c4503653ef10df85396e2fc6880b9807ec0c95957f71cbb2b95"
+          "sha256": "b27cfeb2f482058d19b97b365f7ee3f2ed965ce6b7c45d46ec4b1b27698e44ea"
         }
       ],
       "context": "Node 22.22.2, canonical default Vitest profile with two workers and guarded local PostgreSQL for the catalog service. Includes the real Fastify request/receipt paths and precision unit tests."
@@ -129,21 +131,21 @@
       "id": "c3-signed-and-technical",
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/auxiliary-catalog-native-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-c3-evidence/c3-signed-and-technical.json",
-      "startedAt": "2026-11-25T07:20:20.376Z",
-      "endedAt": "2026-11-25T07:21:29.723Z",
-      "testedHead": "a94d141858f7539fc20edda920141653835b3f95",
-      "sourceFingerprint": "00b66d2f3476aee74cfa8ba054cbc67f4b6674b6cd8c33fb3cbdc098a6dc8495",
+      "startedAt": "2026-11-25T07:26:46.601Z",
+      "endedAt": "2026-11-25T07:27:46.776Z",
+      "testedHead": "82840aca21b6e3d1298e9d3953c5e6e5ff59d520",
+      "sourceFingerprint": "f95321c2025ae5d23bcd1a0082c204598eea5ab0a976b207799aecc5e5ec42bf",
       "exitCode": 0,
       "status": "passed",
       "log": "/workspace/dx-v115-c3-evidence/c3-signed-and-technical.log",
-      "logSha256": "61e2602af228025f32e906ed9106d9c55048f0f3ee1f72afc1cc7190ef4ffcd9",
+      "logSha256": "8494ca8bb99692477e805de6c31a62f5d6ce78d225c920b78d7c669ddf8fb918",
       "passed": 50,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e7d5a9fb4320cda8af422d4af095172087b35532a206ae402b025c98104dd057"
+          "sha256": "1520b31d46feedc1bc46718699c11bfb1bf30e22c67062f961af750bbfb84c5e"
         }
       ],
       "context": "Node 22.22.2, canonical business-chain Vitest profile with two workers, Chromium and two guarded local PostgreSQL 16 test DB names. Six signed catalog/browser workflows and 44 existing technical workflows."
@@ -152,33 +154,56 @@
       "id": "c3-amendment",
       "kind": "tests",
       "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --maxWorkers 2 tests/integration/development-amendment-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-c3-evidence/c3-amendment.json",
-      "startedAt": "2026-11-25T07:21:29.866Z",
-      "endedAt": "2026-11-25T07:21:46.962Z",
-      "testedHead": "a94d141858f7539fc20edda920141653835b3f95",
-      "sourceFingerprint": "00b66d2f3476aee74cfa8ba054cbc67f4b6674b6cd8c33fb3cbdc098a6dc8495",
+      "startedAt": "2026-11-25T07:27:46.932Z",
+      "endedAt": "2026-11-25T07:28:02.577Z",
+      "testedHead": "82840aca21b6e3d1298e9d3953c5e6e5ff59d520",
+      "sourceFingerprint": "f95321c2025ae5d23bcd1a0082c204598eea5ab0a976b207799aecc5e5ec42bf",
       "exitCode": 0,
       "status": "passed",
       "log": "/workspace/dx-v115-c3-evidence/c3-amendment.log",
-      "logSha256": "59fadc505b2ee313a577790394aefc5434e4bb65ca01521b6e25ac1bf1c30794",
+      "logSha256": "66a7efa705059815b3f9e059378983f0f1cfe8c1e71608573db08904593fdbbc",
       "passed": 28,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5f1424628586b70fc6d67a20544cd7fb30c492c5a2ff5ab2f3a397fbdf9fc079"
+          "sha256": "38f9f85e067ae686b5d1c34b03488b47ca7042862fddb64efd6558f416653bed"
         }
       ],
       "context": "Node 22.22.2, canonical default two-worker Vitest and guarded PostgreSQL. Existing same-round supplement and correction, authorization, immutable historical documents, and real HTTP save and submit recovery."
     },
     {
+      "id": "c3-ci-protocol",
+      "kind": "tests",
+      "command": "node --test --test-reporter=tap scripts/ci/*.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 285,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "82840aca21b6e3d1298e9d3953c5e6e5ff59d520",
+      "sourceFingerprint": "f95321c2025ae5d23bcd1a0082c204598eea5ab0a976b207799aecc5e5ec42bf",
+      "context": "Node 22.22.2, the original GitHub Light TAP prerequisites replayed after reconciling the exact retired route and dead paging candidate; no business time source added or altered.",
+      "startedAt": "2026-11-25T07:28:06.450Z",
+      "endedAt": "2026-11-25T07:28:10.943Z",
+      "log": "/workspace/dx-v115-c3-evidence/c3-ci-protocol.log",
+      "logSha256": "7762667522e43aef159e14fae6c2327537aa0fa048d4ef4c8a6863efba41feef",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "7762667522e43aef159e14fae6c2327537aa0fa048d4ef4c8a6863efba41feef"
+        }
+      ]
+    },
+    {
       "id": "c3-static",
       "kind": "command",
       "command": "bash -c \"set -e; npm run typecheck -w apps/api; npm run typecheck -w apps/web; node node_modules/eslint/bin/eslint.js $(git diff --name-only 7f418380 -- \\\"*.ts\\\" \\\"*.tsx\\\" \\\"*.mjs\\\") --max-warnings=0; git diff --check\"",
-      "startedAt": "2026-11-25T07:20:24.958Z",
-      "endedAt": "2026-11-25T07:21:09.156Z",
-      "testedHead": "a94d141858f7539fc20edda920141653835b3f95",
-      "sourceFingerprint": "00b66d2f3476aee74cfa8ba054cbc67f4b6674b6cd8c33fb3cbdc098a6dc8495",
+      "startedAt": "2026-11-25T07:28:11.097Z",
+      "endedAt": "2026-11-25T07:28:46.675Z",
+      "testedHead": "82840aca21b6e3d1298e9d3953c5e6e5ff59d520",
+      "sourceFingerprint": "f95321c2025ae5d23bcd1a0082c204598eea5ab0a976b207799aecc5e5ec42bf",
       "exitCode": 0,
       "status": "passed",
       "log": "/workspace/dx-v115-c3-evidence/c3-static.log",

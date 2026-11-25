@@ -82,6 +82,16 @@ const url=process.env.TEST_DATABASE_URL;
   await expect(service.create(actor(),{...input,name:renamed.name},randomUUID())).rejects.toMatchObject({statusCode:409});
   expect((await db.query('SELECT supplier FROM auxiliary_catalog_versions WHERE auxiliary_id=$1 AND version=2',[entry.id])).rows[0].supplier).toBe(oldSupplier);
  });
+ it('rejects a legacy supplier item renaming onto a supplierless duplicate without modifying either version',async()=>{
+  const legacy=await service.create(actor(),{...value(),referencePricing:{amount:'2',unit:'件'}},randomUUID());
+  const oldSupplier='TEST historical supplier';
+  await db.query('UPDATE auxiliary_catalog_items SET supplier=$2 WHERE auxiliary_id=$1',[legacy.id,oldSupplier]);
+  const current=await service.create(actor(),{...value(undefined,legacy.specification),referencePricing:{amount:'3',unit:'件'}},randomUUID());
+  await expect(service.rename(actor(),legacy.id,{expectedVersion:legacy.version,name:current.name.toLowerCase(),reason:'TEST 同名同规格不能由旧供应商分开'},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await list(current.name)).items).toEqual([current]);
+  expect((await service.history(actor(),legacy.id,1)).items).toMatchObject([{version:1,name:legacy.name,referencePricing:legacy.referencePricing}]);
+  expect((await db.query('SELECT version,supplier FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[legacy.id])).rows).toEqual([{version:1,supplier:oldSupplier}]);
+ });
  it('stores reference pricing by exact version and keeps catalog access separate from cost visibility',async()=>{
   const original=await service.create(actor(),{...value(),referencePricing:{amount:'0',unit:'套'}},randomUUID());
   expect((await db.query('SELECT supplier FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[original.id])).rows).toEqual([{supplier:''}]);

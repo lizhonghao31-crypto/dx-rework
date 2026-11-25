@@ -93,8 +93,8 @@ export class AuxiliaryCatalogService{
   }catch(error){await db.query('ROLLBACK');if(error instanceof ApplicationError&&error.code==='IDEMPOTENCY_CONFLICT')throw new ApplicationError(error.code,'原目录操作标识对应的内容不同，请先核对原结果，不要换内容重复提交',409);throw error;}finally{db.release();}
  }
  private async current(db:PoolClient,id:string,version:number){const row=(await db.query<Row>('SELECT * FROM auxiliary_catalog_items WHERE auxiliary_id=$1 FOR UPDATE',[id])).rows[0];if(!row) return fail('该辅料已不存在，请重新搜索',404);if(row.version!==version)fail('该辅料已被修改，本次未保存；请重新读取并核对');if(row.merged_into)fail('该辅料已合并，请在搜索结果选择目标条目');return row;}
- private async duplicate(db:PoolClient,name:string,specification:string,legacySupplier:string|null,except?:string){
-  const found=(await db.query('SELECT name,active FROM auxiliary_catalog_items WHERE lower(btrim(name))=lower(btrim($1)) AND lower(btrim(specification))=lower(btrim($2)) AND ($3::text IS NULL OR lower(btrim(supplier))=lower(btrim($3))) AND merged_into IS NULL AND ($4::uuid IS NULL OR auxiliary_id<>$4) ORDER BY active DESC,auxiliary_id LIMIT 1',[name,specification,legacySupplier,except??null])).rows[0];
+ private async duplicate(db:PoolClient,name:string,specification:string,except?:string){
+  const found=(await db.query('SELECT name,active FROM auxiliary_catalog_items WHERE lower(btrim(name))=lower(btrim($1)) AND lower(btrim(specification))=lower(btrim($2)) AND merged_into IS NULL AND ($3::uuid IS NULL OR auxiliary_id<>$3) ORDER BY active DESC,auxiliary_id LIMIT 1',[name,specification,except??null])).rows[0];
   if(found)fail(`相同品名、规格的辅料“${found.name}”${found.active?'已存在，请复用已有项':'已停用，请核实旧条目；本操作不恢复启用'}`);
  }
  private async record(db:PoolClient,actor:TrustedActorContext,row:Row,before:Row|null,action:string,reason:string){
@@ -106,7 +106,7 @@ export class AuxiliaryCatalogService{
   const price=value.referencePricing;
   if(price&&!canReadReferencePricing)fail('当前身份不能登记参考价',403);
   if(value.supplier)fail('共享辅料目录不登记供应商，请在订单材料中从供应商库选择',400);
-  await this.duplicate(db,value.name,value.specification,null);
+  await this.duplicate(db,value.name,value.specification);
   const row=(await db.query<Row>(`INSERT INTO auxiliary_catalog_items(auxiliary_id,version,name,specification,supplier,auxiliary_kind,active${price?',reference_unit_price,reference_pricing_unit':''}) VALUES($1,1,$2,$3,'',$4,true${price?',$5,$6':''}) RETURNING *`,[randomUUID(),value.name,value.specification,value.auxiliaryKind,...(price?[price.amount,price.unit]:[])])).rows[0]!;
   return(await this.record(db,actor,row,null,'create','业务页直接新增共享辅料')).result;
  });}
@@ -122,7 +122,7 @@ export class AuxiliaryCatalogService{
   });
  }
  async rename(actor:TrustedActorContext,id:string,input:unknown,key:string){const value=parse(RenameAuxiliarySchema,input);return this.command(actor,'rename',key,{id,...value},async db=>{
-  const before=await this.current(db,id,value.expectedVersion);await this.duplicate(db,value.name,before.specification,before.supplier||null,id);
+  const before=await this.current(db,id,value.expectedVersion);await this.duplicate(db,value.name,before.specification,id);
   const row=(await db.query<Row>('UPDATE auxiliary_catalog_items SET version=version+1,name=$2,changed_at=CURRENT_TIMESTAMP WHERE auxiliary_id=$1 RETURNING *',[id,value.name])).rows[0]!;return(await this.record(db,actor,row,before,'rename',value.reason)).result;
  });}
  async disable(actor:TrustedActorContext,id:string,input:unknown,key:string){const value=parse(DisableAuxiliarySchema,input);return this.command(actor,'disable',key,{id,...value},async db=>{
