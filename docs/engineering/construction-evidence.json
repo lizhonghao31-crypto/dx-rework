@@ -30,23 +30,23 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-later-review-final-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-later-review-once-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 49,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "1fd6b9eb315ee761ef085aac7d2401ce25bed828",
+      "testedHead": "7b840dd8c5715aef4314e1bf8de5d91be93fc7d6",
       "sourceFingerprint": "bdb295ebc8f0b06b6442ef72879bb50d14da84fac226554c01cb5e09d8a496b8",
       "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
-      "startedAt": "2026-11-25T17:19:44.748Z",
-      "endedAt": "2026-11-25T17:19:46.969Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-later-review-final-unit.log",
-      "logSha256": "22f07efcdf6bcb06b8c87ccf5ce55901620a9016527ac778d913c76adc1d5a7c",
+      "startedAt": "2026-11-25T17:28:27.310Z",
+      "endedAt": "2026-11-25T17:28:28.524Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-later-review-once-unit.log",
+      "logSha256": "8720f037a365bbd604b87d8c5a0f81185224da9fc68912e2f1137c522b6ba7e0",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d8bc58137766c261916bcc29690496a5bb4dba3b08fb25d0f3d846b2c1ed7bf7"
+          "sha256": "73aff7aa23b5a35b2ed86f3df7b8e5c4f11bc5ddcd9e156578a2906fde078219"
         }
       ]
     }
