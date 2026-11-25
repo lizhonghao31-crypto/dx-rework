@@ -26,6 +26,7 @@ import { developmentDocumentRow } from "./development-round-repository.js";
 import {approvedOrderTimeOrder} from './order-time-admission.js';
 import {automaticOrderTime} from './order-time-automatic.js';
 import {acceptsNewOrderTime} from './order-time-admission.js';
+import {captureWarehouseInstructionDemand,readWarehouseInstructionDemands,sourcedInstructionMaterialId} from './warehouse-instruction-demand.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const fail = (message: string): never => { throw new ApplicationError("INSTRUCTION_CONFLICT", message, 409); };
@@ -52,8 +53,11 @@ export class ProductionInstructionService {
     document.comments = source.instructions;
     document.measurements = source.measurements.map(item => ({ id: randomUUID(), name: item.name, tolerance: "", method: "", values: document.sizes.map(size => item.values[source.sizes.indexOf(size)] ?? "") }));
     document.images = source.files.filter(file => file.kind === "款图" || file.kind === "局部图").map(file => ({ attachmentId: file.attachmentId, kind: file.kind === "款图" ? "款图" : "其它工艺", description: "" }));
-    document.fabrics = source.materials.filter(item => item.category !== "辅料").map(item => ({ id: randomUUID(), name: item.name, part: item.label, colors: Object.fromEntries(order.lines.map(line => [line.lineId, item.color])), remarks: [item.width, item.weight, item.composition].filter(Boolean).join("／") }));
-    document.accessories = source.materials.filter(item => item.category === "辅料").map(item => ({ id: randomUUID(), group: "车缝", garmentColors: order.lines.map(line => line.color).join("、"), materialColor: item.color, name: item.name, category: "", part: item.label, specification: item.specification, consumption: item.consumption, remarks: "" }));
+    const count=new Map<string,number>();
+    for(const material of source.materials)count.set(material.materialId,(count.get(material.materialId)??0)+1);
+    const materialRef=(id:string)=>count.get(id)===1?sourcedInstructionMaterialId(order.productionOrderId,order.sourceId!,id):randomUUID();
+    document.fabrics = source.materials.filter(item => item.category !== "辅料").map(item => ({ id: materialRef(item.materialId), name: item.name, part: item.label, colors: Object.fromEntries(order.lines.map(line => [line.lineId, item.color])), remarks: [item.width, item.weight, item.composition].filter(Boolean).join("／") }));
+    document.accessories = source.materials.filter(item => item.category === "辅料").map(item => ({ id: materialRef(item.materialId), group: "车缝", garmentColors: order.lines.map(line => line.color).join("、"), materialColor: item.color, name: item.name, category: "", part: item.label, specification: item.specification, consumption: item.consumption, remarks: "" }));
     document.composition = source.materials.filter(item => item.category === "主布").map(item => item.composition).filter(Boolean).join("／");
     return { document, sourceRound: row.round_number ?? 1, sourceVersion:row.version as number };
   }
@@ -163,15 +167,22 @@ export class ProductionInstructionService {
       }
       if(current.sourceRound!==current.latestSourceRound)fail("开发单有新资料，请逐项核对采用或保留后发布");
       const readiness=await productionReadiness(db,id);
+      let warehouseDemand:ReturnType<typeof captureWarehouseInstructionDemand>=null;
       if(readiness.adoption){if(input.expectedReadinessRevision!==readiness.revision)fail('产前依据已变化，请刷新并核对当前有效资料');if(readiness.finalReasons.length)fail(readiness.finalReasons.join('；'));
-       const table=(await publishedTechnicalArtifact(db,order.sourceId!,current.sourceRound!))!.artifact.body.baseSizeTable;
-       if(!instructionMatchesTechnicalSizes(current.document,order,table))fail('制单尺寸与当前有效技术尺寸表不一致，请明确采用技术表；缺订购尺码须由技术补充复核');
+       const technical=(await publishedTechnicalArtifact(db,order.sourceId!,current.sourceRound!))!.artifact;
+       if(!instructionMatchesTechnicalSizes(current.document,order,technical.body.baseSizeTable))fail('制单尺寸与当前有效技术尺寸表不一致，请明确采用技术表；缺订购尺码须由技术补充复核');
+       if(readiness.document&&technical.artifactSetId===readiness.technical?.artifactRef?.id&&technical.version===readiness.technical.artifactRef.version){
+        const inherited=await this.seed(db,order,current.sourceRound!);
+        const previousTracked=current.publishedVersion?(await readWarehouseInstructionDemands(db,[id])).get(id)?.demand.tracked:undefined;
+        warehouseDemand=captureWarehouseInstructionDemand({order,round:current.sourceRound!,document:current.document,inherited:inherited.document,
+         materials:(readiness.document.document as DevelopmentDocument).materials,artifact:technical,...(previousTracked?{previousTracked}:{})});
+       }
       }
       const issues=instructionErrors(current.document,order);if(issues.length)fail(issues.join("；"));
       await this.bindImages(db,actor,order,current.document);
       await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId,businessNow().toISOString()]);
       await db.query("UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1",[id]);
-      if(readiness.adoption)await db.query('INSERT INTO digital_instruction_preparation_bases(production_order_id,instruction_version,readiness_revision,technical_revision,basis_json) VALUES($1,$2,$3,$4,$5)',[id,current.version,readiness.revision,readiness.technical!.revision,JSON.stringify({artifact:readiness.technical!.artifactRef,review:readiness.technical!.reviewRef,comment:readiness.technical!.finalCommentRef})]);
+      if(readiness.adoption)await db.query('INSERT INTO digital_instruction_preparation_bases(production_order_id,instruction_version,readiness_revision,technical_revision,basis_json) VALUES($1,$2,$3,$4,$5)',[id,current.version,readiness.revision,readiness.technical!.revision,JSON.stringify({artifact:readiness.technical!.artifactRef,review:readiness.technical!.reviewRef,comment:readiness.technical!.finalCommentRef,...(warehouseDemand?{warehouseDemand}:{})})]);
       await recordInstructionWork(db,actor.actorId,id,'published',current.version,{technicalRevision:readiness.technical?.revision??null});
       await instructionNotice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
       await new BulkPreparationService(this.database).sync(db,actor,id);

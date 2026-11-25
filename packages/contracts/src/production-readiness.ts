@@ -65,11 +65,12 @@ export type WarehouseReceiptWorkItem={
  basis:{resource:PreparationResource;kind:WarehouseReceiptBatch['kind'];scopeRef:string;materialId:string;lineId:string|null;adoptedRef:string;supplierId:string|null;unit:string};
  purchase:{invested:WarehouseQuantity;investedAt:string;original:WarehouseReceiptRef;handover:WarehouseReceiptRef};
  received:WarehouseQuantity|null;
+ productionRequired:WarehouseQuantity|null;
  balance:{unit:string|null;procurementRemaining:string|null;excessReceived:string|null;productionShortage:string|null;dispatchRemaining:string|null};
  receiptVersion:number;
  activeBatches:{ref:WarehouseReceiptRef;quantity:WarehouseQuantity;occurredAt:string}[];
 };
-export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'balance'> & {
+export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'productionRequired'|'balance'> & {
  id:string;resource:PreparationResource;orderNumber:string|null;customerCode:string|null;orderRush?:true;
  poNumber:string|null; assigneeName:string|null; invested:WarehouseQuantity; investedAt:string;
 };

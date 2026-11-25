@@ -105,6 +105,7 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
    <h2>{current.name} · {current.kind==='fabric_receipt'?'实收面料':'实收辅料'}</h2>
    <p>供应方：{current.supplier||'原资料未登记'} · 原投料 {current.purchase.invested.quantity} {current.basis.unit}</p>
    <p>已实收：{current.received?`${current.received.quantity} ${current.basis.unit}`:'实际数量待核'} · 采购待收：{current.balance.procurementRemaining??'待核'}</p>
+   <p>生产需用：{current.productionRequired?`${current.productionRequired.quantity} ${current.productionRequired.unit}`:'待核'} · 生产欠料：{current.balance.productionShortage??'待核'}</p>
    <p>原验布、预缩及质量放行保持原办理入口。</p>
    <Selector label="选择新增或订正原批次" value={correction} options={[{value:'',label:'新增独立收料批次'},...current.activeBatches.map(row=>({
      value:String(row.ref.version),label:`订正第 ${row.ref.version} 批 · ${row.quantity.quantity} ${row.quantity.unit} · ${asBeijingLocal(row.occurredAt).replace('T',' ')}`,

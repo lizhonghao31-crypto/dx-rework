@@ -1,9 +1,11 @@
 import type {PreparationMaterialFact,ProductionReadinessState,WarehouseReceiptWorkItem} from '@dx-rework/contracts/production-readiness';
 import {businessNow} from '../acceptance-clock/business-time.js';
+import {demandForWarehouseReceipt} from './warehouse-instruction-demand.js';
 import {currentWarehouseReceiptQuantity,scopedWarehouseReceiptQuantity,warehouseMaterialBalance,warehouseReceiptTaskBasis,
  type WarehouseReceiptBasis,type WarehouseReceiptMovement} from './warehouse-material-balance.js';
 export const warehouseReceiptScopePrefix='warehouse-receipt/';
 export const warehouseReceiptScope=(materialId:string,lineId:string|null)=>warehouseReceiptScopePrefix+materialId+'/'+(lineId??'shared');
+const receiptKey=(ref:WarehouseReceiptMovement['original'])=>JSON.stringify([ref.recordId,ref.version]);
 
 export function warehouseReceiptMovements(history:readonly PreparationMaterialFact[],basis:WarehouseReceiptBasis):WarehouseReceiptMovement[]{
  const scope=warehouseReceiptScope(basis.materialId,basis.lineId);
@@ -25,7 +27,7 @@ function receivedAtBasis(fact:PreparationMaterialFact){
  return typeof (fact as PreparationMaterialFact&{materialBasis?:unknown}).materialBasis==='string';
 }
 
-export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString()):WarehouseReceiptWorkItem[]{
+export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString(),demand?:Parameters<typeof demandForWarehouseReceipt>[0]):WarehouseReceiptWorkItem[]{
  return original.facts.flatMap(investment=>{
   if(investment.kind!=='material_investment'||!investment.investmentScopeBasis)return [];
   const scope=investment.investmentScopeBasis;
@@ -50,17 +52,18 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
    const receiptVersion=original.history.reduce((version,row)=>row.warehouseReceipt&&row.kind===basis.kind&&
     row.scopeRef===receiptScope&&row.resource.kind===basis.resource.kind&&row.resource.id===basis.resource.id?Math.max(version,row.version):version,0);
    const typedBalance=raw.length?scopedWarehouseReceiptQuantity(basis,raw,asOf):null;
-   const replaced=new Set(raw.flatMap(row=>row.replaces?[JSON.stringify(row.replaces)]:[]));
-   const activeBatches=typedBalance?raw.flatMap(row=>row.occurredAt&&!replaced.has(JSON.stringify(row.original))?
+   const replaced=new Set(raw.flatMap(row=>row.replaces?[receiptKey(row.replaces)]:[]));
+   const activeBatches=typedBalance?raw.flatMap(row=>row.occurredAt&&!replaced.has(receiptKey(row.original))?
     [{ref:row.original,quantity:row.quantity,occurredAt:row.occurredAt}]:[]):[];
    // A separate, explicitly recorded batch cannot be mixed with old numeric
    // snapshots whose physical lots cannot be matched to the batch.
    const received=raw.length?(receipt?null:typedBalance):
     currentWarehouseReceiptQuantity(receipt??null,basis);
-   const balance=warehouseMaterialBalance({unit:basis.unit,invested:purchase.invested,received,productionRequired:null,
+   const productionRequired=demandForWarehouseReceipt(demand,basis,original.lines);
+   const balance=warehouseMaterialBalance({unit:basis.unit,invested:purchase.invested,received,productionRequired,
     usableAfterOccupancy:null,dispatchRequired:null,dispatched:null});
    return [{kind,materialId:basis.materialId,name:material.name,scopeRef:basis.scopeRef,lineId:basis.lineId,
-    supplier:material.supplier||null,basis,purchase,received,balance,receiptVersion,activeBatches}];
+    supplier:material.supplier||null,basis,purchase,received,productionRequired,balance,receiptVersion,activeBatches}];
   });
  });
 }

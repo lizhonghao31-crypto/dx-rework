@@ -10,6 +10,7 @@ import {developmentReadTables} from './development-amendment-repository.js';
 import {currentPreparationMaterials,instructionInvestmentMaterials,preparationHandoverCurrent,preparationHash} from './preparation-material-repository.js';
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
+import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
 
 type Source={kind:'source'|'order';id:string;order_id:string|null;source_id:string|null;order_number:string|null;customer_code:string|null;
  assignee_name:string|null;development_version:number|null;development:DevelopmentDocument|null;instruction_version:number|null;instruction:InstructionDocument|null;
@@ -82,6 +83,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     WHERE m.kind IN ('design_handover','material_investment','fabric_receipt','accessories_ready')
     ORDER BY m.recorded_at DESC,m.version DESC,m.record_id`,[JSON.stringify([...nativeKeys.values()])])).rows;
    const indexed=new Map<string,Raw[]>();
+   const demands=await readWarehouseInstructionDemands(db,context.flatMap(row=>row.order_id?[row.order_id]:[]));
    for(const row of history){
     const key=`${row.resource_kind}:${row.resource_id}`,values=indexed.get(key)??[];values.push(row);indexed.set(key,values);
    }
@@ -95,7 +97,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
      note:row.body.note??'',expectedVersion:row.body.expectedVersion??0,recipientId:row.body.recipientId??null,
      sourceDocumentVersion:row.body.sourceDocumentVersion??null})) as PreparationMaterialFact[];
     const facts=currentPreparationMaterials(materialHistory,scope.order_id);
-    for(const item of deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf)){
+    for(const item of deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf,scope.order_id?demands.get(scope.order_id):undefined)){
      const line=scope.lines.find(row=>row.lineId===item.lineId);
      const procurementComplete=item.balance.procurementRemaining==='0'&&item.balance.excessReceived==='0';
      if((input.status==='completed')!==procurementComplete)continue;
@@ -103,7 +105,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
      out.push({id:JSON.stringify([scope.kind,scope.id,item.materialId,item.lineId,item.scopeRef,item.kind]),
       resource:{kind:scope.kind,id:scope.id},orderNumber:scope.order_number,customerCode:scope.customer_code,poNumber:line?.poNumber??null,
       assigneeName:scope.assignee_name,kind:item.kind,materialId:item.materialId,name:item.name,lineId:item.lineId,scopeRef:item.scopeRef,supplier:item.supplier,
-      received:item.received,balance:item.balance,invested:item.purchase.invested,investedAt:item.purchase.investedAt});
+      received:item.received,productionRequired:item.productionRequired,balance:item.balance,invested:item.purchase.invested,investedAt:item.purchase.investedAt});
     }
    }
   }

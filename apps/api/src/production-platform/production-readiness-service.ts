@@ -1,6 +1,9 @@
 import {WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence,type WarehouseReceiptPageQuery} from '@dx-rework/contracts/production-readiness';
 import {warehouseReceiptPage} from './warehouse-receipt-page.js';
 import {readWarehouseReceiptWork} from './warehouse-receipt-work.js';
+import {sourcedInstructionMaterialId} from './warehouse-instruction-demand.js';
+import {materialIssuesOnScope,originalMaterialIssueHistory} from './warehouse-material-issue.js';
+import {projectWarehouseIssueAllocation} from './warehouse-issue-allocation.js';
 import {scopedWarehouseReceiptQuantity} from './warehouse-material-balance.js';
 import {deriveWarehouseReceiptWork,warehouseReceiptMovements,warehouseReceiptScope,warehouseReceiptScopePrefix} from './warehouse-receipt-projection.js';
 import {BulkPreparationService} from './bulk-preparation-service.js';
@@ -315,10 +318,16 @@ export class ProductionReadinessService{
     row.resource.kind===target.kind&&row.resource.id===target.id).sort((left,right)=>right.version-left.version)[0];
    if((original?.version??0)!==input.expectedReceiptVersion)conflict('收料批次已更新，请重新读取');
    const movement=warehouseReceiptMovements(view.history,item.basis),nextVersion=input.expectedReceiptVersion+1;
-   const valid=scopedWarehouseReceiptQuantity(item.basis,[...movement,{basis:item.basis,
+   const revised=[...movement,{basis:item.basis,
     original:{recordId:original?.recordId??'first-native-batch',version:nextVersion},
-    ...(input.replaces?{replaces:input.replaces}:{}),quantity:{unit:input.unit,quantity:input.quantity},occurredAt:input.occurredAt,valid:true}],now);
+    ...(input.replaces?{replaces:input.replaces}:{}),quantity:{unit:input.unit,quantity:input.quantity},occurredAt:input.occurredAt,valid:true}];
+   const valid=scopedWarehouseReceiptQuantity(item.basis,revised,now);
    if(!valid)conflict('订正目标不是本项当前有效收料批次，或原实收资料需要核对');
+   if(input.replaces&&a.context.orderId&&item.basis.resource.kind==='source'){
+    const instructionMaterialId=sourcedInstructionMaterialId(a.context.orderId,item.basis.resource.id,item.materialId);
+    const sent=materialIssuesOnScope(await originalMaterialIssueHistory(db,a.context.orderId),instructionMaterialId,item.basis);
+    if(!sent||sent.length&&!projectWarehouseIssueAllocation(input.unit,revised,sent))conflict('本批已有实际发料，订正后数量及时间须涵盖原已发记录');
+   }
    const evidence:WarehouseReceiptBatchEvidence={kind:input.kind,scopeRef:input.scopeRef,materialId:input.materialId,
     lineId:input.lineId,supplierId:input.supplierId,unit:input.unit,investment:input.investment,materialFingerprint:input.materialFingerprint,quantity:input.quantity,
     ...(input.replaces?{replaces:input.replaces}:{})};

@@ -10,7 +10,7 @@ import {confirmedTechnicalFixture} from './development-technical-fixture.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 /** Explicit production-test prerequisite; physical sample execution is not claimed by this fixture.
  * Typed material and original quality/publication commands remain real. */
-export async function productionReadinessFixture(db:Pool,root:TrustedActorContext,orderId:string,workerId:string,warehouse:TrustedActorContext){
+export async function productionReadinessFixture(db:Pool,root:TrustedActorContext,orderId:string,workerId:string,warehouse:TrustedActorContext,options?:{leaveAccessoriesForReceipt:boolean}){
  const service=new ProductionReadinessService(db),bulk=new BulkPreparationService(db),current=await service.read(root,{kind:'order',id:orderId});
  if(!current.enrolled)return current;
  const assigned=await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[orderId]);
@@ -31,7 +31,7 @@ export async function productionReadinessFixture(db:Pool,root:TrustedActorContex
  const readQuantities=async()=>(await db.query('SELECT l.line_id,(SELECT coalesce(sum(quantity),0)::int FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS order_quantity FROM digital_production_po_lines l WHERE production_order_id=$1',[orderId])).rows.map(r=>({lineId:r.line_id,materialId:null,name:'TEST款号唛',quantity:r.order_quantity,unit:'枚'}));
  // Read physical counts only when this invocation needs to record a missing fact.
  let quantities:Awaited<ReturnType<typeof readQuantities>>|undefined;
- for(const kind of ['style_label_ready','accessories_ready'] as const){const latest=await service.read(root,{kind:'order',id:orderId});if(latest.facts.some(f=>f.kind===kind&&f.state==='ready'))continue;
+ for(const kind of ['style_label_ready','accessories_ready'] as const){if(kind==='accessories_ready'&&options?.leaveAccessoriesForReceipt)continue;const latest=await service.read(root,{kind:'order',id:orderId});if(latest.facts.some(f=>f.kind===kind&&f.state==='ready'))continue;
   quantities??=await readQuantities();
   await service.record(warehouse,{kind:'order',id:orderId},{kind,scopeRef:'whole',expectedVersion:0,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST physical material prerequisite',quantities,evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());}
  return service.read(root,{kind:'order',id:orderId});

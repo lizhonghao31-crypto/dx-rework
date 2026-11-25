@@ -15,6 +15,7 @@ import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js'
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
+import {warehouseOriginalIssueFixture} from '../helpers/warehouse-original-issue-fixture.js';
 import {productionReadinessFixture,completeBulkRangeFixture} from '../helpers/production-readiness-fixture.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -146,6 +147,47 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await tab.page.goto(`${h.base}/ui/digital-production?factory=${ready.id}&factoryAction=dispatch`);
    await tab.page.getByText(/裁片已发 4 \/ 应发 10/).waitFor();
    expect((await f.db.query("SELECT count(*)::int AS total FROM digital_factory_facts WHERE preparation_id=$1 AND kind='仓库实际发厂'",[original.preparationId])).rows[0].total).toBe(1);
+  }finally{await tab.close();}
+ });
+ it('sends one exact available accessory lot from the original assigned warehouse form and refreshes remaining quantity',async()=>{
+  const f=h.f,prepared=await warehouseOriginalIssueFixture(f),{id,warehouse,resource,batch,preparation,scope,bulk,now}=prepared;
+  const original=await f.runtime.run(prepared.scene,f.root,()=>preparation.recordWarehouseReceiptBatch(warehouse,resource,batch,randomUUID()));
+  const receipt=original.history.find(row=>row.warehouseReceipt)!;
+  const tab=await h.open(warehouse.actorId,1165,{},`/ui/digital-production?bulk=${id}`);
+  try{
+   const page=tab.page;await page.getByText('辅料发出记录 · 0 次',{exact:true}).click();
+   await page.getByText('共享物料 · 采用需用 500 米 · 本范围可发 500 米',{exact:true}).waitFor();
+   await page.getByRole('textbox',{name:'第 1 批实际发出（米，本批可用 500）',exact:true}).fill('300');
+   await page.getByLabel('实际时间（北京时间）',{exact:true}).fill(new Date(Date.parse(now)+8*3600000).toISOString().slice(0,16));
+   const committed=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/orders/${id}/bulk-preparation/materials-dispatch`));
+   await page.getByRole('button',{name:'保存辅料发出',exact:true}).click();
+   const response=await committed;expect(response.status(),await response.text()).toBe(200);
+   expect(response.request().postDataJSON()).toMatchObject({supplierId:f.supplierId,items:[{materialId:scope.id,quantity:300,unit:'米',
+    scope:{lineId:null,scopeRef:'whole',allocations:[{receipt:{recordId:receipt.recordId,version:receipt.version},quantity:'300'}]}}]});
+   await page.getByText('共享物料 · 采用需用 500 米 · 本范围可发 200 米',{exact:true}).waitFor();
+   expect(await page.getByRole('textbox',{name:'第 1 批实际发出（米，本批可用 200）',exact:true}).inputValue()).toBe('');
+   expect((await bulk.read(warehouse,id)).materials?.history).toMatchObject([{items:[{materialId:scope.id,quantity:300,unit:'米'}]}]);
+  }finally{await tab.close();}
+ });
+ it('lets the assigned warehouse record a failed report for a named actual fabric lot without authorizing its release',async()=>{
+  const f=h.f,p=await warehouseOriginalIssueFixture(f,{fabricPurchase:true});
+  const history=await f.runtime.run(p.scene,f.root,()=>p.preparation.recordWarehouseReceiptBatch(p.warehouse,p.resource,p.fabricBatch!,randomUUID()));
+  const actual=history.history.find(row=>row.warehouseReceipt?.kind==='fabric_receipt')!;
+  const tab=await h.open(p.warehouse.actorId,1165,{},`/ui/digital-production?bulk=${p.id}`);
+  try{
+   const page=tab.page;await page.getByText('面料验布 · 可预缩',{exact:true}).click();
+   const report=page.getByRole('group',{name:'验布报告',exact:true});
+   const physical=report.getByRole('checkbox',{name:/TEST棉布.*第 1 批.*500 米/});
+   await physical.click();
+   await report.getByRole('combobox').selectOption('不合格');
+   await report.getByRole('textbox',{name:'检验情况',exact:true}).fill('TEST 当批面料未达到原质量要求');
+   const committed=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/orders/${p.id}/bulk-preparation/fabric-report`));
+   await report.getByRole('button',{name:'保存验布报告',exact:true}).click();
+   const response=await committed;expect(response.status(),await response.text()).toBe(200);
+   expect(response.request().postDataJSON()).toMatchObject({receiptBatches:[{materialId:p.fabricBatch!.materialId,receipt:{recordId:actual.recordId,version:actual.version}}],result:'不合格'});
+   await page.getByText('面料验布 · 等待质量决定',{exact:true}).waitFor();
+   expect(await page.getByRole('button',{name:'允许继续使用',exact:true}).count()).toBe(0);
+   expect((await p.bulk.read(p.warehouse,p.id)).materials?.items.find(item=>item.kind==='fabric')?.issueOptions).toEqual([]);
   }finally{await tab.close();}
  });
 });
