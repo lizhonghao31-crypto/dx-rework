@@ -1,444 +1,189 @@
 {
   "version": 1,
-  "base": "7e61cad8bebed19dd91160f7739a5c9a3882a0c8",
-  "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
+  "base": "65717a188b3ab4dec6a8f02802d8a813f9e9117c",
   "risk": "full",
+  "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+  "checks": [
+    {
+      "id": "native",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-final-native.json tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/receiving-board-native-browser-postgres.test.ts tests/unit/pending-receiving-scope.test.ts",
+      "context": "Exact X4 source. Isolated native PostgreSQL with the CI dual routing and two workers, signed real Chromium using the production build. The test object uploader is isolated; receipt and factory operations use their original services.",
+      "startedAt": "2026-11-25T14:56:42.032Z",
+      "endedAt": "2026-11-25T14:57:32.240Z",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
+      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+      "log": "/workspace/dx-v115-x4-evidence/x4-final-native.log",
+      "logSha256": "b3862939c2f57a7bd9ff956e5f6f29569fb12e05951298879f640d3e9ba8245a",
+      "kind": "tests",
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "c1691d7fdb76914605538beb1221b7dbc0cc0caf538a856a06e6c16e41034bf0"
+        }
+      ]
+    },
+    {
+      "id": "receiving-nondb",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-final-nondb.json tests/unit/pending-receiving-scope.test.ts tests/unit/receiving-*.test.ts tests/unit/order-board-*.test.ts tests/unit/factory-production-facts.test.ts",
+      "context": "Exact X4 source without any DB URL; tests cover the original receiving and order-board layout, authorization contracts and quantity/receipt UI.",
+      "startedAt": "2026-11-25T14:56:39.552Z",
+      "endedAt": "2026-11-25T14:56:41.840Z",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
+      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+      "log": "/workspace/dx-v115-x4-evidence/x4-final-nondb.log",
+      "logSha256": "e180d6600ecdc68b2d16e76ae27a54e3cd4fb294a9c6e744f4f03f4d1cf29730",
+      "kind": "tests",
+      "passed": 78,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "cafb8d12c9adbc48637a81ac21ce2fea92fa1ba70820c30673350149ad8a9eb3"
+        }
+      ]
+    },
+    {
+      "id": "packages",
+      "command": "npm run build:packages",
+      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
+      "startedAt": "2026-11-25T14:55:40.258Z",
+      "endedAt": "2026-11-25T14:55:48.305Z",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
+      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+      "log": "/workspace/dx-v115-x4-evidence/x4-final-packages.log",
+      "logSha256": "a8c320e2397cda70c4b959cad7754744d59731af921c5dc23ef05b7368ae82c1",
+      "kind": "command"
+    },
+    {
+      "id": "typecheck",
+      "command": "npm run typecheck",
+      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
+      "startedAt": "2026-11-25T14:55:48.309Z",
+      "endedAt": "2026-11-25T14:56:31.216Z",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
+      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+      "log": "/workspace/dx-v115-x4-evidence/x4-final-typecheck.log",
+      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
+      "kind": "command"
+    },
+    {
+      "id": "lint",
+      "command": "bash -o pipefail -c git\\ diff\\ --name-only\\ -z\\ \\\"\\$1\\\"\\ --\\ \\\"\\*.ts\\\"\\ \\\"\\*.tsx\\\"\\ \\|\\ xargs\\ -0\\ node\\ node_modules/eslint/bin/eslint.js\\ --max-warnings=0 _ 65717a188b3ab4dec6a8f02802d8a813f9e9117c",
+      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
+      "startedAt": "2026-11-25T14:56:31.220Z",
+      "endedAt": "2026-11-25T14:56:32.834Z",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
+      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+      "log": "/workspace/dx-v115-x4-evidence/x4-final-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "command"
+    },
+    {
+      "id": "preflight",
+      "command": "npm run test:preflight",
+      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
+      "startedAt": "2026-11-25T14:56:32.838Z",
+      "endedAt": "2026-11-25T14:56:39.317Z",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
+      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+      "log": "/workspace/dx-v115-x4-evidence/x4-final-preflight.log",
+      "logSha256": "0d702e81c560984fdfaa4be2f545884c6ec713e01515d4e614e0252078a3cf94",
+      "kind": "command"
+    }
+  ],
   "rules": [
     {
-      "rule": "收料用原物料有效版本、原仓管与分批真实收料；预单转正式继承事实、采购欠收与生产欠量分开。",
-      "source": "v11.5 §9.2、§9.3 及 N17–20/N40/N52 原设计工作台施工定稿",
+      "rule": "自动待收按实际原发厂证据及同一母单、PO、裁单、厂分配聚合。",
+      "source": "v11.5 §10.1–10.3、N21–24、X03/X04",
       "writes": [
-        "apps/api/src/production-platform/journey-selection-access.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/warehouse-adopted-demand.ts",
-        "apps/api/src/production-platform/warehouse-assigned-resources.ts",
-        "apps/api/src/production-platform/warehouse-material-balance.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts",
-        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
-        "apps/api/src/production-platform/warehouse-receipt-work.ts",
-        "packages/contracts/src/production-readiness.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/unit/warehouse-adopted-demand.test.ts",
-        "tests/unit/warehouse-material-balance.test.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/helpers/production-readiness-fixture.ts",
-        "tests/helpers/warehouse-original-issue-fixture.ts"
+        "apps/api/src/receiving/pending-receiving-native-receipts.ts",
+        "apps/api/src/receiving/pending-receiving-original-allocation.ts",
+        "apps/api/src/receiving/pending-receiving-scope.ts",
+        "apps/api/src/receiving/pending-receiving-view.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/production-facts-consistency-postgres.test.ts",
+        "tests/unit/pending-receiving-scope.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts",
-        "apps/api/src/production-platform/journey-query.ts"
-      ],
-      "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "initialization": "现有 material_investment、到仓及原指派派生，不初始化第二份任务或重写历史；沿真实当前采用版本及可确定范围。",
-      "dateAndPermission": "只有当前原合法仓库责任可写，旧纯读与无关角色不提权。提交沿实际时间、原前置和现有回执；正式前不造时效。",
-      "expectation": "成功收料留下真实原批次、订正记录与已投/实收/欠口；旧数据缺数量和不同单位不假称齐料，传权边界与正式继承仍成立。",
-      "checks": [
-        "pg-native",
-        "signed-creation",
-        "warehouse-unit",
-        "typecheck",
-        "scoped-lint",
-        "preflight"
-      ]
-    },
-    {
-      "rule": "面辅料实际发料锁本次真实可用余量，面料验布结论只关联真实到仓批次，验布和预缩原资格保留。",
-      "source": "v11.5 §9.2–9.3、§9.5 的批次、单位、验布/预缩及发料验收",
-      "writes": [
-        "apps/api/src/production-platform/bulk-fabric-facts.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
-        "apps/api/src/production-platform/warehouse-instruction-demand.ts",
-        "apps/api/src/production-platform/warehouse-issue-allocation.ts",
-        "apps/api/src/production-platform/warehouse-material-issue.ts",
-        "apps/web/src/bulk-fabric-panel.tsx",
-        "apps/web/src/bulk-materials-panel.tsx",
-        "apps/web/src/bulk-preparation-panel.tsx",
-        "packages/contracts/src/bulk-preparation.ts",
-        "tests/unit/warehouse-issue-allocation.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/bulk-fabric-facts.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/warehouse-material-issue.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
-      ],
-      "initialization": "沿现有制单和真实收料/已采用需用，原入仓缺数量/未知单位只供历史读；不补写、不把可用量推成库存。",
-      "dateAndPermission": "受派仓管才能读当前任务或提交，对应验布质量决定仍由原岗位；只认当前业务时钟下原发生时刻。",
-      "expectation": "实际分批、批次有效性、部分发料、验布前置、原 PO 独立与共享材料不重复计算，原版次确认和原流程保持。",
-      "checks": [
-        "pg-native",
-        "warehouse-unit",
-        "typecheck",
-        "scoped-lint",
-        "preflight"
-      ]
-    },
-    {
-      "rule": "工艺收发与大货发厂写回原账本；工艺批准、前道放行、返工占用及后续工厂分配有稳定原引用。",
-      "source": "v11.5 §9.4、§9.5 和 G4，X3/X5 未同时完成前不启用新的仓库实物办理入口",
-      "writes": [
+        "apps/api/src/receiving/receiving-service.ts",
         "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/warehouse-craft-factory-basis.ts",
-        "apps/api/src/production-platform/warehouse-craft-movement.ts",
-        "apps/api/src/production-platform/warehouse-factory-dispatch-evidence.ts",
-        "apps/api/src/sourcing/sourcing-production-service.ts",
-        "apps/web/src/factory-flow-panel.tsx",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-facts-consistency-postgres.test.ts",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
-        "tests/unit/warehouse-craft-factory-basis.test.ts",
-        "tests/unit/warehouse-craft-movement.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/factory-step-ledger.ts",
-        "apps/api/src/production-platform/factory-batch-ledger.ts",
-        "apps/api/src/production-platform/factory-flow-routes.ts",
-        "apps/api/src/production-platform/factory-production-facts.ts",
-        "apps/api/src/sourcing/production-closure-service.ts"
+        "apps/api/src/production-platform/garment-quality.ts"
       ],
       "oldTests": [
         "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-facts-consistency-postgres.test.ts",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
+        "tests/integration/production-facts-consistency-postgres.test.ts"
       ],
-      "initialization": "沿原工艺事件和原合同实际发厂；X5 未提供真实占用状态时不注册新物理操作。本次仅在隔离用例用双方接口确认边界，不消费伪造返工历史。",
-      "dateAndPermission": "当前原派工、同准备版和原工艺任务、精确审批与前道实际批次。恢复回执不能产生新数量，保原实际时间与旧工艺路径。",
-      "expectation": "两道工艺两家原厂、分批回仓记本批真实待检数量；严格封住返工占用与发厂超量；向下一批提供原母单/PO、cuttingOrderId、厂及实际发厂引用。",
+      "initialization": "沿实际发厂与原收货既有事实；不创建第二份收货记录或历史写回。",
+      "dateAndPermission": "原发出、工厂发回和有效订正独立保留；只读取现有收货资格对应的范围。",
+      "expectation": "同厂发500收280余220，B厂不变；未证明的收货批次不猜；旧检查不会覆盖新数量版本。",
       "checks": [
-        "pg-native",
-        "warehouse-unit",
-        "typecheck",
-        "scoped-lint",
-        "preflight"
+        "native",
+        "receiving-nondb"
       ]
     },
     {
-      "rule": "仓库首页按当前原授权提供材料、预缩、发料/发厂；独立任务页保原动作、回原筛选/分页和焦点。",
-      "source": "v11.5 §9.2，C1 统一分页/读取提示/表单，原合法角色只看本范围",
+      "rule": "用现有仓管身份及原收货命令，不改退回、差异、装箱或返工权。",
+      "source": "v11.5 §10.3–10.4、N21–24、N26–27",
       "writes": [
-        "apps/api/src/production-platform/task-routes.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/web/src/App.tsx",
-        "apps/web/src/components.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/warehouse-center.tsx",
-        "apps/web/src/warehouse-native-task-table.tsx",
-        "apps/web/src/warehouse-receipt-batch-panel.tsx",
-        "apps/web/src/warehouse-workbench-route.ts"
+        "apps/api/src/receiving/receiving-routes.ts",
+        "apps/api/src/receiving/receiving-service.ts"
+      ],
+      "reads": [
+        "apps/api/src/receiving/pending-receiving-view.ts",
+        "apps/api/src/production-platform/order-closure-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/receiving-board-native-browser-postgres.test.ts"
+      ],
+      "initialization": "待收行仅定位；提交后才走原首次或追加路径。",
+      "dateAndPermission": "原活动仓管及厂/裁单分配在原事务复核，原授权、幂等与登记时间不替换。",
+      "expectation": "原可见记录同键重试不会重复收货，错误厂或旧选择拒绝，覆盖原历史与原控制。",
+      "checks": [
+        "native",
+        "receiving-nondb"
+      ]
+    },
+    {
+      "rule": "既有回货看板增加待收入口，沿同范围原表办理并返回原筛选与焦点。",
+      "source": "v11.5 §10.2–10.4、V17、GOV12",
+      "writes": [
+        "apps/web/src/order-board-page.tsx",
+        "apps/web/src/pending-receiving-board.tsx",
+        "apps/web/src/pending-receiving-entry.ts",
+        "apps/web/src/receiving-page.tsx",
+        "tests/integration/receiving-board-native-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/web/src/list-pagination.tsx",
         "apps/web/src/foreground-loading.tsx",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/factory-flow-panel.tsx"
+        "apps/api/src/receiving/receiving-routes.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "tests/integration/receiving-board-native-browser-postgres.test.ts"
       ],
-      "initialization": "进入当前确切原任务或原材料批次，历史保留只读，采用同一已授权全量计算总数和当前页。",
-      "dateAndPermission": "仓管仅本人实际受派任务，Root 原管理、没有接收人显示待安排；付款、成衣收货、洗水、设计及报价不增加权限或时效。",
-      "expectation": "本人原任务与无权者、有/无数据及回程可验证；选任务后原读取、保存、读回和原下游状态不失。",
+      "initialization": "由原仓管菜单打开同一个收货域，旧入口、返工和本厂做尾继续可用。",
+      "dateAndPermission": "选择、提交与回到原行不改变能力、角色或业务日期；真实状态不凭计划。",
+      "expectation": "授权仓管真实首收、追加，再回到原筛选原行；旧装箱与差异、角色隔离正常。",
       "checks": [
-        "pg-native",
-        "signed-creation",
-        "warehouse-unit",
-        "typecheck",
-        "scoped-lint",
-        "preflight"
-      ]
-    },
-    {
-      "rule": "保留既有技术岗位和 PMC 的准备详情、原发料历史范围及最小字段；不对仓库批次数据增加可见性。",
-      "source": "v11.5 §9.3 X3 原入口与现行权限边界，以及 #1106 Full 首轮非数据库实报。",
-      "writes": [
-        "tests/unit/digital-task-read-boundary.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/warehouse-material-issue.ts"
-      ],
-      "oldTests": [
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
-      ],
-      "initialization": "沿用原有技术岗位模拟订单、权限和订单号；只增加同一原发料记录的内部批次描述用于反例。",
-      "dateAndPermission": "原正式订单过滤、原权限拒绝、真实发料时间和岗位投影不变。",
-      "expectation": "仅允许原订单过滤语义的精确读取，分行排版不触发错误；授权技术摘要不会返还原始仓库批次详情。",
-      "checks": [
-        "nondb-task-authority"
-      ]
-    },
-    {
-      "rule": "保留原座舱样式隔离，不把员工页面原有公共焦点脚本当作座舱泄漏。",
-      "source": "v11.5 §9 保留无关模块；GitHub Full 45624001368 唯一数据库浏览器失败与精确发布基线真实对照。",
-      "writes": [
-        "tests/integration/module-bundles-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/system-dialog.tsx",
-        "apps/web/src/employee-access-page.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/module-bundles-native-browser-postgres.test.ts"
-      ],
-      "initialization": "用原生产构建和既有员工页面签名测试身份，冷开非座舱路由，不改变任何产品源代码。",
-      "dateAndPermission": "原入口、权限、时间、样式和资源边界保持不变。只识别公共弹窗直接静态导入的焦点辅助资源。",
-      "expectation": "冷开员工页仍不允许下载座舱专属 chunk 或注入其 CSS；五个原视口、真实页面导航及原动态模块检查照常执行。",
-      "checks": [
-        "bundle-browser"
-      ]
-    }
-  ],
-  "checks": [
-    {
-      "id": "pg-native",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 80,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "053b7cdf3b4614e87ff119999b8a4a9174734157d2b748591b7f6ce0b55c9e2e"
-        }
-      ],
-      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
-      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
-      "context": "isolated PostgreSQL dual test databases, canonical two-worker setting, signed Chromium where the original browser suit is used",
-      "startedAt": "2026-11-25T12:59:07.748Z",
-      "endedAt": "2026-11-25T13:02:06.953Z",
-      "logSha256": "9a0335d3fa7d26db37158bb6e8b8b5b6e4cd951c3dd1b5433b9d6e40829b2a5b",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.log",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/acceptance",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/production-facts-consistency-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
-      ],
-      "inputFingerprint": "46f8b45f2eb6b0aa0f970ec3a7e2e5215b172fc9863072e131ab4af8b3930e5f"
-    },
-    {
-      "id": "signed-creation",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.json tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'resumes an unnumbered draft'",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 1,
-      "failed": 0,
-      "skipped": 23,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "1a53dfe8468958239b47f3bf195cea1242df58f9aac3f7a0c9d898571e8647b9"
-        }
-      ],
-      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
-      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
-      "context": "isolated PostgreSQL dual test databases and signed real warehouse/merchandiser browser through original preorder, transfer, historical receipt and return context",
-      "startedAt": "2026-11-25T12:59:07.768Z",
-      "endedAt": "2026-11-25T12:59:58.793Z",
-      "logSha256": "d0648284b5833db0a8a2d5e6376194dc27ee452e30b9cac5713066a388d8798e",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.log",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/acceptance",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
-      ],
-      "inputFingerprint": "f8a47cbc476a6d225a529e1028719abddad9df22cdd843961ed72cda925b8711"
-    },
-    {
-      "id": "warehouse-unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-reviewed-unit.json tests/unit/warehouse-*.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 68,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "b5c7fc5f8f1322d1856224215e62f8bcb44dcbebb12522134c5b30d2d6de6813"
-        }
-      ],
-      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
-      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
-      "context": "canonical Vitest base config with two workers; X3 quantity and current exact authorization negative cases",
-      "startedAt": "2026-11-25T12:59:07.406Z",
-      "endedAt": "2026-11-25T12:59:17.357Z",
-      "logSha256": "9dfa1123d2098e06462d11d064af8d41bb33f855862d49ee0e9f22e3c0ad24bd",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-unit.log",
-      "inputPaths": [
-        "apps",
-        "packages",
-        ".github",
-        "scripts",
-        "tests/helpers",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "eslint.config.js",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/warehouse-adopted-demand.test.ts",
-        "tests/unit/warehouse-craft-factory-basis.test.ts",
-        "tests/unit/warehouse-craft-movement.test.ts",
-        "tests/unit/warehouse-issue-allocation.test.ts",
-        "tests/unit/warehouse-material-balance.test.ts",
-        "tests/unit/warehouse-supervisor-access.test.ts"
-      ],
-      "inputFingerprint": "fe3482d48bbbb0cb07ba09c83d8d873ef00342529b2418b8bf6d4f9fc02f907e"
-    },
-    {
-      "id": "typecheck",
-      "kind": "command",
-      "command": "npm run typecheck",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
-      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
-      "context": "repository command across contracts, UI, API and web workspaces",
-      "startedAt": "2026-11-25T12:59:07.097Z",
-      "endedAt": "2026-11-25T13:00:08.193Z",
-      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-typecheck.log",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "9539fa59e485e385a7ebc87924b1be74e8757378f4ad6793e6e13af17b6ed91f"
-    },
-    {
-      "id": "scoped-lint",
-      "kind": "command",
-      "command": "git diff --name-only -z 7e61cad8bebed19dd91160f7739a5c9a3882a0c8 -- '*.ts' '*.tsx' | xargs -0 node node_modules/eslint/bin/eslint.js --max-warnings=0",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9eb50867276425ebd8d7966252dfd13bb50f417a",
-      "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
-      "context": "scoped original ESLint configuration over actual release X3 diff",
-      "startedAt": "2026-11-25T14:14:13.410Z",
-      "endedAt": "2026-11-25T14:14:18.009Z",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "log": "/workspace/dx-v115-x3-evidence/x3-asset-final-lint.log"
-    },
-    {
-      "id": "preflight",
-      "kind": "command",
-      "command": "npm run test:preflight",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "9eb50867276425ebd8d7966252dfd13bb50f417a",
-      "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
-      "context": "repository preflight, currently pinned migration manifest and time occurrence inventory; no migration added",
-      "startedAt": "2026-11-25T14:14:13.415Z",
-      "endedAt": "2026-11-25T14:14:22.889Z",
-      "logSha256": "f3b81b2b9df684c4271fb6d7bc03d9f862b6bb64455eb9cfb8ac82fc0749fa6c",
-      "log": "/workspace/dx-v115-x3-evidence/x3-asset-final-preflight.log"
-    },
-    {
-      "id": "nondb-task-authority",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-v115-x3-evidence/x3-nondb-authority-fix.json tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 68,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "84391707a8fc27fb377fb8c2109b5fc7155f34c7",
-      "sourceFingerprint": "effdee0cd2bcd15c7b7d2d048b39b391ec6d2223ab44d852c398b131ee64f350",
-      "context": "The CI non-DB configuration has no database URL. The original task/PMC role gates are strict isolated SQL fixtures, now normalize lexical whitespace only and reject every unexpected read, including any cross-order or raw warehouse history projection.",
-      "startedAt": "2026-11-25T13:24:27.916Z",
-      "endedAt": "2026-11-25T13:24:31.299Z",
-      "log": "/workspace/dx-v115-x3-evidence/x3-nondb-authority-fix.log",
-      "logSha256": "706730f5a22eb55c5fb16c1b60dc4bcfdb548a4f7791e963d0074717cc75672e",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "2d34f3372deb3f4d8198be6d2c7a69d7213fbbc368d4ae6fcc740e02f5aab842"
-        }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/acceptance",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json",
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
-      ],
-      "inputFingerprint": "302a022758667280e0b5f8b54594ca60f89bbf105e7e9c67c25560ef73623fb2"
-    },
-    {
-      "id": "bundle-browser",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-asset-isolation-final.json tests/integration/module-bundles-native-browser-postgres.test.ts",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 10,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "9eb50867276425ebd8d7966252dfd13bb50f417a",
-      "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
-      "context": "Same signed real native Chromium, isolated PostgreSQL and original Vite compilation. Compared exact release 7e61cad8 and prior candidate 9eb50867 before the test-only fix. The same existing focus helper is a direct SystemDialog import on both; no cockpit pilot chunk or scoped styles are allowed on the cold non-cockpit route.",
-      "startedAt": "2026-11-25T14:13:20.189Z",
-      "endedAt": "2026-11-25T14:14:36.522Z",
-      "log": "/workspace/dx-v115-x3-evidence/x3-asset-isolation-final.log",
-      "logSha256": "9d5b6756be758835e975cef0ffdd142fcea42d22a9bae46df1a955149cb4e154",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "9741e5ad00cf812c8ae8300611d9d001f89553a08ef0c6ea3dc20db1c8b59e65"
-        }
+        "native",
+        "receiving-nondb"
       ]
     }
   ]
