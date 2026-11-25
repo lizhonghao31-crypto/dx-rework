@@ -13,5 +13,6 @@ export function readMerchandiserWorkbenchRoute(query:URLSearchParams){
 export function merchandiserWorkbenchPath(value:MerchandiserWorkbenchRoute,base:string){
  const params=new URLSearchParams({workspace:value.workspace,page:String(value.page),search:value.search});
  if(value.kind)params.set('kind',value.kind);
+ if(value.state!=='mine')params.set('state',value.state);
  return createWebUrls(base).pageUrl('ui/digital-production')+'?'+params;
 }

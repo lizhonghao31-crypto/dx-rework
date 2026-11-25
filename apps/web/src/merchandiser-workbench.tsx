@@ -4,7 +4,7 @@ import {Link} from '@astryxdesign/core/Link';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Table} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {MerchandiserWorkKindSchema,MerchandiserWorkResponseSchema,type MerchandiserWorkResponse} from '@dx-rework/contracts';
+import {MerchandiserWorkActionFilterSchema,MerchandiserWorkKindSchema,MerchandiserWorkResponseSchema,type MerchandiserWorkResponse} from '@dx-rework/contracts';
 import {DigitalIdSchema} from '@dx-rework/contracts/digital-production';
 import {todoDestination} from '@dx-rework/contracts/todo-destination';
 import {createWebUrls} from '../url-contract.js';
@@ -43,7 +43,7 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
   const marker=window.setTimeout(()=>change({...route,page:1,search:value}),250);
   return()=>window.clearTimeout(marker);
  },[change,route,search]);
- const parameters=new URLSearchParams({page:String(route.page),search:route.search,...(route.kind?{kind:route.kind}:{})});
+ const parameters=new URLSearchParams({page:String(route.page),search:route.search,state:route.state,...(route.kind?{kind:route.kind}:{})});
  const path=urls.apiUrl('todos/merchandiser/current?'+parameters),key=`${path}:${retry}`;
  const exact=data?.key===key?data.value:null,error=issue?.key===key?issue.message:'',busy=!exact&&!error;
  useForegroundWait(busy&&!action?`merchandiser:${key}`:undefined);useInternalReturnScroll(Boolean(exact||error));
@@ -76,8 +76,10 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    <h2>本单投面辅料</h2><Button label="返回跟单列表" variant="secondary" onClick={()=>void close()}/>
    <ProductionReadinessPanel key={`${action.resource.kind}:${action.resource.id}`} resource={action.resource} investmentOnly onChanged={saved}/>
   </section></DocumentGuardContext.Provider>}
-  <section hidden={Boolean(action)} aria-label="待我办理"><h2 ref={listHeading} tabIndex={-1}>待我办理</h2>
+  <section hidden={Boolean(action)} aria-label={route.state==='returned'?'退回要改':'待我办理'}><h2 ref={listHeading} tabIndex={-1}>{route.state==='returned'?'退回要改':'待我办理'}</h2>
   <div className="pattern-actions"><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
+   <Selector label="办理状态" value={route.state} options={[{value:'mine',label:'待我办理'},{value:'returned',label:'退回要改'}]}
+    onChange={value=>{const state=MerchandiserWorkActionFilterSchema.safeParse(value).data;if(state)change({...route,page:1,state});}}/>
    <Selector label="业务类型" value={route.kind??'all'} options={[{value:'all',label:'全部业务'},...Object.entries(labels).map(([value,label])=>({value,label}))]}
     onChange={value=>change({...route,page:1,kind:MerchandiserWorkKindSchema.safeParse(value).data})}/>
   </div>

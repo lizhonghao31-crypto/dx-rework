@@ -338,7 +338,8 @@ export class TodoService {
          AND entity_type='sourcing_case' AND todo_type='business_action' AND status='pending' AND category=ANY($2::text[])
          AND route_descriptor->>'routeName'='sourcing_detail' AND route_descriptor->>'entityId'=entity_id
          AND member_module_can_write($1,'sourcing')
-         AND required_capability IS NOT NULL AND todo_user_has_direct_role($1,'order_merchandiser',required_capability)`,
+         AND required_capability IS NOT NULL AND todo_user_has_direct_role($1,'order_merchandiser',required_capability)
+         AND (category<>'sourcing_merchandiser_correction' OR sourcing_status='pending_merchandiser_correction')`,
       [actor.actorId,originalMerchandiserTodoCategories]),
     ]);
     const peopleTasks=native.filter(item=>item.key.category==='digital_task'&&item.key.route.routeName==='digital_production_task');
@@ -365,7 +366,7 @@ export class TodoService {
 
   /** Request-local directory of current original actions. Order details are
    * supplemental and may never widen a task or contract recipient's scope. */
-  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind']|undefined;search:string;page:number}){
+  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind']|undefined;state?:'mine'|'returned';search:string;page:number}){
     const actions=await this.merchandiserActionSources(actor),db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -383,11 +384,11 @@ export class TodoService {
       const rows=actions.map(({candidate,todo,identity}):AuthorizedMerchandiserWorkItem=>{
         const order=identity?.orderId?byId.get(identity.orderId):undefined;
         const context=todo.orderContext,key=identity&&developmentRushKey(identity);
-        return {...candidate,state:'mine',orderNumber:order?.order_no??context?.orderNo??context?.styleNo??null,styleNo:context?.styleNo??null,
+        return {...candidate,state:todo.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.order_no??context?.orderNo??context?.styleNo??null,styleNo:context?.styleNo??null,
           customer:order?.customer_code??null,poNumbers:order?.po_numbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key))};
       });
       await db.query('COMMIT');
-      return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state:'mine'});
+      return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state:filter.state??'mine'});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 
