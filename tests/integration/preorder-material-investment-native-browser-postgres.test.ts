@@ -58,8 +58,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(new URL((await open.getAttribute('href'))!,tab.page.url()).searchParams.get('order')).toBe(original.id);
    await open.focus();await open.press('Enter');
    await tab.page.getByRole('heading',{name:search,exact:true}).waitFor();
-   await tab.page.getByRole('link',{name:'成本预算表',exact:true}).waitFor();
-   await tab.page.getByRole('link',{name:'大货制单与客户交期',exact:true}).waitFor();
+   const originalRead=(document:'budget'|'instruction')=>tab.page.waitForResponse(response=>
+    response.request().method()==='GET'&&new URL(response.url()).pathname===`/api/digital-production/orders/${original.id}/${document}`);
+   const budgetRead=originalRead('budget');
+   await tab.page.getByRole('link',{name:'成本预算表',exact:true}).click();
+   const budget=await budgetRead;expect(budget.status(),await budget.text()).toBe(200);
+   expect(await budget.json()).toMatchObject({productionOrderId:original.id,canSubmitSourcing:false});
+   await tab.page.getByRole('heading',{name:'成本预算表',exact:true}).waitFor();
+   expect(await tab.page.getByRole('link',{name:'核实预算并进入外发申请',exact:true}).count()).toBe(0);
+   await tab.page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await tab.page.getByRole('heading',{name:search,exact:true}).waitFor();
+   const instructionRead=originalRead('instruction');
+   await tab.page.getByRole('link',{name:'大货制单与客户交期',exact:true}).click();
+   const instruction=await instructionRead;expect(instruction.status(),await instruction.text()).toBe(200);
+   expect(await instruction.json()).toMatchObject({order:{productionOrderId:original.id,designStyleNo:search}});
+   await tab.page.getByRole('heading',{name:'大货制单',exact:true}).waitFor();
+   await tab.page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await tab.page.getByRole('heading',{name:search,exact:true}).waitFor();
    await tab.page.getByRole('button',{name:'返回',exact:true}).click();
    await open.waitFor();
    await expect.poll(()=>open.evaluate(element=>document.activeElement===element)).toBe(true);
