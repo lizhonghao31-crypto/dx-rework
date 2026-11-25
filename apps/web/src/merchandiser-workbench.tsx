@@ -27,13 +27,33 @@ type OpenAction={kind:'contract';caseId:string;documentId:string|null}|{kind:'in
 export function MerchandiserWorkbench({search}:{search:string}){
  const [route,setRoute]=useState(()=>readMerchandiserWorkbenchRoute(new URLSearchParams(search)));
  const change=useCallback((next:MerchandiserWorkbenchRoute)=>{
-  window.history.replaceState(window.history.state,'',merchandiserWorkbenchPath(next,urls.base));setRoute(next);
+  const updated={...next,focus:undefined};
+  window.history.replaceState(window.history.state,'',merchandiserWorkbenchPath(updated,urls.base));setRoute(updated);
  },[]);
  if(!route)return <p role="alert">跟单工作区筛选不正确，请从原入口重新进入。</p>;
  return <div className="dx-designer-astryx" lang="zh-CN"><style>{designerAstryxCss}</style><h1>跟单工作区</h1>
   {route.view==='orders'?<><Button label="返回跟单事项" variant="secondary" onClick={()=>change({...route,page:1,view:'work'})}/>
    <OriginalMerchandiserOrders route={route} change={change}/></>:<CurrentMerchandiserActions route={route} change={change}/>}
  </div>;
+}
+function MerchandiserOriginalLink({route,rowId,target,label}:{route:MerchandiserWorkbenchRoute;rowId:string;target:string;label:string}){
+ return <span data-merchandiser-original={rowId}><Link type="inherit" href={digitalChildDetailHref(target,
+  merchandiserWorkbenchPath({...route,focus:rowId},urls.base),urls.base)}>{label}</Link></span>;
+}
+function useOriginalReturnFocus(focus:string|undefined,ready:boolean){
+ const region=useRef<HTMLElement>(null),handled=useRef<string|null>(null);
+ useEffect(()=>{
+  if(!focus){handled.current=null;return;}
+  if(!ready||handled.current===focus)return;
+  const frame=requestAnimationFrame(()=>{
+   const found=region.current?.querySelector<HTMLElement>(`[data-merchandiser-original="${CSS.escape(focus)}"] a`);
+   const target=found??region.current?.querySelector<HTMLElement>('h2');
+   if(!target)return;
+   target.focus({preventScroll:true});target.scrollIntoView({block:'nearest'});handled.current=focus;
+  });
+  return()=>cancelAnimationFrame(frame);
+ },[ready,focus]);
+ return region;
 }
 /** A second view of original orders, not a fifth todo state and never a new
  * instruction/contract/receiving form. Each existing domain rechecks access. */
@@ -56,14 +76,14 @@ function OriginalMerchandiserOrders({route,change}:{route:MerchandiserWorkbenchR
    .catch(reason=>{if(!abort.signal.aborted)setIssue({key,message:reason instanceof Error?reason.message:'原授权订单读取失败'});});
   return()=>abort.abort();
  },[path,key]);
- const from=merchandiserWorkbenchPath(route,urls.base);
- return <section aria-label="原授权订单"><h2>原授权订单</h2><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
+ const region=useOriginalReturnFocus(route.focus,Boolean(exact||error));
+ return <section ref={region} aria-label="原授权订单"><h2 tabIndex={-1}>原授权订单</h2><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
   {error&&<p role="alert">{error} <Button label="重试读取" variant="secondary" onClick={()=>setRetry(value=>value+1)}/></p>}
   {exact&&(exact.items.length===0?<p>没有符合当前搜索及授权范围的原订单。</p>:<div className="development-table-scroll"><Table data={exact.items} idKey="id" density="balanced" columns={[
    {key:'orderNumber',header:'订单ID / 原款号',renderCell:row=><>{row.orderNumber??row.styleNo} <OrderRushBadge value={row.urgent}/></>},
    {key:'customer',header:'客户 / PO',renderCell:row=><>{row.customer}<small>{row.poNumbers.join('、')||'PO 待核'}</small></>},
    {key:'factories',header:'加工厂',renderCell:row=>row.factories.join('、')||'待核'},
-   {key:'id',header:'操作',renderCell:row=><Link type="inherit" href={digitalChildDetailHref(`/ui/digital-production?order=${row.id}`,from,urls.base)}>打开原订单</Link>},
+   {key:'id',header:'操作',renderCell:row=><MerchandiserOriginalLink route={route} rowId={row.id} target={`/ui/digital-production?order=${row.id}`} label="打开原订单"/>},
   ]}/></div>)}
   <ListPagination page={route.page} total={exact?.total??null} totalPages={exact?Math.max(1,Math.ceil(exact.total/15)):null} busy={busy}
    ariaLabel="原授权订单分页" onPageChange={page=>change({...route,page})}/>
@@ -101,7 +121,7 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    .catch(reason=>{if(!abort.signal.aborted)setIssue({key,message:reason instanceof Error?reason.message:'原跟单任务读取失败'});});
   return()=>abort.abort();
  },[key,path]);
- const returnTo=merchandiserWorkbenchPath(route,urls.base);
+ const region=useOriginalReturnFocus(route.focus,Boolean(exact||error)&&!action);
  const open=(button:HTMLButtonElement,next:OpenAction)=>{returnFocus.current={button,scroll:window.scrollY};setAction(next);};
  const close=async()=>{for(const guard of guards.current)if(!await guard())return;setAction(null);};
  const saved=()=>setRetry(attempt=>attempt+1);
@@ -112,7 +132,7 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    <h2>本单投面辅料</h2><Button label="返回跟单列表" variant="secondary" onClick={()=>void close()}/>
    <ProductionReadinessPanel key={`${action.resource.kind}:${action.resource.id}`} resource={action.resource} investmentOnly onChanged={saved}/>
   </section></DocumentGuardContext.Provider>}
-  <section hidden={Boolean(action)} aria-label={states[route.state]}><h2 ref={listHeading} tabIndex={-1}>{states[route.state]}</h2>
+  <section ref={region} hidden={Boolean(action)} aria-label={states[route.state]}><h2 ref={listHeading} tabIndex={-1}>{states[route.state]}</h2>
   <div className="pattern-actions"><Button label="查找原授权订单" variant="secondary" onClick={()=>change({...route,page:1,view:'orders'})}/>
    <TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
    <Selector label="办理状态" value={route.state} options={Object.entries(states).map(([value,label])=>({value,label}))}
@@ -129,20 +149,20 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    {key:'responsibleName',header:'负责人',renderCell:row=>row.responsibleName??'待核'},
    {key:'dueAt',header:'原期限',renderCell:row=>row.dueAt?new Date(row.dueAt).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'}):'未记录'},
    {key:'itemId',header:'操作',renderCell:row=>{
-    const {route}=row;
+    const workRoute=row.route;
     if(row.state==='waiting'||row.state==='completed'){
-     if(route.routeName!=='digital_production_task'||!DigitalIdSchema.safeParse(route.entityId).success)return <span>原任务范围待核</span>;
-     const original=`/ui/digital-production?task=${encodeURIComponent(route.entityId)}&taskView=read`;
-     return <Link type="inherit" href={digitalChildDetailHref(original,returnTo,urls.base)}>查看原任务</Link>;
+     if(workRoute.routeName!=='digital_production_task'||!DigitalIdSchema.safeParse(workRoute.entityId).success)return <span>原任务范围待核</span>;
+     const original=`/ui/digital-production?task=${encodeURIComponent(workRoute.entityId)}&taskView=read`;
+     return <MerchandiserOriginalLink route={route} rowId={row.itemId} target={original} label="查看原任务"/>;
     }
-    const inlineContract=route.routeName==='sourcing_detail'&&route.tab==='contract_return';
-    const inlineInvestment=route.routeName==='digital_source_material_investment'||route.routeName==='digital_order_material_investment';
-    if((inlineContract||inlineInvestment)&&!DigitalIdSchema.safeParse(route.entityId).success)return <span>原办理范围待核</span>;
+    const inlineContract=workRoute.routeName==='sourcing_detail'&&workRoute.tab==='contract_return';
+    const inlineInvestment=workRoute.routeName==='digital_source_material_investment'||workRoute.routeName==='digital_order_material_investment';
+    if((inlineContract||inlineInvestment)&&!DigitalIdSchema.safeParse(workRoute.entityId).success)return <span>原办理范围待核</span>;
     if(inlineContract)return <Button label="办理本单回签" size="sm" variant="secondary" onClick={event=>open(event.currentTarget,
-     {kind:'contract',caseId:route.entityId,documentId:route.contractReturn?.documentId??route.transferContract?.documentId??null})}/>;
+     {kind:'contract',caseId:workRoute.entityId,documentId:workRoute.contractReturn?.documentId??workRoute.transferContract?.documentId??null})}/>;
     if(inlineInvestment)return <Button label="办理本单投面辅料" size="sm" variant="secondary"
-     onClick={event=>open(event.currentTarget,{kind:'investment',resource:{kind:route.routeName==='digital_source_material_investment'?'source':'order',id:route.entityId}})}/>;
-    return <Link type="inherit" href={digitalChildDetailHref(todoDestination(row.route),returnTo,urls.base)}>打开原办理</Link>;
+     onClick={event=>open(event.currentTarget,{kind:'investment',resource:{kind:workRoute.routeName==='digital_source_material_investment'?'source':'order',id:workRoute.entityId}})}/>;
+    return <MerchandiserOriginalLink route={route} rowId={row.itemId} target={todoDestination(workRoute)} label="打开原办理"/>;
    }},
   ]}/></div>)}
   <ListPagination page={route.page} total={exact?.total??null} totalPages={exact?Math.max(1,Math.ceil(exact.total/15)):null} busy={busy}

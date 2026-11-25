@@ -48,12 +48,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const row=tab.page.getByRole('region',{name:'原授权订单',exact:true}).getByRole('row').filter({hasText:search});
    const open=row.getByRole('link',{name:'打开原订单',exact:true});
    expect(new URL((await open.getAttribute('href'))!,tab.page.url()).searchParams.get('order')).toBe(original.id);
-   await open.click();
+   await open.focus();await open.press('Enter');
    await tab.page.getByRole('heading',{name:search,exact:true}).waitFor();
    await tab.page.getByRole('link',{name:'成本预算表',exact:true}).waitFor();
    await tab.page.getByRole('link',{name:'大货制单与客户交期',exact:true}).waitFor();
    await tab.page.getByRole('button',{name:'返回',exact:true}).click();
    await open.waitFor();
+   await expect.poll(()=>open.evaluate(element=>document.activeElement===element)).toBe(true);
    expect(new URL(tab.page.url()).searchParams.get('view')).toBe('orders');
    expect(new URL(tab.page.url()).searchParams.get('search')).toBe(search);
   }finally{await tab.close();}

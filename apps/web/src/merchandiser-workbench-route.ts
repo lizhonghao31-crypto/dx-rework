@@ -2,7 +2,7 @@ import {MerchandiserWorkQuerySchema} from '@dx-rework/contracts';
 import {z} from 'zod';
 import {createWebUrls} from '../url-contract.js';
 
-const schema=MerchandiserWorkQuerySchema.extend({workspace:z.literal('merchandiser'),view:z.enum(['work','orders']).default('work')}).strict();
+const schema=MerchandiserWorkQuerySchema.extend({workspace:z.literal('merchandiser'),view:z.enum(['work','orders']).default('work'),focus:z.uuid().optional()}).strict();
 export type MerchandiserWorkbenchRoute=z.infer<typeof schema>;
 export function readMerchandiserWorkbenchRoute(query:URLSearchParams){
  const keys=[...query.keys()];
@@ -15,5 +15,6 @@ export function merchandiserWorkbenchPath(value:MerchandiserWorkbenchRoute,base:
  if(value.kind)params.set('kind',value.kind);
  if(value.state!=='mine')params.set('state',value.state);
  if(value.view==='orders')params.set('view','orders');
+ if(value.focus)params.set('focus',value.focus);
  return createWebUrls(base).pageUrl('ui/digital-production')+'?'+params;
 }
