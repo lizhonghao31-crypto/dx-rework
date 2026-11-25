@@ -28,7 +28,7 @@ import {developmentSlaPlan} from '../../apps/api/src/production-platform/develop
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
 import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import {ContextBusinessClock,businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
-import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
+import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {randomUUID,createHash} from 'node:crypto';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -50,6 +50,9 @@ import {ManagementReportingService} from '../../apps/api/src/reporting/managemen
 import {ReportQuerySchema} from '@dx-rework/contracts/reporting';
 import {arrangeTestRound} from '../helpers/development-arrangement-fixture.js';
 import {developmentNativeRound} from '../../apps/api/src/production-platform/development-native-round.js';
+import {developmentNativeRoute} from '../../apps/api/src/production-platform/development-native-route.js';
+import {FixedTimelineAdoptionRepository} from '../../apps/api/src/production-platform/fixed-timeline-adoptions.js';
+import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {approveFixtureCraftPrice,bindFixtureCraftApprover,submitFixtureCraftPrice} from '../helpers/secondary-craft-approval-fixture.js';
 
 // This fixture exercises the real Acceptance business clock and original UAT
@@ -74,13 +77,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean;workbenchSheet?:boolean;catalogReferencePrice?:boolean}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingPricingUnit?:boolean;missingAccessory?:boolean;twoMissingAccessories?:boolean;useClerk?:boolean;assignSewing?:boolean;withoutNative?:boolean;workbenchSheet?:boolean;catalogReferencePrice?:boolean;numberedPreorder?:boolean;washing?:'外洗'}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
-  const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  if(options.numberedPreorder){
+   const settings=await identity.orderNumberSettings(f.root);
+   await identity.saveOrderNumberSettings(f.root,{...settings.values,expectedVersion:settings.version,designers:[{userId:designer.actorId,code:'LH'}]},randomUUID());
+  }
+  const created=options.numberedPreorder?await identity.reserveNumberedDraft(designer,{developmentType:'头版',temporaryStyleNo:null,
+   numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P04'}},randomUUID())
+   :await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
   const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],
-   interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST technical garment',craft,washing:'免洗',
-   materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
+   interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST technical garment',craft,washing:options.washing??'免洗',
+   materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:!options.numberedPreorder,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
   const accessoryIds=(options.twoMissingAccessories?['纽扣','拉链']:options.missingAccessory?['纽扣']:[]).map(name=>{
    const materialId=randomUUID();
    document.materials.push({...document.materials[0]!,materialId,category:'辅料',label:`TEST必要${name}`,name,available:false,expectedDate:'2027-01-01'});
@@ -99,7 +108,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    version:1,styleName:"TEST 新版无技术尺码",gender:"男装",boardType:"头版",brand:"",processingSelected:true,referenceNote:"",
    sewingRows:[{rowId:randomUUID(),color:"蓝",size:"",quantity:null}],
   };
+  if(options.numberedPreorder&&'orderNumber'in created){
+   document.customerOrderDraft={withOrder:true,stage:'preorder',order:InitialCustomerOrderDraftSchema.parse({
+    customerCode:'PD',productGroup:'男装',designStyleNo:created.orderNumber,temporaryStyleNo:null,primaryMerchandiserId:person('merchandiser').actorId,
+    orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})};
+  }
   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
+  if(options.numberedPreorder)await forms.publishPreorder(designer,sourceId,saved.version,randomUUID());
   if(options.withoutNative)await new DigitalDevelopmentService(f.db,true).publish(designer,sourceId,saved.version,randomUUID());
   else await forms.publish(designer,sourceId,saved.version,randomUUID(),category);
   const fixed=await execution.read(f.root,sourceId);
@@ -128,6 +143,40 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return technical.saveArtifact(p.worker,p.sourceId,{taskId:p.paper.taskId,expectedDocumentVersion:p.documentVersion,expectedVersion:0,scopeRef:'整款',action:'publish',body,...overrides},randomUUID());
  };
  const comment=(version=0,isFinal=true):RecordFinalComment=>({roundNumber:1,scopeRef:'整款',expectedVersion:version,isFinal,decision:'approved',text:'TEST客户最终批复，技术仍须核对或沿用',evidenceRefs:[],evidenceNote:'TEST客户邮件文字记录，非报价确认',occurredAt:null});
+
+ it('keeps the original technical artifact and pre-wash route on a numbered preorder without adopting an SLA',async()=>{
+  const p=await prepare('无',{numberedPreorder:true,useClerk:true,washing:'外洗'}),source={kind:'source' as const,id:p.sourceId};
+  expect(p.paper).toMatchObject({state:'ready',dueAt:null,warningAt:null,slaHours:null});
+  expect(await technical.read(p.worker,p.sourceId)).toMatchObject({enrolled:true,cycle:null});
+  const published=await artifact(p);
+  await execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,attachmentIds:[],
+   artifactRef:{id:published.artifactSetId,version:published.version,scopeRef:'整款'},note:'TEST 原纸样三件套完成'},randomUUID());
+  const workflow=await execution.read(f.root,p.sourceId);
+  expect(workflow).toMatchObject({slaEnrolled:false,deferredTechnicalWorkflow:true});
+  expect(workflow.technical.artifacts).toEqual(expect.arrayContaining([expect.objectContaining({artifactSetId:published.artifactSetId,version:published.version})]));
+  const route=await developmentNativeRoute(f.db,p.sourceId,1);
+  expect(route?.input.route?.map(position=>position.kind)).toEqual(['development_materials','development_pattern','development_cutting',
+   'development_sewing','development_pre_wash_check','development_washing_dispatch','development_washing','development_tail_check','development_confirmation']);
+  const cut=workflow.tasks.find(task=>task.taskKind==='development_cutting')!;
+  await execution.complete(p.worker,p.sourceId,{taskId:cut.taskId,attachmentIds:[],note:'TEST 原裁板完成'},randomUUID());
+  const sewn=(await execution.read(p.worker,p.sourceId)).tasks.find(task=>task.taskKind==='development_sewing')!;
+  const photo=await f.image(p.worker);
+  await execution.recordUploadPurpose(p.worker,p.sourceId,photo,'车板成果',sewn.taskId);
+  const routeAction={note:'TEST原工序',result:'通过' as const,craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null};
+  await execution.route(p.worker,p.sourceId,{...routeAction,taskId:sewn.taskId,attachmentIds:[photo]},randomUUID());
+  const inspector=Object.values(f.people).find(actor=>actor.actorRoles.includes('pattern_room_tail_inspector'))!;
+  const prewash=(await execution.read(inspector,p.sourceId)).tasks.find(task=>task.taskKind==='development_pre_wash_check')!;
+  expect(prewash).toMatchObject({state:'ready',canExecute:true,dueAt:null,warningAt:null});
+  await expect(execution.route(inspector,p.sourceId,{...routeAction,taskId:prewash.taskId},randomUUID()))
+   .rejects.toMatchObject({statusCode:409,message:'请按本轮开发单的测量部位和尺码填写实际尺寸'});
+  await execution.route(inspector,p.sourceId,{...routeAction,taskId:prewash.taskId,measurements:[{name:'胸围',values:['48']}]},randomUUID());
+  const washed=await execution.read(inspector,p.sourceId);
+  expect(washed.routeFacts.find(fact=>fact.taskId===prewash.taskId)).toMatchObject({kind:'洗前检查',payload:{
+   inspection:{phase:'洗前',unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['48']}],artifactRef:{id:published.artifactSetId,version:published.version}}}});
+  expect(await new FixedTimelineAdoptionRepository(f.db).existing(source,1)).toBeNull();
+  expect(await developmentSlaPlan(f.db,p.sourceId)).toBeNull();
+  expect(await new OrderTimePlanRepository(f.db).current(source)).toBeNull();
+ });
 
 
  it('corrects only the commercial unit after real technical completion, preserving original work and frozen financial versions',async()=>{

@@ -22,7 +22,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
 import { DigitalProductionTaskService } from "./task-service.js";
-import { captureDevelopmentSla, developmentSlaPlan,developmentSlaRoute } from "./development-sla-enrollment.js";
+import { captureDevelopmentSla, developmentSlaPlan,developmentSlaRoute,developmentWorkflowVersion } from "./development-sla-enrollment.js";
 import {developmentOccurrence} from './development-occurrence.js';
 import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
@@ -32,6 +32,9 @@ import {assembleQuotation} from './quotation-assembly.js';
 import {withoutDevelopmentPrices} from './development-commercial-fields.js';
 import {ProductionReadinessService} from './production-readiness-service.js';
 import {assertWholeOrderActive} from './whole-order-visibility.js';
+import {captureTechnicalEnrollment,captureTechnicalRound} from './development-cycle-evidence.js';
+import {captureDeferredDevelopmentRoute} from './development-native-route.js';
+import {digitalSlaDefaults} from '@dx-rework/contracts/digital-sla';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("DEVELOPMENT_CONFLICT", message, 409); };
@@ -267,9 +270,11 @@ export class DigitalDevelopmentService {
       const row = (await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0] ?? conflict("请先保存开发单");
       if (row.status === "published") { if (row.version === expectedVersion + 1) return this.read(actor, sourceId, db); conflict("开发单已经发布"); }
       if (row.version !== expectedVersion) conflict("开发单已更新，请重新打开后发布");
-      const numberedPreorder=Boolean(preorderDraftOrder(row.document)&&(await this.source(db,actor,sourceId,true)).workbench_generated_number);
+      const actorSource=preorderDraftOrder(row.document)?await this.source(db,actor,sourceId,true):null;
+      const numberedPreorder=Boolean(actorSource?.workbench_generated_number);
+      const preorder=numberedPreorder?await workbenchPreorderPublication(db,sourceId):null;
       if(numberedPreorder){
-        if(!await workbenchPreorderPublication(db,sourceId))conflict('请先发布当前编号预下单，再提交实际开发需求');
+        if(!preorder)conflict('请先发布当前编号预下单，再提交实际开发需求');
         await assertWholeOrderActive(db,'source',sourceId);
       }
       await validateSpecialCraftChoices(db,row.document.craftSteps??[],[],'development');
@@ -302,6 +307,16 @@ export class DigitalDevelopmentService {
         await captureDevelopmentSla(db, actor, sourceId, row.document, time, `development-publish:${sourceId}:${key}`,activation&&admission?'fixed_v2':'legacy',activation);
       const routeId=randomUUID();
       const publishedPlan=await developmentSlaPlan(db,sourceId);
+      if(preorder){
+        const technicalEvent=randomUUID(),defaults=digitalSlaDefaults(),wash=defaults.development_washing!,warning=defaults.warning_ratio!;
+        await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
+          VALUES($1,$2,$3,'digital_development_preorder_technical_released','digital_development',$4,$5)`,
+        [technicalEvent,actor.requestId,actor.actorId,sourceId,JSON.stringify({preorderEventId:preorder.event_id,documentVersion:row.version+1,routeId,businessTime:time})]);
+        await captureTechnicalEnrollment(db,actorSource!.created_by,sourceId,technicalEvent,true);
+        await captureTechnicalRound(db,actor.actorId,sourceId,1,time.now,'minutes'in wash?wash.minutes:1440,warning.kind==='ratio'?warning.percent/100:0.7);
+        await captureDeferredDevelopmentRoute(db,actor.actorId,sourceId,1,routeId,
+          ['development_materials',...developmentSlaRoute(row.document,craftPiece?'工艺布片':'整件样板',2)],row.document,row.version+1,technicalEvent,time);
+      }
       if(publishedPlan?.timeline_schema_version===2)await captureDevelopmentTimeline(db,actor.actorId,sourceId,1,routeId,
         ['development_materials',...developmentSlaRoute(row.document,craftPiece?'工艺布片':'整件样板',2)],row.document,row.version+1,`development-publish:${sourceId}:${key}`,time);
       const candidates = (await db.query(`SELECT DISTINCT u.id FROM app_users u JOIN user_role_assignments r ON r.user_id=u.id AND r.revoked_at IS NULL
@@ -310,7 +325,7 @@ export class DigitalDevelopmentService {
       for (const user of candidates) if (await new DigitalProductionAccessPolicy(db).activeRole(user.id, "development_clerk")) eligible.push(user.id);
       const { taskId } = await new DigitalProductionTaskService(this.database).createWithClient(db, actor, { resource: { kind: "source", id: sourceId }, kind: "development_materials", routeId, routeVersion: 1, occurrence: 1, assigneeId: eligible.length === 1 ? eligible[0]! : null });
       await db.query("UPDATE digital_development_documents SET status='published',published_at=$4,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP WHERE source_id=$1", [sourceId, taskId, actor.actorId, time.now]);
-      if (await developmentSlaPlan(db,sourceId)) {
+      if (preorder||publishedPlan) {
         const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;
         await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:"source",id:sourceId},kind:"development_shipping",routeId:randomUUID(),routeVersion:1,occurrence:1,
           assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,"sample_designer")?designer:null});
@@ -331,7 +346,7 @@ export class DigitalDevelopmentService {
     return this.command(actor, sourceId, "material", key, { materialId, ...input }, async db => {
       const row = await developmentDocumentRow(db,sourceId) ?? digitalNotFound();
       if (row.status !== "published" || row.version !== input.expectedVersion) conflict("请在当前已发布开发单上确认物料");
-      const clerkReceiptRequired=!isRootActor(actor)&&Boolean(await developmentSlaPlan(db,sourceId));
+      const clerkReceiptRequired=!isRootActor(actor)&&Boolean(await developmentWorkflowVersion(db,sourceId));
       if(clerkReceiptRequired&&input.action!=='修改预计日期')digitalForbidden();
       if((clerkReceiptRequired||input.expectedRound!==undefined)&&input.expectedRound!==(row.round_number??1))conflict("开发轮次已变化，请刷新后重新确认");
       if(input.action==='修改预计日期'&&(clerkReceiptRequired||input.expectedRound!==undefined)){

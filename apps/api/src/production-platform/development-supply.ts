@@ -9,7 +9,7 @@ import {DigitalProductionAccessPolicy} from "./access-policy.js";
 import {DigitalProductionTaskService} from "./task-service.js";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import {materialReadiness} from "./development-material-readiness.js";
-import {developmentSlaPlan} from "./development-sla-enrollment.js";
+import {developmentWorkflowVersion} from "./development-sla-enrollment.js";
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_SUPPLY_CONFLICT",message,409);};
 export function validateDevelopmentReturn(document:DevelopmentDocument,input:DevelopmentCheck,retainedIssues:DevelopmentReturnIssue[]=[]){
@@ -66,7 +66,7 @@ export async function submitDevelopmentSupply(db:PoolClient,pool:Pool,actor:Trus
   if(draft||requirements?.issues.some(issue=>developmentReturnNeed(issue)==="document")&&!amendment)fail("本次包含资料补正，请打开本任务“补改资料”，保存并提交补正草稿；仅登记到货不能完成资料补正");
  }
  const supplyIssues=requirements?.issues.filter(issue=>developmentReturnNeed(issue)==="supply")??[];
- const clerkReceipts=supplyIssues.length>0&&Boolean(await developmentSlaPlan(db,sourceId));
+ const clerkReceipts=supplyIssues.length>0&&Boolean(await developmentWorkflowVersion(db,sourceId));
  const receiptMaterialIds=clerkReceipts?[...new Set(supplyIssues.flatMap(issue=>issue.materialId?[issue.materialId]:[]))]:[];
  if(clerkReceipts&&receiptMaterialIds.some(id=>!readiness.materials.some(material=>material.materialId===id)))fail("退回的实物不在当前资料中，请先核对原补料材料");
  if(!clerkReceipts){

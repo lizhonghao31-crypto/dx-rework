@@ -2,6 +2,7 @@ import type {PoolClient} from 'pg';
 import type {BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {readFixedOrderRoute} from './fixed-order-route.js';
+import {developmentNativeRoute} from './development-native-route.js';
 
 type DB=Pick<PoolClient,'query'>;
 
@@ -11,9 +12,10 @@ type DB=Pick<PoolClient,'query'>;
 export async function prepareFixedTaskPosition(db:DB,input:{resource:BusinessTimeScope;routeId:string;routeVersion:number;kind:string;predecessors?:string[];routePosition?:number}){
  // Source rounds adopt independently; later instruction versions on one order
  // continue its original adoption and bind a separate immutable route scope.
- const saved=await new FixedTimelineAdoptionRepository(db).existing(input.resource,input.resource.kind==='order'?1:input.routeVersion);
+ const order=input.resource.kind==='order'?await new FixedTimelineAdoptionRepository(db).existing(input.resource,1):null;
+ const saved=order??(input.resource.kind==='source'?await developmentNativeRoute(db,input.resource.id,input.routeVersion):null);
  if(!saved)return null;
- const scope=saved.input.sourceVersions.routeRef===input.routeId?null:await readFixedOrderRoute(db,saved,input.routeId);
+ const scope=order&&saved.input.sourceVersions.routeRef!==input.routeId?await readFixedOrderRoute(db,order,input.routeId):null;
  if(saved.input.sourceVersions.routeRef!==input.routeId&&!scope)return null;
  const route=scope?.route??saved.input.route??[];
  if(!route.some(position=>position.kind===input.kind))return null;

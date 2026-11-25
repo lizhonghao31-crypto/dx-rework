@@ -31,7 +31,8 @@ export async function styleLabelModelVersionSql(db:Db,model:string,current:strin
     WHERE 'style_label_ready'=ANY(style_round.route_nodes))
    AND NOT EXISTS(SELECT 1 FROM (SELECT route_nodes FROM digital_development_sla_plans WHERE source_id=style_source.source_id ORDER BY revision DESC LIMIT 1) style_sla
     WHERE 'style_label_ready'=ANY(style_sla.route_nodes))
-   AND NOT EXISTS(SELECT 1 FROM (SELECT input_snapshot FROM digital_timeline_adoptions WHERE source_id=style_source.source_id ORDER BY round_number DESC LIMIT 1) style_timeline
+   AND NOT EXISTS(SELECT 1 FROM (SELECT input_snapshot FROM digital_timeline_adoptions WHERE source_id=style_source.source_id
+     AND input_snapshot->>'executionOnly' IS NULL ORDER BY round_number DESC LIMIT 1) style_timeline
     WHERE jsonb_typeof(style_timeline.input_snapshot->'work') IS DISTINCT FROM 'array' OR jsonb_path_exists(style_timeline.input_snapshot,${labelWork}))
    AND NOT EXISTS(SELECT 1 FROM (SELECT input_snapshot FROM digital_order_time_plan_versions WHERE source_id=style_source.source_id ORDER BY revision DESC LIMIT 1) style_plan
     WHERE jsonb_typeof(style_plan.input_snapshot->'work') IS DISTINCT FROM 'array' OR jsonb_path_exists(style_plan.input_snapshot,${labelWork})))

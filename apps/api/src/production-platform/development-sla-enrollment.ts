@@ -15,6 +15,7 @@ import type {TimelineAdoptionMode} from './fixed-timeline-mode.js';
 import {CraftStepChoicesSchema} from '@dx-rework/contracts/digital-craft';
 import {orderTimeAdmission} from './order-time-admission.js';
 import {orderTimeSnapshot} from './order-time-native-timing.js';
+import {deferredDevelopmentRoute} from './development-native-route.js';
 
 type DB = Pick<PoolClient, "query">;
 export async function developmentSlaPlan(db: DB, sourceId: string) {
@@ -41,7 +42,13 @@ export function developmentSlaRoute(document: Pick<DevelopmentDocument, "craft" 
 }
 export async function savedDevelopmentRoute(db: DB, sourceId: string, document: Pick<DevelopmentDocument, "craft" | "washing">): Promise<DigitalTaskKind[]> {
   const saved = await developmentSlaPlan(db, sourceId);
-  return saved?.route_nodes.length ? saved.route_nodes : developmentRoute(document);
+  if(saved?.route_nodes.length)return saved.route_nodes;
+  const physical=(await deferredDevelopmentRoute(db,sourceId))?.input.route;
+  return physical?physical.filter(row=>row.kind!=='development_materials').map(row=>row.kind as DigitalTaskKind):developmentRoute(document);
+}
+export async function developmentWorkflowVersion(db:DB,sourceId:string):Promise<1|2|null>{
+ const plan=await developmentSlaPlan(db,sourceId);
+ return plan?plan.route_schema_version===2?2:1:await deferredDevelopmentRoute(db,sourceId)?2:null;
 }
 export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorContext, sourceId: string,
   document: DevelopmentDocument | null, time: BusinessTime, eventKey: string,newMode:TimelineAdoptionMode='legacy',activation:{eventId:string;createdBy:string}|null=null) {

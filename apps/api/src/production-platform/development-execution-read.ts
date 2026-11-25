@@ -13,6 +13,7 @@ import {materialReadiness,type MaterialReadiness} from "./development-material-r
 import {developmentSlaPlan,savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import {developmentNextSteps} from "./development-route.js";
 import {fixedDevelopmentCutter,canConfigureDevelopmentCutter} from "./development-fixed-cutting.js";
+import {deferredDevelopmentRoute} from './development-native-route.js';
 
 export type DevelopmentExecutionFact={
   factId:string;taskId:string|null;kind:string;payload:Record<string,unknown>;actorId:string;recordedAt:Date;
@@ -31,6 +32,7 @@ export interface DevelopmentExecutionSnapshot{
   canRequestExternalPattern:boolean;
   sewingRecipientName:string|null;
   slaEnrolled:boolean;
+  deferredTechnicalWorkflow?:true;
   fixedCutting:(Partial<NonNullable<Awaited<ReturnType<typeof fixedDevelopmentCutter>>>>&{canConfigure:boolean})|null;
   reopenMaterialCheck:{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}|null;
   fabricCases:Awaited<ReturnType<typeof fabricCases>>;
@@ -100,15 +102,17 @@ export async function readDevelopmentExecutionSnapshot(
        ORDER BY f.sequence DESC NULLS LAST LIMIT 1`,[sourceId,currentRound])).rows[0];
       if(candidate&&tasks.some(task=>task.taskId===candidate.check_id&&task.canExecute))reopenMaterialCheck={taskId:candidate.check_id,supplyTaskId:candidate.supply_id,roundNumber:currentRound,expectedDocumentVersion:sheet.version,expectedVerificationVersion:candidate.version};
     }
-    const externalPatterns=await developmentSlaPlan(db,sourceId)?await externalPatternRecords(db,sourceId):[];
+    const slaEnrolled=Boolean(await developmentSlaPlan(db,sourceId));
+    const deferredTechnicalWorkflow=!slaEnrolled&&Boolean(sheet.preorderPublication&&await deferredDevelopmentRoute(db,sourceId));
+    const externalPatterns=slaEnrolled||deferredTechnicalWorkflow?await externalPatternRecords(db,sourceId):[];
     const canRequestExternalPattern=isRootActor(actor)||actor.actorRoles.includes('pattern_room_supervisor')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'pattern_room_supervisor');
     return {
       technical:await readers.readTechnical(actor,sourceId,currentRound,'整款',db),
       externalPatterns,
       canRequestExternalPattern,
       sewingRecipientName,
-      slaEnrolled:Boolean(await developmentSlaPlan(db,sourceId)),
-      fixedCutting:await developmentSlaPlan(db,sourceId)?{...await fixedDevelopmentCutter(db),canConfigure:await canConfigureDevelopmentCutter(db,actor)}:null,
+      slaEnrolled,...(deferredTechnicalWorkflow?{deferredTechnicalWorkflow:true as const}:{}),
+      fixedCutting:slaEnrolled||deferredTechnicalWorkflow?{...await fixedDevelopmentCutter(db),canConfigure:await canConfigureDevelopmentCutter(db,actor)}:null,
       reopenMaterialCheck,
       fabricCases:await fabricCases(db,sourceId),
       materialVerification,

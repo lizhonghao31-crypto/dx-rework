@@ -20,7 +20,7 @@ import type {DevelopmentArrangementInput} from "@dx-rework/contracts/development
 import {saveArrangement,arrangementsAvailable} from "./development-arrangement.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
 import {materialReadiness,materialCheckError} from "./development-material-readiness.js";
-import {developmentSlaPlan} from "./development-sla-enrollment.js";
+import {developmentWorkflowVersion} from "./development-sla-enrollment.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {DevelopmentRoundService} from "./development-round-service.js";
 import {DevelopmentRouteService,type DevelopmentRouteAction} from "./development-route-service.js";
@@ -81,7 +81,7 @@ export class DevelopmentExecutionService {
   }
   async configureFixedCutting(actor:TrustedActorContext,sourceId:string,input:{expectedVersion:number;assigneeId:string;reason:string},key:string){
     return this.command(actor,sourceId,"fixed-cutting",key,input,async db=>{
-      if(!await developmentSlaPlan(db,sourceId))fail('此历史开发单保留原人员安排方式');
+      if(!await developmentWorkflowVersion(db,sourceId))fail('此历史开发单保留原人员安排方式');
       const result=await saveFixedDevelopmentCutter(db,actor,input);
       for(const taskId of result.affected)await this.tasks().reassignWithClient(db,actor,taskId,input.assigneeId);
       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_fixed_cutting_changed','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({...input,...result})]);
@@ -117,7 +117,7 @@ export class DevelopmentExecutionService {
     if(await arrangementsAvailable(this.database))fail("人员安排已统一到本单总委派页，请从我的待办打开“安排本轮师傅”。");
     if(!isDigitalLeader(actor)&&!isDigitalTechnicalManager(actor)&&!actor.actorRoles.includes("development_clerk"))digitalForbidden();
     return this.command(actor,sourceId,"dispatch",key,input,async db=>{
-      if(await developmentSlaPlan(db,sourceId)){
+      if(await developmentWorkflowVersion(db,sourceId)){
         const fixed=await fixedDevelopmentCutter(db);
         if(!fixed?.valid||input.cuttingWorkerId!==fixed.assigneeId)fail('开发裁板使用固定人员，请先设置有效固定岗位，不逐单分派');
       }
@@ -206,7 +206,7 @@ export class DevelopmentExecutionService {
           JOIN digital_production_tasks t ON t.task_id=f.task_id
           WHERE f.source_id=$1 AND f.kind='缺项退回' AND t.route_version=$2
           ORDER BY f.sequence DESC LIMIT 1`,[sourceId,task.route_version])).rows[0]?.payload.items??[];
-        const clerkReceiptRequired=Boolean(await developmentSlaPlan(db,sourceId));
+        const clerkReceiptRequired=Boolean(await developmentWorkflowVersion(db,sourceId));
         checkedItems=required.map(item=>{
           const checked=input.items.find(check=>check.materialId===item.materialId)??prior.find((check:{materialId:string})=>check.materialId===item.materialId);
           const expectedDate=sheet.materialEvents.filter(event=>event.materialId===item.materialId&&event.action==="修改预计日期").at(-1)?.expectedDate??item.expectedDate;
@@ -311,7 +311,7 @@ export class DevelopmentExecutionService {
     return this.command(actor,sourceId,"route",key,input,async db=>{await new DigitalProductionAccessPolicy(db).assert(actor,"task",input.taskId,"execute");await this.fabricReady(db,sourceId);
       const current=await this.task(db,sourceId,input.taskId);
       if(input.making&&(current.task_kind!=='development_tail_check'||input.result!=='退回'))fail('各码数量升级仅用于本次尾查退回；其他实际修改请从复版资料办理');
-      const tailEvidence=current.task_kind==='development_tail_check'&&Boolean(await developmentSlaPlan(db,sourceId));
+      const tailEvidence=current.task_kind==='development_tail_check'&&Boolean(await developmentWorkflowVersion(db,sourceId));
       const craftEvidence=['development_printing','development_embroidery','development_print_embroidery'].includes(current.task_kind)&&Boolean(await technicalEnrollment(db,sourceId));
       if(craftEvidence){
         if(!input.attachmentIds?.length)fail('请由本任务内部工艺负责人员上传实际回样照片，设计确认后才衔接车板');
@@ -361,7 +361,7 @@ export class DevelopmentExecutionService {
   async externalPattern(actor:TrustedActorContext,sourceId:string,input:DevelopmentExternalPattern,key:string){
     return this.command(actor,sourceId,'external-pattern',key,input,async db=>{
       await this.authorizeExternalPattern(actor,sourceId,db);
-      if(!await developmentSlaPlan(db,sourceId))fail('历史开发单保留原办理记录');
+      if(!await developmentWorkflowVersion(db,sourceId))fail('历史开发单保留原办理记录');
       const sheet=await this.forms().read(actor,sourceId,db),round=sheet.roundNumber??1;
       if(input.action==='request'){
         if(input.roundNumber!==round)fail('开发轮次已变化，请刷新');

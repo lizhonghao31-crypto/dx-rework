@@ -2,7 +2,7 @@
   "version": 1,
   "base": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
   "risk": "full",
-  "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
+  "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
   "rules": [
     {
       "rule": "新编号草稿只保存及恢复，尚未具备材料交接、投料、正式安排任务或报价编辑资格。",
@@ -120,98 +120,154 @@
         "types",
         "lint"
       ]
+    },
+    {
+      "rule": "合法开发提交保留独立的实际路线、技证版本、材料验证、角色和原洗前尺寸，不提前启用监督或考核。",
+      "source": "批准的 v11.5 §3.2.3、§3.2.5 及 #1100 精确首轮 Codex Review P1。",
+      "writes": [
+        "apps/api/src/production-platform/development-arrangement.ts",
+        "apps/api/src/production-platform/development-cycle-evidence.ts",
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/development-fixed-cutting.ts",
+        "apps/api/src/production-platform/development-material-check-rules.ts",
+        "apps/api/src/production-platform/development-material-readiness.ts",
+        "apps/api/src/production-platform/development-native-route.ts",
+        "apps/api/src/production-platform/development-notifications.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/development-supply.ts",
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/fixed-development-work.ts",
+        "apps/api/src/production-platform/fixed-task-route.ts",
+        "apps/api/src/production-platform/fixed-timeline-adoptions.ts",
+        "apps/api/src/production-platform/style-label-model-compatibility.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/development-external-pattern.tsx",
+        "apps/web/src/development-result-upload.tsx",
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-technical-repository.ts",
+        "apps/api/src/production-platform/development-inspection-evidence.ts",
+        "apps/api/src/production-platform/fixed-craft-steps.ts",
+        "apps/api/src/production-platform/development-task-timing.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/development-responsibility-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "initialization": "原技术登记和真实版次资料保存在各自业务表，原任务位置和工艺关系共享底层记录。专用执行态只保存路线位置与关联，无目标、工期或公司时效，原冻结读取明确排除。",
+      "dateAndPermission": "预下单状态继续只允许真正有效的原跟单、核料文员、板房师傅及尾查人员办理；检查尺寸和引用原 PLT，正式时效按正式确认版本开始。",
+      "expectation": "原角色按原顺序完成技术 PLT、纸样、裁板和车板，原洗前步骤不能不录尺寸直接完成。正式订单没有真实确认前看不到 SLA 或时效提醒，原资料和实绩仍可读取。",
+      "checks": [
+        "business",
+        "historical",
+        "commercial",
+        "unit",
+        "preflight",
+        "types",
+        "lint"
+      ]
     }
   ],
   "checks": [
     {
       "id": "business",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-final-business-chain.json tests/integration/production-readiness-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-business.json tests/integration/production-readiness-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts",
       "context": "Canonical PostgreSQL plus original signed Chromium using the isolated database resources and Node 22, two workers. Current native readiness, A and B policies, approvals, original creation and legacy preorder.",
-      "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
-      "testedHead": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T00:44:02.709Z",
-      "endedAt": "2026-11-25T00:46:36.285Z",
-      "log": "/workspace/dx-x2-evidence/x2-final-business-chain.log",
-      "logSha256": "0177bf2a47b69a47a09a736f38b46683c6cf0ba08cb14216ffe872c6bba4f32e",
-      "passed": 111,
+      "startedAt": "2026-11-25T01:03:32.926Z",
+      "endedAt": "2026-11-25T01:06:46.474Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-business.log",
+      "logSha256": "1e8bd396506e02ce14e629082d9e05f2800ae56dd31599f0a9ba6908976de92e",
+      "passed": 152,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dc271c863ba7a6e9f0594f1dc4209be8866e37798e8e49403f12b85ac58d7abe"
+          "sha256": "eeb2fb0193de97751a095f4c1af62293254556b5da6e8b82cb9464d125392e69"
         }
       ]
     },
     {
       "id": "historical",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-development-old.json tests/integration/development-amendment-postgres.test.ts tests/integration/development-responsibility-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-historical.json tests/integration/development-amendment-postgres.test.ts tests/integration/development-responsibility-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
       "context": "Canonical PostgreSQL with a single worker. Original development amendments and responsibility, Journey current and historical consistency.",
-      "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
-      "testedHead": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T00:42:07.346Z",
-      "endedAt": "2026-11-25T00:43:17.390Z",
-      "log": "/workspace/dx-x2-evidence/x2-development-old.log",
-      "logSha256": "2a7497bf018f36860dd31a2f47091a6f0d94e60e85a98ea997bde779615862f8",
+      "startedAt": "2026-11-25T01:07:18.890Z",
+      "endedAt": "2026-11-25T01:08:24.584Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-historical.log",
+      "logSha256": "c69e4ded008e9f5b5a524408125ddeaa2528ff7b6ca60aa57cfdf31d52b7852b",
       "passed": 69,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c9d8103fde89a270e9cac7b8f73046c051593f918d7a2fab4b0028496e822cda"
+          "sha256": "40633e6b9d7937191dee19afdf022a935a4353e0d8bedb213c4e5b9fd36c6586"
         }
       ]
     },
     {
       "id": "commercial",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-commercial-journey.json tests/integration/customer-quotation-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-commercial.json tests/integration/customer-quotation-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts",
       "context": "Canonical PostgreSQL for original hand-written quotation and Journey read-model coverage with the current model, using assigned roles and original fixtures.",
-      "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
-      "testedHead": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T00:46:36.343Z",
-      "endedAt": "2026-11-25T00:47:09.133Z",
-      "log": "/workspace/dx-x2-evidence/x2-commercial-journey.log",
-      "logSha256": "64c7bd53feca2697d381950ea36b27af5d2defd73fc20da293fa345f97ba8fef",
+      "startedAt": "2026-11-25T01:06:46.526Z",
+      "endedAt": "2026-11-25T01:07:18.830Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-commercial.log",
+      "logSha256": "42ed76eed50998ad15aac5adb5398e4a62aaa91abf8a489e1c6e63bebaaf3887",
       "passed": 36,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e9162780206b1af5a9b9c92d8d9a2c84578b88aad84d8a26bef90cce0e539140"
+          "sha256": "dd81a3f3de00a3d88ed8734d89b1db86c2e63f28249a593223d12e803eef0d14"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-non-db.json tests/unit/development-material-readiness.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/order-time-publication-intent.test.ts tests/unit/production-readiness-contract.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-non-db.json tests/unit/development-material-readiness.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/order-time-publication-intent.test.ts tests/unit/production-readiness-contract.test.ts",
       "context": "Original Node and root Vitest with no database URLs. Existing PMC read-only permissions and time/material contracts.",
-      "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
-      "testedHead": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T00:42:47.026Z",
-      "endedAt": "2026-11-25T00:42:51.277Z",
-      "log": "/workspace/dx-x2-evidence/x2-non-db.log",
-      "logSha256": "1ab528f09b6eedda6892de1b7494b55255ff048ef278db586972b306fc47fae1",
+      "startedAt": "2026-11-25T01:04:59.716Z",
+      "endedAt": "2026-11-25T01:05:04.638Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-non-db.log",
+      "logSha256": "107eec778bbd6380c12c4a5e06193c7c3b31ebfca9bc317203c163f236d9992c",
       "passed": 63,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "02a33e3233bae4bef05a3a2d81e8f6476563b657c52bcd89cace01ea6e809704"
+          "sha256": "7c12636ba8857494907d4e1cb268d5618a1682c46f4f9c1f0a94d1be925a89be"
         }
       ]
     },
@@ -220,27 +276,27 @@
       "kind": "command",
       "command": "git diff --check && node scripts/acceptance/time-site-inventory.mjs && npm run db:migrate:lint && npm run test:preflight",
       "context": "Original repository syntax, time-source audit, migration digest/manifest and canonical regression-plan checks.",
-      "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
-      "testedHead": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T00:43:39.142Z",
-      "endedAt": "2026-11-25T00:43:45.559Z",
-      "log": "/workspace/dx-x2-evidence/x2-current-preflight.log",
-      "logSha256": "9ca5572aff0588a6ee354d77fe2feced0eb188166a40c8408679e1ed18f2c8fe"
+      "startedAt": "2026-11-25T01:03:32.782Z",
+      "endedAt": "2026-11-25T01:03:41.270Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-preflight.log",
+      "logSha256": "e26e54db8c0d1a0f47d4bcb062c00eadc287329c82779e13a1b9cf25d37d5e2f"
     },
     {
       "id": "types",
       "kind": "command",
       "command": "npm run typecheck",
       "context": "Original TypeScript workspace check using the current compiled shared contracts.",
-      "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
-      "testedHead": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T00:43:45.561Z",
-      "endedAt": "2026-11-25T00:44:26.453Z",
-      "log": "/workspace/dx-x2-evidence/x2-current-typecheck.log",
+      "startedAt": "2026-11-25T01:03:41.318Z",
+      "endedAt": "2026-11-25T01:04:26.574Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-typecheck.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988"
     },
     {
@@ -248,13 +304,13 @@
       "kind": "command",
       "command": "npm run lint",
       "context": "Original repository ESLint check with warnings treated as errors.",
-      "sourceFingerprint": "055d80fb931eeac89a7c8506dce7b7494d0fdcb9bb6a9560b251be2438dabcd6",
-      "testedHead": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T00:44:26.457Z",
-      "endedAt": "2026-11-25T00:44:55.657Z",
-      "log": "/workspace/dx-x2-evidence/x2-current-lint.log",
+      "startedAt": "2026-11-25T01:04:26.578Z",
+      "endedAt": "2026-11-25T01:04:59.466Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-lint.log",
       "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
     }
   ]

@@ -26,9 +26,11 @@ export async function saveFixedDevelopmentCutter(db:PoolClient,actor:TrustedActo
   const policy=new DigitalProductionAccessPolicy(db);
   if(!await policy.lockActiveRole(input.assigneeId,"pattern_room_worker"))throw new ApplicationError("DEVELOPMENT_CONFLICT","固定裁板人员须为在职有效的板房师傅",409);
   await db.query("INSERT INTO digital_development_fixed_cutting(version,worker_id,changed_by,reason) VALUES($1,$2,$3,$4)",[current.version+1,input.assigneeId,actor.actorId,input.reason]);
+  const hasTimeline=(await db.query("SELECT to_regclass('digital_timeline_adoptions') AS relation")).rows[0]?.relation;
   const candidates=(await db.query(`SELECT a.task_id,a.assignee_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
     WHERE a.task_kind='development_cutting' AND t.state IN ('pending','ready','blocked')
-    AND EXISTS(SELECT 1 FROM digital_development_sla_plans p WHERE p.source_id=a.source_id)
+    AND (EXISTS(SELECT 1 FROM digital_development_sla_plans p WHERE p.source_id=a.source_id)
+      ${hasTimeline?"OR EXISTS(SELECT 1 FROM digital_timeline_adoptions r WHERE r.source_id=a.source_id AND r.round_number=1 AND r.input_snapshot->>'executionOnly'='workbench-preorder-route-v1')":""})
     ORDER BY a.task_id FOR UPDATE OF t,a`)).rows;
   const affected:string[]=[];
   for(const task of candidates)if(!task.assignee_id||!await policy.activeRole(task.assignee_id,"pattern_room_worker"))affected.push(task.task_id);
