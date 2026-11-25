@@ -11,6 +11,9 @@ import { globalTodoSearch } from "./global-search.js";
 import { digitalTodoTarget } from "../production-platform/notification-policy.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
+import { DigitalProductionAccessPolicy } from "../production-platform/access-policy.js";
+import { isRootActor } from "../access/business-authority.js";
+import {merchandiserWorkCandidate,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories} from '../production-platform/merchandiser-work-candidates.js';
 import { randomUUID } from "node:crypto";
 import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
 
@@ -316,6 +319,44 @@ export class TodoService {
       const identity=identities[index],key=identity&&developmentRushKey(identity);
       return key&&rush.has(key)?{...todo,orderRush:true as const}:todo;
     });
+  }
+
+  /** Original actionable sources only. Other workbench states come from the
+   * original business domain, never from guessing what a missing todo means. */
+  async merchandiserActionSources(actor:TrustedActorContext) {
+    this.requireCapability(actor,'todo:view');
+    if(!isRootActor(actor)&&(!actor.actorRoles.includes('order_merchandiser')||
+      !await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'order_merchandiser'))){
+      throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+    }
+    const context=await this.contextSql();
+    const [native,stored]=await Promise.all([
+      this.providerSelections(this.digital,actor,true),
+      this.database.query<TodoPageRow>(`WITH todo_view AS (${context})
+        SELECT todo_view.* FROM todo_view WHERE recipient_user_id=$1 AND required_role='order_merchandiser'
+         AND entity_type='sourcing_case' AND todo_type='business_action' AND status='pending' AND category=ANY($2::text[])
+         AND route_descriptor->>'routeName'='sourcing_detail' AND route_descriptor->>'entityId'=entity_id
+         AND member_module_can_write($1,'sourcing')
+         AND required_capability IS NOT NULL AND todo_user_has_direct_role($1,'order_merchandiser',required_capability)`,
+      [actor.actorId,originalMerchandiserTodoCategories]),
+    ]);
+    const peopleTasks=native.filter(item=>item.key.category==='digital_task'&&item.key.route.routeName==='digital_production_task');
+    const identities=peopleTasks.length?await this.database.query<{task_id:string;task_kind:string}>(`SELECT t.task_id,a.task_kind
+      FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      WHERE t.task_id=ANY($1::uuid[]) AND a.task_kind=ANY($2::text[]) AND a.assignee_id=$3 AND a.required_role='order_merchandiser'`,
+    [peopleTasks.map(item=>item.key.todoId),originalMerchandiserTaskKinds,actor.actorId]):{rows:[]};
+    const taskById=new Map(identities.rows.map(row=>[row.task_id,{taskId:row.task_id,taskKind:row.task_kind}]));
+    const selected=native.filter(item=>taskById.has(item.key.todoId)||originalMerchandiserTodoCategories.includes(item.key.category));
+    const originals=[...await sourcingTodoPresentation(this.database,stored.rows.map(todoResponse)),...await Promise.all(selected.map(item=>item.load()))];
+    const actions=new Map<string,{candidate:NonNullable<ReturnType<typeof merchandiserWorkCandidate>>;todo:TodoResponse}>();
+    for(const todo of originals){
+      const candidate=merchandiserWorkCandidate(actor,todo,taskById.get(todo.todoId));
+      if(!candidate)continue;
+      const previous=actions.get(todo.todoId);
+      if(previous&&!isDeepStrictEqual(previous.candidate,candidate))throw new ApplicationError('CONFLICT','原跟单工作身份已变化，请重新读取',409);
+      actions.set(todo.todoId,{candidate,todo});
+    }
+    return [...actions.values()];
   }
 
   async listForActor(

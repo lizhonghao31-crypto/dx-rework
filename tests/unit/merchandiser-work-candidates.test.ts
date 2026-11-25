@@ -36,6 +36,8 @@ describe('only native actionable merchandiser work is eligible for the new workb
   const transferRoute={...route('sourcing_detail'),tab:'contract_return' as const,transferContract:transfer};
   const priceRoute={...route('sourcing_detail'),tab:'contract_return' as const,contractReturn:price};
   expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_transfer_contract_return',route:transferRoute})?.route).toEqual(transferRoute);
+  const storedWithoutTitle={...task,taskTitle:undefined};
+  expect(merchandiserWorkCandidate(actor,{...storedWithoutTitle,category:'sourcing_transfer_contract_return',route:transferRoute})?.title).toBe('转厂合同回传');
   expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_price_contract_return',route:priceRoute})?.route).toEqual(priceRoute);
   expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_price_contract_return',route:transferRoute})).toBeNull();
   expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_transfer_contract_return',route:priceRoute})).toBeNull();
