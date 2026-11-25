@@ -20,7 +20,7 @@ import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {readIeProcessingDirectory} from './ie-processing-directory.js';
-import {projectDevelopmentRushResources} from './development-order-rush.js';
+import {readDevelopmentOrderRush,type RushIdentity} from './development-order-rush.js';
 import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
 import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
 import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
@@ -32,7 +32,7 @@ type QuoteRow=AssembledQuotation;
 const conflict=(message:string,code='QUOTATION_CONFLICT'):never=>{throw new ApplicationError(code,message,409);};
 const enabledRoles=['sample_designer','order_merchandiser','pattern_room_worker','ie_reviewer','embroidery_washing_merchandiser','owner_group','production_management'];
 const readRoles=[...enabledRoles,'pmc'];
-type QuoteDirectoryRow={source_id:string|null;production_order_id:string|null;style_no:string;customer_code:string|null;
+type QuoteDirectoryRow={source_id:string|null;production_order_id:string|null;rush_source_id:string|null;style_no:string;customer_code:string|null;
  source_designer:string|null;primary_merchandiser_id:string|null;version:number|null;confirmed_version:number|null;assignments:QuotationAssignment[]|null};
 function quotationAuthority(actor:TrustedActorContext,roles:ReadonlySet<string>,designerId:string|null,primaryId:string|null,assignments:readonly QuotationAssignment[]){
  const root=isRootActor(actor),designer=roles.has('sample_designer')&&designerId===actor.actorId,merch=roles.has('order_merchandiser')&&primaryId===actor.actorId;
@@ -232,7 +232,7 @@ export class DigitalQuotationService{
    OR EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.production_order_id=q.production_order_id AND (($3::boolean AND o.created_by=$2::uuid) OR ($4::boolean AND o.primary_merchandiser_id=$2::uuid)))
    OR ($3::boolean AND EXISTS(SELECT 1 FROM digital_production_sources s WHERE s.source_id=q.source_id AND s.created_by=$2::uuid))
    ORDER BY q.updated_at DESC LIMIT 100)
-   SELECT c.source_id,c.production_order_id,CASE WHEN c.production_order_id IS NULL THEN s.design_style_no ELSE o.design_style_no END AS style_no,
+   SELECT c.source_id,c.production_order_id,s.source_id AS rush_source_id,CASE WHEN c.production_order_id IS NULL THEN s.design_style_no ELSE o.design_style_no END AS style_no,
     coalesce(o.customer_code,s.customer_code) AS customer_code,CASE WHEN s.source_id IS NULL THEN o.created_by ELSE s.created_by END AS source_designer,
     o.primary_merchandiser_id,quote.version,quote.confirmed_version,quote.assignments
    FROM candidates c LEFT JOIN digital_production_orders o ON o.production_order_id=c.production_order_id OR (c.production_order_id IS NULL AND o.source_id=c.source_id)
@@ -240,15 +240,19 @@ export class DigitalQuotationService{
    LEFT JOIN LATERAL(SELECT q.version,q.confirmed_version,q.assignments FROM digital_quotation_documents q
     WHERE q.production_order_id=o.production_order_id OR (s.source_id IS NOT NULL AND q.source_id=s.source_id) LIMIT 1) quote ON true
    ORDER BY c.updated_at DESC`,[isRootActor(actor)||active.has('owner_group')||active.has('production_management')||active.has('pmc'),actor.actorId,active.has('sample_designer'),active.has('order_merchandiser'),active.has('pattern_room_worker'),[...active].filter(r=>['sample_designer','ie_reviewer','embroidery_washing_merchandiser','pattern_room_worker'].includes(r))])).rows;
-   const items=[];
+   const items=[],rushIdentities:RushIdentity[]=[];
    for(const row of rows){
     const resource:QuotationResource=row.production_order_id?{kind:'order',id:row.production_order_id}:{kind:'source',id:row.source_id!};
     if(!await acceptanceIncludesNative(this.database,resource.id,db))continue;
     try{await acceptanceBusinessContext()?.assertScope(resource);}catch(error){if(error instanceof ApplicationError&&error.statusCode===404)continue;throw error;}
     if(!quotationAuthority(actor,active,row.source_designer,row.primary_merchandiser_id,row.assignments??[]).allowed)continue;
     items.push({resource,designStyleNo:row.style_no,customerCode:row.customer_code,version:row.version??0,status:row.version!==null&&row.version===row.confirmed_version?'confirmed' as const:'draft' as const});
+    if(row.rush_source_id)rushIdentities.push({sourceId:row.rush_source_id,orderId:resource.kind==='order'?resource.id:null});
    }
-   const projected=await projectDevelopmentRushResources(db,items);
+   // The original no-source directory path stays metadata-only. Read just the
+   // rush marker for exact linked sources in the already authorized result.
+   const rush=await readDevelopmentOrderRush(db,rushIdentities);
+   const projected=items.map(item=>rush.has(`${item.resource.kind}:${item.resource.id}`)?{...item,orderRush:true as const}:item);
    await db.query('COMMIT');return {items:projected};
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }

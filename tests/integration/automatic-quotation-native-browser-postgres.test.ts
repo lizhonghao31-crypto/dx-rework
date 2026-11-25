@@ -153,6 +153,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const ieTab=await h.open(ie.actorId,1165,{},'/'),rootTab=await h.open(f.root.actorId,1165,{},'/'),designerTab=await h.open(designer.actorId,1165,{},'/');
   const url=(page:number,search=prefix,state='all')=>h.base+'/api/digital-production/quotations/ie-processing?'+new URLSearchParams({page:String(page),search,state});
   try{
+   const originalDirectory=await ieTab.page.request.get(h.base+'/api/digital-production/quotations');
+   expect(originalDirectory.ok(),await originalDirectory.text()).toBe(true);
+   const originalItems=(await originalDirectory.json()).items;
+   expect(originalItems.find(item=>item.resource.id===source.sourceId)).toEqual({resource,designStyleNo:`${prefix}-target`,
+    customerCode:'PD',version:assigned.version,status:'draft',orderRush:true});
    const first=await ieTab.page.request.get(url(1)),second=await ieTab.page.request.get(url(2)),empty=await ieTab.page.request.get(url(3));
    expect(first.ok(),await first.text()).toBe(true);expect(second.ok(),await second.text()).toBe(true);
    const firstPage=await first.json(),secondPage=await second.json();

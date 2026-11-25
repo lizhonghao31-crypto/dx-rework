@@ -950,7 +950,14 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const page=tab.page,steps=page.getByLabel('建单步骤');
    await page.getByRole('button',{name:style,exact:true}).click();
    expect(await page.locator('#development-craft-requirements').count()).toBe(0);
-   await page.getByRole('button',{name:'下一步',exact:true}).click();
+   const next=page.getByRole('button',{name:'下一步',exact:true});
+   await next.click();
+   const garmentValidation=page.getByRole('dialog',{name:'下一步',exact:true});
+   await garmentValidation.getByText(/请在基本资料明确选择衣类$/).waitFor();
+   await garmentValidation.getByRole('button',{name:'去填写 衣类',exact:true}).click();
+   await garmentValidation.waitFor({state:'hidden'});
+   await changeGarment(page,'上衣',true);
+   await next.click();
    await steps.getByRole('heading',{name:'开发需求',exact:true}).waitFor();
    expect(await page.evaluate(()=>{
     const groups=['development-basic','development-craft-requirements','development-sizes','development-craft'].map(id=>document.getElementById(id));

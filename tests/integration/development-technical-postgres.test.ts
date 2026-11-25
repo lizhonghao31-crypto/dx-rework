@@ -49,7 +49,7 @@ import {RootAwareTodoProjectionService} from '../../apps/api/src/todos/root-awar
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import {registerTodoRoutes} from '../../apps/api/src/todos/routes.js';
 import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
-import {TodoListResponseSchema} from '@dx-rework/contracts';
+import {CreateSupplierSchema,TodoListResponseSchema} from '@dx-rework/contracts';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import {DevelopmentWorkspaceFilterSchema,PatternWorkspaceFilterSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
@@ -119,6 +119,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    sewingRows:[{rowId:randomUUID(),color:"蓝",size:"",quantity:null}],
   };
   if(options.numberedPreorder&&'orderNumber'in created){
+   const supplier='TEST 预下单技术资料供应商';
+   const supplierReference=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({
+    supplierCode:'TEST-TECH-PREORDER-FABRIC',supplierName:supplier,supplierType:'fabric',changeReason:'TEST 预下单采用有效供应商目录',
+   }));
+   document.materials=document.materials.map(material=>({...material,supplier,supplierReference}));
    document.customerOrderDraft={withOrder:true,stage:'preorder',order:InitialCustomerOrderDraftSchema.parse({
     customerCode:'PD',productGroup:'男装',designStyleNo:created.orderNumber,temporaryStyleNo:null,primaryMerchandiserId:person('merchandiser').actorId,
     orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})};
@@ -693,17 +698,36 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    if(!viewer)throw new ApplicationError('UNAUTHORIZED','TEST login required',401);
    return {id:viewer.actorId,displayName:'TEST signed worker',businessRoles:viewer.actorRoles,capabilities:viewer.authorizationCapabilities!};
   }});
-  const query=async(token:keyof typeof sessions,style?:string)=>{
-   const response=await app.inject({method:'GET',url:`/todos/mine?module=digital_production${style?`&q=${encodeURIComponent(style)}`:''}`,headers:{cookie:`dx_rework_session=${token}`}});
+  const query=async(token:keyof typeof sessions,style?:string,page=1)=>{
+   const response=await app.inject({method:'GET',url:`/todos/mine?module=digital_production&page=${page}${style?`&q=${encodeURIComponent(style)}`:''}`,headers:{cookie:`dx_rework_session=${token}`}});
    expect(response.statusCode,response.body).toBe(200);
    return TodoListResponseSchema.parse(response.json());
   };
   try{
-   const page=await query('worker');
-   const originalSelection=await provider.todoSelections(urgent.worker);
-   expect(page.totalCount).toBe(originalSelection.length);
-   expect(page.todos.map(t=>t.todoId)).toEqual(originalSelection.slice(0,15).map(t=>t.key.todoId));
-   expect(page.todos.find(t=>t.todoId===urgent.paper.taskId)).toMatchObject({orderRush:true});
+   const firstPage=await query('worker');
+   const originalIds=(await provider.todoSelections(urgent.worker)).map(t=>t.key.todoId);
+   expect(firstPage.pageSize).toBe(15);
+   const pages=new Map([[1,firstPage]]);
+   const assertPage=(result:typeof firstPage,number:number)=>{
+    expect(result).toMatchObject({page:number,totalCount:originalIds.length,totalPages:Math.ceil(originalIds.length/15),moduleCounts:{digital_production:originalIds.length}});
+    expect(result.todos.map(t=>t.todoId)).toEqual(originalIds.slice((number-1)*15,number*15));
+   };
+   assertPage(firstPage,1);
+   // This suite shares a worker across earlier cases, so newly created tasks
+   // are not necessarily on the first page of their original deadline order.
+   const moduleItem=async(id:string)=>{
+    const index=originalIds.indexOf(id);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const number=Math.floor(index/15)+1;
+    const result=pages.get(number)??await query('worker',undefined,number);
+    pages.set(number,result);
+    assertPage(result,number);
+    const item=result.todos.find(t=>t.todoId===id);
+    expect(item).toBeDefined();
+    return item!;
+   };
+   expect(await moduleItem(urgent.paper.taskId)).toMatchObject({orderRush:true});
+   expect((await moduleItem(ordinary.paper.taskId)).orderRush).toBeUndefined();
    const searched=(await query('worker',urgentStyle)).todos.find(t=>t.todoId===urgent.paper.taskId)!;
    const original=await provider.todo(urgent.worker,urgent.paper.taskId);
    expect(searched).toMatchObject({status:original!.status,dueAt:original!.dueAt,route:original!.route,contentToken:original!.contentToken,orderRush:true});

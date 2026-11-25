@@ -65,6 +65,7 @@ import {BulkPreparationService} from '../../apps/api/src/production-platform/bul
 import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
 import {productionReadiness,styleLabelCuttingReason} from '../../apps/api/src/production-platform/production-readiness-repository.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {CreateSupplierSchema} from '@dx-rework/contracts';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import {DevelopmentWorkspaceFilterSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
@@ -79,6 +80,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  afterAll(async()=>{await f?.dispose();});
  // Pure template construction must not publish an unrelated source for draft tests.
  const documentFixture=(photo:string,{available=true}={})=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',sizes:['M'],measurements:[{name:'胸围',values:['48']}],unit:'cm',craft:'无',washing:'免洗',materials:[{materialId:randomUUID(),category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
+ const preorderFabricSupplier=async(supplierCode:string)=>{
+  const supplier='TEST 面料供应商 '+supplierCode;
+  const supplierReference=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({
+   supplierCode,supplierName:supplier,supplierType:'fabric',changeReason:'TEST 预下单采用有效供应商目录',
+  }));
+  return {supplier,supplierReference};
+ };
  const setup=async()=>{
   const designer=f.people['sample-designer']!,primary=f.people.merchandiser!,warehouse=f.people.warehouse!,style=`TEST-P05-${randomUUID()}`,photo=await f.image(designer);
   const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
@@ -103,7 +111,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P01'}},randomUUID());
   expect(orderNumber).toBe('PDMLH2027P01-001');
   const resource={kind:'source' as const,id:sourceId},photo=await f.image(designer);
-  const draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{...documentFixture(photo,{available:false}),
+  const document=documentFixture(photo,{available:false}),supplier=await preorderFabricSupplier('TEST-PO-DRAFT-FABRIC');
+  const draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{...document,materials:document.materials.map(material=>({...material,...supplier})),
    quantity:null,sampleSize:'',sizes:[],sizeQuantities:[],measurements:[],customerOrderDraft:{withOrder:true,stage:'preorder',
     order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,
      primaryMerchandiserId:primary.actorId,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,
@@ -996,11 +1005,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const scene=await f.scene(started),identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true,h.patternOrders);
   const settings=await identity.orderNumberSettings(root);
   await identity.saveOrderNumberSettings(root,{...settings.values,expectedVersion:settings.version,designers:[{userId:designer.actorId,code:'LH'}]},randomUUID());
+  const supplier=await preorderFabricSupplier(requiresColorMatching?'TEST-PO-T0-A-FABRIC':'TEST-PO-T0-B-FABRIC');
   const original=await f.runtime.run(scene,designer,async()=>{
    const {sourceId,orderNumber}=await identity.reserveNumberedDraft(designer,{developmentType:'头版',temporaryStyleNo:null,
     numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P02'}},randomUUID());
    const resource={kind:'source' as const,id:sourceId},base=initialDevelopmentDocument(),photo=await f.image(designer);
-   const material={...base.materials[0]!,name:'TEST 预下单主布',quantity:'75米',supplier:'TEST 面料供应商',specification:'TEST 已知原布规格'};
+   const material={...base.materials[0]!,...supplier,name:'TEST 预下单主布',quantity:'75米',specification:'TEST 已知原布规格'};
    const accessory={...material,materialId:randomUUID(),category:'辅料' as const,label:'辅料',name:'TEST 后续辅料',quantity:'12件',expectedDate:'2026-11-24'};
    const document=DevelopmentDocumentSchema.parse({...base,materials:[material,accessory],files:[{attachmentId:photo,kind:'款图'}],
     productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'preorder',
