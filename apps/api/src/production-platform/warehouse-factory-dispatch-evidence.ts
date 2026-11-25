@@ -40,11 +40,13 @@ export async function readWarehouseFactoryDispatchScopes(db:Pick<PoolClient,'que
   cut.cutting_order_id AS "cuttingOrderId",po.line_id AS "lineId",(lot->>'quantity')::int AS quantity
   FROM digital_factory_routes route JOIN digital_factory_facts f USING(preparation_id)
   JOIN digital_production_child_links link ON link.production_order_id=route.production_order_id AND link.module='production'
+  JOIN sourcing_approval_snapshots sent_approval ON sent_approval.sourcing_approval_snapshot_id::text=f.payload#>>'{dispatchEvidence,approvalSnapshotId}'
+   AND sent_approval.sourcing_case_id::text=f.payload#>>'{dispatchEvidence,sourcingCaseId}'
+   AND sent_approval.sourcing_decision_id::text=f.payload#>>'{dispatchEvidence,sourcingDecisionId}'
+   AND sent_approval.supplier_id::text=f.payload->>'supplierId'
   JOIN sourcing_production_factory_orders execution ON execution.production_order_id=link.child_id
-   AND execution.sourcing_case_id::text=f.payload#>>'{dispatchEvidence,sourcingCaseId}'
-   AND execution.sourcing_decision_id::text=f.payload#>>'{dispatchEvidence,sourcingDecisionId}'
-   AND execution.sourcing_approval_snapshot_id::text=f.payload#>>'{dispatchEvidence,approvalSnapshotId}'
-   AND execution.supplier_id::text=f.payload->>'supplierId'
+   AND execution.sourcing_case_id=sent_approval.sourcing_case_id AND execution.supplier_id=sent_approval.supplier_id
+   AND execution.sourcing_decision_id=sourcing_factory_execution_basis(sent_approval.sourcing_case_id,sent_approval.sourcing_decision_id)
   CROSS JOIN LATERAL jsonb_array_elements(f.payload#>'{dispatchEvidence,cuts}') lot
   JOIN digital_production_po_lines po ON po.production_order_id=route.production_order_id AND po.line_id::text=lot->>'lineId'
   JOIN cutting_orders cut ON cut.sourcing_case_id=execution.sourcing_case_id AND cut.cutting_order_id::text=lot->>'cuttingOrderId'
