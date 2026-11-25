@@ -15,6 +15,7 @@ import {GarmentQualityService,garmentQuality} from '../../apps/api/src/productio
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '../../apps/api/src/receiving/pending-receiving-native-receipts.js';
 import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
+import {pendingReceivingView} from '../../apps/api/src/receiving/pending-receiving-view.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('original production completion and receipt correction facts',()=>{
@@ -75,6 +76,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const r=await prepare();await f.runtime.run(r.scene,f.root,async()=>{
    const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,r.id);
    expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toEqual([]);
+   expect(await pendingReceivingView(f.db,[r.id],{page:1,search:'',status:'open'})).toEqual({page:1,total:0,items:[]});
    await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST native complete dispatch'},randomUUID());
    const production=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id;
    const reports=new ProductionReportingService(f.db),day='2026-11-21';await reports.report(f.root,production,{position:1,businessDate:day,quantity:10},randomUUID());
@@ -91,6 +93,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(initialReceipts.has(unrelated)).toBe(false);
    expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id,unrelated])).toMatchObject([{identity:scope,expectedQuantity:10,
     factoryShipmentRecorded:true,balance:{actualDispatched:10,received:2,remaining:8}}]);
+   const view=await pendingReceivingView(f.db,[r.id,unrelated],{page:1,search:'TEST anchor factory',status:'open'});
+   expect(view).toMatchObject({page:1,total:1,items:[{identity:scope,supplierName:'TEST anchor factory',customerCode:'PD',
+    actualFactoryDispatchAt:expect.any(String),expectedFactoryReturnDate:expect.stringMatching(/^\d{4}-\d\d-\d\d$/),
+    factoryShipmentRecorded:true,balance:{remaining:8}}]});
+   expect(await pendingReceivingView(f.db,[r.id],{page:2,search:view.items[0]!.poNumber!,status:'open'})).toEqual({page:2,total:1,items:[]});
+   expect(await pendingReceivingView(f.db,[unrelated],{page:1,search:'',status:'all'})).toEqual({page:1,total:0,items:[]});
    await new GarmentQualityService(f.db).record(f.root,r.id,{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:businessNow().toISOString(),qualifiedQuantity:2,problem:''},randomUUID());
    const before=(await f.db.query('SELECT * FROM receiving_receipts WHERE receipt_id=$1',[created.value.receiptId])).rows[0],closure=new OrderClosureService(f.db);
    const version=Number((await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[created.value.receivingBatchId])).rows[0].version);

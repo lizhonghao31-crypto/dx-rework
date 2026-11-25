@@ -34,6 +34,10 @@ export async function pendingReceivingForAuthorizedOrders(db:Pick<PoolClient,'qu
    dispatches:facts.map(fact=>({identity,factId:fact.factId,kind:'仓库实际发厂',actualDispatchedAt:fact.dispatchedAt,dispatchedQuantity:fact.quantity}))});
   if(!balance)return [];
   return [{identity,factoryDecisionId,expectedQuantity,balance,
+   supplierId:matched.length===1?matched[0].supplier_id as string:null,
+   supplierName:matched.length===1?matched[0].supplier_name_snapshot as string|null:null,
+   poNumber:matched.length===1?matched[0].po_number as string|null:null,
+   color:matched.length===1?matched[0].color as string|null:null,
    factoryShipmentRecorded:matched.length===1&&matched[0].execution_status==='shipped'}];
  });
 }
