@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useState,useSyncExternalStore,type ReactNode} from 'react';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
 import {Dialog,DialogHeader} from '@astryxdesign/core/Dialog';
 import {Link} from '@astryxdesign/core/Link';
@@ -64,7 +65,7 @@ function RecordEvidence({entry,session,returnTo}:{entry:CockpitDocumentEntry;ses
  };
  const href=originalHref(entry,returnTo);
  const children=[...(entry.originalEntries??[]),...(entry.children??[])];
- return <li><strong>{entry.label}</strong>
+ return <li><strong>{entry.label}</strong>{entry.effectiveCustomerApproval&&<> <Badge variant="success" label="本轮有效批复"/></>}
   {entry.note&&<p>{entry.note}</p>}
   {(entry.by||entry.at)&&<p>{[entry.by,entry.at].filter(Boolean).join(' · ')}</p>}
   {href&&<> <Link href={href}>查看原记录</Link></>}

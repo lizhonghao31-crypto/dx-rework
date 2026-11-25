@@ -29,7 +29,16 @@ function commentEntry(c:Row,sid:string,round:number,scope:string):CockpitDocumen
 }
 function historyEntries(data:Row,sid:string,round:number,kind:'artifacts'|'comments',scope:string):CockpitDocumentEntry[]{
  sameEntity(data,'sourceId',sid,'技术资料');check(data.roundNumber===round&&data.scopeRef===scope&&(data.nextBeforeVersion===null||positiveValue(data.nextBeforeVersion)));
- const items=checkedRows(data.items),entries=items.map(a=>kind==='artifacts'?artifactEntry(a,sid,scope):commentEntry(a,sid,round,scope));
+ const effective=row(data.effective),adopted=row(effective.finalCommentRef);
+ const exactEffective=kind==='comments'&&effective.state==='effective'&&effective.sourceId===sid&&effective.roundNumber===round&&effective.scopeRef===scope;
+ const entries=checkedRows(data.items).map(item=>{
+  if(kind==='artifacts')return artifactEntry(item,sid,scope);
+  const entry=commentEntry(item,sid,round,scope);
+  // The authorized technical snapshot decides validity. The latest row, an
+  // earlier approved opinion, and a final reply still awaiting review do not.
+  return exactEffective&&item.isFinal&&item.decision==='approved'&&item.commentId===adopted.id&&item.version===adopted.version
+   ?{...entry,effectiveCustomerApproval:true as const}:entry;
+ });
  if(data.nextBeforeVersion)entries.push({id:`older:${kind}:${data.nextBeforeVersion}`,label:kind==='artifacts'?'读取更早技术成果':'读取更早客户评语',load:{kind:`technical_history_${kind}`,path:historyPath(sid,round,kind,{cursor:num(data.nextBeforeVersion),directory:true,scopeRef:scope}),id:sid,round:String(round),cursor:num(data.nextBeforeVersion),scopeRef:scope}});
  return entries;
 }

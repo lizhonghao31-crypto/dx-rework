@@ -421,8 +421,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await reviewLink.count()).toBe(0);
    await page.getByRole('button',{name:'返回来源',exact:true}).click();
    await page.locator(`a[href*="originalTechnicalId=${middleCommentId}"]`).waitFor();
+   expect(await page.getByText('本轮有效批复',{exact:true}).count()).toBe(0);
    origin.searchParams.set('originalCategory','customer_final_approval');await page.goto(origin.href);
-   await page.locator(`a[href*="originalTechnicalId=${finalCommentId}"]`).click();
+   const finalOriginal=page.locator(`a[href*="originalTechnicalId=${finalCommentId}"]`);
+   await finalOriginal.waitFor();
+   await page.getByRole('listitem').filter({has:finalOriginal}).getByText('本轮有效批复',{exact:true}).waitFor();
+   await finalOriginal.click();
    await page.getByText('TEST客户最终认可；TEST原记录',{exact:true}).waitFor();
    const file=page.getByRole('link',{name:'客户原确认依据 1',exact:true});
    expect(await file.getAttribute('href')).toContain(`/sources/${s.sourceId}/development/attachments/${finalEvidence}`);
