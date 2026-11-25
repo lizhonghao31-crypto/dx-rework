@@ -25,10 +25,12 @@ const idempotencyKey = (request: FastifyRequest): string => {
 };
 
 const factorySelection=(body:Record<string,unknown>)=>({
+ ...(body.pendingAllocation===undefined?{}:{pendingAllocation:String(body.pendingAllocation)}),
  ...(body.productionOrderId===undefined?{}:{productionOrderId:batchId(String(body.productionOrderId))}),
  ...(body.factoryDecisionId===undefined?{}:{factoryDecisionId:body.factoryDecisionId===null?null:batchId(String(body.factoryDecisionId))}),
 });
 const createBody = (input: unknown): {
+  pendingAllocation?:string;
   cuttingOrderId?: string;
   productionOrderId?:string;
   factoryDecisionId?:string|null;
@@ -200,6 +202,7 @@ const batchId = (input: string): string => {
 };
 
 const repeatBody = (input: unknown): {
+  pendingAllocation?:string;
   cuttingOrderId?: string;
   productionOrderId?:string;
   factoryDecisionId?:string|null;
@@ -327,6 +330,18 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
 
   app.get<{Params:{batchId:string}}>("/receiving/batches/:batchId/document-history",async(request,reply)=>{
     await readUser(request);reply.header("cache-control","no-store");return dependencies.service.documentHistory(batchId(request.params.batchId));
+  });
+  app.get<{Querystring:{q?:string;page?:string;status?:string}}>("/receiving/pending",async(request,reply)=>{
+    const actor=await creator(request),page=Number(request.query.page??'1'),status=request.query.status??'open';
+    if(status!=='open'&&status!=='all'&&status!=='collected')throw new ApplicationError('VALIDATION_ERROR','待收货状态无效',400);
+    reply.header('cache-control','no-store');
+    return dependencies.service.pending(actor,{search:request.query.q??'',page,status});
+  });
+  app.get<{Querystring:{scope?:string}}>("/receiving/pending/selection",async(request,reply)=>{
+    const actor=await creator(request);
+    if(typeof request.query.scope!=='string')throw new ApplicationError('VALIDATION_ERROR','待收货范围无效',400);
+    reply.header('cache-control','no-store');
+    return dependencies.service.pendingSelection(actor,request.query.scope);
   });
   app.get<{ Querystring: {
     page?: string;

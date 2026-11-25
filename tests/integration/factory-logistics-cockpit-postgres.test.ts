@@ -13,6 +13,9 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
+import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '../../apps/api/src/receiving/pending-receiving-native-receipts.js';
+import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
+import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
 import {nativeFactoryTimeline} from '../../apps/api/src/production-platform/factory-production-facts.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
@@ -37,13 +40,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  const context=async(at:string|null)=>{
   const scene=at?await f.scene(at):null,run=<T>(work:()=>Promise<T>)=>scene?f.runtime.run(scene,f.root,work):work();return {scene,run};
  };
- const prepare=async(run:<T>(work:()=>Promise<T>)=>Promise<T>,poCount=1,withSourcingTodos=false)=>run(async()=>{
+ const prepare=async(run:<T>(work:()=>Promise<T>)=>Promise<T>,poCount=1,withSourcingTodos=false,quantity=10,dispatchParts?:readonly number[])=>run(async()=>{
   const commands=withSourcingTodos?new SourcingService(f.db,undefined,undefined,new TodoProjectionService(new TodoService(f.db)),f.contracts):f.sourcing;
-  const r=await f.bulkReady('无',undefined,poCount,commands),cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[r.caseId])).rows;
+  const r=await f.bulkReady('无',undefined,poCount,commands,{quantity}),cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[r.caseId])).rows;
   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
-  for(const cut of cuts)await r.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
-  const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,r.id);
-  await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST date-only logistics'},randomUUID());
+  for(const cut of cuts)await r.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:quantity,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const flow=new FactoryFlowService(f.db);
+  for(const part of dispatchParts??[null]){
+   const state=await flow.read(f.root,r.id);
+   await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST date-only logistics',
+    ...(part===null?{}:{lines:[{lineId:state.lines[0]!.lineId,quantity:part}]})},randomUUID());
+  }
   const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id as string;
   return {...r,productionId,cuts,day:beijingCalendarDate(businessNow())};
  });
@@ -128,27 +135,72 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   for(const order of orders){const item=list.items.find(i=>i.orderId===order.id)!;expect(item.supervision!.nodes.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows![0]!.shippedOn).toBe(order.day);if(order.scene)expect(item.supervision!.asOf).toBe(order.at);}
  },testExecutionConfig.correctnessTimeoutMs);
  it('matches shared cutting receipts to the explicit shipped factory even when both supplier pilots are off',async()=>{
-  const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run);
+  const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run,1,false,1000,[200,300]);
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST nonpilot transfer factory',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST receipt factory isolation'}));
   await ctx.run(async()=>{
    const closure=new ProductionClosureService(f.db),reports=new ProductionReportingService(f.db),receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},service=new ReceivingService(f.db,undefined,undefined,closure);
    await closure.setPilot(f.root,{supplierId:f.supplierId,enabled:false});
-   await reports.report(f.root,r.productionId,{position:1,businessDate:r.day,quantity:2},randomUUID());
-   await f.sourcing.requestFactoryChange(f.people['production-management']!,r.caseId,{supplierId:supplier.supplierId,unitPrice:'6',changeReason:'TEST transfer remaining eight'},randomUUID());
+   await reports.report(f.root,r.productionId,{position:1,businessDate:r.day,quantity:500},randomUUID());
+   await f.sourcing.requestFactoryChange(f.people['production-management']!,r.caseId,{supplierId:supplier.supplierId,unitPrice:'6',changeReason:'TEST transfer remaining 500'},randomUUID());
    const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
    const changed=await f.sourcing.decideFactoryChange(f.people.owner!,r.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST receipt split scope'},randomUUID()),factoryDecisionId=changed.value.decision!.sourcingDecisionId;
    await reports.execute(f.root,r.productionId,'complete',{factoryDecisionId:null,businessDate:r.day,confirmed:true},randomUUID());
    await reports.execute(f.root,r.productionId,'ship',{factoryDecisionId:null,businessDate:r.day,confirmed:true},randomUUID());
-   await ship(r,factoryDecisionId,[8]);
+   const flow=new FactoryFlowService(f.db),currentFactory=await flow.read(f.root,r.id);
+   await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:currentFactory.revision,occurredAt:businessNow().toISOString(),supplierId:supplier.supplierId,note:'TEST factory B own dispatch',
+    lines:[{lineId:currentFactory.lines[0]!.lineId,quantity:500}]},randomUUID());
+   await ship(r,factoryDecisionId,[500]);
    expect((await closure.expected(receiver,{cuttingOrderId:r.cuts[0].cutting_order_id})).items.map(row=>row.factoryDecisionId)).toEqual(expect.arrayContaining([null,factoryDecisionId]));
-   const body={cuttingOrderId:r.cuts[0].cutting_order_id,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(receiver)]};
+   const body={cuttingOrderId:r.cuts[0].cutting_order_id,documentQuantity:280,actualQuantity:280,attachmentIds:[await f.image(receiver)]};
    await expect(service.create(receiver,body,randomUUID())).rejects.toMatchObject({statusCode:409});
    await expect(service.create(receiver,{...body,productionOrderId:r.productionId,factoryDecisionId:randomUUID()},randomUUID())).rejects.toMatchObject({statusCode:409});
    expect((await f.db.query('SELECT 1 FROM sourcing_production_receipt_links WHERE production_order_id=$1',[r.productionId])).rowCount).toBe(0);
-   const original=await service.create(receiver,{...body,productionOrderId:r.productionId,factoryDecisionId:null},randomUUID());
-   const current=await service.createRepeated(receiver,{cuttingOrderId:r.cuts[0].cutting_order_id,receivingBatchId:original.value.receivingBatchId,source:'other_factory',documentQuantity:8,actualQuantity:8,productionOrderId:r.productionId,factoryDecisionId},randomUUID());
+   const firstBalance=await pendingReceivingForAuthorizedOrders(f.db,[r.id]);
+   const list=await service.pending(receiver,{page:1,search:currentFactory.lines[0]!.poNumber,status:'open'});
+   expect(list.total).toBe(2);
+   const aScope=list.items.find(row=>row.factoryDecisionId===null)!,bScope=list.items.find(row=>row.factoryDecisionId===factoryDecisionId)!;
+   await expect(service.pending(f.people['cutting-worker']!,{page:1,search:'',status:'all'})).rejects.toMatchObject({statusCode:403});
+   const chosen=await service.pendingSelection(receiver,aScope.id);
+   expect(chosen).toMatchObject({orderId:r.id,cuttingOrderId:body.cuttingOrderId,factoryDecisionId:null,remaining:500,receivingBatchId:null});
+   await expect(service.create(receiver,{...body,productionOrderId:r.productionId,factoryDecisionId,pendingAllocation:aScope.id},randomUUID())).rejects.toMatchObject({statusCode:409});
+   const payload={...body,productionOrderId:r.productionId,factoryDecisionId:null,pendingAllocation:aScope.id},key=randomUUID();
+   const original=await service.create(receiver,payload,key);
+   await expect(service.create(receiver,payload,key)).resolves.toMatchObject({reused:true,value:{receiptId:original.value.receiptId}});
+   await expect(service.create(receiver,payload,randomUUID())).rejects.toMatchObject({statusCode:409});
+   const received=await pendingReceivingForAuthorizedOrders(f.db,[r.id]);
+   const a=received.find(row=>row.factoryDecisionId===null),b=received.find(row=>row.factoryDecisionId===factoryDecisionId);
+   expect(a).toMatchObject({expectedQuantity:500,balance:{actualDispatched:500,received:280,remaining:220,
+    receipts:[{receiptId:original.value.receiptId,actualQuantity:280}]}});
+   expect(a!.balance.dispatches.map(row=>row.dispatchedQuantity).sort((left,right)=>left-right)).toEqual([200,300]);
+   expect(a!.balance.receipts[0]).not.toHaveProperty('dispatchFactId');
+   expect(b).toMatchObject({expectedQuantity:500,balance:{actualDispatched:500,received:0,remaining:500}});
+   expect(b).toEqual(firstBalance.find(row=>row.factoryDecisionId===factoryDecisionId));
+   const selectionB=await service.pendingSelection(receiver,bScope.id);
+   expect(selectionB).toMatchObject({receivingBatchId:original.value.receivingBatchId,factoryDecisionId,remaining:500});
+   const current=await service.createRepeated(receiver,{cuttingOrderId:r.cuts[0].cutting_order_id,receivingBatchId:original.value.receivingBatchId,source:'other_factory',documentQuantity:100,actualQuantity:100,productionOrderId:r.productionId,factoryDecisionId,pendingAllocation:bScope.id},randomUUID());
    expect((await closure.receiptSummary(f.root,r.productionId,null)).shipment?.receipts.map(row=>row.receiptId)).toEqual([original.value.receiptId]);
    expect((await closure.receiptSummary(f.root,r.productionId,factoryDecisionId)).shipment?.receipts.map(row=>row.receiptId)).toEqual([current.value.receiptId]);
+   const exact=(await readPendingReceivingNativeReceipts(f.db,[r.id])).get(r.id)!;
+   expect(exact).toHaveLength(2);
+   expect(exact.find(row=>row.receiptId===original.value.receiptId)?.identity).toMatchObject({productionId:r.productionId,
+    cuttingOrderId:r.cuts[0].cutting_order_id,factoryAllocationKey:receivingFactoryAllocationKey(r.productionId,null)});
+   expect(exact.find(row=>row.receiptId===current.value.receiptId)?.identity).toMatchObject({productionId:r.productionId,
+    cuttingOrderId:r.cuts[0].cutting_order_id,factoryAllocationKey:receivingFactoryAllocationKey(r.productionId,factoryDecisionId)});
+   const receiveA=original.value.receiptId,receiveB=current.value.receiptId,quality=new GarmentQualityService(f.db);
+   const inspections=()=>garmentQuality(f.db,r.id);
+   const initial=(await inspections()).find(row=>row.receiptId===receiveA)!;
+   const qc={receiptId:receiveA,quantityVersion:initial.quantityVersion,qualifiedQuantity:280,problem:'',occurredAt:businessNow().toISOString()};
+   await quality.record(f.root,r.id,qc,randomUUID());
+   expect((await inspections()).find(row=>row.receiptId===receiveA)).toMatchObject({inspected:true,quantity:280});
+   const bBefore=(await inspections()).find(row=>row.receiptId===receiveB),version=Number((await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[original.value.receivingBatchId])).rows[0].version);
+   await service.correctReceipt({...f.root,authorizationCapability:'receiving:correct',authorizationCapabilities:['receiving:correct']},receiveA,{expectedVersion:version,documentQuantity:280,actualQuantity:275,defectiveQuantity:0});
+   const revised=(await inspections()).find(row=>row.receiptId===receiveA)!;
+   expect(revised).toMatchObject({quantity:275,inspected:false,priorInspection:true});
+   expect(revised.quantityVersion).not.toBe(qc.quantityVersion);
+   expect((await inspections()).find(row=>row.receiptId===receiveB)).toEqual(bBefore);
+   await expect(quality.record(f.root,r.id,qc,randomUUID())).rejects.toMatchObject({statusCode:409});
+   await quality.record(f.root,r.id,{...qc,quantityVersion:revised.quantityVersion,qualifiedQuantity:275},randomUUID());
+   expect((await inspections()).find(row=>row.receiptId===receiveA)).toMatchObject({quantity:275,inspected:true,quantityVersion:revised.quantityVersion});
   });
  });
  it('R5 exposes the current approved factory after all original allocation is transferred',async()=>{

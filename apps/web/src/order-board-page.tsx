@@ -8,7 +8,7 @@ import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { ReceivingDialog } from "./receiving-dialog.js";
@@ -18,6 +18,7 @@ import { alertInApp } from "./system-dialog.js";
 import "./order-board-page.css";
 import "./legacy-ui.css";
 
+const PendingReceivingBoard=lazy(()=>import('./pending-receiving-board.js').then(module=>({default:module.PendingReceivingBoard})));
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 
@@ -62,6 +63,11 @@ const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): stri
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
 export function OrderBoardPage() {
+  return new URLSearchParams(window.location.search).get('view')==='pending'
+    ?<Suspense fallback={<p role="status">读取中，请稍候</p>}><PendingReceivingBoard/></Suspense>:<OrderBoardOriginal/>;
+}
+
+function OrderBoardOriginal() {
   const targetValues=new URLSearchParams(window.location.search).getAll("receivingBatchId");
   const targetBatchId=targetValues[0];
   const invalidTarget=targetValues.length>1||Boolean(targetValues.length&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetBatchId??""));
@@ -218,7 +224,7 @@ export function OrderBoardPage() {
         </select></label>
       </div>}
       <div className="order-board-heading__action">
-        {canReceive ? <a className="order-board-receiving-link" href={pageUrl("ui/receiving")}>＋ 仓库收货</a> : null}
+        {canReceive ? <><a className="order-board-receiving-link" href={pageUrl("ui/orders?view=pending")}>待收货</a><a className="order-board-receiving-link" href={pageUrl("ui/receiving")}>＋ 仓库收货</a></> : null}
       </div>
     </div>
 

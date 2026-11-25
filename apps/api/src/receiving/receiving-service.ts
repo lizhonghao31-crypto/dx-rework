@@ -8,6 +8,8 @@ export {RECEIVING_BOARD_BASE_SQL,RECEIVING_BATCH_BOARD_BASE_SQL,DIGITAL_RECEIVIN
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.js";
 import {receivingDocumentHistory} from "./receiving-document-history.js";
+import {parsePendingReceivingIdentity,pendingReceivingSelection,pendingReceivingView} from './pending-receiving-view.js';
+import {DigitalProductionAccessPolicy} from '../production-platform/access-policy.js';
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
@@ -47,6 +49,7 @@ type ResolveReceivingDifferenceInput = Readonly<{
 }>;
 
 type CreateRepeatedReceivingInput = Readonly<{
+  pendingAllocation?: string;
   cuttingOrderId?: string;
   productionOrderId?: string;
   factoryDecisionId?: string|null;
@@ -58,6 +61,7 @@ type CreateRepeatedReceivingInput = Readonly<{
 }>;
 
 type CreateReceivingInput = Readonly<{
+  pendingAllocation?: string;
   cuttingOrderId?: string;
   productionOrderId?: string;
   factoryDecisionId?: string|null;
@@ -298,6 +302,7 @@ export class ReceivingService {
     }
     const receivingSource: "initial" | "backfill" = input.receivedDate === undefined ? "initial" : "backfill";
     const normalized = {
+      ...(input.pendingAllocation!==undefined?{pendingAllocation:input.pendingAllocation}:{}),
       ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
       ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
       ...(input.factoryDecisionId!==undefined?{factoryDecisionId:normalizeOptionalUuid(input.factoryDecisionId,"分厂标识")}:{ }),
@@ -320,6 +325,7 @@ export class ReceivingService {
         requestHash: hash(scope, normalized),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        await this.assertPendingSelection(client,actor,normalized,null);
         const cutting = normalized.cuttingOrderId
           ? await this.resolveCuttingSelection(client, normalized.cuttingOrderId)
           : normalized.styleNo && !normalized.productionOrderId && this.options.allowLegacyStyleInput
@@ -370,6 +376,7 @@ export class ReceivingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: hash(scope, {
+          ...(input.pendingAllocation!==undefined?{pendingAllocation:input.pendingAllocation}:{}),
           ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
           ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
       ...(input.factoryDecisionId!==undefined?{factoryDecisionId:normalizeOptionalUuid(input.factoryDecisionId,"分厂标识")}:{ }),
@@ -381,6 +388,7 @@ export class ReceivingService {
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        await this.assertPendingSelection(client,actor,input,input.receivingBatchId);
         const storedBatch = await client.query<{ cutting_order_id: string | null }>(
           `SELECT cutting_order_id
            FROM receiving_batches
@@ -2229,6 +2237,48 @@ export class ReceivingService {
   }
 
   documentHistory(batchId:string){return receivingDocumentHistory(this.database,batchId);}
+  private async activePendingReceiver(client:PoolClient,actor:TrustedActorContext){
+    if(actor.actorRoles.includes('root_superuser'))return;
+    if(!hasWarehouseReceivingRole(actor.actorRoles)||actor.authorizationCapability!=='receiving:create'||!actor.authorizationCapabilities?.includes('receiving:create')||
+      !await new DigitalProductionAccessPolicy(client).activeRole(actor.actorId,'warehouse_receiver'))fail('仅当前原收货岗位可办理待收货',403,'FORBIDDEN');
+  }
+  private async assertPendingSelection(client:PoolClient,actor:TrustedActorContext,input:{pendingAllocation?:string;cuttingOrderId?:string;productionOrderId?:string;factoryDecisionId?:string|null},receivingBatchId:string|null){
+    if(input.pendingAllocation===undefined)return;
+    await this.activePendingReceiver(client,actor);
+    const identity=parsePendingReceivingIdentity(input.pendingAllocation);
+    if(!identity||input.cuttingOrderId!==identity[4]||input.productionOrderId!==identity[1]||input.factoryDecisionId!==identity[2])return fail('收货范围与原单据不同，请返回待收货重选',409,'CONFLICT');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`cutting:${identity[4]}`]);
+    const selection=await pendingReceivingSelection(client,identity);
+    if(!selection||selection.receivingBatchId!==receivingBatchId)return fail('原待收范围或收货批次已更新，请返回待收货重选',409,'CONFLICT');
+  }
+  async pendingSelection(actor:TrustedActorContext,id:string){
+    const identity=parsePendingReceivingIdentity(id);
+    if(!identity)return fail('待收货范围无效');
+    const client=await this.database.connect();
+    try{
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      await this.activePendingReceiver(client,actor);
+      const item=await pendingReceivingSelection(client,identity);
+      if(!item)return fail('原待收范围已变更或尚未发回，请刷新列表',409,'CONFLICT');
+      await client.query('COMMIT');return item;
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }
+  async pending(actor:TrustedActorContext,input:{search:string;page:number;status:'open'|'all'|'collected'}){
+    if(!Number.isInteger(input.page)||input.page<1||input.page>100000||input.search.length>100||!['open','all','collected'].includes(input.status))fail('待收货筛选无效');
+    const client=await this.database.connect();
+    try{
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      await this.activePendingReceiver(client,actor);
+      // The original expected-receipt view allows this warehouse role to act
+      // across receiving allocations. Do not grant that scope to other board readers.
+      const {rows}=await client.query<{order_id:string}>(`SELECT DISTINCT route.production_order_id AS order_id
+        FROM digital_factory_routes route JOIN digital_factory_facts fact USING(preparation_id)
+        WHERE fact.kind='仓库实际发厂' AND fact.payload ? 'dispatchEvidence'`);
+      const result=await pendingReceivingView(client,rows.map(row=>row.order_id),input);
+      await client.query('COMMIT');
+      return result;
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }
   board(
     startDateInput: string,
     endDateOrQuery = startDateInput,

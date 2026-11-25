@@ -1,6 +1,7 @@
 import {ReworkInitiationService} from "../../apps/api/src/rework/service.js";
 import {afterAll,beforeAll,describe,expect,it,vi} from "vitest";
-import {randomUUID} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
+import sharp from 'sharp';
 import {createServer,type Server} from "node:http";
 import {mkdtemp,mkdir,readFile,rm} from "node:fs/promises";
 import {join,resolve,extname} from "node:path";
@@ -14,6 +15,11 @@ import {PostgresAuthStore} from "../../apps/api/src/auth/postgres-store.js";
 import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from "../../apps/api/src/auth/acceptance-provider.js";
 import {RootAuthority} from "../../apps/api/src/access/root-authority.js";
 import {ReceivingService} from "../../apps/api/src/receiving/receiving-service.js";
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {ExportJobService} from '../../apps/api/src/tools/exports.js';
+import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -32,8 +38,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const authenticate:typeof auth.authenticate=(token,context)=>auth.authenticate(token,context);
   // Native command creates isolated historical style-only receipts; this TEST
   // service option does not change runtime production configuration or routes.
-  const receiving=new ReceivingService(f.db,undefined,undefined,undefined,{allowLegacyStyleInput:true});
-  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},receiving:{authenticate,root,service:receiving},rework:{authenticate,root,service:new ReworkInitiationService(f.db,"anchor-test")}});await app.ready();
+  const receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db),{allowLegacyStyleInput:true});
+  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},receiving:{authenticate,root,service:receiving},rework:{authenticate,root,service:new ReworkInitiationService(f.db,"anchor-test")},
+   tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:f.attachments,exports:new ExportJobService(f.db),canDownloadBoundAttachment:(actor,binding)=>receiving.canDownloadBoundAttachment(actor,binding)}});await app.ready();
   for(const role of ["root","warehouse"])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   const warehouse={...f.people.warehouse!,authorizationCapability:"receiving:create",authorizationCapabilities:["receiving:create"]};
   for(let index=0;index<4;index++){
@@ -134,6 +141,59 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {context,page}=await open(0,"warehouse",1440);try{
    expect(await page.locator(".order-board-row").count()).toBe(1);expect(await page.locator(".order-board-root-actions").count()).toBe(0);expect(await page.getByRole("button",{name:"去处理",exact:true}).count()).toBe(0);expect(await page.getByRole("link",{name:"＋ 仓库收货",exact:true}).count()).toBe(1);
    expect((await page.request.get(base+"/api/auth/me")).status()).toBe(200);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(evidence,"native-warehouse-1440.png"),fullPage:true});
+  }finally{await context.close();}
+ });
+ it('opens the actual pending factory scope and receives against the pinned original picking identity as warehouse',async()=>{
+  const o=await f.bulkReady('无'),factory=new FactoryFlowService(f.db),reporting=new ProductionReportingService(f.db),warehouse=f.people.warehouse!;
+  const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[o.caseId])).rows[0].cutting_order_id;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await o.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const state=await factory.read(f.root,o.id),po=state.lines[0]!.poNumber,now=new Date(),day=beijingCalendarDate(now);
+  await factory.dispatch(warehouse,o.id,{expectedRevision:state.revision,supplierId:f.supplierId,occurredAt:now.toISOString(),note:'TEST original shipment for pending receiving'},randomUUID());
+  const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[o.caseId])).rows[0].production_order_id;
+  await reporting.report(f.root,productionId,{position:1,quantity:10,businessDate:day},randomUUID());
+  await reporting.execute(f.root,productionId,'complete',{businessDate:day,confirmed:true},randomUUID());
+  await reporting.execute(f.root,productionId,'ship',{businessDate:day,confirmed:true},randomUUID());
+  const {context,page}=await open(0,'warehouse');
+  try{
+   await context.route('https://private.example.test/**',async route=>{
+    const request=route.request();
+    if(request.method()!=='POST')return route.abort();
+    const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
+    const key=String(form.get('key')),file=form.get('file') as File,bytes=new Uint8Array(await file.arrayBuffer()),sha256=createHash('sha256').update(bytes).digest('hex');
+    expect(f.storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);
+    expect(sha256).toBe(form.get('x-oss-meta-sha256'));await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});
+    await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+   });
+   await page.getByRole('link',{name:'待收货',exact:true}).click();
+   await page.getByRole('textbox',{name:'订单ID、PO 或工厂',exact:true}).fill(po);
+   await page.getByRole('button',{name:'搜索',exact:true}).click();
+   const row=page.getByRole('row').filter({hasText:po});await row.getByText('10 件 / 0 件 / 10 件',{exact:true}).waitFor();
+   await row.getByRole('link',{name:'收货',exact:true}).click();
+   await page.getByText('已锁定原收货范围',{exact:false}).waitFor();
+   expect(await page.getByLabel('正式款号',{exact:true}).isDisabled()).toBe(true);
+   expect(await page.getByLabel('实际收货数量',{exact:true}).inputValue()).toBe('');
+   await page.getByLabel('送货单数量',{exact:true}).fill('4');await page.getByLabel('实际收货数量',{exact:true}).fill('4');
+   await page.locator('input[type=file]').setInputFiles({name:'TEST-original-receipt.png',mimeType:'image/png',buffer:await sharp({create:{width:20,height:20,channels:3,background:'white'}}).png().toBuffer()});
+   const posted=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/receiving/receipts'&&response.request().method()==='POST');
+   await page.getByRole('button',{name:'提交收货',exact:true}).click();const response=await posted;expect(response.status(),await response.text()).toBe(201);
+   expect(response.request().postDataJSON()).toMatchObject({cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,actualQuantity:4,pendingAllocation:expect.any(String)});
+   await page.getByRole('link',{name:'返回待收货',exact:true}).click();
+   await row.getByText('10 件 / 4 件 / 6 件',{exact:true}).waitFor();
+   await expect.poll(()=>row.getByRole('link',{name:'收货',exact:true}).evaluate(node=>document.activeElement===node)).toBe(true);
+   await row.getByRole('link',{name:'收货',exact:true}).press('Enter');
+   await page.getByRole('button',{name:'其他工厂收货',exact:true}).click();
+   await page.getByLabel('本次送货单数量',{exact:true}).fill('3');await page.getByLabel('实际收货数量',{exact:true}).fill('3');
+   const repeat=page.waitForResponse(res=>new URL(res.url()).pathname==='/api/receiving/repeat-receipts'&&res.request().method()==='POST');
+   await page.getByRole('button',{name:'提交多次收货',exact:true}).click();const repeatResult=await repeat;
+   expect(repeatResult.status(),await repeatResult.text()).toBe(201);
+   expect(repeatResult.request().postDataJSON()).toMatchObject({cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,actualQuantity:3,receivingBatchId:(await response.json()).receivingBatchId});
+   await page.getByRole('link',{name:'返回待收货',exact:true}).click();
+   await row.getByText('10 件 / 7 件 / 3 件',{exact:true}).waitFor();
+   await page.screenshot({path:join(evidence,'native-pending-receipt-1165.png'),fullPage:true});
+   await page.setViewportSize({width:390,height:1003});
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   expect(await row.getByRole('link',{name:'收货',exact:true}).count()).toBe(1);
   }finally{await context.close();}
  });
  it('records explicit receipt allocations in the original warehouse packing dialog and restores them for Root review at desktop and narrow widths',async()=>{
