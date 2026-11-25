@@ -7,6 +7,11 @@ export const DEVELOPMENT_UPLOAD_PURPOSES=['工艺开发板','面料报告','车�
 export type DevelopmentUploadPurpose=typeof DEVELOPMENT_UPLOAD_PURPOSES[number];
 export const DEVELOPMENT_PURPOSE_TASK_KIND:Partial<Record<DevelopmentUploadPurpose,string>>={'车板成果':'development_sewing','纸样成果':'development_pattern','尾查照片':'development_tail_check','定位图':'development_positioning','工艺回样照片':'craft','补做成果':'development_patch'};
 const scope=z.string().trim().min(1).max(100).default('整款');
+/** Unlike comment creation, a stored revision reference cannot default its scope. */
+export const DevelopmentRevisionCommentRefSchema=z.object({
+ sourceId:z.uuid(),roundNumber:z.number().int().positive(),scopeRef:scope.unwrap(),commentId:z.uuid(),version:z.number().int().positive(),
+}).strict();
+export type DevelopmentRevisionCommentRef=z.infer<typeof DevelopmentRevisionCommentRefSchema>;
 const ids=z.array(z.string().uuid()).max(20).refine(v=>new Set(v).size===v.length,'附件不能重复');
 const note=z.string().trim().max(4000);
 const decimal=z.string().regex(/^(?:0|[1-9]\d{0,10})(?:\.\d{1,6})?$/,'请填写非负数，最多六位小数');
