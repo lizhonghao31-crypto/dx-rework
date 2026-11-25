@@ -29,7 +29,11 @@ describe("PR-08 information display", () => {
     expect(page).toContain("查看记录");
     expect(page).toContain("累计实收 {quantity(item.cumulativeActualQuantity)}件");
     expect(page).toContain("historyDateTime(item.receivedAt)");
-    expect(page).not.toContain("待收");
+    // X4 pending receipt is a separate authorized view, never another
+    // KPI, quantity, or state in the original receipt and difference board.
+    const pendingLink='<a className="order-board-receiving-link" href={pageUrl("ui/orders?view=pending")}>待收货</a>';
+    expect(page).toContain(`{canReceive ? <>${pendingLink}`);
+    expect(page.replace(pendingLink, "")).not.toContain("待收");
   });
 
   it("keeps supplier and temporary-worker wage facts visible without changing deduction math", async () => {
