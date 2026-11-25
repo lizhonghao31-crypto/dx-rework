@@ -21,6 +21,8 @@ import {productionReadinessFixture,completeBulkRangeFixture} from '../helpers/pr
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {MemberModuleBindingService} from '../../apps/api/src/access/member-module-binding-service.js';
 import {readWarehouseCraftFactoryBasis} from '../../apps/api/src/production-platform/warehouse-craft-factory-basis.js';
+import {readCurrentCraftProblem} from '../../apps/api/src/production-platform/quality-craft-problem-scope.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -183,6 +185,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await count()).toBe(before+3);
   const result=await flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:5}]},randomUUID());
   expect(result.facts.filter(row=>row.kind==='仓库实际发厂')).toEqual([expect.objectContaining({payload:expect.objectContaining({returnFactId:in3.factId,lines:[{lineId,quantity:5}]})})]);
+  const qc=f.people.qc!,qcTask=(await f.db.query(`SELECT p.task_id FROM digital_timeline_task_positions p
+   JOIN digital_production_task_access a USING(task_id) WHERE p.route_ref=$1 AND p.step_id=$2 AND a.task_kind='bulk_qc'`,[ready.preparationId,second!.stepId])).rows[0];
+  await new DigitalProductionTaskService(f.db).reassign(f.root,qcTask.task_id,qc.actorId,randomUUID());
+  const inspected={expectedRevision:(await flow.read(f.root,ready.id)).revision,stepRef:second!.stepId,returnFactId:in4.factId,note:'TEST count remaining physical return',
+   checks:[{lineId,result:'需处理' as const,problem:'TEST two affected pieces',treatment:'',attachmentIds:[],
+    quantityScope:{inspectedQuantity:11,qualifiedQuantity:9,problemQuantity:2,unit:'片' as const}}]};
+  await expect(flow.qc(qc,ready.id,{...inspected,checks:[{...inspected.checks[0]!,quantityScope:{inspectedQuantity:16,qualifiedQuantity:14,problemQuantity:2,unit:'片'}}]},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(flow.qc(warehouse,ready.id,inspected,randomUUID())).rejects.toMatchObject({statusCode:403});
+  const counted=await flow.qc(qc,ready.id,inspected,randomUUID()),current=counted.checks.find(check=>check.returnFactId===in4.factId)!;
+  expect(counted.batches?.find(batch=>batch.factId===in4.factId)?.rows).toMatchObject([{lineId,available:15,releasedAvailable:9}]);
+  const locate={orderId:ready.id,preparationId:ready.preparationId,stepRef:second!.stepId,returnFactId:in4.factId,lineId,checkId:current.checkId};
+  await expect(readCurrentCraftProblem(f.db,locate)).resolves.toMatchObject({problemQuantity:2,qualifiedQuantity:9,actualReturned:15,sourceSendFactId:out2.factId,factoryId:factories[1]});
+  await expect(readCurrentCraftProblem(f.db,{...locate,stepRef:first!.stepId})).resolves.toBeNull();
+  await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,
+    attachment_ids,checked_by,checked_at) VALUES($1,$2,$3,$4,'合格','','','{}',$5,$6)`,
+   [randomUUID(),ready.preparationId,in4.factId,lineId,qc.actorId,businessNow().toISOString()])).rejects.toMatchObject({code:'23514'});
+  const countedDispatch={...dispatch,expectedRevision:counted.revision,returnFactId:in4.factId,occurredAt:businessNow().toISOString()};
+  await expect(flow.dispatch(warehouse,ready.id,{...countedDispatch,lines:[{lineId,quantity:10}]},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const partial=await flow.dispatch(warehouse,ready.id,{...countedDispatch,lines:[{lineId,quantity:9}]},randomUUID());
+  expect(partial.batches?.find(batch=>batch.factId===in4.factId)?.rows).toMatchObject([{lineId,sent:9,available:6,releasedAvailable:0}]);
  });
  it('counts appended preshrink once and binds the actual current task through the additional group handoff',async()=>{
   const f=h.f,special=await new SpecialCraftLibraryService(f.db).save(f.root,{id:null,expectedVersion:0,definition:{name:'TEST appended-preshrink craft',enabled:true,development:{minutes:60,calendar:'continuous',reminder:{enabled:false,percent:70}},bulk:{minutes:120,calendar:'continuous',reminder:{enabled:false,percent:70}}}},randomUUID());

@@ -32,4 +32,15 @@ describe('independent craft scopes and terminal-only physical supply',()=>{
   const unrelated=factoryStepLedger([{lineId:'po',quantity:100}],[...first,fact('old','工艺回仓','old-combined',100)], [qc('return1'),qc('old')],steps);
   expect(unrelated.canDispatch).toBe(false);expect(unrelated.batches).toEqual([]);
  });
+ it('allows only pieces explicitly released on the exact counted predecessor without unlocking a legacy sibling lot',()=>{
+  const facts=[fact('s1','工艺发出','emb',400),fact('counted','工艺回仓','emb',300,{sendFactId:'s1'}),fact('legacy','工艺回仓','emb',100,{sendFactId:'s1'})];
+  const scope={...qc('counted'),result:'需处理',quantity_scope:{inspectedQuantity:220,qualifiedQuantity:200,problemQuantity:20,unit:'片'}};
+  const u=[{lineId:'po',quantity:400}];
+  const before=factoryStepLedger(u,facts,[scope,qc('legacy')],steps);
+  expect(before.steps[0]!.completion[0]).toMatchObject({qualified:300,complete:false});
+  expect(before.sendable[1]!.lines[0]!.remaining).toBe(200);
+  const after=factoryStepLedger(u,[...facts,fact('s2','工艺发出','print',200,{fromReturnId:'counted'})],[scope,qc('legacy')],steps);
+  expect(after.steps[0]!.batches[0]!.rows[0]).toMatchObject({returned:300,available:100,releasedAvailable:0});
+  expect(after.sendable[1]!.lines[0]!.remaining).toBe(0);
+ });
 });

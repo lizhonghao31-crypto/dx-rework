@@ -1,14 +1,14 @@
 import type {PoolClient} from 'pg';
+import type {CraftCheckQuantityScope} from '@dx-rework/contracts/factory-flow';
 
 type ProblemLocator={orderId:string;preparationId:string;stepRef:string;returnFactId:string;lineId:string;checkId:string};
-type CountedCraftCheck={inspectedQuantity:number;qualifiedQuantity:number;problemQuantity:number;unit:'片'};
 type OriginalCheck={check_id:string;result:string;quantity_scope:unknown;returned_payload:unknown};
 
 /** Legacy 「需处理」 never implies a quantity, even if the whole PO or
  * original return size is known. Quality and warehouse share actual pieces. */
-export function countedCraftCheck(input:unknown,actualReturned:number):CountedCraftCheck|null{
+export function countedCraftCheck(input:unknown,actualReturned:number):CraftCheckQuantityScope|null{
  if(!input||typeof input!=='object'||!Number.isSafeInteger(actualReturned)||actualReturned<=0)return null;
- const {inspectedQuantity,qualifiedQuantity,problemQuantity,unit}=input as Partial<CountedCraftCheck>;
+ const {inspectedQuantity,qualifiedQuantity,problemQuantity,unit}=input as Partial<CraftCheckQuantityScope>;
  if(unit!=='片'||typeof inspectedQuantity!=='number'||typeof qualifiedQuantity!=='number'||typeof problemQuantity!=='number'||
   ![inspectedQuantity,qualifiedQuantity,problemQuantity].every(Number.isSafeInteger)||inspectedQuantity<=0||
   inspectedQuantity>actualReturned||qualifiedQuantity<0||problemQuantity<0||qualifiedQuantity+problemQuantity!==inspectedQuantity)return null;

@@ -1283,6 +1283,10 @@
     {
       "version": "0306_development_revision_comment_adoptions",
       "checksum": "64cf8e49214db110cb14e82125dff0175b782efa6118d5ef2126db96018dbe4f"
+    },
+    {
+      "version": "0307_craft_quality_quantity_scope",
+      "checksum": "943ca4ec2c2155b321155582af3d2717c47f8d9b2d054f51f57efe93dfbb2f0c"
     }
   ]
 }
