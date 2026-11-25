@@ -2,51 +2,51 @@
   "version": 1,
   "base": "686b2607eed56e6900ee5c8ca122384e8b838291",
   "risk": "full",
-  "sourceFingerprint": "bdb295ebc8f0b06b6442ef72879bb50d14da84fac226554c01cb5e09d8a496b8",
+  "sourceFingerprint": "2b6d82ddee9767a1092d072c071ae372e64b87e673420077df8da309e36c9802",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-later-review-once-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-current-fixed-scope-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "1fd6b9eb315ee761ef085aac7d2401ce25bed828",
-      "sourceFingerprint": "bdb295ebc8f0b06b6442ef72879bb50d14da84fac226554c01cb5e09d8a496b8",
+      "testedHead": "7284dd6e8e03ebd5339e373866bba3ec3828ee85",
+      "sourceFingerprint": "2b6d82ddee9767a1092d072c071ae372e64b87e673420077df8da309e36c9802",
       "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing and two explicit workers and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
-      "startedAt": "2026-11-25T17:26:25.930Z",
-      "endedAt": "2026-11-25T17:27:55.451Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-later-review-once-native.log",
-      "logSha256": "5a615eae1ef430d5d3340bd03f7d87b220be4bc437d555cc00f8508f49e8c821",
+      "startedAt": "2026-11-25T17:34:33.881Z",
+      "endedAt": "2026-11-25T17:36:09.739Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-current-fixed-scope-native.log",
+      "logSha256": "bf85adc8a440b28f37cc88d9c85c2c65a931f2e83fa63e488e70d2b3fcdd3cd6",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b5747e0aff7409f1f50aef714e8b87729f2cb8b2e736c24289e92f1c0d203030"
+          "sha256": "b5cef6f5014ff6e08787bec44de948a023d517d4f3ed6623103b6e0759e7efaf"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-later-review-once-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-current-scope-consumers.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/factory-production-facts.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 49,
+      "passed": 93,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7b840dd8c5715aef4314e1bf8de5d91be93fc7d6",
-      "sourceFingerprint": "bdb295ebc8f0b06b6442ef72879bb50d14da84fac226554c01cb5e09d8a496b8",
+      "testedHead": "7284dd6e8e03ebd5339e373866bba3ec3828ee85",
+      "sourceFingerprint": "2b6d82ddee9767a1092d072c071ae372e64b87e673420077df8da309e36c9802",
       "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
-      "startedAt": "2026-11-25T17:28:27.310Z",
-      "endedAt": "2026-11-25T17:28:28.524Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-later-review-once-unit.log",
-      "logSha256": "8720f037a365bbd604b87d8c5a0f81185224da9fc68912e2f1137c522b6ba7e0",
+      "startedAt": "2026-11-25T17:34:15.799Z",
+      "endedAt": "2026-11-25T17:34:17.411Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-current-scope-consumers.log",
+      "logSha256": "56718cd9db40aeccad3564a26b6051543109a24696beefb49911d9977b0b7465",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "73aff7aa23b5a35b2ed86f3df7b8e5c4f11bc5ddcd9e156578a2906fde078219"
+          "sha256": "9ccdd585a60452f3add662e0ed52c1d144fddc7842382000519c54c47f7d2a2d"
         }
       ]
     }
