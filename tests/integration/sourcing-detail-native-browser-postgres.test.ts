@@ -288,8 +288,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await context.addCookies([{name:"dx_rework_session",value:ieToken,url:base}]);
    const page=await context.newPage();page.setDefaultTimeout(12000);
    await page.goto(base+"/ui/sourcing/pending");
-   await page.getByRole("link",{name:"IE 报价与核价中心",exact:true}).click();
-   await page.getByRole("link",{name:"外发加工核价",exact:true}).click();
+   const desktop=page.getByLabel('桌面端主导航',{exact:true});
+   const group=desktop.locator('details').filter({has:page.getByText('产品开发打板',{exact:true})});
+   if(await group.getAttribute('open')===null)await group.locator('summary').click();
+   const center=group.locator('a[href="/ui/ie-processing?directory=unified"]').filter({hasText:"IE 报价与核价中心"});
+   await center.click();
+   await page.waitForURL(url=>url.pathname.endsWith('/ui/ie-processing')&&url.searchParams.get('directory')==='unified');
+   await page.getByRole('region',{name:'IE 报价与核价目录',exact:true}).waitFor();
+   // The sidebar now opens the unified directory, while the former sourcing
+   // tab remains an independently supported legacy bookmark.
+   await page.goto(base+'/ui/ie-processing?channel=sourcing&search=&page=1');
    await page.getByRole("textbox",{name:"搜索外发款号或单号",exact:true}).fill(style);
    await page.getByRole("button",{name:"搜索",exact:true}).click();
    await page.getByRole("link",{name:record.erpOrderNo,exact:true}).click();
