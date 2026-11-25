@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "7e61cad8bebed19dd91160f7739a5c9a3882a0c8",
-  "sourceFingerprint": "effdee0cd2bcd15c7b7d2d048b39b391ec6d2223ab44d852c398b131ee64f350",
+  "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
   "risk": "full",
   "rules": [
     {
@@ -184,6 +184,27 @@
       "checks": [
         "nondb-task-authority"
       ]
+    },
+    {
+      "rule": "保留原座舱样式隔离，不把员工页面原有公共焦点脚本当作座舱泄漏。",
+      "source": "v11.5 §9 保留无关模块；GitHub Full 45624001368 唯一数据库浏览器失败与精确发布基线真实对照。",
+      "writes": [
+        "tests/integration/module-bundles-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/system-dialog.tsx",
+        "apps/web/src/employee-access-page.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/module-bundles-native-browser-postgres.test.ts"
+      ],
+      "initialization": "用原生产构建和既有员工页面签名测试身份，冷开非座舱路由，不改变任何产品源代码。",
+      "dateAndPermission": "原入口、权限、时间、样式和资源边界保持不变。只识别公共弹窗直接静态导入的焦点辅助资源。",
+      "expectation": "冷开员工页仍不允许下载座舱专属 chunk 或注入其 CSS；五个原视口、真实页面导航及原动态模块检查照常执行。",
+      "checks": [
+        "bundle-browser"
+      ]
     }
   ],
   "checks": [
@@ -212,19 +233,20 @@
       "inputPaths": [
         "apps",
         "packages",
-        ".github",
         "scripts",
         "tests/helpers",
+        "tests/acceptance",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "eslint.config.js",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/integration"
+        "tsconfig.base.json",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/production-facts-consistency-postgres.test.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
       ],
-      "inputFingerprint": "645234905ef8553ad97f237b69d6a1d0b98d8d18404f416143490003d25332b5"
+      "inputFingerprint": "46f8b45f2eb6b0aa0f970ec3a7e2e5215b172fc9863072e131ab4af8b3930e5f"
     },
     {
       "id": "signed-creation",
@@ -251,19 +273,17 @@
       "inputPaths": [
         "apps",
         "packages",
-        ".github",
         "scripts",
         "tests/helpers",
+        "tests/acceptance",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "eslint.config.js",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/integration"
+        "tsconfig.base.json",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "inputFingerprint": "645234905ef8553ad97f237b69d6a1d0b98d8d18404f416143490003d25332b5"
+      "inputFingerprint": "f8a47cbc476a6d225a529e1028719abddad9df22cdd843961ed72cda925b8711"
     },
     {
       "id": "warehouse-unit",
@@ -338,71 +358,13 @@
       "command": "git diff --name-only -z 7e61cad8bebed19dd91160f7739a5c9a3882a0c8 -- '*.ts' '*.tsx' | xargs -0 node node_modules/eslint/bin/eslint.js --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
-      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
+      "testedHead": "9eb50867276425ebd8d7966252dfd13bb50f417a",
+      "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
       "context": "scoped original ESLint configuration over actual release X3 diff",
-      "startedAt": "2026-11-25T12:59:07.053Z",
-      "endedAt": "2026-11-25T12:59:07.053Z",
+      "startedAt": "2026-11-25T14:14:13.410Z",
+      "endedAt": "2026-11-25T14:14:18.009Z",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-source-lint.log",
-      "inputPaths": [
-        "eslint.config.js",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "apps/api/src/production-platform/bulk-fabric-facts.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/journey-selection-access.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/task-routes.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/warehouse-adopted-demand.ts",
-        "apps/api/src/production-platform/warehouse-assigned-resources.ts",
-        "apps/api/src/production-platform/warehouse-craft-factory-basis.ts",
-        "apps/api/src/production-platform/warehouse-craft-movement.ts",
-        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
-        "apps/api/src/production-platform/warehouse-factory-dispatch-evidence.ts",
-        "apps/api/src/production-platform/warehouse-instruction-demand.ts",
-        "apps/api/src/production-platform/warehouse-issue-allocation.ts",
-        "apps/api/src/production-platform/warehouse-material-balance.ts",
-        "apps/api/src/production-platform/warehouse-material-issue.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts",
-        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
-        "apps/api/src/production-platform/warehouse-receipt-work.ts",
-        "apps/api/src/sourcing/sourcing-production-service.ts",
-        "apps/web/src/App.tsx",
-        "apps/web/src/bulk-fabric-panel.tsx",
-        "apps/web/src/bulk-materials-panel.tsx",
-        "apps/web/src/bulk-preparation-panel.tsx",
-        "apps/web/src/components.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/factory-flow-panel.tsx",
-        "apps/web/src/warehouse-center.tsx",
-        "apps/web/src/warehouse-native-task-table.tsx",
-        "apps/web/src/warehouse-receipt-batch-panel.tsx",
-        "apps/web/src/warehouse-workbench-route.ts",
-        "packages/contracts/src/bulk-preparation.ts",
-        "packages/contracts/src/production-readiness.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/helpers/production-readiness-fixture.ts",
-        "tests/helpers/warehouse-original-issue-fixture.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
-        "tests/integration/production-facts-consistency-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/unit/warehouse-adopted-demand.test.ts",
-        "tests/unit/warehouse-craft-factory-basis.test.ts",
-        "tests/unit/warehouse-craft-movement.test.ts",
-        "tests/unit/warehouse-issue-allocation.test.ts",
-        "tests/unit/warehouse-material-balance.test.ts"
-      ],
-      "inputFingerprint": "738e82d4839356f3a110b8cfebf6d31e6059fbf31d8ec29c229ecd22a1ab46a9"
+      "log": "/workspace/dx-v115-x3-evidence/x3-asset-final-lint.log"
     },
     {
       "id": "preflight",
@@ -410,30 +372,13 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6b829ca54bb73ee9c402073ee0828507b1188aa1",
-      "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
+      "testedHead": "9eb50867276425ebd8d7966252dfd13bb50f417a",
+      "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
       "context": "repository preflight, currently pinned migration manifest and time occurrence inventory; no migration added",
-      "startedAt": "2026-11-25T12:59:07.105Z",
-      "endedAt": "2026-11-25T12:59:22.244Z",
-      "logSha256": "ee192d6d999a0c98f172c58d5bdf00dfe6e3fef39d3ff00f8dca264e84e6f27f",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-preflight.log",
-      "inputPaths": [
-        "apps",
-        "packages",
-        ".github",
-        "scripts",
-        "tests/helpers",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "eslint.config.js",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/integration",
-        "docs/governance"
-      ],
-      "inputFingerprint": "0fffcaf1b46a329418452fd0d888d07790672b5ca2a01c4835a3ceb5a62d768f"
+      "startedAt": "2026-11-25T14:14:13.415Z",
+      "endedAt": "2026-11-25T14:14:22.889Z",
+      "logSha256": "f3b81b2b9df684c4271fb6d7bc03d9f862b6bb64455eb9cfb8ac82fc0749fa6c",
+      "log": "/workspace/dx-v115-x3-evidence/x3-asset-final-preflight.log"
     },
     {
       "id": "nondb-task-authority",
@@ -455,6 +400,44 @@
         {
           "format": "vitest-json",
           "sha256": "2d34f3372deb3f4d8198be6d2c7a69d7213fbbc368d4ae6fcc740e02f5aab842"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tsconfig.base.json",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
+      ],
+      "inputFingerprint": "302a022758667280e0b5f8b54594ca60f89bbf105e7e9c67c25560ef73623fb2"
+    },
+    {
+      "id": "bundle-browser",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-asset-isolation-final.json tests/integration/module-bundles-native-browser-postgres.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "9eb50867276425ebd8d7966252dfd13bb50f417a",
+      "sourceFingerprint": "dcae4cf3622238ad3e4b374516470a871a2ca9e7e3f4a81db905015fa6fe7f5a",
+      "context": "Same signed real native Chromium, isolated PostgreSQL and original Vite compilation. Compared exact release 7e61cad8 and prior candidate 9eb50867 before the test-only fix. The same existing focus helper is a direct SystemDialog import on both; no cockpit pilot chunk or scoped styles are allowed on the cold non-cockpit route.",
+      "startedAt": "2026-11-25T14:13:20.189Z",
+      "endedAt": "2026-11-25T14:14:36.522Z",
+      "log": "/workspace/dx-v115-x3-evidence/x3-asset-isolation-final.log",
+      "logSha256": "9d5b6756be758835e975cef0ffdd142fcea42d22a9bae46df1a955149cb4e154",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9741e5ad00cf812c8ae8300611d9d001f89553a08ef0c6ea3dc20db1c8b59e65"
         }
       ]
     }

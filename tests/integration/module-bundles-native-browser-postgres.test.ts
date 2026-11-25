@@ -60,14 +60,21 @@ function expectStyledShell(frames:Awaited<ReturnType<typeof shellFrames>>){
  });
  it('measures the cockpit pilot at the original viewports and isolates its compiled styles from other modules',async()=>{
   const pilotStyle='style[data-cockpit-style="astryx-v0.7.16"]';
-  const astryxAssets=Object.entries(h.assetManifest!).filter(([source])=>/digital-cockpit-page|focusOutline\.stylex|astryxdesign/.test(source)).map(([,entry])=>'/'+entry.file);
+  const manifest=Object.entries(h.assetManifest!);
+  // The employee page already uses the shared Astryx system dialog. Its
+  // keyboard-focus helper is not part of the cockpit pilot's scoped CSS.
+  const dialogImports=new Set(manifest.filter(([,entry])=>entry.file.startsWith('assets/system-dialog-'))
+   .flatMap(([,entry])=>entry.imports??[]));
+  const pilotAssets=new Set(manifest.filter(([source])=>/digital-cockpit-page|focusOutline\.stylex|astryxdesign/.test(source)&&
+   !(/^_focusOutline\.stylex-/.test(source)&&dialogImports.has(source))).map(([,entry])=>'/'+entry.file));
   const offRouteStart=h.resources.length;
   const cold=await h.open(undefined,{},1165,1,{height:747,path:'/ui/employee-access'});
   try{
    await cold.page.locator('.app-shell>aside').waitFor();
    await cold.page.waitForLoadState('networkidle');
    expect(await cold.page.locator(pilotStyle).count()).toBe(0);
-   expect(h.resources.slice(offRouteStart).some(resource=>astryxAssets.includes(resource.path))).toBe(false);
+   const pilotAssetsOnEmployeePage=h.resources.slice(offRouteStart).filter(resource=>pilotAssets.has(resource.path)).map(resource=>resource.path);
+   expect(pilotAssetsOnEmployeePage,'cockpit pilot chunks fetched on a cold employee page').toEqual([]);
    expect(h.resources.slice(offRouteStart).some(resource=>resource.path===asset('employee-access-page.tsx'))).toBe(true);
   }finally{await cold.context.close();}
 
