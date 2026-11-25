@@ -12,6 +12,7 @@ import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {receivingForecast} from './receiving-forecast.js';
 import {receivingSpan} from './receiving-span.js';
 import {garmentQuality,GarmentQualityService} from './garment-quality.js';
+import {canReadExactOriginalQualityPhoto} from './original-quality-photo.js';
 import type {ReceiptQuality,ReceiptQualityVerification} from '@dx-rework/contracts/order-closure';
 import {canOpenOrderReceiving,receivingSummary,receiptTime} from './receiving-summary.js';
 import {factoryDeliveryReadings} from './factory-delivery-reading.js';
@@ -35,6 +36,8 @@ export class OrderClosureService{
  constructor(private readonly database:Pool){this.cockpitReceipts=new CockpitReceiptService(database);}
  private async canClose(db:DB,actor:TrustedActorContext){if(actor.actorRoles.includes('root_superuser')&&(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed)return true;const policy=new DigitalProductionAccessPolicy(db);for(const role of ['production_management','owner_group'])if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))return true;return false;}
  async recordQuality(actor:TrustedActorContext,id:string,input:ReceiptQuality,key:string){return new GarmentQualityService(this.database).record(actor,id,input,key);}
+ async authorizeQualityUpload(actor:TrustedActorContext,orderId:string,receiptId:string,quantityVersion:string){return new GarmentQualityService(this.database).authorizeUpload(actor,orderId,receiptId,quantityVersion);}
+ async canReadQualityPhoto(actor:TrustedActorContext,orderId:string,ref:{receiptId:string;quantityVersion:string;eventId:string;attachmentId:string}){return canReadExactOriginalQualityPhoto(this.database,actor,{kind:'garment-receipt',orderId,...ref});}
  async verifyQualityTime(actor:TrustedActorContext,id:string,input:ReceiptQualityVerification,key:string){return new GarmentQualityService(this.database).verifyTime(actor,id,input,key);}
  async documentHistory(actor:TrustedActorContext,id:string,beforeId?:string,eventId?:string){return orderDocumentHistory(this.database,actor,id,'receipt_quality',beforeId,eventId);}
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<OrderClosureSheet>{

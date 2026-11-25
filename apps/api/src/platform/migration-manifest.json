@@ -1283,6 +1283,34 @@
     {
       "version": "0306_development_revision_comment_adoptions",
       "checksum": "64cf8e49214db110cb14e82125dff0175b782efa6118d5ef2126db96018dbe4f"
+    },
+    {
+      "version": "0307_craft_quality_quantity_scope",
+      "checksum": "f228ff036180c738c3ba49b0492d8ec78fea3813e136afebbc6932e87fedcf92"
+    },
+    {
+      "version": "0308_rework_original_craft_quality_source",
+      "checksum": "5bf02a80748d37b4b704f59ac4591f33c0f0a768e16f24a3a772d95f5a347fe0"
+    },
+    {
+      "version": "0309_original_external_craft_configuration",
+      "checksum": "dec944ce2860cb8e3ab4ea1390a192a3b0c2a1c2559ba1aaf73ec7c1e8820689"
+    },
+    {
+      "version": "0310_original_external_craft_final_quantity",
+      "checksum": "1b3318acb4c3404ef031dfccf60e9ff42ad982b511bcc1eb97c8a84d263e4949"
+    },
+    {
+      "version": "0311_internal_craft_quality_reinspection",
+      "checksum": "a48d22d7729b3c460ddfaa8308c5172b814bdfc979e6167d3e3a8f4a90f3a27f"
+    },
+    {
+      "version": "0312_original_garment_quality_rework",
+      "checksum": "b9739700ff20970d5ae5a483d5f73178861a6ffe2436c036694ec09a1ceae954"
+    },
+    {
+      "version": "0313_external_craft_repair_continuation",
+      "checksum": "dbaaacbc6a45910c2d4a6a179573f0ff44d2253990e33374936de97f74ea9587"
     }
   ]
 }

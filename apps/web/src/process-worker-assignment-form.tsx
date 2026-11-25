@@ -15,6 +15,7 @@ import {
   type ProcessWorkerPlanResponse,
 } from "@dx-rework/contracts/process-worker-plan";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
+import { Button as AstryxButton } from "@astryxdesign/core/Button";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -25,6 +26,7 @@ import { SearchSelect } from "./search-select.js";
 import { alertInApp, confirmInApp } from "./system-dialog.js";
 import { parseWorkTaskOptions } from "./work-task-options.js";
 import { WorkReportingForm } from "./work-reporting-form.js";
+import { designerAstryxCss } from "./designer-astryx.js";
 import "./process-worker-assignment-form.css";
 import "./process-worker-assignment-mobile-sheet.css";
 
@@ -219,7 +221,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
     setUser(session.user); setDetail(loadedDetail); hydrate(config, workerPlan);
     const configurable = session.user.isRoot === true || moduleCanWrite(session.user, "rework") && Boolean(session.user.businessRoles?.includes("tail_supervisor") && session.user.capabilities.includes("process:configure") && session.user.capabilities.includes("work:assign"));
-    if (configurable && config.reworkStatus === "pending_process_configuration") {
+    if (configurable && config.reworkStatus === "pending_process_configuration" && !config.externalCraftOnly) {
       const [processResult, peopleResult] = await Promise.allSettled([
         request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema.parse),
         request("work-task-options", parseWorkTaskOptions),
@@ -578,7 +580,30 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   ];
   const changedProps = onOrderChanged ? { onOrderChanged } : {};
 
+  const activateOutside = async () => {
+    if (!response?.externalCraftOnly || !editable || busy) return;
+    setBusy(true);
+    try {
+      if (!await confirmInApp("确认该批只由原外厂返修？不会分配本厂工人或录入计件价格。")) return;
+      const body={expectedOrderVersion:response.orderVersion};
+      const result=await request(`rework-orders/${reworkOrderId}/process-configuration/external-activate`,ProcessConfigurationResponseSchema.parse,{
+        method:"POST",headers:{"idempotency-key":mutationKey(`outside:${reworkOrderId}:${response.orderVersion}`)},body:JSON.stringify(body),
+      });
+      setResponse(result);
+      setMessage("已确认原外厂返修，等待真实仓库收发。");
+      try { await onOrderChanged?.(); } catch { /* Preserve the committed response if the parent refresh fails. */ }
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "外厂返修确认失败，可重试。");
+    } finally { setBusy(false); }
+  };
+
   if (!response || !plan) return <Surface>{message || "正在加载…"}</Surface>;
+  if (response.externalCraftOnly || configuration?.items.some(item=>item.executionKind==='external_craft')) return <div className="dx-designer-astryx"><style>{designerAstryxCss}</style><Surface>
+    <h2>{workspaceNode==='ie_review' ? 'N03 · 计件核价不适用' : 'N02 · 原外厂返修'}</h2>
+    <p>原检查范围由外厂实际返修，不登记本厂工人和计件价格。</p>
+    {!history && editable && workspaceNode==='process_configuration' && <AstryxButton type="button" variant="primary" label="确认原外厂返修" isDisabled={busy} onClick={()=>void activateOutside()} />}
+    {message && <p role="status">{message}</p>}
+  </Surface></div>;
   if (!history && workspaceNode === "ie_review" && !["pending_process_configuration", "pending_ie_review"].includes(response.reworkStatus)) {
     return <Surface className="process-worker-readonly process-worker-ie-review-readonly">
       <StatusBadge tone="success">IE 核价已完成</StatusBadge>

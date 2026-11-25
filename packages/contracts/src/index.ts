@@ -535,6 +535,8 @@ export const ReworkOrderResponseSchema = z.object({
   status: ReworkOrderStatusSchema,
   reworkKind: ReworkKindSchema.optional(),
   receivingBatchId: IdSchema.nullable().optional(),
+  originalCraftQuality: z.object({ checkId: IdSchema, unit: z.literal("片"), execution: z.enum(["internal","factory"]) }).strict().optional(),
+  originalQualityReportAvailable: z.boolean().optional(),
   styleNo: z.string().nullable(),
   customerSupplyCode: z.string().nullable(),
   factoryStyleNo: z.string().nullable(),
@@ -630,6 +632,7 @@ export type InspectionReportImageExtraction = z.infer<typeof InspectionReportIma
 
 export const ProcessPricingUnitSchema = z.enum(["piece", "hour"]);
 export const ProcessExecutionKindSchema = z.enum(["worker", "tail_inspection"]);
+const ConfiguredProcessExecutionKindSchema = z.enum([...ProcessExecutionKindSchema.options,"external_craft"]);
 export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("catalog"),
@@ -697,7 +700,7 @@ export const ProcessConfigurationItemResponseSchema = z.object({
   processId: IdSchema.nullable(),
   processVersion: z.number().int().positive().nullable(),
   processName: z.string().min(1),
-  executionKind: ProcessExecutionKindSchema.optional().default("worker"),
+  executionKind: ConfiguredProcessExecutionKindSchema.optional().default("worker"),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
   // Historical configurations created before N02 pricing was mandatory may
@@ -713,6 +716,7 @@ export const ProcessConfigurationResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   tailInspectionRequired: z.boolean().default(true),
+  externalCraftOnly: z.boolean().optional(),
   specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
   otherCraftDescription: OtherCraftDescriptionSchema,
   configuration: z.object({
@@ -906,6 +910,11 @@ export const WorkReportsBatchResponseSchema = z.object({
   orderVersion: z.number().int().positive(),
   reports: z.array(WorkReportResponseSchema).min(1).max(200),
 }).strict();
+const ExternalCraftPhysicalProgressSchema = z.object({
+  requiredQuantity: z.number().int().positive(),
+  returnedQuantity: z.number().int().nonnegative(),
+  physicalCompletedAt: z.string().datetime().nullable(),
+}).strict();
 export const ReworkWorkTasksResponseSchema = z.object({
   specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
   otherCraftDescription: OtherCraftDescriptionSchema,
@@ -913,6 +922,7 @@ export const ReworkWorkTasksResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   tasks: z.array(WorkTaskResponseSchema),
+  externalRepair: ExternalCraftPhysicalProgressSchema.nullable().optional(),
 });
 export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
 export type AddActiveWorkTaskMembers = z.infer<typeof AddActiveWorkTaskMembersSchema>;
@@ -1102,6 +1112,7 @@ export const WholeOrderReviewResponseSchema = z.object({
     reason: z.string().nullable(),
   }).strict()),
   reviewId: IdSchema.nullable(),
+  externalRepair: ExternalCraftPhysicalProgressSchema.nullable().optional(),
   finalConfirmation: z.object({
     confirmationId: IdSchema,
     confirmationVersion: z.number().int().positive(),
@@ -1111,6 +1122,7 @@ export const WholeOrderReviewResponseSchema = z.object({
     reviewedBy: IdSchema.nullable(),
     reviewedAt: z.string().datetime().nullable(),
     reviewReason: z.string().nullable(),
+    externalRepair: ExternalCraftPhysicalProgressSchema.optional(),
     prices: z.array(z.object({
       configurationItemId: IdSchema,
       originalUnitPrice: z.number().positive(),
@@ -1235,7 +1247,7 @@ export const ResponsibilityDeterminationResponseSchema = z.object({
     configurationItemId: IdSchema,
     processName: z.string().min(1),
     pricingUnit: ProcessPricingUnitSchema,
-    executionKind: ProcessExecutionKindSchema,
+    executionKind: ConfiguredProcessExecutionKindSchema,
     includedInResponsibility: z.boolean(),
     baseAmount: z.string(),
   }).strict()),

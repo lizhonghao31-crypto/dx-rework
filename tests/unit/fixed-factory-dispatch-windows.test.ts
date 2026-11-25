@@ -20,3 +20,17 @@ it('completes only the dispatched return and does not use another return or miss
  expect(windows).toMatchObject([{key:'return60:po',enteredAt:monday,complete:true,completedAt:tuesday},{key:'return40:po',enteredAt:wednesday,complete:false,completedAt:null}]);
  expect(terminalDispatchObligations(ledger,facts,checks,null).every(window=>window.enteredAt===null)).toBe(true);
 });
+it('starts the dispatch obligation at the real counted partial release, not a later optional full recheck',()=>{
+ const facts=[fact('send','工艺发出',100,monday),fact('mixed','工艺回仓',100,monday,{sendFactId:'send'})];
+ const fail:BatchCheck={...check('mixed',monday,'failed-piece'),result:'需处理',allow_dispatch:false,
+  quantity_scope:{inspectedQuantity:20,qualifiedQuantity:0,problemQuantity:20,unit:'片'}};
+ expect(terminalDispatchObligations(factoryBatchLedger(lines,facts,[fail],false),facts,[fail],monday)).toEqual([]);
+ const release:BatchCheck={...check('mixed',tuesday,'mixed-quantities'),result:'需处理',allow_dispatch:false,
+  quantity_scope:{inspectedQuantity:100,qualifiedQuantity:80,problemQuantity:20,unit:'片'}};
+ const before=terminalDispatchObligations(factoryBatchLedger(lines,facts,[release],false),facts,[release],monday);
+ expect(before).toMatchObject([{key:'mixed:po',checkId:'mixed-quantities',enteredAt:tuesday,complete:false}]);
+ const rest=[...facts,fact('dispatch80','仓库实际发厂',80,wednesday,{returnFactId:'mixed'})];
+ const later:BatchCheck={...check('mixed',wednesday,'new-release'),quantity_scope:{inspectedQuantity:100,qualifiedQuantity:100,problemQuantity:0,unit:'片'},supersedes_check_id:'mixed-quantities'};
+ const checked=[release,later];
+ expect(terminalDispatchObligations(factoryBatchLedger(lines,rest,checked,false),rest,checked,monday)).toEqual(before);
+});

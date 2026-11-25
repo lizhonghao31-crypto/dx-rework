@@ -57,7 +57,8 @@ describe("tail inspection cost bearer", () => {
     expect(responsibility).toContain("requestedTailCostBearer === null");
     expect(responsibility).toContain("hasExplicitTailCostBearer");
     expect(responsibility).toContain("历史整查费用承担方未经生产主管确认");
-    expect(responsibility).toContain("item.execution_kind IN ('worker','tail_inspection')");
+    expect(responsibility.match(/item\.execution_kind IN \('worker','tail_inspection','external_craft'\)/g)).toHaveLength(2);
+    expect(responsibility).toMatch(/item\.execution_kind IN \('worker','external_craft'\)\s+OR \(item\.execution_kind='tail_inspection' AND \$2 IN \('own_factory','processing_factory'\)\)/);
     expect(responsibility).toContain("整查费用由加工厂承担时必须按加工厂 100%、倍率 1.2 扣款");
     expect(panel).toContain('multiplier: tailCostBearer === "own_factory" ? "1.000" : "1.200"');
     expect(responsibility).toContain("整查费用由本厂承担时必须按本厂 100%、倍率 1 计入责任");

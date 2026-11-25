@@ -20,6 +20,7 @@ import {
 import { mapWithConcurrency } from "./concurrency.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { hasExistingReceivingSource } from "./receiving-source.js";
+import {pendingReceivingReturn,type PendingReceivingSelection} from './pending-receiving-entry.js';
 import "./receiving-page.css";
 import "./legacy-ui.css";
 
@@ -113,6 +114,9 @@ const uploadReceivingImage = async (source: File): Promise<string> => {
 };
 
 export function ReceivingPage() {
+  const query=new URLSearchParams(window.location.search),pendingAllocation=query.get('pendingAllocation');
+  const pendingReturn=pendingReceivingReturn(query.get('returnTo'));
+  const [pendingScope,setPendingScope]=useState<PendingReceivingSelection|null>(null),[pendingError,setPendingError]=useState(''),[pendingRetry,retryPending]=useState(0);
   const [open, setOpen] = useState(false);
   const [backfill, setBackfill] = useState(false);
   const [repeat, setRepeat] = useState(false);
@@ -141,15 +145,34 @@ export function ReceivingPage() {
   const [message, setMessage] = useState("");
   const selectedCuttingId=repeat?selectedRepeatOrder?.cuttingOrderId:selectedCutting?.cuttingOrderId;
   useEffect(()=>{setFactoryShipment(null);},[selectedCuttingId,open,repeat]);
-  const factoryInput=factoryShipment?{productionOrderId:factoryShipment.productionOrderId,factoryDecisionId:factoryShipment.factoryDecisionId??null}:{};
+  const factoryInput=pendingScope&&pendingAllocation?{pendingAllocation,productionOrderId:pendingScope.productionOrderId,factoryDecisionId:pendingScope.factoryDecisionId}
+    :factoryShipment?{productionOrderId:factoryShipment.productionOrderId,factoryDecisionId:factoryShipment.factoryDecisionId??null}:{};
   const pendingKey = useRef<string | null>(null);
   const submitting = useRef(false);
   const uploadedIds = useRef(new Map<string, string>());
   const previewUrls = useRef(new Set<string>());
 
+  useEffect(()=>{
+    if(!pendingAllocation)return;
+    const abort=new AbortController();
+    setPendingError('');
+    void requestJson<PendingReceivingSelection>('receiving/pending/selection?'+new URLSearchParams({scope:pendingAllocation}).toString(),{method:'GET',signal:abort.signal}).then(data=>{
+      if(abort.signal.aborted)return;
+      setPendingScope(data);
+      const selected={cuttingOrderId:data.cuttingOrderId,styleNo:data.styleNo,color:data.color,supplierName:data.supplierName??'工厂待核',actualCutCount:data.actualCutCount,styleConflictCount:1};
+      setStyleNo(data.styleNo);setSelectedCutting(selected);
+      if(data.receivingBatchId){
+        if(data.documentQuantity===null)throw Error('原收货送货单数量待核，请返回原单查看');
+        setRepeat(true);setRepeatQuery(data.styleNo);setSelectedRepeatOrder({...selected,receivingBatchId:data.receivingBatchId,documentQuantity:data.documentQuantity});
+      }
+      setOpen(true);
+    }).catch(error=>{if(!abort.signal.aborted)setPendingError(error instanceof Error?error.message:'原待收货范围未读到');});
+    return()=>abort.abort();
+  },[pendingAllocation,pendingRetry]);
+
   useEffect(() => {
     const needle = debouncedRepeatQuery.trim();
-    if (!repeat || !repeatSource || needle.length < 4) {
+    if (pendingAllocation || !repeat || !repeatSource || needle.length < 4) {
       setRepeatOrders([]);
       setRepeatOptionsQuery("");
       setRepeatSearching(false);
@@ -184,10 +207,10 @@ export function ReceivingPage() {
       })
       .finally(() => { if (!controller.signal.aborted) setRepeatSearching(false); finish(); });
     return () => { controller.abort(); finish(); };
-  }, [repeat, repeatSource, debouncedRepeatQuery]);
+  }, [pendingAllocation, repeat, repeatSource, debouncedRepeatQuery]);
   useEffect(() => {
     const needle = debouncedStyleNo.trim();
-    if (!open || repeat || needle.length < 4) {
+    if (pendingAllocation || !open || repeat || needle.length < 4) {
       setCuttingOptions([]);
       setCuttingOptionsQuery("");
       setCuttingSearching(false);
@@ -221,7 +244,7 @@ export function ReceivingPage() {
       finish();
     });
     return () => { controller.abort(); finish(); };
-  }, [open, repeat, debouncedStyleNo]);
+  }, [pendingAllocation, open, repeat, debouncedStyleNo]);
 
   useEffect(() => () => {
     for (const previewUrl of previewUrls.current) URL.revokeObjectURL(previewUrl);
@@ -292,6 +315,7 @@ export function ReceivingPage() {
     const actualCount = Number(actualQuantity);
     const defectiveCount = Number(defectiveQuantity);
     const addedDocumentCount = Number(documentQuantity);
+    if(pendingAllocation&&!pendingScope)return;
     if (!repeatSource) { setMessage("请先选择嘉顺收货或其他工厂收货"); return; }
     if (!selectedRepeatOrder) { setMessage("请先搜索并选择要追加收货的订单"); return; }
     if (repeatSource === "other_factory" && (!/^\d+$/.test(documentQuantity) || addedDocumentCount <= 0)) { setMessage("本次送货单数量请输入大于0的整数"); return; }
@@ -299,7 +323,8 @@ export function ReceivingPage() {
     if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
     if (defectiveCount > actualCount) { setMessage("次品数量不能超过实际收货数量"); return; }
 
-    setBusy(true);
+    if(submitting.current)return;
+    submitting.current=true;setBusy(true);
     setMessage("正在提交多次收货…");
     try {
       const key = pendingKey.current ?? createClientRequestId();
@@ -334,11 +359,13 @@ export function ReceivingPage() {
       if (nextMessage.includes("重新搜索")) setSelectedRepeatOrder(null);
       setMessage(nextMessage);
     } finally {
+      submitting.current=false;
       setBusy(false);
     }
   };
 
   const submit = async () => {
+    if(pendingAllocation&&!pendingScope)return;
     const trimmedStyle = (selectedCutting?.styleNo ?? styleNo).trim();
     const documentCount = Number(documentQuantity);
     const actualCount = Number(actualQuantity);
@@ -355,7 +382,7 @@ export function ReceivingPage() {
     if (submitting.current) return;
     submitting.current = true;
     setBusy(true);
-    if (!backfill && trimmedStyle.length >= 4) {
+    if (!pendingScope && !backfill && trimmedStyle.length >= 4) {
       try {
         const options = await requestJson<RepeatOptions>(`receiving/repeat-options?${new URLSearchParams({ q: trimmedStyle }).toString()}`, { method: "GET" });
         if (hasExistingReceivingSource(options.orders, trimmedStyle, selectedCutting?.cuttingOrderId)) {
@@ -439,8 +466,10 @@ export function ReceivingPage() {
     <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
-      {open&&selectedCuttingId?<FactoryReceiptSelector key={`${selectedCuttingId}:${repeat}`} cuttingOrderId={selectedCuttingId} shipment={factoryShipment} disabled={busy} onSelect={s=>{setFactoryShipment(s);pendingKey.current=null;}}/>:null}
-      {!open ? (
+      {pendingReturn&&<a href={pendingReturn}>返回待收货</a>}
+      {pendingScope&&<p className="receiving-repeat-selected">已锁定原收货范围 · {pendingScope.supplierName??'工厂待核'} · {pendingScope.poNumber??'PO 待核'} · 待收 {pendingScope.remaining} 件</p>}
+      {open&&selectedCuttingId&&!pendingAllocation?<FactoryReceiptSelector key={`${selectedCuttingId}:${repeat}`} cuttingOrderId={selectedCuttingId} shipment={factoryShipment} disabled={busy} onSelect={s=>{setFactoryShipment(s);pendingKey.current=null;}}/>:null}
+      {pendingAllocation&&!open ? (pendingError?<p role="alert">{pendingError} <Button variant="secondary" onClick={()=>retryPending(v=>v+1)}>重新读取</Button></p>:!pendingScope?<p role="status">读取原待收货范围…</p>:null) : !open ? (
         <div className="receiving-entry-actions">
           <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setRepeatSource(null); setBackfill(false); setOpen(true); setMessage(""); }}>
             <span aria-hidden="true">＋</span>
@@ -489,7 +518,7 @@ export function ReceivingPage() {
                 inputMode="text"
                 placeholder="输入完整款号或末尾至少4位"
                 value={repeatQuery}
-                disabled={busy}
+                disabled={busy||Boolean(pendingScope)}
                 onFocus={() => setRepeatMenuOpen(true)}
                 onBlur={() => window.setTimeout(() => setRepeatMenuOpen(false), 120)}
                 onChange={(event) => {
@@ -572,7 +601,7 @@ export function ReceivingPage() {
                 inputMode="text"
                 placeholder="输入完整款号或末尾至少4位"
                 value={styleNo}
-                disabled={busy}
+                disabled={busy||Boolean(pendingScope)}
                 onFocus={() => setStyleMenuOpen(true)}
                 onBlur={() => window.setTimeout(() => setStyleMenuOpen(false), 120)}
                 onChange={(event) => {

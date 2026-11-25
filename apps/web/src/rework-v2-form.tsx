@@ -346,7 +346,7 @@ export function ReworkInitiationV2Form({
           fabricSupplierId: context.fabricSupplier?.supplierId ?? "",
           embroideryMerchandiserUserId: context.embroideryMerchandiserUserId ?? "",
         });
-        setMessage(`草稿已读取 · 当前已有 ${formatBusinessDecimal(draft.attachmentIds.length)} 份报告`);
+        setMessage(draft.originalQualityReportAvailable ? '草稿已读取 · 可沿用原质检报告' : `草稿已读取 · 当前已有 ${formatBusinessDecimal(draft.attachmentIds.length)} 份报告`);
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "返工草稿加载失败");
@@ -425,7 +425,7 @@ export function ReworkInitiationV2Form({
           ? "请填写其他工艺内容。"
         : !isFinishing && form.tailInspectionRequired && !form.tailInspectionCostBearer
           ? `请选择${specialLabel}费用承担方。`
-          : !isFinishing && availableImageCount <= 0
+          : !isFinishing && availableImageCount <= 0 && !order?.originalQualityReportAvailable
             ? "请至少上传 1 张返工报告图片。"
             : null;
   const complete = submissionIssue === null;
@@ -759,7 +759,7 @@ export function ReworkInitiationV2Form({
     <Surface className="rework-v2-core">
       <div className="rework-v2-section-heading">
         <div><h2>{embedded ? "返工核心资料" : "核心资料"}</h2><p><strong>*</strong> 为必填；其他资料按实际情况补充。</p></div>
-        {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{formatBusinessDecimal(availableImageCount)} 份报告</StatusBadge> : null}
+        {embedded ? <StatusBadge tone={availableImageCount || order?.originalQualityReportAvailable ? "success" : "info"}>{order?.originalQualityReportAvailable ? '可沿用原质检报告' : `${formatBusinessDecimal(availableImageCount)} 份报告`}</StatusBadge> : null}
       </div>
       <div className="rework-v2-grid">
         <label><span>款号 <b>*</b></span><input value={history ? historicalValue("款号") : form.styleNo} disabled={Boolean(history) || busy || Boolean(receivingBatchId || order?.receivingBatchId)} readOnly={Boolean(receivingBatchId || order?.receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="从订单回货自动带入" /></label>

@@ -9,6 +9,7 @@ import {isRootActor} from '../access/business-authority.js';
 import {memberCanWriteModule} from '../access/member-module-policy.js';
 import {ProductionReportingService} from '../sourcing/production-reporting-service.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,isDigitalLeader} from './access-policy.js';
+import {canReadExactOriginalQualityPhoto,type OriginalQualityPhotoReference} from './original-quality-photo.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 export const isQcProgressActor=(actor:TrustedActorContext)=>actor.actorRoles.includes('quality_control')&&(actor.authorizationCapabilities??[actor.authorizationCapability]).includes(QC_PROGRESS_CAPABILITY);
 function conflict(message:string):never{throw new ApplicationError('QC_PROGRESS_CONFLICT',message,409);}
@@ -176,6 +177,9 @@ export class QcProductionProgressService{
  async authorizePendingUpload(actor:TrustedActorContext,id:string,attachmentId:string){
   const claim=(await this.database.query('SELECT * FROM digital_qc_progress_uploads WHERE production_order_id=$1 AND attachment_id=$2 AND actor_id=$3',[id,attachmentId,actor.actorId])).rows[0];if(!claim)digitalForbidden();
   await this.authorizeUpload(actor,id,claim.factory_decision_id,claim.scope_revision);
+ }
+ async canDownloadOriginal(actor:TrustedActorContext,ref:Extract<OriginalQualityPhotoReference,{kind:'factory-progress'}>){
+  return canReadExactOriginalQualityPhoto(this.database,actor,ref);
  }
  async canDownload(actor:TrustedActorContext,id:string,attachmentId:string){
   if(!await new DigitalProductionAccessPolicy(this.database).allowed(actor,'order',id,'technical'))return false;

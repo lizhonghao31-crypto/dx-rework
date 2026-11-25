@@ -576,12 +576,15 @@ export function Shell({
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
   const warehouseNavigation:NavigationEntry[]=digital&&['warehouse_receiver','warehouse_supervisor'].some(hasRole)?
    [{name:'仓库中心',description:'本人收料、预缩及发厂原任务',href:'/ui/digital-production?workspace=warehouse',activeKey:'digital-warehouse'}]:[];
+  const qualityNavigation:NavigationEntry[]=digital&&hasRole('quality_control')?
+   [{name:'质量中心',description:'查看本人质检原任务',href:'/ui/digital-production?workspace=quality',activeKey:'digital-quality'}]:[];
   const navigation: NavigationEntry[] = [
     ...designerNavigation,
     ...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry)),
     ...preparationNavigation,
     ...factoryNavigation,
     ...warehouseNavigation,
+    ...qualityNavigation,
     ...globalNavigation,
     ...reworkNavigation,
     ...mobileSourcingNavigation,
@@ -596,7 +599,7 @@ export function Shell({
     { name: "大货产前准备", description: "生产前置汇合", entries: preparationNavigation },
     { name: "外发定价&选厂", description: "询价、审批与执行", entries: sourcingNavigation },
     { name: "订单开裁", description: "裁床实裁", entries: cuttingNavigation },
-    { name: "裁后工艺与发厂", description: "裁后办理", entries: factoryNavigation },
+    { name: "裁后工艺与发厂", description: "裁后办理", entries: [...factoryNavigation,...qualityNavigation] },
     {
       name: "订单返工",
       description: "订单返工业务",

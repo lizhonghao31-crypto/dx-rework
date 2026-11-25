@@ -32,4 +32,41 @@ describe('independent craft scopes and terminal-only physical supply',()=>{
   const unrelated=factoryStepLedger([{lineId:'po',quantity:100}],[...first,fact('old','工艺回仓','old-combined',100)], [qc('return1'),qc('old')],steps);
   expect(unrelated.canDispatch).toBe(false);expect(unrelated.batches).toEqual([]);
  });
+ it('allows only pieces explicitly released on the exact counted predecessor without unlocking a legacy sibling lot',()=>{
+  const facts=[fact('s1','工艺发出','emb',400),fact('counted','工艺回仓','emb',300,{sendFactId:'s1'}),fact('legacy','工艺回仓','emb',100,{sendFactId:'s1'})];
+  const scope={...qc('counted'),result:'需处理',quantity_scope:{inspectedQuantity:220,qualifiedQuantity:200,problemQuantity:20,unit:'片'}};
+  const u=[{lineId:'po',quantity:400}];
+  const before=factoryStepLedger(u,facts,[scope,qc('legacy')],steps);
+  expect(before.steps[0]!.completion[0]).toMatchObject({qualified:300,complete:false});
+  expect(before.sendable[1]!.lines[0]!.remaining).toBe(200);
+  const after=factoryStepLedger(u,[...facts,fact('s2','工艺发出','print',200,{fromReturnId:'counted'})],[scope,qc('legacy')],steps);
+  expect(after.steps[0]!.batches[0]!.rows[0]).toMatchObject({returned:300,available:100,releasedAvailable:0});
+  expect(after.sendable[1]!.lines[0]!.remaining).toBe(0);
+ });
+ it('does not count an actual repair return as added stock or spend the original passed pieces',()=>{
+  const stepsForTest=steps.slice(0,1),lines=[{lineId:'po',quantity:300}];
+  const held={...qc('return1'),check_id:'check1',result:'需处理',quantity_scope:{inspectedQuantity:300,qualifiedQuantity:280,problemQuantity:20,unit:'片'}};
+  const outgoing=fact('repair-send','工艺发出','emb',20,{fromReturnId:'return1'});
+  const actual={...outgoing,payload:{...outgoing.payload,warehouseMotion:{reworkId:'repair',checkId:'check1'}}};
+  const returned=fact('repair-back','工艺回仓','emb',20,{sendFactId:'repair-send'});
+  const original=[fact('send1','工艺发出','emb',300),fact('return1','工艺回仓','emb',300,{sendFactId:'send1'})];
+  const out=factoryStepLedger(lines,[...original,actual,returned],[held],stepsForTest);
+  expect(out.batches.map(batch=>batch.rows[0])).toMatchObject([{available:280,releasedAvailable:280},{available:20,allowDispatch:false}]);
+  expect(out.steps[0]!.completion[0]).toMatchObject({qualified:280,complete:false});
+  const after=factoryStepLedger(lines,[...original,actual,returned],[held,qc('repair-back')],stepsForTest);
+  expect(after.steps[0]!.completion[0]).toMatchObject({qualified:300,complete:true,conflict:false});
+  expect(factoryStepLedger(lines,[...original,outgoing,returned],[held],stepsForTest).batches[0]!.rows[0]!.releasedAvailable).toBe(260);
+ });
+ it('appends uninspected pieces and only replaces the exact internally repaired scope',()=>{
+  const lines=[{lineId:'po',quantity:100}],single=steps.slice(0,1);
+  const checked=(id:string,inspected:number,qualified:number):BatchCheck=>({...qc('return1'),check_id:id,
+   result:inspected>qualified?'需处理':'合格',quantity_scope:{inspectedQuantity:inspected,qualifiedQuantity:qualified,problemQuantity:inspected-qualified,unit:'片'}});
+  const old=checked('original-problem',40,35),more=checked('new-scope',60,55);
+  const stock=[...first,fact('shipped','仓库实际发厂','emb',20,{returnFactId:'return1'})];
+  const reinspection={...checked('original-recheck',40,40),supersedes_check_id:old.check_id!};
+  const read=(checks:BatchCheck[])=>factoryStepLedger(lines,stock,checks,single).batches[0]!.rows[0]!;
+  expect(read([old])).toMatchObject({available:80,uninspectedQuantity:60,releasedAvailable:15,result:'需处理'});
+  expect(read([old,more])).toMatchObject({available:80,uninspectedQuantity:0,qualifiedQuantity:90,releasedAvailable:70,result:'需处理'});
+  expect(read([old,more,reinspection])).toMatchObject({available:80,uninspectedQuantity:0,qualifiedQuantity:95,releasedAvailable:75,result:'需处理'});
+ });
 });

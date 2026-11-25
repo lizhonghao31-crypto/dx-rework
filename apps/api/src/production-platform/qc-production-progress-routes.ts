@@ -28,4 +28,14 @@ export function registerQcProductionProgressRoutes(app:FastifyInstance,dependenc
  });
  app.post(`${base}/attachments/:attachmentId/finalize`,async request=>{const trusted=await actor(request,true),attachmentId=id(request,'attachmentId');await service.authorizePendingUpload(trusted,id(request),attachmentId);return attachments.finalize(trusted,attachmentId);});
  app.get(`${base}/attachments/:attachmentId`,async(request,reply)=>{const trusted=await actor(request),attachmentId=id(request,'attachmentId'),orderId=id(request);const grant=await attachments.createDownloadIntent(trusted,attachmentId,()=>service.canDownload(trusted,orderId,attachmentId),'inline');return reply.redirect(grant.downloadUrl);});
+ app.get(`${base}/original-attachments/:attachmentId`,async(request,reply)=>{
+  const trusted=await actor(request),attachmentId=id(request,'attachmentId'),orderId=id(request);
+  const query=parse(z.object({productionId:z.string().uuid(),factoryDecisionId:z.union([z.string().uuid(),z.literal('original')]),
+   recordId:z.string().uuid(),revision:z.coerce.number().int().positive(),scopeRevision:z.string().regex(/^[0-9a-f]{64}$/)}).strict(),request.query);
+  const ref={kind:'factory-progress' as const,orderId,attachmentId,...query,factoryDecisionId:query.factoryDecisionId==='original'?null:query.factoryDecisionId};
+  const authorize=()=>service.canDownloadOriginal(trusted,ref);
+  if(!await authorize())throw new ApplicationError('NOT_FOUND','所选原进度照片或范围不可查看',404);
+  const grant=await attachments.createDownloadIntent(trusted,attachmentId,authorize,'inline');
+  return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+ });
 }

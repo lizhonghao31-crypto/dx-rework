@@ -2,7 +2,7 @@ import type {PoolClient} from 'pg';
 import {ApplicationError} from '../platform/errors.js';
 import {fixedCraftSteps} from './fixed-craft-steps.js';
 import {factoryStepLedger} from './factory-step-ledger.js';
-import {scopes,type FactoryScope} from './factory-batch-ledger.js';
+import {factoryBatchReleaseAvailable,scopes,type FactoryScope} from './factory-batch-ledger.js';
 
 /** The low-level native dispatch also verifies terminal scope. A direct caller
  * cannot turn an earlier craft's QC or an already consumed return into supply.
@@ -24,6 +24,6 @@ export async function assertFixedFactoryDispatch(db:Pick<PoolClient,'query'>,ord
  if(!batch||ledger.quantityConflict||!requested.length||new Set(requested.map(line=>line.lineId)).size!==requested.length)fail();
  for(const line of requested){
   const row=batch!.rows.find(row=>row.lineId===line.lineId),remaining=ledger.totals.find(row=>row.lineId===line.lineId)?.remaining??0;
-  if(!row?.allowDispatch||line.quantity>Math.min(row.available,remaining))fail();
+  if(!row||line.quantity>Math.min(factoryBatchReleaseAvailable(row),remaining))fail();
  }
 }

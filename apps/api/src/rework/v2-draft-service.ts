@@ -23,6 +23,8 @@ type OrderRow = Readonly<{
   rework_no: string | null;
   status: ReworkOrderResponse["status"];
   rework_kind: "qc_rework" | "inhouse_finishing";
+  source_garment_qc_event_id?: string|null;
+  source_craft_qc_check_id?: string|null;
   source_system: string;
   style_no: string | null;
   customer_supply_code: string | null;
@@ -366,11 +368,17 @@ export class ReworkV2DraftService {
     row: OrderRow,
   ): Promise<ReworkOrderResponse> {
     const factory = factoryFromRow(row);
+    const originalQualityReportAvailable=row.source_garment_qc_event_id?(await client.query<{ready:boolean}>(
+      'SELECT garment_rework_has_original_report($1) AS ready',[row.source_garment_qc_event_id],
+    )).rows[0]?.ready===true:row.source_craft_qc_check_id?(await client.query<{ready:boolean}>(
+      'SELECT craft_rework_has_original_report($1) AS ready',[row.source_craft_qc_check_id],
+    )).rows[0]?.ready===true:undefined;
     return {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
       reworkKind: row.rework_kind,
+      ...(originalQualityReportAvailable!==undefined?{originalQualityReportAvailable}:{}),
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,

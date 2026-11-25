@@ -18,7 +18,9 @@ import {digitalChildDetailHref} from './digital-detail-route.js';
 
 type NativePage={items:DigitalTask[];total:number;page:number};
 const urls=createWebUrls(import.meta.env.BASE_URL);
-const taskHref=(row:DigitalTask,returnTo:string)=>digitalChildDetailHref('/ui/digital-production?'+new URLSearchParams({
+const taskHref=(row:DigitalTask,returnTo:string,kind:WarehouseNativeTaskQuery['kind'])=>digitalChildDetailHref('/ui/digital-production?'+new URLSearchParams(kind==='craft'&&row.orderId&&row.state!=='completed'?{
+ factory:row.orderId,factoryAction:'logistics',warehouseCraft:'1',
+}:{
  task:row.taskId,taskView:row.canExecute&&row.state!=='completed'&&!row.paused?'handle':'read',
 }),returnTo,urls.base);
 const deadline=(row:DigitalTask)=>{
@@ -46,7 +48,7 @@ export function WarehouseNativeTaskTable({initial,onFilter,returnTo}:{
  },[key,parameter]);
  const apply=()=>onFilter({...initial,search:search.trim(),page:1});
  const shown=exact?.items??[];
- return <section aria-label={initial.kind==='preshrink'?'待预缩':'待发料及发厂'}>
+ return <section aria-label={initial.kind==='preshrink'?'待预缩':initial.kind==='craft'?'原仓库工艺收发':'待发料及发厂'}>
   <form className="pattern-actions" onSubmit={event=>{event.preventDefault();apply();}}>
    <TextInput label="搜索订单ID或 PO" value={search} onChange={setSearch}/>
    <Button type="submit" label="搜索" isDisabled={search.trim().length>100}/>
@@ -63,7 +65,7 @@ export function WarehouseNativeTaskTable({initial,onFilter,returnTo}:{
    {key:'dueAt',header:'原计划 / 期限',renderCell:row=><>{deadline(row)}<TaskPlanTargets task={row}/></>},
    {key:'state',header:'状态',renderCell:row=>digitalTaskDisplayStatus(row,row.state==='completed')},
    {key:'taskId',header:'办理',renderCell:row=>{
-    const href=taskHref(row,returnTo);
+    const href=taskHref(row,returnTo,initial.kind);
     return href?<Link type="inherit" href={href}>{row.state==='completed'||!row.canExecute?'查看原任务':'进入原任务'}</Link>:null;
    }},
   ]}/></div>}

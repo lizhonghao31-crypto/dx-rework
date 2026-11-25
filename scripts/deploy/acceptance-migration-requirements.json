@@ -2509,5 +2509,186 @@
       "reject_operation_event_mutation"
     ],
     "sequences": []
+  },
+  "0307_craft_quality_quantity_scope": {
+    "checksum": "f228ff036180c738c3ba49b0492d8ec78fea3813e136afebbc6932e87fedcf92",
+    "tables": [
+      "digital_factory_facts",
+      "digital_factory_qc",
+      "digital_factory_routes",
+      "digital_production_po_lines"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_native_craft_quality_quantity_scope"
+    ],
+    "sequences": []
+  },
+  "0308_rework_original_craft_quality_source": {
+    "checksum": "5bf02a80748d37b4b704f59ac4591f33c0f0a768e16f24a3a772d95f5a347fe0",
+    "tables": [
+      "attachments",
+      "digital_factory_facts",
+      "digital_factory_qc",
+      "rework_orders",
+      "rework_process_configurations",
+      "rework_tail_completion_confirmations"
+    ],
+    "functions": [
+      "guard_rework_submission_requires_image",
+      "guard_rework_source_receiving_quantity_ceiling",
+      "rework_source_receiving_actual_quantity"
+    ],
+    "references": [
+      "digital_factory_qc"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_rework_original_craft_quality_source",
+      "craft_rework_has_original_report",
+      "guard_rework_submission_requires_image",
+      "rework_original_quantity_bound",
+      "guard_rework_source_receiving_quantity_ceiling",
+      "rework_source_receiving_actual_quantity"
+    ],
+    "sequences": []
+  },
+  "0309_original_external_craft_configuration": {
+    "checksum": "dec944ce2860cb8e3ab4ea1390a192a3b0c2a1c2559ba1aaf73ec7c1e8820689",
+    "tables": [
+      "rework_orders",
+      "rework_process_configurations",
+      "rework_process_configuration_items",
+      "rework_work_tasks"
+    ],
+    "functions": [
+      "guard_rework_order_write",
+      "guard_rework_process_configuration_write"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "original_external_craft_configuration_matches",
+      "guard_rework_order_write",
+      "guard_rework_process_configuration_write",
+      "guard_original_external_craft_worker_task",
+      "guard_original_external_craft_item"
+    ],
+    "sequences": []
+  },
+  "0310_original_external_craft_final_quantity": {
+    "checksum": "1b3318acb4c3404ef031dfccf60e9ff42ad982b511bcc1eb97c8a84d263e4949",
+    "tables": [
+      "digital_factory_facts",
+      "digital_factory_qc",
+      "operation_events",
+      "rework_orders",
+      "rework_process_configurations",
+      "rework_process_configuration_items",
+      "rework_tail_completion_confirmations"
+    ],
+    "functions": [
+      "guard_rework_tail_completion_confirmation",
+      "guard_rework_order_review_insert",
+      "validate_responsibility_version"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "original_external_craft_return_snapshot_matches",
+      "guard_original_external_craft_finish_facts",
+      "guard_original_external_craft_confirmation_facts",
+      "guard_rework_tail_completion_confirmation",
+      "guard_rework_order_review_insert",
+      "validate_responsibility_version"
+    ],
+    "sequences": []
+  },
+  "0311_internal_craft_quality_reinspection": {
+    "checksum": "a48d22d7729b3c460ddfaa8308c5172b814bdfc979e6167d3e3a8f4a90f3a27f",
+    "tables": [
+      "digital_factory_qc",
+      "operation_events",
+      "rework_orders"
+    ],
+    "functions": [],
+    "references": [
+      "digital_factory_qc",
+      "rework_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_internal_craft_reinspection"
+    ],
+    "sequences": []
+  },
+  "0312_original_garment_quality_rework": {
+    "checksum": "b9739700ff20970d5ae5a483d5f73178861a6ffe2436c036694ec09a1ceae954",
+    "tables": [
+      "attachments",
+      "digital_order_closures",
+      "digital_production_child_lines",
+      "digital_production_orders",
+      "digital_production_resource_lifecycle",
+      "digital_production_task_events",
+      "receiving_batches",
+      "receiving_receipt_corrections",
+      "receiving_receipts",
+      "rework_orders"
+    ],
+    "functions": [
+      "guard_rework_submission_requires_image",
+      "rework_original_quantity_bound"
+    ],
+    "references": [
+      "digital_production_task_events"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "craft_rework_has_original_report",
+      "garment_rework_has_original_report",
+      "guard_original_garment_quality_rework",
+      "original_garment_qc_problem_quantity",
+      "rework_source_receiving_actual_quantity"
+    ],
+    "sequences": []
+  },
+  "0313_external_craft_repair_continuation": {
+    "checksum": "dbaaacbc6a45910c2d4a6a179573f0ff44d2253990e33374936de97f74ea9587",
+    "tables": [
+      "digital_factory_facts",
+      "digital_factory_qc",
+      "operation_events",
+      "rework_orders"
+    ],
+    "functions": [
+      "guard_rework_original_craft_quality_source"
+    ],
+    "references": [
+      "rework_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "craft_repair_can_continue",
+      "craft_repair_unallocated",
+      "original_external_craft_return_snapshot_matches"
+    ],
+    "sequences": []
   }
 }

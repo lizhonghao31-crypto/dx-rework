@@ -1,5 +1,7 @@
 import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import { FinanceNodeParamsSchema } from "@dx-rework/contracts/reporting";
+import {OriginalCraftReworkDraftSchema} from '@dx-rework/contracts/factory-flow';
+import {GarmentReworkSourceSchema} from '@dx-rework/contracts/order-closure';
 import {
   AddIePrecountSchema,
   AddTailDefectiveQuantitySchema,
@@ -92,6 +94,7 @@ export type ReworkHttpDependencies = Readonly<{
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
   attachments?: AttachmentService;
   inspectionImageExtractor?: InspectionImageExtractionService;
+  originalCraftQuality?:boolean;
 }>;
 
 export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkHttpDependencies): void {
@@ -255,6 +258,16 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     const input = parse(CreateReworkDraftWithReceivingBatchSchema, request.body);
     const result = await dependencies.service.createDraft(await finishingActor(request), input, idempotencyKey(request), "inhouse_finishing");
     if (result.reused) void reply.header("idempotency-replayed", "true");
+    return reply.code(201).send(result.value);
+  });
+  if(dependencies.originalCraftQuality)app.post('/rework-orders/craft-quality/drafts',async(request,reply)=>{
+    const result=await dependencies.service.createCraftDraft(await actor(request),parse(OriginalCraftReworkDraftSchema,request.body),idempotencyKey(request));
+    if(result.reused)reply.header('idempotency-replayed','true');
+    return reply.code(201).send(result.value);
+  });
+  if(dependencies.originalCraftQuality)app.post('/rework-orders/garment-quality/drafts',async(request,reply)=>{
+    const result=await dependencies.service.createGarmentDraft(await actor(request),parse(GarmentReworkSourceSchema,request.body),idempotencyKey(request));
+    if(result.reused)reply.header('idempotency-replayed','true');
     return reply.code(201).send(result.value);
   });
   app.post("/rework-orders/drafts", async (request, reply) => {

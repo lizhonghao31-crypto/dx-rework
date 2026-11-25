@@ -10,6 +10,7 @@ import {readFixedOrderRoute} from './fixed-order-route.js';
 import {orderTimePolicyHistory} from './order-time-native-timing.js';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import type {FactoryEvaluationRoute} from './factory-evaluation-route.js';
+import {countedCraftCheck} from './quality-craft-problem-scope.js';
 
 const latest=(values:Array<Date|string|null|undefined>)=>values.length&&values.every(Boolean)?new Date(Math.max(...values.map(value=>new Date(value!).getTime()))).toISOString():null;
 
@@ -19,7 +20,12 @@ const latest=(values:Array<Date|string|null|undefined>)=>values.length&&values.e
 export function terminalDispatchObligations(ledger:Pick<ReturnType<typeof factoryBatchLedger>,'batches'>,facts:readonly BatchFact[],checks:readonly (BatchCheck&{check_id?:string})[],contractAt:Date|string|null){
  const windows:Array<{key:string;lineId:string;enteredAt:string|null;complete:boolean;completedAt:string|null;checkId:string|null}>=[];
  for(const batch of ledger.batches)for(const line of batch.rows){
-  const first=checks.find(check=>check.return_fact_id===batch.factId&&check.line_id===line.lineId&&(check.result==='合格'||check.allow_dispatch));
+  const first=checks.find(check=>{
+   if(check.return_fact_id!==batch.factId||check.line_id!==line.lineId)return false;
+   if(check.quantity_scope==null)return check.result==='合格'||check.allow_dispatch;
+   const count=countedCraftCheck(check.quantity_scope,line.returned);
+   return count!==null&&(count.qualifiedQuantity>0||check.allow_dispatch===true);
+  });
   if(!first||line.reworked>0&&line.available===0&&line.sent===0)continue;
   const dispatched=facts.filter(fact=>fact.kind==='仓库实际发厂'&&fact.payload.returnFactId===batch.factId&&Array.isArray(fact.payload.lines)&&fact.payload.lines.some((scope:FactoryScope)=>scope.lineId===line.lineId));
   const complete=line.available===0&&line.sent>0;
