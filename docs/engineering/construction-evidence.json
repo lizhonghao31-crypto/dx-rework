@@ -129,7 +129,8 @@
       "startedAt": "2026-11-25T08:24:34Z",
       "endedAt": "2026-11-25T08:25:23Z",
       "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
+      "testedHead": "ffbf76cfa9c3cef554144499d869013c63266519",
+      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-static.log",
       "logSha256": "155dcb146c7b87cde51a53ca4fdf659091a7f7738702acc4dbba24131d87932c"
     },
     {
@@ -145,7 +146,8 @@
       "startedAt": "2026-11-25T08:24:34Z",
       "endedAt": "2026-11-25T08:24:42Z",
       "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
+      "testedHead": "ffbf76cfa9c3cef554144499d869013c63266519",
+      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-unit.log",
       "logSha256": "c80522c5dda7fff6d7a57739670323270ca958911617868b63d14b2dcce2c9c6"
     },
     {
@@ -161,7 +163,8 @@
       "startedAt": "2026-11-25T08:24:34Z",
       "endedAt": "2026-11-25T08:24:36Z",
       "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
+      "testedHead": "ffbf76cfa9c3cef554144499d869013c63266519",
+      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-protocol.log",
       "logSha256": "b2973cb34a51bc5121fa8f6fe0de3d10422be844b3a7dda367a759dc3f4fd550"
     },
     {
@@ -177,7 +180,8 @@
       "startedAt": "2026-11-25T08:24:34Z",
       "endedAt": "2026-11-25T08:25:52Z",
       "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
+      "testedHead": "ffbf76cfa9c3cef554144499d869013c63266519",
+      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-native.log",
       "logSha256": "cd49a7ef026a77107430496df08b55550adef016ec516d3a01edaf55859e558d"
     }
   ]
