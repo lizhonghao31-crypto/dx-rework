@@ -16,7 +16,7 @@ export async function readHistoricalReview(client:PoolClient, orderId:string, at
  LEFT JOIN LATERAL (SELECT * FROM rework_work_report_quantity_revisions revision WHERE revision.work_report_id=report.work_report_id AND revision.corrected_at <= $2::timestamptz ORDER BY revision.revision_version DESC LIMIT 1) correction ON true
  WHERE report.rework_order_id=$1 AND report.created_at <= $2::timestamptz ORDER BY report.completed_at,report.work_report_id`,[orderId,at])).rows.map(row=>({...row,completedAt:row.completedAt.toISOString(),correctedAt:row.correctedAt?.toISOString()??null})) as WholeOrderReviewResponse['reports'];
  const confirmation=(await client.query(`SELECT confirmation.*,review.decision,review.reviewed_by,review.reviewed_at,review.reason AS review_reason,
- event.after_state->'externalRepair'-'returnFactIds' AS external_repair FROM rework_tail_completion_confirmations confirmation
+ (event.after_state->'externalRepair')-'returnFactIds'::text AS external_repair FROM rework_tail_completion_confirmations confirmation
  JOIN operation_events event ON event.event_id=confirmation.operation_event_id
  LEFT JOIN rework_tail_completion_reviews review ON review.confirmation_id=confirmation.confirmation_id AND review.reviewed_at <= $2::timestamptz
  WHERE confirmation.rework_order_id=$1 AND confirmation.confirmed_at <= $2::timestamptz ORDER BY confirmation.confirmation_version DESC LIMIT 1`,[orderId,at])).rows[0];
