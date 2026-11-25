@@ -54,6 +54,35 @@ it('R5 reads each technical kind independently so a failed comment does not hide
  const original=async(path:string)=>path.endsWith('/execution')?Promise.reject(Error('任务读取失败')):path.includes('/technical/history?')?{sourceId:sid,roundNumber:1,scopeRef:'整款',enrolled:false,items:[],nextBeforeVersion:null}:{sourceId:sid,roundNumber:1,version:1,document:{sizes:['M'],measurements:[{name:'胸围',values:['50']}]}};
  expect((await category(order,'development_sizes',original,signal)).state).toBe('created');await expect(category(order,'development_plt',original,signal)).rejects.toThrow('任务读取失败');
 });
+it('C5 identifies the actual effective final reply by its exact evidence, rather than the newest opinion',async()=>{
+ const items=[
+  {commentId:line,version:3,isFinal:false,decision:'approved'},
+  {commentId:oid,version:2,isFinal:true,decision:'approved'},
+  {commentId:sid,version:1,isFinal:true,decision:'approved'},
+ ];
+ const effective={sourceId:sid,roundNumber:1,scopeRef:'整款',state:'effective',finalCommentRef:{id:oid,version:2}};
+ const queried:string[]=[];
+ const documentView=async(overrides:object={},key:'customer_comments'|'customer_final_approval'='customer_final_approval')=>category({...order,lines:[]},key,async path=>{
+  queried.push(path);
+  return {sourceId:sid,roundNumber:1,scopeRef:'整款',items,nextBeforeVersion:null,effective:{...effective,...overrides}};
+ },signal);
+ const current=await documentView();
+ expect(current.entries.map(({id,effectiveCustomerApproval})=>[id,effectiveCustomerApproval??false])).toEqual([
+  [`comment:${oid}:2`,true],[`comment:${sid}:1`,false],
+ ]);
+ const reference=new URL(current.entries[0]?.originalUrl??'', 'https://local.invalid').searchParams;
+ expect(reference.get('originalTechnicalId')).toBe(oid);
+ expect(reference.get('originalTechnicalVersion')).toBe('2');
+ expect(reference.get('round')).toBe('1');
+ expect(reference.get('originalTechnicalScope')).toBe('整款');
+ const ordinary=await documentView({finalCommentRef:{id:line,version:3}},'customer_comments');
+ expect(ordinary.entries).toHaveLength(1);expect(ordinary.entries[0]?.effectiveCustomerApproval).toBeUndefined();
+ for(const invalid of [{state:'pending_review'},{state:'superseded'},{sourceId:oid},{roundNumber:2},{scopeRef:'po:'+line},
+  {finalCommentRef:{id:sid,version:2}},{finalCommentRef:{id:oid,version:1}}]){
+  expect((await documentView(invalid)).entries.every(row=>!row.effectiveCustomerApproval)).toBe(true);
+ }
+ expect(queried.every(path=>path.includes('kind=comments')&&path.includes('view=directory')&&!path.includes('&version='))).toBe(true);
+});
 it('R5 retains exact per-PO technical readers when a whole-style file is absent, without borrowing other scopes',async()=>{
  const calls:string[]=[],scope='po:'+line,artifact={artifactSetId:'po-a',version:1,sourceId:sid,roundNumber:1,scopeRef:scope,taskId:'paper',documentVersion:1,status:'published'};
  const read:CockpitDocumentReader=async path=>{calls.push(path);const q=new URL(path,'http://test').searchParams,selected=q.get('scopeRef');return {sourceId:sid,roundNumber:1,scopeRef:selected,items:q.get('kind')==='artifacts'&&selected===scope?[q.has('version')?{...artifact,body:{pltAttachmentIds:['PO-PLT'],consumptionRows:[],baseSizeTable:{sizes:[],measurements:[]}}}:artifact]:[],nextBeforeVersion:null};};

@@ -11,13 +11,13 @@ import {ApplicationError} from '../platform/errors.js';
 import {developmentSourceLifecycle,preorderDraftOrder,workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
-import {DEVELOPMENT_HANDOVER_ENTITY,designElectronicBases,readDesignElectronicHandover,shareApprovedDesignVersions} from './development-electronic-handover.js';
+import {DEVELOPMENT_HANDOVER_ENTITY,SAMPLE_HANDOVER_EVENT,designElectronicBases,designSampleHandoverHistory,readDesignElectronicHandover,readFormalDesignHandover,recordFormalDesignHandover,shareApprovedDesignVersions} from './development-electronic-handover.js';
+import {formalDevelopmentHandoverEvidence} from './development-formal-handover-evidence.js';
+import {orderTimeCreated} from './order-time-created.js';
 import {preparationContext,preparationAvailable,preparationAdoption,preparationHash,preparationIso,preparationMaterialHistory,currentPreparationMaterials,preparationResponsibility,appendPreparationMaterial,directInvestmentInstruction,type PreparationDB} from './preparation-material-repository.js';
 import {materialInvestmentReminder} from './material-investment-reminder.js';
 import {productionReadiness,preparationWindow,refreshPreparationWindows} from './production-readiness-repository.js';
 const conflict=(message:string):never=>{throw new ApplicationError('PREPARATION_CONFLICT',message,409);};
-const SAMPLE_HANDOVER_EVENT='design_sample_handed_over';
-type SampleDeliveryEvent={event_id:string;actor_id:string;actor_name:string|null;payload:{round:number;documentVersion:number;recipientId:string;recipientName:string|null;occurredAt:string}};
 type PreorderRecipient={actorId:string;handover:PreparationMaterialFact;evidence:ReadonlySet<string>};
 function preorderRecipientRows(rows:PreparationMaterialFact[],scope:PreorderRecipient,history=false){
  return rows.flatMap(row=>{
@@ -122,18 +122,16 @@ export class ProductionReadinessService{
    !access.context.orderId&&original?.state==='ready'&&original.valid?original.recipientId:null;
   const recipient=recipientId&&await access.policy.activeRole(recipientId,'order_merchandiser')
    ?{id:recipientId,name:(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[recipientId])).rows[0]?.display_name??null}:null;
-  const events=(await db.query<SampleDeliveryEvent>(`SELECT e.id AS event_id,e.actor_id,u.display_name AS actor_name,e.after_state AS payload
-   FROM audit_events e LEFT JOIN app_users u ON u.id=e.actor_id
-   WHERE e.entity_type=$1 AND e.entity_id=$2 AND e.action=$3 AND e.after_state->>'round'=$4
-   ORDER BY e.created_at DESC,e.id DESC`,[DEVELOPMENT_HANDOVER_ENTITY,sourceId,SAMPLE_HANDOVER_EVENT,String(round)])).rows;
-  const history=events.map(event=>({eventId:event.event_id,...event.payload,confirmedBy:event.actor_id,
-   confirmedByName:event.actor_name}));
-  const current=history.find(record=>record.recipientId===recipient?.id)??null;
+  const formal=order?await readFormalDesignHandover(db,order.id,sourceId):null;
+  const history=await designSampleHandoverHistory(db,sourceId,round);
+  const current=history.find(record=>record.recipientId===recipient?.id&&(!formal||record.documentVersion===documentVersion))??null;
   const canConfirm=access.designer&&recipient!==null&&current===null&&await this.sampleHandoverActive(db,sourceId,access.context.orderId);
   const bases=await designElectronicBases(db,sourceId,{version:documentVersion,document:document.document},order);
   const orderState=order?'available':access.context.orderId?'unavailable':'not_applicable';
   const electronic=await readDesignElectronicHandover(db,{sourceId,round,recipientId:recipient?.id??null},bases,original,orderState);
-  return {sourceId,round,documentVersion,recipient,electronic,canConfirm,current,history};
+  const view={sourceId,round,documentVersion,recipient,electronic,canConfirm,current,history};
+  return formal&&order?{...view,formal:{...formal,currentComplete:Boolean(formal.historicalCompletion&&
+   formalDevelopmentHandoverEvidence(view,await orderTimeCreated(db,{kind:'order',id:order.id})))}}:view;
  }
  async sampleHandover(actor:TrustedActorContext,sourceId:string){
   const db=await this.database.connect();
@@ -176,7 +174,10 @@ export class ProductionReadinessService{
      JSON.stringify({round,documentVersion,recipientId,recipientName,occurredAt})]);
    }
    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(receipt)]);
-   const handover=view.current?view:{...view,current:receipt,canConfirm:false,history:[receipt,...view.history]};
+   const orderId=access.context.orderId;
+   if(view.formal&&orderId)await recordFormalDesignHandover(db,actor,orderId,{sourceId,round:input.round,recipientId:input.recipientId},input.documentVersion,view.electronic,receipt);
+   const handover=view.formal?await this.sampleHandoverView(db,actor,sourceId,await this.access(db,actor,resource))
+    :view.current?view:{...view,current:receipt,canConfirm:false,history:[receipt,...view.history]};
    await db.query('COMMIT');return {handover,receipt};
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }

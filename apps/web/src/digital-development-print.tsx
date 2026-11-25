@@ -121,6 +121,6 @@ export function DevelopmentPrint({sheet,document,imageUrl,printRef}:{sheet:Devel
       </section>)}
       {document.files.filter(file=>file.kind==="菲林"||file.kind==="工艺开发板").map(file=><p key={file.attachmentId}><a href={imageUrl(file.attachmentId)}>{file.kind}{boardNumbers.has(file.attachmentId)?` ${boardNumbers.get(file.attachmentId)}`:""}（登录后查看原件）</a></p>)}
     </article>
-    {feedback&&<DevelopmentCustomerFeedbackPrint identity={identity} feedback={feedback}/>}
+    {feedback&&<DevelopmentCustomerFeedbackPrint identity={identity} feedback={feedback} imageUrl={imageUrl}/>}
   </div>;
 }

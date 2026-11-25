@@ -1,0 +1,14 @@
+.development-handover-checklist[data-progress] {
+  border: 1px solid var(--dx-status-danger);
+  border-radius: var(--dx-v2-radius-md, 8px);
+  padding: var(--dx-v2-space-3, 12px);
+}
+.development-handover-checklist[data-progress="complete"] {
+  border-color: var(--dx-status-success);
+}
+.development-handover-checklist [data-receipt] > span[aria-hidden="true"] {
+  color: var(--dx-status-danger);
+}
+.development-handover-checklist [data-receipt="shared"] > span[aria-hidden="true"] {
+  color: var(--dx-status-success);
+}

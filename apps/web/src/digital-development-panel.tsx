@@ -21,7 +21,7 @@ import { Button, Surface } from "@dx-rework/ui";
 import type { DevelopmentDocument, DevelopmentMaterialEvent, DevelopmentSheet } from "@dx-rework/contracts/digital-development";
 import { initialDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs, attachDevelopmentCraftFile } from "./digital-development-editing.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
-import { digitalRequest } from "./digital-production-api.js";
+import { DigitalRequestError,digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { sha256Hex } from "./attachment-upload.js";
 import { createWebUrls } from "../url-contract.js";
@@ -29,6 +29,9 @@ import "./digital-development.css";
 import { DocumentToolbar, DocumentErrors, DocumentSection } from "./document-editor.js";
 import { developmentIssues } from "./digital-development-validation.js";
 import {productionWorkspaceDomainHref} from "./digital-detail-route.js";
+import {SubmissionAttempt} from './submission-attempt.js';
+import {SubmissionRequestError} from './submission-validation.js';
+import {sessionCacheVersion} from './auth-session.js';
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const initial = initialDevelopmentDocument;
 type RoundHistory={roundNumber:number;origin:string;customerComment:string;internalProblem:string;explanation:string;affectedNodes:string[];inherited:Record<string,{taskId:string;roundNumber:number}>};
@@ -55,10 +58,13 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const [error,setError]=useState(""),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);
   const [revision,setRevision]=useState<RevisionFields|null>(null),[draftVersion,setDraftVersion]=useState(0),[rounds,setRounds]=useState<Rounds>({rounds:[],draft:null}),[selectedRound,setSelectedRound]=useState<number|undefined>(initialRound);
   const [roundsRead,setRoundsRead]=useState(false);
+  const [revisionReceipt,setRevisionReceipt]=useState('');
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null);
+  const revisionAttempt=useRef(new SubmissionAttempt());
+  const pendingRevision=revisionAttempt.current.hasPending;
   const timeApplication=useOrderTimeApplication(()=>{setDirty(false);});
-  useDigitalDetailNavigationGuard(dirty, busy, writing, "有未保存修改，确定离开？");
+  useDigitalDetailNavigationGuard(dirty||pendingRevision, busy, writing, pendingRevision?'复版提交结果尚未确认，离开不会撤销原请求。':'有未保存修改，确定离开？');
   const base=`sources/${sourceId}/development`;
   const applySheet=(value:DevelopmentSheet)=>{setSheet(value);onRead?.(value,selectedRound);};
   useEffect(()=>{
@@ -91,7 +97,35 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     setRevision(draft?{...draft.payload}:{basedOnRound:sheet!.latestRoundNumber??1,origin:"客户新增要求",customerComment:"",internalProblem:"",explanation:`参考第${sheet!.roundNumber??1}轮资料`,categories:["其他"],affectedNodes:["车板"],outputKind:"整件样板"});
     setDraftVersion(draft?.version??0);setDirty(!draft);
   };
+  const submitAdoptedRevision=async(input?:{expectedDraftVersion:number;basedOnRound:number;revision:DevelopmentRevision})=>{
+    if(writing.current||input&&revisionAttempt.current.hasPending)return;
+    writing.current=true;setBusy(true);setError('');setRevisionReceipt('');
+    try{
+      const key=input?createClientRequestId():undefined,actor=sessionCacheVersion();
+      const send=async()=>{
+        if(actor!==sessionCacheVersion())throw new SubmissionRequestError('登录身份已变化，请使用原账号核对。','FORBIDDEN',403);
+        let result:{sourceId:string;roundNumber:number};
+        try{result=await digitalRequest(`${base}/round-publish`,'POST',input,key);}
+        catch(reason){if(reason instanceof DigitalRequestError&&!reason.resultUnknown)throw new SubmissionRequestError(reason.message,reason.code,reason.status??500);throw reason;}
+        if(!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(result?.sourceId??'')||!Number.isSafeInteger(result?.roundNumber)||result.roundNumber!==(result.sourceId===sourceId?input!.basedOnRound+1:1))throw Error('未确认本轮复版的正式回执');
+        revisionAttempt.current.markConfirmed();setRevision(null);setDirty(false);previews.saved();
+        if(result.sourceId!==sourceId){window.location.assign(urls.pageUrl(`ui/digital-production?development=${result.sourceId}`));return;}
+        setRevisionReceipt('本轮复版已发布，正在读取原版单。');
+        setSelectedRound(result.roundNumber);
+        const location=new URL(window.location.href);location.searchParams.set('round',String(result.roundNumber));window.history.replaceState(window.history.state,'',location);
+        const next=await digitalRequest<DevelopmentSheet>(`${base}?round=${result.roundNumber}`);
+        applySheet(next);installDocument(next.document??initial());
+        setRevisionReceipt('本轮复版已发布。');
+      };
+      const result=input?await revisionAttempt.current.run(send):await revisionAttempt.current.retry();
+      if(result.kind==='failure'){
+        if(result.confirmed){setRevisionReceipt('本轮复版已发布，读取原版单失败。请重新读取，不必再提交。');setError('未能读取已发布的复版资料。');}
+        else setError(result.failure.message);
+      }else if(result.kind==='expired')setError('已超过原请求安全恢复期限，请先核对原复版单。');
+    }finally{writing.current=false;setBusy(false);}
+  };
   const revisionAction=async(publish:boolean)=>{
+    if(publish&&revision?.customerCommentRef){await submitAdoptedRevision({expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound,revision:{...revision,document}});return;}
     if(!revision||writing.current)return;writing.current=true;setBusy(true);setError("");
     const body=publish?{expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound}:{expectedDraftVersion:draftVersion,revision:{...revision,document}};
     const path=`${base}/${publish?"round-publish":"round-draft"}`,payload=JSON.stringify([path,body]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
@@ -130,13 +164,13 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
       }catch(reason){if(currentUploadContext!==uploadContext.current)return;const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
     }catch(reason){if(currentUploadContext===uploadContext.current){const message=reason instanceof Error?reason.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);}}finally{if(currentUploadContext===uploadContext.current){uploadWriter.current=false;writing.current=false;setBusy(false);}}
   };
-  const readonly=embedded|| (revision?!sheet?.canRevise:!sheet?.canEdit||sheet.status==="published");
+  const readonly=embedded||pendingRevision|| (revision?!sheet?.canRevise:!sheet?.canEdit||sheet.status==="published");
   const imageUrl=(id:string)=>previews.url(id,urls.apiUrl(`digital-production/${base}/attachments/${id}`));
   const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)):[];
   const issue=(id:string)=>issues.find(value=>value.id===id)?.message;
   const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)).length===0;};
   const save=()=>{if(!validate())return;if(revision)void revisionAction(false);else void run(base,{expectedVersion:sheet!.version,document},"PUT");};
-  const publish=()=>{if(!validate(true))return;if(dirty){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice&&sheet?.revisionSource?.outputKind!=='工艺布片'){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,...(sheet?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})});}};
+  const publish=()=>{if(!validate(true))return;if(dirty&&!revision?.customerCommentRef){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice&&sheet?.revisionSource?.outputKind!=='工艺布片'){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,...(sheet?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})});}};
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);applySheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   const readRef=useTodoContentRead({routeName:'digital_development',entityId:sourceId,developmentRound:sheet?.roundNumber??1},Boolean(sheet?.document));
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
@@ -147,13 +181,14 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     &&sheet.canEdit&&sheet.canRevise&&Boolean(sheet.document)&&(selectedRound===undefined||selectedRound===(sheet.roundNumber??1));
   if(!embedded&&sheet?.canEdit&&!revision&&(sheet.status==="draft"||(!directEdit&&!showPublishedDocument&&sheet.document?.customerOrderDraft?.withOrder&&!sheet.productionOrderId)))return <ResumeDevelopmentCreateForm contained={contained} key={`${sheet.sourceId}:${sheet.version}`} sheet={sheet} onClose={onClose} onCreated={()=>void reload()} onViewPublished={()=>setShowPublishedDocument(true)}/>;
   return <Surface><section ref={readRef} className="development-editor dx-doc-development">
-    <DocumentToolbar title={sheet?`开发单 · ${sheet.designStyleNo}`:"开发单"} status={busy?"保存中":error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · ${revision?"复版草稿版本":"资料版本"} ${revision?draftVersion:sheet?.version??0}`}>
+    <DocumentToolbar title={sheet?`开发单 · ${sheet.designStyleNo}`:"开发单"} status={busy?"保存中":pendingRevision?'复版提交结果待确认':error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · ${revision?"复版草稿版本":"资料版本"} ${revision?draftVersion:sheet?.version??0}`}>
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {directRevision&&<Button variant="primary" disabled={busy} title={rounds.draft?'继续修订草稿':undefined} onClick={beginRevision}>编辑版单</Button>}
       {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy||(!revision&&sheet?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
+      {pendingRevision&&!busy&&<Button onClick={()=>void submitAdoptedRevision()}>使用原内容核对复版提交</Button>}
       <Button disabled={!savedPrint||dirty||busy||print.busy} onClick={()=>void print.preview(printMime)}>{print.busy?"正在准备打印…":"打印 / 保存 PDF"}</Button>
     </DocumentToolbar>
-    {sheet?.canEdit&&!embedded&&!directEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:'source',id:sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}{previews.view}<DocumentErrors issues={issues} error={error}/>{error&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}{timeApplication.dialog}
+    {sheet?.canEdit&&!embedded&&!directEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:'source',id:sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}{previews.view}<DocumentErrors issues={issues} error={error}/>{error&&!pendingRevision&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}{revisionReceipt&&<p role="status">{revisionReceipt}</p>}{timeApplication.dialog}
     {print.error&&<p role="alert">{print.error}</p>}
     {!sheet&&<p>正在读取开发单</p>}
     {sheet&&<>
@@ -163,7 +198,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
 
 
       <form onSubmit={event=>{event.preventDefault();save();}}>
-        {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
+        {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy||pendingRevision} {...(directEdit?{sourceId}:{})} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
         <DevelopmentDocumentFields designerInput={directEdit&&!readonly} fixedCraft={sheet.timelineSchemaVersion===2} materialFactsReadonly={directEdit||Boolean(sheet.materialForecastOnly)} {...((embedded||contained)?{attachmentPageSize:6}:{})} key={`${sourceId}:${revision?`revision-${revision.basedOnRound}`:"initial"}`} templateResetKey={revision?draftVersion:sheet.version} document={document} edit={edit} readonly={readonly} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={previews.identity} metadataPath={id=>`${base}/attachments/${id}/metadata`} imageUrl={imageUrl} upload={upload} fileKind={fileKind} setFileKind={setFileKind} issue={issue} patternSection={sheet.status==="draft"&&!revision&&sheet.canEdit?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
       </form>
       {sheet.status==="published"&&<DevelopmentAmendmentHistory key={`${sheet.sourceId}:${sheet.roundNumber}:${sheet.version}`} sheet={sheet}/>}

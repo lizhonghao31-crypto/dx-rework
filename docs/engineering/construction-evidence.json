@@ -1,243 +1,230 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "d1705aada1e5701c572d9303fa7b15505482df48",
-  "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
+  "base": "90bc335db678dc038f15fe9e939b5505251ffc70",
+  "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
   "rules": [
     {
-      "source": "Approved v11.5 Workbench §7.2–7.4, G3 and ENT03–05, C6 only (final print addendum leaves these clauses unchanged).",
-      "rule": "Approve or return the exact currently submitted craft version as the authenticated canonical Root or the individually bound verified Wu Yunfeng. Record real authority and never substitute the notified person for the actual decision actor.",
+      "source": "Approved v11.5 final workbench plan §8 and C2/C5 revision two-document A4 addendum §4 and §8, G2/G3. Only C5.",
+      "rule": "Mark full formal workbench handover complete only from four actual effective receipts for the same formal order, valid document/round and original current recipient, while preserving early material investment and original histories.",
       "writes": [
-        "apps/api/src/production-platform/secondary-craft-approval-authority.ts",
-        "apps/api/src/production-platform/secondary-craft-approval-todos.ts",
-        "apps/api/src/production-platform/secondary-craft-quotation.ts",
-        "apps/web/src/components.tsx",
-        "apps/web/src/secondary-craft-quotation-page.tsx",
-        "apps/api/migrations/0305_secondary_craft_decision_authority.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
-        "tests/integration/member-module-policy-postgres.cases.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts",
-        "tests/integration/special-craft-native-postgres.test.ts",
-        "tests/helpers/development-technical-fixture.ts",
-        "tests/helpers/development-sla-native-fixture.ts"
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "apps/api/src/production-platform/development-electronic-handover.ts",
+        "apps/api/src/production-platform/development-formal-handover-evidence.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/preparation-series-bridge.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/web/src/development-sample-handover.tsx",
+        "apps/web/src/development-sample-handover.css",
+        "packages/contracts/src/digital-development-workspace.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/development-formal-handover-evidence.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/secondary-craft-suppliers.ts",
-        "apps/api/src/production-platform/secondary-craft-development-basis.ts",
-        "apps/api/src/access/business-authority.ts",
-        "apps/api/src/production-platform/access-policy.ts"
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/web/src/production-readiness-panel.tsx"
       ],
       "oldTests": [
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/unit/development-formal-handover-evidence.test.ts"
       ],
       "checks": [
-        "c6-unit",
-        "c6-protocol",
-        "c6-original-fixtures",
-        "c6-policy-chain",
-        "c6-denied-before-lock"
+        "c5-protocol",
+        "c5-static",
+        "c5-unit",
+        "c5-native"
       ],
-      "initialization": "Append nullable decision authority, preserve all existing approvals as original verified Wu evidence, and retain submitted-version, actual actor, unique decision and immutability rules. Preserve the existing recipient when eligible; only the other eligible actor may approve.",
-      "dateAndPermission": "Signed Root is validated against the canonical active bootstrap identity; Wu is an individually bound active owner. Preserve exact craft, scope, supplier version, original maker eligibility, time choice, and original task/notification ownership.",
-      "expectation": "Both legitimate actors independently decided real submitted versions, racing legitimate actors created exactly one row, other owner and maker were rejected, old versions and DB-only unauthorized inserts did not win. Pricing readiness is explicit until the joint schema exists."
+      "initialization": "Append formal workbench eligibility only on real native confirmation. No historical backfill, no reinterpretation of frozen legacy evaluation, no early transition, no synthetic timestamp, and no duplicate completion event.",
+      "dateAndPermission": "Existing record tasks and ordinary design/merch authority; actual effective receipt provenance includes current source version, PO quantity snapshot, exact approved pricing and original sample handoff. Preserve prior legitimate event when current receiver or provenance changes.",
+      "expectation": "Real four-receipt completion occurs exactly once on quote-last and sample-last; valid pre-formal material retains its actual time, formal event is never before T0; unmatched prior recipient, read failure, or incomplete quote does not turn green."
     },
     {
-      "source": "Approved v11.5 Workbench §7.2–7.4, G3 and ENT03–05, C6 only (final print addendum leaves these clauses unchanged).",
-      "rule": "Keep exact customer-price calculation and independent recoverable draft. All current governed confirmation entrypoints require actual designer, exact amount and scope, complete authorized current inputs, no unresolved reviews and actual applicable craft evidence.",
+      "source": "Approved v11.5 final workbench plan §8 and C2/C5 revision two-document A4 addendum §4 and §8, G2/G3. Only C5.",
+      "rule": "Show the approved workbench areas and only linked authorized original document/print versions, preserve exact pagination, retry, scope and return position.",
       "writes": [
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/quotation-workbench.ts",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "apps/web/src/quotation-workbench-pricing.tsx",
-        "apps/web/src/quotation-pricing-draft-receipt.ts",
-        "packages/contracts/src/digital-quotation.ts",
-        "tests/unit/customer-quotation.test.ts",
-        "tests/unit/quotation-pricing-draft-receipt.test.ts",
-        "tests/unit/quotation-workbench-confirmation.test.ts",
-        "tests/unit/quotation-workbench-preview.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
+        "apps/web/src/cockpit-detail-r5.css",
+        "apps/web/src/cockpit-document-data.ts",
+        "apps/web/src/cockpit-document-navigation.css",
+        "apps/web/src/cockpit-document-navigation.tsx",
+        "apps/web/src/cockpit-documents-technical.ts",
+        "apps/web/src/cockpit-documents.tsx",
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/designer-related-originals.tsx",
+        "apps/web/src/development-workspace-return.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/original-document-directory.tsx",
+        "apps/web/src/digital-development-print.tsx",
+        "apps/web/src/development-customer-feedback-print.tsx",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/v2-workspace-navigation.test.ts",
         "tests/integration/development-execution-read-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "apps/api/src/production-platform/quotation-routes.ts",
-        "apps/api/src/production-platform/quotation-budget-basis.ts",
-        "apps/api/src/production-platform/development-document-snapshot.ts"
+        "apps/web/src/cockpit-document-catalog.ts",
+        "apps/api/src/production-platform/development-document-snapshot.ts",
+        "apps/web/src/development-print-preview.ts"
       ],
       "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/unit/customer-quotation.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/v2-workspace-navigation.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "newTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
-        "tests/unit/quotation-pricing-draft-receipt.test.ts"
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/v2-workspace-navigation.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
       ],
       "checks": [
-        "c6-unit",
-        "c6-protocol",
-        "c6-original-fixtures",
-        "c6-policy-chain",
-        "c6-denied-before-lock"
+        "c5-protocol",
+        "c5-static",
+        "c5-unit",
+        "c5-native"
       ],
-      "initialization": "Use the original pricing draft table and native command receipt, do not copy pricing into a confirmation on save. Reuse immutable workbench enrollment; legacy manual workflow retains its original basis. Do not stamp dates or backfill old records.",
-      "dateAndPermission": "Preserve business time and actual customer confirmation date; seller authority derives from original current order/source and active designer, not survey display strings or a browser-only check. Detect unrepresented source craft evidence and do not allow old payload to bypass the active gate.",
-      "expectation": "Actual save and response loss restore one exact draft; legacy raw requests, wrong authority, old version and amount mismatch cannot create confirmation or budget. Ordinary current technical and IE roles retain original write/review paths."
+      "initialization": "Reuse the original scope metadata, authorized version endpoints, read caching and production UI. Keep known authorized legacy originals, active scroll focus and the real retained-record pagination.",
+      "dateAndPermission": "Neither a series-level query nor a document link creates authority to another record. Images must match the persisted exact adopted source/round/PO/version and original allowed attachment binding. Old actual dates are displayed only from identifiable events.",
+      "expectation": "Real normal designer reads fixed original and returns to correct order/filter/position; 21 original entries are still reachable without replacement, and actual pattern-role A4 double print uses the true adopted A image even if a newer B exists. Other-order and finance photo attempts are denied."
     },
     {
-      "source": "Approved v11.5 Workbench §7.2–7.4, G3 and ENT03–05, C6 only (final print addendum leaves these clauses unchanged).",
-      "rule": "Budget consumes the same current authorized adoption, with exact confirmed quote evidence. Pure development may confirm without creating a formal order; later formal conversion inherits that exact confirmation once.",
+      "source": "Approved v11.5 final workbench plan §8 and C2/C5 revision two-document A4 addendum §4 and §8, G2/G3. Only C5.",
+      "rule": "Keep approved materials and active developer revision workflows, independent exact original publish receipt, and distinct ordinary customer notes vs explicit final customer conclusions.",
       "writes": [
-        "apps/api/src/production-platform/quotation-budget-basis.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/helpers/customer-quotation-fixture.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "apps/api/src/production-platform/development-revision-comment-basis.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/order-number-repository.ts",
+        "apps/web/src/development-revision-fields.tsx",
+        "apps/web/src/development-technical-workspace.tsx",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/designer-order-workbench.tsx",
+        "packages/contracts/src/digital-development-rounds.ts",
+        "packages/contracts/src/digital-development-technical.ts",
+        "packages/contracts/src/digital-development.ts",
+        "apps/api/migrations/0306_development_revision_comment_adoptions.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/budget-service.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/development-electronic-handover.ts"
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/development-comment-time.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/web/src/digital-development-execution-panel.tsx"
       ],
       "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/acceptance-sla-clock-postgres.test.ts"
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "checks": [
-        "c6-unit",
-        "c6-protocol",
-        "c6-original-fixtures",
-        "c6-policy-chain",
-        "c6-denied-before-lock"
+        "c5-protocol",
+        "c5-static",
+        "c5-unit",
+        "c5-native"
       ],
-      "initialization": "No historical writes. Test fixtures that are not historical Root-authored manual quotes now exercise the actual original designer command and retain their prior exact budget amounts.",
-      "dateAndPermission": "Preserve original lead merchandiser and isolated sibling scope, immutable snapshots and original budget review. No quote alone creates an order. Keep rollout paused on a same-candidate Acceptance until C5 joint readiness; no deployment in this PR.",
-      "expectation": "Signed merchandiser remains locked until real designer confirmation, a sibling stays locked, approved basis change makes writes fail, pure source confirmation first then real native formal order creates precisely one budget from its exact immutable prior version."
+      "initialization": "Add exact original adopted foreign key plus a neutral ordinary note discriminator in the additive migration only. Original created-at and observed business times are distinct, no present date substituted; legacy explicit occurrence and original published snapshots are retained. Basic editorial corrections are isolated audited workbench annotations, not a rewrite of published documents.",
+      "dateAndPermission": "Original sample designer/source eligibility, active membership, version and retry checked by native services. Strict basic-info whitelist permits only existing brand and reference-note fields. Stale, unrelated and forged physical/frozen/price changes are denied. Historic and pending states do not grant arbitrary authority.",
+      "expectation": "Original selected version, comment and original photos are used for revision. Direct native publish and lost response do not create duplicates. A normal note stores transaction time once without technical review and a final request requires an explicit real customer outcome. After commit with failed GET, retry only reads; the former document and formal clock remain byte-for-byte unchanged after legal annotation."
     }
   ],
   "checks": [
     {
-      "id": "c6-unit",
+      "id": "c5-protocol",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/customer-quotation.test.ts tests/unit/quotation-material-unit.test.ts tests/unit/quotation-pricing-draft-receipt.test.ts tests/unit/quotation-workbench-confirmation.test.ts tests/unit/quotation-workbench-preview.test.ts tests/unit/secondary-craft-directory-view.test.ts tests/unit/platform-modules.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=verbose --reporter=json",
-      "context": "Locked Node 22. Exact pricing/receipt, workbench actual confirmation, owner and craft projection, and original PMC authorization.",
+      "command": "node --test scripts/ci/*.test.mjs",
+      "context": "Original Light CI protocol, including the time-source inventory and preservation of existing semantic metadata. Exact source plus reviewed C5 inventory.",
       "status": "passed",
       "exitCode": 0,
-      "passed": 82,
+      "passed": 285,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T09:44:48Z",
-      "endedAt": "2026-11-25T09:45:03Z",
-      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
-      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
-      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-unit.log",
-      "logSha256": "d994816be5a50a3064d89fb92a705846bc6e758f016b0e36f5b3d7ba0afb604a",
+      "startedAt": "2026-11-25T11:11:57+00:00",
+      "endedAt": "2026-11-25T11:12:03+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-protocol.log",
+      "logSha256": "627b53c239b4262cc3803baa39fb94ce1cc300c4fb757745490d71c4e51010ba"
+    },
+    {
+      "id": "c5-static",
+      "kind": "command",
+      "command": "git diff --check <actual base>; node node_modules/eslint/bin/eslint.js --max-warnings=0 <changed TS/TSX>; npm run db:migrate:lint; npm run typecheck -w @dx-rework/web; npm run typecheck -w @dx-rework/api",
+      "context": "Exact current working candidate before commit. Locked repository Node 22. Migration checksum and chronological sequence verified before fresh isolated PostgreSQL use.",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-25T11:12:08+00:00",
+      "endedAt": "2026-11-25T11:12:57+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-static.log",
+      "logSha256": "a9fc11c279638d9ef02aede9b682ed529ee727846e53f2e6509a3e5af5134b64"
+    },
+    {
+      "id": "c5-unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=verbose --reporter=json tests/unit/development-formal-handover-evidence.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
+      "context": "Existing original directory, return, and PMC role behavior plus pure handover receipt rules, no new role. Runs on the exact candidate.",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 91,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-25T11:12:03+00:00",
+      "endedAt": "2026-11-25T11:12:08+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-unit.log",
+      "logSha256": "2ea618ce9dfd236c91f76befa66e643837da26613c8ed0b88c3692732b11b7c6",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bfed8e03b52fd051bde3ab1edd21ab3b44db939fd0424a6b83d63197c4161c9c"
+          "sha256": "bf3660b9b5bff7c986fdae7c9defb94051dbf6def1ee13b0f6e492720fc91670"
         }
       ]
     },
     {
-      "id": "c6-protocol",
+      "id": "c5-native",
       "kind": "tests",
-      "command": "node --test scripts/ci/pr-gate-controller.test.mjs scripts/ci/ci-gate-runtime.test.mjs",
-      "context": "Original CI control and runtime protocols, migration classification, and the unchanged time-source inventory.",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'C5 rejects cross-order|C5 completes the formal milestone|submits current revision inputs|opens the seven approved workbench regions|reads an exact original development revision|captures and supplements the original customer approval date|numbers new pure and confirmed orders|resumes an unnumbered draft|keeps the original sample handover receipt|keeps a failed .* precheck|opens the exact native request|shows the ordinary|reads the original customer'",
+      "context": "Same original signed App AuthService, production web build and Chromium, dual isolated guarded PostgreSQL databases, normal two-worker test mode. Synthetic data only. Checks affected cases. Other cases filtered by name and not counted.",
       "status": "passed",
       "exitCode": 0,
-      "passed": 47,
+      "passed": 13,
       "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-25T09:44:48Z",
-      "endedAt": "2026-11-25T09:44:51Z",
-      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
-      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
-      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-protocol.log",
-      "logSha256": "878535f162109ad38f359f26f0c5cd9ef397fd0dc25bb84d7d0d6cdcefe2b65b"
-    },
-    {
-      "id": "c6-original-fixtures",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/acceptance-sla-clock-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts -t 'preserves clock scope through native owner factory-date approval|P09' --reporter=verbose --reporter=json",
-      "context": "Only the two named native upstream regression groups: four scoped/ordinary approval paths and two P09 original sourcing paths. All unselected cases are explicitly skipped.",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 6,
-      "failed": 0,
-      "skipped": 167,
-      "startedAt": "2026-11-25T09:46:25Z",
-      "endedAt": "2026-11-25T09:46:38Z",
-      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
-      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
-      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-original-fixtures.log",
-      "logSha256": "c8746cf01f58b96661ed7940935c11a8eb8bb4fddb47e76ec772a8c16984ce73",
+      "skipped": 52,
+      "startedAt": "2026-11-25T11:11:57+00:00",
+      "endedAt": "2026-11-25T11:13:32+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-native.log",
+      "logSha256": "aeae8919d8e70de95cf4e7a4628c37176eb1a1ee82dba598b0a71dfa4f105600",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e44413b9741c814d0bc5a7c37710eef997375a80fb6419c4eb6298eb40671103"
-        }
-      ]
-    },
-    {
-      "id": "c6-policy-chain",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts --maxWorkers 2 tests/integration/full-business-chain-postgres.test.ts --reporter=verbose --reporter=json",
-      "context": "Canonical original business-chain suite. Ordinary owner, wrong bound and disabled Root remain denied while real canonical active Root reads; other original assertions are unchanged.",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 61,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-25T09:46:38Z",
-      "endedAt": "2026-11-25T09:47:44Z",
-      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
-      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
-      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-policy-chain.log",
-      "logSha256": "12e70cc5e114ba5ffa4a199402dc022e0054f7c0e793e33496229e989d6f1347",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "514edadd11a8ddf04ded6cf059779afdb7d7042954ad52c04b424c76cbd706c8"
-        }
-      ]
-    },
-    {
-      "id": "c6-denied-before-lock",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/automatic-quotation-native-browser-postgres.test.ts -t 'keeps jointly enabled R4 row reviews' --reporter=verbose --reporter=json",
-      "context": "Exact current targeted signed Browser/PG. Concurrent denied merchandising writes returned 403/403 with zero draft rows; retains native designer quote and existing row reviews. A separate all-suite attempt was resource-interrupted and is not asserted successful.",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 1,
-      "failed": 0,
-      "skipped": 9,
-      "startedAt": "2026-11-25T09:44:23.719000Z",
-      "endedAt": "2026-11-25T09:44:38.379480Z",
-      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
-      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
-      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-denied-before-lock.log",
-      "logSha256": "6bbacc7753ff2861bbf0069157c0e687c04d01eef74dc9a52f97d3bbebcc221b",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8753acf723227df727e07b11f66b0466fd5014a18cafcd2dd8537ef334c7c031"
+          "sha256": "c1d613649be962865e3803d0e897ef03bf1f8eefa882016bc11eb5425383c88f"
         }
       ]
     }
   ],
-  "executionBoundary": "User authorized immediate push and Full after real focused proof. Full final now remains to be run. Local full typecheck and the all-browser report were interrupted by the executor memory limit and are not marked passed. Earlier exact original workflow/roles and 74 original scenarios are retained separately."
+  "executionBoundary": "Local checks use signed synthetic identities and isolated PostgreSQL. No deploy, live business data, or Acceptance run. Initial Light reported a missing C5 time-site inventory; all original semantic metadata was retained and the unchanged original protocol passed. Full 45597174756 passed non-db but reported two legacy-browser expectation mismatches in the PostgreSQL lane. Both now exercise the approved new sample receipt decoration and separate Customer Opinion and Quotation regions while retaining actual receipt, database, precheck and native retry assertions. Changes after that run are tests and evidence only. Official final GitHub gate and independent Review for this correction remain pending at construction time. C3, C4, C6 and X1/X2 are unchanged and X3–X6 remain separate."
 }

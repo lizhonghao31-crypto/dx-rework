@@ -5,6 +5,7 @@ import {journeyTaskSummaries} from '../../apps/api/src/production-platform/journ
 import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
 import {execFileSync} from 'node:child_process';
 import {technicalDocumentFingerprint} from '../../apps/api/src/production-platform/development-technical-repository.js';
+import {readDevelopmentRevisionCommentBasis} from '../../apps/api/src/production-platform/development-revision-comment-basis.js';
 import {QuotationConfirmationSchema} from '@dx-rework/contracts/digital-quotation';
 import {calculateBudget} from '@dx-rework/contracts/digital-budget';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
@@ -1159,6 +1160,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   app.setErrorHandler((e,_r,reply)=>{const error=e as ApplicationError;void reply.code(error.statusCode??500).send({code:error.code,message:error.message});});registerDevelopmentExecutionRoutes(app,deps,execution,f.attachments);await app.ready();
   try{const url=`/digital-production/technical-size-templates/${templateId}/versions/1`,headers={cookie:'dx_rework_session=worker'},exact=await app.inject({method:'GET',url,headers});expect(exact.statusCode).toBe(200);expect(exact.headers['cache-control']).toBe('no-store');expect(exact.json().version).toBe(1);expect((await app.inject({method:'GET',url})).statusCode).toBe(401);expect((await app.inject({method:'GET',url,headers:{cookie:'dx_rework_session=designer'}})).statusCode).toBe(403);expect((await app.inject({method:'GET',url:url.replace('/versions/1','/versions/0'),headers})).statusCode).toBe(400);expect((await app.inject({method:'GET',url:url.replace('/versions/1','/versions/9999'),headers})).statusCode).toBe(404);}finally{await app.close();}
  });
+ it('keeps the exact adopted comment and picture IDs after a later customer comment instead of reading the newest entry',async()=>{
+  const p=await prepare(),attachmentA=await f.image(p.designer),attachmentB=await f.image(p.designer);
+  await execution.recordUploadPurpose(p.designer,p.sourceId,attachmentA,'客户评语依据');
+  await execution.recordUploadPurpose(p.designer,p.sourceId,attachmentB,'客户评语依据');
+  const a=await technical.recordComment(p.designer,p.sourceId,{...comment(0,false),text:'TEST 原用评语 A',evidenceRefs:[attachmentA]},randomUUID());
+  const ref={sourceId:p.sourceId,roundNumber:1,scopeRef:'整款',commentId:a.commentId,version:a.version};
+  const first=await readDevelopmentRevisionCommentBasis(f.db,ref);
+  expect(first).toMatchObject({ref,text:'TEST 原用评语 A',evidenceRefs:[attachmentA],final:false});
+  const b=await technical.recordComment(p.designer,p.sourceId,{...comment(a.version,false),text:'TEST 后录评语 B',evidenceRefs:[attachmentB]},randomUUID());
+  expect(await readDevelopmentRevisionCommentBasis(f.db,ref)).toEqual(first);
+  expect(await readDevelopmentRevisionCommentBasis(f.db,{...ref,commentId:b.commentId,version:b.version})).toMatchObject({text:'TEST 后录评语 B',evidenceRefs:[attachmentB]});
+  for(const different of [{version:b.version},{roundNumber:2},{scopeRef:'另一工艺'},{sourceId:randomUUID()}])
+   expect(await readDevelopmentRevisionCommentBasis(f.db,{...ref,...different})).toBeNull();
+  await expect(readDevelopmentRevisionCommentBasis(f.db,{...ref,version:2_147_483_648})).rejects.toMatchObject({name:'ZodError'});
+ });
+
  it('P03-06: retrieves complete original PNG PDF and PLT bytes through native source authorization and private storage grants',async()=>{
   const p=await prepare();await artifact(p);
   const plotId=(await technical.read(p.worker,p.sourceId)).artifacts[0]!.body.pltAttachmentIds[0]!,imageId=(await forms.read(p.designer,p.sourceId)).document!.files.find(f=>f.kind==='款图')!.attachmentId;

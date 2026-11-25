@@ -25,11 +25,20 @@ export async function productionTechnicalDirectory(entry:CockpitDocumentEntry,re
 }
 function commentEntry(c:Row,sid:string,round:number,scope:string):CockpitDocumentEntry{
  check(positiveValue(c.version)&&textValue(c.commentId)&&typeof c.isFinal==='boolean');
- return {technicalPart:c.isFinal?'final':'comment',id:`comment:${c.commentId}:${c.version}`,label:`${c.isFinal?'客户最终批复':'客户中间评语'} v${c.version} · ${c.decision==='approved'?'认可':'需修改'}`,at:str(c.occurredAt)||str(c.occurredDate),metadata:[{label:'客户实际反馈',at:str(c.occurredAt)||str(c.occurredDate),by:''},{label:'原评语登记',at:str(c.recordedAt),by:''}],note:c.isFinal?'每次最终批复对应原技术复核记录':'中间沟通不触发最终尺寸复核',url:c.reviewTaskId?`/ui/digital-production?task=${c.reviewTaskId}&taskView=read`:original('development',sid,round),originalUrl:technicalOriginalHref(sid,{kind:'comment',id:str(c.commentId),round,version:num(c.version),scopeRef:scope,inherited:false}),children:c.review?[{id:`review:${row(c.review).reviewId}`,label:row(c.review).completed?`技术尺寸复核 · ${row(c.review).decision==='reuse'?'明确沿用':'采用修改成果'} v${row(c.review).artifactVersion}`:'原尺寸复核任务',note:str(row(c.review).note),url:`/ui/digital-production?task=${row(c.review).taskId}&taskView=read`}]:[],load:{kind:'technical_comment',path:historyPath(sid,round,'comments',{version:num(c.version),scopeRef:scope}),id:sid,version:num(c.version),round:String(round),scopeRef:scope}};
+ return {technicalPart:c.isFinal?'final':'comment',id:`comment:${c.commentId}:${c.version}`,label:`${c.isFinal?'客户最终批复':'客户中间评语'} v${c.version} · ${c.decision==='approved'?'认可':c.decision==='noted'?'已记录':'需修改'}`,at:str(c.occurredAt)||str(c.occurredDate),metadata:[{label:'客户实际反馈',at:str(c.occurredAt)||str(c.occurredDate),by:''},{label:'原评语登记',at:str(c.recordedAt),by:''}],note:c.isFinal?'每次最终批复对应原技术复核记录':'中间沟通不触发最终尺寸复核',url:c.reviewTaskId?`/ui/digital-production?task=${c.reviewTaskId}&taskView=read`:original('development',sid,round),originalUrl:technicalOriginalHref(sid,{kind:'comment',id:str(c.commentId),round,version:num(c.version),scopeRef:scope,inherited:false}),children:c.review?[{id:`review:${row(c.review).reviewId}`,label:row(c.review).completed?`技术尺寸复核 · ${row(c.review).decision==='reuse'?'明确沿用':'采用修改成果'} v${row(c.review).artifactVersion}`:'原尺寸复核任务',note:str(row(c.review).note),url:`/ui/digital-production?task=${row(c.review).taskId}&taskView=read`}]:[],load:{kind:'technical_comment',path:historyPath(sid,round,'comments',{version:num(c.version),scopeRef:scope}),id:sid,version:num(c.version),round:String(round),scopeRef:scope}};
 }
 function historyEntries(data:Row,sid:string,round:number,kind:'artifacts'|'comments',scope:string):CockpitDocumentEntry[]{
  sameEntity(data,'sourceId',sid,'技术资料');check(data.roundNumber===round&&data.scopeRef===scope&&(data.nextBeforeVersion===null||positiveValue(data.nextBeforeVersion)));
- const items=checkedRows(data.items),entries=items.map(a=>kind==='artifacts'?artifactEntry(a,sid,scope):commentEntry(a,sid,round,scope));
+ const effective=row(data.effective),adopted=row(effective.finalCommentRef);
+ const exactEffective=kind==='comments'&&effective.state==='effective'&&effective.sourceId===sid&&effective.roundNumber===round&&effective.scopeRef===scope;
+ const entries=checkedRows(data.items).map(item=>{
+  if(kind==='artifacts')return artifactEntry(item,sid,scope);
+  const entry=commentEntry(item,sid,round,scope);
+  // The authorized technical snapshot decides validity. The latest row, an
+  // earlier approved opinion, and a final reply still awaiting review do not.
+  return exactEffective&&item.isFinal&&item.decision==='approved'&&item.commentId===adopted.id&&item.version===adopted.version
+   ?{...entry,effectiveCustomerApproval:true as const}:entry;
+ });
  if(data.nextBeforeVersion)entries.push({id:`older:${kind}:${data.nextBeforeVersion}`,label:kind==='artifacts'?'读取更早技术成果':'读取更早客户评语',load:{kind:`technical_history_${kind}`,path:historyPath(sid,round,kind,{cursor:num(data.nextBeforeVersion),directory:true,scopeRef:scope}),id:sid,round:String(round),cursor:num(data.nextBeforeVersion),scopeRef:scope}});
  return entries;
 }

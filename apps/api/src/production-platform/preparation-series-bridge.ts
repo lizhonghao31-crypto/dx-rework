@@ -5,12 +5,16 @@ import {businessNow,acceptanceBusinessContext} from '../acceptance-clock/busines
 import {appendSeriesSourceEvent} from './series-plan-facts.js';
 import {preparationAvailable,currentPreparationMaterials,preparationMaterialHistory,type PreparationDB} from './preparation-material-repository.js';
 import {readStyleLabelReadiness} from './style-label-readiness.js';
+import {formalDevelopmentHandoverEnrollment} from './development-formal-handover-evidence.js';
 export async function bridgePreparationMaterials(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>,actorId:string){
  if(!context.orderId||!await preparationAvailable(db))return;
  if(!(await db.query("SELECT to_regclass('digital_series_source_events') AS relation")).rows[0]?.relation)return;
  const history=await preparationMaterialHistory(db,context),materials=currentPreparationMaterials(history,context.orderId);
  let labels:Awaited<ReturnType<typeof readStyleLabelReadiness>>|undefined;
  for(const fact of materials){
+  // The source material receipt still enables investment. On enrolled orders
+  // it no longer writes completion of the separate formal handover milestone.
+  if(fact.kind==='design_handover'&&await formalDevelopmentHandoverEnrollment(db,context.orderId,context.sourceId))continue;
   const prior=(await db.query('SELECT * FROM digital_series_source_events WHERE production_order_id=$1 AND node_key=$2 AND scope_ref=$3 ORDER BY source_version DESC LIMIT 1',[context.orderId,fact.kind,fact.scopeRef])).rows[0];
   if(prior&&prior.source_record_id!==fact.recordId)throw new ApplicationError('PREPARATION_CONFLICT','该节点排程已引用另一原始记录，请核对来源；本次物料记录未写入',409);
   if(prior&&prior.source_version>=fact.version)continue;

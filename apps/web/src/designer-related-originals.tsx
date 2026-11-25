@@ -1,9 +1,11 @@
-import {useCallback,useEffect,useState,useSyncExternalStore} from 'react';
+import {useCallback,useEffect,useState,useSyncExternalStore,type ReactNode} from 'react';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
+import {Dialog,DialogHeader} from '@astryxdesign/core/Dialog';
 import {Link} from '@astryxdesign/core/Link';
-import {Selector} from '@astryxdesign/core/Selector';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {SourcingTimelineResponseSchema,type SourcingTimelineEntry} from '@dx-rework/contracts';
-import {JOURNEY_STAGES,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {JOURNEY_STAGES,type JourneyStageKey,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
 import type {BulkWashingSheet} from '@dx-rework/contracts/bulk-washing';
 import {OrderTimeRequestStateSchema} from '@dx-rework/contracts/order-time-requests';
@@ -22,10 +24,12 @@ import {AuxiliaryCatalogHistory} from './auxiliary-catalog-history.js';
 import {ReceivingOriginalDirectory} from './receiving-original-records.js';
 import {washingFactLabel} from './bulk-washing-actions.js';
 import {useForegroundRead} from './use-foreground-read.js';
+import {CockpitDocumentDirectoryRow,CockpitDocumentMore,CockpitDocumentStageTabs} from './cockpit-document-navigation.js';
+import {OriginalDocumentDirectory,type OriginalDocumentRef} from './original-document-directory.js';
+import {designerAstryxCss} from './designer-astryx.js';
 
 const urls=createWebUrls(import.meta.env.BASE_URL);
 const idle=emptyCockpitDirectoryStates(),noSubscription=()=>()=>{};
-const categories=COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.filter(({key})=>!['development','budget','instruction','quotation'].includes(key));
 const read:CockpitDocumentReader=async(path,signal)=>{
  const response=await feedbackFetch(urls.apiUrl(path),{credentials:'include',cache:'no-store',signal});
  return feedbackJson(response,'GET',value=>value,(message,_code,status)=>Object.assign(new Error(message),{status}));
@@ -61,7 +65,7 @@ function RecordEvidence({entry,session,returnTo}:{entry:CockpitDocumentEntry;ses
  };
  const href=originalHref(entry,returnTo);
  const children=[...(entry.originalEntries??[]),...(entry.children??[])];
- return <li><strong>{entry.label}</strong>
+ return <li><strong>{entry.label}</strong>{entry.effectiveCustomerApproval&&<> <Badge variant="success" label="本轮有效批复"/></>}
   {entry.note&&<p>{entry.note}</p>}
   {(entry.by||entry.at)&&<p>{[entry.by,entry.at].filter(Boolean).join(' · ')}</p>}
   {href&&<> <Link href={href}>查看原记录</Link></>}
@@ -73,11 +77,29 @@ function RecordEvidence({entry,session,returnTo}:{entry:CockpitDocumentEntry;ses
  </li>;
 }
 
-type ReaderCategory=CockpitDocumentCategory|'sourcing_history'|'time_requests'|'auxiliary_basis';
-const designerRelatedCategories=[...categories,{key:'sourcing_history',stage:'preparation',label:'外发原节点与决策'},
+type ReaderCategory=CockpitDocumentCategory|'sourcing_history'|'time_requests'|'auxiliary_basis'|'related_records';
+type Category={key:ReaderCategory;stage:JourneyStageKey;label:string};
+const designerRelatedCategories:readonly Category[]=[...COCKPIT_VISIBLE_DOCUMENT_CATEGORIES,{key:'sourcing_history',stage:'preparation',label:'外发原节点与决策'},
  {key:'time_requests',stage:'creation',label:'本单时效申请与决定'},
  {key:'auxiliary_basis',stage:'development',label:'采用的共享辅料版本'},
-] as const;
+ ...JOURNEY_STAGES.map(({key}):Category=>({key:'related_records',stage:key,label:'本阶段关联原记录'})),
+];
+const originalVersionKinds=['development','budget','instruction','quotation'] as const;
+const exactKind=(key:ReaderCategory|null)=>originalVersionKinds.find(kind=>kind===key)??null;
+const catalogueCategory=(key:ReaderCategory|null)=>COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.find(item=>item.key===key)?.key??null;
+
+function readDocumentSelection(query:URLSearchParams,order:OrderJourney):{stage:JourneyStageKey;category:ReaderCategory|null}{
+ const chosen=designerRelatedCategories.find(item=>item.key===query.get('originalCategory')&&item.stage===query.get('originalStage'));
+ const stage=JOURNEY_STAGES.find(item=>item.key===query.get('originalStage'))?.key;
+ if(chosen&&stage)return {stage,category:chosen.key};
+ if(stage)return {stage,category:null};
+ // Older links from the exact-version directory may contain a page/search
+ // without a category. Restore the directory, not a guessed original version.
+ const pages=originalVersionKinds.filter(kind=>/^[1-9]\d*$/.test(query.get('original'+kind+'Page')??''));
+ const kind=pages.length===1?pages[0]:'development';
+ if(order.sourceId&&kind)return {stage:designerRelatedCategories.find(item=>item.key===kind)!.stage,category:kind};
+ return {stage:'creation' as const,category:null};
+}
 const sourcingNodes={
  created:['created','跟单创建订单'],ie_quote:['ie_quote','IE 给价'],management_decision:['management','调价与选厂'],
  owner_decision:['owner','最终审批'],finance_reconciliation:['finance','财务核对'],
@@ -180,23 +202,22 @@ function TimeOriginals({sourceId,session,returnTo}:{sourceId:string;session:Cock
  </>;
 }
 
-export function DesignerRelatedOriginals({order,materials,returnTo}:{order:OrderJourney;materials:readonly DevelopmentMaterial[];returnTo:string}){
- const [stage,setStage]=useState(()=>{
-  const query=new URLSearchParams(location.search);
-  return JOURNEY_STAGES.find(item=>item.key===query.get('originalStage'))?.key??'development';
- });
- const [category,setCategory]=useState<ReaderCategory|null>(()=>{
-  const key=new URLSearchParams(location.search).get('originalCategory');return designerRelatedCategories.find(item=>item.key===key&&item.stage===stage)?.key??null;
- });
+export function DesignerRelatedOriginals({order,materials,returnTo,onOriginal,onReady,relatedOriginals}:{
+ order:OrderJourney;materials:readonly DevelopmentMaterial[];returnTo:string;onOriginal(ref:OriginalDocumentRef):void;onReady(ready:boolean):void;
+ relatedOriginals(stage:JourneyStageKey,returnTo:string):ReactNode;
+}){
+ const [{stage,category},setDirectory]=useState(()=>readDocumentSelection(new URLSearchParams(location.search),order));
+ const [more,setMore]=useState(false),[query,setQuery]=useState('');
  const [reading,setReading]=useState(false),[authError,setAuthError]=useState(false),[retry,setRetry]=useState(0);
  const [material,setMaterial]=useState<DevelopmentMaterial|null>(null);
  const [selection,setSelection]=useState<{order:OrderJourney;signature:string;snapshot:CockpitDocumentSnapshot}|null>(null);
  const current=selection?.order===order&&selection.signature===verifiedSessionIdentity(cachedVerifiedSession())?selection.snapshot:null;
  const states=useSyncExternalStore(current?.subscribe??noSubscription,current?.getSnapshot??(()=>idle),()=>idle);
+ const selectedKind=exactKind(category),selectedReader=Boolean(category&&!selectedKind);
  useEffect(()=>registerSessionInvalidator(()=>{setSelection(null);setMaterial(null);}),[]);
  useEffect(()=>()=>selection?.snapshot.dispose(),[selection]);
  useEffect(()=>{
-  if(!category||current)return;
+  if(!selectedReader||current)return;
   let active=true;setReading(true);setAuthError(false);
   void verifySession().then(verified=>{
    if(!active)return;
@@ -206,34 +227,74 @@ export function DesignerRelatedOriginals({order,materials,returnTo}:{order:Order
    setSelection({order,signature,snapshot:createCockpitDocumentSnapshot(order,read,()=>verifiedSessionIdentity(cachedVerifiedSession())===signature)});
   }).catch(()=>{if(active)setAuthError(true);}).finally(()=>{if(active)setReading(false);});
   return()=>{active=false;};
- },[category,order,Boolean(current),retry]);
- const currentCategory=category&&category!=='sourcing_history'&&category!=='time_requests'&&category!=='auxiliary_basis'&&category!=='packing'?category:null;
+ },[selectedReader,order,Boolean(current),retry]);
+ const currentCategory=selectedReader&&category!=='packing'?catalogueCategory(category):null;
  useEffect(()=>{if(currentCategory&&current)void current.load(currentCategory);},[currentCategory,current]);
- const remember=(nextStage:typeof stage,nextCategory:ReaderCategory|null)=>{
-  setMaterial(null);setStage(nextStage);setCategory(nextCategory);setAuthError(false);
+ const remember=(nextStage:JourneyStageKey,nextCategory:ReaderCategory|null)=>{
+  setMaterial(null);setDirectory({stage:nextStage,category:nextCategory});
   const target=new URL(location.href);
   target.searchParams.set('area','records');target.searchParams.set('originalStage',nextStage);
   if(nextCategory!=='time_requests')target.searchParams.delete('originalTimePage');
   if(nextCategory)target.searchParams.set('originalCategory',nextCategory);else target.searchParams.delete('originalCategory');
   history.replaceState(history.state,'',target);
  };
- const target=new URL(returnTo,'https://local.invalid');target.searchParams.set('originalStage',stage);
+ const target=new URL(returnTo,'https://local.invalid'),liveContext=new URL(location.href);
+ if(liveContext.pathname===target.pathname&&liveContext.searchParams.get('development')===order.sourceId){
+  for(const key of ['originalSearch',...originalVersionKinds.map(kind=>'original'+kind+'Page')]){
+   const latest=liveContext.searchParams.get(key);
+   if(latest!==null)target.searchParams.set(key,latest);else target.searchParams.delete(key);
+  }
+ }
+ target.searchParams.set('originalStage',stage);
  if(category)target.searchParams.set('originalCategory',category);
+ else target.searchParams.delete('originalCategory');
+ const targetPath=target.pathname+target.search;
  const state=currentCategory?states[currentCategory]:null;
- return <div aria-label="按阶段读取原单据">
-  <Selector label="原单据阶段" value={stage} size="sm" options={JOURNEY_STAGES.map(item=>({value:item.key,label:item.label}))} onChange={value=>{
-   const next=JOURNEY_STAGES.find(item=>item.key===value);if(next)remember(next.key,null);
-  }}/>
-  <ul>{designerRelatedCategories.filter(item=>item.stage===stage&&(!['sourcing_history','contract'].includes(item.key)||order.orderId)).map(item=><li key={item.key}>
-   <Button label={item.label} variant={category===item.key?'primary':'secondary'} onClick={()=>remember(item.stage,item.key)}/>
-  </li>)}</ul>
-  {category&&(reading||current&&state?.phase==='loading')&&<p role="status">正在读取原单据…</p>}
-  {authError&&<p role="alert">登录状态未核实，未展示原记录。<Button label="重新核对身份" onClick={()=>setRetry(value=>value+1)}/></p>}
-  {category==='sourcing_history'&&current&&<SourcingOriginals order={order} session={current} returnTo={target.pathname+target.search}/>}
-  {category==='factory'&&current&&order.orderId&&<WashingOriginals orderId={order.orderId} session={current} returnTo={target.pathname+target.search}/>}
-  {category==='time_requests'&&current&&order.sourceId&&<TimeOriginals sourceId={order.sourceId} session={current} returnTo={target.pathname+target.search}/>}
+ const [exactReady,setExactReady]=useState(false);
+ const ready=selectedKind?exactReady:!selectedReader||authError||Boolean(current&&(!state||state.phase==='ready'||state.phase==='error'));
+ useEffect(()=>{onReady(ready);return()=>onReady(false);},[ready,onReady]);
+ const visible=designerRelatedCategories.filter(item=>(!['sourcing_history','contract','packing','receiving'].includes(item.key)||order.orderId)&&
+  (item.key!=='time_requests'||order.sourceId));
+ const directoryRow=(item:Category,choose:(item:Category)=>void)=>{
+  const key=catalogueCategory(item.key),data=current&&key?states[key]:null;
+  const filled=data?.phase==='ready'&&data.data?.state==='created';
+  const status=data?.phase==='error'?(data.denied?'不可查看':'读取失败'):data?.phase==='loading'?'读取中':
+   data?.phase==='ready'&&data.data?.state==='missing'?'暂无记录':filled?'已创建':'待查看';
+  return <CockpitDocumentDirectoryRow key={item.key} category={item.key} label={item.label} status={status}
+   {...(data?.phase?{readState:data.phase}:{})} filled={filled} expanded={category===item.key} onOpen={()=>choose(item)}/>;
+ };
+ const closeMore=()=>{setMore(false);setQuery('');};
+ const changeMore=(open:boolean)=>{if(!open)closeMore();};
+ return <div className="designer-document-directory" aria-label="按阶段读取原单据">
+  <div className="cockpit-document-directory">
+   <CockpitDocumentStageTabs stage={stage} onSelect={value=>{if(value!==stage)remember(value,null);}}/>
+   <div className="cockpit-document-priority" role="region" aria-label="本节点单据" tabIndex={0}>
+    {visible.filter(item=>item.stage===stage).map(item=>directoryRow(item,chosen=>remember(chosen.stage,category===chosen.key?null:chosen.key)))}
+   </div>
+   <CockpitDocumentMore onOpen={()=>setMore(true)}/>
+  </div>
+  <Dialog isOpen={more} className="dx-designer-astryx designer-document-directory-more" onOpenChange={changeMore}>
+   <style>{designerAstryxCss}</style><DialogHeader title="全部相关单据" onOpenChange={changeMore}/>
+   <TextInput label="搜索单据类别" value={query} onChange={setQuery} ref={input=>{if(input)input.maxLength=100;}}/>
+   {JOURNEY_STAGES.map(group=>{
+    const inGroup=visible.filter(item=>item.stage===group.key&&item.label.includes(query.trim()));
+    return inGroup.length?<section key={group.key} className="cockpit-document-stage"><h3>{group.label}</h3>
+     {inGroup.map(item=><Button key={item.key} label={item.label} variant="ghost" onClick={()=>{remember(item.stage,item.key);closeMore();}}/>)}
+    </section>:null;
+   })}
+   {!visible.some(item=>item.label.includes(query.trim()))&&<p>没有匹配的类别。</p>}
+   <Button label="关闭" onClick={closeMore}/>
+  </Dialog>
+  <OriginalDocumentDirectory resource={{kind:order.sourceId?'source':'order',id:order.sourceId??order.orderId??order.id}} activeKind={selectedKind}
+   onSelect={onOriginal} onReady={setExactReady} rememberInUrl/>
+  {selectedReader&&(reading||current&&state?.phase==='loading')&&<p role="status">正在读取原单据…</p>}
+  {selectedReader&&authError&&<p role="alert">登录状态未核实，未展示原记录。<Button label="重新核对身份" onClick={()=>setRetry(value=>value+1)}/></p>}
+  {category==='related_records'&&current&&relatedOriginals(stage,targetPath)}
+  {category==='sourcing_history'&&current&&<SourcingOriginals order={order} session={current} returnTo={targetPath}/>}
+  {category==='factory'&&current&&order.orderId&&<WashingOriginals orderId={order.orderId} session={current} returnTo={targetPath}/>}
+  {category==='time_requests'&&current&&order.sourceId&&<TimeOriginals sourceId={order.sourceId} session={current} returnTo={targetPath}/>}
   {current&&order.orderId&&(category==='receiving'||category==='packing')&&
-   <ReceivingOriginalDirectory orderId={order.orderId} category={category} returnTo={target.pathname+target.search} session={current}/>}
+   <ReceivingOriginalDirectory orderId={order.orderId} category={category} returnTo={targetPath} session={current}/>}
   {category==='auxiliary_basis'&&current&&<>
    {materials.some(item=>item.auxiliaryCatalog)?<ul>{materials.flatMap(item=>item.auxiliaryCatalog?[<li key={item.materialId}>
     <Button label={`${item.name} · 版本 ${item.auxiliaryCatalog.version}`} onClick={()=>setMaterial(item)}/>
@@ -245,7 +306,7 @@ export function DesignerRelatedOriginals({order,materials,returnTo}:{order:Order
   {current&&state?.data&&<>
    {state.data.note&&<p>{state.data.note}</p>}
    {state.data.entries.length?<ul>{state.data.entries.filter(entry=>category!=='receiving'||entry.load?.kind!=='receiving').map(entry=>
-    <RecordEvidence key={entry.id} entry={entry} session={current} returnTo={target.pathname+target.search}/>)}</ul>
+    <RecordEvidence key={entry.id} entry={entry} session={current} returnTo={targetPath}/>)}</ul>
     :state.phase==='ready'&&<p>{state.data.state==='missing'?'暂无记录':state.data.state==='not_applicable'?'当前没有此类业务来源':'是否存在原记录尚待核实'}</p>}
    {state.data.nextPage&&<div className="dx-pagination-frame"><Button label="读取下一页关联单据" size="sm"
     isDisabled={state.phase==='loading'} onClick={()=>void current.load(currentCategory!,true)}/></div>}

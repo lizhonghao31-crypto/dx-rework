@@ -55,6 +55,7 @@ export type DevelopmentSampleHandover={
   sourceId:string;round:number;documentVersion:number;recipient:{id:string;name:string|null}|null;
   electronic:DevelopmentElectronicHandoverItem[];
   canConfirm:boolean;current:DevelopmentSampleHandoverReceipt|null;history:DevelopmentSampleHandoverReceipt[];
+ formal?:{currentComplete:boolean;historicalCompletion:{eventId:string;at:string}|null};
 };
 export type ConfirmDevelopmentSampleHandoverResult={handover:DevelopmentSampleHandover;receipt:DevelopmentSampleHandoverReceipt};
 

@@ -2,6 +2,7 @@ import {developmentSourceLifecycle,effectiveDevelopmentSourceSql,workbenchPreord
 import {assertWholeOrderActive,wholeOrderActiveSql} from './whole-order-visibility.js';
 import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
+import {enrollFormalDevelopmentHandover} from './development-formal-handover-evidence.js';
 import {refreshPreparationWindows} from './production-readiness-repository.js';
 import {enrollPreparation,preparationContext,currentPreparationMaterials,preparationMaterialHistory} from './preparation-material-repository.js';
 import {approvedShortLeadCalendar,validateInitialLeadTime,consumeShortLead} from './short-lead-evidence.js';
@@ -429,10 +430,11 @@ export class DigitalProductionIdentityService {
       await consumeShortLead(client,actor,root.productionOrderId,shortApproval,businessTime,creationEventId);
       await new SlaOrderService(this.database).enrollNewOrder(client, actor, root.productionOrderId, creationEventId, businessTime);
       await enrollPreparation(client,{kind:'order',id:root.productionOrderId},actor.actorId,creationEventId);
+      if(usingOrderTime&&sourceId)await enrollFormalDevelopmentHandover(client,root.productionOrderId,sourceId,creationEventId);
       await bridgePreparationMaterials(client,await preparationContext(client,{kind:'order',id:root.productionOrderId}),actor.actorId);
       await refreshPreparationWindows(client,root.productionOrderId);
       await ensureQuotationBudget(client,root.productionOrderId,actor.actorId);
-      if(sourceId)await shareApprovedDesignVersions(client,actor,sourceId);
+      if(sourceId)await shareApprovedDesignVersions(client,actor,sourceId,usingOrderTime?{orderId:root.productionOrderId,eventId:creationEventId}:undefined);
       return this.readWith(client, actor, root.productionOrderId);
     },result=>({kind:'order',id:result.productionOrderId})));
   }

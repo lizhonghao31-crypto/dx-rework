@@ -41,6 +41,10 @@ import {DigitalProductionTaskService} from "../../apps/api/src/production-platfo
 import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
 import {DigitalQuotationService} from "../../apps/api/src/production-platform/quotation-service.js";
+import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
+import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
+import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {DevelopmentDocumentSchema,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
@@ -66,7 +70,7 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("S1 development read through original App and native signed identity",()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string;
- let prepareDevelopment:(published?:boolean,accessoryId?:string,completeHandover?:boolean)=>Promise<{id:string;materialId:string}>;
+ let prepareDevelopment:(published?:boolean,accessoryId?:string,completeHandover?:boolean,nativeDraft?:boolean)=>Promise<{id:string;materialId:string}>;
  let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string,uploadSourceId:string,uploadPaperId:string;
  let externalSourceId:string,externalTaskId:string,externalRequestId:string;
  const tokens=new Map<string,string>(),evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"development-read");
@@ -94,12 +98,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const prices=new PatternRoomPriceService(f.db),option=(await prices.options(f.root))[0]!,quote=await prices.quote(f.root,'category',option.priceId);
   const category=await prices.change(f.root,'category',option.priceId,{version:quote.version,amount:'10.000',enabled:true,reason:'TEST isolated S1 sample'},randomUUID());
   const designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!;
-  const prepare=prepareDevelopment=async(published=true,accessoryId?:string,completeHandover=false)=>{
-   const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-S1-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const prepare=prepareDevelopment=async(published=true,accessoryId?:string,completeHandover=false,nativeDraft=false)=>{
+   const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-S1-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID(),nativeDraft);
    const materialId=randomUUID(),photo=await f.image(designer);
    const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST S1 原制作说明',craft:'无',washing:'免洗',materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
    document.patternCategoryId=category.priceId;
    if(completeHandover)document.materials[0]!.quantityUnit='米';
+   // A native reserved draft declares the material only. Actual warehouse or
+   // development-clerk availability must not be fabricated in its version.
+   if(nativeDraft){
+    document.materials[0]={...document.materials[0]!,category:'辅料',label:'辅料',name:'TEST 扣件',quantityUnit:'件',available:false,
+     expectedDate:beijingCalendarDate(new Date(businessNow().getTime()+86400000))};
+   }
    if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST 必需纽扣',name:'TEST 必需纽扣',available:false,expectedDate:'2027-01-01'});
    const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
    if(published)await forms.publish(designer,source.sourceId,saved.version,randomUUID(),{categoryId:category.priceId,priceVersion:category.version});
@@ -133,7 +143,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      return f.sourcing.canDownloadBoundAttachment({actorId:actor.actorId,actorRoles:actor.actorRoles,
       authorizationCapability:'sourcing:view',authorizationCapabilities:actor.capabilities,requestId:randomUUID()},binding);
     }},
-   digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentRounds:new DevelopmentRoundService(f.db,true,native),developmentExecution:execution,developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(f.db),bulkPreparationService:new BulkPreparationService(f.db),closureService:new OrderClosureService(f.db),factoryFlowService:new FactoryFlowService(f.db),bulkWashing:new BulkWashingService(f.db),qcProgress:new QcProductionProgressService(f.db),journeys:new DigitalJourneyQuery(f.db),quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
+   digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentRounds:new DevelopmentRoundService(f.db,true,native),developmentExecution:execution,developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(f.db),bulkPreparationService:new BulkPreparationService(f.db),closureService:new OrderClosureService(f.db),factoryFlowService:new FactoryFlowService(f.db),bulkWashing:new BulkWashingService(f.db),qcProgress:new QcProductionProgressService(f.db),journeys:new DigitalJourneyQuery(f.db),quotationService:new DigitalQuotationService(f.db,true),budgetService:new DigitalBudgetService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
   for(const role of ['root','pattern-room-worker','worker-a','worker-b','pattern-room-supervisor','development-clerk'])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   output=await mkdtemp(join(tmpdir(),"dx-development-read-native-"));const previous=process.env.NODE_ENV;
   try{process.env.NODE_ENV="production";await build({root:resolve("apps/web"),configFile:resolve("apps/web/vite.config.ts"),mode:"production",base:"/",build:{outDir:output,emptyOutDir:true}});}finally{if(previous===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previous;}
@@ -159,6 +169,165 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {chromium}:{chromium:typeof Chromium}=await import(process.env.PLAYWRIGHT_IMPORT??"playwright-core");browser=await chromium.launch({headless:true,...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{}),args:["--no-sandbox"]});await mkdir(evidence,{recursive:true});
  });
  afterAll(async()=>{await browser?.close();if(server){server.closeAllConnections();await new Promise<void>(done=>server.close(()=>done()));}await app?.close();await f?.dispose();if(output)await rm(output,{recursive:true,force:true});});
+
+ it('submits current revision inputs without a prior draft save and prints only the adopted original opinion as the signed pattern role',async()=>{
+  const own=await prepareDevelopment(),designer=f.people['sample-designer']!,forms=new DigitalDevelopmentService(f.db,true);
+  const original=await forms.read(designer,own.id),technical=execution.technicalEvidenceService();
+  const imageA=await f.image(designer),imageB=await f.image(designer);
+  for(const image of [imageA,imageB])await execution.recordUploadPurpose(designer,own.id,image,'客户评语依据');
+  const authorToken=await loginRole('sample-designer');
+  const post=(url:string,payload:object,key=randomUUID())=>app.inject({method:'POST',url,payload,
+   headers:{cookie:`dx_rework_session=${authorToken}`,'idempotency-key':key}});
+  const commentPath=`/digital-production/sources/${own.id}/execution/technical/comments`;
+  const comment=(text:string,attachmentId:string,expectedVersion:number)=>({roundNumber:1,scopeRef:'整款',expectedVersion,isFinal:false,
+   decision:'changes_required',text,evidenceRefs:[attachmentId],evidenceNote:'TEST 原客户修改意见',occurredAt:null});
+  const a=await post(commentPath,comment('TEST 确认采用原评语 A',imageA,0));
+  expect(a.statusCode,a.body).toBe(200);
+  const ref={sourceId:own.id,roundNumber:1,scopeRef:'整款',commentId:a.json().commentId,version:a.json().version};
+  const current={expectedDraftVersion:0,basedOnRound:1,revision:{basedOnRound:1,origin:'客户新增要求',customerComment:'TEST 不采用表单伪造文字',internalProblem:'',
+   customerCommentRef:ref,explanation:'TEST 当前未保存修改',categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板',
+   document:{...original.document!,instructions:'TEST 本次未保存的制作说明'}}};
+  const submitPath=`/digital-production/sources/${own.id}/development/round-publish`;
+  const wrong=await post(submitPath,{...current,revision:{...current.revision,customerCommentRef:{...ref,scopeRef:'另一范围'}}});
+  expect([400,409]).toContain(wrong.statusCode);
+  const author=await browser.newContext({viewport:{width:1165,height:840}});
+  await author.addCookies([{name:'dx_rework_session',value:authorToken,url:base}]);
+  const editor=await author.newPage(),writes:string[]=[];
+  editor.on('request',request=>{if(request.method()==='PUT'||request.method()==='POST')writes.push(new URL(request.url()).pathname);});
+  let submitted:{sourceId:string;roundNumber:number};
+  try{
+   await editor.goto(base+`/ui/digital-production?workspace=designer&section=workspace&area=development&development=${own.id}`);
+   await editor.getByRole('button',{name:'编辑版单',exact:true}).click();
+   await editor.getByRole('combobox',{name:'采用本轮原客户评语',exact:true}).click();
+   await editor.getByRole('option',{name:/TEST 确认采用原评语 A/}).click();
+   await editor.getByLabel('制作说明（选填）',{exact:true}).fill(current.revision.document.instructions);
+   const requests:Array<{key:string|undefined;body:string|null}>=[];
+   let storedStatus:number|undefined;
+   await editor.route(base+'/api'+submitPath,async route=>{
+    requests.push({key:route.request().headers()['idempotency-key'],body:route.request().postData()});
+    if(requests.length!==1)return route.continue();
+    storedStatus=(await route.fetch()).status();
+    return route.abort('failed');
+   });
+   await editor.getByRole('button',{name:/建立独立复版单|正式发布本轮修改/}).click();
+   const recover=editor.getByRole('button',{name:'使用原内容核对复版提交',exact:true});
+   await recover.waitFor();
+   expect(storedStatus).toBe(200);
+   expect(requests).toHaveLength(1);
+   const response=editor.waitForResponse(res=>new URL(res.url()).pathname==='/api'+submitPath&&res.request().method()==='POST');
+   await recover.click();
+   const result=await response;
+   expect(result.status(),await result.text()).toBe(200);
+   expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);
+   submitted=await result.json();
+   expect(writes).not.toContain('/api'+submitPath.replace('round-publish','round-draft'));
+   const payload=result.request().postDataJSON(),idem=result.request().headers()['idempotency-key']!;
+   expect(payload).toMatchObject({expectedDraftVersion:0,revision:{customerCommentRef:ref,document:{instructions:current.revision.document.instructions}}});
+   expect(idem).toBeTruthy();
+   expect((await post(submitPath,payload,idem)).json()).toEqual(submitted);
+   expect((await post(submitPath,payload)).statusCode).toBe(409);
+  }finally{await author.close();}
+  const {sourceId:revisionId,roundNumber}=submitted,b=await post(commentPath,comment('TEST 后录不能混入的评语 B',imageB,ref.version));
+  expect(b.statusCode,b.body).toBe(200);
+  expect((await technical.read(designer,own.id,1,'整款')).comments.map(row=>row.commentId)).toEqual(expect.arrayContaining([ref.commentId,b.json().commentId]));
+  let saved=await forms.read(designer,revisionId,undefined,roundNumber);
+  if(saved.status==='draft'){
+   const category=saved.document!.patternCategoryId!;
+   const price=await new PatternRoomPriceService(f.db).quote(f.root,'category',category);
+   const published=await post(`/digital-production/sources/${revisionId}/development/publish`,{expectedVersion:saved.version,patternOrder:{categoryId:category,priceVersion:price.version}});
+   expect(published.statusCode,published.body).toBe(200);
+   saved=await forms.read(designer,revisionId,undefined,roundNumber);
+  }
+  expect(saved).toMatchObject({document:{instructions:'TEST 本次未保存的制作说明'},status:'published'});
+  const version=`/api/digital-production/sources/${revisionId}/development/versions/${saved.version}`;
+  const context=await browser.newContext({viewport:{width:1165,height:840}});
+  await context.addCookies([{name:'dx_rework_session',value:await loginRole('pattern-room-supervisor'),url:base}]);
+  const page=await context.newPage();
+  try{
+   await page.addInitScript(()=>{
+    const watch=new MutationObserver(entries=>{for(const entry of entries)for(const node of entry.addedNodes){
+     if(!(node instanceof HTMLIFrameElement)||node.title!=='版单 A4 打印预览'||!node.contentWindow)continue;
+     node.contentWindow.print=()=>{
+      const paper=node.contentDocument!;
+      document.body.dataset.testExactRevisionPrint=JSON.stringify([...paper.querySelectorAll<HTMLElement>('.development-print-page')].map(sheet=>({
+       document:sheet.dataset.printDocument,text:sheet.textContent,images:[...sheet.querySelectorAll('img')].map(img=>({url:img.src,decoded:img.naturalWidth>0})),
+      })));
+      node.contentWindow?.dispatchEvent(new Event('afterprint'));
+     };
+    }});
+    watch.observe(document,{childList:true,subtree:true});
+   });
+   const snapshot=await page.request.get(base+version+`?round=${roundNumber}`);expect(snapshot.status(),await snapshot.text()).toBe(200);
+   const exact=await snapshot.json();
+   expect(exact.document.files.some((row:{attachmentId:string})=>[imageA,imageB].includes(row.attachmentId))).toBe(false);
+   expect(exact.printFeedback).toMatchObject({text:'TEST 确认采用原评语 A',version:ref.version,images:[{attachmentId:imageA}]});
+   const wrongAttachment=await page.request.get(base+version+`/attachments/${imageB}?round=${roundNumber}`,{maxRedirects:0});
+   expect(wrongAttachment.status()).toBe(404);
+   const finance=await loginRole('factory-payables');
+   expect((await app.inject({method:'GET',url:version.slice(4)+`/attachments/${imageA}?round=${roundNumber}`,
+    headers:{cookie:`dx_rework_session=${finance}`}})).statusCode).toBe(404);
+   await page.goto(base+`/ui/digital-production?development=${revisionId}&round=${roundNumber}&developmentDocumentVersion=${saved.version}`);
+   await page.getByRole('button',{name:'打印 / 保存 PDF',exact:true}).click();
+   await expect.poll(()=>page.locator('body').getAttribute('data-test-exact-revision-print')).toBeTruthy();
+   const printed=JSON.parse((await page.locator('body').getAttribute('data-test-exact-revision-print'))!) as Array<{document:string;text:string;images:Array<{url:string;decoded:boolean}>}>;
+   const feedback=printed.filter(row=>row.document==='客户评语单'),main=printed.filter(row=>row.document!=='客户评语单');
+   expect(main.length).toBeGreaterThan(0);expect(printed[0]?.document).not.toBe('客户评语单');
+   expect(main.every(row=>!row.text.includes('TEST 确认采用原评语 A'))).toBe(true);
+   expect(feedback.map(row=>row.text).join(' ')).toContain('TEST 确认采用原评语 A');
+   expect(feedback.flatMap(row=>row.images)).toEqual([{url:base+version+`/attachments/${imageA}?round=${roundNumber}`,decoded:true}]);
+   expect(JSON.stringify(printed)).not.toContain(imageB);
+  }finally{await context.close();}
+ });
+
+ it('C5 rejects cross-order revision comment and attachment access for real unrelated signed identities',async()=>{
+  const designer=f.people['sample-designer']!,forms=new DigitalDevelopmentService(f.db,true);
+  const own=await prepareDevelopment(),foreign=await prepareDevelopment();
+  const headers={cookie:`dx_rework_session=${await loginRole('sample-designer')}`};
+  const post=(url:string,payload:object)=>app.inject({method:'POST',url,payload,headers:{...headers,'idempotency-key':randomUUID()}});
+  async function original(sourceId:string,label:string){
+   const imageId=await f.image(designer);
+   await execution.recordUploadPurpose(designer,sourceId,imageId,'客户评语依据');
+   const saved=await post(`/digital-production/sources/${sourceId}/execution/technical/comments`,{roundNumber:1,scopeRef:'整款',expectedVersion:0,
+    isFinal:false,decision:'changes_required',text:label,evidenceRefs:[imageId],evidenceNote:'TEST 原客户修改意见',occurredAt:null});
+   expect(saved.statusCode,saved.body).toBe(200);
+   return {imageId,ref:{sourceId,roundNumber:1,scopeRef:'整款',commentId:saved.json().commentId,version:saved.json().version}};
+  }
+  const a=await original(own.id,'TEST 本单真实评语'),b=await original(foreign.id,'TEST 另一独立订单评语');
+  const sheet=await forms.read(designer,own.id);
+  const url=`/digital-production/sources/${own.id}/development/round-publish`;
+  const submit=(ref:typeof a.ref)=>post(url,{expectedDraftVersion:0,basedOnRound:1,revision:{basedOnRound:1,origin:'客户新增要求',
+   customerComment:'不能用本表单文字替代原评语',internalProblem:'',customerCommentRef:ref,explanation:'TEST 验证本单原评语范围',
+   categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板',document:sheet.document!}});
+  for(const ref of [b.ref,{...b.ref,sourceId:own.id}]){
+   const wrong=await submit(ref);expect(wrong.statusCode).toBe(409);
+   expect(wrong.body).not.toContain('TEST 另一独立订单评语');
+  }
+  expect((await f.db.query(`SELECT 1 FROM digital_development_revision_comment_adoptions WHERE based_on_source_id IN ($1,$2)`,[own.id,foreign.id])).rowCount).toBe(0);
+  const published=await submit(a.ref);expect(published.statusCode,published.body).toBe(200);
+  const {sourceId,roundNumber}=published.json();
+  let revision=await forms.read(designer,sourceId,undefined,roundNumber);
+  if(revision.status==='draft'){
+   const categoryId=revision.document!.patternCategoryId!,price=await new PatternRoomPriceService(f.db).quote(f.root,'category',categoryId);
+   const issued=await post(`/digital-production/sources/${sourceId}/development/publish`,{expectedVersion:revision.version,patternOrder:{categoryId,priceVersion:price.version}});
+   expect(issued.statusCode,issued.body).toBe(200);revision=await forms.read(designer,sourceId,undefined,roundNumber);
+  }
+  const pattern=await loginRole('pattern-room-supervisor'),finance=await loginRole('factory-payables');
+  const get=(path:string,token:string)=>app.inject({method:'GET',url:path,headers:{cookie:`dx_rework_session=${token}`}});
+  const version=(id:string,v:number)=>`/digital-production/sources/${id}/development/versions/${v}`;
+  const exact=version(sourceId,revision.version),foreignVersion=version(foreign.id,(await forms.read(designer,foreign.id)).version);
+  const attachment=(path:string,imageId:string,round:number)=>`${path}/attachments/${imageId}?round=${round}`;
+  const allowed=await get(`${exact}?round=${roundNumber}`,pattern);
+  expect(allowed.statusCode,allowed.body).toBe(200);
+  expect(allowed.json().printFeedback).toMatchObject({text:'TEST 本单真实评语',images:[{attachmentId:a.imageId}]});
+  expect((await get(`${foreignVersion}?round=1`,pattern)).statusCode).toBe(200);
+  const ownDownload=await get(attachment(exact,a.imageId,roundNumber),pattern);
+  expect(ownDownload.statusCode).toBe(302);expect(ownDownload.headers.location).toBeTruthy();
+  for(const [path,token] of [[attachment(exact,b.imageId,roundNumber),pattern],[attachment(foreignVersion,a.imageId,1),pattern],
+   [attachment(exact,a.imageId,roundNumber),finance],[`${exact}?round=${roundNumber}`,finance]] as const){
+   const denied=await get(path,token);expect(denied.statusCode).toBe(404);expect(denied.headers.location).toBeUndefined();
+   expect(denied.body).not.toMatch(/本单真实评语|另一独立订单评语|__test-storage/);
+  }
+ });
 
  it('reads an exact original development revision as the real designer without editable controls, latest fallback or business writes',async()=>{
   const designer=f.people['sample-designer']!,clerk=f.people['development-clerk']!,forms=new DigitalDevelopmentService(f.db,true),amendments=new DevelopmentAmendmentService(f.db,true);
@@ -254,6 +423,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.goBack();await firstOriginal.waitFor();await expect.poll(async()=>Math.abs(await page.evaluate(()=>window.scrollY)-originalTop)).toBeLessThanOrEqual(2);
    expect(new URL(page.url()).searchParams.get('selected')).toBe(own.id);expect(new URL(page.url()).searchParams.get('area')).toBe('records');
    expect(await search.inputValue()).toBe('资料版本 '+prior.documentVersion);
+   const singleDirectory=page.getByRole('region',{name:'订单单据',exact:true});
+   expect(await singleDirectory.count()).toBe(1);
+   const stages=singleDirectory.getByRole('tablist',{name:'单据流程节点'});
+   expect(await stages.getByRole('tab').allTextContents()).toEqual(['订单','开发','产前','开裁','工艺','生产','回货']);
+   await stages.getByRole('tab',{name:'开发',exact:true}).click();
    const originalPattern=page.getByRole('button',{name:'打板执行单',exact:true});
    const relatedResponse=(number:string)=>page.waitForResponse(response=>{
     const url=new URL(response.url());
@@ -289,6 +463,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('link',{name:'返回来源列表',exact:true}).click();await miscLink.waitFor();
    expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('misc');
    expect(new URL(page.url()).searchParams.get('selected')).toBe(own.id);
+   await singleDirectory.getByRole('button',{name:'查看更多 ›',exact:true}).click();
+   const directoryChooser=page.getByRole('dialog',{name:'全部相关单据',exact:true});
+   await directoryChooser.getByLabel('搜索单据类别',{exact:true}).fill('开发原单');
+   await directoryChooser.getByRole('button',{name:'开发原单与轮次',exact:true}).click();
+   await directoryChooser.waitFor({state:'hidden'});
+   expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('development');
+   expect(await search.inputValue()).toBe('资料版本 '+prior.documentVersion);
    await firstOriginal.click();await original.waitFor();
    const width=await original.boundingBox();await page.getByRole('button',{name:'切换单据',exact:true}).click();const chooser=page.getByRole('dialog',{name:'切换单据',exact:true});await chooser.waitFor();
    await chooser.getByRole('button',{name:`开发单 · 第1轮 · 资料版本 ${current.version} · 已发布`,exact:true}).waitFor();
@@ -577,6 +758,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(await workbench.getByText('录客户意见',{exact:true}).count()).toBe(0);
     expect(await workbench.getByText('客户评语与最终批复',{exact:true}).count()).toBe(0);
     expect(writes).toEqual([]);
+    expect(await feedback.getByLabel('反馈性质',{exact:true}).count()).toBe(0);
+    expect(await feedback.getByLabel('确认依据与原记录位置',{exact:true}).count()).toBe(0);
+    expect(await feedback.getByLabel('客户实际反馈时间',{exact:true}).count()).toBe(0);
+    const feedbackInput=feedback.getByRole('textbox',{name:'评语原意',exact:true});
+    const commentPath=`/sources/${commentSourceId}/execution`;
+    let breakRead=false,hasBrokenRead=false;
+    await workbench.route(url=>url.pathname.endsWith(commentPath),async route=>{
+     if(route.request().method()==='GET'&&breakRead&&!hasBrokenRead){
+      hasBrokenRead=true;await route.fulfill({status:502,contentType:'application/json',body:'{}'});
+     }else await route.continue();
+    });
+    const ordinaryText='TEST 本轮普通意见，不触发尺寸复核';
+    await feedbackInput.fill(ordinaryText);breakRead=true;
+    await feedback.getByRole('button',{name:'保存意见',exact:true}).click();
+    const reload=workbench.getByRole('button',{name:'重试读取客户意见',exact:true});
+    await reload.waitFor();expect(await feedbackInput.inputValue()).toBe(ordinaryText);expect(hasBrokenRead).toBe(true);
+    expect(writes).toEqual(['POST']);
+    const readComments=()=>f.db.query(`SELECT version,is_final,decision,text_value,occurred_at,recorded_at
+      FROM digital_development_final_comments WHERE source_id=$1 ORDER BY version`,[commentSourceId]);
+    const intermediate=(await readComments()).rows;expect(intermediate).toHaveLength(2);
+    expect(intermediate[1]).toMatchObject({version:2,is_final:false,decision:'noted',text_value:ordinaryText,occurred_at:null,recorded_at:expect.any(Date)});
+    expect((await f.db.query('SELECT * FROM digital_development_size_review_requests WHERE source_id=$1',[commentSourceId])).rows).toEqual(before);
+    await reload.click();await feedback.getByText(ordinaryText,{exact:true}).waitFor();
+    await expect.poll(()=>feedbackInput.inputValue()).toBe('');expect(writes).toEqual(['POST']);
+
+    const finalText='TEST 本轮最终批复，客户确实要求修改';
+    await feedbackInput.fill(finalText);
+    const finalButton=feedback.getByRole('button',{name:'确认本轮最终批复',exact:true});
+    await finalButton.click();
+    let confirmation=workbench.getByRole('dialog',{name:'确认本轮最终批复',exact:true});
+    await confirmation.getByRole('button',{name:'取消',exact:true}).click();
+    await confirmation.waitFor({state:'hidden'});expect(await feedbackInput.inputValue()).toBe(finalText);expect(writes).toEqual(['POST']);
+    await finalButton.click();confirmation=workbench.getByRole('dialog',{name:'确认本轮最终批复',exact:true});
+    await confirmation.getByRole('button',{name:'客户要求修改',exact:true}).click();
+    await feedback.getByText('本轮最终批复已登记',{exact:true}).waitFor();
+    await feedback.getByText(finalText,{exact:true}).waitFor();
+    const updated=(await readComments()).rows;
+    expect(updated).toHaveLength(3);expect(updated.slice(0,2)).toEqual(intermediate);
+    expect(updated[2]).toMatchObject({version:3,is_final:true,decision:'changes_required',text_value:finalText,occurred_at:null,recorded_at:expect.any(Date)});
+    expect(writes).toEqual(['POST','POST']);
+    expect((await f.db.query('SELECT final_comment_version FROM digital_development_size_review_requests WHERE source_id=$1 ORDER BY final_comment_version',[commentSourceId])).rows)
+     .toEqual([{final_comment_version:1},{final_comment_version:3}]);
+    await workbench.screenshot({path:join(evidence,'c5-customer-feedback-two-actions-1165.png'),fullPage:true});
    }finally{await designer.close();}
   }catch(error){await page.screenshot({path:join(evidence,'customer-approval-time-failure.png'),fullPage:true});await writeFile(join(evidence,'customer-approval-time-failure-body.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
  });
@@ -606,7 +830,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(stored.payload.actualCompletedDate).toBe('2026-11-09');
   }catch(error){await page.screenshot({path:join(evidence,'occurrence-failure.png'),fullPage:true});await writeFile(join(evidence,'occurrence-failure-body.txt'),await page.locator('body').innerText());await writeFile(join(evidence,'occurrence-failure-controls.json'),JSON.stringify(await page.locator('.development-material-events select').evaluateAll(selects=>selects.map(select=>select.outerHTML))));throw error;}finally{await context.close();}
  });
- it('opens the six workbench areas and returns from the authorized original task to the same order',async()=>{
+ it('opens the seven approved workbench regions and returns from the authorized original task to the same order',async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:747}});
   const token=await loginRole('sample-designer');
   await context.addCookies([{name:'dx_rework_session',value:token,url:base}]);
@@ -631,58 +855,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await row.click();
    expect((await readinessResponse).status()).toBe(200);
    await page.getByRole('heading',{name:source,exact:true}).waitFor();
-   const nav=page.getByRole('navigation',{name:'本单区域'});
-   expect(await nav.getByRole('link').allTextContents()).toEqual(['版单资料','开发进度','客户与报价','交接与寄样','订单相关单据','操作记录']);
-   expect(await nav.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+   expect(await page.getByRole('navigation',{name:'本单区域'}).count()).toBe(0);
+   expect(await page.getByRole('region',{name:'当前办理',exact:true}).count()).toBe(0);
+   expect(await page.getByRole('region',{name:'开发进度',exact:true}).count()).toBe(0);
+   const headings=page.locator('.designer-order-area > h2');
+   expect(await headings.allTextContents()).toEqual(['版单资料','交资料','客户意见','报价','样衣寄出','订单单据','操作记录']);
    await page.setViewportSize({width:390,height:747});
-   expect(await nav.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
    await page.setViewportSize({width:1165,height:747});
-   const customer=page.getByRole('region',{name:'客户与报价',exact:true});
-   await customer.getByText('客户当前确认版：',{exact:false}).waitFor();
+   await page.getByRole('region',{name:'报价',exact:true}).getByText('客户当前确认版：',{exact:false}).waitFor();
    const originalDirectory=page.getByRole('region',{name:'本单原单据目录',exact:true});
    await originalDirectory.getByLabel('搜索原单与版本',{exact:true}).waitFor();
    const overviewPaths=[`/sources/${sourceId}/quotation`,`/sources/${sourceId}/production-readiness`,`/journeys/${sourceId}`];
    for(const path of overviewPaths)expect(requests.filter(request=>request.path.endsWith(path))).toHaveLength(1);
-   await nav.getByRole('link',{name:'客户与报价',exact:true}).focus();
-   await page.keyboard.press('Enter');
-   await nav.getByRole('link',{name:'订单相关单据',exact:true}).click();
    await originalDirectory.getByLabel('搜索原单与版本',{exact:true}).fill('资料版本');
    await expect.poll(()=>new URL(page.url()).searchParams.get('originalSearch')).toBe('资料版本');
    await expect.poll(()=>originalDirectory.getByRole('status').filter({hasText:/^正在(?:读取|核对)/}).count()).toBe(0);
    expect(await originalDirectory.getByRole('navigation',{name:/版本分页/}).count()).toBe(0);
-   const developmentRecords=page.getByRole('region',{name:'产品开发打板',exact:true});
+   const records=page.getByRole('region',{name:'订单单据',exact:true});
+   await records.getByRole('tab',{name:'开发',exact:true}).click();
+   await records.getByRole('button',{name:'本阶段关联原记录',exact:true}).click();
+   const developmentRecords=records.getByRole('list',{name:'本阶段关联原记录',exact:true});
    const paperDocument=developmentRecords.locator(`a[href*="task=${paperId}"]`);
    const paperDocumentPath=new URL((await paperDocument.getAttribute('href'))!,page.url());
    expect(paperDocumentPath.searchParams.get('task')).toBe(paperId);
    expect(paperDocumentPath.searchParams.get('taskView')).toBe('read');
-   expect(new URL(paperDocumentPath.searchParams.get('returnTo')!,page.url()).searchParams.get('area')).toBe('records');
-   await nav.getByRole('link',{name:'客户与报价',exact:true}).click();
+   const paperReturn=new URL(paperDocumentPath.searchParams.get('returnTo')!,page.url()).searchParams;
+   expect(paperReturn.get('area')).toBe('records');
+   expect(paperReturn.get('development')).toBe(sourceId);
+   expect(paperReturn.get('originalStage')).toBe('development');
+   expect(paperReturn.get('originalCategory')).toBe('related_records');
+   expect(paperReturn.get('originalSearch')).toBe('资料版本');
    expect(new URL(page.url()).searchParams.get('originalSearch')).toBe('资料版本');
    for(const path of overviewPaths)expect(requests.filter(request=>request.path.endsWith(path))).toHaveLength(1);
-   const nativeTask=page.getByRole('region',{name:'当前办理'}).getByRole('link',{name:/等别人.*纸样/});
-   const target=new URL((await nativeTask.getAttribute('href'))!,page.url());
-   expect(target.searchParams.get('task')).toBe(paperId);
-   expect(target.searchParams.get('taskView')).toBe('read');
-   expect(new URL(target.searchParams.get('returnTo')!,page.url()).searchParams.get('originalSearch')).toBe('资料版本');
-   await nativeTask.click();
+   await paperDocument.click();
    await page.getByRole('button',{name:'返回来源',exact:true}).click();
-   await nav.getByRole('link',{name:'开发进度',exact:true}).waitFor();
-   expect(new URL(page.url()).searchParams.get('area')).toBe('development');
+   await paperDocument.waitFor();
+   expect(new URL(page.url()).searchParams.get('originalCategory')).toBe('related_records');
    expect(new URL(page.url()).searchParams.get('originalSearch')).toBe('资料版本');
    expect(new URL(page.url()).searchParams.get('development')).toBe(sourceId);
    expect(new URL(page.url()).searchParams.get('search')).toBe(source);
-   const progress=page.getByRole('region',{name:'开发进度',exact:true});
-   const paperRow=progress.getByRole('listitem').filter({has:page.locator('summary').filter({hasText:/^开发纸样 ·/})});
-   await paperRow.locator('summary').click();
-   const paperRecord=paperRow.getByRole('link',{name:'查看原任务',exact:true});
-   const paperUrl=new URL((await paperRecord.getAttribute('href'))!,page.url());
-   expect(paperUrl.searchParams.get('task')).toBe(paperId);
-   expect(paperUrl.searchParams.get('taskView')).toBe('read');
-   expect(await paperRow.getByRole('link',{name:'打开本人的办理',exact:true}).count()).toBe(0);
-   await paperRecord.click();
-   await page.getByRole('button',{name:'返回来源',exact:true}).click();
-   await nav.getByRole('link',{name:'交接与寄样',exact:true}).click();
-   const handover=page.getByRole('region',{name:'交接与寄样',exact:true});
+   // Old routed bookmarks stay valid, but land at the original document
+   // instead of reconstructing a second general process/todo surface.
+   const alias=new URL(page.url());alias.searchParams.set('area','development');
+   await page.goto(alias.toString());
+   await page.getByRole('heading',{name:'版单资料',exact:true}).waitFor();
+   await expect.poll(()=>page.evaluate(()=>document.activeElement?.id)).toBe('designer-order-document');
+   const handover=page.getByRole('region',{name:'交资料',exact:true});
    await handover.getByText('原设计资料交接',{exact:false}).waitFor();
    expect(await handover.getByRole('button',{name:'刷新交接记录',exact:true}).isVisible()).toBe(true);
    expect(await handover.locator('[data-preparation-kind]').evaluateAll(items=>items.map(item=>item.getAttribute('data-preparation-kind')))).toEqual(['design_handover']);
@@ -813,13 +1032,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await directory.getByRole('button',{name:'装箱与数量差异',exact:true}).click();
    await directory.locator(`a[href*="originalReceivingId=${originalPacking.packingRevisionId}"]`).waitFor();
    const selectOriginalStage=async(label:string)=>{
-    await directory.getByRole('combobox',{name:'原单据阶段',exact:true}).click();
-    await page.getByRole('option',{name:label,exact:true}).click();
+    await directory.getByRole('tab',{name:label,exact:true}).click();
    };
-   await selectOriginalStage('产品开发打板');
+   await selectOriginalStage('开发');
    await directory.getByRole('button',{name:'尺寸表',exact:true}).click();
    await directory.getByRole('button',{name:'纸样PLT',exact:true}).waitFor();
-   await selectOriginalStage('回货与装箱');
+   await selectOriginalStage('回货');
    await directory.getByRole('button',{name:'真实回货与成衣QC',exact:true}).click();
    await originalReceiptLink.waitFor();
    expect(receivingReads).toBe(2);
@@ -1232,7 +1450,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const key=await submitted.request().headerValue('idempotency-key');expect(key).toBeTruthy();
    const firstReceipt=(await submitted.json()).receipt;
    expect(firstReceipt).toMatchObject({...body,confirmedBy:designer.actorId});
-   await panel.getByText(/^已交样衣 ·/).waitFor();
+   const completed=panel.locator('[data-receipt="shared"]').filter({hasText:/已交样衣 ·/});
+   await completed.waitFor();
+   expect(await completed.innerText()).toContain(firstReceipt.recipientName??'接收跟单');
    const repeat=await send('POST',sample,randomUUID(),body);expect(repeat.statusCode).toBe(200);expect(repeat.json().receipt).toEqual(firstReceipt);
    const reassigned=await selectRecipient(second.actorId,1);expect(reassigned.statusCode,reassigned.body).toBe(200);
    const afterReassignment=await send('GET',sample,'');expect(afterReassignment.json()).toMatchObject({recipient:{id:second.actorId},current:null,canConfirm:true,history:[firstReceipt]});
@@ -1565,4 +1785,100 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(commands).toEqual([]);
   }finally{await context.close();}
  });
+ it.each(['quotation-last','sample-last'] as const)('C5 completes the formal milestone only on four original receipts with confirmed C6 pricing and preserves history (%s)',async(last)=>{
+  await prepareRewashSettings(f);
+  const {id}=await prepareDevelopment(true,undefined,true,true),designer=f.people['sample-designer']!,first=f.people.merchandiser!,second=f.people.ie!;
+  const worker=f.people['pattern-room-worker']!,source=await new DigitalDevelopmentService(f.db,true).read(designer,id);
+  const token=await loginRole('sample-designer'),firstToken=await loginRole('merchandiser');
+  const path=`/digital-production/sources/${id}`,sample=`${path}/production-readiness/sample-handover`,quote=`${path}/quotation`;
+  const send=(method:'GET'|'POST'|'PUT',url:string,payload?:object,session=token,key=randomUUID())=>app.inject({method,url,
+   headers:{cookie:`dx_rework_session=${session}`,'idempotency-key':key},...(payload?{payload}:{})});
+  const body=async(response:Awaited<ReturnType<typeof send>>)=>{expect(response.statusCode,response.body).toBe(200);return response.json();};
+  const view=async()=>body(await send('GET',sample));
+  const material=(recipientId:string,expectedVersion:number)=>({kind:'design_handover',state:'ready',scopeRef:'whole',expectedVersion,
+   occurredAt:new Date(businessNow().getTime()-60_000).toISOString(),note:'TEST 原面辅料回执',sourceDocumentVersion:source.version,recipientId,evidenceIds:[],quantities:[]});
+  const receipt=(recipientId:string)=>({round:source.roundNumber!,documentVersion:source.version,recipientId});
+  const record=async()=> (await f.db.query(`SELECT e.id,e.after_state,p.event_id,p.occurred_at FROM audit_events e
+   JOIN digital_series_source_events p ON p.source_record_id=e.id WHERE e.action='design_formal_handover_completed' AND e.entity_id=$1`,[id])).rows;
+  await body(await send('POST',`${path}/production-readiness/materials`,material(first.actorId,0)));
+  const sampleKey=randomUUID();
+  const early=last==='quotation-last'?await body(await send('POST',sample,receipt(first.actorId),token,sampleKey)):null;
+  expect((await view()).formal).toBeUndefined();expect(await record()).toEqual([]);
+  await new DigitalProductionAccessService(f.db).setCustomerDefault(f.root,'PD',first.actorId);
+  const date=beijingCalendarDate(new Date(businessNow().getTime()+90*86400000));
+  const formalInput=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.designStyleNo,
+   orderDate:beijingCalendarDate(businessNow()),contractDeliveryDate:date,requiresColorMatching:false,productionPlanning:{craftSteps:[],preshrink:false},
+   lines:[{formalPoNo:source.designStyleNo,color:'黑',customerWarehouseArrivalDate:date,sizes:[{size:'M',quantity:7},{size:'L',quantity:3}]}]});
+  const order=last==='quotation-last'?await body(await send('POST',`${path}/confirm`,formalInput)):await (async()=>{
+   const service=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true));
+   const operation={kind:'confirm_order',sourceId:id,input:formalInput};
+   const checked=await service.check(designer,operation);
+   const requested=await service.submit(designer,{operation,fingerprint:checked.fingerprint,reason:'TEST 原审核路径确认客户订单'},randomUUID());
+   const pending=await service.read(f.root,requested.requestId);
+   const applied=await service.apply(f.root,pending.requestId,{expectedVersion:pending.version,fingerprint:pending.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   expect(applied.appliedBy?.id).toBe(f.root.actorId);
+   return new DigitalProductionIdentityService(f.db,true).read(designer,applied.result!.orderId!);
+  })();
+  const orderId=order.productionOrderId as string;
+  const plan=async()=>new OrderTimePlanRepository(f.db).current({kind:'order',id:orderId});
+  const beforePlan=await plan();expect(beforePlan).toBeTruthy();
+  const sampleView=await view();expect(sampleView.formal).toEqual({currentComplete:false,historicalCompletion:null});
+  if(early)expect(sampleView.current.eventId).toBe(early.receipt.eventId);else expect(sampleView.current).toBeNull();
+  expect(sampleView.electronic.map((r:{state:string})=>r.state)).toEqual(['shared','shared','incomplete']);
+  if(last==='sample-last'){
+   const shared=(await f.db.query('SELECT actor_id FROM audit_events WHERE id=$1',[sampleView.electronic[1].receipt.id])).rows[0];
+   expect(shared.actor_id).toBe(f.root.actorId);
+  }
+  expect((await f.db.query(`SELECT 1 FROM digital_series_source_events WHERE production_order_id=$1 AND node_key='design_handover' AND business_completed`,[orderId])).rowCount).toBe(0);
+  const budget=`/digital-production/orders/${orderId}/budget`;
+  expect((await body(await send('GET',budget,undefined,firstToken))).canEdit).toBe(false);
+  const rowId=randomUUID(),saved=await body(await send('PUT',quote,{expectedVersion:0,document:{fabricType:'针织',productCategory:'上衣',monthSeries:'',date:null,currency:'人民币',
+   rows:[{rowId,section:'主料',category:'',name:'TEST 面料',specification:'40支',unit:'米',supplier:'TEST',consumption:'',unitPrice:'8'}],
+   freight:'0',cm:'0',salePrice:'',outsourcingScope:'',outsourcingUnitPrice:'0',imageAttachmentIds:[]},assignments:[{rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:designer.actorId,priceRole:'sample_designer'}]}));
+  const priced=await body(await send('POST',`${quote}/rows/${rowId}`,{expectedVersion:saved.version,consumption:'1'},tokens.get('pattern-room-worker')!));
+  const confirm={expectedVersion:priced.version,customerCode:'PD',customerConfirmedTotal:'20',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',
+   taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',
+   evidenceNote:'TEST 真实报价交接',confirmedAt:new Date(businessNow().getTime()-1000).toISOString(),workbenchPricing:{field:'customerUnitPrice',value:'20'}};
+  const quoteKey=randomUUID(),confirmed=await body(await send('POST',`${quote}/confirm`,confirm,token,quoteKey));
+  if(last==='sample-last'){
+   expect((await view()).formal).toEqual({currentComplete:false,historicalCompletion:null});expect(await record()).toEqual([]);
+  }
+  const originalSample=early??await body(await send('POST',sample,receipt(first.actorId),token,sampleKey));
+  const after=await view(),original=(await record())[0]!;
+  expect(after.formal).toMatchObject({currentComplete:true,historicalCompletion:{eventId:original.event_id}});
+  expect(original.after_state).toMatchObject({orderId,sourceId:id,sampleReceiptId:originalSample.receipt.eventId,recipientId:first.actorId,
+   receipts:[{kind:'materials',version:source.version},{kind:'order_quantities',version:order.version},{kind:'quotation',version:confirmed.confirmedVersion}]});
+  expect(original.occurred_at.toISOString()).toBe(last==='quotation-last'?after.electronic[2].receipt.at:originalSample.receipt.occurredAt);
+  expect((await body(await send('GET',budget,undefined,firstToken))).canEdit).toBe(true);
+  await body(await send('POST',`${quote}/confirm`,confirm,token,quoteKey));
+  await body(await send('POST',sample,receipt(first.actorId),token,sampleKey));
+  expect(await record()).toEqual([original]);expect(await plan()).toEqual(beforePlan);
+  const pageContext=await browser.newContext({viewport:{width:1165,height:900}});
+  await pageContext.addCookies([{name:'dx_rework_session',value:token,url:base}]);
+  try{
+   const page=await pageContext.newPage();
+   await page.goto(`${base}/ui/digital-production?workspace=designer&section=workspace&development=${id}`);
+   await page.getByText('交资料—完成',{exact:true}).waitFor();
+   await page.screenshot({path:join(evidence,`c5-formal-four-${last}.png`),fullPage:true});
+  }finally{await pageContext.close();}
+  const assignment=await f.access.assignRole(f.root,{userId:second.actorId,roleCode:'order_merchandiser',reason:'TEST new actual C5 recipient'});
+  try{
+   await new DigitalProductionAccessService(f.db).assignMerchandiser(f.root,orderId,second.actorId,order.version);
+   const changed=await view();expect(changed.formal).toEqual({...after.formal,currentComplete:false});expect(changed.current).toBeNull();
+   expect((await send('POST',sample,receipt(first.actorId))).statusCode).toBe(409);
+   await body(await send('POST',`${path}/production-readiness/materials`,material(second.actorId,1)));
+   expect((await view()).formal.currentComplete).toBe(false);
+   const simultaneous=await Promise.all([send('POST',sample,receipt(second.actorId)),send('POST',sample,receipt(second.actorId))]);
+   const final=await view();expect(simultaneous.map(r=>r.statusCode)).toEqual([200,200]);
+   expect(simultaneous.map(r=>r.json().receipt.eventId)).toEqual([final.current.eventId,final.current.eventId]);
+   expect(final.formal).toEqual(after.formal);expect(final.history).toHaveLength(2);
+   expect(await record()).toEqual([original]);expect(await plan()).toEqual(beforePlan);
+   await body(await send('POST',`${quote}/rows/${rowId}`,{expectedVersion:confirmed.version,unitPrice:'9'}));
+   const pendingQuote=await view();
+   expect(pendingQuote.electronic[2]).toMatchObject({kind:'quotation',state:'incomplete'});
+   expect(pendingQuote.formal).toEqual({...after.formal,currentComplete:false});
+   expect(await record()).toEqual([original]);expect(await plan()).toEqual(beforePlan);
+  }finally{await f.access.revokeRole(f.root,assignment.assignmentId,'TEST clean up C5 recipient');}
+ });
+
 });

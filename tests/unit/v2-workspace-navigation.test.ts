@@ -40,6 +40,16 @@ describe("V2 shell route adapter", () => {
     }
     expect(developmentWorkspaceReturnUrl(root.replace('&development=b92e6815-5892-4c51-b3c9-5e70ddbd1546','')+'&area=development','/')).toBeNull();
   });
+  it('keeps the related-original reading category in the previously selected stage and source',()=>{
+    const root='/ui/digital-production?workspace=designer&section=workspace&development=b92e6815-5892-4c51-b3c9-5e70ddbd1546&area=records';
+    const category='&originalCategory=related_records';
+    for(const stage of ['creation','development','preparation','cutting','post_cutting','production','receiving']){
+      const target=root+category+'&originalStage='+stage;
+      expect(developmentWorkspaceReturnUrl(target,'/')).toBe(target);
+    }
+    for(const suffix of [category,category+'&originalStage=registry','&originalStage=receiving&originalCategory=unknown',
+      category+'&originalStage=development&originalStage=production'])expect(developmentWorkspaceReturnUrl(root+suffix,'/')).toBeNull();
+  });
   it("retains Root and original non-Root module permissions without granting new capabilities", () => {
     const user = { id: "TEST", displayName: "TEST", capabilities: [], businessRoles: [] as string[] };
     expect(canAccessDigitalProduction({ ...user, isRoot: true })).toBe(true);
