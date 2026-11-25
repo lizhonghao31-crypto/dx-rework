@@ -24,6 +24,7 @@ import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {craftLegacyLabel} from '@dx-rework/contracts/digital-craft';
 import {readFixedOrderRoute} from './fixed-order-route.js';
 import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
+import {warehouseFactoryDispatchEvidence} from './warehouse-factory-dispatch-evidence.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);};
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
@@ -162,6 +163,14 @@ export class FactoryFlowService{
  private latestTime(...values:Array<Date|string|null|undefined>){const times=values.filter((v):v is Date|string=>v!=null).map(v=>new Date(v).getTime());return times.length?new Date(Math.max(...times)):null;}
  private checkTime(at:string|null,earliest?:Date|string|null){if(at&&(!Number.isFinite(new Date(at).getTime())||new Date(at).getTime()>businessNow().getTime()||earliest&&new Date(at)<new Date(earliest)))fail('真实时间不能晚于当前或早于前置发生时间；请在本页操作记录核对最近的实际发出、回仓或到厂时间后填写，不要用预计日期替代');}
  private async fact(db:PoolClient,actor:TrustedActorContext,prep:string,kind:string,at:string|null,payload:unknown){const id=randomUUID();await db.query('INSERT INTO digital_factory_facts(fact_id,preparation_id,sequence,kind,payload,actor_id,occurred_at) SELECT $1,$2,coalesce(max(sequence),0)+1,$3,$4,$5,$6 FROM digital_factory_facts WHERE preparation_id=$2',[id,prep,kind,JSON.stringify(payload),actor.actorId,at]);return id;}
+ private async dispatchEvidence(db:PoolClient,id:string,s:Awaited<ReturnType<FactoryFlowService['state']>>,lines?:readonly FactoryScope[]){
+  const approval=s.gate.approval,contract=s.contract;
+  if(!approval||contract?.status!=='ready')return {};
+  const dispatchEvidence=await warehouseFactoryDispatchEvidence(db,id,{sourcingCaseId:approval.sourcing_case_id,
+   sourcingDecisionId:approval.sourcing_decision_id,approvalSnapshotId:approval.sourcing_approval_snapshot_id,
+   contractDocumentId:contract.sourcing_contract_document_id},lines);
+  return dispatchEvidence?{dispatchEvidence}:{};
+ }
  async logistics(actor:TrustedActorContext,id:string,input:FactoryLogistics,key:string){return this.command(actor,id,'logistics',input,key,async(db,s)=>{
   if(!await this.authorized(db,actor,s,'process_logistics',input.stepRef))digitalForbidden();if(s.batch)return this.batchLogistics(db,actor,s,input);if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'process_logistics'));
   if(input.kind==='工艺沟通'&&!input.note.trim())fail('请填写沟通记录');
@@ -191,7 +200,7 @@ export class FactoryFlowService{
   if(input.supplierId!==s.gate.approval?.supplier_id)fail('请刷新确认当前原批准的唯一加工厂');
   const task=s.tasks.find(t=>t.task_kind==='warehouse_dispatch');if(task?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'warehouse_dispatch'));
   this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,s.returned?.occurred_at,...s.latest.map(l=>l.check?.checked_at)));
-  const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note});
+  const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note,...await this.dispatchEvidence(db,id,s)});
   await new SourcingProductionService(this.database).dispatchDigitalWithClient(db,actor,id,factId);
   await this.ensureProductionQc(db,actor,id,s.route.preparation_id);
   await startQcTrackingFromDispatch(db,actor,id,factId);
@@ -264,7 +273,7 @@ export class FactoryFlowService{
   const lines=this.scope(input.lines,limits);
   if(s.tasks.find(t=>t.task_kind==='warehouse_dispatch')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'warehouse_dispatch'));
   this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,batch?.occurredAt,...(batch?.rows.filter(l=>lines.some(x=>x.lineId===l.lineId)).map(l=>l.checkedAt)??[])));
-  const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note,lines,...(s.stepLedger?{stepRef:s.stepLedger.terminalStepRef}:{}),...(batch?{returnFactId:batch.factId,releaseCheckIds:lines.map(l=>({lineId:l.lineId,checkId:s.checks.filter(c=>c.return_fact_id===batch.factId&&c.line_id===l.lineId).at(-1)!.check_id}))}:{})});
+  const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note,lines,...await this.dispatchEvidence(db,id,s,lines),...(s.stepLedger?{stepRef:s.stepLedger.terminalStepRef}:{}),...(batch?{returnFactId:batch.factId,releaseCheckIds:lines.map(l=>({lineId:l.lineId,checkId:s.checks.filter(c=>c.return_fact_id===batch.factId&&c.line_id===l.lineId).at(-1)!.check_id}))}:{})});
   await new SourcingProductionService(this.database).dispatchDigitalWithClient(db,actor,id,factId);
   await this.ensureProductionQc(db,actor,id,s.route.preparation_id);
   await startQcTrackingFromDispatch(db,actor,id,factId);

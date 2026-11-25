@@ -1,4 +1,5 @@
 import {assignedWarehousePreparationResources} from '../../apps/api/src/production-platform/warehouse-assigned-resources.js';
+import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {orderTimeCreated} from '../../apps/api/src/production-platform/order-time-created.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
@@ -551,7 +552,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await f.advance(scene,'2026-11-02T08:01:00Z');
    source=await flow.logistics(f.root,ready.id,{expectedRevision:source.revision,kind:'工艺回仓',occurredAt:businessNow().toISOString(),supplier:'TEST原印花厂',note:'TEST original return'},randomUUID());
    source=await flow.qc(f.root,ready.id,{expectedRevision:source.revision,checks:source.lines.map(line=>({lineId:line.lineId,result:'合格',problem:'',treatment:'',attachmentIds:[]})),note:'TEST原裁后QC'},randomUUID());
-   source=await flow.dispatch(f.root,ready.id,{expectedRevision:source.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST原仓库发裁片'},randomUUID());
+   expect(await readWarehouseFactoryDispatchScopes(f.db,ready.id)).toEqual([]);
+   const dispatchAt=businessNow().toISOString(),dispatch={expectedRevision:source.revision,occurredAt:dispatchAt,supplierId:f.supplierId,note:'TEST原仓库发裁片'},dispatchKey=randomUUID();
+   source=await flow.dispatch(f.root,ready.id,dispatch,dispatchKey);
+   expect(await flow.dispatch(f.root,ready.id,dispatch,dispatchKey)).toEqual(source);
+   const dispatchFact=source.facts.find(fact=>fact.kind==='仓库实际发厂')!;
+   const scopes=await readWarehouseFactoryDispatchScopes(f.db,ready.id);
+   expect(scopes).toEqual(source.lines.map((line,index)=>({orderId:ready.id,factId:dispatchFact.factId,dispatchedAt:dispatchAt,productionId:source.productionId,
+    factoryDecisionId:null,cuttingOrderId:cuts[index]!.cutting_order_id,lineId:line.lineId,quantity:10})));
+   expect(await readWarehouseFactoryDispatchScopes(f.db,randomUUID())).toEqual([]);
    const before=await nodeMaterialsFootprint(f.db),journey=await new DigitalJourneyQuery(f.db).read(f.root,ready.id),compact=await new DigitalJourneyQuery(f.db).read(f.root,ready.id,undefined,true);
    expect(journey.supervision).toBeUndefined();
    for(const key of ['process_logistics','bulk_qc','warehouse_dispatch']){
