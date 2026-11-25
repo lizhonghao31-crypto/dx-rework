@@ -388,6 +388,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      expect(new URL(page.url()).searchParams.get('page')).toBe('2');
      await expect.poll(()=>row.evaluate(node=>node===document.activeElement)).toBe(true);
     }
+    const returned=link('processing_quote',quote.quoteId!,ieRow.rowId);
+    await returned.click();
+    const reprice=page.getByRole('region',{name:'外发加工报价'});
+    await reprice.getByText('请先保存本行的新单价，再重报。',{exact:true}).waitFor();
+    expect(await reprice.getByRole('button',{name:'重报本行核价',exact:true}).count()).toBe(0);
+    await reprice.getByRole('textbox',{name:'加工单价',exact:true}).fill('8.125');
+    const [newPrice]=await Promise.all([page.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/rows/'+ieRow.rowId)),
+     reprice.getByRole('button',{name:'保存加工单价',exact:true}).click()]);
+    expect(newPrice.status()).toBe(200);
+    await reprice.getByRole('button',{name:'重报本行核价',exact:true}).waitFor();
+    expect(await (await page.request.get(url+'?kind=processing_quote&state=returned')).json()).toMatchObject({total:1,items:[{entryId:ieRow.rowId}]});
+    const [resubmission]=await Promise.all([page.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/quotation/workbench-review')),
+     reprice.getByRole('button',{name:'重报本行核价',exact:true}).click()]);
+    expect(resubmission.status()).toBe(200);
+    expect(await resubmission.json()).toMatchObject({commandReceipt:{action:'workbench-review:resubmit'}});
+    await reprice.getByText('本行核价已重报，等待复核。',{exact:true}).waitFor();
+    expect(await (await page.request.get(url+'?kind=processing_quote&state=priced&search='+encodeURIComponent(prefix))).json()).toMatchObject({total:1,items:[{entryId:ieRow.rowId,pricing:{kind:'single',amount:'8.125',unit:'件'}}]});
+    await page.getByRole('link',{name:'返回报价列表',exact:true}).click();
+    await returned.waitFor();
+    await expect.poll(()=>returned.evaluate(node=>node===document.activeElement)).toBe(true);
     const [filtered]=await Promise.all([page.waitForResponse(result=>{
      const target=new URL(result.url());return target.pathname.endsWith('/ie-directory')&&target.searchParams.get('search')===`${prefix}-HISTORY`;
     }),search.fill(`${prefix}-HISTORY`)]);

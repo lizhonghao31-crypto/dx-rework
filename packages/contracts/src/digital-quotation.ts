@@ -48,7 +48,9 @@ export const IeProcessingBasisSchema=z.object({
 export const IeProcessingEntrySchema=z.object({resource:QuotationResourceSchema,quoteId:z.string().uuid(),rowId:z.string().uuid(),
  version:z.number().int().positive(),round:z.number().int().positive(),styleNo:z.string(),customerCode:z.string().nullable(),
  assigneeId:z.string().uuid().nullable(),assigneeName:z.string().nullable(),state:IeProcessingStateSchema,canEditPrice:z.boolean(),orderRush:z.literal(true).optional(),
- basis:IeProcessingBasisSchema.nullable().optional()}).strict();
+ basis:IeProcessingBasisSchema.nullable().optional(),
+ priceReview:z.object({reviewId:z.uuid(),reason:z.string(),status:z.enum(['returned','resubmitted']),
+  resubmitFieldVersion:z.number().int().positive().nullable(),canResubmit:z.boolean()}).strict().nullable().optional()}).strict();
 export const IeProcessingDirectorySchema=z.object({page:z.number().int().positive(),pageSize:z.literal(15),total:z.number().int().nonnegative(),
  items:z.array(IeProcessingEntrySchema).max(15)}).strict();
 export type IeProcessingEntry=z.infer<typeof IeProcessingEntrySchema>;

@@ -119,14 +119,16 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   if(identityKey(directoryEntry)!==target)throw Error('当前账号无法查看所选报价行，请返回列表重新选择。');
   const sheet=await quotationRequest(base,resource);
   if(sheet.version!==directoryEntry.version||sheet.quoteId!==quoteId||!sheet.rows.some(row=>row.rowId===rowId))throw Error('报价行已更新，请重新读取。');
-  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush,basis:directoryEntry.basis};
+  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush,basis:directoryEntry.basis,priceReview:directoryEntry.priceReview};
  },[base,resource,quoteId,rowId,target]);
  const read=useForegroundRead(resource.id,target,load);
  useForegroundWait(read.foregroundKey);
  const [draft,setDraft]=useState<string|null>(null),[busy,setBusy]=useState(false),[fieldError,setFieldError]=useState(''),[receipt,setReceipt]=useState<number|null>(null);
+ const [resent,setResent]=useState(false);
  const saving=useRef(false),feedback=useSubmissionFeedback(setBusy);
  const sheet=read.value?.sheet,row=sheet?.rows.find(row=>row.rowId===rowId),canEdit=Boolean(read.value?.canEdit&&row?.canEditPrice);
  const basis=read.value?.basis,photo=basis?.styleImage;
+ const review=read.value?.priceReview;
  const sizeColumns:TableColumn<NonNullable<typeof basis>['measurements'][number]>[]=basis?[
   {key:'name',header:`尺寸项（${basis.sizeUnit}）`},...basis.sizes.map((size,index)=>({key:`size-${index}`,header:size,renderCell:(measure:NonNullable<typeof basis>['measurements'][number])=>measure.values[index]||'—'})),
  ]:[];
@@ -152,6 +154,28 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
    }finally{saving.current=false;}
   });
  };
+ const resubmit=()=>{
+  const requested=review?.resubmitFieldVersion;
+  if(saving.current||busy||changed||feedback.uncertain||read.waiting||!canEdit||resent||!review?.canResubmit||!requested||!sheet)return;
+  const key=createClientRequestId(),actor=sessionCacheVersion();
+  const body={action:'resubmit',reviewId:review.reviewId,expectedFieldVersion:requested};
+  void feedback.run(async()=>{
+   if(actor!==sessionCacheVersion())throw new SubmissionRequestError('登录身份已变化，请回到原账号核对。','FORBIDDEN',403);
+   saving.current=true;
+   try{
+    const reply=await digitalRequest<unknown>(`${base}/workbench-review`,'POST',body,key);
+    const checked=z.object({resource:QuotationResourceSchema,quoteId:z.uuid(),version:z.number().int(),
+     commandReceipt:z.object({action:z.literal('workbench-review:resubmit'),appliedVersion:z.number().int().positive()})}).safeParse(reply);
+    if(actor!==sessionCacheVersion()||!checked.success||checked.data.quoteId!==quoteId||checked.data.resource.id!==resource.id
+     ||checked.data.resource.kind!==resource.kind||checked.data.commandReceipt.appliedVersion<sheet.version
+     ||checked.data.version<checked.data.commandReceipt.appliedVersion)throw Error('未收到本行重报的原命令回执。');
+    feedback.confirmed();setResent(true);read.refreshSilently();
+   }catch(reason){
+    if(reason instanceof DigitalRequestError&&!reason.resultUnknown&&reason.status!==null)throw new SubmissionRequestError(reason.message,reason.code,reason.status);
+    throw reason;
+   }finally{saving.current=false;}
+  });
+ };
  return <section aria-label={processingQuoteLabel}>
   <Link href={back}>返回报价列表</Link>
   {read.error&&<p role="alert">{receipt!==null?'报价已保存，重新读取失败。 ':''}{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
@@ -166,6 +190,11 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
      <dt>材料</dt><dd>{basis.materials.map(item=>[item.category,item.name,item.specification].filter(Boolean).join(' · ')).join('；')||'—'}</dd></dl>
     {basis.measurements.length>0&&<div className="development-table-scroll"><Table columns={sizeColumns} data={basis.measurements} idKey={measure=>measure.name} aria-label="核价尺寸依据" density="compact"/></div>}
    </section>}
+   {review&&<div aria-label="本行退回重核">
+    <p>{review.status==='resubmitted'||resent?'已重报，待复核':'退回重核'} · {review.reason}</p>
+    {review.status==='returned'&&!resent&&(review.canResubmit?<Button label="重报本行核价" isDisabled={busy||changed||feedback.uncertain||read.waiting} onClick={resubmit}/>
+     :<p>请先保存本行的新单价，再重报。</p>)}
+   </div>}
    <form onSubmit={event=>{event.preventDefault();save();}}>
     <Stack gap={2} maxWidth={480}>
      <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
@@ -179,6 +208,7 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   {feedback.notice&&<p role="status">{feedback.notice}</p>}
   {feedback.uncertain&&<Button label="核对上次提交结果" isDisabled={busy} onClick={()=>void feedback.retry()}/>}
   {receipt!==null&&<p role="status">本行报价已保存 · v{receipt}</p>}
+  {resent&&<p role="status">本行核价已重报，等待复核。</p>}
  </section>;
 }
 

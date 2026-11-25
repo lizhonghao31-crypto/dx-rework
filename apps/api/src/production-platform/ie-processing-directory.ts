@@ -74,6 +74,26 @@ export function processingIeCandidates(database:object,viewer:IeProcessingViewer
  };
 }
 
+/** Only the original assignee gets the active same-round work item needed by the
+ * existing resubmission command. The command still rechecks all conditions. */
+export async function readIeProcessingPriceReview(db:Pick<PoolClient,'query'>,entry:IeProcessingEntry,viewer:IeProcessingViewer):Promise<IeProcessingEntry['priceReview']>{
+ if(!entry.canEditPrice||!viewer.canPrice||entry.assigneeId!==viewer.id)return null;
+ const review=(await db.query<{review_id:string;reason:string;field_version:number|null;has_price:boolean;field_actor:string|null;
+  return_field_version:number|null;resubmit_field_version:number|null}>(`SELECT review.review_id,review.reason,review.return_field_version,review.resubmit_field_version,
+  (q.price_sources->(review.row_id::text)->>'version')::int field_version,
+  q.price_sources->(review.row_id::text)->>'actorId' field_actor,
+  EXISTS (SELECT 1 FROM jsonb_array_elements(q.document->'rows') value WHERE value->>'rowId'=review.row_id::text AND value->>'unitPrice'<>'') has_price
+  FROM digital_quotation_line_reviews review JOIN digital_quotation_documents q USING(quote_id)
+  WHERE review.quote_id=$1 AND review.round_number=$2 AND review.row_id=$3 AND review.field='unitPrice'
+  AND review.recipient_id=$4 AND review.resolve_at IS NULL AND q.version=$5`,[entry.quoteId,entry.round,entry.rowId,viewer.id,entry.version])).rows[0];
+ if(!review)return null;
+ const resubmitted=review.resubmit_field_version!==null&&review.resubmit_field_version===review.field_version;
+ const canResubmit=!resubmitted&&review.has_price&&review.field_actor===viewer.id&&review.field_version!==null
+  &&review.field_version>Math.max(review.return_field_version??0,review.resubmit_field_version??0);
+ return {reviewId:review.review_id,reason:review.reason,status:resubmitted?'resubmitted':'returned',
+  resubmitFieldVersion:canResubmit?review.field_version:null,canResubmit};
+}
+
 /** Uses the current stored IE row. Customer confirmation and external IE quotes have their own identities. */
 export async function readIeProcessingDirectory(db:PoolClient,database:object,input:IeProcessingQuery,viewer:IeProcessingViewer,
  target?:{quoteId:string;rowId:string}){

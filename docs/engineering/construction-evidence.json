@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "4cced4c86195a0e06de15498d3caa7b8fd35220d",
-  "sourceFingerprint": "441258791ec4a94c71019082245b05580cca7eeec7bb38ad763881dfe1747f51",
+  "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
   "rules": [
     {
       "source": "Approved Workbench v11.5 §6.1–6.5, V10/V11, I01–I06 and F01–F03, with C6 joint activation expressly deferred.",
@@ -49,7 +49,7 @@
       ],
       "initialization": "Use the same existing adapters and schema, batch only the selected original row metadata, and keep bare and old deep links. No migration, retrospective update or duplicate status table.",
       "dateAndPermission": "Resolve each original source with its own live read capability and same actor before paging in a read-only snapshot. Existing source identity, current round and quote versions, rush grouping of old readers and all prior business clocks remain authoritative; revoked/cross-tenant selectors cannot grant rights.",
-      "expectation": "Signed IE sees the three legal original types across pages, with the current returned row retaining exact prior price; click each legal original then return to the same page and focused row; wrong roles and malformed filters are rejected."
+      "expectation": "Signed IE sees the three legal original types across pages, with the current returned row retaining exact prior price; click each legal original then return to the same page and focused row. The ordinary assigned IE saves a new exact price without clearing return state, then explicitly resubmits the exact original field via its existing command; wrong roles and malformed filters are rejected."
     },
     {
       "source": "Approved Workbench v11.5 §6.1–6.5, V10/V11, I01–I06 and F01–F03, with C6 joint activation expressly deferred.",
@@ -126,10 +126,10 @@
       "context": "Locked Node 22 workspace. No assertions weakened and only C4 tracked/untracked source included.",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T08:09:49Z",
-      "endedAt": "2026-11-25T08:10:40Z",
-      "sourceFingerprint": "441258791ec4a94c71019082245b05580cca7eeec7bb38ad763881dfe1747f51",
-      "testedHead": "99a8f5312de1f09e4879d319b1aa98935d25ceb7",
+      "startedAt": "2026-11-25T08:24:34Z",
+      "endedAt": "2026-11-25T08:25:23Z",
+      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
+      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
       "logSha256": "155dcb146c7b87cde51a53ca4fdf659091a7f7738702acc4dbba24131d87932c"
     },
     {
@@ -142,11 +142,11 @@
       "passed": 80,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T08:09:49Z",
-      "endedAt": "2026-11-25T08:09:57Z",
-      "sourceFingerprint": "441258791ec4a94c71019082245b05580cca7eeec7bb38ad763881dfe1747f51",
-      "testedHead": "99a8f5312de1f09e4879d319b1aa98935d25ceb7",
-      "logSha256": "a05f56b5b8474924e1aa1a5cd815f4975754ae32a5ac71095462da02e7dbdb10"
+      "startedAt": "2026-11-25T08:24:34Z",
+      "endedAt": "2026-11-25T08:24:42Z",
+      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
+      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
+      "logSha256": "c80522c5dda7fff6d7a57739670323270ca958911617868b63d14b2dcce2c9c6"
     },
     {
       "id": "c4-prepush-protocol",
@@ -158,11 +158,11 @@
       "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T08:09:49Z",
-      "endedAt": "2026-11-25T08:09:51Z",
-      "sourceFingerprint": "441258791ec4a94c71019082245b05580cca7eeec7bb38ad763881dfe1747f51",
-      "testedHead": "99a8f5312de1f09e4879d319b1aa98935d25ceb7",
-      "logSha256": "14a1c6fd4e241de91488b3e057e46a2ba37077e1c78dac3a52f6db49416af17d"
+      "startedAt": "2026-11-25T08:24:34Z",
+      "endedAt": "2026-11-25T08:24:36Z",
+      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
+      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
+      "logSha256": "b2973cb34a51bc5121fa8f6fe0de3d10422be844b3a7dda367a759dc3f4fd550"
     },
     {
       "id": "c4-prepush-native",
@@ -174,11 +174,11 @@
       "passed": 12,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T08:09:49Z",
-      "endedAt": "2026-11-25T08:11:07Z",
-      "sourceFingerprint": "441258791ec4a94c71019082245b05580cca7eeec7bb38ad763881dfe1747f51",
-      "testedHead": "99a8f5312de1f09e4879d319b1aa98935d25ceb7",
-      "logSha256": "556df2e705b8be2514118100bf3e95323bdd4d988b7cdce477c48f2c2fac741c"
+      "startedAt": "2026-11-25T08:24:34Z",
+      "endedAt": "2026-11-25T08:25:52Z",
+      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
+      "testedHead": "39ba8e60dc1190ed2f00f01b085258da0589d4d9",
+      "logSha256": "cd49a7ef026a77107430496df08b55550adef016ec516d3a01edaf55859e558d"
     }
   ]
 }

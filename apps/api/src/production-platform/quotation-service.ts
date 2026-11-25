@@ -19,7 +19,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './access-policy.js';
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
-import {ieProcessingViewer,readIeProcessingDirectory} from './ie-processing-directory.js';
+import {ieProcessingViewer,readIeProcessingDirectory,readIeProcessingPriceReview} from './ie-processing-directory.js';
 import {readIeProcessingBasis,quotationStyleImage} from './quotation-display-basis.js';
 import {developmentDocumentSnapshot} from './development-document-snapshot.js';
 import {readDevelopmentOrderRush,type RushIdentity} from './development-order-rush.js';
@@ -285,6 +285,7 @@ export class DigitalQuotationService{
    if(target&&result.items.length===1){
     await acceptanceBusinessContext()?.assertScope(result.items[0]!.resource);
     result.items[0]!.basis=await readIeProcessingBasis(db,result.items[0]!);
+    result.items[0]!.priceReview=await readIeProcessingPriceReview(db,result.items[0]!,viewer);
    }
    await db.query('COMMIT');return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
