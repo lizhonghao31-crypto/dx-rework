@@ -4,7 +4,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Table} from '@astryxdesign/core/Table';
 import type {DevelopmentSheet} from '@dx-rework/contracts/digital-development';
 import {DESIGNER_WORKBENCH_TASK_KINDS,type DevelopmentWorkspaceHandling,type DevelopmentWorkspaceItem} from '@dx-rework/contracts/digital-development-workspace';
-import {JOURNEY_STAGES,type JourneyNode,type JourneyRecord,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {JourneyNode,JourneyRecord,JourneyStageKey,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
 import {createWebUrls} from '../url-contract.js';
 import {CockpitOperationLog} from './cockpit-operation-log.js';
@@ -19,13 +19,13 @@ import {DesignerRelatedOriginals} from './designer-related-originals.js';
 import {DESIGNER_ORDER_AREAS,type DesignerOrderArea} from './digital-workspace-navigation.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {todoRouteHref} from './todo-route-link.js';
-import {OriginalDocumentDirectory,originalDocumentHref,type OriginalDocumentRef} from './original-document-directory.js';
+import {originalDocumentHref,type OriginalDocumentRef} from './original-document-directory.js';
 import {navigateInternalPage} from './internal-navigation.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {digitalTaskDisplayStatus} from './digital-workspace-copy.js';
 import {OrderRushBadge} from './order-rush-badge.js';
 
-const labels:Record<DesignerOrderArea,string>={document:'版单资料',development:'开发进度',customer:'客户与报价',handover:'交接与寄样',records:'订单相关单据',history:'操作记录'};
+const labels:Record<DesignerOrderArea,string>={document:'版单资料',development:'开发进度',customer:'客户与报价',handover:'交接与寄样',records:'订单单据',history:'操作记录'};
 const labelsId=(area:DesignerOrderArea)=>`designer-order-${area}`;
 const urls=createWebUrls(import.meta.env.BASE_URL);
 function designerCanExecute(task:DigitalTask,actorId:string|undefined){
@@ -58,7 +58,7 @@ function originalRecordHref(record:JourneyRecord,returnTo:string){
  return href;
 }
 
-function RelatedWorkbenchDocuments({journey,returnTo}:{journey:OrderJourney;returnTo:string}){
+function RelatedWorkbenchDocuments({journey,stage,returnTo}:{journey:OrderJourney;stage:JourneyStageKey;returnTo:string}){
  const seen=new Set<string>();
  const entries=(records:Array<{record:JourneyRecord;label:string}>)=>records.flatMap(({record,label})=>{
   if(versionedDocuments.has(record.domain))return [];
@@ -66,17 +66,13 @@ function RelatedWorkbenchDocuments({journey,returnTo}:{journey:OrderJourney;retu
   if(!href||seen.has(key))return [];
   seen.add(key);return [{href,key,label}];
  });
- const groups=JOURNEY_STAGES.map(stage=>({key:stage.key,title:stage.label,
-  items:entries((journey.stages.find(item=>item.key===stage.key)?.nodes??[]).flatMap(node=>node.records.map(record=>({record,
+ const local=entries((journey.stages.find(item=>item.key===stage)?.nodes??[]).flatMap(node=>node.records.map(record=>({record,
    label:[node.subject||node.label,node.round?`第 ${node.round} 轮`:null,journey.lines.find(line=>line.id===record.lineId)?.po].filter(Boolean).join(' · '),
-  }))))}));
- const attached=entries(journey.links.map(record=>({record,label:record.domain==='production'?'实时生产看板':record.domain==='sourcing'?'外发原单':'查看关联原记录'})));
- const visible=[...groups,{key:'order-links',title:'订单关联',items:attached}].filter(group=>group.items.length);
- return visible.length?<div aria-label="按阶段查看关联原记录">{visible.map(group=><section key={group.key} aria-label={group.title}>
-  <h3>{group.title}</h3><ul>{group.items.map(item=><li key={item.key}>
+  }))));
+ const attached=stage==='creation'?entries(journey.links.map(record=>({record,label:record.domain==='production'?'实时生产看板':record.domain==='sourcing'?'外发原单':'查看关联原记录'}))):[];
+ return local.length||attached.length?<ul aria-label="本阶段关联原记录">{[...local,...attached].map(item=><li key={item.key}>
    <Link type="inherit" href={item.href}>{item.label}</Link>
-  </li>)}</ul>
- </section>)}</div>:<p>当前范围没有其它可查看的关联单据。</p>;
+  </li>)}</ul>:<p>当前范围没有其它可查看的关联单据。</p>;
 }
 
 export function DesignerHandlingItems({handling,hrefFor,limit=Infinity}:{handling:DevelopmentWorkspaceHandling;hrefFor:(href:string)=>string;limit?:number}){
@@ -201,9 +197,9 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
    const openOriginal=(ref:OriginalDocumentRef)=>{
     const href=originalDocumentHref(ref,sourceQuery('records'),urls.base);if(href)void navigateInternalPage(href);
    };
-   return <><OriginalDocumentDirectory resource={{kind:'source',id:sourceId}} onSelect={openOriginal} onReady={setOriginalVersionsReady} rememberInUrl/>
-    <DesignerRelatedOriginals order={journey} materials={sheet?.document?.materials??[]} returnTo={sourceQuery('records')}/>
-    <RelatedWorkbenchDocuments journey={journey} returnTo={sourceQuery('records')}/></>;
+   return <DesignerRelatedOriginals key={`${sourceId}:${round??'current'}`} order={journey} materials={sheet?.document?.materials??[]}
+    returnTo={sourceQuery('records')} onOriginal={openOriginal} onReady={setOriginalVersionsReady}
+    relatedOriginals={(stage,returnTo)=><RelatedWorkbenchDocuments journey={journey} stage={stage} returnTo={returnTo}/>}/>;
   }))}
   {region('history',readResult(journey=><CockpitOperationLog order={journey} embedded/>))}
  </div>;

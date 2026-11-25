@@ -20,10 +20,10 @@ const designerReturnSchema=DevelopmentWorkspaceFilterSchema.safeExtend({
   instructionVersion:selectedDocumentVersion,budgetVersion:selectedDocumentVersion,
   originalSearch:z.string().max(100).optional(),
   originalStage:z.enum(JOURNEY_STAGES.map(stage=>stage.key)).optional(),
-  originalCategory:z.enum([...COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.map(category=>category.key),'sourcing_history','time_requests','auxiliary_basis']).optional(),
+  originalCategory:z.enum([...COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.map(category=>category.key),'sourcing_history','time_requests','auxiliary_basis','related_records']).optional(),
   originaldevelopmentPage:originalPage,originalbudgetPage:originalPage,originalinstructionPage:originalPage,originalquotationPage:originalPage,
   originalTimePage:originalPage,
-});
+}).refine(value=>value.originalCategory!=='related_records'||Boolean(value.originalStage));
 
 /** Allow only local read workspaces, with validated filters and selected task. */
 export function developmentWorkspaceReturnUrl(value: string | null, base: string = import.meta.env.BASE_URL): string | null {

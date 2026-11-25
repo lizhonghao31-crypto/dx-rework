@@ -1,4 +1,3 @@
-import {NavigationIcon} from './navigation-icons.js';
 import {Button} from '@dx-rework/ui';
 import {cachedVerifiedSession,verifySession,refreshSession,verifiedSessionIdentity,registerSessionInvalidator} from './auth-session.js';
 import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
@@ -10,6 +9,7 @@ import {type COCKPIT_DOCUMENT_CATEGORIES,createCockpitDocumentSnapshot,emptyCock
 import {COCKPIT_VISIBLE_DOCUMENT_CATEGORIES} from './cockpit-document-catalog.js';
 import {documentTime,documentFocusKey,filterDocumentEntries} from './cockpit-document-presentation.js';
 import {trapCockpitDialogFocus} from './cockpit-dialog-focus.js';
+import {CockpitDocumentDirectoryRow,CockpitDocumentMore,CockpitDocumentStageTabs} from './cockpit-document-navigation.js';
 import './cockpit-documents.css';
 const urls=createWebUrls(import.meta.env.BASE_URL);
 class DocumentReadError extends Error{constructor(message:string,readonly status:number){super(message);}}
@@ -32,7 +32,6 @@ function Entry({entry,context,path,openPaths,onToggle,readEntry,onNavigate}:{onN
  return canExpand?<details className={continuation?"cockpit-document-entry cockpit-document-continuation":"cockpit-document-entry"} open={open} onToggle={event=>{if(event.currentTarget.open!==open)onToggle(path,event.currentTarget.open);}}><summary data-document-focus={documentFocusKey(path)} onFocus={()=>onNavigate(path)}>{entry.label}</summary>{open&&<div className="cockpit-document-entry-body">{error?<p role="alert">{error}<button type="button" onClick={()=>setRetry(value=>value+1)}>重试读取此版本</button></p>:entry.load&&!loaded?<p role="status">正在读取此版本…</p>:<>{content}{files.map(file=><div className="cockpit-document-file" key={file.id}>{file.path?<a href={urls.apiUrl(file.path)} target="_blank" rel="noreferrer" title={file.name}>{file.name}</a>:<span tabIndex={0} title={file.name}>{file.name}</span>}{(file.note||file.at)&&<small>{[file.note,file.at?documentTime(file.at):"",file.by].filter(Boolean).join(" · ")}</small>}</div>)}{children.map(child=><Entry readEntry={readEntry} key={child.id} entry={child} context={context} path={`${path}/${child.id}`} openPaths={openPaths} onToggle={onToggle} onNavigate={onNavigate}/>)}{!files.length&&!children.length&&!item.url&&<p>尚无可打开的原件或历史记录。</p>}</>}</div>}</details>:<article className="cockpit-document-entry"><strong>{item.label}</strong>{content}</article>;
 }
 
-const stageNames={creation:'订单',development:'开发',preparation:'产前',cutting:'开裁',post_cutting:'工艺',production:'生产',receiving:'回货'} as const;
 const documentIdentityListeners=new Set<()=>void>();registerSessionInvalidator(()=>{for(const listener of documentIdentityListeners)listener();});
 const idleStates=emptyCockpitDirectoryStates(),noSubscription=()=>()=>undefined;
 const stateLabel=(state:CockpitDirectoryState,waiting:string)=>state.phase==='error'?(state.denied?'无权查看':'读取失败'):waiting?'读取中':state.phase==='idle'||state.phase==='loading'?'读取中':state.data?({created:'已填',missing:'未填',not_applicable:'不适用',unknown:'待核实'} as const)[state.data.state]:'尚未读取';
@@ -71,10 +70,14 @@ function DocumentsForSnapshot({order,context,onChange,identity,onRefreshIdentity
  const visible=COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.filter(c=>states[c.key].data?.state!=='not_applicable');
  const displayState=(key:CockpitDocumentCategory):CockpitDirectoryState=>identityError?{phase:'error',error:identityError}:states[key];
  return <div className="cockpit-document-directory" role="region" aria-label="本单相关单据" ref={directory}>
-  <div className="cockpit-document-node-tabs" role="tablist" aria-label="单据流程节点">{JOURNEY_STAGES.map(stage=><button type="button" role="tab" aria-selected={stage.key===selectedStage} key={stage.key} onClick={()=>onChange({documentStage:stage.key,documentOpen:undefined,documentSearch:undefined,documentScroll:0,documentFocus:undefined})}>{stageNames[stage.key]}</button>)}</div>
-  <div className="cockpit-document-priority" role="region" aria-label="本节点单据" tabIndex={0}>{visible.filter(category=>category.stage===selectedStage).map(category=>{const state=displayState(category.key),filled=!waitingReason&&state.phase==='ready'&&state.data?.state==='created';return <button className="cockpit-document-priority-row" data-category={category.key} data-read-state={state.phase} data-state={state.data?.state??'unknown'} type="button" key={category.key} onClick={event=>openAll(category,event.currentTarget)}><span className="cockpit-document-title"><NavigationIcon name="FileText"/>{category.label}</span><span className="cockpit-document-fill-status" data-filled={filled}>{filled?<NavigationIcon name="CircleCheck"/>:<span className="cockpit-document-empty-icon" aria-hidden>○</span>}<span>{stateLabel(state,waitingReason)}</span></span><span className="cockpit-document-arrow" aria-hidden>›</span></button>;})}</div>
+  <CockpitDocumentStageTabs stage={selectedStage} onSelect={stage=>onChange({documentStage:stage,documentOpen:undefined,documentSearch:undefined,documentScroll:0,documentFocus:undefined})}/>
+  <div className="cockpit-document-priority" role="region" aria-label="本节点单据" tabIndex={0}>{visible.filter(category=>category.stage===selectedStage).map(category=>{
+   const state=displayState(category.key),filled=!waitingReason&&state.phase==='ready'&&state.data?.state==='created';
+   return <CockpitDocumentDirectoryRow key={category.key} category={category.key} label={category.label} status={stateLabel(state,waitingReason)}
+    readState={state.phase} {...(state.data?{state:state.data.state}:{})} filled={filled} onOpen={event=>openAll(category,event.currentTarget)}/>;
+  })}</div>
   {identityError&&<p role="alert">{identityError}</p>}
-  <footer className="cockpit-document-footer"><button type="button" className="journey-text-action cockpit-document-open-all" data-document-trigger onClick={event=>openAll(undefined,event.currentTarget)}>查看更多 ›</button></footer>
+  <CockpitDocumentMore onOpen={event=>openAll(undefined,event.currentTarget)}/>
   <dialog ref={dialog} className="cockpit-documents-dialog" aria-label="全部相关单据" onKeyDown={trapCockpitDialogFocus} onCancel={event=>{event.preventDefault();closeAll();}} onClose={()=>{if(!dialog.current?.open&&!closing.current)changeRef.current({documentView:undefined});}}>
    <header><div><h2>全部相关单据</h2><p>{order.designStyleNo} · 按流程查看原单、采用版及历史</p></div><button type="button" autoFocus aria-label="关闭全部相关单据" onClick={closeAll}>×</button></header>
    <div className="cockpit-document-filters"><label>流程阶段<select aria-label="单据流程阶段" value={selectedStage} onChange={event=>changeRef.current({documentStage:event.target.value as CockpitContext['documentStage']||undefined,documentScroll:0})}>{JOURNEY_STAGES.map(stage=><option key={stage.key} value={stage.key}>{stage.label}</option>)}</select></label><label>查找已读取资料<input data-document-focus="document-search" aria-label="查找已读取资料" value={context.documentSearch??''} maxLength={100} placeholder="标题 / 备注 / 已载入文件名" onChange={event=>changeRef.current({documentSearch:event.target.value,documentScroll:0})}/></label></div>

@@ -98,7 +98,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    });
    await designer.page.reload();await link.waitFor();
    const jump=designer.page.getByRole('textbox',{name:'跳转页码',exact:true});
-   const pageError=designer.page.getByRole('region',{name:'订单相关单据',exact:true}).getByText('请输入 1 至 2 的整数页码',{exact:true});
+   const pageError=designer.page.getByRole('region',{name:'订单单据',exact:true}).getByText('请输入 1 至 2 的整数页码',{exact:true});
    await jump.fill('999');await jump.press('Enter');
    await pageError.waitFor();
    expect(pageReads).toEqual([1]);
