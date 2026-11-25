@@ -15,6 +15,7 @@ import {digitalDetailReturnUrl} from './digital-detail-route.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {useForegroundRead} from './use-foreground-read.js';
 import {QuotationWorkbenchPricing} from './quotation-workbench-pricing.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 import './digital-budget.css';
 import './digital-quotation.css';
 const urls=createWebUrls(import.meta.env.BASE_URL);
@@ -31,7 +32,7 @@ export async function quotationRequest(path:string,resource:QuotationResource,me
  }
  return value;
 }
-type QuotationListItem={resource:QuotationResource;designStyleNo:string;version:number;status:string};
+type QuotationListItem={resource:QuotationResource;designStyleNo:string;version:number;status:string;orderRush?:true};
 const readQuotationList=(signal:AbortSignal)=>digitalRequest<{items:QuotationListItem[]}>('quotations','GET',undefined,undefined,{signal});
 
 export function DigitalQuotationPage(){
@@ -42,7 +43,7 @@ export function DigitalQuotationPage(){
  const items=Array.isArray(list.value?.items)?list.value.items:[];
  const error=list.error?.message;
  if(query.has('id')||query.has('kind'))return parsed.success?<DigitalQuotationPanel key={`${parsed.data.kind}:${parsed.data.id}`} resource={parsed.data}/>:<Surface><p role="alert">报价来源编号无效，请从原单进入</p></Surface>;
- return <Surface><h1>报价协作</h1><p>显示最近100条当前有权的报价；更早报价可从原单进入。用量与价格由各自负责岗位填写。</p>{error&&<><p role="alert">{error}</p><Button onClick={list.retry}>重试读取</Button></>}<DocumentTableScroll><table><thead><tr><th>设计编号</th><th>版本</th><th>状态</th><th>办理</th></tr></thead><tbody>{items.map(item=><tr key={item.resource.id}><td>{item.designStyleNo}</td><td>{item.version}</td><td>{item.status==='confirmed'?'客户已确认':'协作草稿'}</td><td><a href={quotationHref(item.resource)}>打开报价</a></td></tr>)}</tbody></table></DocumentTableScroll>{!items.length&&!error&&!list.waiting&&<p>暂无分配给自己的报价；设计可从原开发单或预算页建立。</p>}</Surface>;
+ return <Surface><h1>报价协作</h1><p>显示最近100条当前有权的报价；更早报价可从原单进入。用量与价格由各自负责岗位填写。</p>{error&&<><p role="alert">{error}</p><Button onClick={list.retry}>重试读取</Button></>}<DocumentTableScroll><table><thead><tr><th>设计编号</th><th>版本</th><th>状态</th><th>办理</th></tr></thead><tbody>{items.map(item=><tr key={item.resource.id}><td>{item.designStyleNo}<OrderRushBadge value={item.orderRush}/></td><td>{item.version}</td><td>{item.status==='confirmed'?'客户已确认':'协作草稿'}</td><td><a href={quotationHref(item.resource)}>打开报价</a></td></tr>)}</tbody></table></DocumentTableScroll>{!items.length&&!error&&!list.waiting&&<p>暂无分配给自己的报价；设计可从原开发单或预算页建立。</p>}</Surface>;
 }
 export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,designerWorkbench}:{resource:QuotationResource;onChanged?:()=>void;originalSnapshot?:QuotationSheet|undefined;designerWorkbench?:{actorId:string|undefined}}){
  const [initialHistory]=useState<{version?:number;error?:string}>(()=>originalSnapshot?{version:originalSnapshot.version}:quotationHistoryFromSearch(window.location.search,resource));

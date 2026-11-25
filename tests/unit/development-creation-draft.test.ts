@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {clearCreationDraft,listCreationDrafts,readCreationDraft,selectCreationDraft,writeCreationDraft,type CreationDraftRecord,type CreationDraftSnapshot} from '../../apps/web/src/development-creation-draft.js';
+import {developmentDraftRows,type SavedDevelopmentDraft} from '../../apps/web/src/development-draft-list.js';
 
 const actorId='11111111-1111-4111-8111-111111111111',viewId='22222222-2222-4222-8222-222222222222',sourceId='33333333-3333-4333-8333-333333333333',identity={actorId,environment:'https://TEST.invalid/acceptance/'};
 function storage(){const rows=new Map<string,string>();return {getItem:(key:string)=>rows.get(key)??null,setItem:(key:string,value:string)=>{rows.set(key,value);},removeItem:(key:string)=>{rows.delete(key);},rows};}
@@ -9,6 +10,26 @@ function snapshot():CreationDraftSnapshot{
  return {intent:'certain_order',form:{customerCode:'',productGroup:'男装',designStyleNo:'  TEST 未提交款号  ',temporaryStyleNo:null,orderDate:'2026-11-17',contractDeliveryDate:null,lines:[{poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:'  黑  ',colorForeign:null,deliveryDate:null,sizes:[{size:'M',quantity:'1.'}]}]},document,quantityInput:'2.',sizeQuantityInputs:[],developmentType:'头版',preorder:false,fixedCraft:true,measurementIds:document.measurements.map((_,index)=>'TEST-row-'+index),poSizeIds:['TEST-po-size'],sharedPoColumns:true,dateOverrides:[],fileKind:'菲林',patternChoice:null,baseline:'TEST original untouched baseline',localFiles:[]};
 }
 const draft=():CreationDraftRecord=>({schemaVersion:1,viewId,identity,open:true,phase:'draft',snapshot:snapshot()});
+
+describe('single development draft list',()=>{
+ const saved:SavedDevelopmentDraft={sourceId,designStyleNo:'TEST-PERSISTED',version:2,updatedAt:'2026-11-25T14:00:00.000Z',approvalState:'pending'};
+ const bound:CreationDraftRecord={...draft(),phase:'bound',sourceId,version:1};
+ const pending:CreationDraftRecord={...draft(),phase:'pending',sourceId,beforeVersion:1,
+  original:{path:`sources/${sourceId}/development`,method:'PUT',key:'TEST-pending-save',body:'{}'}};
+ it('merges recovery using immutable source ID and prioritizes the unresolved original without replacing server metadata',()=>{
+  const separate={...draft(),viewId:actorId,snapshot:{...snapshot(),form:{...snapshot().form,designStyleNo:saved.designStyleNo!}}};
+  expect(developmentDraftRows([saved],[bound,separate,pending],'persisted',1)).toEqual([
+   {kind:'saved',saved,local:pending},{kind:'local',local:separate},
+  ]);
+  expect(developmentDraftRows([saved],[bound],'persisted',2)).toEqual([{kind:'saved',saved,local:bound}]);
+ });
+ it('filters local drafts with the same submitted search and keeps an unresolved result findable on a later page',()=>{
+  const local=draft(),unbound={...pending,sourceId:null,beforeVersion:null,original:{path:'sources/drafts',method:'POST' as const,key:'TEST-pending',body:'{}'}};
+  expect(developmentDraftRows([], [local], '  test 未提交 ', 1)).toEqual([{kind:'local',local}]);
+  expect(developmentDraftRows([], [local], '无关', 1)).toEqual([]);
+  expect(developmentDraftRows([], [local,{...unbound,viewId:actorId}], '无关', 3)).toEqual([{kind:'local',local:{...unbound,viewId:actorId}}]);
+ });
+});
 
 describe('original designer parent/child pure creation draft storage',()=>{
  it('retains raw incomplete form, document and stable local row identities without inventing source, key, body or version',()=>{

@@ -35,7 +35,7 @@ export async function bulkWashingTodos(db:WashingDB,actor:TrustedActorContext,pr
     const token=todoContentToken([todoId,scope.quantityVersion,String(scope.revision)]);
     const selected:TodoSelectionKey={todoId,contentToken:token,taskTitle:candidate.label,todoType:'business_action',category:'digital_bulk_washing',sourceAction:'bulk_washing',recipientUserId:actor.actorId,
      route:{routeName:'digital_bulk_washing',entityId:order.production_order_id,todoId},dueAt:candidate.due,status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:order.design_style_no,supplierName:null,status:`${scope.label} · ${candidate.label}`,updatedAt:at},unread:true,createdAt:at};
-    appendSelectedTodo(result,projection,selected,()=>({...selected,sourceEventId:todoId,entityType:'digital_production_order',entityId:order.production_order_id,requiredRole:candidate.role,requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:scope.revision+1,updatedAt:at}));
+    appendSelectedTodo(result,projection,selected,()=>({...selected,sourceEventId:todoId,entityType:'digital_production_order',entityId:order.production_order_id,requiredRole:candidate.role,requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:scope.revision+1,updatedAt:at}),{sourceId:null,orderId:order.production_order_id});
    }
   }
  }

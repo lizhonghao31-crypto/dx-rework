@@ -57,6 +57,6 @@ export async function qcProgressNotices(db:DB,people:TrustedActorContext[],onlyO
 export function qcNoticesAsTodos(notices:QcProgressNotice[],actor:TrustedActorContext,projection?:TodoProjection):TodoResponse[]{
  const result:TodoResponse[]=[];for(const n of notices.filter(n=>n.recipients.includes(actor.actorId))){
   const selectionKey:TodoSelectionKey={todoId:n.route.todoId,contentToken:todoContentToken([n.key,...n.lineIds]),taskTitle:n.title,todoType:n.blockedReason?'recipient_routing_exception':'business_action',category:'digital_qc_progress',sourceAction:'digital_qc_progress',recipientUserId:actor.actorId,route:n.route,dueAt:n.dueAt,status:n.blockedReason?'blocked_recipient':'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:n.styleNo,supplierName:n.supplierName,status:n.title,updatedAt:n.createdAt},unread:true,createdAt:n.createdAt};
-  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:n.route.todoId,entityType:'digital_production_order',entityId:n.orderId,requiredRole:null,requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:n.blockedReason,version:1,updatedAt:n.createdAt}));
+  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:n.route.todoId,entityType:'digital_production_order',entityId:n.orderId,requiredRole:null,requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:n.blockedReason,version:1,updatedAt:n.createdAt}),{sourceId:null,orderId:n.orderId});
  }return result;
 }

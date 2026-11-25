@@ -39,7 +39,7 @@ export const IeProcessingQuerySchema=z.object({page:z.coerce.number().int().min(
  search:z.string().trim().max(100).default(''),state:z.union([z.literal('all'),IeProcessingStateSchema]).default('all')}).strict();
 export const IeProcessingEntrySchema=z.object({resource:QuotationResourceSchema,quoteId:z.string().uuid(),rowId:z.string().uuid(),
  version:z.number().int().positive(),round:z.number().int().positive(),styleNo:z.string(),customerCode:z.string().nullable(),
- assigneeId:z.string().uuid().nullable(),assigneeName:z.string().nullable(),state:IeProcessingStateSchema,canEditPrice:z.boolean()}).strict();
+ assigneeId:z.string().uuid().nullable(),assigneeName:z.string().nullable(),state:IeProcessingStateSchema,canEditPrice:z.boolean(),orderRush:z.literal(true).optional()}).strict();
 export const IeProcessingDirectorySchema=z.object({page:z.number().int().positive(),pageSize:z.literal(15),total:z.number().int().nonnegative(),
  items:z.array(IeProcessingEntrySchema).max(15)}).strict();
 export type IeProcessingEntry=z.infer<typeof IeProcessingEntrySchema>;

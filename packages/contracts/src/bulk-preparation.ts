@@ -23,7 +23,7 @@ export type BulkPatternCardSummary={
  lines:Array<Pick<BulkCuttingProgress['lines'][number],'lineId'|'poNumber'|'formalStyleNo'|'temporaryStyleNo'|'color'>>;
 };
 export type BulkPatternCardPage={page:number;pageSize:15;total:number;items:Array<{
- orderId:string;designStyleNo:string;customer:string|null;card:BulkPatternCardSummary;
+ orderId:string;designStyleNo:string;customer:string|null;orderRush?:true;card:BulkPatternCardSummary;
 }>};
 
 export const BulkFabricReportSchema=z.object({expectedReportId:z.string().uuid().nullable(),expectedReceiptVersion:z.number().int().nonnegative().optional(),material:z.string().trim().min(1).max(200),

@@ -10,6 +10,7 @@ import {ApplicationError} from '../platform/errors.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
+import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {assembleQuotation,type AssembledQuotation} from './quotation-assembly.js';
 import {secondaryCraftDevelopmentBasis} from './secondary-craft-development-basis.js';
 import {lockSecondaryCraftApprover,readSecondaryCraftApprover} from './secondary-craft-approval-authority.js';
@@ -201,6 +202,7 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
        WHERE n.quote_id=r.quote_id AND n.row_id=r.row_id AND n.revision>r.revision))))
   ORDER BY q.updated_at DESC,q.quote_id`,[actor.actorId,makerRoles,approver]);
  const items:SecondaryCraftList['items']=[];
+ const action=new Map<SecondaryCraftList['items'][number],string>();
  for(const quote of rows){
   const resource:QuotationResource=quote.production_order_id?{kind:'order',id:quote.production_order_id}:{kind:'source',id:quote.source_id!};
   if(!await acceptanceIncludesNative(db,resource.id))continue;
@@ -211,14 +213,19 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
    const revision=revisions.get(target.rowId);
    const item=detailFor(actor,roles,approver,target,revision);
    if(!item)continue;
-   items.push({resource,styleNo:quote.style_no,rowId:target.rowId,label:target.label,round:target.round,stage:target.stage,
+   const entry={resource,styleNo:quote.style_no,rowId:target.rowId,label:target.label,round:target.round,stage:target.stage,
     sourceVersion:target.sourceVersion,version:item.version,state:item.state,authorName:target.authorId?quote.people?.[target.authorId]??null:null,
     supplier:item.supplier,note:item.note,canDecide:item.canDecide,
     approvalTodoId:item.canDecide?revision?.revision_id??null:null,
-    submittedAt:item.canDecide&&revision?new Date(revision.recorded_at).toISOString():null});
+    submittedAt:item.canDecide&&revision?new Date(revision.recorded_at).toISOString():null};
+   items.push(entry);
+   if(item.canDecide)action.set(entry,`${target.stage}:approval`);
+   else if(item.canEdit&&['pending','draft','returned'].includes(item.state))action.set(entry,`${target.stage}:${target.role}:quote`);
   }
  }
- return {ready:true,items};
+ const projected=await projectDevelopmentRushResources(db,items);
+ const groups=new Map(projected.map((item,index)=>[item,action.get(items[index]!)]));
+ return {ready:true,items:prioritizeWithinRushGroups(projected,item=>groups.get(item)??null,item=>item.orderRush===true)};
 }
 
 export async function saveSecondaryCraft(db:PoolClient,actor:TrustedActorContext,quote:AssembledQuotation,roles:ReadonlySet<string>,rowId:string,

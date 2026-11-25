@@ -3,13 +3,17 @@ import {ListPagination} from './list-pagination.js';
 import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
 import {CockpitRetryUpdates} from './cockpit-retry-updates.js';
 import {useDevelopmentCreationDraft} from './use-development-creation-draft.js';
+import {developmentDraftRows,type DevelopmentDraftRow,type SavedDevelopmentDraft} from './development-draft-list.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {Link} from '@astryxdesign/core/Link';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {Dialog,DialogHeader} from '@astryxdesign/core/Dialog';
+import {Selector} from '@astryxdesign/core/Selector';
 import {DevelopmentEntryAction,DevelopmentEntryText} from './development-entry-controls.js';
 import {designerAstryxCss as workspaceAstryxCss} from './designer-astryx.js';
-import {registerSessionInvalidator} from './auth-session.js';
+import {registerSessionInvalidator,sessionCacheVersion} from './auth-session.js';
+import {createClientRequestId} from './client-request-id.js';
+import {confirmInApp} from './system-dialog.js';
 import {useLiveSearch} from "./use-live-search.js";
 import { SearchableSelect } from "./search-select.js";
 import {DevelopmentOrderArchive} from "./development-order-archive.js";
@@ -20,12 +24,14 @@ import { Button,Surface } from "@dx-rework/ui";
 import { BusinessTable, FilterBar, KpiCard, Pagination, StatusBadge } from "@dx-rework/ui/production";
 import { DEVELOPMENT_HANDLING_FILTERS, DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
 import type { DigitalCustomer, DigitalOrder } from "@dx-rework/contracts/digital-production";
-import type { DevelopmentSheet } from "@dx-rework/contracts/digital-development";
+import {DEVELOPMENT_GARMENTS,type DevelopmentDocument,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
 import { DigitalRequestError,digitalRequest } from "./digital-production-api.js";
 import {OrderDocumentContainer} from "./order-document-container.js";
 import {DesignerHandlingItems,DesignerOrderWorkbench} from './designer-order-workbench.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 import {digitalChildDetailHref} from './digital-detail-route.js';
 import { DevelopmentCreateForm, type DevelopmentCreateIntent } from "./digital-development-create-form.js";
+import {isDraftReservationPath} from './development-creation-command-path.js';
 import { DEVELOPMENT_CREATION_TYPES, type DevelopmentWizardKind } from './development-creation-wizard.js';
 import type { DigitalAccessOptions } from "./digital-production-access-panel.js";
 import { navigateInternalPage } from "./internal-navigation.js";
@@ -34,7 +40,6 @@ import "./digital-development-workspace.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
-type SavedDevelopmentDraft={sourceId:string;designStyleNo:string|null;version:number;updatedAt:string;approvalState:string|null};
 type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean;total:number};
 const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
@@ -49,15 +54,20 @@ function StyleImage({item}: {item: DevelopmentWorkspaceItem}) {
 export function DigitalDesignerWorkspace() {
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<DevelopmentWorkspaceResult | null>(null);
   const [appliedListQuery,setAppliedListQuery]=useState<string|null>(null);
-  const [options, setOptions] = useState<{independentCraftsEnabled?:boolean;orderTimeEnabled?:boolean;creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
+  const [options, setOptions] = useState<{independentCraftsEnabled?:boolean;orderTimeEnabled?:boolean;workbenchNumberedCreation?:boolean;creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
   const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<DevelopmentWorkspaceItem | null>(null);
   const [choosingType,setChoosingType]=useState(false);
+  const [newType,setNewType]=useState<DevelopmentWizardKind|null>(null);
+  const [newGarment,setNewGarment]=useState<DevelopmentDocument['template']|null>(null);
+  const [newRush,setNewRush]=useState<boolean|null>(null);
+  const openCreationChoices=()=>{setNewType(null);setNewGarment(null);setNewRush(null);setChoosingType(true);};
   const creation=useDevelopmentCreationDraft();
   const [draftPage,setDraftPage]=useState(1);
   const [drafts,setDrafts]=useState<SavedDevelopmentDraftPage|null>(null),[draftError,setDraftError]=useState('');
   const [appliedDraftQuery,setAppliedDraftQuery]=useState<string|null>(null);
   const [draftTotal,setDraftTotal]=useState<{search:string;total:number}|null>(null);
   const [creationMessage,setCreationMessage]=useState(''),[creationBusy,setCreationBusy]=useState(false);
+  const discardKeys=useRef(new Map<string,{version:number;key:string}>());
   const [confirmSheet,setConfirmSheet]=useState<DevelopmentSheet|undefined>(),[preparingConfirm,setPreparingConfirm]=useState(false),[confirmError,setConfirmError]=useState("");
   const [confirmedOrderId,setConfirmedOrderId]=useState<string|null>(null);
   const [confirmedOrder,setConfirmedOrder]=useState<DigitalOrder|null>(null),[confirmedOrderError,setConfirmedOrderError]=useState(""),[orderRetry,setOrderRetry]=useState(0);
@@ -157,7 +167,7 @@ export function DigitalDesignerWorkspace() {
       .catch(reason=>{if(live)setAccessError(reason.message);});
     return()=>{live=false;abort.abort();};
   },[editor,creatingPage,refresh]);
-  useEffect(()=>registerSessionInvalidator(()=>{creation.reset();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftError('');setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setRefresh(value=>value+1);}),[]);
+  useEffect(()=>registerSessionInvalidator(()=>{creation.reset();discardKeys.current.clear();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftError('');setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setRefresh(value=>value+1);}),[]);
   useEffect(()=>{
     if(!access?.actorId||editor||creatingPage||query.has('handling'))return;
     try{
@@ -196,7 +206,8 @@ export function DigitalDesignerWorkspace() {
   const selected = result?.items.find(item => item.journey.id === selectedId), sheet = selected ? sheets[selected.journey.id] : undefined;
   const openUrl = (item: DevelopmentWorkspaceItem) => contextUrl({development:item.journey.sourceId!, ...(item.journey.selectedRound && item.journey.sourceVersion ? {round:String(item.journey.selectedRound)} : {})}, filter, item.journey.id);
   const editorItem=result?.items.find(item=>item.journey.sourceId===editor),editorSheet=openedSheet?.refresh===refresh&&openedSheet.sheet.sourceId===editor&&openedSheet.requestedRound===round?openedSheet.sheet:undefined;
-  const canConfirm=Boolean(editorItem?.canConfirm&&!editorItem.journey.orderId&&editorSheet?.status==="published"&&!editorSheet.productionOrderId
+  const canConfirm=Boolean(editorItem&&!editorItem.journey.orderId&&editorSheet&&!editorSheet.productionOrderId
+    &&(editorSheet.preorderPublication?options?.workbenchNumberedCreation&&editorSheet.canEdit:editorItem.canConfirm&&editorSheet.status==='published')
     &&(!workbench||editorSheet.canEdit&&(editorSheet.roundNumber??1)===(editorSheet.latestRoundNumber??1))&&options?.creationEnabled&&access?.create&&!confirmedOrderId);
   const openCreation=async(action:()=>ReturnType<typeof creation.open>,selectedView?:string)=>{
     if(openingCreation.current)return;
@@ -213,7 +224,11 @@ export function DigitalDesignerWorkspace() {
     catch(reason){if(selectedView&&new URL(location.href).searchParams.get('creationDraft')===selectedView)setDraftLocation();setChoosingType(false);setCreationMessage(reason instanceof Error?reason.message:'本页创建资料尚未核实');}
     finally{openingCreation.current=false;setCreationBusy(false);}
   };
-  const beginCreation=(kind:DevelopmentWizardKind)=>openCreation(()=>creation.open(undefined,kind==='development'?'development':'certain_order',kind==='preorder'));
+  const beginCreation=()=>{
+    if(!newType||!newGarment||newRush===null)return;
+    const choices={template:newGarment,rush:newRush};
+    void openCreation(()=>creation.open(undefined,newType==='development'?'development':'certain_order',newType==='preorder',choices));
+  };
   useEffect(()=>{
     if(!creatingPage||liveSearch.pending||intent||!options?.creationEnabled||!access?.create)return;
     const abort=new AbortController(),finish=beginForegroundWait();setDraftError('');
@@ -255,7 +270,7 @@ export function DigitalDesignerWorkspace() {
       // Read the selected round again before restoring its published, locked PO draft.
       const currentRound=new URLSearchParams(window.location.search).get("round");
       const current=await digitalRequest<DevelopmentSheet>(`sources/${editor}/development${currentRound?`?round=${encodeURIComponent(currentRound)}`:""}`);
-      if(current.status!=="published"||current.productionOrderId){setRefresh(value=>value+1);throw new Error(current.productionOrderId?"此开发单已有客户订单，请核对最新关联订单。":"请先沿原流程发布开发单，再确认客户订单。");}
+      if(current.productionOrderId||!(current.preorderPublication?options?.workbenchNumberedCreation&&current.canEdit:current.status==='published')){setRefresh(value=>value+1);throw new Error(current.productionOrderId?"此开发单已有客户订单，请核对最新关联订单。":"请先沿原流程发布开发单，再确认客户订单。");}
       setConfirmSheet(current);setConfirm(editorItem);setIntent("confirm_order");
     }catch(reason){setConfirmError(reason instanceof Error?reason.message:"订购资料读取失败，请重试；开发资料仍保留。");}
     finally{preparing.current=false;setPreparingConfirm(false);}
@@ -265,7 +280,7 @@ export function DigitalDesignerWorkspace() {
     const showOriginal=Boolean(creation.mayReadSnapshot&&(creation.sourceSheet?.canEdit||record?.phase==='pending'&&!record.sourceId));
     return <Surface className="development-workspace dx-designer-astryx"><style data-designer-style="astryx-v0.7.16">{workspaceAstryxCss}</style>
       <h1>{creation.mode==='pending'?'原创建提交结果待核对':'本页原开发资料保留'}</h1>{showOriginal&&<><p>款号：{record?.snapshot.form.designStyleNo||'未填写'} · 客户：{record?.snapshot.form.customerCode||'未填写'}。完整原输入仍保留，尚未开始新的提交。</p>{record?.snapshot.form.lines.map((line,index)=><p key={index}>原PO {index+1} · {line.formalPoNo||line.poNumber||'未填写'} · {line.color} · {line.sizes.map(size=>`${size.size} ${size.quantity}`).join(' / ')}</p>)}</>}{creation.problem&&<p role="alert">{creation.problem}</p>}{creationMessage&&<p role="status">{creationMessage}</p>}
-      {creation.mode==='pending'&&record?.phase==='pending'&&((record.native||record.original.path==='sources/drafts'||record.original.method==='PUT')?<DevelopmentEntryAction type="button" disabled={creationBusy} onClick={()=>{setCreationBusy(true);setCreationMessage('');void creation.check().then(result=>{if(result){setIntent(null);void navigateInternalPage(contextUrl({development:result.sourceId}));}}).catch(reason=>setCreationMessage(reason instanceof Error?reason.message:'原提交尚未核实，原资料仍保留')).finally(()=>setCreationBusy(false));}}>只读核对原提交结果</DevelopmentEntryAction>:<p>该原创建或保存步骤尚无受支持的只读终态入口；原实际标识及输入保留。不能把它当成新草稿再提交，请先核对权威终态。</p>)}
+      {creation.mode==='pending'&&record?.phase==='pending'&&((record.native||isDraftReservationPath(record.original.path)||record.original.method==='PUT')?<DevelopmentEntryAction type="button" disabled={creationBusy} onClick={()=>{setCreationBusy(true);setCreationMessage('');void creation.check().then(result=>{if(result){setIntent(null);void navigateInternalPage(contextUrl({development:result.sourceId,...(record.native?.operation==='publish_preorder'?{section:'workspace'}:{})}));}}).catch(reason=>setCreationMessage(reason instanceof Error?reason.message:'原提交尚未核实，原资料仍保留')).finally(()=>setCreationBusy(false));}}>只读核对原提交结果</DevelopmentEntryAction>:<p>该原创建或保存步骤尚无受支持的只读终态入口；原实际标识及输入保留。不能把它当成新草稿再提交，请先核对权威终态。</p>)}
       <DevelopmentEntryAction type="button" disabled={creationBusy} onClick={()=>{try{creation.close();setDraftLocation();setIntent(null);}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原恢复记录尚未保留');}}}>返回列表并保留资料</DevelopmentEntryAction>
     </Surface>;
   }
@@ -273,9 +288,14 @@ export function DigitalDesignerWorkspace() {
         <DialogHeader title="请选择创建类型" onOpenChange={setChoosingType}/>
         <div className="development-type-choices">
           {DEVELOPMENT_CREATION_TYPES.map(({kind,label,description})=><div key={kind}>
-            <AstryxButton label={label} variant="secondary" isDisabled={creationBusy} onClick={()=>void beginCreation(kind)}/>
+            <AstryxButton label={label} variant={kind===newType?"primary":"secondary"} aria-pressed={kind===newType} isDisabled={creationBusy} onClick={()=>setNewType(kind)}/>
             <p>{description}</p>
           </div>)}
+          <Selector label="衣类" placeholder="请选择衣类" isRequired value={newGarment??""} options={DEVELOPMENT_GARMENTS.map(value=>({value,label:value}))}
+            isDisabled={creationBusy||!newType} onChange={value=>{if(value==="上衣"||value==="裤子")setNewGarment(value);}}/>
+          <Selector label="急单" placeholder="请选择急单" isRequired value={newRush===null?"":newRush?"yes":"no"} options={[{value:"yes",label:"是"},{value:"no",label:"否"}]}
+            isDisabled={creationBusy||!newGarment} onChange={value=>{if(value==="yes"||value==="no")setNewRush(value==="yes");}}/>
+          <AstryxButton label="进入建单" variant="primary" isDisabled={creationBusy||!newType||!newGarment||newRush===null} onClick={beginCreation}/>
           <AstryxButton label="取消" variant="ghost" isDisabled={creationBusy} onClick={()=>setChoosingType(false)}/>
         </div>
       </Dialog>;
@@ -284,7 +304,7 @@ export function DigitalDesignerWorkspace() {
     {!workbench&&<div className="development-breadcrumb">产品开发 › <strong>{confirm?"客户确定订单":"新建开发订单"}</strong></div>}
     {creation.problem&&!confirm&&<p role="alert">{creation.problem} <DevelopmentEntryAction type="button" onClick={()=>{try{creation.retry();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'本页记录仍未保留');}}}>重试保留本页资料</DevelopmentEntryAction></p>}{creationMessage&&<p role="status">{creationMessage}</p>}
     {creatingPage&&!confirm&&creationTypeDialog}
-    <DevelopmentCreateForm key={confirm?.journey.id ?? creation.viewId??"new-development"} intent={displayedIntent} guidedCreation={creatingPage&&!confirm} initialPreorder={creation.visibleView?.preorder??false} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {...(creation.sourceSheet?{existingDraft:creation.sourceSheet}:{}),...(creation.viewId&&access?{creation:{viewId:creation.viewId,actorId:access.actorId,snapshot:creation.restored?.snapshot,onSnapshot:creation.snapshot,started:creation.started,acknowledged:creation.acknowledged,refused:creation.refused}}:{})})} contained={workbench} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} orderTimeEnabled={options.orderTimeEnabled} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onChooseCreationType={creatingPage&&!confirm?()=>setChoosingType(true):undefined} onCancel={canReturnToServer => {if(!confirm)try{creation.close(canReturnToServer);setDraftLocation();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原资料尚未保留');return;}setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
+    <DevelopmentCreateForm key={confirm?.journey.id ?? creation.viewId??"new-development"} intent={displayedIntent} guidedCreation={creatingPage&&!confirm} initialPreorder={creation.visibleView?.preorder??false} initialChoices={creation.visibleView?.choices} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {...(creation.sourceSheet?{existingDraft:creation.sourceSheet}:{}),...(creation.viewId&&access?{creation:{viewId:creation.viewId,actorId:access.actorId,snapshot:creation.restored?.snapshot,onSnapshot:creation.snapshot,started:creation.started,acknowledged:creation.acknowledged,refused:creation.refused}}:{})})} contained={workbench} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} orderTimeEnabled={options.orderTimeEnabled} workbenchNumberedCreation={options.workbenchNumberedCreation===true} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onChooseCreationType={creatingPage&&!confirm?openCreationChoices:undefined} onCancel={canReturnToServer => {if(!confirm)try{creation.close(canReturnToServer);setDraftLocation();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原资料尚未保留');return;}setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
       if(!confirm)try{if(!creation.completed(sourceId,creation.viewId))return;}catch(reason){setCreationMessage('原办理已完成；本页恢复记录尚未清理。'+(reason instanceof Error?reason.message:''));return;}
       if(confirm&&editor===sourceId){setConfirmedOrderId(orderId);setIntent(null);setConfirm(null);setConfirmSheet(undefined);quietListRefresh.current=true;
         if(workbench)updateEditorFacts();else setRefresh(value=>value+1);}
@@ -306,36 +326,77 @@ export function DigitalDesignerWorkspace() {
       image={editorItem&&<StyleImage item={editorItem}/>} document={document} confirmation={confirm?creationForm:confirmButton} onClose={close} onChanged={updateEditorFacts}/>:document}
    </div>;
   }
+  const canCreate=Boolean(options?.creationEnabled&&access?.create);
+  const ownLocal=creation.localDrafts.filter(record=>record.identity.actorId===access?.actorId&&(canCreate||record.phase==='pending'));
+  const draftMatches=canCreate&&appliedDraftQuery===draftQuery?drafts:null;
+  const draftRows=creatingPage?developmentDraftRows(draftMatches?.items??[],ownLocal,filter.search,draftPage):[];
+  const unboundReceipt=ownLocal.some(row=>row.phase==='pending'&&!row.sourceId);
+  const discardDraft=async(row:DevelopmentDraftRow)=>{
+    const saved=row.kind==='saved'?row.saved:null,local=row.local;
+    if(openingCreation.current||!canCreate||local?.phase==='pending'||(saved?!saved.canDiscard||unboundReceipt:local?.phase!=='draft'))return;
+    const session=sessionCacheVersion(),ordered=saved?.designStyleNo??local?.snapshot.form.designStyleNo;
+    if(!await confirmInApp(`确认删除草稿「${ordered?.trim()||'待生成订单ID'}」？原已登记编号不会再次分配。`,{presentation:'astryx',title:'删除开发草稿',confirmLabel:'删除'}))return;
+    if(session!==sessionCacheVersion()||openingCreation.current)return;
+    openingCreation.current=true;setCreationBusy(true);setCreationMessage('');
+    try{
+      if(saved){
+        const prior=discardKeys.current.get(saved.sourceId),attempt=prior?.version===saved.version?prior:{version:saved.version,key:createClientRequestId()};
+        discardKeys.current.set(saved.sourceId,attempt);
+        const receipt=await digitalRequest<{discarded?:boolean}>(`sources/${saved.sourceId}/draft`,'DELETE',{expectedVersion:attempt.version},attempt.key);
+        if(receipt?.discarded!==true)throw new DigitalRequestError('删除回执尚未确认',500,'INVALID_RESPONSE');
+        if(session!==sessionCacheVersion())return;
+        discardKeys.current.delete(saved.sourceId);
+        setRefresh(value=>value+1);
+      }
+      if(local&&!creation.discardListSnapshot(local)&&!saved)throw Error('本页草稿已变化，请重新核对后删除');
+      setCreationMessage('开发草稿已删除。');
+    }catch(reason){
+      if(session!==sessionCacheVersion())return;
+      if(reason instanceof DigitalRequestError&&reason.resultUnknown){setCreationMessage('删除结果待核对，请刷新或重试原草稿删除。');return;}
+      if(saved)discardKeys.current.delete(saved.sourceId);
+      setCreationMessage(reason instanceof Error?reason.message:'未能删除开发草稿，请刷新并核对。');
+    }finally{openingCreation.current=false;setCreationBusy(false);}
+  };
   if(creatingPage)return <div className="development-workspace development-golden dx-production-refined dx-designer-astryx">
     <style data-designer-style="astryx-v0.7.16">{workspaceAstryxCss}</style>
     <div className="development-breadcrumb">设计开发工作台 › <strong>创建开发单</strong></div>{creation.problem&&<p role="alert">{creation.problem}</p>}{creationMessage&&<p role="status">{creationMessage}</p>}
-    {options?.creationEnabled&&access?.create&&<section className="dx-production-panel">
+    {(canCreate||ownLocal.length>0)&&<section className="dx-production-panel">
       <header>
         <h1>创建开发单</h1>
-        <AstryxButton label="新建开发订单" variant="primary" isDisabled={creationBusy} onClick={()=>setChoosingType(true)}/>
+        {canCreate&&<AstryxButton label="新建开发订单" variant="primary" isDisabled={creationBusy} onClick={openCreationChoices}/>}
       </header>
       {creationTypeDialog}
       <div aria-label="开发草稿">
         <h2>开发草稿</h2>
-        <div className="development-search-field"><DevelopmentEntryText label="搜索草稿款号" visibleLabel value={search} maxLength={100}
+        {canCreate&&<div className="development-search-field"><DevelopmentEntryText label="搜索草稿款号" visibleLabel value={search} maxLength={100}
           onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={setSearch}
-          onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></div>
-        {draftError?<p role="alert">{draftError} <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>刷新草稿</DevelopmentEntryAction></p>
-          :!drafts?<p role="status">正在读取草稿…</p>:drafts.items.length===0?<p>暂无开发草稿</p>:<ul>
-            {drafts.items.map(draft=><li key={draft.sourceId}><AstryxButton label={draft.designStyleNo??'待生成订单ID'} type="button" variant="secondary" isDisabled={creationBusy} onClick={()=>void openSavedDraft(draft.sourceId)}/> <span>{draft.version?'最后保存':draft.designStyleNo?'已预留款号':'草稿预留'} {date(draft.updatedAt)}</span>{draft.approvalState==='pending'&&<span> · 时效待审核</span>}{draft.approvalState==='returned'&&<span> · 时效申请已退回</span>}</li>)}
-          </ul>}
-        {drafts&&<ListPagination page={drafts.page} totalPages={appliedDraftQuery===draftQuery?Math.max(1,Math.ceil(drafts.total/15)):null}
+          onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></div>}
+        {canCreate&&(draftError?<p role="alert">{draftError} <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>刷新草稿</DevelopmentEntryAction></p>
+          :!draftMatches?<p role="status">正在读取草稿…</p>:draftRows.length===0?<p>暂无开发草稿</p>:null)}
+        {draftRows.length>0&&<ul>{draftRows.map(row=>{
+          const saved=row.kind==='saved'?row.saved:undefined,local=row.local;
+          const kind=local?(local.snapshot.preorder?'预下单':local.snapshot.intent==='development'?'纯开发':'已确认订单'):
+            saved?.kind==='preorder'?'预下单':saved?.kind==='development'?'纯开发':saved?.kind==='certain_order'?'已确认订单':null;
+          const removable=canCreate&&local?.phase!=='pending'&&(saved?saved.canDiscard&&!unboundReceipt:local?.phase==='draft');
+          const label=local?.phase==='pending'?'核对原创建提交结果':local?.phase==='bound'?'继续本页保存的草稿'
+            :saved?saved.designStyleNo??'待生成订单ID':`继续${kind}草稿 · ${local?.snapshot.form.designStyleNo.trim()||'待生成订单ID'}`;
+          return <li key={saved?.sourceId??local!.viewId}>
+            <AstryxButton label={label} type="button" variant="secondary" isDisabled={creationBusy} onClick={()=>{
+              if(local)void openCreation(()=>creation.resume(local.viewId),local.viewId);
+              else if(saved)void openSavedDraft(saved.sourceId);
+            }}/>{' '}
+            {local&&local.phase!=='draft'&&<span>{(saved?.designStyleNo??local.snapshot.form.designStyleNo.trim())||'待生成订单ID'} · </span>}
+            {kind&&<span>{kind} · </span>}
+            {saved&&<span>{saved.version?'最后保存':saved.designStyleNo?'已预留款号':'草稿预留'} {date(saved.updatedAt)}</span>}
+            {saved?.approvalState==='pending'&&<span> · 时效待审核</span>}{saved?.approvalState==='returned'&&<span> · 时效申请已退回</span>}
+            {local&&<span>{saved?' · 本页仍有恢复资料':local.phase==='draft'?'尚未写入服务器':'需核对本页原资料'}</span>}
+            {removable&&<AstryxButton label="删除" aria-label={`删除草稿 ${saved?.designStyleNo??(local?.snapshot.form.designStyleNo.trim()||'待生成订单ID')}`} variant="destructive" size="sm" type="button" isDisabled={creationBusy} onClick={()=>void discardDraft(row)}/>}
+          </li>;
+        })}</ul>}
+        {canCreate&&drafts&&<ListPagination page={drafts.page} totalPages={appliedDraftQuery===draftQuery?Math.max(1,Math.ceil(drafts.total/15)):null}
           total={!liveSearch.pending&&appliedDraftQuery===draftQuery?drafts.total:null}
           busy={creationBusy||liveSearch.pending||appliedDraftQuery!==draftQuery} onPageChange={setDraftPage} ariaLabel="开发草稿分页"/>}
       </div>
-    </section>}
-    {creation.localDrafts.length>0&&<section className="dx-production-panel" aria-label="此标签页的草稿">
-      <h2>此标签页的草稿</h2>
-      <ul>{creation.localDrafts.map(record=>{
-        const kind=record.snapshot.preorder?'预下单':record.snapshot.intent==='development'?'纯开发':'已确认订单';
-        const label=record.phase==='pending'?'核对原创建提交结果':record.phase==='bound'?'继续本页保存的草稿':`继续${kind}草稿 · ${record.snapshot.form.designStyleNo.trim()||'未填款号'}`;
-        return <li key={record.viewId}><AstryxButton label={label} variant="secondary" isDisabled={creationBusy} onClick={()=>void openCreation(()=>creation.resume(record.viewId),record.viewId)}/></li>;
-      })}</ul>
     </section>}
     {accessError&&<p role="alert">{accessError}</p>}
     {access&&(!access.create||options?.creationEnabled===false)&&<p role="status">当前身份或环境未开放开发单创建。</p>}
@@ -358,7 +419,7 @@ export function DigitalDesignerWorkspace() {
           <thead><tr><th>序号</th><th>款图 / 款号</th><th>款名</th><th>客户</th><th>开发类型</th><th>当前轮次</th><th>状态</th><th>要求完成</th><th>创建日期</th></tr></thead>
           <tbody>{result?.items.map((item,index)=>{
             const href=item.journey.sourceId?openUrl(item):null;
-            const title=<><StyleImage key={`${item.journey.id}:${item.journey.sourceVersion}:${item.journey.selectedRound}:${item.journey.styleImageUrl}`} item={item}/><strong>{item.journey.designStyleNo}</strong></>;
+            const title=<><StyleImage key={`${item.journey.id}:${item.journey.sourceVersion}:${item.journey.selectedRound}:${item.journey.styleImageUrl}`} item={item}/><strong>{item.journey.designStyleNo}</strong><OrderRushBadge value={item.orderRush}/></>;
             return <tr key={item.journey.id} className={selectedId===item.journey.id?'is-selected':''} onClick={event=>{
               const target=event.target;
               if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey

@@ -1,4 +1,5 @@
 import {readTechnicalTaskListPage} from './journey-selection-access.js';
+import {developmentRushKey,readDevelopmentOrderRush} from './development-order-rush.js';
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow} from './development-responsibility-window.js';
 import {readTaskPageFacts,readTaskPageHistory,taskWithParentsSql,effectiveTaskDeadlineSql} from './task-page-read-context.js';
 import {taskReadBatches} from './journey-selection-access.js';
@@ -785,6 +786,17 @@ export class DigitalProductionTaskService {
   }
   async read(actor: TrustedActorContext, id: string, db: Pick<Pool, "query"> = this.database,completionContext?:TaskCompletionReadContext) {
     return this.readTaskDetail(actor,id,db,completionContext);
+  }
+  async readWorkItem(actor:TrustedActorContext,id:string){
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const task=await this.read(actor,id,db);
+      const identity=developmentRushKey(task);
+      const orderRush=task.identity&&identity&&(await readDevelopmentOrderRush(db,[task])).has(identity);
+      await db.query('COMMIT');
+      return orderRush?{...task,orderRush:true as const}:task;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   /** Read the final page of task details on a caller-owned read snapshot. */
   async readPage(actor:TrustedActorContext,ids:readonly string[],db:PoolClient,completions?:ReadonlyMap<string,TaskCompletionReadContext>){

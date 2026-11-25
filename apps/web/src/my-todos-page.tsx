@@ -3,6 +3,7 @@ import {beginForegroundWait} from './foreground-loading.js';
 import {cachedVerifiedSession,refreshSession} from './auth-session.js';
 import {subscribeTodoRead} from './todo-indicator-refresh.js';
 import {TodoRoutingTransfer} from './todo-routing-transfer.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 import { todoTaskTitle } from "@dx-rework/contracts";
 import { todoRouteHref } from "./todo-route-link.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -359,7 +360,7 @@ export function MyTodosPage() {
                     <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <StatusBadge tone="danger">需要转交</StatusBadge>
-                      <h2>{taskTitle(todo)}</h2>
+                      {todo.orderRush ? <div className="my-todo-title"><h2>{taskTitle(todo)}</h2><OrderRushBadge value={todo.orderRush}/></div> : <h2>{taskTitle(todo)}</h2>}
                       <p>{todo.blockedReason ?? "当前任务需要由管理人员转交。"}</p>
                       {todo.entityType==="digital_task"&&todo.category==="digital_assignment"&&order?.styleNo&&<><p>{orderSummary}</p><a href={withTodoReturn(taskHref(todo),{q:displayedQuery,module:activeModule,page})}>查看任务与人员安排</a></>}
                     </div>
@@ -370,6 +371,7 @@ export function MyTodosPage() {
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
                         <h2>{taskTitle(todo)}</h2>
+                        <OrderRushBadge value={todo.orderRush}/>
                         {todo.timing&&<StatusBadge tone={todo.timing.status==="overdue"?"danger":todo.timing.status==="warning"?"warning":"neutral"}>{({overdue:"逾期",warning:"临期",normal:"时效正常",unknown:"时效未定",unlimited:"无独立时限"})[todo.timing.status]}</StatusBadge>}
                         <StatusBadge tone="warning">{todo.unread === undefined ? "待处理" : todo.unread ? "未读" : todo.entityType==="production_order" ? "已读 · 风险仍在" : "已读"}</StatusBadge>
                       </div>

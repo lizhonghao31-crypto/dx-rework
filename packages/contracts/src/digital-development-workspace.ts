@@ -26,7 +26,11 @@ export const DESIGNER_WORKBENCH_TASK_KINDS:ReadonlySet<string>=new Set([
 ]);
 export type DevelopmentWorkspaceAction={id:string;kind:'mine'|'waiting'|'returned';label:string;ownerName?:string;reason?:string;route:TodoRouteDescriptor};
 export type DevelopmentWorkspaceHandling={items:DevelopmentWorkspaceAction[];complete:boolean};
-export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean; handling?:DevelopmentWorkspaceHandling };
+export type DevelopmentWorkspaceItem = {
+  journey: OrderJourney; view: DevelopmentView; canConfirm: boolean; handling?:DevelopmentWorkspaceHandling;
+  /** Published order marker, not approval to alter any deadline. */
+  orderRush?:true;
+};
 export type DevelopmentWorkspaceResult = {
   asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;detailFailures?:Array<{journeyId:string;designStyleNo:string}>;
   counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;
@@ -92,6 +96,7 @@ export type PatternWorkspaceTask = {
   asOf?: string | null;
   journeyId: string; sourceId: string | null; orderId: string | null; designStyleNo: string;
   customer: string | null; designer: string | null; node: JourneyNode;
+  orderRush?:true;
   group: typeof PATTERN_GROUPS[number]["key"];
   nativeAssignment?: {orderId:string};
 };

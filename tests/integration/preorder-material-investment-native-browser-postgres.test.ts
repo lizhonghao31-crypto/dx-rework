@@ -1,3 +1,4 @@
+import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js";
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -34,7 +35,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    const page=creation.page;
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
-   await page.getByRole('dialog',{name:'请选择创建类型'}).getByRole('button',{name:'预下单',exact:true}).click();
+   await chooseDevelopmentCreation(page,'预下单');
    await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
    await page.getByLabel('主布 面料名称',{exact:true}).fill('TEST 预下单棉布');
    await page.getByLabel('主布 数量与单位',{exact:true}).fill('75米');
@@ -194,6 +195,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'确认',exact:true}).click();
    expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(style);
    expect(await page.locator('#development-'+original.fabric.materialId+'-name').inputValue()).toBe(original.fabric.name);
+   await page.getByRole('combobox',{name:/^衣类/}).click();
+   await page.getByRole('option',{name:'上衣',exact:true}).click();
+   const garment=page.getByRole('alertdialog',{name:'更正衣类'});
+   await garment.getByRole('button',{name:'确认更正',exact:true}).click();
+   await garment.waitFor({state:'hidden'});
    for(let i=0;i<2;i++)await page.getByRole('button',{name:'下一步',exact:true}).click();
    expect(await page.getByLabel('PO 1 颜色',{exact:true}).inputValue()).toBe('黑');
    const intermediate=page.waitForResponse(r=>r.request().method()==='PUT'&&new URL(r.url()).pathname===base+'/development');

@@ -3,7 +3,7 @@ import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development
 
 /** Price visibility or a price edit does not change the physical material. */
 export function withoutDevelopmentMaterialPrice(material:DevelopmentDocument['materials'][number]){
- const copy={...material};delete copy.unitPrice;
+ const copy={...material};delete copy.unitPrice;delete copy.lineTotal;
  if(copy.auxiliaryCatalog){
   const {id,version}=copy.auxiliaryCatalog;
   copy.auxiliaryCatalog={id,version};
@@ -18,9 +18,10 @@ export function withoutDevelopmentPrices(document:DevelopmentDocument):Developme
 
 export function sameDevelopmentMaterialBasis(a:DevelopmentDocument['materials'][number],b:DevelopmentDocument['materials'][number]){
  const physical=(material:typeof a)=>{
-  const {auxiliaryCatalog,...facts}=withoutDevelopmentMaterialPrice(material);
+  const {auxiliaryCatalog,supplierReference,...facts}=withoutDevelopmentMaterialPrice(material);
   delete facts.pricingUnit;
-  return {...facts,catalogId:auxiliaryCatalog?.id};
+  delete facts.designerHasMaterial;
+  return {...facts,catalogId:auxiliaryCatalog?.id,supplierId:supplierReference?.supplierId};
  };
  return isDeepStrictEqual(physical(a),physical(b));
 }

@@ -9,6 +9,7 @@ import {journeyMatchesSearch} from "./journey-projection.js";
 import type {PoolClient} from 'pg';
 import type {DevelopmentWorkspaceHandling} from '@dx-rework/contracts/digital-development-workspace';
 import type {DigitalProductionNotificationService} from './notification-service.js';
+import {developmentRushKey,prioritizeWithinRushGroups,readDevelopmentOrderRush,type RushIdentity} from './development-order-rush.js';
 
 /** Display views only. The original publication, route and order facts remain authoritative. */
 export function developmentView(item: OrderJourney): DevelopmentView {
@@ -21,12 +22,28 @@ function developmentNodesView(orderId:string|null,nodes:readonly Pick<WorkspaceN
   return route.length>0&&route.every(node=>['completed','inherited'].includes(node.state))?'awaiting_order':'developing';
 }
 
-export function patternTasks(items: OrderJourney[]): PatternWorkspaceTask[] {
+const rushMarker=(keys:ReadonlySet<string>,identity:RushIdentity)=>keys.has(developmentRushKey(identity)??'')?{orderRush:true as const}:{};
+function prioritizeDesignRush<T extends {view:DevelopmentView;handling?:DevelopmentWorkspaceHandling|undefined;orderRush?:true}>(
+ items:readonly T[],nodes:(item:T)=>readonly Pick<WorkspaceNodeFact,'instanceId'|'key'>[],
+){
+ return prioritizeWithinRushGroups(items,item=>{
+  const action=item.handling?.items.find(candidate=>candidate.kind!=='waiting');
+  if(!action)return null;
+  const taskKind=nodes(item).find(node=>node.instanceId===action.id)?.key;
+  return taskKind?`${item.view}:${action.kind}:${taskKind}`:null;
+ },item=>item.orderRush===true);
+}
+
+function prioritizePatternRush<T extends {orderRush?:true;node:Pick<WorkspaceNodeFact,'owner'|'state'|'key'>}>(items:readonly T[],actorId:string){
+ return prioritizeWithinRushGroups(items,task=>task.node.state==='active'&&task.node.owner?.id===actorId?task.node.key:null,task=>task.orderRush===true);
+}
+
+export function patternTasks(items: OrderJourney[],rush:ReadonlySet<string>=new Set<string>()): PatternWorkspaceTask[] {
   return items.flatMap(item => item.stages.flatMap(stage => stage.nodes).flatMap(node => {
     const group = PATTERN_GROUPS.find(group => (group.nodes as readonly string[]).includes(node.key));
     // Material plans, uncreated placeholders and inherited references are not tasks.
     if (!group || !node.current || !/^[0-9a-f-]{36}$/i.test(node.instanceId) || !node.records.some(record => record.domain === "task" && record.id === node.instanceId) || ["cancelled", "unavailable", "not_applicable", "inherited", "uncreated"].includes(node.state)) return [];
-    return [{ asOf:item.asOf??null, journeyId: item.id, sourceId: item.sourceId, orderId: item.orderId, designStyleNo: item.designStyleNo, customer: item.customer, designer: item.designer, node, group: group.key }];
+    return [{ asOf:item.asOf??null, journeyId: item.id, sourceId: item.sourceId, orderId: item.orderId, designStyleNo: item.designStyleNo, customer: item.customer, designer: item.designer, node, group: group.key,...rushMarker(rush,item) }];
   }));
 }
 
@@ -59,23 +76,31 @@ export class DevelopmentWorkspaceQuery {
     const indexed=await this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search,...(filter.customer?{customer:filter.customer}:{}),startDate:filter.startDate,endDate:filter.endDate}),undefined,async(facts,asOf,freshness,db)=>{
       const scoped=facts.filter(item=>!filter.designer||item.designer===filter.designer);
       const handling=filter.layout==='workbench'?await this.handling(db,actor,scoped):undefined;
-      const all=scoped.map(journey=>({journey,view:developmentNodesView(journey.orderId,journey.nodes),canConfirm:!journey.orderId&&Boolean(journey.sourceId)&&(isRootActor(actor)||journey.nodes.some(node=>node.key==='product_development'&&node.owner?.id===actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
+      const rush=filter.layout==='workbench'?await readDevelopmentOrderRush(db,scoped):new Set<string>();
+      const all=scoped.map(journey=>({journey,...rushMarker(rush,journey),view:developmentNodesView(journey.orderId,journey.nodes),canConfirm:!journey.orderId&&Boolean(journey.sourceId)&&(isRootActor(actor)||journey.nodes.some(node=>node.key==='product_development'&&node.owner?.id===actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
       const counts=Object.fromEntries(DEVELOPMENT_VIEWS.map(view=>[view.key,view.key==='all'?all.length:all.filter(item=>item.view===view.key).length])) as DevelopmentWorkspaceResult['counts'];
-      const filtered=all.filter(viewMatches),page=filtered.slice(((freshness?1:filter.page)-1)*15,(freshness?1:filter.page)*15);
+      const filtered=prioritizeDesignRush(all.filter(viewMatches),item=>item.journey.nodes),page=filtered.slice(((freshness?1:filter.page)-1)*15,(freshness?1:filter.page)*15);
       return {ids:page.map(item=>item.journey.id),finish:(details,finalFreshness=freshness,detailFailures=[])=>({asOf,page:finalFreshness?1:filter.page,pageSize:15 as const,total:finalFreshness?null:filtered.length,counts:finalFreshness?null:counts,...(finalFreshness?{freshness:finalFreshness}:{}),...(detailFailures.length?{detailFailures:detailFailures.map(id=>({journeyId:id,designStyleNo:facts.find(item=>item.id===id)!.designStyleNo}))}:{}),designers:[...new Set(facts.flatMap(item=>item.designer?[item.designer]:[]))].sort(),customers:[...new Set(facts.flatMap(item=>item.customer?[item.customer]:[]))].sort(),items:page.filter(item=>details.has(item.journey.id)).map(item=>({...item,journey:details.get(item.journey.id)!}))})};
     });
     if(indexed)return indexed;
-    let selectionFacts:OrderJourney[]|undefined,handling:Map<string,DevelopmentWorkspaceHandling>|undefined;
+    let selectionFacts:OrderJourney[]|undefined,handling:Map<string,DevelopmentWorkspaceHandling>|undefined,rush=new Set<string>();
+    const legacyItem=(journey:OrderJourney)=>({
+      journey,view:developmentView(journey),...rushMarker(rush,journey),handling:handling?.get(journey.id),
+    });
+    const legacyNodes=(item:{journey:OrderJourney})=>item.journey.stages.flatMap(stage=>stage.nodes);
     const result = await this.journeys.list(actor, JourneyFilterSchema.parse({ search: filter.search, ...(filter.customer ? {customer: filter.customer} : {}), startDate: filter.startDate, endDate: filter.endDate }), true,async(items,db)=>{
       selectionFacts=items;
       const scoped=items.filter(item=>!filter.designer||item.designer===filter.designer);
-      if(filter.layout==='workbench')handling=await this.handling(db,actor,scoped.map(item=>({id:item.id,nodes:item.stages.flatMap(stage=>stage.nodes)})));
-      return scoped.filter(item=>viewMatches({view:developmentView(item),handling:handling?.get(item.id)})).slice((filter.page-1)*15,filter.page*15);
+      if(filter.layout==='workbench'){
+        handling=await this.handling(db,actor,scoped.map(item=>({id:item.id,nodes:item.stages.flatMap(stage=>stage.nodes)})));
+        rush=await readDevelopmentOrderRush(db,scoped);
+      }
+      return prioritizeDesignRush(scoped.map(legacyItem).filter(viewMatches),legacyNodes).slice((filter.page-1)*15,filter.page*15).map(item=>item.journey);
     });
     const facts=selectionFacts??result.items,details=new Map(result.items.map(item=>[item.id,item]));
-    const all = facts.filter(item => !filter.designer || item.designer === filter.designer).map(journey => ({journey, view: developmentView(journey), canConfirm: !journey.orderId && Boolean(journey.sourceId) && (isRootActor(actor) || journey.stages.flatMap(stage => stage.nodes).some(node => node.key === "product_development" && node.owner?.id === actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
+    const all = facts.filter(item => !filter.designer || item.designer === filter.designer).map(journey => ({journey,...rushMarker(rush,journey),view: developmentView(journey), canConfirm: !journey.orderId && Boolean(journey.sourceId) && (isRootActor(actor) || journey.stages.flatMap(stage => stage.nodes).some(node => node.key === "product_development" && node.owner?.id === actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
     const counts = Object.fromEntries(DEVELOPMENT_VIEWS.map(view => [view.key, view.key === "all" ? all.length : all.filter(item => item.view === view.key).length])) as DevelopmentWorkspaceResult["counts"];
-    const filtered = all.filter(viewMatches);
+    const filtered = prioritizeDesignRush(all.filter(viewMatches),legacyNodes);
     return {asOf: result.asOf, page: filter.page, pageSize: 15, total: filtered.length, counts, designers: [...new Set(facts.flatMap(item => item.designer ? [item.designer] : []))].sort(), customers: [...new Set(facts.flatMap(item => item.customer ? [item.customer] : []))].sort(), items: filtered.slice((filter.page - 1) * 15, filter.page * 15).map(item=>({...item,journey:details.get(item.journey.id)!}))};
   }
   async pattern(actor: TrustedActorContext, filter: PatternWorkspaceFilter): Promise<PatternWorkspaceResult> {
@@ -86,9 +111,12 @@ export class DevelopmentWorkspaceQuery {
     if(filter.scope==="dispatch"&&!isRootActor(actor)&&!actor.actorRoles.includes("pattern_room_supervisor"))digitalForbidden();
     const indexed=await this.indexedPattern(actor,filter);if(indexed)return indexed;
     // Board cards contain read-only facts. Handling always re-reads the actual task.
-    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({}), true,undefined,{details:false,patternBusiness:filter.business});
+    let rush=new Set<string>();
+    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({}), true,async(items,db)=>{
+      rush=await readDevelopmentOrderRush(db,items);return items;
+    },{details:false,patternBusiness:filter.business});
     const journeys=new Map(result.items.map(item=>[item.id,item])),search=filter.search.toLocaleLowerCase();
-    const all = patternTasks(result.items).filter(task => filter.business === "all" || (task.node.key === "bulk_pattern" ? filter.business === "bulk" : filter.business === "development"));
+    const all = patternTasks(result.items,rush).filter(task => filter.business === "all" || (task.node.key === "bulk_pattern" ? filter.business === "bulk" : filter.business === "development"));
     const assignments=filter.scope==="dispatch"?await this.journeys.pendingPatternAssignments(actor,[...new Set(all.flatMap(task=>task.sourceId?[task.sourceId]:[]))]):[];
     // One genuine current task supplies document context for each pending original order.
     // Formal assignment never changes this task's readiness, owner or completion.
@@ -102,35 +130,38 @@ export class DevelopmentWorkspaceQuery {
       && (filter.state === "all" || (filter.state === "ongoing" ? ["pending", "active", "blocked"].includes(task.node.state) : task.node.state === filter.state))
       && (!filter.risk || task.node.risks.includes(filter.risk)));
     const lane = PATTERN_LANES.find(item => item.key === filter.lane);
-    const visible = filtered.filter(task => (!filter.group || task.group === filter.group) && (!lane || (lane.groups as readonly string[]).includes(task.group)));
+    const matching = filtered.filter(task => (!filter.group || task.group === filter.group) && (!lane || (lane.groups as readonly string[]).includes(task.group)));
+    const visible=prioritizePatternRush(matching,actor.actorId);
     const owners = [...new Map(scoped.flatMap(task => task.node.owner ? [[task.node.owner.id, task.node.owner] as const] : [])).values()];
     return {asOf: result.asOf, page: filter.page, pageSize: 15, total: visible.length, archiveTotal: new Set(visible.map(task => task.journeyId)).size,
       counts: Object.fromEntries(PATTERN_GROUPS.map(group => [group.key, filtered.filter(task => task.group === group.key).length])) as PatternWorkspaceResult["counts"], owners,
       riskCounts:Object.fromEntries(PATTERN_GROUPS.map(group=>[group.key,{dueSoon:filtered.filter(task=>task.group===group.key&&task.node.risks.includes("due_soon")).length,overdue:filtered.filter(task=>task.group===group.key&&task.node.risks.includes("overdue")).length}])) as PatternWorkspaceResult["riskCounts"],
-      risks: visible.filter(task => task.node.risks.length > 0).slice(0, 15),
+      risks: matching.filter(task => task.node.risks.length > 0).slice(0, 15),
       boardPreview:PATTERN_LANES.flatMap(lane=>visible.filter(task=>(lane.groups as readonly string[]).includes(task.group)).slice(0,3)),
       items: visible.slice((filter.page - 1) * 15, filter.page * 15)};
   }
   private async indexedPattern(actor:TrustedActorContext,filter:PatternWorkspaceFilter):Promise<PatternWorkspaceResult|null|undefined>{
-    return this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search}),filter.business,async(facts,asOf,freshness)=>{
+    return this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search}),filter.business,async(facts,asOf,freshness,db)=>{
       type Task=Omit<PatternWorkspaceTask,'node'>&{node:WorkspaceNodeFact};
+      const rush=await readDevelopmentOrderRush(db,facts);
       const journeys=new Map(facts.map(item=>[item.id,item])),search=filter.search.toLocaleLowerCase();
       const all:Task[]=facts.flatMap(item=>item.nodes.flatMap(node=>{
         const group=PATTERN_GROUPS.find(group=>(group.nodes as readonly string[]).includes(node.key));
         if(!group||!node.current||!node.nativeTask||!/^[0-9a-f-]{36}$/i.test(node.instanceId)||['cancelled','unavailable','not_applicable','inherited','uncreated'].includes(node.state))return [];
         if(filter.business!=='all'&&(node.key==='bulk_pattern'?filter.business!=='bulk':filter.business!=='development'))return [];
-        return [{asOf:item.asOf,journeyId:item.id,sourceId:item.sourceId,orderId:item.orderId,designStyleNo:item.designStyleNo,customer:item.customer,designer:item.designer,node,group:group.key}];
+        return [{asOf:item.asOf,journeyId:item.id,sourceId:item.sourceId,orderId:item.orderId,designStyleNo:item.designStyleNo,customer:item.customer,designer:item.designer,node,group:group.key,...rushMarker(rush,item)}];
       }));
       const assignments=filter.scope==='dispatch'?await this.journeys.pendingPatternAssignments(actor,[...new Set(all.flatMap(task=>task.sourceId?[task.sourceId]:[]))]):[];
       const dispatch:Task[]=assignments.flatMap(assignment=>{const candidates=all.filter(task=>task.sourceId===assignment.sourceId&&['pending','active','blocked'].includes(task.node.state)),task=candidates.find(task=>task.group==='dispatch')??candidates[0];return task?[{...task,nativeAssignment:{orderId:assignment.orderId}}]:[];});
       const scoped=filter.scope==='dispatch'?dispatch:all.filter(task=>filter.scope==='mine'?task.node.owner?.id===actor.actorId:filter.scope==='unassigned'?!task.node.owner:filter.scope==='personnel'?['materials','dispatch'].includes(task.group):true);
       const filtered=scoped.filter(task=>(!search||journeys.get(task.journeyId)!.selectionSignals?.searchMatched||Boolean(task.node.owner?.name?.toLocaleLowerCase().includes(search)))&&(!filter.owner||task.node.owner?.id===filter.owner)
         &&(filter.state==='all'||(filter.state==='ongoing'?['pending','active','blocked'].includes(task.node.state):task.node.state===filter.state))&&(!filter.risk||task.node.risks.includes(filter.risk)));
-      const lane=PATTERN_LANES.find(item=>item.key===filter.lane),visible=filtered.filter(task=>(!filter.group||task.group===filter.group)&&(!lane||(lane.groups as readonly string[]).includes(task.group)));
-      const page=visible.slice(((freshness?1:filter.page)-1)*15,(freshness?1:filter.page)*15),risks=visible.filter(task=>task.node.risks.length>0).slice(0,15),board=PATTERN_LANES.flatMap(lane=>visible.filter(task=>(lane.groups as readonly string[]).includes(task.group)).slice(0,3));
+      const lane=PATTERN_LANES.find(item=>item.key===filter.lane),matching=filtered.filter(task=>(!filter.group||task.group===filter.group)&&(!lane||(lane.groups as readonly string[]).includes(task.group)));
+      const visible=prioritizePatternRush(matching,actor.actorId);
+      const page=visible.slice(((freshness?1:filter.page)-1)*15,(freshness?1:filter.page)*15),risks=matching.filter(task=>task.node.risks.length>0).slice(0,15),board=PATTERN_LANES.flatMap(lane=>visible.filter(task=>(lane.groups as readonly string[]).includes(task.group)).slice(0,3));
       const display=[...page,...risks,...board];
       return {ids:display.map(task=>task.journeyId),finish:(details,finalFreshness=freshness,detailFailures=[])=>{
-        const actual=new Map(patternTasks([...details.values()]).map(task=>[task.journeyId+':'+task.node.instanceId,task]));
+        const actual=new Map(patternTasks([...details.values()],rush).map(task=>[task.journeyId+':'+task.node.instanceId,task]));
         const card=(task:Task):PatternWorkspaceTask=>{const value=actual.get(task.journeyId+':'+task.node.instanceId);if(!value)throw new Error('Current workspace task is absent from its native projection');return {...value,...(task.nativeAssignment?{nativeAssignment:task.nativeAssignment}:{})};};
         return {asOf,page:finalFreshness?1:filter.page,pageSize:15,total:finalFreshness?null:visible.length,archiveTotal:finalFreshness?null:new Set(visible.map(task=>task.journeyId)).size,...(finalFreshness?{freshness:finalFreshness}:{}),...(detailFailures.length?{detailFailures:detailFailures.map(id=>({journeyId:id,designStyleNo:facts.find(item=>item.id===id)!.designStyleNo}))}:{}),
           counts:finalFreshness?null:Object.fromEntries(PATTERN_GROUPS.map(group=>[group.key,filtered.filter(task=>task.group===group.key).length])) as PatternWorkspaceResult['counts'],

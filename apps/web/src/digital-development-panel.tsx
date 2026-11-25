@@ -15,6 +15,7 @@ import {DevelopmentPatternLink,type DevelopmentPatternChoice} from "./developmen
 import { DevelopmentExecutionPanel } from "./digital-development-execution-panel.js";
 import { confirmInApp } from "./system-dialog.js";
 import { DevelopmentPrint } from "./digital-development-print.js";
+import {developmentPrintAttachmentMime,useDevelopmentPrint} from "./development-print-preview.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { DevelopmentDocument, DevelopmentMaterialEvent, DevelopmentSheet } from "@dx-rework/contracts/digital-development";
@@ -34,6 +35,7 @@ type RoundHistory={roundNumber:number;origin:string;customerComment:string;inter
 type Rounds={rounds:RoundHistory[];draft:{version:number;payload:DevelopmentRevision}|null};
 export type DevelopmentSheetRead=(sheet:DevelopmentSheet,requestedRound:number|undefined)=>void;
 export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=false,contained=false,directEdit=false,onVersionChange,onRead}:{sourceId:string;onClose:()=>void;onVersionChange?:((version:number|undefined)=>void)|undefined;onRead?:DevelopmentSheetRead|undefined;initialRound?:number|undefined;contained?:boolean;embedded?:boolean;directEdit?:boolean}) {
+  const print=useDevelopmentPrint();
   const previews=useDocumentUploadPreviews({onFailureRemoved:message=>setError(current=>current===message?'':current)});
   const [sheet,setSheet]=useState<DevelopmentSheet|null>(null),[document,setDocument]=useState<DevelopmentDocument>(initial);
   const [showPublishedDocument,setShowPublishedDocument]=useState(false);
@@ -138,6 +140,9 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);applySheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   const readRef=useTodoContentRead({routeName:'digital_development',entityId:sourceId,developmentRound:sheet?.roundNumber??1},Boolean(sheet?.document));
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
+  const printVersion=!revision&&sheet?.status==="published"?{base:`${base}/versions/${sheet.version}`,round:sheet.roundNumber??1}:null;
+  const printImage=(id:string)=>printVersion?urls.apiUrl(`digital-production/${printVersion.base}/attachments/${id}?round=${printVersion.round}`):imageUrl(id);
+  const printMime=developmentPrintAttachmentMime(id=>printVersion?`${printVersion.base}/attachments/${id}/metadata?round=${printVersion.round}`:`${base}/attachments/${id}/metadata`);
   const directRevision=directEdit&&!embedded&&!revision&&roundsRead&&sheet?.status==='published'
     &&sheet.canEdit&&sheet.canRevise&&Boolean(sheet.document)&&(selectedRound===undefined||selectedRound===(sheet.roundNumber??1));
   if(!embedded&&sheet?.canEdit&&!revision&&(sheet.status==="draft"||(!directEdit&&!showPublishedDocument&&sheet.document?.customerOrderDraft?.withOrder&&!sheet.productionOrderId)))return <ResumeDevelopmentCreateForm contained={contained} key={`${sheet.sourceId}:${sheet.version}`} sheet={sheet} onClose={onClose} onCreated={()=>void reload()} onViewPublished={()=>setShowPublishedDocument(true)}/>;
@@ -146,12 +151,13 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {directRevision&&<Button variant="primary" disabled={busy} title={rounds.draft?'继续修订草稿':undefined} onClick={beginRevision}>编辑版单</Button>}
       {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy||(!revision&&sheet?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
-      <Button disabled={!savedPrint||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
+      <Button disabled={!savedPrint||dirty||busy||print.busy} onClick={()=>void print.preview(printMime)}>{print.busy?"正在准备打印…":"打印 / 保存 PDF"}</Button>
     </DocumentToolbar>
     {sheet?.canEdit&&!embedded&&!directEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:'source',id:sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}{previews.view}<DocumentErrors issues={issues} error={error}/>{error&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}{timeApplication.dialog}
+    {print.error&&<p role="alert">{print.error}</p>}
     {!sheet&&<p>正在读取开发单</p>}
     {sheet&&<>
-      {dirty||busy||!savedPrint?<article className="development-print"><p>当前单据不可打印，请先保存当前修改。</p></article>:<DevelopmentPrint sheet={revision?{...sheet,status:"draft",roundNumber:revision.basedOnRound+1,version:draftVersion}:sheet} document={savedPrint} imageUrl={imageUrl}/>}
+      {dirty||busy||!savedPrint?<article className="development-print"><p>当前单据不可打印，请先保存当前修改。</p></article>:<DevelopmentPrint printRef={print.ref} sheet={revision?{...sheet,status:"draft",roundNumber:revision.basedOnRound+1,version:draftVersion}:sheet} document={savedPrint} imageUrl={printImage}/>}
       {sheet.revisionSource&&<details><summary>复版 {sheet.revisionSource.revisionNumber} · 原单与原因</summary><p><a href={urls.pageUrl(`ui/digital-production?development=${sheet.revisionSource.parentSourceId}`)}>查看来源开发单</a> · 参考第 {sheet.revisionSource.parentRound} 轮</p><p>{sheet.revisionSource.origin} · {sheet.revisionSource.customerComment}</p><p>{sheet.revisionSource.categories.join('、')} · {sheet.revisionSource.explanation}</p></details>}
       <div className="development-heading dx-doc-card"><span>款号：<strong>{sheet.designStyleNo}</strong></span><span>代用号：{sheet.temporaryStyleNo??"—"}</span><span>客户：{sheet.customerCode??"通用开发"}</span><span>设计师：{sheet.designerName}</span><span>{sheet.developmentType} · 第{revision?revision.basedOnRound+1:sheet.roundNumber??1}轮 · 资料版本 {revision?draftVersion:sheet.version}</span></div>
 
@@ -160,7 +166,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
         {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
         <DevelopmentDocumentFields designerInput={directEdit&&!readonly} fixedCraft={sheet.timelineSchemaVersion===2} materialFactsReadonly={directEdit||Boolean(sheet.materialForecastOnly)} {...((embedded||contained)?{attachmentPageSize:6}:{})} key={`${sourceId}:${revision?`revision-${revision.basedOnRound}`:"initial"}`} templateResetKey={revision?draftVersion:sheet.version} document={document} edit={edit} readonly={readonly} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={previews.identity} metadataPath={id=>`${base}/attachments/${id}/metadata`} imageUrl={imageUrl} upload={upload} fileKind={fileKind} setFileKind={setFileKind} issue={issue} patternSection={sheet.status==="draft"&&!revision&&sheet.canEdit?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
       </form>
-      {sheet.status==="published"&&<DevelopmentAmendmentHistory key={`${sheet.sourceId}:${sheet.roundNumber}:${sheet.version}`} sheet={sheet} imageUrl={imageUrl}/>}
+      {sheet.status==="published"&&<DevelopmentAmendmentHistory key={`${sheet.sourceId}:${sheet.roundNumber}:${sheet.version}`} sheet={sheet}/>}
       {sheet.status==="published"&&!embedded&&!directEdit&&!revision&&(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)&&<ProductionReadinessPanel resource={{kind:"source",id:sourceId}} sourceDocumentVersion={sheet.version}/>}
       {sheet.status==="published"&&<DocumentSection id="development-handling" title="办理记录">
         {sheet.status==="published"&&<div className="development-round-controls"><label>查看轮次<select aria-label="查看轮次" disabled={busy||embedded||Boolean(revision)} value={sheet.roundNumber??1} onChange={async event=>{if(embedded)return;const round=Number(event.target.value);if((!dirty||await confirmInApp("有未保存修改，确定切换轮次？"))&&!writing.current){setSelectedRound(round);const url=new URL(window.location.href);url.searchParams.set("round",String(round));window.history.replaceState(window.history.state,"",url);onVersionChange?.(round);}}}><option value={1}>第1轮 · 原始开发</option>{rounds.rounds.map(round=><option key={round.roundNumber} value={round.roundNumber}>第{round.roundNumber}轮 · {round.origin}</option>)}</select></label>{!directEdit&&!embedded&&sheet.canRevise&&!revision&&<Button disabled={busy} onClick={beginRevision}>{rounds.draft?"继续复版草稿":"发起实际修改 / 复版"}</Button>}

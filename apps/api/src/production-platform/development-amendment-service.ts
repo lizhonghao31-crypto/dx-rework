@@ -3,11 +3,12 @@ import {developmentDocumentRow} from './development-round-repository.js';
 import {withoutDevelopmentPrices} from './development-commercial-fields.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
+import {validateDevelopmentMaterialSuppliers} from './development-material-suppliers.js';
 import {createHash,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
 import type {Pool,PoolClient} from "pg";
 import {DevelopmentDocumentSchema,developmentPublishErrors,type DevelopmentDocument} from "@dx-rework/contracts/digital-development";
-import {legacyAmendmentPublicationOptions,validateDevelopmentMaterialPlan} from "./development-document-format.js";
+import {legacyAmendmentPublicationOptions,validateDevelopmentMaterialPlan,validateDevelopmentStylePictures,withDevelopmentMaterialLineTotals} from "./development-document-format.js";
 import {DEVELOPMENT_RETURN_FIELD_LABELS,developmentReturnNeed,developmentAmendmentErrors,type DevelopmentAmendmentContext,type SaveDevelopmentAmendment,type SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
 import {isRootActor} from "../access/business-authority.js";
 import type {TrustedActorContext} from "../tools/repositories.js";
@@ -73,12 +74,15 @@ export class DevelopmentAmendmentService{
   return this.command(actor,sourceId,"save",key,input,async(db,current)=>{
    const draft=(await db.query("SELECT version,document FROM digital_development_amendment_drafts WHERE task_id=$1 FOR UPDATE",[input.taskId])).rows[0];
    if((draft?.version??0)!==input.expectedDraftVersion)fail("补正草稿已由另一窗口更新，请保留输入后核对；没有覆盖原草稿");
+   validateDevelopmentStylePictures(input.document,current.sheet.document!);
    const errors=developmentAmendmentErrors(current.sheet.document!,input.document);if(errors.length)fail(errors.join("；"));
    if(current.sheet.materialForecastOnly)validateDevelopmentMaterialPlan(input.document,current.sheet.document!);
    await validateAuxiliaryReferences(db,input.document,draft?.document??current.sheet.document!);
-   await this.forms().bindFiles(db,actor,sourceId,input.document);
+   await validateDevelopmentMaterialSuppliers(db,input.document,draft?.document??current.sheet.document!,{catalog:Boolean(current.sheet.document!.materialSupplierCatalog)});
+   const document=withDevelopmentMaterialLineTotals({...input.document,materialSupplierCatalog:current.sheet.document!.materialSupplierCatalog});
+   await this.forms().bindFiles(db,actor,sourceId,document);
    await db.query(`INSERT INTO digital_development_amendment_drafts(task_id,source_id,round_number,version,base_document_version,document,reason,updated_by)
-    VALUES($1,$2,$3,1,$4,$5,$6,$7) ON CONFLICT(task_id) DO UPDATE SET version=digital_development_amendment_drafts.version+1,document=$5,reason=$6,updated_by=$7,updated_at=CURRENT_TIMESTAMP`,[input.taskId,sourceId,input.roundNumber,current.sheet.version,JSON.stringify(input.document),input.reason,actor.actorId]);
+    VALUES($1,$2,$3,1,$4,$5,$6,$7) ON CONFLICT(task_id) DO UPDATE SET version=digital_development_amendment_drafts.version+1,document=$5,reason=$6,updated_by=$7,updated_at=CURRENT_TIMESTAMP`,[input.taskId,sourceId,input.roundNumber,current.sheet.version,JSON.stringify(document),input.reason,actor.actorId]);
    return {draftVersion:input.expectedDraftVersion+1,documentVersion:current.sheet.version,roundNumber:input.roundNumber};
   });
  }
@@ -100,8 +104,10 @@ export class DevelopmentAmendmentService{
    }
    if(!draft.reason.trim())fail("请填写本次具体补正 / 澄清说明，再保存并提交");
    const before=current.sheet.document!,document=DevelopmentDocumentSchema.parse(draft.document);
+   await validateDevelopmentMaterialSuppliers(db,document,before,{catalog:Boolean(before.materialSupplierCatalog),publish:true});
    if(current.sheet.materialForecastOnly)validateDevelopmentMaterialPlan(document,before);
    await validateSpecialCraftChoices(db,document.craftSteps??[],before.craftSteps??[],'development');
+   validateDevelopmentStylePictures(document,before);
    const errors=[...developmentAmendmentErrors(before,document),...developmentPublishErrors(document,legacyAmendmentPublicationOptions(before,document))];if(errors.length)fail(errors.join("；"));
    for(const issue of requirements?.issues??[]){
     if(developmentReturnNeed(issue)==="supply"||issue.field==="other")continue;

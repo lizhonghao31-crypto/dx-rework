@@ -11,13 +11,15 @@ import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {captureDeferredDevelopmentRoute,deferredDevelopmentRoute} from './development-native-route.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
-import {developmentRevisionForSave,validateDevelopmentMaterialPlan} from "./development-document-format.js";
+import {validateDevelopmentMaterialSuppliers} from './development-material-suppliers.js';
+import {isRootActor} from '../access/business-authority.js';
+import {developmentRevisionForSave,validateDevelopmentMaterialPlan,withDevelopmentMaterialLineTotals} from "./development-document-format.js";
 import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {DevelopmentRevisionSchema,type DevelopmentRevision} from '@dx-rework/contracts/digital-development-rounds';
-import {developmentPublishErrors} from '@dx-rework/contracts/digital-development';
+import {developmentPublishErrors,usesDevelopmentMaterialPlanning} from '@dx-rework/contracts/digital-development';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {digitalForbidden} from './access-policy.js';
@@ -60,8 +62,10 @@ export class DevelopmentRoundService {
    const sheet=await this.forms().read(actor,sourceId,db);if((sheet.roundNumber??1)!==input.revision.basedOnRound)fail('已有新轮次，请重新读取当前资料');
    const before=(await db.query('SELECT version,payload FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];if((before?.version??0)!==input.expectedDraftVersion)fail('复版草稿已更新，请刷新');
    const revision={...input.revision,document:developmentRevisionForSave(input.revision.document,sheet.document!)};
-   if(sheet.materialForecastOnly)validateDevelopmentMaterialPlan(revision.document,sheet.document!);
+   if(sheet.materialForecastOnly||!isRootActor(actor)&&(usesDevelopmentMaterialPlanning(revision.document)||usesDevelopmentMaterialPlanning(sheet.document)))
+    validateDevelopmentMaterialPlan(revision.document,sheet.document!);
    await validateAuxiliaryReferences(db,revision.document,before?.payload?.document??sheet.document!);
+   await validateDevelopmentMaterialSuppliers(db,revision.document,before?.payload?.document??sheet.document!,{catalog:Boolean(sheet.document!.materialSupplierCatalog)});
    await this.forms().bindFiles(db,actor,sourceId,revision.document);
    await db.query('INSERT INTO digital_development_round_drafts(source_id,version,based_on_round,payload,updated_by) VALUES($1,1,$2,$3,$4) ON CONFLICT(source_id) DO UPDATE SET version=digital_development_round_drafts.version+1,based_on_round=$2,payload=$3,updated_by=$4,updated_at=CURRENT_TIMESTAMP',[sourceId,input.revision.basedOnRound,JSON.stringify(revision),actor.actorId]);
    return {draftVersion:input.expectedDraftVersion+1};
@@ -81,8 +85,9 @@ export class DevelopmentRoundService {
  async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string,patternReworkRoundId?:string){
   if(!this.enabled)digitalForbidden();
   const rawBasis=await developmentDocumentRow(db,sourceId);
-  if(rawBasis)input={...input,document:{...input.document,
+  if(rawBasis)input={...input,document:withDevelopmentMaterialLineTotals({...input.document,
    ...(rawBasis.document.quotationMode?{quotationMode:rawBasis.document.quotationMode}:{}),
+   materialSupplierCatalog:rawBasis.document.materialSupplierCatalog,
    materials:input.document.materials.map(material=>{
     const original=rawBasis.document.materials.find((row:{materialId:string})=>row.materialId===material.materialId);
     const basis=material.auxiliaryCatalog,previous=original?.auxiliaryCatalog;
@@ -92,7 +97,7 @@ export class DevelopmentRoundService {
       ?{auxiliaryCatalog:{...basis,referencePricing:previous.referencePricing}}:{}),
     };
    }),
-  }};
+  })};
   const parsed=DevelopmentRevisionSchema.safeParse(input);if(!parsed.success)fail(parsed.error.issues[0]?.message??"复版资料无效");input=parsed.data!;
   const sheet=await this.forms().read(actor,sourceId,db);
   // A technical return carries the commercial basis forward without granting
@@ -116,10 +121,13 @@ export class DevelopmentRoundService {
    else if(!await approvedOrderTimeRevision(db,actor,sourceId,input.basedOnRound))await authorizePatternOrder(db,actor,"pattern_room:orders:rework",true);
   }
   if(!returnTaskId&&!patternReworkRoundId&&!sheet.canEdit)digitalForbidden();
-  if(!returnTaskId&&!patternReworkRoundId&&sheet.materialForecastOnly)validateDevelopmentMaterialPlan(input.document,sheet.document!);
+  if((!returnTaskId&&!patternReworkRoundId&&sheet.materialForecastOnly)||
+    (!isRootActor(actor)&&(usesDevelopmentMaterialPlanning(input.document)||usesDevelopmentMaterialPlanning(sheet.document))))
+   validateDevelopmentMaterialPlan(input.document,sheet.document!);
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');
   if(returnTaskId){const task=(await db.query("SELECT t.route_version,a.task_kind,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1",[returnTaskId])).rows[0];if(!task||task.source_id!==sourceId||task.task_kind!=='development_tail_check'||task.route_version!==input.basedOnRound||input.origin!=='内部发现')digitalForbidden();}
   await validateAuxiliaryReferences(db,input.document,sheet.document!);
+  await validateDevelopmentMaterialSuppliers(db,input.document,sheet.document!,{catalog:Boolean(sheet.document!.materialSupplierCatalog),publish:true});
   await validateSpecialCraftChoices(db,input.document.craftSteps??[],sheet.document?.craftSteps??[],'development');
   const deferred=Boolean(sheet.preorderPublication&&await deferredDevelopmentRoute(db,sourceId));
   const errors=developmentPublishErrors(deferred?{...input.document,customerOrderDraft:undefined}:input.document,{allowMissingOrderDate:sheet.document!.orderDate===null});if(errors.length)fail(errors.join('；'));

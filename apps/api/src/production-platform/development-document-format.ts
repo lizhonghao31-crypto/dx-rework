@@ -1,8 +1,13 @@
 import {beijingCalendarDate} from "@dx-rework/contracts/digital-production";
-import {developmentMaterialPriceIdentityIssue,developmentSizeQuantityIssues,type DevelopmentDocument,type DevelopmentMakingUpgrade} from "@dx-rework/contracts/digital-development";
+import {developmentMaterialLineTotal,developmentMaterialPriceIdentityIssue,developmentSizeQuantityIssues,developmentStylePictureIssue,type DevelopmentDocument,type DevelopmentMakingUpgrade} from "@dx-rework/contracts/digital-development";
 import {ApplicationError} from "../platform/errors.js";
 
 const reject=(message:string):never=>{throw new ApplicationError("VALIDATION_ERROR",message,400);};
+export function validateDevelopmentStylePictures(document:DevelopmentDocument,basis?:DevelopmentDocument){
+ if(!document.templateConfirmed&&!basis?.templateConfirmed&&!document.materialSupplierCatalog&&!basis?.materialSupplierCatalog)return;
+ const issue=developmentStylePictureIssue(document.files,basis?.files);
+ if(issue)reject(issue);
+}
 function validateNewMaterialPriceIdentity(document:DevelopmentDocument,basis?:DevelopmentDocument){
  const before=new Map(basis?.materials.map(material=>[material.materialId,material]));
  for(const material of document.materials){
@@ -20,6 +25,14 @@ export function validateDevelopmentMaterialPlan(document:DevelopmentDocument,bas
   if(material.category!=='辅料'&&material.expectedDate!==null&&(material.category!==original?.category||material.expectedDate!==original.expectedDate))reject('预计到料日期只可填在辅料资料，面料沿原跟单流程');
  }
 }
+/** A submitted total is not authoritative. A missing or incompatible unit is unknown, not zero. */
+export function withDevelopmentMaterialLineTotals(document:DevelopmentDocument):DevelopmentDocument{
+ return {...document,materials:document.materials.map(row=>{
+  const total=document.materialSupplierCatalog?developmentMaterialLineTotal(row):null;
+  if(total===null){const inputs={...row};delete inputs.lineTotal;return inputs;}
+  return row.lineTotal===total?row:{...row,lineTotal:total};
+ })};
+}
 /** Called only with the original row held by the development command transaction. */
 export function developmentDraftForSave(input:DevelopmentDocument,previous:DevelopmentDocument|undefined,createdAt:Date|string):DevelopmentDocument{
  const fixedDate=previous?.orderDate??beijingCalendarDate(new Date(createdAt));
@@ -28,7 +41,8 @@ export function developmentDraftForSave(input:DevelopmentDocument,previous:Devel
  if(previous&&!previous.workbenchSheet&&input.workbenchSheet)reject("原草稿须沿用保存时的版单格式");
  if(previous?.documentFormatVersion===2&&(input.documentFormatVersion!==2||!input.sizeQuantities))reject("不能移除已保存的每码制作数量，请重新读取当前资料");
  validateNewMaterialPriceIdentity(input,previous);
- return {...input,...(previous?.quotationMode?{quotationMode:previous.quotationMode}:{}),documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null),orderDate:fixedDate};
+ validateDevelopmentStylePictures(input,previous);
+ return withDevelopmentMaterialLineTotals({...input,...(previous?.quotationMode?{quotationMode:previous.quotationMode}:{}),documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null),orderDate:fixedDate});
 }
 /** A new physical round always uses the new protocol; its source date remains the frozen first date. */
 export function developmentRevisionForSave(input:DevelopmentDocument,basis:DevelopmentDocument):DevelopmentDocument{
@@ -36,7 +50,8 @@ export function developmentRevisionForSave(input:DevelopmentDocument,basis:Devel
  if(!basis.workbenchSheet&&input.workbenchSheet)reject("复版须沿用原版单格式");
  if(input.orderDate!==basis.orderDate)reject("实际复版不能改写首次开发下单日期，请保留原日期；客户日期独立办理");
  validateNewMaterialPriceIdentity(input,basis);
- return {...input,...(basis.quotationMode?{quotationMode:basis.quotationMode}:{}),documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null)};
+ validateDevelopmentStylePictures(input,basis);
+ return withDevelopmentMaterialLineTotals({...input,...(basis.quotationMode?{quotationMode:basis.quotationMode}:{}),materialSupplierCatalog:basis.materialSupplierCatalog,documentFormatVersion:2,sizeQuantities:input.sizeQuantities??input.sizes.map(()=>null)});
 }
 /** Existing tail/rework permission authorizes only explicit counts for the new round, never rewriting its frozen basis. */
 export function developmentAutomaticRoundDocument(document:DevelopmentDocument,version:number,making:DevelopmentMakingUpgrade|undefined):DevelopmentDocument{

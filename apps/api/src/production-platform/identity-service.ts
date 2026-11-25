@@ -74,7 +74,7 @@ export class DigitalProductionIdentityService {
         &&(command==='create-source'||command==='direct-order'||command.startsWith('confirm-source:'));
       if(!this.transactionClient)await client.query(initialAdoption?'BEGIN ISOLATION LEVEL REPEATABLE READ':'BEGIN');
       if(authorize)await authorize(client);
-      if(command.startsWith("numbers:")||command.startsWith("confirm-source:")||command.startsWith('attach-source:'))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      if(command.startsWith("numbers:")||command.startsWith("confirm-source:")||command.startsWith('attach-source:')||command.startsWith('discard-development-draft:'))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, command, key])]);
       const hash = digest(payload);
       const prior = await client.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, command, key]);
@@ -236,6 +236,19 @@ export class DigitalProductionIdentityService {
       return {sourceId,orderNumber};
     },client=>this.assertNumberedDraftActor(client,actor));
   }
+  async numberedDraftReceipt(actor:TrustedActorContext,key:string):Promise<{sourceId:string|null;orderNumber:string|null}> {
+    this.assertSourceCreation(actor);
+    if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识',400);
+    return this.readSnapshot(async db=>{
+      if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
+      const saved=(await db.query<{source_id:string;reserved_number:string|null}>(`SELECT s.source_id,c.response->>'orderNumber' AS reserved_number
+        FROM digital_production_commands c JOIN digital_production_sources s ON s.source_id::text=c.response->>'sourceId'
+        WHERE c.actor_id=$1 AND c.command='reserve-numbered-draft' AND c.key=$2
+          AND s.created_by=$1 AND s.workbench_generated_number AND ${await wholeOrderActiveSql(db,'source','s.source_id')}`,[actor.actorId,key])).rows[0];
+      if(saved)await this.visibleSource(db,actor,saved.source_id);
+      return {sourceId:saved?.source_id??null,orderNumber:saved?.reserved_number??null};
+    });
+  }
   private async assertOrderNumberAdministrator(client:PoolClient,actor:TrustedActorContext,write=false) {
     if(isRootActor(actor))return;
     const policy=new DigitalProductionAccessPolicy(client);
@@ -275,7 +288,12 @@ export class DigitalProductionIdentityService {
     if(countOnly)return {items:[],page,total,hasNext:page*15<total};
     const result=await db.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
       s.design_style_no AS "designStyleNo",s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",
-      coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState"
+      coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState",
+      CASE WHEN s.created_by=$2 THEN digital_development_draft_discardable(s.source_id,$2,coalesce(d.version,0)) ELSE false END AS "canDiscard",
+      CASE WHEN d.document->'customerOrderDraft'->>'withOrder'='false' THEN 'development'
+       WHEN d.document->'customerOrderDraft'->>'withOrder'='true' THEN
+        CASE WHEN d.document->'customerOrderDraft'->>'stage'='preorder' AND d.document->'customerOrderDraft'->>'wizardConfirmPreorder' IS DISTINCT FROM 'true'
+         THEN 'preorder' ELSE 'certain_order' END END AS "kind"
       FROM digital_production_sources s JOIN digital_development_source_lifecycle lifecycle USING(source_id)
       LEFT JOIN digital_development_documents d USING(source_id)
       LEFT JOIN LATERAL (
@@ -285,6 +303,26 @@ export class DigitalProductionIdentityService {
       ) approval ON true
       ${scope} ORDER BY coalesce(d.updated_at,s.created_at) DESC,s.source_id DESC LIMIT 15 OFFSET $4`,[...params,(page-1)*15]);
     return {items:result.rows,page,total,hasNext:page*15<total};
+    });
+  }
+  async discardDevelopmentDraft(actor:TrustedActorContext,sourceId:string,expectedVersion:number,key:string){
+    this.assertSourceCreation(actor);
+    return this.command(actor,`discard-development-draft:${sourceId}`,key,{expectedVersion},async db=>{
+      const source=await this.visibleSource(db,actor,sourceId,true);
+      if(source.created_by!==actor.actorId)fail('开发草稿不存在或无权删除',404);
+      if(!(await db.query('SELECT digital_development_draft_discardable($1,$2,$3) AS allowed',[sourceId,actor.actorId,expectedVersion])).rows[0]?.allowed)
+        fail('仅可删除本人未发布、未关联且没有执行记录的当前版本草稿，请刷新核对');
+      const eventId=await this.audit(db,actor,'digital_development_draft_discarded',sourceId,{version:expectedVersion},{discarded:true,historyRetained:true});
+      await db.query('INSERT INTO digital_development_draft_discards(source_id,actor_id,draft_version,audit_event_id) VALUES($1,$2,$3,$4)',
+        [sourceId,actor.actorId,expectedVersion,eventId]);
+      // The command name scopes the authorized idempotency receipt to the original
+      // source. It is not a readable source DTO after the tombstone commits.
+      return {discarded:true as const};
+    },async db=>{
+      await acceptanceBusinessContext()?.assertScope({kind:'source',id:sourceId});
+      if(isRootActor(actor)){
+        if(!(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed)digitalForbidden();
+      }else if(!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'sample_designer'))digitalForbidden();
     });
   }
   async developmentDraftReceipt(actor:TrustedActorContext,key:string){

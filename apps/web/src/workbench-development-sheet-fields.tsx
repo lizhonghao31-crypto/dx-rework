@@ -11,9 +11,9 @@ export const emptyWorkbenchDevelopmentSheet=():WorkbenchDevelopmentSheet=>({
   version:1,styleName:'',brand:'',gender:null,boardType:null,processingSelected:false,referenceNote:'',sewingRows:[],
 });
 
-export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange,creation=false}:{
+export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange,creation=false,originalFields=true}:{
   sheet:WorkbenchDevelopmentSheet;readonly:boolean;issue:(id:string)=>string|undefined;
-  onChange:(sheet:WorkbenchDevelopmentSheet)=>void;creation?:boolean;
+  onChange:(sheet:WorkbenchDevelopmentSheet)=>void;creation?:boolean;originalFields?:boolean;
 }){
   const text=(key:'styleName'|'brand'|'referenceNote',label:string)=>{
     const id=`development-workbench-${key}`;
@@ -40,7 +40,7 @@ export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange,c
     onChange({...sheet,sewingRows:sheet.sewingRows.map(row=>row.rowId===rowId?{...row,...patch}:row)});
   return <DocumentSection id="development-workbench" title="版单基本资料">
     <div className="development-basic-grid">
-      {text('styleName','款名（必填）')}
+      {originalFields&&text('styleName','款名（必填）')}
       {choice('gender','性别（必填）',DEVELOPMENT_SAMPLE_GENDERS)}
       {choice('boardType','板类（必填）',DEVELOPMENT_SAMPLE_BOARD_TYPES)}
     </div>
@@ -68,8 +68,8 @@ export function WorkbenchDevelopmentSheetFields({sheet,readonly,issue,onChange,c
     {!readonly&&<Button type="button" disabled={sheet.sewingRows.length>=100} onClick={()=>onChange({...sheet,sewingRows:[
       ...sheet.sewingRows,{rowId:createClientRequestId(),color:'',size:'',quantity:null},
     ]})}>添加颜色尺码行</Button>}
-    <details><summary>其他信息（品牌与参考，已填 {[sheet.brand,sheet.referenceNote].filter(Boolean).length} 项）</summary>
-      {text('brand','品牌')}{text('referenceNote','参考款 / 版型说明')}
+    <details><summary>{originalFields?"其他信息（品牌与参考":"其他信息（参考款"}，已填 {(originalFields?[sheet.brand,sheet.referenceNote]:[sheet.referenceNote]).filter(Boolean).length} 项）</summary>
+      {originalFields&&text('brand','品牌')}{text('referenceNote','参考款 / 版型说明')}
     </details>
   </DocumentSection>;
 }

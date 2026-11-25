@@ -20,7 +20,7 @@ export async function secondaryCraftApprovalTodos(db:Pick<Pool,'query'>,actor:Tr
    recipientUserId:actor.actorId,route,dueAt:null,status:'pending',
    orderContext:{reworkNo:null,orderNo:null,styleNo:item.styleNo,supplierName:item.supplier?.name??null,status:'待审批',updatedAt:at},unread:true,createdAt:at};
   appendSelectedTodo(result,projection,selected,()=>({...selected,sourceEventId:todoId,entityType:'secondary_craft_quotation',
-   entityId:item.rowId,requiredRole:'owner_group',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:item.version,updatedAt:at}));
+   entityId:item.rowId,requiredRole:'owner_group',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:item.version,updatedAt:at}),{sourceId:item.resource.kind==='source'?item.resource.id:null,orderId:item.resource.kind==='order'?item.resource.id:null});
  }
  return result;
 }

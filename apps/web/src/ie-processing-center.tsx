@@ -17,6 +17,7 @@ import {createClientRequestId} from './client-request-id.js';
 import {designerAstryxCss} from './designer-astryx.js';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {quotationRequest} from './digital-quotation-panel.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {navigateInternalPage} from './internal-navigation.js';
 import {loadReworkQueue} from './reporting/reporting-client.js';
@@ -105,7 +106,7 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   if(identityKey(directoryEntry)!==target)throw Error('当前账号无法查看所选报价行，请返回列表重新选择。');
   const sheet=await quotationRequest(base,resource);
   if(sheet.version!==directoryEntry.version||sheet.quoteId!==quoteId||!sheet.rows.some(row=>row.rowId===rowId))throw Error('报价行已更新，请重新读取。');
-  return {sheet,canEdit:directoryEntry.canEditPrice};
+  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush};
  },[base,resource,quoteId,rowId,target]);
  const read=useForegroundRead(resource.id,target,load);
  useForegroundWait(read.foregroundKey);
@@ -138,7 +139,7 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   <Link href={back}>返回报价列表</Link>
   {read.error&&<p role="alert">{receipt!==null?'报价已保存，重新读取失败。 ':''}{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
   {sheet&&row&&<>
-   <h2>{sheet.designStyleNo} · 产品加工报价</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
+   <h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/> · 产品加工报价</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
    <form onSubmit={event=>{event.preventDefault();save();}}>
     <Stack gap={2} maxWidth={480}>
      <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
@@ -169,7 +170,7 @@ function ProcessingDirectory({query,focus}:{query:IeProcessingQuery;focus?:strin
  useDirectoryReturn(read.value!==null,focus);
  const change=(next:IeProcessingQuery)=>void navigateInternalPage(centerHref(next));
  const columns:TableColumn<IeProcessingEntry>[]=[
-  {key:'style',header:'款号',renderCell:row=><Link id={resultLinkId(row.quoteId)} href={centerHref(query,row)}>{row.styleNo}</Link>},
+  {key:'style',header:'款号',renderCell:row=><><Link id={resultLinkId(row.quoteId)} href={centerHref(query,row)}>{row.styleNo}</Link><OrderRushBadge value={row.orderRush}/></>},
   {key:'customer',header:'客户',renderCell:row=>row.customerCode??'—'},
   {key:'version',header:'轮次／版本',renderCell:row=>`第 ${row.round} 轮 · v${row.version}`},
   {key:'assignee',header:'负责人',renderCell:row=>row.assigneeName??'待指派'},

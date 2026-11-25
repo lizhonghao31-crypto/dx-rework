@@ -24,6 +24,23 @@ describe('separate todo count, page and single read',()=>{
   const ignored=await production.todoSelections.mock.results[0]!.value;expect(ignored.every(item=>!item.load.mock.calls.length)).toBe(true);
   expect((await service.listForActor(actor,{module:'digital_production',page:999})).todos).toEqual(rows.slice(30));
  });
+ it('batches rush facts for exact identities on the current authorized page only',async()=>{
+  const orderContext={styleNo:'TEST same style',reworkNo:null,orderNo:null,supplierName:null,status:'ready',updatedAt:'2026-11-08T00:00:00.000Z'};
+  const rows=Array.from({length:17},(_,i)=>({...fixture(i),orderContext:i===16?null:orderContext}));
+  const sourceIds=rows.map(()=>randomUUID()), linkedOrder=randomUUID();
+  const database=db(),query=vi.spyOn(database,'query');
+  query.mockImplementation((async(sql:string)=>({rows:sql.includes('to_regclass')?[{relation:null,development:'documents'}]
+   :sql.includes('WITH requested')?[{kind:'order',id:linkedOrder}]:[]})) as never);
+  const digital={todos:async()=>[],todoSelections:async()=>rows.map((todo,i)=>({
+   key:todoSelectionKey(todo),load:async()=>todo,rushIdentity:{sourceId:sourceIds[i]!,orderId:i===15?linkedOrder:null},
+  }))};
+  const result=await new TodoService(database,undefined,undefined,undefined,digital).listForActor(actor,{module:'digital_production',page:2});
+  expect(result).toMatchObject({page:2,totalCount:17,totalPages:2});
+  expect(result.todos).toEqual([{...rows[15],orderRush:true},rows[16]]);
+  const facts=query.mock.calls.filter(call=>String(call[0]).includes('WITH requested'));
+  expect(facts).toHaveLength(1);
+  expect(facts[0]![1]).toEqual([[],[linkedOrder]]);
+ });
  it('loads a target through single providers and returns404 after that target disappears',async()=>{
   const rows=[fixture(1),fixture(2)],digital=provider(rows),production=provider([]),service=new TodoService(db(),undefined,undefined,production,digital);
   expect(await service.getForActor(actor,rows[1]!.todoId)).toEqual(rows[1]);

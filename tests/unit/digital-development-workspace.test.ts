@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { JOURNEY_NODES, JOURNEY_STAGES, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema,PATTERN_GROUPS,PATTERN_LANES } from "@dx-rework/contracts/digital-development-workspace";
 import { DevelopmentWorkspaceQuery, developmentView, patternTasks } from "../../apps/api/src/production-platform/development-workspace-query.js";
+import {prioritizeWithinRushGroups} from '../../apps/api/src/production-platform/development-order-rush.js';
 import type { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { developmentWorkspaceReturnUrl } from "../../apps/web/src/development-workspace-return.js";
@@ -15,6 +16,17 @@ const node = (key: string, state: JourneyNode["state"] = "active", patch: Partia
 };
 const journey = (nodes: JourneyNode[], patch: Partial<OrderJourney> = {}): OrderJourney => ({id: randomUUID(), sourceId: randomUUID(), orderId: null, designStyleNo: "TEST-view", temporaryStyleNo: null, customer: "PD", category: "上衣", designer: "TEST", styleName: null, merchandisers: [], orderNumbers: [], createdAt: "2026-10-01T00:00:00Z", deliveryDate: null, selectedRound: 1, adoptedRound: null, sourceVersion: 1, instructionVersion: null, lines: [], links: [], stages: JOURNEY_STAGES.map(stage => ({...stage, state: "active", nodes: nodes.filter(node => node.stage === stage.key)})), progress: {development: null, bulk: null}, hitReasons: [], ...patch});
 const actor: TrustedActorContext = {actorId: randomUUID(), actorRoles: ["sample_designer"], authorizationCapability: "pattern_room:orders:create", authorizationCapabilities: ["pattern_room:orders:create"], requestId: "TEST-workspace"};
+
+it('prioritizes urgent work only within the same actionable group, preserving waiting and normal relative order',()=>{
+ const rows=[
+  {name:'普通纸样 1',group:'paper',rush:false},{name:'待前置',group:null,rush:true},
+  {name:'普通裁板',group:'cutting',rush:false},{name:'普通纸样 2',group:'paper',rush:false},
+  {name:'急单纸样',group:'paper',rush:true},{name:'急单裁板',group:'cutting',rush:true},
+ ];
+ expect(prioritizeWithinRushGroups(rows,row=>row.group,row=>row.rush).map(row=>row.name)).toEqual([
+  '急单纸样','待前置','急单裁板','普通纸样 1','普通纸样 2','普通裁板',
+ ]);
+});
 
 describe("pattern task business observation",()=>{
   it("retains each original journey clock across mixed board rows, previews and risks while list snapshot stays real",async()=>{

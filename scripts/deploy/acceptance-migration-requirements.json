@@ -2417,5 +2417,53 @@
       "guard_workbench_draft_task"
     ],
     "sequences": []
+  },
+  "0304_development_draft_discard": {
+    "checksum": "a094213bd8c0d25047dd2622b1221f614d11782e3feeb7202e9418c707f1bad5",
+    "tables": [
+      "audit_events",
+      "digital_development_documents",
+      "digital_development_execution_facts",
+      "digital_development_material_events",
+      "digital_development_pattern_links",
+      "digital_development_revision_sources",
+      "digital_development_rounds",
+      "digital_development_route_facts",
+      "digital_development_sla_plans",
+      "digital_development_source_lifecycle",
+      "digital_development_technical_enrollments",
+      "digital_order_time_plan_versions",
+      "digital_order_time_requests",
+      "digital_order_time_subjects",
+      "digital_preparation_material_versions",
+      "digital_preparation_rule_adoptions",
+      "digital_production_resource_lifecycle",
+      "digital_production_sources",
+      "digital_production_task_access",
+      "digital_quotation_documents",
+      "digital_short_lead_requests",
+      "digital_timeline_adoptions",
+      "digital_whole_order_deleted_objects"
+    ],
+    "functions": [
+      "digital_whole_order_active"
+    ],
+    "references": [
+      "digital_production_sources",
+      "app_users",
+      "audit_events"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_draft_discards"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "digital_whole_order_active",
+      "digital_development_draft_discardable",
+      "guard_development_draft_discard"
+    ],
+    "sequences": []
   }
 }

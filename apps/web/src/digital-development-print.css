@@ -1,0 +1,86 @@
+@page dxDevelopmentA4 { size: A4 landscape; margin: 8mm; }
+
+body[data-development-pdf] { margin: 0; page: dxDevelopmentA4; }
+.development-print {
+  color: #171717;
+  font: 9.5pt/1.25 "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  overflow-wrap: anywhere;
+}
+.development-print *, .development-print *::before { box-sizing: border-box; }
+.development-print :is(p, h2, h3, h4, dl, dd, figure) { margin: 0; }
+.development-print h3 { font-size: 9.5pt; }
+body[data-development-pdf] .development-print { display: block; width: 281mm; }
+.development-print-page {
+  width: 281mm;
+  height: 193mm;
+  display: flex;
+  flex-direction: column;
+  break-after: page;
+}
+.development-print-page:last-child { break-after: auto; }
+.development-print-page__content { display: flow-root; flex: 1 1 auto; min-height: 0; }
+.development-print-page__content > :not([data-print-cover]) { margin-top: 1.1mm; }
+.development-print-page__caption { display: flex; align-items: baseline; justify-content: space-between; gap: 3mm; font-size: 8pt; color: #383838; padding-top: 1.1mm; border-top: .2mm solid #888; }
+.development-print-page__caption span:last-child { white-space: nowrap; }
+.development-print-page__continued { padding-bottom: 1mm; border-bottom: .25mm solid #777; }
+.development-paper-title { display: flex; justify-content: space-between; align-items: baseline; gap: 3mm; padding-block: 1mm; border-bottom: .45mm solid #333; }
+.development-paper-title h2 { font-size: 17pt; text-align: right; }
+.development-paper-title small { font-size: 9pt; font-weight: 500; margin-inline-start: 2mm; }
+.development-paper-title .development-paper-rush { color: #9b2525; font-weight: 700; }
+.development-paper-fields { display: grid; grid-template-columns: 1.2fr 1.15fr 1fr 1fr .85fr .85fr; border-left: .2mm solid #888; }
+.development-paper-dates { grid-template-columns: repeat(auto-fit, minmax(35mm,1fr)); }
+.development-paper-fields > div { border: .2mm solid #888; border-left: 0; padding: .7mm 1.25mm; }
+.development-paper-fields dt { font-size: 8pt; color: #393939; }
+.development-paper-fields dd { font-weight: 550; }
+.development-paper-bar { padding: .65mm 1.2mm; border: .2mm solid #888; background: #ededed; print-color-adjust: exact; }
+.development-paper-grid { display: grid; grid-template-columns: minmax(0,52%) minmax(0,48%); border-left: .2mm solid #888; }
+.development-print [data-garment-layout="trousers"] .development-paper-grid,
+.development-print-page[data-garment-layout="trousers"] .development-paper-grid { grid-template-columns: minmax(0,54%) minmax(0,46%); }
+.development-print [data-garment-layout="trousers"] .development-paper-sizes th:first-child,
+.development-print-page[data-garment-layout="trousers"] .development-paper-sizes th:first-child { width: 64%; }
+.development-paper-left,.development-paper-right { min-width: 0; border-right: .2mm solid #888; }
+.development-paper-pictures { display: flex; gap: 2mm; padding: 2mm; height: 68mm; align-items: center; justify-content: center; }
+.development-paper-pictures figure { flex: 1 1 0; min-width: 0; text-align: center; }
+.development-paper-pictures img { width: 100%; height: 58mm; object-fit: contain; display: block; }
+.development-paper-pictures figcaption { color: #525252; }
+.development-paper-instructions { padding: 1.3mm; border-top: .2mm solid #888; }
+.development-paper-requirements { display: grid; grid-template-columns: 1fr 1fr; }
+.development-paper-requirements section { padding: .75mm 1.2mm; border: .2mm solid #aaa; }
+.development-paper-inline-fields > div { display: inline-block; max-width: 100%; margin-inline-end: 1.6mm; }
+.development-paper-inline-fields :is(dt,dd) { display: inline; }
+.development-paper-inline-fields dt { white-space: nowrap; }
+.development-paper-inline-fields dt::after { content: "："; }
+.development-paper-material-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-left: .2mm solid #888; border-bottom: .2mm solid #888; }
+.development-paper-material-summary section { padding: 1mm 1.35mm; border-right: .2mm solid #888; }
+.development-paper-material-summary .development-paper-inline-fields > div { display: block; margin-inline-end: 0; }
+.development-print table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.development-print :is(th, td) { text-align: left; vertical-align: top; padding: .45mm .8mm; border: .2mm solid #888; white-space: pre-wrap; }
+.development-print table th[scope="row"] { width: 42%; }
+.development-print thead th { background: #f3f3f3; print-color-adjust: exact; }
+.development-paper-sizes :is(th, td):not(:first-child) { text-align: center; }
+.development-paper-sizes th:first-child { width: 54%; }
+.development-paper-supplement-image { padding: 1mm; }
+.development-paper-supplement-image img { display: block; width: 100%; height: 125mm; object-fit: contain; }
+.development-print [data-print-split-text] p { white-space: pre-wrap; padding: 1mm 1.2mm; }
+.development-feedback-text p { font-size: 11pt; }
+.development-feedback-document .development-paper-dates :is(dt,dd),
+.development-print-page[data-print-document="客户评语单"] .development-paper-dates :is(dt,dd) { display: inline; }
+.development-print-page[data-print-document="客户评语单"] .development-paper-dates dt::after { content: "："; }
+.development-feedback-image {
+  min-height: 0;
+  border: .2mm solid #888;
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr) auto;
+  gap: .8mm;
+  text-align: center;
+}
+.development-feedback-image .development-paper-bar { text-align: left; }
+.development-feedback-image img { width: 100%; height: 100%; min-height: 0; object-fit: contain; padding: 1.2mm; }
+.development-feedback-image figcaption { padding: 0 1mm .8mm; color: #383838; }
+.development-feedback-pair { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.development-feedback-pair > div { display: grid; min-height: 0; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.development-feedback-pair .development-feedback-image { grid-template-rows: minmax(0,1fr) auto; }
+.development-feedback-pair .development-feedback-image h3 { display: none; }
+@media print {
+  body[data-development-pdf] .development-print-page { break-inside: avoid; }
+}

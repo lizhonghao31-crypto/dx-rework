@@ -6,6 +6,7 @@ import {CraftStepChoicesSchema,craftChoiceLabel,hasBothBuiltinCrafts,type CraftS
 import {DevelopmentDocumentSchema,developmentCraftOptions,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {DevelopmentPrint} from '../../apps/web/src/digital-development-print.js';
+import {DevelopmentCraftRequirements} from '../../apps/web/src/development-craft-requirements.js';
 import {digitalSlaDefaults,DIGITAL_SLA_RULE_VERSION} from '@dx-rework/contracts/digital-sla';
 import {fixedDevelopmentWork} from '../../apps/api/src/production-platform/fixed-development-work.js';
 import {fixedOrderWork} from '../../apps/api/src/production-platform/fixed-order-work.js';
@@ -49,6 +50,23 @@ describe('special crafts have distinct native steps rather than another combined
   expect(DevelopmentDocumentSchema.safeParse({...document,files:[{attachmentId,kind:'菲林'}],craftRequirements:[requirement]}).success).toBe(false);
   const nextSteps:CraftStepChoice[]=[{craftKind:'special',sequence:1,specialCraft:{...a,version:a.version+1}},craftSteps[1]!];
   expect(DevelopmentDocumentSchema.safeParse({...document,craftSteps:nextSteps,craftRequirements:[requirement]}).success).toBe(false);
+ });
+ it('renders independent craft instructions and one original board reused by two selected crafts',()=>{
+  const attachmentId=randomUUID(),file={attachmentId,kind:'工艺开发板' as const};
+  const printing={stepKey:'printing',part:'前幅',specification:'宽 6 cm',instructions:'对准原定位线',attachmentIds:[attachmentId]};
+  const embroidery={stepKey:'embroidery',part:'左袖',specification:'双线',instructions:'按原顺序收线',attachmentIds:[attachmentId]};
+  const document:DevelopmentDocument={...initialDevelopmentDocument(),craft:'印绣花',files:[file],craftRequirements:[printing,embroidery]};
+  const parsed=DevelopmentDocumentSchema.parse(document);
+  expect(parsed.files).toEqual([file]);
+  expect(parsed.craftRequirements).toEqual([printing,embroidery]);
+  const markup=renderToStaticMarkup(createElement(DevelopmentCraftRequirements,{document:parsed,edit:()=>{},readonly:true,disabled:false,draftsOnly:false,
+   upload:async()=>{},viewFile:id=>`/original/${id}`,fileIdentity:()=>({filename:'TEST-shared-board.png',mimeType:'image/png',sizeBytes:500})}));
+  for(const {part,specification,instructions} of [printing,embroidery]){
+   expect(markup).toContain(part);expect(markup).toContain(specification);expect(markup).toContain(instructions);
+  }
+  expect(markup.match(new RegExp(`<a href="/original/${attachmentId}"`,'g'))).toHaveLength(2);
+  expect(markup).toContain('查看印花附件 1原件');expect(markup).toContain('查看绣花附件 1原件');
+  expect(DevelopmentDocumentSchema.safeParse({...document,craftRequirements:[{...printing,attachmentIds:[attachmentId,attachmentId]},embroidery]}).success).toBe(false);
  });
  it('binds a secondary-craft approval basis to one development step, board and round',()=>{
   const board=randomUUID(),otherBoard=randomUUID(),replacement=randomUUID(),sourceId=randomUUID();
@@ -118,20 +136,22 @@ describe('special crafts have distinct native steps rather than another combined
    sheet:{...sheet,version},document,imageUrl:id=>`/versions/${version}/attachments/${id}`,
   }));
   const old=print(original,1),current=print(revised,2);
-  const specialSection=old.match(/<section aria-label="TEST 激光">(.*?)<\/section>/s)?.[1];
-  const printingSection=old.match(/<section aria-label="印花">(.*?)<\/section>/s)?.[1];
+  const specialSection=old.match(/<section aria-label="TEST 激光"[^>]*>(.*?)<\/section>/s)?.[1];
+  const printingSection=old.match(/<section aria-label="印花"[^>]*>(.*?)<\/section>/s)?.[1];
   expect(specialSection).toContain('<td>原版袖口</td>');
   expect(specialSection).toContain('<td>双线效果</td>');
   expect(specialSection).toContain('<td>沿版标定位</td>');
-  expect(specialSection).toContain(`/versions/1/attachments/${originalBoard}">工艺开发板 1`);
-  expect(specialSection).not.toContain(printingBoard);
-  expect(printingSection).toContain(`/versions/1/attachments/${printingBoard}">工艺开发板 2`);
+  expect(printingSection).toContain('<td>后幅</td>');
+  const figures=(printed:string)=>Array.from(printed.matchAll(/<figure[^>]+data-print-craft-image="([^"]+)"[^>]*><a href="([^"]+)">([^<]+)<\/a><\/figure>/g),match=>match.slice(1));
+  expect(figures(old)).toEqual([[originalBoard,`/versions/1/attachments/${originalBoard}`,'TEST 激光 · 工艺开发板 1'],[printingBoard,`/versions/1/attachments/${printingBoard}`,'印花 · 工艺开发板 2']]);
+  expect(figures(current)).toEqual([[revisedBoard,`/versions/2/attachments/${revisedBoard}`,'TEST 激光 · 工艺开发板 1'],[printingBoard,`/versions/2/attachments/${printingBoard}`,'印花 · 工艺开发板 2']]);
   expect(old).not.toContain(revisedBoard);
   expect(current).toContain(`/versions/2/attachments/${revisedBoard}`);
   expect(current).not.toContain(originalBoard);
   const legacy=print({...original,craftRequirements:undefined},1);
-  expect(legacy).not.toContain('<h4>工艺要求</h4>');
-  expect(legacy).toContain(`/versions/1/attachments/${originalBoard}">工艺开发板</a>`);
+  expect(legacy).not.toContain('工艺要求 ·');
+  expect(figures(legacy)).toEqual([]);
+  expect(legacy).toContain(`/versions/1/attachments/${originalBoard}">工艺开发板 1（登录后查看原件）</a>`);
  });
  it('uses each development value, includes each handoff once and preserves real serial order',()=>{
   const kinds=steps.flatMap(()=>['development_craft_dispatch','development_printing','development_craft_confirmation'] as const);

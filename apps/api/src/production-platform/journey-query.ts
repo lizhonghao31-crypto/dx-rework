@@ -14,6 +14,7 @@ import {ApplicationError} from '../platform/errors.js';
 import {journeyMeasure,journeySpan,journeyCandidateCount} from '../platform/journey-diagnostic.js';
 import {readQcExecutionEvidence} from './qc-progress-evidence.js';
 import {issuedOrderNumber} from './order-number-repository.js';
+import {projectDevelopmentOrderRush} from './development-order-rush.js';
 import {readNodeMaterials} from './node-materials.js';
 import {styleLabelCuttingReason,preparationTestReasons} from './production-readiness-repository.js';
 import {seriesPlanJourney} from './series-plan-journey.js';
@@ -130,10 +131,10 @@ export class DigitalJourneyQuery {
 )
     ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id,patternKinds])).rows;
   }
-  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[],db:PoolClient)=>OrderJourney[]|Promise<OrderJourney[]>,options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all"}={}) {
+  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[],db:PoolClient)=>OrderJourney[]|Promise<OrderJourney[]>,options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all";withOrderRush?:true}={}) {
     assertIdentityActor(actor);
     if(this.options.listReadMode==='indexed'&&filter.scope&&!exportAll&&!selectPage&&options.details!==false&&!options.patternBusiness)
-      return this.snapshot((db,asOf,transaction)=>this.indexedList(db,actor,filter,asOf,transaction));
+      return this.snapshot((db,asOf,transaction)=>this.indexedList(db,actor,filter,asOf,transaction,options.withOrderRush));
     return this.snapshot(async(db,asOf,transaction)=>{
       // Internal workspace selection runs after all authorized facts, before detail hydration.
       const summaryOnly=options.details===false||!exportAll||Boolean(selectPage);
@@ -178,7 +179,12 @@ export class DigitalJourneyQuery {
           if(detail)details.push({...detail,hitReasons:summary.hitReasons});
         }
         result.items=details;
+      }else if(options.details===false&&selectPage&&!filter.scope){
+        // Board-room selection may attach a scoped display fact without
+        // opting into native detail/financial hydration.
+        result.items=await selectPage(result.items,db);
       }
+      if(options.withOrderRush)result.items=await projectDevelopmentOrderRush(db,result.items);
       const live=prepared?[...prepared.values()].some(({observation})=>observation.mode==='live'):items.some(item=>item.observationMode==='live');
       return {...result,...(filter.scope&&filter.kpi==='todo'&&result.summary.todo===null?{total:null}:{}),observationMode:live?'live' as const:'fixed' as const,canManagePolicies:isDigitalLeader(actor),facets};
     });
@@ -268,7 +274,7 @@ export class DigitalJourneyQuery {
       return {page:undefined,scopes};
     }
   }
-  private async indexedList(db:PoolClient,actor:TrustedActorContext,filter:JourneyFilter,asOf:string,transaction:PoolClient):Promise<JourneyResult>{
+  private async indexedList(db:PoolClient,actor:TrustedActorContext,filter:JourneyFilter,asOf:string,transaction:PoolClient,withOrderRush?:true):Promise<JourneyResult>{
     const candidates=await journeyMeasure('candidates',()=>this.candidates(db,actor));journeyCandidateCount(candidates.length);
     const read=await journeyMeasure('selection',()=>readJourneySelections(this.database,db,actor,candidates,filter,asOf));
     for(const row of read.items){const time=read.clocks.get(businessScopeKey(row.resource))!;
@@ -313,9 +319,10 @@ export class DigitalJourneyQuery {
         failed++;retryIds.push(selectedItem.id);
       }
     }
+    const pageItems=withOrderRush?await projectDevelopmentOrderRush(db,items):items;
     if(incomplete){const available={...selected};delete available.scopeCounts;delete available.supervision;
-      return {...available,page:filter.page,total:null,summary:null,items,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}};}
-    return {...selected,...(filter.kpi==='todo'&&selected.summary.todo===null?{total:null}:{}),items,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),...(pending||failed?{freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15),detailsOnly:true as const}}:{})};
+      return {...available,page:filter.page,total:null,summary:null,items:pageItems,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}};}
+    return {...selected,...(filter.kpi==='todo'&&selected.summary.todo===null?{total:null}:{}),items:pageItems,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),...(pending||failed?{freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15),detailsOnly:true as const}}:{})};
   }
   private async cockpitActions(db:PoolClient,transaction:PoolClient,actor:TrustedActorContext,items:JourneySelection[]){
     if(!items.length)return;

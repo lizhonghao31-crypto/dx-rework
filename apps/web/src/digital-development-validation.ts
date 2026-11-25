@@ -1,4 +1,4 @@
-import { DevelopmentDocumentSchema, developmentPublishErrors, developmentPublicationSizeIssues, developmentMaterialPublishIssues, developmentWorkbenchPublishIssues, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
+import { DevelopmentDocumentSchema, developmentPublishErrors, developmentPublicationSizeIssues, developmentUnlabelledSizeIndex, developmentMaterialPublishIssues, developmentWorkbenchPublishIssues, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import {developmentMakingQuantityError} from "./digital-development-editing.js";
 import { DevelopmentRevisionSchema, type DevelopmentRevision } from "@dx-rework/contracts/digital-development-rounds";
 import type { DocumentIssue } from "./document-editor.js";
@@ -25,19 +25,24 @@ export function developmentIssues(document:DevelopmentDocument,quantityInput:str
  }
  if(revision){const parsedRevision=DevelopmentRevisionSchema.safeParse({...revision,document});if(!parsedRevision.success)for(const issue of parsedRevision.error.issues)if(issue.path[0]!=="document")issues.push({id:"development-revision",label:"复版修改依据",message:issue.message});}
  if(!parsed.success||issues.length||!publish&&!workbenchStep)return issues;
- const workbenchIssues=parsed.data.workbenchSheet?developmentWorkbenchPublishIssues(parsed.data.workbenchSheet):[];
+ const workbenchIssues=parsed.data.workbenchSheet?developmentWorkbenchPublishIssues(parsed.data.workbenchSheet,{styleNameOptional:parsed.data.templateConfirmed===true}):[];
  for(const entry of workbenchIssues)issues.push({id:`development-workbench-${entry.field}`,label:entry.label,message:entry.message});
  const materialIssues=developmentMaterialPublishIssues(parsed.data);
  for(const issue of materialIssues){
   const row=parsed.data.materials.find(row=>row.materialId===issue.materialId)!;
   issues.push({id:`development-${row.materialId}-${issue.field}`,label:`面辅料 · ${row.label||row.category} · ${labels[issue.field]}`,message:issue.message});
  }
- if(!publish)return issues;
+ if(!publish){
+  const unnamed=developmentUnlabelledSizeIndex(parsed.data);
+  if(unnamed>=0)issues.push({id:`development-size-${unnamed}`,label:"尺码列",message:"请填写尺码列名称，或删除不用的列"});
+  return issues;
+ }
  for(const message of developmentPublishErrors(parsed.data,{allowMissingOrderDate})){
   if(developmentPublicationSizeIssues(parsed.data).some(issue=>issue.message===message))continue;
   if(materialIssues.some(issue=>issue.message===message)||workbenchIssues.some(issue=>issue.message===message))continue;
   const key=message.includes("数量")?"quantity":message.includes("打样尺码")?"sampleSize":message.includes("尺码列")?"sizes":message.includes("下单日期")?"orderDate":message.includes("仅适用于")?"craft":"files";
-  issues.push({id:key==="files"?"development-upload":key==="sizes"?document.sizes.length?`development-size-${document.sizes.findIndex(size=>!size.trim())}`:"development-sizes":`development-${key}`,label:labels[key]??key,message});
+  const unnamed=key==="sizes"?developmentUnlabelledSizeIndex(document):-1;
+  issues.push({id:key==="files"?"development-upload":key==="sizes"?unnamed<0?"development-sizes":`development-size-${unnamed}`:`development-${key}`,label:labels[key]??key,message});
  }
  for(const issue of developmentPublicationSizeIssues(parsed.data))issues.push({id:issue.index===null?"development-size-quantities":`development-size-quantity-${issue.index}`,label:"尺寸表 · 制作数量",message:issue.message});
  return issues;

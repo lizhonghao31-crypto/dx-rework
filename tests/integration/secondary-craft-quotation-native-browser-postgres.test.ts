@@ -32,7 +32,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:styleNo,temporaryStyleNo:null,customerCode:'PD'},key());
   const board=await f.image(designer),photo=await f.image(designer);
   const draft=await forms.save(designer,source.sourceId,{expectedVersion:0,document:DevelopmentDocumentSchema.parse({
-   ...initialDevelopmentDocument(),quotationMode:'automatic_v1',documentFormatVersion:2,
+   ...initialDevelopmentDocument(),quotationMode:'automatic_v1',documentFormatVersion:2,rush:true,
    craft:'印绣花',craftSteps:[{craftKind:'embroidery',sequence:1},{craftKind:'printing',sequence:2}],
    quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
    files:[{attachmentId:photo,kind:'款图'},{attachmentId:board,kind:'工艺开发板'}],
@@ -95,7 +95,11 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect(factories).toContainEqual(expect.objectContaining({supplierId:f.supplierId}));
   expect(Object.keys(factories[0]).sort()).toEqual(['code','name','supplierId']);
   expect(await currentDirectory(approvalSession)).toEqual([]);
-  expect(new Set((await currentDirectory(makerSession)).map((item:{rowId:string})=>item.rowId))).toEqual(new Set([embroidery.rowId,printing.rowId]));
+  const makerDirectory=await currentDirectory(makerSession);
+  expect(new Set(makerDirectory.map((item:{rowId:string})=>item.rowId))).toEqual(new Set([embroidery.rowId,printing.rowId]));
+  expect(makerDirectory).toMatchObject([{resource,orderRush:true},{resource,orderRush:true}]);
+  const quoteList=h.base+'/api/digital-production/quotations';
+  expect((await (await makerSession.get(quoteList)).json()).items).toContainEqual(expect.objectContaining({resource,orderRush:true}));
   expect((await makerSession.get(external+'/attachments/'+board,{maxRedirects:0})).status()).toBe(302);
   expect((await makerSession.get(external+'/attachments/'+photo,{maxRedirects:0})).status()).toBe(404);
   await write(makerSession,403,h.base+'/api/master-data/suppliers',{supplierCode:'TEST-R6-DENIED'});
@@ -105,6 +109,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   await write(makerSession,409,quotation+`/rows/${embroidery.rowId}`,{expectedVersion:sheet.version,unitPrice:'2'});
   await write(makerSession,403,external+'/draft',{...terms,attachmentIds:[photo]},key(),'PUT');
   await makerPage.goto(center);
+  await makerPage.getByRole('row').filter({has:makerPage.getByRole('link',{name:/ · 绣花$/})}).getByText('急单',{exact:true}).waitFor();
   await makerPage.getByRole('link',{name:/ · 绣花$/}).click();
   await makerPage.getByRole('heading',{name:'绣花报价',exact:true}).waitFor();
   await makerPage.getByRole('combobox',{name:'制作方式'}).click();
@@ -133,7 +138,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect(sends[0]?.key).toBe(sends[1]?.key);
   expect(sends[0]?.bodyHash).toBe(sends[1]?.bodyHash);
   const approvalItem=(await currentDirectory(approvalSession))[0];
-  expect(approvalItem).toMatchObject({rowId:embroidery.rowId,version:2,canDecide:true,state:'submitted'});
+  expect(approvalItem).toMatchObject({resource,rowId:embroidery.rowId,version:2,canDecide:true,state:'submitted',orderRush:true});
   expect(await currentDirectory(otherSession)).toEqual([]);
   const notice=await db.query(`SELECT e.todo_id,r.recipient_id FROM digital_production_notification_events e
    JOIN digital_production_notification_receipts r USING(event_id) WHERE event_kind='secondary_craft_approval'`);

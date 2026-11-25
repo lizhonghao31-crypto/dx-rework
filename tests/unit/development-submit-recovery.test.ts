@@ -6,10 +6,13 @@ import {DigitalRequestError,type digitalRequest} from '../../apps/web/src/digita
 
 const sourceId='12345678-1111-4111-8111-123456789012',other='12345678-2222-4222-8222-123456789012';
 const publish:PendingDevelopmentSubmission={operation:'publish',sourceId,key:'original-publish',body:{expectedVersion:2,patternOrder:{categoryId:other,priceVersion:1}}};
+const preorder:PendingDevelopmentSubmission={operation:'publish_preorder',sourceId,key:'original-preorder',body:{expectedVersion:2}};
 const confirm:PendingDevelopmentSubmission={operation:'confirm',sourceId,key:'original-confirm',body:DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-RECOVERY',orderDate:'2027-01-07',lines:[{formalPoNo:'TEST-PO',color:'黑',sizes:[{size:'M',quantity:10}]}]})};
+const publishedAt='2026-11-20T04:00:00.000Z';
 describe('development original submission recovery',()=>{
- for(const command of [publish,confirm]){
-  const completed=command.operation==='publish'?{status:'completed',operation:'publish',sourceId,documentVersion:3}:{status:'completed',operation:'confirm',sourceId,productionOrderId:other};
+ for(const command of [publish,preorder,confirm]){
+  const facts=command.operation==='publish'?{documentVersion:3}:command.operation==='publish_preorder'?{documentVersion:2,publishedAt}:{productionOrderId:other};
+  const completed={status:'completed',operation:command.operation,sourceId,...facts};
   it(`${command.operation}: missing receipt remains unknown and lookup sends no write`,async()=>{
    const request=vi.fn().mockResolvedValue({status:'unconfirmed'});
    expect(await recoverDevelopmentSubmission(command,false,request as typeof digitalRequest)).toEqual({status:'unconfirmed'});
@@ -21,11 +24,11 @@ describe('development original submission recovery',()=>{
    expect(request).toHaveBeenCalledTimes(1);
   });
   it(`${command.operation}: explicit replay retains the captured exact body, version and key`,async()=>{
-   const response=command.operation==='publish'?{sourceId,status:'published',version:3}:{sourceId,productionOrderId:other};
+   const response=command.operation==='publish'?{sourceId,status:'published',version:3}:command.operation==='publish_preorder'?{sourceId,version:2,publishedAt}:{sourceId,productionOrderId:other};
    const request=vi.fn().mockResolvedValueOnce({status:'unconfirmed'}).mockResolvedValueOnce(response);
    const before=structuredClone(command);expect(await recoverDevelopmentSubmission(command,true,request as typeof digitalRequest)).toEqual(completed);
    expect(command).toEqual(before);
-   expect(request.mock.calls[1]).toEqual([`sources/${sourceId}/${command.operation==='publish'?'development/publish':'confirm'}`,'POST',before.body,before.key]);
+   expect(request.mock.calls[1]).toEqual([`sources/${sourceId}/${command.operation==='publish'?'development/publish':command.operation==='publish_preorder'?'development/publish-preorder':'confirm'}`,'POST',before.body,before.key]);
   });
  }
  it.each([null,{}, {status:'completed',operation:'publish',sourceId:other,documentVersion:3}, {status:'completed',operation:'confirm',sourceId,productionOrderId:other}])('does not trust a malformed, wrong-source or wrong-operation read receipt: %j',async value=>{
@@ -37,6 +40,19 @@ describe('development original submission recovery',()=>{
   const request=vi.fn().mockRejectedValue(new DigitalRequestError('无权读取',403));const before=structuredClone(publish);
   await expect(recoverDevelopmentSubmission(publish,true,request as typeof digitalRequest)).rejects.toMatchObject({status:403});
   expect(publish).toEqual(before);expect(request).toHaveBeenCalledTimes(1);
+ });
+ it('a preorder receipt must prove the original saved version, never later publication or ordinary development release',async()=>{
+  for(const value of [
+   {status:'completed',operation:'publish_preorder',sourceId,documentVersion:3,publishedAt},
+   {status:'completed',operation:'publish_preorder',sourceId:other,documentVersion:2,publishedAt},
+   {status:'completed',operation:'publish',sourceId,documentVersion:2},
+  ]){
+   const request=vi.fn().mockResolvedValue(value);
+   await expect(recoverDevelopmentSubmission(preorder,true,request as typeof digitalRequest)).rejects.toMatchObject({resultUnknown:true});
+   expect(request).toHaveBeenCalledTimes(1);
+  }
+  for(const value of [{sourceId,version:3,publishedAt},{sourceId,version:2},{sourceId:other,version:2,publishedAt}])
+   expect(()=>developmentSubmissionResult(preorder,value)).toThrow(DigitalRequestError);
  });
  it('rejects a draft, incomplete or foreign write response as unknown instead of declaring publication/order completion',()=>{
   for(const result of [null,{}, {sourceId,status:'draft',version:2},{sourceId:other,status:'published',version:3}])expect(()=>developmentSubmissionResult(publish,result)).toThrow(DigitalRequestError);

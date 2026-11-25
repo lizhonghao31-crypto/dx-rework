@@ -20,6 +20,7 @@ import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {readIeProcessingDirectory} from './ie-processing-directory.js';
+import {projectDevelopmentRushResources} from './development-order-rush.js';
 import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
 import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
 import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
@@ -247,7 +248,8 @@ export class DigitalQuotationService{
     if(!quotationAuthority(actor,active,row.source_designer,row.primary_merchandiser_id,row.assignments??[]).allowed)continue;
     items.push({resource,designStyleNo:row.style_no,customerCode:row.customer_code,version:row.version??0,status:row.version!==null&&row.version===row.confirmed_version?'confirmed' as const:'draft' as const});
    }
-   await db.query('COMMIT');return {items};
+   const projected=await projectDevelopmentRushResources(db,items);
+   await db.query('COMMIT');return {items:projected};
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  async participants(actor:TrustedActorContext,resource:QuotationResource){

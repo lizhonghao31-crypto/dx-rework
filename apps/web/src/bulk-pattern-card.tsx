@@ -3,6 +3,7 @@ import {StatusBadge} from '@dx-rework/ui';
 import type {BulkPatternCardPage} from '@dx-rework/contracts/bulk-preparation';
 import {digitalTaskTiming} from '@dx-rework/domain/digital-task-deadline';
 import {digitalTaskStateLabels} from './digital-workspace-copy.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 
 type Item=BulkPatternCardPage['items'][number];
 // Existing fixed reason from BulkPreparationService.gates; the DTO has no closure flag.
@@ -22,7 +23,7 @@ export function BulkPatternCard({item,href}:{item:Item;href:string}){
  return <article className="pattern-task-card bulk-pattern-card">
   <div className="bulk-pattern-card__identity">
    <a className="bulk-pattern-card__link" href={href} aria-label={`${item.designStyleNo}${item.customer?`，客户 ${item.customer}`:''}，查看大货纸样与唛架详情`}>
-    <strong>{item.designStyleNo}</strong>{item.customer&&<span className="bulk-pattern-card__customer">{item.customer}</span>}
+    <strong>{item.designStyleNo}</strong><OrderRushBadge value={item.orderRush}/>{item.customer&&<span className="bulk-pattern-card__customer">{item.customer}</span>}
    </a>
    {(speciallyClosed||task)&&<span className="bulk-pattern-card__status"><StatusBadge>{speciallyClosed?'已特殊结案':digitalTaskStateLabels[task!.state]}</StatusBadge></span>}
   </div>

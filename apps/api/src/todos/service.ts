@@ -12,6 +12,7 @@ import { digitalTodoTarget } from "../production-platform/notification-policy.js
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import { randomUUID } from "node:crypto";
+import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
 
 import {
   TodoRouteDescriptorSchema,
@@ -307,6 +308,16 @@ export class TodoService {
     return provider?.todo?provider.todo(actor,id):(await provider?.todos(actor))?.find(todo=>todo.todoId===id)??null;
   }
 
+  private async pageRush(todos:TodoResponse[],selected:ReadonlyMap<string,RushIdentity>):Promise<TodoResponse[]>{
+    // Only the displayed, already-authorized provider rows carry an exact native identity.
+    const identities=todos.map(todo=>todo.orderContext?selected.get(todo.todoId):undefined);
+    const rush=await readDevelopmentOrderRush(this.database,identities.flatMap(identity=>identity?[identity]:[]));
+    return todos.map((todo,index)=>{
+      const identity=identities[index],key=identity&&developmentRushKey(identity);
+      return key&&rush.has(key)?{...todo,orderRush:true as const}:todo;
+    });
+  }
+
   async listForActor(
     actor: TrustedActorContext,
     options: TodoListOptions = {},
@@ -354,22 +365,26 @@ export class TodoService {
         ...productionTodos.map(item=>({module:"production",todo:item.key})),...digitalTodos.map(item=>({module:"digital_production",todo:item.key})),
       ]);
       const providers=new Map([...productionTodos,...digitalTodos].map(item=>[item.key.todoId,item]));
+      const rushIdentities=new Map<string,RushIdentity>();
       const todos=await Promise.all(result.items.map(async item=>{
         if(item.kind==="provider"){
           const selected=providers.get(String(item.value.todoId));
           if(!selected)throw new ApplicationError('NOT_FOUND','待办信息已变化，请刷新当前列表',409);
+          if(selected.rushIdentity)rushIdentities.set(selected.key.todoId,selected.rushIdentity);
           return selected.load();
         }
         const row={...item.value};
         for(const key of ["due_at","created_at","updated_at","rework_updated_at","sourcing_updated_at","sample_updated_at","pattern_updated_at","supplier_request_updated_at"]){if(row[key]!=null)row[key]=new Date(String(row[key]));}
         return todoResponse(row as unknown as TodoRow);
       }));
-      return {todos:await sourcingTodoPresentation(this.database,todos),activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
+      return {todos:await this.pageRush(await sourcingTodoPresentation(this.database,todos),rushIdentities),activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
     }
     if (activeModule === "production" || activeModule === "digital_production") {
       const selected = activeModule === "production" ? productionTodos : digitalTodos;
       const totalCount = selected.length, totalPages = Math.ceil(totalCount / 15), page = totalPages ? Math.min(requestedPage,totalPages) : 1;
-      return {todos:await Promise.all(selected.slice((page-1)*15,page*15).map(item=>item.load())),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
+      const pageItems=selected.slice((page-1)*15,page*15);
+      const rushIdentities=new Map(pageItems.flatMap(item=>item.rushIdentity?[[item.key.todoId,item.rushIdentity] as const]:[]));
+      return {todos:await this.pageRush(await Promise.all(pageItems.map(item=>item.load())),rushIdentities),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
     }
 
     const totalResult = await this.database.query<{ total_count: number | string }>(

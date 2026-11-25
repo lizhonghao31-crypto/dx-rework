@@ -1271,6 +1271,10 @@
     {
       "version": "0303_workbench_preorder_publication",
       "checksum": "464cecb0116dcfad25b6b39f0ad34b5aac3465b02c73b205f7c5ac36c882528a"
+    },
+    {
+      "version": "0304_development_draft_discard",
+      "checksum": "a094213bd8c0d25047dd2622b1221f614d11782e3feeb7202e9418c707f1bad5"
     }
   ]
 }

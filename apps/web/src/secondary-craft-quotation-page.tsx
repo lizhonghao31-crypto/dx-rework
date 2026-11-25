@@ -13,6 +13,7 @@ import {createClientRequestId} from './client-request-id.js';
 import {designerAstryxCss} from './designer-astryx.js';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {DocumentTableScroll} from './document-editor.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {unknownWriteResult} from './request-response-feedback.js';
 import {SUBMISSION_RECOVERY_WINDOW_MS} from './submission-attempt.js';
@@ -50,7 +51,7 @@ function CraftDirectory(){
   {read.value?.ready&&items.length===0&&<p>暂无分配给您的工艺报价或待审批工艺。</p>}
   {items.length>0&&<DocumentTableScroll><table><thead><tr><th>款号 / 工艺</th><th>阶段与资料</th><th>报价人</th><th>加工厂</th><th>状态</th></tr></thead>
    <tbody>{items.map(item=><tr key={item.rowId}>
-    <td><a href={secondaryCraftHref(item.resource,item.rowId)}>{item.styleNo} · {item.label}</a></td>
+    <td><a href={secondaryCraftHref(item.resource,item.rowId)}>{item.styleNo} · {item.label}</a><OrderRushBadge value={item.orderRush}/></td>
     <td>{stageLabel[item.stage]} · 第 {item.round} 轮 · 资料 v{item.sourceVersion}</td>
     <td>{item.authorName??'—'}</td><td>{item.supplier?.name??'—'}</td>
     <td>{labels[item.state]}{item.note&&` · ${item.note}`}</td>

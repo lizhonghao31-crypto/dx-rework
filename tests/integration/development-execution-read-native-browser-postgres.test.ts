@@ -221,6 +221,34 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.locator('.dx-doc-status').textContent()).toContain('资料版本 '+prior.documentVersion);
    const oldFile=`/sources/${own.id}/development/versions/${prior.documentVersion}/attachments/${originalImage}`;
    expect(await original.locator(`img[src*="${oldFile}"]`).count()).toBeGreaterThan(0);expect(await original.locator(`img[src*="${newImage}"]`).count()).toBe(0);
+   // The authorized original entry prepares a real isolated A4 frame. Capture
+   // the moment it requests native print, without opening a system dialog in CI.
+   await page.evaluate(()=>{
+    const watcher=new MutationObserver(entries=>{
+     for(const entry of entries)for(const node of entry.addedNodes){
+      if(!(node instanceof HTMLIFrameElement)||node.title!=="版单 A4 打印预览"||!node.contentWindow)continue;
+      node.contentWindow.print=()=>{
+       const paper=node.contentDocument!;
+       document.body.setAttribute('data-test-original-print',JSON.stringify({
+        pages:[...paper.querySelectorAll<HTMLElement>('.development-print-page')].map(sheet=>sheet.dataset.printDocument),
+        images:[...paper.querySelectorAll('img')].map(img=>({url:img.src,decoded:img.naturalWidth>0})),
+        text:paper.body.textContent,
+       }));
+       node.contentWindow?.dispatchEvent(new Event('afterprint'));
+      };
+      watcher.disconnect();
+     }
+    });
+    watcher.observe(document.body,{childList:true});
+   });
+   await original.getByRole('button',{name:'打印 / 保存 PDF',exact:true}).click();
+   await page.waitForFunction(()=>document.body.hasAttribute('data-test-original-print'));
+   const printed=JSON.parse((await page.locator('body').getAttribute('data-test-original-print'))!) as {pages:string[];images:{url:string;decoded:boolean}[];text:string};
+   expect(printed.pages.length).toBeGreaterThan(0);expect(printed.pages.every(page=>page==='版单')).toBe(true);
+   expect(printed.images.some(image=>image.url.includes(oldFile)&&image.decoded)).toBe(true);
+   expect(printed.images.some(image=>image.url.includes(newImage))).toBe(false);
+   expect(printed.text).toContain('TEST S1 原制作说明');
+   expect(printed.text).not.toContain('TEST 新修订制作说明');
    expect(await page.locator('.order-document-layout > nav').count()).toBe(0);expect(await page.locator('input[type="file"]').count()).toBe(0);
    for(const name of ['保存草稿','发布开发单','发起实际修改 / 复版'])expect(await page.getByRole('button',{name,exact:true}).count()).toBe(0);
    await page.goBack();await firstOriginal.waitFor();await expect.poll(async()=>Math.abs(await page.evaluate(()=>window.scrollY)-originalTop)).toBeLessThanOrEqual(2);

@@ -1009,9 +1009,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID()),key=randomUUID();
    await expect(forms.publish(designer,sourceId,saved.version,randomUUID())).rejects.toMatchObject({statusCode:409});
    await expect(forms.publishPreorder(designer,sourceId,saved.version+1,randomUUID())).rejects.toMatchObject({statusCode:409});
+   expect(await forms.submissionReceipt(designer,sourceId,'publish_preorder',key)).toEqual({status:'unconfirmed'});
    const published=await Promise.all([forms.publishPreorder(designer,sourceId,saved.version,key),forms.publishPreorder(designer,sourceId,saved.version,randomUUID())]);
    expect(published).toEqual([{sourceId,version:saved.version,publishedAt:started},{sourceId,version:saved.version,publishedAt:started}]);
    expect(await forms.publishPreorder(designer,sourceId,saved.version,key)).toEqual(published[0]);
+   expect(await forms.submissionReceipt(designer,sourceId,'publish_preorder',key)).toEqual({status:'completed',operation:'publish_preorder',sourceId,documentVersion:saved.version,publishedAt:started});
+   expect(await forms.submissionReceipt(designer,sourceId,'publish',key)).toEqual({status:'unconfirmed'});
+   await expect(forms.submissionReceipt(merch,sourceId,'publish_preorder',key)).rejects.toMatchObject({statusCode:404});
    expect(await forms.read(designer,sourceId)).toMatchObject({preorderPublication:{at:started,documentVersion:saved.version},productionOrderId:null,taskId:null});
    const archived=(await f.db.query(`SELECT document_version,document FROM digital_development_preorder_publications WHERE source_id=$1`,[sourceId])).rows;
    expect(archived).toEqual([{document_version:saved.version,document:saved.document}]);

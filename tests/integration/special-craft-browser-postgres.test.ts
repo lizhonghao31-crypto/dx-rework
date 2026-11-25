@@ -1,3 +1,4 @@
+import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js";
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {JourneyNode} from '@dx-rework/contracts/digital-production-journey';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
@@ -243,8 +244,16 @@ async function submitCraftFromOriginalQuote(page:Page,name:string,amount:string,
   try{
    const page=tab.page;
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
-   await page.getByRole('dialog',{name:'请选择创建类型'}).getByRole('button',{name:'纯开发',exact:true}).click();
+   await chooseDevelopmentCreation(page,'纯开发');
    await page.getByLabel('设计款号',{exact:true}).fill(style);
+   for(const [field,option] of [['性别（必填）','男装'],['板类（必填）','头版']] as const){
+    await page.getByRole('combobox',{name:field,exact:true}).click();
+    await page.getByRole('option',{name:option,exact:true}).click();
+   }
+   const craftGroup=page.getByRole('group',{name:'工艺',exact:true});
+   expect(await craftGroup.count()).toBe(0);
+   await page.getByRole('button',{name:'下一步',exact:true}).click();
+   await craftGroup.waitFor();
    await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).check();
    await page.getByRole('combobox',{name:'工艺特殊工艺',exact:true}).press('Enter');
    await page.getByRole('option',{name:craft.definition.name,exact:true}).click();
