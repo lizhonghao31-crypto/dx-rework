@@ -1,4 +1,4 @@
-import {WarehouseNativeTaskQuerySchema} from '@dx-rework/contracts/production-readiness';
+import {QualityNativeTaskQuerySchema,WarehouseNativeTaskQuerySchema} from '@dx-rework/contracts/production-readiness';
 import {SettingsCalculationSchema,SettingsSetSaveSchema,SettingsSetDraftSchema,SettingsSetBasisSchema,SettingsSetPublishSchema,SettingsSetRestoreSchema} from '@dx-rework/contracts/sla-settings-sets';
 import {SpecialCraftSaveSchema} from '@dx-rework/contracts/digital-craft';
 import {OrderTimeCalculationSchema,OrderTimeSettingsSaveSchema,OrderTimeSettingsUseSchema} from '@dx-rework/contracts/order-time-settings';
@@ -32,6 +32,11 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   app.get("/digital-production/tasks", async request => service.list(await actor(request), parse(z.object({ page: z.coerce.number().int().min(1).max(100000).default(1) }).strict(), request.query).page));
   if(dependencies.workbenchNumberedCreation)app.get("/digital-production/warehouse/native-tasks",async(request,reply)=>{
     const trusted=await actor(request),input=parse(WarehouseNativeTaskQuerySchema,request.query);
+    reply.header('cache-control','private, no-store');
+    return service.list(trusted,input.page,input);
+  });
+  if(dependencies.workbenchNumberedCreation)app.get("/digital-production/quality/native-tasks",async(request,reply)=>{
+    const trusted=await actor(request),input=parse(QualityNativeTaskQuerySchema,request.query);
     reply.header('cache-control','private, no-store');
     return service.list(trusted,input.page,input);
   });

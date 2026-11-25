@@ -197,7 +197,31 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(result.facts.filter(row=>row.kind==='仓库实际发厂')).toEqual([expect.objectContaining({payload:expect.objectContaining({returnFactId:in3.factId,lines:[{lineId,quantity:5}]})})]);
   const qc=f.people.qc!,qcTask=(await f.db.query(`SELECT p.task_id FROM digital_timeline_task_positions p
    JOIN digital_production_task_access a USING(task_id) WHERE p.route_ref=$1 AND p.step_id=$2 AND a.task_kind='bulk_qc'`,[ready.preparationId,second!.stepId])).rows[0];
-  await new DigitalProductionTaskService(f.db).reassign(f.root,qcTask.task_id,qc.actorId,randomUUID());
+  const taskService=new DigitalProductionTaskService(f.db);
+  await taskService.reassign(f.root,qcTask.task_id,qc.actorId,randomUUID());
+  const qualityQuery={kind:'craft' as const,status:'open' as const,page:1,search:''};
+  const qualityWork=await taskService.list(qc,1,qualityQuery);
+  expect(qualityWork).toMatchObject({page:1,items:[{taskId:qcTask.task_id}],total:1});
+  expect(await taskService.list(qc,2,{...qualityQuery,page:2})).toEqual({page:2,items:[],total:1});
+  await expect(taskService.list(warehouse,1,qualityQuery)).rejects.toMatchObject({statusCode:403});
+  const qualityStyle=(await f.db.query('SELECT design_style_no FROM digital_production_orders WHERE production_order_id=$1',[ready.id])).rows[0].design_style_no as string;
+  const qualityTab=await h.open(qc.actorId,1165,{},`/ui/digital-production?workspace=quality&kind=craft&search=${encodeURIComponent(qualityStyle)}`);
+  try{
+   await qualityTab.page.getByRole('heading',{name:'质量中心',exact:true}).waitFor();
+   const queue=qualityTab.page.getByRole('region',{name:'工艺回仓质检原任务',exact:true});
+   const open=queue.getByRole('link',{name:'进入原任务',exact:true});
+   const entry=new URL((await open.getAttribute('href'))!,qualityTab.page.url());
+   expect(entry.searchParams.get('task')).toBe(qcTask.task_id);
+   await open.click();
+   const original=qualityTab.page.getByRole('link',{name:'打开裁后工艺、QC与发厂办理',exact:true});
+   const originalEntry=new URL((await original.getAttribute('href'))!,qualityTab.page.url());
+   expect(originalEntry.searchParams.get('factory')).toBe(ready.id);
+   expect(originalEntry.searchParams.get('factoryAction')).toBe('qc');
+   expect(new URL(qualityTab.page.url()).searchParams.get('task')).toBe(qcTask.task_id);
+   await qualityTab.page.getByRole('button',{name:'返回',exact:true}).click();
+   await open.waitFor();
+   expect(new URL(qualityTab.page.url()).searchParams.get('search')).toBe(qualityStyle);
+  }finally{await qualityTab.close();}
   const originalReportPhoto=await f.image(qc);
   const inspected={expectedRevision:(await flow.read(f.root,ready.id)).revision,stepRef:second!.stepId,returnFactId:in4.factId,note:'TEST count remaining physical return',
    checks:[{lineId,result:'需处理' as const,problem:'TEST two affected pieces',treatment:'',attachmentIds:[originalReportPhoto],

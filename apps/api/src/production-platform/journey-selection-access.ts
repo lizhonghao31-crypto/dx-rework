@@ -1,4 +1,4 @@
-import type {WarehouseNativeTaskQuery} from '@dx-rework/contracts/production-readiness';
+import type {QualityNativeTaskQuery,WarehouseNativeTaskQuery} from '@dx-rework/contracts/production-readiness';
 import {digitalForbidden} from './access-policy.js';
 import type {PoolClient} from 'pg';
 import type {TrustedActorContext} from '../tools/repositories.js';
@@ -117,7 +117,7 @@ async function authorizeTaskBatch(db:PoolClient,actor:TrustedActorContext,taskId
 
 /** Keep the legacy task-list membership and the native task read policy
  * ahead of pagination. Return empty pages with the same snapshot's total. */
-export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActorContext,page:number,warehouse?:WarehouseNativeTaskQuery){
+export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActorContext,page:number,native?:WarehouseNativeTaskQuery|QualityNativeTaskQuery){
  const {liveRoles}=await readJourneySelectionAccess(db,actor,[]);
  const activeTask=await wholeOrderActiveSql(db,'task','a.task_id');
  const activeOrder=await wholeOrderActiveSql(db,'order','o.production_order_id');
@@ -126,9 +126,11 @@ export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActor
  const owns=actor.actorRoles.includes('sample_designer');
  const merch=actor.actorRoles.includes('order_merchandiser');
  const clerk=actor.actorRoles.includes('development_clerk');
- if(warehouse&&!isRootActor(actor)&&!activeRole(liveRoles,'warehouse_receiver'))return digitalForbidden();
- const scene=warehouse?acceptanceBusinessContext()?.scenarioId:null;
- const filter=warehouse?`AND a.task_kind=$9 AND ($10 OR a.assignee_id=$2)
+ const quality=native?.kind==='craft'||native?.kind==='factory';
+ if(native&&!isRootActor(actor)&&!activeRole(liveRoles,quality?'quality_control':'warehouse_receiver'))return digitalForbidden();
+ const scene=native?acceptanceBusinessContext()?.scenarioId:null;
+ const filter=native?`AND a.task_kind=$9 AND ($10 OR a.assignee_id=$2)
+    ${quality?`AND a.required_role='quality_control'`:''}
     AND ($11 AND t.state='completed' OR NOT $11 AND t.state IN ('pending','ready','blocked'))
     AND ($12='' OR strpos(lower(COALESCE(o.design_style_no,s.design_style_no,'')),lower($12))>0 OR EXISTS(
       SELECT 1 FROM digital_production_po_lines po WHERE po.production_order_id=o.production_order_id
@@ -160,7 +162,8 @@ export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActor
   SELECT (SELECT count(*)::int FROM eligible) AS total,
     coalesce(array_agg(task_id ORDER BY created_at DESC,task_id DESC),'{}'::uuid[]) AS ids
   FROM selected`,[global,actor.actorId,owns,merch,clerk,[...liveRoles],(page-1)*15,await retiredBulkPreshrinkTaskIds(db),
-  ...(warehouse?[warehouse.kind==='preshrink'?'warehouse_preshrink':'warehouse_dispatch',isRootActor(actor),warehouse.status==='completed',warehouse.search]:[]),
+  ...(native?[{preshrink:'warehouse_preshrink',dispatch:'warehouse_dispatch',craft:'bulk_qc',factory:'factory_production_qc'}[native.kind],
+   isRootActor(actor),native.status==='completed',native.search]:[]),
   ...(scene?[scene]:[])]);
  return rows[0]!;
 }

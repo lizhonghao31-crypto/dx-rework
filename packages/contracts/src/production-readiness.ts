@@ -111,3 +111,8 @@ export type ProductionReadinessState={
  instructionDeliveries:Array<{eventId:string;instructionVersion:number;recipient:string;occurredAt:string;note:string;evidenceIds:string[]}>;
  ranges:Array<{rangeId:string;preparationId:string;kind:string;version:number;lineIds:string[];complete:boolean;pendingMaterialIds:string[];note:string;recordedAt:string;evidenceIds:string[];basis:Record<string,unknown>}>;
 };
+export const QualityNativeTaskQuerySchema=z.object({
+  kind:z.enum(['craft','factory']),status:z.enum(['open','completed']).default('open'),
+  page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
+}).strict();
+export type QualityNativeTaskQuery=z.infer<typeof QualityNativeTaskQuerySchema>;
