@@ -496,6 +496,22 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
   await taskService.reassign(f.root,qcTask.task_id,qc.actorId,randomUUID());
   const qualityStyle=(await f.db.query('SELECT design_style_no FROM digital_production_orders WHERE production_order_id=$1',[ready.id])).rows[0].design_style_no as string;
   const qualityQuery={kind:'craft' as const,status:'open' as const,page:1,search:qualityStyle};
+  const verifyOriginalDispatchLimit=async(returnFactId:string,maximum:number)=>{
+   const warehousePage=await h.open(warehouse.actorId,1165,{},`/ui/digital-production?factory=${ready.id}&factoryAction=dispatch`);
+   try{
+    const pendingBatch=warehousePage.page.locator('#factory-dispatch select').filter({has:warehousePage.page.locator(`option[value="${returnFactId}"]`)});
+    await pendingBatch.waitFor().catch(async error=>{throw new Error(await warehousePage.page.locator('main').innerText({timeout:1000}),{cause:error});});
+    await pendingBatch.selectOption(returnFactId);
+    const entry=warehousePage.page.getByRole('group',{name:'仓库实际发厂',exact:true});
+    const input=entry.locator(`input[name="quantity:${lineId}"]`);
+    expect(await input.getAttribute('max')).toBe(String(maximum));
+    await entry.getByText(new RegExp(`可办 ${maximum}$`)).waitFor();
+    await input.fill(String(maximum+1));
+    expect(await input.evaluate((field:HTMLInputElement)=>field.validity.rangeOverflow)).toBe(true);
+    await input.fill(String(maximum));
+    expect(await input.evaluate((field:HTMLInputElement)=>field.validity.valid)).toBe(true);
+   }finally{await warehousePage.close();}
+  };
   const continuation=await h.open(qc.actorId,1165,{},'/ui/digital-production?workspace=quality&kind=craft');
   let dispatch:{expectedRevision:number;returnFactId:string;supplierId:string;occurredAt:string;note:string};
   occupiedOrigin=in3.factId;
@@ -526,6 +542,7 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
    await panel.getByRole('img',{name:'待提交质检报告 1',exact:true}).waitFor({state:'hidden'});
    await panel.getByRole('link',{name:'查看原检查图片 1',exact:true}).waitFor();
    dispatch={expectedRevision:firstInspection.revision,returnFactId:in3.factId,supplierId:f.supplierId,occurredAt:businessNow().toISOString(),note:'TEST final accepted physical dispatch'};
+   await verifyOriginalDispatchLimit(in3.factId,firstInspected);
    await expect(flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:firstInspected+1}]},randomUUID())).rejects.toMatchObject({statusCode:409});
    expect(await count()).toBe(before+3);
    const result=await flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:firstInspected}]},randomUUID());
@@ -585,6 +602,7 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
   await expect(flow.qc(warehouse,ready.id,inspected,randomUUID())).rejects.toMatchObject({statusCode:403});
   const counted=await flow.qc(qc,ready.id,inspected,randomUUID()),current=counted.checks.find(check=>check.returnFactId===in4.factId)!;
   expect(counted.batches?.find(batch=>batch.factId===in4.factId)?.rows).toMatchObject([{lineId,available:problemReturn,releasedAvailable:passedPieces}]);
+  await verifyOriginalDispatchLimit(in4.factId,passedPieces);
   const locate={orderId:ready.id,preparationId:ready.preparationId,stepRef:second!.stepId,returnFactId:in4.factId,lineId,checkId:current.checkId};
   const disposition={orderId:ready.id,preparationId:ready.preparationId,stepRef:second!.stepId,sourceFactId:in4.factId};
   const dispositionClient=await f.db.connect();

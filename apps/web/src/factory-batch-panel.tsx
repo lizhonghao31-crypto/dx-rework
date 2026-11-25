@@ -4,8 +4,9 @@ import {quotationHref} from './digital-quotation-panel.js';
 import {productionWorkspaceDomainHref} from './digital-detail-route.js';
 import {useState} from 'react';
 import {Button} from '@dx-rework/ui';
-import type {FactoryFlowSheet} from '@dx-rework/contracts/factory-flow';
+import type {FactoryBatchView,FactoryFlowSheet} from '@dx-rework/contracts/factory-flow';
 type Props={qcSource?:{stepRef:string|null;returnFactId:string;lineId:string};sheet:FactoryFlowSheet;busy:boolean;paused:boolean;action:string;save:(path:string,body:Record<string,unknown>)=>Promise<void>;upload:(id:string,files:File[])=>Promise<void>;images:Record<string,string[]>;previews:Record<string,Array<{attachmentId:string;url:string}>>};
+const released=(row:FactoryBatchView['rows'][number])=>row.releasedAvailable??(row.allowDispatch?row.available:0);
 export function FactoryBatchPanel({sheet,busy,paused,action,save,upload,images,previews,qcSource}:Props){
  const [kind,setKind]=useState('工艺发出'),[sendId,setSendId]=useState(''),[returnId,setReturnId]=useState(''),[fromReturnId,setFromReturnId]=useState('');
  const [selectedStep,setSelectedStep]=useState(''),[dispatchReturnId,setDispatchReturnId]=useState('');
@@ -23,8 +24,9 @@ export function FactoryBatchPanel({sheet,busy,paused,action,save,upload,images,p
  const timeField=<label>实际时间（北京时间）<input name="at" type="datetime-local" required/></label>;
  const pickBatch=<label>回仓批次<select value={batch?.factId??''} onChange={e=>setReturnId(e.target.value)}>{batches.map((b,i)=><option key={b.factId} value={b.factId}>第 {i+1} 批 · {b.occurredAt?new Date(b.occurredAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'实际时间未知'}</option>)}</select></label>;
  const sendable=step?sheet.craftSendable?.find(row=>row.stepRef===step.stepId)?.lines??[]:null;
- const movementRows=kind==='工艺回仓'?(send?.rows??[]):from?from.rows.map(l=>({lineId:l.lineId,remaining:previous&&from.stepRef===previous.stepId?l.allowDispatch?Math.min(l.available,sendable?.find(row=>row.lineId===l.lineId)?.remaining??0):0:l.available})):sendable??(sheet.batchTotals??[]).map(l=>({lineId:l.lineId,remaining:l.craftRemaining}));
- const dispatchRows=sheet.secondaryCraft==='无'?sheet.batchTotals??[]:(dispatchBatch?.rows??[]).map(l=>({lineId:l.lineId,remaining:l.allowDispatch?l.available:0}));
+ const movementRows=kind==='工艺回仓'?(send?.rows??[]):from?from.rows.map(l=>({lineId:l.lineId,remaining:previous&&from.stepRef===previous.stepId?Math.min(released(l),sendable?.find(row=>row.lineId===l.lineId)?.remaining??0):l.available})):sendable??(sheet.batchTotals??[]).map(l=>({lineId:l.lineId,remaining:l.craftRemaining}));
+ const dispatchRows=sheet.secondaryCraft==='无'?sheet.batchTotals??[]:(dispatchBatch?.rows??[]).map(l=>({lineId:l.lineId,
+  remaining:Math.min(released(l),sheet.batchTotals?.find(row=>row.lineId===l.lineId)?.remaining??0)}));
  const inspectionRows=(batch?.rows??[]).filter(row=>!qcSource||row.lineId===qcSource.lineId);
  const relevant=action==='logistics'?'process_logistics':action==='qc'?'bulk_qc':action==='dispatch'?'warehouse_dispatch':null;
  const next=(sheet.batchWindows??[]).filter(w=>!w.complete&&w.dueAt&&(!relevant||w.kind===relevant)&&(!step||!w.stepRef||w.stepRef===step.stepId)).sort((a,b)=>Date.parse(a.dueAt!)-Date.parse(b.dueAt!))[0];
