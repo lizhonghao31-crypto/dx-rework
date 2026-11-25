@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import { ensureOtherCraftComplete } from "./special-process.js";
+import {currentCraftProblemForRework,lockCraftProblemAuthority,reworkCraftLocator,type CraftProblemLocator} from "../production-platform/quality-craft-problem-scope.js";
 import {
   IdempotencyService,
   MessageOutboxRepository,
@@ -18,6 +19,8 @@ type OrderRow = Readonly<{
   rework_no: string | null;
   status: ReworkOrderResponse["status"];
   rework_kind: "qc_rework" | "inhouse_finishing";
+  source_craft_qc_check_id?: string|null;
+  craft_rework_execution?: "internal"|"factory"|null;
   source_system: string;
   style_no: string | null;
   customer_supply_code: string | null;
@@ -50,6 +53,7 @@ type OrderRow = Readonly<{
   has_other_open_style_order?: boolean;
 }>;
 type DatabaseError = Readonly<{ code?: string }>;
+type CraftSubmissionScope={locator:CraftProblemLocator;authority:Awaited<ReturnType<typeof lockCraftProblemAuthority>>};
 
 type FactoryState = Readonly<{
   type: "own_factory" | "supplier";
@@ -117,6 +121,8 @@ export class ReworkV2SubmissionService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      const locator=await reworkCraftLocator(client,actor,reworkOrderId);
+      const originalCraft=locator?{locator,authority:await lockCraftProblemAuthority(client,actor,locator)}:null;
       const scope = kind === "inhouse_finishing" ? "rework.finishing.submit.v2" : "rework.submit.v2";
       const result = await this.idempotency.execute<ReworkOrderResponse>(client, {
         scope,
@@ -126,7 +132,7 @@ export class ReworkV2SubmissionService {
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       }, async () => ({
         statusCode: 200,
-        response: await this.submitOnce(client, actor, reworkOrderId, input, kind),
+        response: await this.submitOnce(client, actor, reworkOrderId, input, kind,originalCraft),
       }));
       await client.query("COMMIT");
       return { value: result.response, reused: result.reused };
@@ -144,6 +150,7 @@ export class ReworkV2SubmissionService {
     reworkOrderId: string,
     input: SubmitReworkOrder,
     kind: "qc_rework" | "inhouse_finishing",
+    originalCraft:CraftSubmissionScope|null,
   ): Promise<ReworkOrderResponse> {
     const current = await this.lockOwnedDraft(client, actor, reworkOrderId);
     ensureOtherCraftComplete(current);
@@ -159,6 +166,12 @@ export class ReworkV2SubmissionService {
     }
     if (current.status !== "draft") {
       throw new ApplicationError("INVALID_STATE_TRANSITION", "只有草稿可以提交", 409);
+    }
+    if(current.source_craft_qc_check_id){
+      if(!originalCraft||originalCraft.locator.checkId!==current.source_craft_qc_check_id)
+        throw new ApplicationError("FORBIDDEN","原工艺问题范围不可办理",403);
+      await currentCraftProblemForRework(client,originalCraft.locator,originalCraft.authority);
+      await client.query("SELECT set_config('dx_rework.craft_rework_check_id',$1,true)",[originalCraft.locator.checkId]);
     }
     if (!current.style_no || !current.processing_factory_type || !current.merchandiser_user_id) {
       throw new ApplicationError("VALIDATION_ERROR", "请完整填写款号、加工厂和订单跟单", 400);
@@ -176,7 +189,12 @@ export class ReworkV2SubmissionService {
     await this.ensureActiveMerchandiser(client, current.merchandiser_user_id);
     await this.ensureFactoryStillAvailable(client, factoryFromRow(current));
     const attachmentIds = await this.attachmentIds(client, reworkOrderId);
-    if (kind === "qc_rework") await this.ensureReadyBoundImage(client, actor, reworkOrderId, attachmentIds);
+    if (kind === "qc_rework"){
+      const hasOriginalReport=attachmentIds.length===0&&current.source_craft_qc_check_id?(await client.query<{ready:boolean}>(
+        "SELECT craft_rework_has_original_report($1) AS ready",[current.source_craft_qc_check_id],
+      )).rows[0]?.ready===true:false;
+      if(!hasOriginalReport)await this.ensureReadyBoundImage(client,actor,reworkOrderId,attachmentIds);
+    }
 
     const numberResult = current.rework_no
       ? { rows: [{ rework_no: current.rework_no }] }
@@ -343,6 +361,9 @@ export class ReworkV2SubmissionService {
       reworkNo: row.rework_no,
       status: row.status,
       reworkKind: row.rework_kind,
+      ...(row.source_craft_qc_check_id&&row.craft_rework_execution?{
+        originalCraftQuality:{checkId:row.source_craft_qc_check_id,unit:"片" as const,execution:row.craft_rework_execution},
+      }:{}),
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
@@ -373,6 +394,9 @@ export class ReworkV2SubmissionService {
       reworkNo: row.rework_no,
       status: row.status,
       reworkKind: row.rework_kind,
+      ...(row.source_craft_qc_check_id&&row.craft_rework_execution?{
+        receivingBatchId:null,originalCraftQuality:{checkId:row.source_craft_qc_check_id,unit:"片" as const,execution:row.craft_rework_execution},
+      }:{}),
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,

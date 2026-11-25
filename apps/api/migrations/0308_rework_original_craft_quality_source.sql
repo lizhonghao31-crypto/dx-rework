@@ -46,6 +46,9 @@ BEGIN
     RAISE EXCEPTION 'internal craft repair must use the original own-factory execution' USING ERRCODE='23514';
   END IF;
   IF (TG_OP='INSERT' OR (OLD.status='draft' AND NEW.status NOT IN ('draft','cancelled','deleted'))) THEN
+    IF TG_OP='UPDATE' AND current_setting('dx_rework.craft_rework_check_id',true) IS DISTINCT FROM source_check.check_id::text THEN
+      RAISE EXCEPTION 'craft rework submission requires current original QC verification' USING ERRCODE='55000';
+    END IF;
     IF EXISTS (SELECT 1 FROM digital_factory_qc q
       WHERE q.preparation_id=source_check.preparation_id AND q.return_fact_id=source_check.return_fact_id
         AND q.line_id=source_check.line_id AND q.sequence>source_check.sequence) THEN
@@ -57,6 +60,34 @@ BEGIN
         AND prior.source_craft_qc_check_id=source_check.check_id AND prior.rework_order_id<>NEW.rework_order_id) THEN
       RAISE EXCEPTION 'the actual previous craft rework movement still occupies this source' USING ERRCODE='55000';
     END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION craft_rework_has_original_report(source_id uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM digital_factory_qc q JOIN attachments a
+      ON a.attachment_id=ANY(q.attachment_ids) AND a.entity_type='digital_factory_qc' AND a.entity_id=q.check_id::text
+    WHERE q.check_id=source_id AND q.quantity_scope IS NOT NULL AND q.result='需处理'
+      AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')
+  )
+$$;
+
+-- A linked craft report remains attached to the original immutable QC. The
+-- old image rule and the in-house finishing exception stay as before.
+CREATE OR REPLACE FUNCTION guard_rework_submission_requires_image() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.status='draft' AND NEW.status='pending_process_configuration'
+     AND NEW.rework_kind='qc_rework'
+     AND NOT craft_rework_has_original_report(NEW.source_craft_qc_check_id)
+     AND NOT EXISTS (
+       SELECT 1 FROM attachments attachment WHERE attachment.entity_type='rework_order'
+         AND attachment.entity_id=NEW.rework_order_id::text AND attachment.status='ready'
+         AND attachment.mime_type IN ('image/jpeg','image/png','image/webp')
+     )
+  THEN
+    RAISE EXCEPTION 'N01 submission requires at least one ready rework image' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
 END;

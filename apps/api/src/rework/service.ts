@@ -252,7 +252,7 @@ export class ReworkInitiationService {
   }
 
   async createCraftDraft(actor:TrustedActorContext,original:OriginalCraftDraft,idempotencyKey:string){
-    return this.createDraft(actor,{},idempotencyKey,"qc_rework",original);
+    return this.createDraft(actor,original.execution==="factory"?{tailInspectionRequired:false}:{},idempotencyKey,"qc_rework",original);
   }
 
   async createDraft(

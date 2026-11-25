@@ -43,4 +43,18 @@ describe('independent craft scopes and terminal-only physical supply',()=>{
   expect(after.steps[0]!.batches[0]!.rows[0]).toMatchObject({returned:300,available:100,releasedAvailable:0});
   expect(after.sendable[1]!.lines[0]!.remaining).toBe(0);
  });
+ it('does not count an actual repair return as added stock or spend the original passed pieces',()=>{
+  const stepsForTest=steps.slice(0,1),lines=[{lineId:'po',quantity:300}];
+  const held={...qc('return1'),check_id:'check1',result:'需处理',quantity_scope:{inspectedQuantity:300,qualifiedQuantity:280,problemQuantity:20,unit:'片'}};
+  const outgoing=fact('repair-send','工艺发出','emb',20,{fromReturnId:'return1'});
+  const actual={...outgoing,payload:{...outgoing.payload,warehouseMotion:{reworkId:'repair',checkId:'check1'}}};
+  const returned=fact('repair-back','工艺回仓','emb',20,{sendFactId:'repair-send'});
+  const original=[fact('send1','工艺发出','emb',300),fact('return1','工艺回仓','emb',300,{sendFactId:'send1'})];
+  const out=factoryStepLedger(lines,[...original,actual,returned],[held],stepsForTest);
+  expect(out.batches.map(batch=>batch.rows[0])).toMatchObject([{available:280,releasedAvailable:280},{available:20,allowDispatch:false}]);
+  expect(out.steps[0]!.completion[0]).toMatchObject({qualified:280,complete:false});
+  const after=factoryStepLedger(lines,[...original,actual,returned],[held,qc('repair-back')],stepsForTest);
+  expect(after.steps[0]!.completion[0]).toMatchObject({qualified:300,complete:true,conflict:false});
+  expect(factoryStepLedger(lines,[...original,outgoing,returned],[held],stepsForTest).batches[0]!.rows[0]!.releasedAvailable).toBe(260);
+ });
 });

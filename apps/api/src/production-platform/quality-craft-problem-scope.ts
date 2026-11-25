@@ -80,3 +80,19 @@ export async function currentCraftProblemForRework(db:PoolClient,locator:CraftPr
 export async function lockCraftProblemForOriginalRework(db:PoolClient,actor:TrustedActorContext,locator:CraftProblemLocator){
  return currentCraftProblemForRework(db,locator,await lockCraftProblemAuthority(db,actor,locator));
 }
+
+export async function reworkCraftLocator(db:PoolClient,actor:TrustedActorContext,reworkId:string){
+ // The staged source is immutable. Legacy rows (including schemas without
+ // this field) retain the original command before any craft-specific reads.
+ const binding=(await db.query<{check_id:string|null}>(`SELECT to_jsonb(orders)->>'source_craft_qc_check_id' AS check_id
+  FROM rework_orders orders WHERE orders.rework_order_id=$1 AND ($2 OR orders.created_by=$3) AND orders.status<>'deleted'`,
+ [reworkId,isRootActor(actor),actor.actorId])).rows[0]?.check_id;
+ if(!binding)return null;
+ const {rows}=await db.query<CraftProblemLocator>(`SELECT route.production_order_id AS "orderId",q.preparation_id AS "preparationId",
+  fact.payload->>'stepRef' AS "stepRef",q.return_fact_id AS "returnFactId",q.line_id AS "lineId",q.check_id AS "checkId"
+  FROM digital_factory_qc q JOIN digital_factory_routes route USING(preparation_id)
+  JOIN digital_factory_facts fact ON fact.fact_id=q.return_fact_id AND fact.preparation_id=q.preparation_id AND fact.kind='工艺回仓'
+  WHERE q.check_id=$1`,[binding]);
+ if(rows.length!==1)throw new ApplicationError('CONFLICT','原返工的工艺检查来源不可核实',409);
+ return rows[0]!;
+}

@@ -24,6 +24,7 @@ import {readWarehouseCraftFactoryBasis} from '../../apps/api/src/production-plat
 import {lockCraftProblemForOriginalRework,readCurrentCraftProblem} from '../../apps/api/src/production-platform/quality-craft-problem-scope.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
+import {ReworkV2SubmissionService} from '../../apps/api/src/rework/v2-submission-service.js';
 import {ensureWithinSourceReceivingActualQuantity} from '../../apps/api/src/rework/receiving-quantity-ceiling.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -190,8 +191,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const qc=f.people.qc!,qcTask=(await f.db.query(`SELECT p.task_id FROM digital_timeline_task_positions p
    JOIN digital_production_task_access a USING(task_id) WHERE p.route_ref=$1 AND p.step_id=$2 AND a.task_kind='bulk_qc'`,[ready.preparationId,second!.stepId])).rows[0];
   await new DigitalProductionTaskService(f.db).reassign(f.root,qcTask.task_id,qc.actorId,randomUUID());
+  const originalReportPhoto=await f.image(qc);
   const inspected={expectedRevision:(await flow.read(f.root,ready.id)).revision,stepRef:second!.stepId,returnFactId:in4.factId,note:'TEST count remaining physical return',
-   checks:[{lineId,result:'需处理' as const,problem:'TEST two affected pieces',treatment:'',attachmentIds:[],
+   checks:[{lineId,result:'需处理' as const,problem:'TEST two affected pieces',treatment:'',attachmentIds:[originalReportPhoto],
     quantityScope:{inspectedQuantity:11,qualifiedQuantity:9,problemQuantity:2,unit:'片' as const}}]};
   await expect(flow.qc(qc,ready.id,{...inspected,checks:[{...inspected.checks[0]!,quantityScope:{inspectedQuantity:16,qualifiedQuantity:14,problemQuantity:2,unit:'片'}}]},randomUUID())).rejects.toMatchObject({statusCode:409});
   await expect(flow.qc(warehouse,ready.id,inspected,randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -221,6 +223,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await expect(ensureWithinSourceReceivingActualQuantity(f.db,draftId,[{label:'原报量',quantity:3}])).rejects.toThrow('原工艺问题范围 2 片');
   await expect(ensureWithinSourceReceivingActualQuantity(f.db,draftId,[{label:'原报量',quantity:2}])).resolves.toBeUndefined();
   expect((await f.db.query('SELECT count(*)::int AS count FROM rework_orders WHERE source_craft_qc_check_id=$1',[current.checkId])).rows[0].count).toBe(1);
+  const submit=new ReworkV2SubmissionService(f.db,'anchor-test'),submitted=await submit.submit(qaActor,draftId,{expectedVersion:entered.value.version},randomUUID());
+  expect(submitted.value).toMatchObject({status:'pending_process_configuration',reworkNo:expect.any(String),attachmentIds:[],
+   originalCraftQuality:{checkId:current.checkId,unit:'片',execution:'factory'}});
+  expect((await f.db.query('SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1',[originalReportPhoto])).rows[0])
+   .toEqual({entity_type:'digital_factory_qc',entity_id:current.checkId});
+  expect((await f.db.query("SELECT count(*)::int AS count FROM rework_work_reports WHERE rework_order_id=$1",[draftId])).rows[0].count).toBe(0);
   await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,
     attachment_ids,checked_by,checked_at) VALUES($1,$2,$3,$4,'合格','','','{}',$5,$6)`,
    [randomUUID(),ready.preparationId,in4.factId,lineId,qc.actorId,businessNow().toISOString()])).rejects.toMatchObject({code:'23514'});
