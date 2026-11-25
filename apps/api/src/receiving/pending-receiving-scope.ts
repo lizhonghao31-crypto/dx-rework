@@ -18,12 +18,13 @@ type Dispatch = Readonly<{
   dispatchedQuantity: number;
 }>;
 
-type Receipt = Readonly<{
+export type PendingReceivingReceipt = Readonly<{
   receiptId: string;
   quantityVersion: string;
   identity: { [K in keyof PendingReceivingIdentity]: string | null };
   actualQuantity: number;
 }>;
+type Receipt=PendingReceivingReceipt;
 
 const dimensions = ["orderId", "productionId", "factoryAllocationKey", "lineId", "cuttingOrderId"] as const;
 const quantity = (value: number) => Number.isSafeInteger(value) && value >= 0;
