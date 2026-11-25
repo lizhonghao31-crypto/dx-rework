@@ -43,6 +43,16 @@ const WorkbenchDevelopmentSheetSchema = z.object({
   }).strict()).max(100),
 }).strict();
 export type WorkbenchDevelopmentSheet = z.infer<typeof WorkbenchDevelopmentSheetSchema>;
+// Editable annotations do not alter the preserved published work order or
+// authority-bearing identity, customer, dates, quantities, or technical facts.
+const DevelopmentWorkbenchBasicFieldsSchema=z.object({brand:short,referenceNote:short}).strict();
+export const SaveDevelopmentWorkbenchBasicsSchema=DevelopmentWorkbenchBasicFieldsSchema.extend({
+  roundNumber:z.number().int().positive(),documentVersion:z.number().int().positive(),expectedRevision:z.number().int().nonnegative(),
+}).strict();
+export const DevelopmentWorkbenchBasicsSchema=DevelopmentWorkbenchBasicFieldsSchema.extend({revision:z.number().int().positive()}).strict();
+export type DevelopmentWorkbenchBasics=z.infer<typeof DevelopmentWorkbenchBasicsSchema>;
+export type SaveDevelopmentWorkbenchBasics=z.infer<typeof SaveDevelopmentWorkbenchBasicsSchema>;
+
 
 export const DevelopmentMaterialSupplierOptionSchema=z.object({
   supplierId:z.uuid(),code:short,name:z.string().min(1).max(200),version:z.number().int().positive(),
@@ -299,7 +309,7 @@ export type DevelopmentPrintFeedback = {
   sourceRound: number;
   version?: number;
   recordedOn?: string;
-  images?: readonly {attachmentId:string;label?:string;url:string}[];
+  images?: readonly {attachmentId:string;label?:string;url?:string}[];
 };
 export type DevelopmentPrintDetails = {
   printTiming?: DevelopmentPrintTiming;
@@ -308,6 +318,9 @@ export type DevelopmentPrintDetails = {
 };
 export type DevelopmentSheet = DevelopmentPrintDetails & {
   orderRush?:true;
+  workbenchBasics?:DevelopmentWorkbenchBasics;
+  workbenchBasicsEditable?:true;
+  numberedSales?:{year:number;series:string|null};
   preorderPublication?:{at:string;documentVersion:number};
   numberedIdentity?:{orderNumber:string|null};
   orderTimeEnabled?:boolean;

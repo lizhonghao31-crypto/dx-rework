@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {Dialog,DialogHeader} from '@astryxdesign/core/Dialog';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -66,13 +66,15 @@ export function OriginalDocumentDirectory({resource,onSelect,onReady,rememberInU
  const [pages,setPages]=useState<Record<string,number>>(()=>Object.fromEntries(['development','budget','instruction','quotation'].map(kind=>{const raw=rememberInUrl?new URLSearchParams(location.search).get('original'+kind+'Page'):null;return [kind,raw&&/^[1-9]\d*$/.test(raw)&&Number(raw)<=1_000_000?Number(raw):1];})));
  const [ready,setReady]=useState<Record<string,boolean>>({});
  const [readDemanded,setReadDemanded]=useState(activeKind!==null);
+ const interacted=useRef(false);
  useEffect(()=>{if(activeKind!==null)setReadDemanded(true);},[activeKind]);
  const mark=useCallback((kind:string,value:boolean)=>setReady(prior=>prior[kind]===value?prior:{...prior,[kind]:value}),[]);
  const [marks]=useState(()=>({development:(v:boolean)=>mark('development',v),budget:(v:boolean)=>mark('budget',v),instruction:(v:boolean)=>mark('instruction',v),quotation:(v:boolean)=>mark('quotation',v)}));
- const [paging]=useState(()=>Object.fromEntries(['development','budget','instruction','quotation'].map(kind=>[kind,(value:number)=>setPages(prior=>({...prior,[kind]:value}))])) as Record<string,(value:number)=>void>);
+ const [paging]=useState(()=>Object.fromEntries(['development','budget','instruction','quotation'].map(kind=>[kind,(value:number)=>{interacted.current=true;setPages(prior=>({...prior,[kind]:value}));}])) as Record<string,(value:number)=>void>);
  useEffect(()=>{
   if(!rememberInUrl)return;
-  const target=new URL(location.href);if(target.searchParams.get('workspace')!=='designer'||target.searchParams.get('development')!==resource.id||target.searchParams.get('area')!=='records')return;
+  const target=new URL(location.href);if(target.searchParams.get('workspace')!=='designer'||target.searchParams.get('development')!==resource.id||(!interacted.current&&target.searchParams.get('area')!=='records'))return;
+  target.searchParams.set('area','records');
   if(search)target.searchParams.set('originalSearch',search);else target.searchParams.delete('originalSearch');
   for(const [kind,page] of Object.entries(pages)){if(page>1)target.searchParams.set('original'+kind+'Page',String(page));else target.searchParams.delete('original'+kind+'Page');}
   history.replaceState(history.state,'',target);
@@ -92,7 +94,7 @@ export function OriginalDocumentDirectory({resource,onSelect,onReady,rememberInU
   (['development','budget','instruction'] as const).every(kind=>!selected(kind)||directory[kind].state!=='available'||ready[kind]));
  useEffect(()=>{onReady?.(complete);return()=>onReady?.(false);},[complete,onReady]);
  if(activeKind===null)return null;
- return <section aria-label="本单原单据目录"><TextInput label="搜索原单与版本" value={search} onChange={value=>{setSearch(value);setPages({development:1,budget:1,instruction:1,quotation:1});}} ref={input=>{if(input)input.maxLength=100;}}/>
+ return <section aria-label="本单原单据目录"><TextInput label="搜索原单与版本" value={search} onChange={value=>{interacted.current=true;setSearch(value);setPages({development:1,budget:1,instruction:1,quotation:1});}} ref={input=>{if(input)input.maxLength=100;}}/>
   {error?<DigitalReadFailure error={error} onRetry={()=>setAttempt(value=>value+1)} retryLabel="重新读取原单关联"/>:!directory?<p role="status">正在核对原单关联和权限…</p>:<>
    {selected('development')&&(directory.development.state==='available'?<DevelopmentOriginalVersions sourceId={directory.development.id} searchQuery={search} page={pages.development!} onPage={paging.development} onSelect={ref=>onSelect({kind:'development',sourceId:(directory.development as {id:string}).id,...ref})} onReady={marks.development}/>:<p>开发资料：{directory.development.state==='unavailable'?'不可查看':'没有可查看的关联来源'}</p>)}
    {(['budget','instruction'] as const).filter(selected).map(kind=>directory[kind].state==='available'?<PublishedGroup key={kind} kind={kind} resource={{kind:'order',id:directory[kind].id}} search={search} onSelect={onSelect} onReady={marks[kind]} page={pages[kind]!} onPage={paging[kind]!}/>:<p key={kind}>{names[kind]}：{directory[kind].state==='unavailable'?'不可查看':'没有可查看的正式订单关联'}</p>)}

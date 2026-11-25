@@ -4,7 +4,10 @@ import {developmentMakingBasis} from '@dx-rework/contracts/digital-development';
 import {createClientRequestId} from './client-request-id.js';
 import {DevelopmentSizeTemplateTools} from './development-size-template-tools.js';
 import {DevelopmentTechnicalBasis} from './development-technical-basis.js';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
+import {Button as AstryxButton} from '@astryxdesign/core/Button';
+import {Dialog} from '@astryxdesign/core/Dialog';
+import {TextArea} from '@astryxdesign/core/TextArea';
 import {Button} from '@dx-rework/ui';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
@@ -72,24 +75,72 @@ export function DevelopmentTechnicalNode({controller,task}:{controller:Controlle
 }
 export function DevelopmentFinalFeedback({controller,direct=false}:{controller:Controller;direct?:boolean}){
  const {state,busy,uncertainWrite,run}=controller,technical=state?.technical;
- if(!technical?.enrolled||!direct&&!technical.canRecordComment)return null;
+ if(!technical?.enrolled)return null;
+ if(direct)return <WorkbenchFinalFeedback key={`${state!.sheet.sourceId}:${technical.roundNumber}:${technical.scopeRef}`} controller={controller} technical={technical}/>;
+ if(!technical.canRecordComment)return null;
  const latest=technical.comments[0];
- const editor=technical.canRecordComment?<>{!direct&&technical.comments.filter(comment=>comment.isFinal).map(comment=><p key={comment.commentId}>第{comment.version}版客户批复 · 实际发生：{comment.occurredDate??(comment.occurredAt?at(comment.occurredAt):'时间待核')}{comment.timeEvidence&&<small>时间依据：{comment.timeEvidence.note} · 于{at(comment.timeEvidence.recordedAt)}登记</small>}</p>)}<form onSubmit={async e=>{e.preventDefault();const form=e.currentTarget,data=new FormData(form);const updated=await run('technical/comments',{roundNumber:technical.roundNumber,scopeRef:technical.scopeRef,expectedVersion:latest?.version??0,isFinal:data.get('isFinal')==='final',decision:data.get('decision'),text:data.get('text'),evidenceRefs:controller.technicalUploads['客户评语依据']??[],evidenceNote:data.get('evidenceNote'),occurredAt:null,actualTime:customerCommentTimeFromForm(data)});if(updated)form.reset();}}><fieldset disabled={busy||uncertainWrite}><legend>由本单设计记录客户实际反馈</legend><label>反馈性质<select aria-label="反馈性质" name="isFinal"><option value="intermediate">中间沟通</option><option value="final">本轮最终评语 / 批复（发起技术复核）</option></select></label><label>客户结论<select aria-label="客户结论" name="decision"><option value="approved">认可本轮样板</option><option value="changes_required">提出修改意见</option></select></label><CustomerCommentTimeFields key={latest?.version??0}/><label>评语原意 *<textarea aria-label="评语原意" name="text" required maxLength={4000}/></label><label>确认依据与原记录位置 *<textarea aria-label="确认依据与原记录位置" name="evidenceNote" required maxLength={2000}/></label><label>补充依据<input aria-label="补充依据" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>{const files=Array.from(e.currentTarget.files??[]);e.currentTarget.value='';void controller.upload(files,'客户评语依据');}}/></label>{controller.previews.viewFor(['客户评语依据'])}<Button type="submit" variant="primary">保存客户评语</Button></fieldset></form>{technical.comments.filter(comment=>comment.isFinal&&comment.decision==='approved'&&!comment.occurredAt&&!comment.occurredDate).map(comment=><form key={comment.commentId} aria-label={`补充客户批复时间第${comment.version}版`} onSubmit={async e=>{e.preventDefault();const form=e.currentTarget,data=new FormData(form);const saved=await run('technical/comment-time',{commentId:comment.commentId,commentVersion:comment.version,actualTime:customerCommentTimeFromForm(data),note:String(data.get('timeNote')??'')});if(saved)form.reset();}}><fieldset disabled={busy||uncertainWrite}><legend>补充第{comment.version}版客户批复时间</legend><p>{comment.text}</p><CustomerCommentTimeFields supplement/><label>时间依据与原记录位置 *<textarea aria-label="批复时间依据" name="timeNote" required maxLength={2000}/></label><Button type="submit">保存批复时间</Button></fieldset></form>)}</>:null;
- if(!direct)return <details className="development-technical-feedback"><summary>客户评语与最终批复</summary>{editor}</details>;
- const recent=technical.comments.find(comment=>comment.roundNumber===technical.roundNumber&&comment.scopeRef===technical.scopeRef);
+ const editor=<>{technical.comments.filter(comment=>comment.isFinal).map(comment=><p key={comment.commentId}>第{comment.version}版客户批复 · 实际发生：{comment.occurredDate??(comment.occurredAt?at(comment.occurredAt):'时间待核')}{comment.timeEvidence&&<small>时间依据：{comment.timeEvidence.note} · 于{at(comment.timeEvidence.recordedAt)}登记</small>}</p>)}<form onSubmit={async e=>{e.preventDefault();const form=e.currentTarget,data=new FormData(form);const updated=await run('technical/comments',{roundNumber:technical.roundNumber,scopeRef:technical.scopeRef,expectedVersion:latest?.version??0,isFinal:data.get('isFinal')==='final',decision:data.get('decision'),text:data.get('text'),evidenceRefs:controller.technicalUploads['客户评语依据']??[],evidenceNote:data.get('evidenceNote'),occurredAt:null,actualTime:customerCommentTimeFromForm(data)});if(updated)form.reset();}}><fieldset disabled={busy||uncertainWrite}><legend>由本单设计记录客户实际反馈</legend><label>反馈性质<select aria-label="反馈性质" name="isFinal"><option value="intermediate">中间沟通</option><option value="final">本轮最终评语 / 批复（发起技术复核）</option></select></label><label>客户结论<select aria-label="客户结论" name="decision"><option value="approved">认可本轮样板</option><option value="changes_required">提出修改意见</option></select></label><CustomerCommentTimeFields key={latest?.version??0}/><label>评语原意 *<textarea aria-label="评语原意" name="text" required maxLength={4000}/></label><label>确认依据与原记录位置 *<textarea aria-label="确认依据与原记录位置" name="evidenceNote" required maxLength={2000}/></label><label>补充依据<input aria-label="补充依据" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>{const files=Array.from(e.currentTarget.files??[]);e.currentTarget.value='';void controller.upload(files,'客户评语依据');}}/></label>{controller.previews.viewFor(['客户评语依据'])}<Button type="submit" variant="primary">保存客户评语</Button></fieldset></form>{technical.comments.filter(comment=>comment.isFinal&&comment.decision==='approved'&&!comment.occurredAt&&!comment.occurredDate).map(comment=><form key={comment.commentId} aria-label={`补充客户批复时间第${comment.version}版`} onSubmit={async e=>{e.preventDefault();const form=e.currentTarget,data=new FormData(form);const saved=await run('technical/comment-time',{commentId:comment.commentId,commentVersion:comment.version,actualTime:customerCommentTimeFromForm(data),note:String(data.get('timeNote')??'')});if(saved)form.reset();}}><fieldset disabled={busy||uncertainWrite}><legend>补充第{comment.version}版客户批复时间</legend><p>{comment.text}</p><CustomerCommentTimeFields supplement/><label>时间依据与原记录位置 *<textarea aria-label="批复时间依据" name="timeNote" required maxLength={2000}/></label><Button type="submit">保存批复时间</Button></fieldset></form>)}</>;
+ return <details className="development-technical-feedback"><summary>客户评语与最终批复</summary>{editor}</details>;
+}
+function WorkbenchFinalFeedback({controller,technical}:{controller:Controller;technical:DevelopmentTechnicalState}){
+ const [text,setText]=useState(''),[confirm,setConfirm]=useState(false),[notice,setNotice]=useState('');
+ const pending=useRef<{input:string;version:number;final:boolean}|null>(null);
+ const titleId=useId();
+ const {busy,uncertainWrite,run,readError,writeOutcome}=controller;
+ const comments=technical.comments.filter(item=>item.roundNumber===technical.roundNumber&&item.scopeRef===technical.scopeRef);
+ const latest=comments[0],lastFinal=comments.find(item=>item.isFinal);
+ const shown=latest?[latest,...(lastFinal&&lastFinal!==latest?[lastFinal]:[])]:[];
+ const locked=busy||uncertainWrite||Boolean(readError),canSave=!locked&&Boolean(text.trim());
+ useEffect(()=>{
+  const record=pending.current;
+  if(!record||writeOutcome?.path!=='technical/comments'||writeOutcome.phase!=='complete')return;
+  if(!comments.some(item=>item.version===record.version+1&&item.text===record.input.trim()&&item.isFinal===record.final))return;
+  setText(current=>current===record.input?'':current);
+  setNotice(record.final?'本轮最终批复已登记':'客户意见已保存');
+  pending.current=null;
+ },[writeOutcome,comments]);
+ const save=(decision:'noted'|'approved'|'changes_required')=>{
+  if(!canSave||controller.writing.current)return;
+  const input={roundNumber:technical.roundNumber,scopeRef:technical.scopeRef,expectedVersion:latest?.version??0,
+   isFinal:decision!=='noted',decision,text:text.trim(),evidenceRefs:controller.technicalUploads['客户评语依据']??[],
+   evidenceNote:'设计工作台登记客户意见',occurredAt:null};
+  pending.current={input:text,version:input.expectedVersion,final:input.isFinal};
+  setConfirm(false);setNotice('');void run('technical/comments',input);
+ };
  return <section className="development-technical-feedback" aria-label="客户意见">
   <h3>客户意见</h3>
-  {recent?<article>
-   <h4>{recent.isFinal?'本轮最终批复':'中间沟通'} · {recent.decision==='approved'?'认可本轮样板':'提出修改意见'}</h4>
-   <p>{recent.text}</p>
-   <p>实际发生：{recent.occurredDate??(recent.occurredAt?at(recent.occurredAt):'时间待核')} · 登记：{at(recent.recordedAt)}</p>
-   <p>原确认依据：{recent.evidenceNote}</p>
-   {recent.evidenceRefs.length>0&&<ul>{recent.evidenceRefs.map((id,index)=><li key={id}>
+  {shown.length?shown.map(item=><article key={item.commentId}>
+   <h4>{item.isFinal?`本轮最终批复 · ${item.decision==='approved'?'认可本轮样板':'需修改'}`:'普通意见'}</h4>
+   <p>{item.text}</p>
+   <p>登记：{at(item.recordedAt)}{(item.occurredDate||item.occurredAt)&&<> · 实际发生：{item.occurredDate??at(item.occurredAt!)}</>}</p>
+   {item.evidenceRefs.length>0&&<ul>{item.evidenceRefs.map((id,index)=><li key={id}>
     <a href={controller.urls.apiUrl(`digital-production/${controller.base.replace('/execution','')}/development/attachments/${id}`)}>查看意见附件 {index+1}</a>
    </li>)}</ul>}
-  </article>:<p>本轮暂无已登记的客户意见。</p>}
-  {editor}
-  {!technical.canRecordComment&&<p>当前身份或本轮状态不允许登记客户意见。</p>}
+  </article>):<p>本轮暂无已登记的客户意见。</p>}
+  {technical.canRecordComment?<div className="development-technical-editor">
+   <TextArea label="评语原意" value={text} maxLength={4000} isDisabled={locked} onChange={value=>{setText(value);setNotice('');}}/>
+   <label>补充依据<input aria-label="补充依据" type="file" disabled={locked} multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={event=>{
+    const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value='';void controller.upload(files,'客户评语依据');
+   }}/></label>
+   {controller.previews.viewFor(['客户评语依据'])}
+   <div className="development-technical-actions">
+    <AstryxButton type="button" variant="secondary" label="保存意见" isDisabled={!canSave} onClick={()=>save('noted')}/>
+    <AstryxButton type="button" variant="primary" label="确认本轮最终批复" isDisabled={!canSave} onClick={()=>setConfirm(true)}/>
+   </div>
+   <Dialog isOpen={confirm} className="dx-designer-astryx" purpose="form" aria-labelledby={titleId}
+    onOpenChange={open=>setConfirm(open)} width="min(32rem, calc(100vw - 2rem))">
+    <div className="development-technical-editor"><h4 id={titleId}>确认本轮最终批复</h4>
+     <p>请按客户原结论确认。最终批复将进入尺寸复核，取消不会保存。</p>
+     <div className="development-technical-actions">
+      <AstryxButton type="button" variant="secondary" label="取消" onClick={()=>setConfirm(false)}/>
+      <AstryxButton type="button" variant="secondary" label="客户要求修改" isDisabled={!canSave} onClick={()=>save('changes_required')}/>
+      <AstryxButton type="button" variant="primary" label="客户认可本轮样板" isDisabled={!canSave} onClick={()=>save('approved')}/>
+     </div>
+    </div>
+   </Dialog>
+   {uncertainWrite&&!readError&&!busy&&<AstryxButton type="button" variant="secondary" label={writeOutcome?.phase==='unknown'?'核对并重试原提交':'重试读取客户意见'} onClick={()=>void controller.recheck()}/>}
+   {notice&&<p role="status">{notice}</p>}
+  </div>:<p>当前身份或本轮状态不允许登记客户意见。</p>}
  </section>;
 }
 function ArtifactReference({artifact,controller}:{artifact:TechnicalArtifact;controller:Controller}){return <details><summary>技术成果 v{artifact.version} · {artifact.status==='published'?'已发布':'草稿'}{artifact.inheritedFrom?' · 明确沿用原成果':''}</summary><p>{artifact.body.baseSizeTable.baseSize||'基码待填'} · {artifact.body.baseSizeTable.sizes.join(' / ')} · 用量 {artifact.body.consumptionRows.length}项</p>{artifact.body.pltAttachmentIds.map((id,i)=><p key={id}><a href={controller.urls.apiUrl(`digital-production/${controller.base.replace('/execution','')}/development/attachments/${id}`)}>下载PLT原件 {i+1}</a></p>)}<p>{artifact.body.baseSizeTable.gradingNote||'无补充跳码说明'}</p></details>;}

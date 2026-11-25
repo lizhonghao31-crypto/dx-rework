@@ -10,6 +10,7 @@ import {effectiveVerificationDocument} from "./development-material-verification
 import {documentMetadata} from "./document-metadata.js";
 import {developmentDocumentSnapshot,developmentSnapshotContainsFile,developmentPublishedVersions} from './development-document-snapshot.js';
 import {developmentPrintDetails} from './development-print-details.js';
+import {readAdoptedDevelopmentRevisionComment,revisionCommentImages} from './development-revision-comment-basis.js';
 import {readDevelopmentOrderRush} from './development-order-rush.js';
 import {readDevelopmentMaterialSuppliers,validateDevelopmentMaterialSuppliers} from './development-material-suppliers.js';
 import {materialReadiness} from "./development-material-readiness.js";
@@ -19,7 +20,7 @@ import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentAuxiliaryPlanningPublishIssues,developmentPublishErrors,usesDevelopmentMaterialPlanning,withoutDevelopmentAlternateSizeDraft, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion, type DevelopmentSubmissionOperation } from "@dx-rework/contracts/digital-development";
+import { DevelopmentWorkbenchBasicsSchema,SaveDevelopmentWorkbenchBasicsSchema,type DevelopmentWorkbenchBasics,type SaveDevelopmentWorkbenchBasics,DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentAuxiliaryPlanningPublishIssues,developmentPublishErrors,usesDevelopmentMaterialPlanning,withoutDevelopmentAlternateSizeDraft, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion, type DevelopmentSubmissionOperation } from "@dx-rework/contracts/digital-development";
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -75,6 +76,14 @@ export class DigitalDevelopmentService {
   }
   private async originalRevisionPrintDetails(db:Database,actor:TrustedActorContext,selection:Parameters<typeof developmentPrintDetails>[1],revision:DevelopmentSheet['revisionSource']){
     const details=await developmentPrintDetails(db,selection,revision);
+    if(details.printFeedback){
+      const original=await readAdoptedDevelopmentRevisionComment(db,selection.sourceId,selection.round);
+      if(original&&original.ref.sourceId===(selection.round===1?revision?.parentSourceId:selection.sourceId)
+        &&original.ref.roundNumber===details.printFeedback.sourceRound&&original.text===details.printFeedback.text){
+        details.printFeedback={text:original.text,sourceRound:original.ref.roundNumber,version:original.ref.version,
+          recordedOn:beijingCalendarDate(new Date(original.recordedAt)),images:await revisionCommentImages(db,original)};
+      }
+    }
     if(details.printRevision&&revision&&await new DigitalProductionAccessPolicy(db).allowed(actor,'source',revision.rootSourceId,'technical')){
       const number=(await db.query<{design_style_no:string|null}>('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[revision.rootSourceId])).rows[0]?.design_style_no;
       if(number)details.printRevision.motherOrderNumber=number;
@@ -114,7 +123,9 @@ export class DigitalDevelopmentService {
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const source=await this.source(db,actor,sourceId);
       const snapshot=await developmentDocumentSnapshot(db,sourceId,roundNumber,documentVersion,Boolean(source.workbench_generated_number&&await workbenchPreorderPublication(db,sourceId)))??digitalNotFound();
-      const allowed=developmentSnapshotContainsFile(snapshot,attachmentId)&&await this.canDownload(actor,sourceId,attachmentId,db);
+      const ownFile=developmentSnapshotContainsFile(snapshot,attachmentId)&&await this.canDownload(actor,sourceId,attachmentId,db);
+      const allowed=ownFile||(await this.originalRevisionPrintDetails(db,actor,{sourceId,round:roundNumber,documentVersion,designerId:source.created_by,
+        asOf:observedBusinessTime(this.now).now},await developmentRevisionSource(db,sourceId))).printFeedback?.images?.some(image=>image.attachmentId===attachmentId)===true;
       await db.query('COMMIT');return allowed;
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
@@ -123,14 +134,56 @@ export class DigitalDevelopmentService {
     if(source.draft_reserved)return observedBusinessTime(this.now).now;
     return (await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at;
   }
-  async readDocument(actor:TrustedActorContext,sourceId:string,roundNumber?:number):Promise<DevelopmentSheet>{
+  private async workbenchBasics(db:Database,sourceId:string,roundNumber:number,documentVersion:number):Promise<DevelopmentWorkbenchBasics|undefined>{
+    const row=(await db.query<{value:unknown}>(`SELECT after_state->'basics' AS value FROM audit_events
+      WHERE entity_type='digital_development' AND entity_id=$1 AND action='development_workbench_basics_saved'
+        AND after_state->>'roundNumber'=$2 AND after_state->>'documentVersion'=$3
+      ORDER BY ((after_state->'basics')->>'revision')::integer DESC LIMIT 1`,
+    [sourceId,String(roundNumber),String(documentVersion)])).rows[0];
+    return row?DevelopmentWorkbenchBasicsSchema.parse(row.value):undefined;
+  }
+  async saveWorkbenchBasics(actor:TrustedActorContext,sourceId:string,raw:SaveDevelopmentWorkbenchBasics,key:string){
+    const input=SaveDevelopmentWorkbenchBasicsSchema.parse(raw);
+    return this.command(actor,sourceId,'workbench_basics',key,input,async db=>{
+      await assertWholeOrderActive(db,'source',sourceId);
+      const sheet=await this.read(actor,sourceId,db);
+      if(!sheet.canEdit)digitalForbidden();
+      if(!sheet.document?.workbenchSheet||!(sheet.status==='published'||sheet.preorderPublication)||
+         sheet.version!==input.documentVersion||(sheet.roundNumber??1)!==input.roundNumber)
+        conflict('本单有效版单已更新，请核对后再编辑基础信息');
+      const prior=await this.workbenchBasics(db,sourceId,input.roundNumber,input.documentVersion);
+      if((prior?.revision??0)!==input.expectedRevision)conflict('基础信息已更新，请核对后再保存');
+      const basics={brand:input.brand,referenceNote:input.referenceNote,revision:input.expectedRevision+1};
+      await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
+        VALUES($1,$2,$3,'development_workbench_basics_saved','digital_development',$4,$5,$6)`,
+      [randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify(prior??{
+        brand:sheet.document!.workbenchSheet!.brand,referenceNote:sheet.document!.workbenchSheet!.referenceNote,revision:0,
+      }),JSON.stringify({roundNumber:input.roundNumber,documentVersion:input.documentVersion,basics})]);
+      return basics;
+    },async db=>{
+      if(isRootActor(actor))return;
+      const owner=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0]?.created_by;
+      if(owner!==actor.actorId||!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'sample_designer'))digitalForbidden();
+    });
+  }
+  async readDocument(actor:TrustedActorContext,sourceId:string,roundNumber?:number,enableWorkbenchBasics=false):Promise<DevelopmentSheet>{
     const db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const result=await this.read(actor,sourceId,db,roundNumber,true);
       const orderRush=(result.status==='published'||result.preorderPublication)
         &&(await readDevelopmentOrderRush(db,[{sourceId,orderId:null}])).has(`source:${sourceId}`);
-      await db.query('COMMIT');return orderRush?{...result,orderRush:true as const}:result;
+      const basics=enableWorkbenchBasics&&result.document?.workbenchSheet&&result.version>0
+        ?await this.workbenchBasics(db,sourceId,result.roundNumber??1,result.version):undefined;
+      const basicsEditable=enableWorkbenchBasics&&result.canEdit&&result.document?.workbenchSheet&&
+        (result.status==='published'||result.preorderPublication)&&(isRootActor(actor)||actor.actorRoles.includes('sample_designer')&&
+        (await db.query("SELECT 1 FROM digital_production_sources WHERE source_id=$1 AND created_by=$2",[sourceId,actor.actorId])).rowCount&&
+        await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'));
+      const sales=result.numberedIdentity?.orderNumber
+        ?await new OrderNumberRepository(db).boundSales(sourceId,result.numberedIdentity.orderNumber):undefined;
+      await db.query('COMMIT');return {...result,...(orderRush?{orderRush:true as const}:{}),
+        ...(basics?{workbenchBasics:basics}:{}),...(basicsEditable?{workbenchBasicsEditable:true as const}:{}),
+        ...(sales?{numberedSales:sales}:{})};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number, includePrintDetails=false): Promise<DevelopmentSheet> {
@@ -203,7 +256,7 @@ export class DigitalDevelopmentService {
       FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3`,[actor.actorId,`development:${sourceId}:save`,key])).rows[0];
     return {sourceId,version:row?.sourceId===sourceId?row.version:null};
   }
-  private async command<T>(actor: TrustedActorContext, sourceId: string, command: string, key: string, input: unknown, action: (db: PoolClient) => Promise<T>): Promise<T> {
+  private async command<T>(actor: TrustedActorContext, sourceId: string, command: string, key: string, input: unknown, action: (db: PoolClient) => Promise<T>, authorize?: (db: PoolClient)=>Promise<void>): Promise<T> {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) conflict("缺少有效操作标识");
     const db = this.transactionClient??await this.database.connect();
     try {
@@ -212,6 +265,7 @@ export class DigitalDevelopmentService {
       await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await this.source(db, actor, sourceId, true);
       await db.query("SELECT source_id FROM digital_production_sources WHERE source_id=$1 FOR UPDATE", [sourceId]);
+      await authorize?.(db);
       const name = `development:${sourceId}:${command}`;
       const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
       const prior = (await db.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, name, key])).rows[0];

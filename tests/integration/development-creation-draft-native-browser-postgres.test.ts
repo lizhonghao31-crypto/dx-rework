@@ -184,7 +184,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     const handover=(await h.db.query(`SELECT record_id,version,occurred_at FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover'`,[sourceId])).rows;
     expect(handover).toHaveLength(1);
     await page.getByRole('button',{name:'客户确认下单',exact:true}).click();
-    const formalForm=page.getByRole('region',{name:'客户与报价',exact:true});
+    const formalForm=page.getByRole('region',{name:'客户意见',exact:true});
     await formalForm.getByRole('button',{name:'确认下单',exact:true}).waitFor();
     expect(await formalForm.getByRole('textbox',{name:'订单ID',exact:true}).inputValue()).toBe(issued);
     await formalForm.getByRole('textbox',{name:'PO 1 正式款号 / PO',exact:true}).fill(`${issued}-01`);
@@ -316,6 +316,51 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect(prints.current).toMatchObject({sourceId,designStyleNo:orderNumber,numberedIdentity:{orderNumber}});
     expect(prints.history).toMatchObject({sourceId,roundNumber:prints.current.roundNumber,documentVersion:prints.current.version,
      designStyleNo:orderNumber,numberedIdentity:prints.current.numberedIdentity});
+    const workbench=`/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`;
+    const basicsPath=`/api/digital-production/sources/${sourceId}/development/workbench-basics`;
+    const loadOriginal=()=>page.request.get(`${h.base}/api/digital-production/sources/${sourceId}/development/versions/${prints.current.version}?round=${prints.current.roundNumber}`);
+    const snapshot=JSON.stringify(await (await loadOriginal()).json());
+    const clockBefore=await orderTimeCreated(h.db,{kind:'order',id:productionOrderId});
+    const fullOrder=()=>h.db.query('SELECT to_jsonb(t) AS record FROM digital_production_orders AS t WHERE production_order_id=$1',[productionOrderId]);
+    const originalFormal=(await fullOrder()).rows;
+    await page.goto(new URL(workbench,page.url()).href);
+    const summary=page.locator('.designer-order-identity');
+    const edit=summary.getByRole('button',{name:'编辑基础信息',exact:true});
+    await edit.waitFor();
+    expect(await summary.getByText(orderNumber,{exact:true}).count()).toBeGreaterThan(0);
+    expect(await summary.getByText('P02',{exact:true}).isVisible()).toBe(true);
+    expect(await summary.getByText('TEST-G2-FORMAL-PO',{exact:true}).isVisible()).toBe(true);
+    await edit.click();
+    const dialog=page.getByRole('dialog',{name:'编辑基础信息',exact:true});
+    await dialog.getByRole('textbox',{name:'品牌',exact:true}).fill('TEST 基础品牌已更正');
+    await dialog.getByRole('textbox',{name:'参考款 / 版型说明',exact:true}).fill('TEST 基础备注原便签');
+    expect(await dialog.getByRole('textbox').count()).toBe(2);
+    const update=page.waitForResponse(r=>r.request().method()==='PUT'&&new URL(r.url()).pathname===basicsPath);
+    await dialog.getByRole('button',{name:'保存基础信息',exact:true}).click();
+    const outcome=await update;expect(outcome.status(),await outcome.text()).toBe(200);
+    const request=outcome.request(),idempotencyKey=request.headers()['idempotency-key']!,input=request.postDataJSON();
+    expect(await outcome.json()).toEqual({brand:'TEST 基础品牌已更正',referenceNote:'TEST 基础备注原便签',revision:1});
+    await dialog.waitFor({state:'hidden'});
+    expect(await summary.getByText('TEST 基础品牌已更正',{exact:true}).isVisible()).toBe(true);
+    const replay=await page.request.put(h.base+basicsPath,{headers:{'idempotency-key':idempotencyKey},data:input});
+    expect(replay.status()).toBe(200);expect(await replay.json()).toEqual(await outcome.json());
+    const stale=await page.request.put(h.base+basicsPath,{headers:{'idempotency-key':randomUUID()},data:{...input,brand:'TEST stale edit'}});
+    expect(stale.status()).toBe(409);
+    for(const extra of [{orderDate:'2028-01-01'},{actualReceived:200},{materialUnitPrice:'1'},{expectedCost:'9'}]){
+     const forbidden=await page.request.put(h.base+basicsPath,{headers:{'idempotency-key':randomUUID()},data:{...input,expectedRevision:1,...extra}});
+     expect(forbidden.status()).toBe(400);
+    }
+    const unrelated=await h.open(h.f.people.warehouse!.actorId,1165,{},workbench);
+    try{
+     const denial=await unrelated.page.request.put(h.base+basicsPath,{headers:{'idempotency-key':randomUUID()},data:{...input,expectedRevision:1}});
+     expect([403,404]).toContain(denial.status());
+    }finally{await unrelated.close();}
+    await page.reload();await summary.getByText('TEST 基础备注原便签',{exact:true}).waitFor();
+    const nativeHistory=await loadOriginal();expect(nativeHistory.status()).toBe(200);expect(JSON.stringify(await nativeHistory.json())).toBe(snapshot);
+    expect(await orderTimeCreated(h.db,{kind:'order',id:productionOrderId})).toEqual(clockBefore);
+    expect((await fullOrder()).rows).toEqual(originalFormal);
+    expect((await h.db.query("SELECT count(*)::int AS n FROM audit_events WHERE entity_id=$1 AND action='development_workbench_basics_saved'",[sourceId])).rows[0]?.n).toBe(1);
+    await page.screenshot({path:join(evidence,'c5-workbench-basics.png'),fullPage:true});
     expect(h.requests.filter(request=>request.session===formal.session&&request.method==='POST'&&request.path.endsWith('/sources/numbered-drafts'))).toHaveLength(1);
    }catch(error){await writeFile(join(evidence,'formal-numbering-failure.txt'),await formal.page.locator('body').innerText());throw error;}
    finally{await formal.context.close();}

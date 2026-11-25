@@ -2,7 +2,7 @@ import {SaveDevelopmentAmendmentSchema,SubmitDevelopmentAmendmentSchema} from "@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, PublishDevelopmentPreorderSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
+import { DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, PublishDevelopmentPreorderSchema, SaveDevelopmentWorkbenchBasicsSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -22,7 +22,11 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   const id = (request: FastifyRequest, name: string) => parse(z.string().uuid(), (request.params as Record<string, unknown>)[name]);
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const base = "/digital-production/sources/:sourceId/development";
-  app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.readDocument(await actor(request),id(request,"sourceId"),query.round);});
+  app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.readDocument(await actor(request),id(request,"sourceId"),query.round,dependencies.workbenchNumberedCreation===true);});
+  if(dependencies.creationEnabled&&dependencies.workbenchNumberedCreation){
+    app.put(`${base}/workbench-basics`,async request=>service.saveWorkbenchBasics(await actor(request),id(request,'sourceId'),
+      parse(SaveDevelopmentWorkbenchBasicsSchema,request.body),key(request)));
+  }
   app.get(`${base}/published-versions`,async(request,reply)=>{
     const query=parse(z.object({page:z.coerce.number().int().min(1).max(1_000_000).default(1),q:z.string().max(100).default('')}).strict(),request.query);
     reply.header('cache-control','private, no-store');return service.publishedVersions(await actor(request),id(request,'sourceId'),query.page,query.q);

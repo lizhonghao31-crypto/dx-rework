@@ -1,17 +1,20 @@
 import {Link} from '@astryxdesign/core/Link';
-import {useEffect,useState,type ReactNode} from 'react';
+import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
+import {Dialog} from '@astryxdesign/core/Dialog';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
 import {Table} from '@astryxdesign/core/Table';
-import type {DevelopmentSheet} from '@dx-rework/contracts/digital-development';
+import type {DevelopmentSheet,DevelopmentWorkbenchBasics,SaveDevelopmentWorkbenchBasics} from '@dx-rework/contracts/digital-development';
+import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {DESIGNER_WORKBENCH_TASK_KINDS,type DevelopmentWorkspaceHandling,type DevelopmentWorkspaceItem} from '@dx-rework/contracts/digital-development-workspace';
-import type {JourneyNode,JourneyRecord,JourneyStageKey,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {JourneyRecord,JourneyStageKey,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
 import {createWebUrls} from '../url-contract.js';
 import {CockpitOperationLog} from './cockpit-operation-log.js';
 import {digitalChildDetailHref} from './digital-detail-route.js';
 import {DevelopmentCustomerConfirmation,useDevelopmentExecution} from './digital-development-execution-panel.js';
 import {DevelopmentSampleHandoverPanel} from './development-sample-handover.js';
-import {journeyRecordIdentity,journeyStateLabels} from './digital-journey-cockpit-model.js';
+import {journeyRecordIdentity} from './digital-journey-cockpit-model.js';
 import {digitalRequest} from './digital-production-api.js';
 import {DigitalReadFailure} from './digital-read-failure.js';
 import {DigitalQuotationPanel} from './digital-quotation-panel.js';
@@ -22,30 +25,18 @@ import {todoRouteHref} from './todo-route-link.js';
 import {originalDocumentHref,type OriginalDocumentRef} from './original-document-directory.js';
 import {navigateInternalPage} from './internal-navigation.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
-import {digitalTaskDisplayStatus} from './digital-workspace-copy.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {createClientRequestId} from './client-request-id.js';
 
-const labels:Record<DesignerOrderArea,string>={document:'版单资料',development:'开发进度',customer:'客户与报价',handover:'交接与寄样',records:'订单单据',history:'操作记录'};
-const labelsId=(area:DesignerOrderArea)=>`designer-order-${area}`;
+type VisibleArea=Exclude<DesignerOrderArea,'development'>|'quotation'|'shipping';
+const labels:Record<VisibleArea,string>={document:'版单资料',handover:'交资料',customer:'客户意见',quotation:'报价',shipping:'样衣寄出',records:'订单单据',history:'操作记录'};
+const labelsId=(area:VisibleArea)=>`designer-order-${area}`;
 const urls=createWebUrls(import.meta.env.BASE_URL);
 function designerCanExecute(task:DigitalTask,actorId:string|undefined){
  return Boolean(actorId&&task.assigneeId===actorId&&task.requiredRole==='sample_designer'&&
   DESIGNER_WORKBENCH_TASK_KINDS.has(task.taskKind)&&task.canExecute&&task.state==='ready'&&!task.paused);
 }
 
-function displayMoment(value:string|null|undefined,precision?:'instant'|'date'|'missing'|'unavailable'){
- if(!value||precision==='missing'||precision==='unavailable')return '待核';
- if(precision==='date')return value;
- const date=new Date(value);
- return Number.isNaN(date.getTime())?'待核':date.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});
-}
-function currentDevelopmentNodes(journey:OrderJourney|null,round:number){
- const development=journey?.stages.find(stage=>stage.key==='development');
- return (development?.nodes??[]).filter(node=>!node.planningOnly&&node.round===round&&node.unavailableReason!=='permission');
-}
-function taskMatches(node:JourneyNode,task:DigitalTask){
- return node.instanceId===task.taskId||node.records.some(record=>record.domain==='task'&&record.id===task.taskId);
-}
 const versionedDocuments=new Set(['development','budget','instruction','quotation']);
 function originalRecordHref(record:JourneyRecord,returnTo:string){
  if(record.mode!=='read'||!record.url)return '';
@@ -93,12 +84,52 @@ export function DesignerHandlingItems({handling,hrefFor,limit=Infinity}:{handlin
  </div>;
 }
 
+function WorkbenchBasics({sheet,onSaved}:{sheet:DevelopmentSheet;onSaved:(value:DevelopmentWorkbenchBasics)=>void}){
+ const [open,setOpen]=useState(false),[brand,setBrand]=useState(''),[referenceNote,setReferenceNote]=useState('');
+ const [error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null),titleId=useId();
+ const record=sheet.workbenchBasics??sheet.document?.workbenchSheet;
+ const start=()=>{if(!record)return;setBrand(record.brand);setReferenceNote(record.referenceNote);setError('');setOpen(true);};
+ const save=async()=>{
+  if(writing.current)return;
+  if(brand.trim().length>100||referenceNote.trim().length>100){setError('品牌和参考款说明各最多100个字符。');return;}
+  const input:SaveDevelopmentWorkbenchBasics={brand,referenceNote,roundNumber:sheet.roundNumber??1,
+   documentVersion:sheet.version,expectedRevision:sheet.workbenchBasics?.revision??0},payload=JSON.stringify(input);
+  if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
+  writing.current=true;setBusy(true);setError('');
+  try{
+   const saved=await digitalRequest<DevelopmentWorkbenchBasics>(`sources/${sheet.sourceId}/development/workbench-basics`,'PUT',input,operation.current.key);
+   operation.current=null;onSaved(saved);setOpen(false);
+  }catch(reason){setError(reason instanceof Error?reason.message:String(reason));}
+  finally{writing.current=false;setBusy(false);}
+ };
+ return <>
+  <Button type="button" size="sm" label="编辑基础信息" onClick={start}/>
+  <Dialog isOpen={open} className="dx-designer-astryx" purpose="form" aria-labelledby={titleId}
+   onOpenChange={value=>{if(!writing.current)setOpen(value);}} width="min(32rem, calc(100vw - 2rem))">
+   <form className="development-technical-editor" onSubmit={event=>{event.preventDefault();void save();}}>
+    <h2 id={titleId}>编辑基础信息</h2>
+    <TextInput label="品牌" value={brand} onChange={setBrand} isDisabled={busy}/>
+    <TextInput label="参考款 / 版型说明" value={referenceNote} onChange={setReferenceNote} isDisabled={busy}/>
+    <p>客户、跟单、交期和已发布版单仍使用原更正或修订入口。</p>
+    {error&&<p role="alert">{error}</p>}
+    <div className="development-technical-actions">
+     <Button type="button" variant="secondary" label="取消" isDisabled={busy} onClick={()=>setOpen(false)}/>
+     <Button type="submit" variant="primary" label="保存基础信息" isDisabled={busy}/>
+    </div>
+   </form>
+  </Dialog>
+ </>;
+}
+
 export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,document,confirmation,onClose,onChanged}:{sourceId:string;round?:number|undefined;actorId?:string|undefined;item?:DevelopmentWorkspaceItem|undefined;sheet?:DevelopmentSheet|undefined;image?:ReactNode;document:ReactNode;confirmation:ReactNode;onClose:()=>void;onChanged:()=>void}){
- const [focus,setFocus]=useState<DesignerOrderArea|null>(()=>{
+ const [focus,setFocus]=useState<VisibleArea|null>(()=>{
   const area=new URLSearchParams(window.location.search).get('area');
-  return DESIGNER_ORDER_AREAS.find(key=>key===area)??null;
+  const prior=DESIGNER_ORDER_AREAS.find(key=>key===area);
+  return prior==='development'?'document':prior??null;
  });
  const [recordRefresh,setRecordRefresh]=useState(0);
+ const [savedBasics,setSavedBasics]=useState<{version:number;round:number;value:DevelopmentWorkbenchBasics}|null>(null);
  const [records,setRecords]=useState<OrderJourney|null>(null),[recordError,setRecordError]=useState<Error|null>(null);
  const [originalVersionsReady,setOriginalVersionsReady]=useState(false);
  const [handoverReady,setHandoverReady]=useState(false);
@@ -132,17 +163,19 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
  const sourceQuery=(area:DesignerOrderArea)=>{
   const target=new URL(window.location.href);target.searchParams.set('area',area);return target.pathname+target.search;
  };
- const open=(area:DesignerOrderArea)=>{
-  window.history.replaceState(window.history.state,'',sourceQuery(area));
-  setFocus(area);
- };
- const region=(area:DesignerOrderArea,content:ReactNode)=><section key={area} className="dx-production-panel designer-order-area" aria-labelledby={labelsId(area)}>
+ const region=(area:VisibleArea,content:ReactNode)=><section key={area} className="dx-production-panel designer-order-area" aria-labelledby={labelsId(area)}>
   <h2 tabIndex={-1} id={labelsId(area)}>{labels[area]}</h2>
   {content}
  </section>;
 
  const journey=item?.journey;
  const exactRecords=records?.sourceId===sourceId&&(!round||records.selectedRound===round)?records:null;
+ const orderDate=exactRecords?.cockpitCreationDetails?.find(entry=>entry.subject==='order')?.at;
+ const scopedBasics=sheet&&savedBasics?.version===sheet.version&&savedBasics.round===(sheet.roundNumber??1)&&
+   savedBasics.value.revision>(sheet.workbenchBasics?.revision??0)?savedBasics.value:sheet?.workbenchBasics;
+ const basicFields=scopedBasics??sheet?.document?.workbenchSheet;
+ const canEditBasics=sheet?.workbenchBasicsEditable&&sheet.document?.workbenchSheet&&
+   (current||Boolean(sheet.preorderPublication&&(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)));
  const readResult=(render:(value:OrderJourney)=>ReactNode)=>recordError
   ?<DigitalReadFailure error={recordError} onRetry={reloadRecords} retryLabel="重试读取原记录"/>
   :exactRecords?render(exactRecords):<p role="status">正在读取本单授权记录…</p>;
@@ -153,11 +186,21 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
    <h1>本单资料</h1>
    <div className="designer-order-summary">{image}<div>
     <h2>{journey?.designStyleNo??sheet?.designStyleNo??'正在读取订单'} <OrderRushBadge value={sheet?sheet.orderRush:item?.orderRush}/></h2>
-    <dl><div><dt>款名</dt><dd>{journey?.styleName??'—'}</dd></div><div><dt>客户</dt><dd>{journey?.customer??sheet?.customerCode??'—'}</dd></div>
+    {canEditBasics&&<WorkbenchBasics sheet={{...sheet,...(scopedBasics?{workbenchBasics:scopedBasics}:{})}}
+     onSaved={value=>{setSavedBasics({version:sheet.version,round:sheet.roundNumber??1,value});reloadRecords();}}/>}
+    <dl><div><dt>订单ID</dt><dd>{sheet?.numberedIdentity?.orderNumber??journey?.identity?.businessNumber??'—'}</dd></div>
+     <div><dt>客户</dt><dd>{journey?.customer??sheet?.customerCode??'—'}</dd></div>
      <div><dt>设计师</dt><dd>{journey?.designer??sheet?.designerName??'—'}</dd></div>
      <div><dt>跟单</dt><dd>{journey?.merchandisers.map(person=>person.name??'姓名未登记').join('、')||'—'}</dd></div>
-     <div><dt>开发类型</dt><dd>{sheet?.developmentType??journey?.developmentType??'—'}</dd></div>
+     <div><dt>下单日期</dt><dd>{orderDate?beijingCalendarDate(new Date(orderDate)):'—'}</dd></div>
+     <div><dt>性别</dt><dd>{sheet?.document?.workbenchSheet?.gender??'—'}</dd></div>
+     <div><dt>板类</dt><dd>{sheet?.document?.workbenchSheet?.boardType??'—'}</dd></div>
+     <div><dt>打板类型</dt><dd>{sheet?.developmentType??journey?.developmentType??'—'}</dd></div>
      <div><dt>服装模板</dt><dd>{sheet?.document?.template??'—'}</dd></div>
+     <div><dt>销售年份</dt><dd>{sheet?.numberedSales?.year??'—'}</dd></div>
+     <div><dt>销售系列</dt><dd>{sheet?.numberedSales?.series??'—'}</dd></div>
+     <div><dt>品牌</dt><dd>{basicFields?.brand||'—'}</dd></div>
+     <div><dt>参考款 / 版型说明</dt><dd>{basicFields?.referenceNote||'—'}</dd></div>
      <div><dt>开发资料</dt><dd>{sheet?`第 ${sheet.roundNumber??1} 轮 · v${sheet.version}`:'—'}</dd></div>
      <div><dt>采用资料</dt><dd>{journey?.adoptedRound?`开发第 ${journey.adoptedRound} 轮`:'—'}{journey?.instructionVersion?` · 制单 v${journey.instructionVersion}`:''}</dd></div>
      <div><dt>正式订单</dt><dd>{journey?.orderId?journey.orderNumbers.join('、')||'已确认下单':journey?'尚未确认下单':'—'}</dd></div>
@@ -172,27 +215,16 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
     ]}/>
    </div>}
   </header>
-  {current&&<section className="dx-production-panel designer-order-area" aria-label="交资料">
-   <h2>交资料</h2><DevelopmentSampleHandoverPanel sourceId={sourceId} round={sheet.roundNumber??1} documentVersion={sheet.version}
-    refreshRevision={recordRefresh} onReady={setHandoverReady}/>
-  </section>}
-  {item?.handling&&<section className="dx-production-panel designer-order-area" aria-label="当前办理">
-   <h2>当前办理</h2><DesignerHandlingItems handling={item.handling} hrefFor={route=>digitalChildDetailHref(route,sourceQuery('development'),urls.base)}/>
-  </section>}
-  <nav className="designer-order-sections" aria-label="本单区域">
-   {DESIGNER_ORDER_AREAS.map(area=><Link key={area} type="inherit" href={`#${labelsId(area)}`} onClick={event=>{
-    if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
-    event.preventDefault();open(area);
-   }}>{labels[area]}</Link>)}
-  </nav>
   {region('document',document)}
-  {current?<CurrentDevelopmentAreas sourceId={sourceId} actorId={actorId} revision={sheet?.materialEvents.length??0} changed={changed}
-    development={content=>region('development',content)} customer={content=>region('customer',content)}
-    handover={content=>region('handover',content)} sheet={sheet} journey={exactRecords}
-    timelineError={recordError} retryTimeline={reloadRecords} returnTo={sourceQuery('development')}
-    returnToHandover={sourceQuery('handover')} confirmation={confirmation}/>
-   :<>{region('development',<p>当前轮次请从版单资料查看原办理记录。</p>)}{region('customer',sheet?.preorderPublication&&confirmation?confirmation:<p>请切换到当前已发布轮次办理客户意见或报价。</p>)}
-     {region('handover',<p>请从当前有效资料查看原交接方式。</p>)}</>}
+  {region('handover',current?<><DevelopmentSampleHandoverPanel sourceId={sourceId} round={sheet.roundNumber??1} documentVersion={sheet.version}
+    refreshRevision={recordRefresh} onReady={setHandoverReady}/>
+    <ProductionReadinessPanel resource={{kind:'source',id:sourceId}} sourceDocumentVersion={sheet.version} designHandoverOnly onChanged={changed}/>
+   </>:<p>请从当前有效资料查看原交接方式。</p>)}
+  {current?<CurrentDevelopmentAreas key={`${sourceId}:${sheet.roundNumber??1}`} sourceId={sourceId} actorId={actorId} revision={sheet.materialEvents.length} changed={changed}
+    region={region} sheet={sheet} returnToHandover={sourceQuery('handover')} confirmation={confirmation}/>
+   :<>{region('customer',sheet?.preorderPublication&&confirmation?confirmation:<p>请切换到当前已发布轮次办理客户意见。</p>)}
+     {region('quotation',<p>请从当前有权报价或订单单据查看原版本。</p>)}
+     {region('shipping',<p>请从当前轮次查看原寄样记录。</p>)}</>}
   {region('records',readResult(journey=>{
    const openOriginal=(ref:OriginalDocumentRef)=>{
     const href=originalDocumentHref(ref,sourceQuery('records'),urls.base);if(href)void navigateInternalPage(href);
@@ -205,41 +237,9 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
  </div>;
 }
 
-function DevelopmentProgress({tasks,journey,round,actorId,returnTo}:{tasks:DigitalTask[];journey:OrderJourney|null;round:number;actorId:string|undefined;returnTo:string}){
- const nodes=currentDevelopmentNodes(journey,round);
- const taskLink=(task:DigitalTask,handle:boolean)=>digitalChildDetailHref(
-  '/ui/digital-production?'+new URLSearchParams({task:task.taskId,taskView:handle?'handle':'read'}),returnTo,urls.base);
- const unmatched=nodes.filter(node=>!tasks.some(task=>taskMatches(node,task)));
- if(!tasks.length&&!nodes.length)return <p>本轮暂无已核实的流程节点。</p>;
- return <ul className="designer-current-actions" aria-label="本轮开发节点">
-  {tasks.map(task=>{
-   const matched=nodes.filter(node=>taskMatches(node,task)),node=matched.length===1?matched[0]:undefined;
-   const own=designerCanExecute(task,actorId)&&task.taskKind!=='development_shipping';
-   const actual=task.actualCompletion;
-   const actualTime=actual?(actual.precision==='unknown'?'待核':displayMoment(actual.date??actual.at,actual.precision))
-     :node?displayMoment(node.actualDate??node.actualAt,node.actualDate?'date':undefined):'待核';
-   return <li key={task.taskId}><details><summary>{task.label} · {digitalTaskDisplayStatus(task)} · {task.assigneeName??'待核'}</summary>
-    <p>预计 {displayMoment(node?.expectedAt,node?.expectedPrecision)} · 实际 {actualTime}{(actual?.quality??node?.actualQuality)==='unverified'?'（未核实）':''}</p>
-    {(task.blockedReason||node?.blockers[0]?.label)&&<p>{task.blockedReason||node?.blockers[0]?.label}</p>}
-    <Link type="inherit" href={taskLink(task,false)}>查看原任务</Link>
-    {own&&<> · <Link type="inherit" href={taskLink(task,true)}>打开本人的办理</Link></>}
-   </details></li>;
-  })}
-  {unmatched.map(node=><li key={node.instanceId}><details><summary>{node.label} · {journeyStateLabels[node.state]} · {node.owner?.name??'待核'}</summary>
-   <p>预计 {displayMoment(node.expectedAt,node.expectedPrecision)} · 实际 {displayMoment(node.actualDate??node.actualAt,node.actualDate?'date':undefined)}</p>
-   {node.blockers[0]&&<p>{node.blockers[0].label}</p>}
-   {node.records.flatMap(record=>{
-    const href=originalRecordHref(record,returnTo);
-    return href?[<Link key={`${record.domain}:${record.id}:${record.version}`} type="inherit" href={href}>查看原记录</Link>]:[];
-   })}
-  </details></li>)}
- </ul>;
-}
-
-function CurrentDevelopmentAreas({sourceId,actorId,revision,changed,development,customer,handover,sheet,journey,timelineError,retryTimeline,returnTo,returnToHandover,confirmation}:{
- sourceId:string;actorId:string|undefined;revision:number;changed:()=>void;development:(content:ReactNode)=>ReactNode;customer:(content:ReactNode)=>ReactNode;
- handover:(content:ReactNode)=>ReactNode;sheet:DevelopmentSheet;journey:OrderJourney|null;timelineError:Error|null;retryTimeline:()=>void;
- returnTo:string;returnToHandover:string;confirmation:ReactNode;
+function CurrentDevelopmentAreas({sourceId,actorId,revision,changed,region,sheet,returnToHandover,confirmation}:{
+ sourceId:string;actorId:string|undefined;revision:number;changed:()=>void;region:(area:VisibleArea,content:ReactNode)=>ReactNode;
+ sheet:DevelopmentSheet;returnToHandover:string;confirmation:ReactNode;
 }){
  const controller=useDevelopmentExecution({sourceId,materialRevision:revision,onChanged:changed});
  const state=controller.state;
@@ -248,24 +248,14 @@ function CurrentDevelopmentAreas({sourceId,actorId,revision,changed,development,
   ?state.tasks.filter(task=>task.sourceId===sourceId&&task.routeVersion===round):[];
  const shipping=tasks.find(task=>task.taskKind==='development_shipping'&&designerCanExecute(task,actorId));
  const shippingHref=shipping?digitalChildDetailHref('/ui/digital-production?'+new URLSearchParams({task:shipping.taskId,taskView:'handle'}),returnToHandover,urls.base):'';
- return <>{development(<>
-   {controller.readError?<DigitalReadFailure error={controller.readError} onRetry={()=>void controller.recheck()} retryLabel="重试读取原任务"/>:
-    !state?<p role="status">正在读取本轮任务…</p>:<DevelopmentProgress tasks={tasks} journey={journey} round={round} actorId={actorId} returnTo={returnTo}/>}
-   {timelineError&&<DigitalReadFailure error={timelineError} onRetry={retryTimeline} retryLabel="重试读取节点日期"/>}
-  </>)}
-  {customer(<>{confirmation}
-   {controller.readError?<DigitalReadFailure error={controller.readError} onRetry={()=>void controller.recheck()} retryLabel="重试读取客户意见"/>
-    :state?<DevelopmentCustomerConfirmation controller={controller} direct/>
-    :<p role="status">正在核对办理资格…</p>}
-   {controller.writeError&&<p role="alert">{controller.writeError}</p>}
-   <DigitalQuotationPanel resource={{kind:'source',id:sourceId}} designerWorkbench={{actorId}} onChanged={changed}/></>)}
-  {handover(<>
-   <ProductionReadinessPanel resource={{kind:'source',id:sourceId}} sourceDocumentVersion={sheet.version} designHandoverOnly onChanged={changed}/>
-   <section aria-label="寄样"><h3>寄样</h3>
-    {shippingHref?<Link type="inherit" href={shippingHref}>打开原寄样任务</Link>:controller.readError
+ return <>{region('customer',<>{confirmation}
+   {controller.readError?<DigitalReadFailure error={controller.readError} onRetry={()=>void controller.recheck()} retryLabel="重试读取客户意见"/>:null}
+   {state?.sheet.sourceId===sourceId?<DevelopmentCustomerConfirmation controller={controller} direct/>
+    :!controller.readError?<p role="status">正在核对办理资格…</p>:null}
+   {controller.writeError&&<p role="alert">{controller.writeError}</p>}</>)}
+  {region('quotation',<DigitalQuotationPanel resource={{kind:'source',id:sourceId}} designerWorkbench={{actorId}} onChanged={changed}/>)}
+  {region('shipping',shippingHref?<Link type="inherit" href={shippingHref}>打开原寄样任务</Link>:controller.readError
      ?<DigitalReadFailure error={controller.readError} onRetry={()=>void controller.recheck()} retryLabel="重试读取寄样任务"/>
-     :state?<p>本轮没有当前可由本人办理的寄样任务。</p>:<p role="status">正在核对本轮寄样任务…</p>}
-   </section>
-  </>)}
+     :state?<p>本轮没有当前可由本人办理的寄样任务。</p>:<p role="status">正在核对寄样资格…</p>)}
  </>;
 }

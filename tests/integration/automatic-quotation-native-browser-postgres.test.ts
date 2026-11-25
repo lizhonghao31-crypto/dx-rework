@@ -688,7 +688,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await forms.publish(designer,source.sourceId,publication.version,randomUUID());
    const workbenchPath='/ui/digital-production?workspace=designer&section=workspace&area=customer&development='+source.sourceId;
    await d.page.goto(h.base+workbenchPath);
-   const customerArea=d.page.getByRole('region',{name:'客户与报价'});
+   const customerArea=d.page.getByRole('region',{name:'报价',exact:true});
    await customerArea.getByRole('heading',{name:'客户报价表',exact:true}).waitFor();
    await customerArea.locator('.quotation-editor').getByText('客户当前确认版：尚未确认',{exact:true}).waitFor();
    expect(await customerArea.getByLabel('TEST棉布用量负责人',{exact:true}).count()).toBe(0);

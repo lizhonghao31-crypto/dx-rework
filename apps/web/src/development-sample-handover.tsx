@@ -8,6 +8,7 @@ import {DigitalReadFailure} from './digital-read-failure.js';
 import {SubmissionAttempt} from './submission-attempt.js';
 import {SubmissionRequestError} from './submission-validation.js';
 import {useForegroundRead} from './use-foreground-read.js';
+import './development-sample-handover.css';
 
 const dateLabel=(value:string)=>new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});
 const electronicLabels={materials:'面辅料供应信息',order_quantities:'客户订单数量',quotation:'报价表'} as const;
@@ -18,6 +19,8 @@ export function DevelopmentSampleHandoverPanel({sourceId,round,documentVersion,r
  const read=useCallback((signal:AbortSignal)=>digitalRequest<DevelopmentSampleHandover>(path,'GET',undefined,undefined,{signal}),[path]);
  const result=useForegroundRead('development-sample-handover',`${sourceId}:${round}:${documentVersion}:${refreshRevision}`,read);
  const view=result.value?.sourceId===sourceId&&result.value.round===round?result.value:null;
+ const readable=view?.documentVersion===documentVersion&&!view.electronic.some(item=>item.state==='unavailable');
+ const progress=view?.formal&&readable?(view.formal.currentComplete?'complete':'pending'):null;
  const [message,setMessage]=useState<{recipientId:string;label:string}|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const writing=useRef(false),attempt=useRef(new SubmissionAttempt());
  const unknown=attempt.current.hasPending;
@@ -45,10 +48,13 @@ export function DevelopmentSampleHandoverPanel({sourceId,round,documentVersion,r
 
  return <>
   {result.error?<DigitalReadFailure error={result.error} onRetry={result.retry} retryLabel="重试读取样衣交接"/>
-   :view?<>
-    <p>已交 {view.electronic.filter(item=>item.state==='shared').length+Number(Boolean(view.current))} 项
-     {view.current&&view.electronic.every(item=>item.state==='shared'||item.state==='not_applicable')?' · 本次资料已交齐':''}</p>
-    <ul aria-label="电子资料交接">{view.electronic.map(item=><li key={item.kind}>
+   :view?<div className="development-handover-checklist" data-progress={progress??undefined}>
+    {progress?<p role="status"><strong>交资料—{progress==='complete'?'完成':'未完成'}</strong></p>
+     :<p>{readable?'本阶段不作正式四项交资料考核':'未能核对正式交资料状态'}</p>}
+    <p>已交 {view.electronic.filter(item=>item.state==='shared').length+Number(Boolean(view.current))} 项</p>
+    {progress==='pending'&&view.formal?.historicalCompletion&&<p>原正式交资料完成记录 · {dateLabel(view.formal.historicalCompletion.at)} · 当前版本或接收人待交齐</p>}
+    <ul aria-label="电子资料交接">{view.electronic.map(item=><li key={item.kind} data-receipt={item.state}>
+     {item.state==='shared'?<span aria-hidden="true">✓ </span>:!['unavailable','not_applicable'].includes(item.state)&&<span aria-hidden="true">× </span>}
      <strong>{electronicLabels[item.kind]}</strong>{' · '}
      {item.state==='shared'&&item.receipt?`已交 · v${item.receipt.version} · ${dateLabel(item.receipt.at)}`
       :item.state==='not_applicable'?'本阶段不要求'
@@ -58,8 +64,8 @@ export function DevelopmentSampleHandoverPanel({sourceId,round,documentVersion,r
     </li>)}</ul>
     <section aria-label="样衣交接">
     <h3>样衣交接</h3>
-    {view.current?<p>已交样衣 · {view.current.recipientName??'接收跟单'} · {dateLabel(view.current.occurredAt)}</p>
-     :<p>{view.recipient?`待交样衣 · 接收跟单：${view.recipient.name??'姓名未登记'}`:'待指定接收跟单'}</p>}
+    {view.current?<p data-receipt="shared"><span aria-hidden="true">✓ </span>已交样衣 · {view.current.recipientName??'接收跟单'} · {dateLabel(view.current.occurredAt)}</p>
+     :<p data-receipt="waiting_share"><span aria-hidden="true">× </span>{view.recipient?`待交样衣 · 接收跟单：${view.recipient.name??'姓名未登记'}`:'待指定接收跟单'}</p>}
     {view.documentVersion!==documentVersion?<p>版单资料已更新，请刷新本单后再办理。</p>
      :view.canConfirm&&!unknown&&message?.recipientId!==view.recipient?.id&&<Button label="确认已交样衣" size="sm" isDisabled={busy||result.waiting} onClick={()=>void send()}/>}
     {view.history.some(record=>record.eventId!==view.current?.eventId)&&<details><summary>原样衣交接记录</summary><ul>
@@ -68,7 +74,7 @@ export function DevelopmentSampleHandoverPanel({sourceId,round,documentVersion,r
      </li>)}
     </ul></details>}
     </section>
-   </>:<p role="status">正在读取样衣交接…</p>}
+   </div>:<p role="status">正在读取样衣交接…</p>}
   {message&&<p role="status">{message.label}</p>}{error&&<p role="alert">{error}</p>}
   {unknown&&<Button label="使用原内容核对样衣交接" size="sm" isDisabled={busy} onClick={()=>void send(true)}/>}
  </>;

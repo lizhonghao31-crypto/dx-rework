@@ -2485,5 +2485,29 @@
       "guard_secondary_craft_approver"
     ],
     "sequences": []
+  },
+  "0306_development_revision_comment_adoptions": {
+    "checksum": "64cf8e49214db110cb14e82125dff0175b782efa6118d5ef2126db96018dbe4f",
+    "tables": [
+      "digital_development_final_comments"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "audit_events",
+      "digital_development_final_comments",
+      "digital_production_orders",
+      "digital_production_sources"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_revision_comment_adoptions",
+      "digital_development_formal_handover_enrollments"
+    ],
+    "execute": [
+      "reject_operation_event_mutation"
+    ],
+    "sequences": []
   }
 }

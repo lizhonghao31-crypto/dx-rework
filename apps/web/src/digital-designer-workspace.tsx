@@ -22,7 +22,7 @@ import { NavigationIcon } from "./navigation-icons.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button,Surface } from "@dx-rework/ui";
 import { BusinessTable, FilterBar, KpiCard, Pagination, StatusBadge } from "@dx-rework/ui/production";
-import { DEVELOPMENT_HANDLING_FILTERS, DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
+import { DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
 import type { DigitalCustomer, DigitalOrder } from "@dx-rework/contracts/digital-production";
 import {DEVELOPMENT_GARMENTS,type DevelopmentDocument,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
 import { DigitalRequestError,digitalRequest } from "./digital-production-api.js";
@@ -43,7 +43,7 @@ const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4
 type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean;total:number};
 const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
-  const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "designer", "handling", "startDate", "endDate"].includes(key))));
+  const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "designer", "startDate", "endDate"].includes(key))));
   return parsed.success ? parsed.data : DevelopmentWorkspaceFilterSchema.parse({});
 }
 function StyleImage({item}: {item: DevelopmentWorkspaceItem}) {
@@ -168,14 +168,6 @@ export function DigitalDesignerWorkspace() {
     return()=>{live=false;abort.abort();};
   },[editor,creatingPage,refresh]);
   useEffect(()=>registerSessionInvalidator(()=>{creation.reset();discardKeys.current.clear();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftError('');setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setRefresh(value=>value+1);}),[]);
-  useEffect(()=>{
-    if(!access?.actorId||editor||creatingPage||query.has('handling'))return;
-    try{
-      const saved=localStorage.getItem(`dx.designer.handling:${access.actorId}`);
-      const value=DEVELOPMENT_HANDLING_FILTERS.find(key=>key===saved);
-      if(value&&value!=='all')update({handling:value});
-    }catch{/* The directory remains usable without preference storage. */}
-  },[access?.actorId,editor,creatingPage]);
   useEffect(() => {
     let live = true; setSheets({}); setSheetErrors({});setOrders({});setOrderErrors({});
     const item = editor?undefined:result?.items.find(value => value.journey.id === selectedId);
@@ -197,10 +189,6 @@ export function DigitalDesignerWorkspace() {
     if(creatingPage&&next.search!==filter.search)setDraftPage(1);
     setFilter(next);setSelectedId(null);setCollapsed(false);
     window.history.replaceState(window.history.state, "", contextUrl({}, next, null));
-  };
-  const changeHandling=(handling:DevelopmentWorkspaceFilter['handling'])=>{
-    if(access?.actorId&&handling)try{localStorage.setItem(`dx.designer.handling:${access.actorId}`,handling);}catch{/* Use the URL preference for the current visit. */}
-    update({handling});
   };
   const select = (id: string) => {setSelectedId(id); setCollapsed(false); window.history.replaceState(window.history.state, "", contextUrl({}, filter, id));};
   const selected = result?.items.find(item => item.journey.id === selectedId), sheet = selected ? sheets[selected.journey.id] : undefined;
@@ -408,10 +396,6 @@ export function DigitalDesignerWorkspace() {
 
       <FilterBar as="div"><label className="development-search-field">款号 / PO<input value={search} maxLength={100} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} placeholder="款号、款名或 PO" onChange={event => setSearch(event.target.value)} onKeyDown={event => {if (event.key === "Enter"&&!event.nativeEvent.isComposing) update({search});}}/></label><label>客户<SearchableSelect value={filter.customer ?? ""} onChange={event => update({customer:event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</SearchableSelect></label><label>设计师<SearchableSelect value={filter.designer ?? ""} onChange={event => update({designer:event.target.value || undefined})}><option value="">全部设计师</option>{result?.designers?.map(designer => <option key={designer}>{designer}</option>)}</SearchableSelect></label><label>状态<select value={filter.view} onChange={event => update({view:event.target.value as DevelopmentWorkspaceFilter['view']})}>{DEVELOPMENT_VIEWS.map(view => <option key={view.key} value={view.key}>{view.label}</option>)}</select></label><label className="development-date-field">创建日期<span className="development-date-input"><input aria-label="创建开始日期" type="date" value={filter.startDate ?? ""} onChange={event => update({startDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.startDate ?? "开始日期"}</span></span><span className="development-date-separator">至</span><span className="development-date-input"><input aria-label="创建结束日期" type="date" value={filter.endDate ?? ""} onChange={event => update({endDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.endDate ?? "结束日期"}</span></span></label></FilterBar>
       {(error||accessError) && <p role="alert">{error||accessError}</p>}{result?.freshness&&<p role="status">部分订单信息尚未更新，数量暂不显示。<CockpitRetryUpdates ids={result.freshness.retryIds??[]} onUpdated={()=>setRefresh(value=>value+1)}/></p>}{result?.detailFailures?.length? <p role="status">{result.detailFailures.map(item=>item.designStyleNo).join("、")} 的详情读取失败。<Button onClick={retryList}>重新读取本页</Button></p>:null}
-      <label className="designer-handling-filter">当前办理 <select value={filter.handling??'all'} disabled={!access?.actorId} onChange={event=>changeHandling(DEVELOPMENT_HANDLING_FILTERS.find(value=>value===event.target.value))}>
-       <option value="all">全部</option><option value="mine">需我处理</option><option value="waiting">等别人</option><option value="returned">退回要改</option>
-      </select></label>
-      {filter.handling&&filter.handling!=='all'&&<p role="status">根据已核实的当前任务筛选。</p>}
       <>
       <div className="development-view-cards">{DEVELOPMENT_VIEWS.filter(view => view.key !== "all").map((view,index) => <KpiCard key={view.key} icon={<NavigationIcon name={(["FileText","History","Users","PackageCheck"] as const)[index]??"FileText"} />} className={`development-kpi development-kpi-${index}`} label={view.label} value={view.key==='draft'?(draftTotal?.search===filter.search?draftTotal.total:'—'):(result?.counts?.[view.key]??'—')} detail={['待完善资料','正在开发','等待订购确认','已记录订购信息'][index]} selected={filter.view === view.key} onClick={() => update({view:filter.view === view.key ? 'all' : view.key})}/>)}</div>
       <div className="development-table-scroll development-list-viewport">

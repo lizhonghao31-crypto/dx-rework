@@ -238,7 +238,14 @@ export function DesignerRelatedOriginals({order,materials,returnTo,onOriginal,on
   if(nextCategory)target.searchParams.set('originalCategory',nextCategory);else target.searchParams.delete('originalCategory');
   history.replaceState(history.state,'',target);
  };
- const target=new URL(returnTo,'https://local.invalid');target.searchParams.set('originalStage',stage);
+ const target=new URL(returnTo,'https://local.invalid'),liveContext=new URL(location.href);
+ if(liveContext.pathname===target.pathname&&liveContext.searchParams.get('development')===order.sourceId){
+  for(const key of ['originalSearch',...originalVersionKinds.map(kind=>'original'+kind+'Page')]){
+   const latest=liveContext.searchParams.get(key);
+   if(latest!==null)target.searchParams.set(key,latest);else target.searchParams.delete(key);
+  }
+ }
+ target.searchParams.set('originalStage',stage);
  if(category)target.searchParams.set('originalCategory',category);
  else target.searchParams.delete('originalCategory');
  const targetPath=target.pathname+target.search;

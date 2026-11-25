@@ -1279,6 +1279,10 @@
     {
       "version": "0305_secondary_craft_decision_authority",
       "checksum": "61b95671c30399e24607976bfd6482c89f2f4c0d054e2ceed1af06449025721d"
+    },
+    {
+      "version": "0306_development_revision_comment_adoptions",
+      "checksum": "64cf8e49214db110cb14e82125dff0175b782efa6118d5ef2126db96018dbe4f"
     }
   ]
 }

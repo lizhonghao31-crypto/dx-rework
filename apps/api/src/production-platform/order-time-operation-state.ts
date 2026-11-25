@@ -32,6 +32,7 @@ import {fixedOrderWork} from './fixed-order-work.js';
 import type {FixedWorkInputs} from './fixed-work-definition.js';
 import {OrderTimePlanRepository,type OrderTimeInput} from './order-time-plan-repository.js';
 import {currentOrderTimeCompany,historicalOrderTimeCompany,orderTimeAdmission} from './order-time-admission.js';
+import {formalDevelopmentHandoverAvailable} from './development-formal-handover-evidence.js';
 import {orderTimeInputFromRoute,orderTimeCheck,orderTimeBegunStates,type OrderTimeNativeProgress} from './order-time-request-plan.js';
 import {formalRemainingSchedule} from './order-time-formal-arrangement.js';
 import {nativeTaskReadiness} from './task-readiness-facts.js';
@@ -90,6 +91,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(preorderPublication)sourceVersion.preorderPublication=preorderPublication.event_id;
  if(order)sourceVersion.instructionVersion=selectedInstruction?.version??null;
  if(operation.kind==='development_revision'){
+  if(operation.input.revision)conflict('客户复版须沿原版单入口建立，之后按原审批发布');
   const draft=(await db.query('SELECT version,payload FROM digital_development_round_drafts WHERE source_id=$1',[operation.sourceId])).rows[0]??conflict('请先保存本单复版资料');
   if(draft.payload.origin!=='内部发现')conflict('客户复版先建立独立草稿，再在该草稿发布时核算本单时效');
   const selected=await readDevelopmentRevisionPlan(db,sourceId!,draft.payload,document!.document,(await developmentSlaPlan(db,sourceId!))?.route_schema_version);
@@ -271,8 +273,10 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(preorderPublication&&operation.kind==='confirm_order'&&sourceId){
   const context=await preparationContext(db,{kind:'source',id:sourceId});
   const facts=currentPreparationMaterials(await preparationMaterialHistory(db,context),null);
+  const formalHandover=await formalDevelopmentHandoverAvailable(db);
   for(const work of value.work){
    if(work.parameterKey!=='design_handover'&&work.parameterKey!=='material_investment')continue;
+   if(formalHandover&&work.parameterKey==='design_handover')continue;
    const fact=facts.find(row=>row.kind===work.parameterKey&&row.scopeRef==='whole'&&row.valid&&
     (row.state==='ready'||row.state==='partial')&&row.occurredAt&&row.occurredAt<=time.now);
    if(!fact)continue;

@@ -67,6 +67,15 @@ export class OrderNumberRepository {
     return result.rows[0]?.customer_code??null;
   }
 
+  /** Read the original saved numbering dimensions for this exact claim. */
+  async boundSales(sourceId:string,orderNumber:string){
+    const row=(await this.db.query<{year:string|null;series:string|null}>(`SELECT series.components->>'salesYear' AS year,
+      series.components->>'salesSeries' AS series FROM digital_order_number_claims claim
+      JOIN digital_order_number_series series ON series.prefix=regexp_replace($2::text,'-[0-9]+$','')
+      WHERE claim.source_id=$1 AND claim.code_key=$3`,[sourceId,orderNumber,digitalPoKey(orderNumber)])).rows[0];
+    return row?.year&&/^\d{4}$/.test(row.year)?{year:Number(row.year),series:row.series}:undefined;
+  }
+
   async lockSettings(write = false) {
     await this.db.query(write
       ? 'SELECT pg_advisory_xact_lock(hashtextextended($1,0))'

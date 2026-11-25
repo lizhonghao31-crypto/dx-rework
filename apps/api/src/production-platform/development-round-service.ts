@@ -6,6 +6,7 @@ import {captureTechnicalRound} from './development-cycle-evidence.js';
 import {technicalEnrollment,inheritTechnicalArtifact,publishedTechnicalArtifact} from './development-technical-repository.js';
 import {DevelopmentTechnicalService} from './development-technical-service.js';
 import {createIndependentDevelopmentRevision} from './development-revision-source.js';
+import {developmentRevisionCommentAdoptionReady,readDevelopmentRevisionCommentBasis} from './development-revision-comment-basis.js';
 import {businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
@@ -18,7 +19,8 @@ import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import {DevelopmentRevisionSchema,type DevelopmentRevision} from '@dx-rework/contracts/digital-development-rounds';
+import {DevelopmentRevisionSchema,PublishDevelopmentRevisionSchema,type DevelopmentRevision} from '@dx-rework/contracts/digital-development-rounds';
+import type {z} from 'zod';
 import {developmentPublishErrors,usesDevelopmentMaterialPlanning} from '@dx-rework/contracts/digital-development';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -71,15 +73,32 @@ export class DevelopmentRoundService {
    return {draftVersion:input.expectedDraftVersion+1};
   });
  }
- async publish(actor:TrustedActorContext,sourceId:string,input:{expectedDraftVersion:number;basedOnRound:number},key:string){
+ async publish(actor:TrustedActorContext,sourceId:string,raw:z.input<typeof PublishDevelopmentRevisionSchema>,key:string){
+  const input=PublishDevelopmentRevisionSchema.parse(raw);
   return this.command(actor,sourceId,'publish',key,input,async db=>{
-   const draft=(await db.query('SELECT * FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0]??fail('请先保存复版草稿');
-   if(draft.version!==input.expectedDraftVersion||draft.based_on_round!==input.basedOnRound)fail('复版草稿已变化，请刷新后发布');
-   const revision=DevelopmentRevisionSchema.parse(draft.payload),publish=()=>this.publishWithClient(db,actor,sourceId,revision);
+   const draft=(await db.query('SELECT * FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];
+   if((draft?.version??0)!==input.expectedDraftVersion||draft&&draft.based_on_round!==input.basedOnRound)fail('复版草稿已变化，请刷新后发布');
+   const submitted=input.revision??(draft?DevelopmentRevisionSchema.parse(draft.payload):fail('请先读取本轮复版资料'));
+   const sheet=await this.forms().read(actor,sourceId,db);
+   let revision=input.revision?{...submitted,document:developmentRevisionForSave(submitted.document,sheet.document!)}:submitted;
+   const ref=revision.customerCommentRef;
+   if(ref){
+    if(!await developmentRevisionCommentAdoptionReady(db))fail('本轮客户评语引用功能尚未就绪');
+    if(ref.sourceId!==sourceId||ref.roundNumber!==input.basedOnRound||ref.roundNumber!==(sheet.roundNumber??1))fail('请选择本单当前轮次的客户评语');
+    if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'sample_designer'))digitalForbidden();
+    const original=await readDevelopmentRevisionCommentBasis(db,ref)??fail('原客户评语已不可用，请重新核对');
+    if(original.decision!=='changes_required'&&(original.final||original.decision!=='noted'))fail('本条客户意见未要求修改，不能作为复版依据');
+    if((await db.query('SELECT 1 FROM digital_development_revision_comment_adoptions WHERE comment_id=$1',[ref.commentId])).rowCount)fail('此版客户评语已建立复版，请打开原复版单');
+    revision={...revision,customerComment:original.text};
+   }
+   if(input.revision)await this.forms().bindFiles(db,actor,sourceId,revision.document);
+   const publish=()=>this.publishWithClient(db,actor,sourceId,revision);
    // A customer revision creates a separate inactive draft. Its original
    // publication later runs the same first-effective check as any new source.
    const result=revision.origin!=='内部发现'?await publish():await automaticOrderTime(this.database,db,actor,{kind:'development_revision',sourceId,input},publish,result=>({kind:'source',id:result.sourceId}));
-   await db.query('DELETE FROM digital_development_round_drafts WHERE source_id=$1',[sourceId]);return result;
+   if(ref)await db.query(`INSERT INTO digital_development_revision_comment_adoptions(source_id,round_number,based_on_source_id,based_on_round,based_on_scope,comment_id,comment_version,adopted_by)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[result.sourceId,result.roundNumber,sourceId,ref.roundNumber,ref.scopeRef,ref.commentId,ref.version,actor.actorId]);
+   if(draft)await db.query('DELETE FROM digital_development_round_drafts WHERE source_id=$1',[sourceId]);return result;
   });
  }
  async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string,patternReworkRoundId?:string){
