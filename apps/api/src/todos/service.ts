@@ -16,6 +16,7 @@ import { DigitalProductionAccessPolicy } from "../production-platform/access-pol
 import { isRootActor } from "../access/business-authority.js";
 import {merchandiserWorkCandidate,merchandiserWorkPage,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories,type AuthorizedMerchandiserWorkItem} from '../production-platform/merchandiser-work-candidates.js';
 import {readMerchandiserTaskProgress} from '../production-platform/merchandiser-task-progress.js';
+import {readMerchandiserOriginalOrders} from '../production-platform/merchandiser-original-orders.js';
 import { randomUUID } from "node:crypto";
 import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
 
@@ -398,6 +399,18 @@ export class TodoService {
       });
       await db.query('COMMIT');
       return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state});
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+
+  async merchandiserOrderPage(actor:TrustedActorContext,filter:{search:string;page:number}){
+    this.requireCapability(actor,'todo:view');
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      if(!isRootActor(actor)&&(!actor.actorRoles.includes('order_merchandiser')||!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser')))
+        throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+      const result=await readMerchandiserOriginalOrders(db,actor,filter);
+      await db.query('COMMIT');return result;
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 

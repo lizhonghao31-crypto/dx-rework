@@ -4,7 +4,7 @@ import {Link} from '@astryxdesign/core/Link';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Table} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {MerchandiserWorkActionFilterSchema,MerchandiserWorkKindSchema,MerchandiserWorkResponseSchema,type MerchandiserWorkResponse} from '@dx-rework/contracts';
+import {MerchandiserOrderResponseSchema,MerchandiserWorkActionFilterSchema,MerchandiserWorkKindSchema,MerchandiserWorkResponseSchema,type MerchandiserOrderResponse,type MerchandiserWorkResponse} from '@dx-rework/contracts';
 import {DigitalIdSchema} from '@dx-rework/contracts/digital-production';
 import {todoDestination} from '@dx-rework/contracts/todo-destination';
 import {createWebUrls} from '../url-contract.js';
@@ -31,8 +31,43 @@ export function MerchandiserWorkbench({search}:{search:string}){
  },[]);
  if(!route)return <p role="alert">跟单工作区筛选不正确，请从原入口重新进入。</p>;
  return <div className="dx-designer-astryx" lang="zh-CN"><style>{designerAstryxCss}</style><h1>跟单工作区</h1>
-  <CurrentMerchandiserActions route={route} change={change}/>
+  {route.view==='orders'?<><Button label="返回跟单事项" variant="secondary" onClick={()=>change({...route,page:1,view:'work'})}/>
+   <OriginalMerchandiserOrders route={route} change={change}/></>:<CurrentMerchandiserActions route={route} change={change}/>}
  </div>;
+}
+/** A second view of original orders, not a fifth todo state and never a new
+ * instruction/contract/receiving form. Each existing domain rechecks access. */
+function OriginalMerchandiserOrders({route,change}:{route:MerchandiserWorkbenchRoute;change:(value:MerchandiserWorkbenchRoute)=>void}){
+ const [search,setSearch]=useState(route.search),[retry,setRetry]=useState(0);
+ const [result,setResult]=useState<{key:string;value:MerchandiserOrderResponse}|null>(null),[issue,setIssue]=useState<{key:string;message:string}|null>(null);
+ useEffect(()=>{
+  const value=search.trim();if(value===route.search||value.length>100)return;
+  const marker=window.setTimeout(()=>change({...route,page:1,search:value}),250);
+  return()=>window.clearTimeout(marker);
+ },[search,route,change]);
+ const params=new URLSearchParams({page:String(route.page),search:route.search}),path=urls.apiUrl('todos/merchandiser/orders?'+params),key=`${path}:${retry}`;
+ const exact=result?.key===key?result.value:null,error=issue?.key===key?issue.message:'',busy=!exact&&!error;
+ useForegroundWait(busy?`merchandiser-orders:${key}`:undefined);useInternalReturnScroll(Boolean(exact||error));
+ useEffect(()=>{
+  const abort=new AbortController();
+  void feedbackFetch(path,{method:'GET',credentials:'include',cache:'no-store',signal:abort.signal})
+   .then(response=>feedbackJson(response,'GET',value=>MerchandiserOrderResponseSchema.parse(value),message=>new Error(message)))
+   .then(value=>{if(!abort.signal.aborted)setResult({key,value});})
+   .catch(reason=>{if(!abort.signal.aborted)setIssue({key,message:reason instanceof Error?reason.message:'原授权订单读取失败'});});
+  return()=>abort.abort();
+ },[path,key]);
+ const from=merchandiserWorkbenchPath(route,urls.base);
+ return <section aria-label="原授权订单"><h2>原授权订单</h2><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
+  {error&&<p role="alert">{error} <Button label="重试读取" variant="secondary" onClick={()=>setRetry(value=>value+1)}/></p>}
+  {exact&&(exact.items.length===0?<p>没有符合当前搜索及授权范围的原订单。</p>:<div className="development-table-scroll"><Table data={exact.items} idKey="id" density="balanced" columns={[
+   {key:'orderNumber',header:'订单ID / 原款号',renderCell:row=><>{row.orderNumber??row.styleNo} <OrderRushBadge value={row.urgent}/></>},
+   {key:'customer',header:'客户 / PO',renderCell:row=><>{row.customer}<small>{row.poNumbers.join('、')||'PO 待核'}</small></>},
+   {key:'factories',header:'加工厂',renderCell:row=>row.factories.join('、')||'待核'},
+   {key:'id',header:'操作',renderCell:row=><Link type="inherit" href={digitalChildDetailHref(`/ui/digital-production?order=${row.id}`,from,urls.base)}>打开原订单</Link>},
+  ]}/></div>)}
+  <ListPagination page={route.page} total={exact?.total??null} totalPages={exact?Math.max(1,Math.ceil(exact.total/15)):null} busy={busy}
+   ariaLabel="原授权订单分页" onPageChange={page=>change({...route,page})}/>
+ </section>;
 }
 function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchRoute;change:(value:MerchandiserWorkbenchRoute)=>void}){
  const [search,setSearch]=useState(route.search),[retry,setRetry]=useState(0);
@@ -78,7 +113,8 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    <ProductionReadinessPanel key={`${action.resource.kind}:${action.resource.id}`} resource={action.resource} investmentOnly onChanged={saved}/>
   </section></DocumentGuardContext.Provider>}
   <section hidden={Boolean(action)} aria-label={states[route.state]}><h2 ref={listHeading} tabIndex={-1}>{states[route.state]}</h2>
-  <div className="pattern-actions"><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
+  <div className="pattern-actions"><Button label="查找原授权订单" variant="secondary" onClick={()=>change({...route,page:1,view:'orders'})}/>
+   <TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
    <Selector label="办理状态" value={route.state} options={Object.entries(states).map(([value,label])=>({value,label}))}
     onChange={value=>{const state=MerchandiserWorkActionFilterSchema.safeParse(value).data;if(state)change({...route,page:1,state});}}/>
    <Selector label="业务类型" value={route.kind??'all'} options={[{value:'all',label:'全部业务'},...Object.entries(labels).map(([value,label])=>({value,label}))]}

@@ -12,6 +12,7 @@ import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {ShipSampleService} from '../../apps/api/src/production-platform/ship-sample-service.js';
 import {prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {orderTimeCreated} from '../../apps/api/src/production-platform/order-time-created.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
@@ -24,6 +25,46 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-preorder-investment-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true,merchandiserWorkbench:true});await prepareRewashSettings(h.f);});
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
+ it('finds an assigned original order without a todo and returns to the same search and order',async()=>{
+  const f=h.f,merch=f.people.merchandiser!,viewer=await h.dedicated('order_merchandiser','TEST unrelated workbench merchandiser');
+  const search='TEST-X6-FACT-ONLY-'+randomUUID(),designer=f.people['sample-designer']!;
+  const order=await new DigitalProductionIdentityService(f.db,true).createOrder(designer,DigitalOrderCreateSchema.parse({
+   customerCode:'PD',productGroup:'男装',designStyleNo:search,orderDate:'2026-11-25',requiresColorMatching:false,
+   primaryMerchandiserId:merch.actorId,productionPlanning:{craftSteps:[],preshrink:false},
+   lines:[{formalPoNo:search,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:1}]}],
+  }),randomUUID());
+  const original={id:order.productionOrderId};
+  await new ShipSampleService(f.db).record(merch,original.id,{occurredAt:new Date().toISOString(),trackingNumber:'TEST-X6-ORIGINAL',note:'TEST completes the native pending task before original order lookup'},randomUUID());
+  const listPath='/api/todos/merchandiser/orders?'+new URLSearchParams({search,page:'1'});
+  const tab=await h.open(merch.actorId,1165,{},`/ui/digital-production?workspace=merchandiser&search=${encodeURIComponent(search)}`);
+  try{
+   const ordinary=await tab.context.request.get(h.base+'/api/todos/merchandiser/current?'+new URLSearchParams({search,state:'mine'}));
+   expect(ordinary.status(),await ordinary.text()).toBe(200);
+   expect(await ordinary.json()).toEqual({items:[],page:1,total:0});
+   const emptyDirectory=tab.page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname==='/api/todos/merchandiser/orders');
+   await tab.page.getByRole('button',{name:'查找原授权订单',exact:true}).click();
+   const response=await emptyDirectory;expect(response.status(),await response.text()).toBe(200);
+   expect(await response.json()).toMatchObject({page:1,total:1,items:[{id:original.id,styleNo:search,customer:order.customerCode,orderNumber:null}]});
+   const row=tab.page.getByRole('region',{name:'原授权订单',exact:true}).getByRole('row').filter({hasText:search});
+   const open=row.getByRole('link',{name:'打开原订单',exact:true});
+   expect(new URL((await open.getAttribute('href'))!,tab.page.url()).searchParams.get('order')).toBe(original.id);
+   await open.click();
+   await tab.page.getByRole('heading',{name:search,exact:true}).waitFor();
+   await tab.page.getByRole('link',{name:'成本预算表',exact:true}).waitFor();
+   await tab.page.getByRole('link',{name:'大货制单与客户交期',exact:true}).waitFor();
+   await tab.page.getByRole('button',{name:'返回',exact:true}).click();
+   await open.waitFor();
+   expect(new URL(tab.page.url()).searchParams.get('view')).toBe('orders');
+   expect(new URL(tab.page.url()).searchParams.get('search')).toBe(search);
+  }finally{await tab.close();}
+  const unrelated=await h.open(viewer.id,1165,{},'/ui/my-tasks');
+  try{
+   const reply=await unrelated.context.request.get(h.base+listPath);
+   expect(reply.status(),await reply.text()).toBe(200);
+   expect(await reply.json()).toEqual({items:[],page:1,total:0});
+   expect((await unrelated.context.request.get(`${h.base}/api/digital-production/orders/${original.id}`)).status()).toBe(404);
+  }finally{await unrelated.close();}
+ });
  it('lets the actual merchandiser enter from My Tasks, save real procurement and keep the draft unpublished and untimed',async()=>{
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,style='TEST-PREORDER-'+randomUUID();
   // This browser creates through the ordinary signed route, without a selected

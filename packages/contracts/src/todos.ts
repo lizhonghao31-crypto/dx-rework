@@ -204,6 +204,11 @@ export const MerchandiserWorkItemSchema=z.object({itemId:z.string().min(1),kind:
  state:MerchandiserWorkActionFilterSchema,responsibleName:z.string().nullable().optional()}).strict();
 export const MerchandiserWorkResponseSchema=z.object({items:z.array(MerchandiserWorkItemSchema),page:z.number().int().positive(),total:z.number().int().nonnegative()}).strict();
 export type MerchandiserWorkResponse=z.infer<typeof MerchandiserWorkResponseSchema>;
+export const MerchandiserOrderQuerySchema=MerchandiserWorkQuerySchema.pick({search:true,page:true}).strict();
+export const MerchandiserOrderResponseSchema=z.object({items:z.array(z.object({id:z.uuid(),orderNumber:z.string().nullable(),
+ styleNo:z.string(),customer:z.string(),poNumbers:z.array(z.string()),factories:z.array(z.string()),urgent:z.boolean()}).strict()),
+ page:z.number().int().positive(),total:z.number().int().nonnegative()}).strict();
+export type MerchandiserOrderResponse=z.infer<typeof MerchandiserOrderResponseSchema>;
 export const TodoReadReceiptSchema=z.object({read:z.literal(true),contentToken:z.string().regex(/^[a-f0-9]{64}$/),readAt:z.string().datetime()}).strict();
 
 export const TodoRoutingExceptionListResponseSchema = z.object({
