@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "99e3451bb057e44a7079aaee52c8673b45e9cb16",
-  "sourceFingerprint": "0f04837efa624fab6157d134393b43ac376778599f5081a54dd84e73a3750301",
+  "sourceFingerprint": "03512ab93799db01335345eed1d40ec9ba1637837ef0fea6092cb1973462e241",
   "rules": [
     {
       "source": "Approved v11.5 §4.6 and N07, centralized todo and existing authorized role lists from the current user instruction",
@@ -18,7 +18,8 @@
       ],
       "oldTests": [
         "tests/unit/digital-development-workspace.test.ts",
-        "tests/unit/todo-list-service.test.ts"
+        "tests/unit/todo-list-service.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ],
       "newTests": [
         "tests/integration/development-technical-postgres.test.ts"
@@ -30,7 +31,8 @@
         "native",
         "unit",
         "seven-pg-delta",
-        "seven-pg-static"
+        "seven-pg-static",
+        "quotation-full-after"
       ],
       "writes": [
         "apps/api/src/production-platform/bulk-fabric-todos.ts",
@@ -80,7 +82,8 @@
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
         "tests/unit/digital-development-workspace.test.ts",
-        "tests/unit/todo-read-split.test.ts"
+        "tests/unit/todo-read-split.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ]
     },
     {
@@ -280,7 +283,7 @@
           "sha256": "a90735457f3fd34db83bb36a584486d5f145b57d5f2077debab477368eaa8fd7"
         }
       ],
-      "context": "Local signed original App with Chromium and PostgreSQL dual URLs restricted to isolated TEST schemas. These are targeted cases, not Acceptance or final CI. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence.",
+      "context": "Local signed original App with Chromium and PostgreSQL dual URLs restricted to isolated TEST schemas. These are targeted cases, not Acceptance or final CI. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input.",
       "inputPaths": [
         "apps/web",
         "apps/api/migrations",
@@ -401,9 +404,15 @@
         "tests/unit/full-gate-risk-map.test.ts",
         "tests/integration/development-amendment-postgres.test.ts",
         "scripts",
-        "tests/unit"
+        "tests/unit",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps"
       ],
-      "inputFingerprint": "2123a7298d50340a6319127e392639890dd8020e4027e186b469a699f5d890e6"
+      "inputFingerprint": "b11babb36adb9ca845f5673493e4cf51a64b74a7ec7b978967ae6150c4fc28c1"
     },
     {
       "id": "unit",
@@ -546,10 +555,16 @@
         "tests/unit/full-gate-risk-map.test.ts",
         "tests/integration/development-amendment-postgres.test.ts",
         "scripts",
-        "tests/unit"
+        "tests/unit",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps"
       ],
-      "inputFingerprint": "2123a7298d50340a6319127e392639890dd8020e4027e186b469a699f5d890e6",
-      "context": "Node and Vitest on the exact candidate, scoped workbench, print, materials, existing authorization and todo consumers. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence."
+      "inputFingerprint": "b11babb36adb9ca845f5673493e4cf51a64b74a7ec7b978967ae6150c4fc28c1",
+      "context": "Node and Vitest on the exact candidate, scoped workbench, print, materials, existing authorization and todo consumers. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input."
     },
     {
       "id": "static",
@@ -683,10 +698,16 @@
         "tests/unit/full-gate-risk-map.test.ts",
         "tests/integration/development-amendment-postgres.test.ts",
         "scripts",
-        "tests/unit"
+        "tests/unit",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps"
       ],
-      "inputFingerprint": "2123a7298d50340a6319127e392639890dd8020e4027e186b469a699f5d890e6",
-      "context": "Repository workspace TypeScript, affected-path ESLint, time site inventory, migrations manifest and diff checks. No deployment or remote test. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence."
+      "inputFingerprint": "b11babb36adb9ca845f5673493e4cf51a64b74a7ec7b978967ae6150c4fc28c1",
+      "context": "Repository workspace TypeScript, affected-path ESLint, time site inventory, migrations manifest and diff checks. No deployment or remote test. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input."
     },
     {
       "id": "final-delta",
@@ -709,7 +730,7 @@
           "sha256": "c8d4cb1f58933ebad3764098d4fa25d400ef20903254439d28778571f002e0a5"
         }
       ],
-      "context": "Original signed Chromium and PostgreSQL 16 on two approved local isolated databases. Current versus exact historical issued identity via the real authenticated route, existing exact historical printing, and native publication plus confirmation receipt loss across reload. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence.",
+      "context": "Original signed Chromium and PostgreSQL 16 on two approved local isolated databases. Current versus exact historical issued identity via the real authenticated route, existing exact historical printing, and native publication plus confirmation receipt loss across reload. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input.",
       "inputPaths": [
         "packages",
         "tests/acceptance",
@@ -829,9 +850,15 @@
         "apps/web",
         "apps/api/migrations",
         "scripts",
-        "tests/unit"
+        "tests/unit",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps"
       ],
-      "inputFingerprint": "134887955c9bfdadbb74ad6c40dacc234955574fa6dda52ba4271ef4b1c9b3d9"
+      "inputFingerprint": "dbf15d1a66763554d90b7337a064fe8bae729e468a11bcbce141e585fe03db78"
     },
     {
       "id": "delta-static",
@@ -845,7 +872,7 @@
       "status": "passed",
       "log": "/tmp/dx-c2-final/delta-static.log",
       "logSha256": "1656d0ad1cd553fbb32e198c53a62ac65c3975cd92a4a3e47e0de2b7141f6d0e",
-      "context": "Exact current API typecheck, targeted ESLint of changed consumer and tests, diff and time site inventory after the review fix. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence.",
+      "context": "Exact current API typecheck, targeted ESLint of changed consumer and tests, diff and time site inventory after the review fix. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input.",
       "inputPaths": [
         "packages",
         "tests/acceptance",
@@ -965,9 +992,15 @@
         "apps/web",
         "apps/api/migrations",
         "scripts",
-        "tests/unit"
+        "tests/unit",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps"
       ],
-      "inputFingerprint": "134887955c9bfdadbb74ad6c40dacc234955574fa6dda52ba4271ef4b1c9b3d9"
+      "inputFingerprint": "dbf15d1a66763554d90b7337a064fe8bae729e468a11bcbce141e585fe03db78"
     },
     {
       "id": "ci-map",
@@ -990,7 +1023,7 @@
           "sha256": "86df7d82405d36a89d2c7d79bc6b2bd1de02673a0519654f23cf8663fcbf59bc"
         }
       ],
-      "context": "Node 22 and original Vitest non-database profile. Existing generic direct-import and new isolated supplier helper input both select the real amendment PostgreSQL suite without duplication. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence.",
+      "context": "Node 22 and original Vitest non-database profile. Existing generic direct-import and new isolated supplier helper input both select the real amendment PostgreSQL suite without duplication. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input.",
       "inputPaths": [
         "apps/api/src/production-platform/bulk-fabric-todos.ts",
         "apps/api/src/production-platform/bulk-preparation-service.ts",
@@ -1106,9 +1139,15 @@
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.business-chain.config.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps"
       ],
-      "inputFingerprint": "134887955c9bfdadbb74ad6c40dacc234955574fa6dda52ba4271ef4b1c9b3d9"
+      "inputFingerprint": "dbf15d1a66763554d90b7337a064fe8bae729e468a11bcbce141e585fe03db78"
     },
     {
       "id": "ci-map-amendment-pg",
@@ -1131,7 +1170,7 @@
           "sha256": "8d435a21006a4e654519f44919c22b8d44f95df607d0b2807e0c6f39b4d1efe9"
         }
       ],
-      "context": "Real PostgreSQL 16 isolated suite selected by the canonical classifier. Existing correction writes, assigned role, original records, and conflict checks unchanged. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence.",
+      "context": "Real PostgreSQL 16 isolated suite selected by the canonical classifier. Existing correction writes, assigned role, original records, and conflict checks unchanged. The new exact delta verifies the affected quotation path and corrected legacy fixture expectations; unchanged paths use the earlier real evidence. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input.",
       "inputPaths": [
         "apps/api/src/production-platform/bulk-fabric-todos.ts",
         "apps/api/src/production-platform/bulk-preparation-service.ts",
@@ -1247,9 +1286,15 @@
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.business-chain.config.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps"
       ],
-      "inputFingerprint": "134887955c9bfdadbb74ad6c40dacc234955574fa6dda52ba4271ef4b1c9b3d9"
+      "inputFingerprint": "dbf15d1a66763554d90b7337a064fe8bae729e468a11bcbce141e585fe03db78"
     },
     {
       "id": "seven-pg-delta",
@@ -1272,7 +1317,129 @@
           "sha256": "9d2038e54a51379ddacbfee9ede2eacb42eca90657d5dcc54b94ad492a3f0bcc"
         }
       ],
-      "context": "Node 22, signed Chromium and the repository’s two-worker canonical business-chain profile with two guarded local PostgreSQL 16 databases. Seven originally failing assertions plus the positive authorized linked quote directory contrast."
+      "context": "Node 22, signed Chromium and the repository’s two-worker canonical business-chain profile with two guarded local PostgreSQL 16 databases. Seven originally failing assertions plus the positive authorized linked quote directory contrast. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input.",
+      "inputPaths": [
+        "apps/api/src/production-platform/bulk-fabric-todos.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/bulk-washing-todos.ts",
+        "apps/api/src/production-platform/development-arrangement-todos.ts",
+        "apps/api/src/production-platform/development-order-rush.ts",
+        "apps/api/src/production-platform/development-workspace-query.ts",
+        "apps/api/src/production-platform/factory-production-qc-todos.ts",
+        "apps/api/src/production-platform/garment-quality-todos.ts",
+        "apps/api/src/production-platform/ie-processing-directory.ts",
+        "apps/api/src/production-platform/journey-home-projection.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/order-time-todos.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/qc-progress-todos.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/secondary-craft-approval-todos.ts",
+        "apps/api/src/production-platform/secondary-craft-quotation.ts",
+        "apps/api/src/production-platform/short-lead-todos.ts",
+        "apps/api/src/production-platform/special-craft-quotation-todos.ts",
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/todos/selection.ts",
+        "apps/api/src/todos/service.ts",
+        "apps/web/src/bulk-pattern-card.tsx",
+        "apps/web/src/bulk-task-workbench.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/digital-pattern-workspace.tsx",
+        "apps/web/src/digital-production-tasks-panel.tsx",
+        "apps/web/src/digital-production-workspaces.tsx",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/ie-processing-center.tsx",
+        "apps/web/src/my-todos-page.tsx",
+        "apps/web/src/order-rush-badge.tsx",
+        "apps/web/src/secondary-craft-quotation-page.tsx",
+        "apps/web/src/task-workbench-sample.tsx",
+        "packages/contracts/src/bulk-preparation.ts",
+        "packages/contracts/src/digital-development-workspace.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "packages/contracts/src/digital-production-tasks.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "packages/contracts/src/secondary-craft-quotation.ts",
+        "packages/contracts/src/todos.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/todo-list-service.test.ts",
+        "apps/api/src/production-platform/development-print-details.ts",
+        "apps/web/src/development-amendment-history.tsx",
+        "apps/web/src/development-customer-feedback-print.tsx",
+        "apps/web/src/development-print-pages.ts",
+        "apps/web/src/development-print-preview.ts",
+        "apps/web/src/development-published-document.tsx",
+        "apps/web/src/digital-development-print.css",
+        "apps/web/src/digital-development-print.tsx",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/unit/development-print-pair.test.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "apps/api/src/production-platform/development-commercial-fields.ts",
+        "apps/api/src/production-platform/development-material-suppliers.ts",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/development-material-supplier-picker.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "apps/web/src/workbench-material-amount.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/api/migrations/0304_development_draft_discard.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/development-amendment-service.ts",
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/development-fabric-cases.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/order-number-repository.ts",
+        "apps/api/src/production-platform/whole-order-visibility.ts",
+        "apps/web/src/development-creation-command-path.ts",
+        "apps/web/src/development-creation-draft.ts",
+        "apps/web/src/development-draft-list.ts",
+        "apps/web/src/development-submit-recovery.ts",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/digital-development-editing.ts",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/digital-development-validation.ts",
+        "apps/web/src/use-development-creation-draft.ts",
+        "packages/contracts/src/digital-development.ts",
+        "packages/contracts/src/digital-order-number.ts",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/digital-development-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/unit/development-creation-garment.test.ts",
+        "tests/unit/development-order-editing.test.ts",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/special-craft-steps.test.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/acceptance",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "dbf15d1a66763554d90b7337a064fe8bae729e468a11bcbce141e585fe03db78"
     },
     {
       "id": "seven-pg-static",
@@ -1286,7 +1453,152 @@
       "status": "passed",
       "log": "/tmp/dx-c2-final/seven-pg-static.log",
       "logSha256": "1656d0ad1cd553fbb32e198c53a62ac65c3975cd92a4a3e47e0de2b7141f6d0e",
-      "context": "Exact final delta API tsc, affected-path ESLint, diff and explicit time-surface inventory."
+      "context": "Exact final delta API tsc, affected-path ESLint, diff and explicit time-surface inventory. Only the isolated technical account and SQL contrast in the failing quotation test changed from this earlier input.",
+      "inputPaths": [
+        "apps/api/src/production-platform/bulk-fabric-todos.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/bulk-washing-todos.ts",
+        "apps/api/src/production-platform/development-arrangement-todos.ts",
+        "apps/api/src/production-platform/development-order-rush.ts",
+        "apps/api/src/production-platform/development-workspace-query.ts",
+        "apps/api/src/production-platform/factory-production-qc-todos.ts",
+        "apps/api/src/production-platform/garment-quality-todos.ts",
+        "apps/api/src/production-platform/ie-processing-directory.ts",
+        "apps/api/src/production-platform/journey-home-projection.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/order-time-todos.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/qc-progress-todos.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/secondary-craft-approval-todos.ts",
+        "apps/api/src/production-platform/secondary-craft-quotation.ts",
+        "apps/api/src/production-platform/short-lead-todos.ts",
+        "apps/api/src/production-platform/special-craft-quotation-todos.ts",
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/todos/selection.ts",
+        "apps/api/src/todos/service.ts",
+        "apps/web/src/bulk-pattern-card.tsx",
+        "apps/web/src/bulk-task-workbench.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/digital-pattern-workspace.tsx",
+        "apps/web/src/digital-production-tasks-panel.tsx",
+        "apps/web/src/digital-production-workspaces.tsx",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/ie-processing-center.tsx",
+        "apps/web/src/my-todos-page.tsx",
+        "apps/web/src/order-rush-badge.tsx",
+        "apps/web/src/secondary-craft-quotation-page.tsx",
+        "apps/web/src/task-workbench-sample.tsx",
+        "packages/contracts/src/bulk-preparation.ts",
+        "packages/contracts/src/digital-development-workspace.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "packages/contracts/src/digital-production-tasks.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "packages/contracts/src/secondary-craft-quotation.ts",
+        "packages/contracts/src/todos.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/todo-list-service.test.ts",
+        "apps/api/src/production-platform/development-print-details.ts",
+        "apps/web/src/development-amendment-history.tsx",
+        "apps/web/src/development-customer-feedback-print.tsx",
+        "apps/web/src/development-print-pages.ts",
+        "apps/web/src/development-print-preview.ts",
+        "apps/web/src/development-published-document.tsx",
+        "apps/web/src/digital-development-print.css",
+        "apps/web/src/digital-development-print.tsx",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/unit/development-print-pair.test.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "apps/api/src/production-platform/development-commercial-fields.ts",
+        "apps/api/src/production-platform/development-material-suppliers.ts",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/development-material-supplier-picker.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "apps/web/src/workbench-material-amount.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/api/migrations/0304_development_draft_discard.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/development-amendment-service.ts",
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/development-fabric-cases.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/order-number-repository.ts",
+        "apps/api/src/production-platform/whole-order-visibility.ts",
+        "apps/web/src/development-creation-command-path.ts",
+        "apps/web/src/development-creation-draft.ts",
+        "apps/web/src/development-draft-list.ts",
+        "apps/web/src/development-submit-recovery.ts",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/digital-development-editing.ts",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/digital-development-validation.ts",
+        "apps/web/src/use-development-creation-draft.ts",
+        "packages/contracts/src/digital-development.ts",
+        "packages/contracts/src/digital-order-number.ts",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/digital-development-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/unit/development-creation-garment.test.ts",
+        "tests/unit/development-order-editing.test.ts",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/special-craft-steps.test.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/acceptance",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "dbf15d1a66763554d90b7337a064fe8bae729e468a11bcbce141e585fe03db78"
+    },
+    {
+      "id": "quotation-full-after",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/customer-quotation-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-c2-final/quotation-full-after.json",
+      "startedAt": "2026-11-25T06:46:33.666Z",
+      "endedAt": "2026-11-25T06:46:37.270Z",
+      "testedHead": "5fc0cdeddfd71959574247ebd4aa316f62c958fd",
+      "sourceFingerprint": "03512ab93799db01335345eed1d40ec9ba1637837ef0fea6092cb1973462e241",
+      "exitCode": 0,
+      "status": "passed",
+      "log": "/tmp/dx-c2-final/quotation-full-after.log",
+      "logSha256": "c377edc3334552a0dd4d1b80c2a64581e679dd421f244310542408a331320096",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "df8e32888f1e5c0fd8e54a1392d689f10a56175e5416526ad0b7441d25b220f1"
+        }
+      ],
+      "context": "Unfiltered original 17-case customer quotation PostgreSQL file, Node 22 and isolated local PG16. The pre-change full file reproduced the remote shared-state failure. This replacement uses a fresh real scoped board assignment and verifies both exact no-development-read and linked Boolean projection, without relaxing permission, output or write checks."
     }
   ]
 }
