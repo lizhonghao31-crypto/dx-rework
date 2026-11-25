@@ -2,7 +2,7 @@
   "version": 1,
   "base": "686b2607eed56e6900ee5c8ca122384e8b838291",
   "risk": "full",
-  "sourceFingerprint": "2f826fd23c17292c25b20b3345ec3c1b320eee6c4c77e8bc584b72301b3da4fc",
+  "sourceFingerprint": "b7b9d80345ed9eb8a36a92798c9ae207fbebf5a66aa90b403249326bc99b8aed",
   "checks": [
     {
       "id": "native",
@@ -15,7 +15,7 @@
       "skipped": 0,
       "testedHead": "a9f230e72235c70af7f2ab47d846ce267305a4a9",
       "sourceFingerprint": "2f826fd23c17292c25b20b3345ec3c1b320eee6c4c77e8bc584b72301b3da4fc",
-      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing, canonical two-worker config and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
+      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing, canonical two-worker config and original object intent, finalization and report commands. Only synthetic storage responses use a fixture. Native inputs are byte-identical to the frozen first candidate; the closing diff only changes a non-database test assertion.",
       "startedAt": "2026-11-25T16:41:21.425Z",
       "endedAt": "2026-11-25T16:42:34.931Z",
       "log": "/workspace/dx-v115-x5-progress/x5-formal-final-native.log",
@@ -25,28 +25,42 @@
           "format": "vitest-json",
           "sha256": "43c55658e07a3b790755f661d20821f2ab9e6c7d283e760ede04132a592d6e64"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "5fa6ad95a51c895fb4ec5075823c04fc1ee1a8427b0730931e61be2c23e3bea4"
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-report-scope-final-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-first-light-fixed-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 48,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "a9f230e72235c70af7f2ab47d846ce267305a4a9",
-      "sourceFingerprint": "2f826fd23c17292c25b20b3345ec3c1b320eee6c4c77e8bc584b72301b3da4fc",
+      "testedHead": "dc04035eb00f605040c9d847e4a84e3d0f46c021",
+      "sourceFingerprint": "b7b9d80345ed9eb8a36a92798c9ae207fbebf5a66aa90b403249326bc99b8aed",
       "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
-      "startedAt": "2026-11-25T16:41:07.774Z",
-      "endedAt": "2026-11-25T16:41:08.956Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-report-scope-final-unit.log",
-      "logSha256": "8f0df4901d4896768694e3f3eddf64b5c8d1b1a7ee299aef1da64220750dbd2d",
+      "startedAt": "2026-11-25T16:46:26.199Z",
+      "endedAt": "2026-11-25T16:46:27.730Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-first-light-fixed-unit.log",
+      "logSha256": "a10648335874b7b7c252d0406daf55f0fcb9da2f20d1918f979e34ab43d20efe",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a422ea8e54f928186cd89b67f7c3a4b6ac7c6cf4195e78ebc0659601e53c3eb4"
+          "sha256": "ead854ddb446ae11aef1816816a3cb553953ded1af52564d851646731a644363"
         }
       ]
     }
