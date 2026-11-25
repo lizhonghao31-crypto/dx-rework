@@ -34,7 +34,7 @@ export async function readMerchandiserOriginalOrders(db:PoolClient,actor:Trusted
   FROM digital_production_orders o LEFT JOIN digital_production_sources s ON s.source_id=o.source_id
   WHERE o.production_order_id=ANY($1::uuid[])`,[ids])).rows;
  const search=filter.search.toLowerCase();
- const matched=originals.filter(row=>!search||[row.design_style_no,row.temporary_style_no,row.customer,...row.po_numbers,...(factories.get(row.id)??[])]
+ const matched=originals.filter(row=>!search||[row.id,row.design_style_no,row.temporary_style_no,row.customer,...row.po_numbers,...(factories.get(row.id)??[])]
   .some(value=>value?.toLowerCase().includes(search)));
  const rush=await readDevelopmentOrderRush(db,matched.map(row=>({orderId:row.id,sourceId:row.source_id})));
  const urgent=(row:Original)=>rush.has('order:'+row.id);

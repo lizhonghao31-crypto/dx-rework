@@ -59,7 +59,7 @@ export function merchandiserWorkPage(rows:readonly AuthorizedMerchandiserWorkIte
  filter:{state:AuthorizedMerchandiserWorkItem['state'];kind?:WorkKind;search:string;page:number}){
  const query=filter.search.trim().toLowerCase();
  const candidates=rows.filter(row=>row.state===filter.state&&(!filter.kind||row.kind===filter.kind)&&
-  (!query||[row.orderNumber,row.styleNo,row.customer,row.factory,...row.poNumbers].some(value=>value?.toLowerCase().includes(query))));
+  (!query||[row.orderNumber,row.originalOrderId,row.styleNo,row.customer,row.factory,...row.poNumbers].some(value=>value?.toLowerCase().includes(query))));
  candidates.sort((first,second)=>Number(second.urgent)-Number(first.urgent)||
   (sortDue(first.dueAt)===sortDue(second.dueAt)?0:sortDue(first.dueAt)-sortDue(second.dueAt))||
   first.itemId.localeCompare(second.itemId));

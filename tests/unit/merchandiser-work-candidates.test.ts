@@ -64,5 +64,8 @@ describe('only native actionable merchandiser work is eligible for the new workb
   expect(second.items.map(row=>row.itemId)).toEqual(['task-30']);
   expect(new Set([...first.items,...second.items].map(row=>row.itemId)).size).toBe(16);
   expect(merchandiserWorkPage(rows,{state:'waiting',search:'target',page:1})).toEqual({items:[],page:1,total:0});
+  const originalOrderId='ebd84d25-9614-46a5-b071-3b5ebd678f21';
+  const one={...rows[0]!,originalOrderId};
+  expect(merchandiserWorkPage([one,...rows.slice(1)],{state:'mine',search:originalOrderId.toUpperCase(),page:1})).toEqual({items:[one],page:1,total:1});
  });
 });

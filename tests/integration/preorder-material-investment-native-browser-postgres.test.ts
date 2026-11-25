@@ -80,12 +80,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect.poll(()=>open.evaluate(element=>document.activeElement===element)).toBe(true);
    expect(new URL(tab.page.url()).searchParams.get('view')).toBe('orders');
    expect(new URL(tab.page.url()).searchParams.get('search')).toBe(search);
+   const byId=tab.page.waitForResponse(reply=>{
+    const url=new URL(reply.url());return reply.request().method()==='GET'&&url.pathname==='/api/todos/merchandiser/orders'&&url.searchParams.get('search')===original.id;
+   });
+   await tab.page.getByRole('textbox',{name:'搜索订单ID、PO、客户或工厂',exact:true}).fill(original.id);
+   const matched=await byId;expect(matched.status(),await matched.text()).toBe(200);
+   expect(await matched.json()).toMatchObject({page:1,total:1,items:[{id:original.id,styleNo:search}]});
+   await row.waitFor();
   }finally{await tab.close();}
   const unrelated=await h.open(viewer.id,1165,{},'/ui/my-tasks');
   try{
    const reply=await unrelated.context.request.get(h.base+listPath);
    expect(reply.status(),await reply.text()).toBe(200);
    expect(await reply.json()).toEqual({items:[],page:1,total:0});
+   const byId=await unrelated.context.request.get(h.base+'/api/todos/merchandiser/orders?'+new URLSearchParams({search:original.id,page:'1'}));
+   expect(byId.status(),await byId.text()).toBe(200);
+   expect(await byId.json()).toEqual({items:[],page:1,total:0});
    expect((await unrelated.context.request.get(`${h.base}/api/digital-production/orders/${original.id}`)).status()).toBe(404);
   }finally{await unrelated.close();}
  });
