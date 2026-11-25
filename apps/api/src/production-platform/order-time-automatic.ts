@@ -27,6 +27,8 @@ export async function automaticOrderTime<T>(database:Pool,db:PoolClient,actor:Tr
   const actual=await loadOrderTimeOperation(database,db,actor,{kind:'arrangement',resource:target},time,{},[],[],'native-refresh');
   const prior=await new OrderTimePlanRepository(db).current(target);
   await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:prior?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-native:'+eventId},(resource,changes)=>refreshLinkedOrderTimeInput(database,db,actor,resource,time,changes));
+  if(operation.kind==='confirm_order'&&state.preorderPublication)
+   await new DigitalProductionTaskService(database).adoptPreorderTaskTimingWithClient(db,actor,operation.sourceId);
   if(target.kind==='order')await new DigitalProductionTaskService(database).refreshShipSampleTimingWithClient(db,actor,target.id);
   await db.query(`UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind=$1 AND ${target.kind==='source'?'source_id':'production_order_id'}=$2`,[target.kind,target.id]);
   return result;

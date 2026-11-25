@@ -5,6 +5,8 @@ import {fixedTimelineElapsedMilliseconds,shiftFixedTimelineMilliseconds,type Fix
 import {OrderTimePlanRepository,type StoredOrderTimePlan} from './order-time-plan-repository.js';
 import {journeyTermination} from './journey-termination.js';
 import {preparationHash,preparationIso,type PreparationDB} from './preparation-material-repository.js';
+import {workbenchPreorderPublication} from './development-source-lifecycle.js';
+import {orderTimeCreated} from './order-time-created.js';
 
 export function materialInvestmentWarningAt(start:string,due:string,calendar:FixedTimelineCalendar,percent:number):string|null{
  const from=Date.parse(start),to=Date.parse(due);
@@ -35,10 +37,14 @@ export async function materialInvestmentReminder(db:PreparationDB,basis:{
    AND body->'investmentScopeBasis'->>'fingerprint'=$2
    AND (resource_kind='source' AND resource_id=$3 OR resource_kind='order' AND resource_id=$4)
   ORDER BY occurred_at,version LIMIT 1`,[basis.handoverId,basis.scopeFingerprint,basis.sourceId,basis.orderId])).rows[0];
- const startedAt=preparationIso(origin?.occurred_at),dueAt=first.target.at!,exclusive=first.target.exclusive;
+ const occurrence=preparationIso(origin?.occurred_at),dueAt=first.target.at!,exclusive=first.target.exclusive;
+ const scopeReference=first.materialInvestmentTargetBasis!.scope!.reference;
+ const formalStart=occurrence&&basis.sourceId&&scopeReference.startsWith('preorder:'+basis.sourceId+':')
+  &&await workbenchPreorderPublication(db,basis.sourceId)?(await orderTimeCreated(db,{kind:'order',id:basis.orderId}))?.at:null;
+ const startedAt=occurrence&&formalStart&&occurrence<formalStart?formalStart:occurrence;
  const warningAt=startedAt&&clock.reminder.enabled?materialInvestmentWarningAt(startedAt,dueAt,clock.calendar,clock.reminder.percent):null;
  // A historical source association is a navigation alias for an order-born handover.
- const orderBorn=first.materialInvestmentTargetBasis!.scope!.reference.startsWith('order:'+basis.orderId+':');
+ const orderBorn=scopeReference.startsWith('order:'+basis.orderId+':');
  const resourceIdentity=orderBorn||!basis.sourceId?{orderId:basis.orderId}:{sourceId:basis.sourceId};
  const fingerprint=preparationHash({...resourceIdentity,handoverId:basis.handoverId,scope:basis.scopeFingerprint,
   startedAt,dueAt,exclusive,calendar:clock.calendar,percent:clock.reminder.percent,enabled:clock.reminder.enabled});

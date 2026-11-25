@@ -1,4 +1,4 @@
-import {developmentSourceLifecycle} from './development-source-lifecycle.js';
+import {developmentSourceLifecycle,preorderDraftOrder,workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {orderTimeFactoryCommitments,outstandingFactoryCommitments} from './order-time-factory-commitments.js';
 import {publicationFormalInput} from './order-time-publication-intent.js';
 import {beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
@@ -36,7 +36,7 @@ import {orderTimeInputFromRoute,orderTimeCheck,orderTimeBegunStates,type OrderTi
 import {formalRemainingSchedule} from './order-time-formal-arrangement.js';
 import {nativeTaskReadiness} from './task-readiness-facts.js';
 import {orderTimeBulkSteps,orderTimeStoredBulkSteps} from './order-time-route-identities.js';
-import {preparationAvailable,preparationHandoverCurrent,preparationInvestmentScope,currentPreparationMaterial,directInvestmentInstruction,instructionInvestmentMaterials} from './preparation-material-repository.js';
+import {preparationAvailable,preparationHandoverCurrent,preparationInvestmentScope,currentPreparationMaterial,currentPreparationMaterials,preparationContext,preparationMaterialHistory,directInvestmentInstruction,instructionInvestmentMaterials} from './preparation-material-repository.js';
 import {materialReadiness} from './development-material-readiness.js';
 import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 
@@ -55,8 +55,11 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const sourceId=resource?.kind==='source'?resource.id:resource?.kind==='order'?(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]?.source_id??null:null;
  const source=sourceId?(await db.query('SELECT * FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]??digitalNotFound():null;
  const lifecycle=sourceId?await developmentSourceLifecycle(db,sourceId):null;
+ const preorderPublication=sourceId&&source?.workbench_generated_number&&!lifecycle?.is_draft?await workbenchPreorderPublication(db,sourceId):null;
  if(resource?.kind==='source'&&lifecycle?.is_draft&&operation.kind!=='development_publish')
   return conflict('开发草稿尚未有效发布，请先沿原流程发布');
+ if(resource?.kind==='source'&&preorderPublication&&operation.kind!=='confirm_order')
+  return conflict('预下单沿正式确认启用时效，当前来源不采用时效计划');
  const order=resource?.kind==='order'?(await db.query('SELECT * FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]??digitalNotFound():null;
  const designerId=source?.created_by??order?.created_by??actor.actorId;
  const designer=isRootActor(actor)||actor.actorId===designerId&&actor.actorRoles.includes('sample_designer')&&actor.authorizationCapabilities?.includes('pattern_room:orders:create')&&await policy.activeRole(actor.actorId,'sample_designer');
@@ -69,7 +72,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(!designer&&!manager&&!main&&!cockpitReader)digitalForbidden();
  const saved=resource?await new OrderTimePlanRepository(db).current(resource):null;
  const inherited=resource?.kind==='order'&&sourceId?await new OrderTimePlanRepository(db).current({kind:'source',id:sourceId}):null;
- const original=saved?.input.plan??inherited?.input.plan??orderTimeAdmission(db)?.plan,oldResource=source&&!lifecycle?.is_draft&&!source.order_time_managed?{kind:'source' as const,id:source.source_id}:order&&!order.order_time_managed?{kind:'order' as const,id:order.production_order_id}:null;
+ const original=saved?.input.plan??inherited?.input.plan??orderTimeAdmission(db)?.plan,oldResource=source&&!preorderPublication&&!lifecycle?.is_draft&&!source.order_time_managed?{kind:'source' as const,id:source.source_id}:order&&!order.order_time_managed?{kind:'order' as const,id:order.production_order_id}:null;
  const company=original?.company??(oldResource?await historicalOrderTimeCompany(db,oldResource):await currentOrderTimeCompany(db));
  if(!company)return conflict('请先在生产管理设置保存本次公司时效，再办理本单时效');
  const plan=FrozenOrderTimePlanSchema.parse(original?{...original,overrides:{...original.overrides,...changes},revision:Object.keys(changes).length?original.revision+1:original.revision}:{version:'order-time-plan-v1',company,overrides:changes,revision:1});
@@ -82,6 +85,9 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const retainedSource=saved?.input.work.map(work=>work.canonicalWorkRef?.match(/^source:([^:]+):round:(\d+):/)).find(match=>match?.[1]===sourceId);
  const sourceRound=selectedInstruction?.source_round??(resource?.kind==='order'&&retainedSource?Number(retainedSource[2]):undefined);
  let document=sourceId?(await developmentDocumentRow(db,sourceId,sourceRound))??null:null;
+ if(operation.kind==='development_publish'&&source?.workbench_generated_number&&preorderDraftOrder(document?.document))
+  return conflict('编号预下单须沿预下单发布及正式确认入口办理');
+ if(preorderPublication)sourceVersion.preorderPublication=preorderPublication.event_id;
  if(order)sourceVersion.instructionVersion=selectedInstruction?.version??null;
  if(operation.kind==='development_revision'){
   const draft=(await db.query('SELECT version,payload FROM digital_development_round_drafts WHERE source_id=$1',[operation.sourceId])).rows[0]??conflict('请先保存本单复版资料');
@@ -262,6 +268,26 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
     unresolvedOverrun:open.some(window=>window.deadline&&Date.parse(window.deadline)<=Date.parse(time.now))});
   }
  }
+ if(preorderPublication&&operation.kind==='confirm_order'&&sourceId){
+  const context=await preparationContext(db,{kind:'source',id:sourceId});
+  const facts=currentPreparationMaterials(await preparationMaterialHistory(db,context),null);
+  for(const work of value.work){
+   if(work.parameterKey!=='design_handover'&&work.parameterKey!=='material_investment')continue;
+   const fact=facts.find(row=>row.kind===work.parameterKey&&row.scopeRef==='whole'&&row.valid&&
+    (row.state==='ready'||row.state==='partial')&&row.occurredAt&&row.occurredAt<=time.now);
+   if(!fact)continue;
+   const key=work.canonicalWorkRef??work.id;
+   progress.set(key,overlayFrameworkCompletion(progress.get(key),{completed:fact.state==='ready',precision:'instant',occurredAt:fact.occurredAt,scopeRef:'whole'}));
+  }
+  sourceVersion.preorderMaterialFacts=facts.map(fact=>({id:fact.recordId,version:fact.version,valid:fact.valid}));
+ }
+ const preorderFormalStart=preorderPublication
+  ?order?(await orderTimeCreated(db,{kind:'order',id:order.production_order_id}))?.at:operation.kind==='confirm_order'?time.now:null
+  :null;
+ if(preorderFormalStart)for(const [identity,fact] of progress){
+  if(!fact.completed&&fact.readyAt&&fact.readyAt<preorderFormalStart)
+   progress.set(identity,{...fact,readyAt:preorderFormalStart,deadline:null,unresolvedOverrun:false});
+ }
  const extraSettings=new Map<string,boolean>();
  if(development){
   const began=(await db.query('SELECT 1 FROM digital_development_cycle_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,round])).rowCount!>0;
@@ -304,7 +330,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal,...(formalEnds?{formalEnds}:{})});
  if(plan.company.framework&&frameworkRoute&&datedScopes.length){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
-  const prospective=operation.kind==='confirm_order'&&Boolean(lifecycle?.first_event_id)||operation.kind==='development_publish'&&lifecycle?.is_draft;
+  const prospective=operation.kind==='confirm_order'&&Boolean(lifecycle?.first_event_id||preorderPublication)||operation.kind==='development_publish'&&lifecycle?.is_draft;
   const created=resource&&!prospective?await orderTimeCreated(db,resource):null;
   const acceptedAt:SlaAnchor=created?{precision:'instant',value:created.at,source:created.evidence}:resource&&!prospective
    ?{precision:'unknown',reason:'本单接单发生时间缺少原始记录'}:{precision:'instant',value:time.now,source:'本次新单拟生效接单时刻'};
@@ -362,5 +388,5 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);
  void database;
  const linkedApplicability={complete:Boolean(!sourceId||development)&&(!includesProduction||Boolean(production&&production.craftSteps!==null&&production.preshrink!==null)),parameterKeys:[...new Set([...value.work.map(work=>work.parameterKey),...extraSettings.keys()])]};
- return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production,linkedApplicability};
+ return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,preorderPublication,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production,linkedApplicability};
 }

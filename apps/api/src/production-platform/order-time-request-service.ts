@@ -145,7 +145,7 @@ export class OrderTimeRequestService{
     if(native.sourceId&&native.orderId){
      const linked=(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[native.orderId])).rows[0];
      if(linked?.source_id!==native.sourceId||sourceOperation&&sourceOperation.sourceId!==native.sourceId)conflict('ORDER_TIME_CONFLICT','原业务返回的开发来源与正式订单不一致');
-     if(sourceOperation){
+     if(sourceOperation&&!state.preorderPublication){
       // Publication may create an order while its original READY tasks still
       // belong to the source. Adopt that exact source first on this client so
       // order plan confirmation inherits its frozen policy and original targets.
@@ -165,6 +165,8 @@ export class OrderTimeRequestService{
     const actual=state.operation.kind==='arrangement'&&!input.washing?.length?state:await loadOrderTimeOperation(this.database,db,actor,actualOperation,time,input.overrides,[],[],state.operation.kind==='arrangement'?'command':'native-refresh');
     const previous=await new OrderTimePlanRepository(db).current(target);
     const saved=await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:previous?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version},(resource,changes)=>refreshLinkedOrderTimeInput(this.database,db,actor,resource,time,changes));
+    if(state.operation.kind==='confirm_order'&&state.preorderPublication)
+     await new DigitalProductionTaskService(this.database).adoptPreorderTaskTimingWithClient(db,actor,state.operation.sourceId);
     if(target.kind==='order')await new DigitalProductionTaskService(this.database).refreshShipSampleTimingWithClient(db,actor,target.id);
     await db.query(`UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind=$1 AND ${target.kind==='source'?'source_id':'production_order_id'}=$2`,[target.kind,target.id]);
     return {native,saved};

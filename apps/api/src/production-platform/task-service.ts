@@ -146,6 +146,20 @@ export class DigitalProductionTaskService {
     }
     return (await client.query("SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [key])).rows[0] ?? digitalNotFound();
   }
+  /** The original task and its occurrence stay put. Only open tasks gain a
+   * formal responsibility window when this same source is confirmed. */
+  async adoptPreorderTaskTimingWithClient(client:PoolClient,actor:TrustedActorContext,sourceId:string){
+    const admission=orderTimeAdmission(client);
+    if(admission?.operation.kind!=='confirm_order'||admission.operation.sourceId!==sourceId)fail('仅正式确认事务可采用原预下单任务时效');
+    const tasks=(await client.query<{task_id:string;task_kind:string;entered_at:Date|string}>(`SELECT t.task_id,a.task_kind,t.entered_at
+      FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      WHERE a.source_id=$1 AND t.state IN ('ready','blocked') AND t.entered_at IS NOT NULL
+      ORDER BY t.task_id FOR UPDATE OF t`,[sourceId])).rows;
+    for(const task of tasks){
+      const event=await this.event(client,actor,task.task_id,{kind:'source',id:sourceId},'formal_preorder_adopted',admission!.time.now,'现场登记');
+      await this.revision(client,actor,task.task_id,await this.policy(client,task.task_kind,task.task_id),iso(task.entered_at),'policy',event);
+    }
+  }
   private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>,readyCorrection?:{at:string|null;eventId:string},refreshDerivedStart=false) {
     const task=await this.task(client,taskId);
     if(task.task_kind==='bulk_ship_sample'&&task.production_order_id){

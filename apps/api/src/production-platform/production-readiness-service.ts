@@ -8,6 +8,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {isRootActor} from '../access/business-authority.js';
 import {businessNow,acceptanceBusinessContext,observedBusinessTime} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
+import {developmentSourceLifecycle,preorderDraftOrder,workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {DEVELOPMENT_HANDOVER_ENTITY,designElectronicBases,readDesignElectronicHandover,shareApprovedDesignVersions} from './development-electronic-handover.js';
@@ -47,7 +48,8 @@ function usesInstructionHandover(
   &&row.resource.id===context.orderId&&row.state==='ready'&&row.orderInstructionVersion!==undefined);
 }
 export class ProductionReadinessService{
- constructor(private readonly database:Pool){}
+ constructor(private readonly database:Pool,private readonly transactionClient?:PoolClient){}
+ inTransaction(client:PoolClient){return new ProductionReadinessService(this.database,client);}
  private async access(db:PreparationDB,actor:TrustedActorContext,resource:PreparationResource){
   const context=await preparationContext(db,resource),policy=new DigitalProductionAccessPolicy(db),responsibility=await preparationResponsibility(db,context);
   const role=async(name:string)=>actor.actorRoles.includes(name)&&await policy.activeRole(actor.actorId,name);
@@ -65,8 +67,10 @@ export class ProductionReadinessService{
   // investment, with only currently shared evidence or their own uploaded receipts.
   const recipientOnly=!context.order&&merch&&!leader&&!designer&&!warehouse&&!color;
   const sourceDocument=recipientOnly&&context.sourceId?await developmentDocumentRow(db,context.sourceId):null;
-  const preorderRecipient=handover&&sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true
-    &&sourceDocument.document.customerOrderDraft.stage==='preorder'?await preorderRecipientScope(db,actor.actorId,handover,history):null;
+  const numberedPreorder=sourceDocument&&context.source?.workbench_generated_number&&context.sourceId
+    ?await workbenchPreorderPublication(db,context.sourceId):null;
+  const preorderRecipient=handover&&preorderDraftOrder(sourceDocument?.document)&&(sourceDocument?.status==='draft'||numberedPreorder)
+    ?await preorderRecipientScope(db,actor.actorId,handover,history):null;
   return {context,policy,responsibility,preorderRecipient,
    history:preorderRecipient?preorderRecipientRows(history,preorderRecipient,true):history,
    facts:preorderRecipient?preorderRecipientRows(facts,preorderRecipient):facts,
@@ -80,7 +84,9 @@ export class ProductionReadinessService{
   const {context}=await this.access(db,actor,resource);
   await this.assertPreparationActive(db,context);
  }
- private async preparationWriteBlock(db:PreparationDB,{orderId,sourceId}:Awaited<ReturnType<typeof preparationContext>>){
+ private async preparationWriteBlock(db:PreparationDB,{orderId,sourceId,source}:Awaited<ReturnType<typeof preparationContext>>){
+  if(!orderId&&sourceId&&source?.workbench_generated_number&&(await developmentSourceLifecycle(db,sourceId))?.is_draft)
+   return '开发草稿尚未发布，请先发布后再交接或投面辅料';
   const {rows:[state]}=await db.query<{inactive:boolean;closed:boolean}>(`SELECT
    EXISTS(SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1)
     OR (resource_kind='source' AND resource_id=$2)) AND state<>'active') AS inactive,
@@ -195,12 +201,14 @@ export class ProductionReadinessService{
   const deliveries=orderId&&await preparationAvailable(db)?(await db.query('SELECT * FROM digital_instruction_deliveries WHERE production_order_id=$1 ORDER BY recorded_at,event_id',[orderId])).rows:[];
   const ranges=orderId&&await preparationAvailable(db)?(await db.query('SELECT r.* FROM digital_bulk_work_ranges r JOIN digital_bulk_preparations p USING(preparation_id) WHERE p.production_order_id=$1 ORDER BY r.preparation_id,r.kind,r.version,r.range_id',[orderId])).rows:[];
   const sourceDocument=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;
+  const sourceIsPreorderDraft=sourceDocument?.status==='draft'&&Boolean(preorderDraftOrder(sourceDocument.document))&&
+   !(a.context.source?.workbench_generated_number&&await workbenchPreorderPublication(db,a.context.sourceId!));
   const handover=a.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole'&&f.state==='ready'&&f.valid&&f.investmentScopeBasis);
   const investment=a.facts.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
   const reminder=handover&&orderId&&!(investment?.state==='ready'&&investment.valid)?await materialInvestmentReminder(db,{sourceId:a.context.sourceId,orderId,handoverId:handover.recordId,scopeFingerprint:handover.investmentScopeBasis!.fingerprint}):null;
   const orderInstruction=canRecordInstructionHandover&&orderId?await directInvestmentInstruction(db,orderId):null;
   return {...(reminder?{materialInvestmentReminder:{...reminder,canClose:writable&&!reminder.termination&&reminder.enabled
-   &&reminder.status!=='waiting'&&(a.merch||root)}}:{}),...(canRecordInstructionHandover?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:writable&&a.leader,
+   &&reminder.status!=='waiting'&&(a.merch||root)}}:{}),...(canRecordInstructionHandover?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceIsPreorderDraft===true,sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:writable&&a.leader,
    canDeliverInstruction:writable&&(a.merch||root),canAcknowledgeAdoption:writable&&!enrolled&&Boolean(orderId)&&(a.merch||root),canAdopt:writable&&!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
    adoptionReason:enrolled?null:'历史单未自动套用；主跟单核对预览后由供应链总监、老板或 Root 明确采用，完成实绩不重算',finalReasons:readiness?.finalReasons??[],technicalRevision:readiness?.technical?.revision??null,
    draftWindow:orderId?await preparationWindow(db,orderId,'draft'): {startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:'正式单形成前保留真实投料及到仓记录',status:'waiting'},
@@ -210,8 +218,9 @@ export class ProductionReadinessService{
  }
  private async command(actor:TrustedActorContext,resource:PreparationResource,action:string,input:unknown,key:string,work:(db:PoolClient,a:Awaited<ReturnType<ProductionReadinessService['access']>>)=>Promise<void>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
-  const db=await this.database.connect();try{
-   await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+  const db=this.transactionClient??await this.database.connect();try{
+   if(!this.transactionClient)await db.query('BEGIN');
+   await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    const a=await this.access(db,actor,resource);
    if(!await preparationAvailable(db))conflict('产前资料版本尚未安装');
    if(a.context.orderId)await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[a.context.orderId]);
@@ -240,7 +249,7 @@ export class ProductionReadinessService{
    if(prior&&prior.payload_hash!==hash)conflict('操作标识已用于不同内容');
    if(prior){
     const response=prior.response as ProductionReadinessState,scope=a.preorderRecipient;
-    await db.query('COMMIT');
+    if(!this.transactionClient)await db.query('COMMIT');
     return scope?{...response,history:preorderRecipientRows(response.history,scope,true),facts:preorderRecipientRows(response.facts,scope)}:response;
    }
    await work(db,a);
@@ -248,8 +257,8 @@ export class ProductionReadinessService{
    const response=await this.read(actor,resource,db);
    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(response)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_preparation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`preparation_${action}`,resource.id,JSON.stringify(input)]);
-   await db.query('COMMIT');return response;
-  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+   if(!this.transactionClient)await db.query('COMMIT');return response;
+  }catch(error){if(!this.transactionClient)await db.query('ROLLBACK');throw error;}finally{if(!this.transactionClient)db.release();}
  }
  async bindFiles(db:PreparationDB,actor:TrustedActorContext,resource:PreparationResource,ids:string[]){
   const a=await this.access(db,actor,resource);
@@ -264,7 +273,8 @@ export class ProductionReadinessService{
     if(a.preorderRecipient&&!a.preorderRecipient.evidence.has(id))digitalForbidden();
     continue;
    }
-   if(row.entity_type==='digital_development'&&row.entity_id===a.context.sourceId&&sourceFiles.includes(id))continue;
+   if(row.entity_type==='digital_development'&&row.entity_id===a.context.sourceId&&sourceFiles.includes(id)&&
+    (!a.preorderRecipient||a.preorderRecipient.evidence.has(id)))continue;
    if(row.entity_type||row.uploaded_by!==actor.actorId)digitalForbidden();
    await db.query("UPDATE attachments SET entity_type='digital_preparation',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[id,resource.id]);
   }

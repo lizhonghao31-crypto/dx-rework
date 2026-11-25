@@ -1267,6 +1267,10 @@
     {
       "version": "0302_digital_order_number_identity",
       "checksum": "94fd8957f69a41ab8c37a098a0a3413afcb5ed08cf7270171087a0a7808f498e"
+    },
+    {
+      "version": "0303_workbench_preorder_publication",
+      "checksum": "464cecb0116dcfad25b6b39f0ad34b5aac3465b02c73b205f7c5ac36c882528a"
     }
   ]
 }

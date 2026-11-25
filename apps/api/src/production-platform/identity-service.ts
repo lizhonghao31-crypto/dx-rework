@@ -1,9 +1,9 @@
-import {developmentSourceLifecycle,effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
+import {developmentSourceLifecycle,effectiveDevelopmentSourceSql,workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {assertWholeOrderActive,wholeOrderActiveSql} from './whole-order-visibility.js';
 import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {refreshPreparationWindows} from './production-readiness-repository.js';
-import {enrollPreparation,preparationContext} from './preparation-material-repository.js';
+import {enrollPreparation,preparationContext,currentPreparationMaterials,preparationMaterialHistory} from './preparation-material-repository.js';
 import {approvedShortLeadCalendar,validateInitialLeadTime,consumeShortLead} from './short-lead-evidence.js';
 import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { SlaOrderService } from "./sla-order-service.js";
@@ -316,6 +316,8 @@ export class DigitalProductionIdentityService {
       await this.customer(client, input.customerCode, input.productGroup);
       let createdBy = approved?orderTimeAdmission(client)!.designerId:actor.actorId;
       let frozenOrdering:InitialCustomerOrderDraft|undefined;
+      let preorderRecipient:string|null=null;
+      let preorder=false;
       if (sourceId) {
         const source = await this.visibleSource(client, actor, sourceId, true);
         if(await developmentRevisionSource(client,sourceId))fail('复版沿原开发档案的客户订单，不重复建立大货数量');
@@ -328,14 +330,24 @@ export class DigitalProductionIdentityService {
           return this.readWith(client, actor, existing.rows[0].production_order_id);
         }
         const published=await developmentDocumentRow(client,sourceId);
-        if(published?.status!=="published")fail("请先发布开发单，再正式确认客户订单");
-        if(published.document?.customerOrderDraft?.withOrder&&published.document.customerOrderDraft.stage!=='preorder')frozenOrdering=published.document.customerOrderDraft.order;
+        preorder=Boolean(source.workbench_generated_number&&await workbenchPreorderPublication(client,sourceId));
+        if(published?.status!=="published"&&!preorder)fail("请先发布开发单，再正式确认客户订单");
+        if(published?.document?.customerOrderDraft?.withOrder&&published.document.customerOrderDraft.stage!=='preorder')frozenOrdering=published.document.customerOrderDraft.order;
+        if(preorder){
+          await assertWholeOrderActive(client,'source',sourceId);
+          if((await client.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1 AND state<>'active'",[sourceId])).rowCount)
+            fail('预下单已暂停或取消，不能确认正式订单');
+          if(!orderTimeAdmission(client))fail('请先通过正式订单时效核算再确认预下单');
+          const context=await preparationContext(client,{kind:'source',id:sourceId});
+          const facts=currentPreparationMaterials(await preparationMaterialHistory(client,context),null);
+          preorderRecipient=facts.find(row=>row.kind==='design_handover'&&row.scopeRef==='whole'&&row.state==='ready'&&row.valid)?.recipientId??null;
+        }
       }
       const styleKey = digitalPoKey(input.designStyleNo);
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-order-style",styleKey])]);
       if ((await client.query("SELECT 1 FROM digital_production_orders WHERE translate(btrim(design_style_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=$1 LIMIT 1", [styleKey])).rowCount)
         fail("该编号已有客户订单，请打开原档案继续办理");
-      const formalTime=sourceId&&(this.businessClock||acceptanceClockReaderEnabled(this.database)||acceptanceBusinessContext())
+      const formalTime=preorder?orderTimeAdmission(client)!.time:sourceId&&(this.businessClock||acceptanceClockReaderEnabled(this.database)||acceptanceBusinessContext())
         ? await (this.businessClock??new ContextBusinessClock(this.database,client)).read({kind:'source',id:sourceId}):observedBusinessTime(this.now);
       const now=new Date(formalTime.now),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
       if(orderDateError)fail(orderDateError,400);
@@ -347,9 +359,11 @@ export class DigitalProductionIdentityService {
         fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
       const shortApproval=usingOrderTime?null:await validateInitialLeadTime(client,actor,sourceId,input,formalTime);
       let merchandiserId = input.primaryMerchandiserId;
+      if(preorder&&merchandiserId===undefined)merchandiserId=preorderRecipient??undefined;
       const defaultMerchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1 FOR SHARE", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
-      if (!isDigitalLeader(actor) && merchandiserId !== undefined && merchandiserId !== defaultMerchandiserId) digitalForbidden();
+      if (!isDigitalLeader(actor) && merchandiserId !== undefined && merchandiserId !== defaultMerchandiserId && !(preorder&&merchandiserId===preorderRecipient)) digitalForbidden();
       if (merchandiserId === undefined) merchandiserId = defaultMerchandiserId;
+      if(preorder&&!merchandiserId)fail('正式确认前请指定有效主跟单',400);
       if (merchandiserId && !await new DigitalProductionAccessPolicy(client).lockActiveRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
       const businessTime = !sourceId&&this.businessClock ? await this.businessClock.read({ kind: "order", id: root.productionOrderId }) : formalTime;
@@ -389,6 +403,7 @@ export class DigitalProductionIdentityService {
       const context=acceptanceBusinessContext();if(context){await context.assertScope({kind:'order',id});await context.assertScope({kind:'source',id:sourceId});}
       const source = await this.visibleSource(client, actor, sourceId, true);
       if((await developmentSourceLifecycle(client,sourceId))?.is_draft)fail("请先发布开发草稿");
+      if(source.workbench_generated_number&&await workbenchPreorderPublication(client,sourceId))fail('已发布预下单须沿原来源确认正式订单');
       const order = await this.visibleOrder(client, actor, id, true);
       if (!isDigitalLeader(actor) && !(actor.actorRoles.includes("sample_designer") && order.created_by === actor.actorId && source.created_by === actor.actorId)) digitalForbidden();
       if (order.source_id === sourceId) return this.readWith(client, actor, id);

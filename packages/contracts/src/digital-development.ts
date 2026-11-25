@@ -207,6 +207,7 @@ export function developmentAmendmentPublicationOptions(before:DevelopmentDocumen
  return {allowLegacySizeQuantities:legacy,allowMissingOrderDate:before.orderDate===null&&after.orderDate===null};
 }
 export type DevelopmentSheet = {
+  preorderPublication?:{at:string;documentVersion:number};
   orderTimeEnabled?:boolean;
   timelineSchemaVersion?:2;
   independentRevisions?:boolean;

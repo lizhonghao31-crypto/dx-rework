@@ -6,7 +6,8 @@ import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import type {FixedTaskPosition} from './fixed-task-targets.js';
 
 export const taskWithParentsSql=`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role,${developmentReadyCorrectionSql('t.task_id')} AS ready_correction,
- coalesce((to_jsonb(o)->>'order_time_managed')::boolean,(to_jsonb(s)->>'order_time_managed')::boolean,false) AS order_time_managed
+ coalesce((to_jsonb(o)->>'order_time_managed')::boolean,(to_jsonb(s)->>'order_time_managed')::boolean,false) AS order_time_managed,
+ (to_jsonb(s)->>'workbench_generated_number')::boolean AS workbench_generated_number
  FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
  LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
  LEFT JOIN digital_production_sources s ON s.source_id=a.source_id`;

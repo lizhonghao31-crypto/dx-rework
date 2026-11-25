@@ -4,10 +4,26 @@ import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {enrollPreparation} from './preparation-material-repository.js';
+import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 
 type DB=Pick<PoolClient,'query'>;
 type Lifecycle={is_draft:boolean;first_event_id:string|null;first_business_time:BusinessTime|null};
 const installed=new WeakSet<DB>();
+const preorderInstalled=new WeakSet<DB>();
+
+export function preorderDraftOrder(document:DevelopmentDocument|null|undefined){
+ const draft=document?.customerOrderDraft;
+ return draft?.withOrder&&draft.stage==='preorder'?draft.order:null;
+}
+
+export async function workbenchPreorderPublication(db:DB,sourceId:string){
+ if(!preorderInstalled.has(db)){
+  if(!(await db.query("SELECT to_regclass('digital_development_preorder_publications') AS relation")).rows[0]?.relation)return null;
+  preorderInstalled.add(db);
+ }
+ return (await db.query<{event_id:string;business_time:BusinessTime;document_version:number;recipient_id:string}>(
+  'SELECT event_id,business_time,document_version,recipient_id FROM digital_development_preorder_publications WHERE source_id=$1',[sourceId])).rows[0]??null;
+}
 
 export async function developmentLifecycleAvailable(db:DB){
  if(installed.has(db))return true;

@@ -23,6 +23,7 @@ import {readIeProcessingDirectory} from './ie-processing-directory.js';
 import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
 import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
 import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
+import {developmentSourceLifecycle} from './development-source-lifecycle.js';
 
 type Database=Pick<Pool|PoolClient,'query'>;
 type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
@@ -59,6 +60,8 @@ export class DigitalQuotationService{
    ?(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]?.created_by:row.created_by;
   const {full,allowed,structure,primaryMerchandiser}=quotationAuthority(actor,roles,sourceDesigner,order?.primary_merchandiser_id??null,quote?.assignments??[]);
   if(!allowed)digitalNotFound();
+  if(!readOnly&&resource.kind==='source'&&row.workbench_generated_number&&(await developmentSourceLifecycle(db,resource.id))?.is_draft)
+   conflict('本单仍是草稿，发布后才能办理报价');
   const policy=orderId?await workbenchCommercialOrderPolicy(db,orderId):row.workbench_commercial_policy;
   const workbenchPolicy=policy===designerQuotationPolicy;
   const confirm=structure||(!workbenchPolicy&&primaryMerchandiser);
