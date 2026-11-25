@@ -9,6 +9,8 @@ export const sourceReceivingQuantityCeilingError = (cause: unknown): Application
   if (!cause || typeof cause !== "object") return null;
   const failure = cause as { code?: unknown; message?: unknown };
   if (failure.code !== "23514" || typeof failure.message !== "string") return null;
+  const craft = /^rework quantity exceeds source craft issue quantity ceiling (\d+(?:\.\d+)?)$/.exec(failure.message);
+  if (craft) return new ApplicationError("VALIDATION_ERROR", `确认数量不能超过本次原工艺问题范围 ${Number(craft[1])} 片，请刷新后重试`, 400);
   const match = /^rework quantity exceeds source receiving actual quantity ceiling (\d+(?:\.\d+)?)$/.exec(failure.message);
   return match ? new ApplicationError("VALIDATION_ERROR", `确认数量不能超过本次实收数量 ${Number(match[1])} 件，请刷新报数后重试`, 400) : null;
 };
@@ -42,13 +44,16 @@ export const ensureWithinSourceReceivingActualQuantity = async (
   reworkOrderId: string,
   facts: readonly QuantityFact[],
 ): Promise<void> => {
-  const ceiling = await sourceReceivingActualQuantity(client, reworkOrderId);
-  if (ceiling === null) return;
+  const row = (await client.query<{quantity:string|null;unit?:string}>(
+    "SELECT quantity::text AS quantity,unit FROM rework_original_quantity_bound($1)",[reworkOrderId],
+  )).rows[0];
+  if (row?.quantity == null) return;
+  const ceiling=Number(row.quantity);
   const exceeded = facts.find((fact) => fact.quantity > ceiling);
   if (exceeded) {
     throw new ApplicationError(
       "VALIDATION_ERROR",
-      `${exceeded.label}不能超过本次实收数量 ${ceiling} 件`,
+      row.unit==="片"?`${exceeded.label}不能超过本次原工艺问题范围 ${ceiling} 片`:`${exceeded.label}不能超过本次实收数量 ${ceiling} 件`,
       400,
     );
   }

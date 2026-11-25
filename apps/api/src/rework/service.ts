@@ -1,5 +1,6 @@
 import {reworkTransitionRejection} from "../platform/business-rejection-guidance.js";
 import {linkDigitalRework} from "../production-platform/receiving-link-adapter.js";
+import {currentCraftProblemForRework,lockCraftProblemAuthority,type CraftProblemLocator} from "../production-platform/quality-craft-problem-scope.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import {
@@ -55,6 +56,7 @@ type ReworkDraftSource = Readonly<{
   receivingBatchId: string | null;
   styleNo: string | null;
 }>;
+type OriginalCraftDraft=Readonly<{scope:CraftProblemLocator;execution:"internal"|"factory";quantity:number}>;
 type ReworkOrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
@@ -81,6 +83,8 @@ type ReworkOrderRow = Readonly<{
   tail_inspection_cost_bearer_source: "legacy_default" | "quality_inspection" | "production_override" | null;
   inspection_report: InspectionReportDraft | null;
   source_receiving_batch_id: string | null;
+  source_craft_qc_check_id?: string|null;
+  craft_rework_execution?: "internal"|"factory"|null;
   created_by: string;
   updated_by: string;
   version: number;
@@ -247,13 +251,20 @@ export class ReworkInitiationService {
     return order;
   }
 
+  async createCraftDraft(actor:TrustedActorContext,original:OriginalCraftDraft,idempotencyKey:string){
+    return this.createDraft(actor,{},idempotencyKey,"qc_rework",original);
+  }
+
   async createDraft(
     actor: TrustedActorContext,
     input: CreateReworkDraftWithReceivingBatch,
     idempotencyKey: string,
     kind: "qc_rework" | "inhouse_finishing" = "qc_rework",
+    originalCraft?: OriginalCraftDraft,
   ): Promise<MutationResult<ReworkOrderResponse>> {
-    return this.mutate(actor, kind === "inhouse_finishing" ? "rework.finishing.draft.create" : "rework.draft.create", idempotencyKey, { ...input, kind }, 201, async (client) => {
+    if(originalCraft&&kind!=="qc_rework")throw new ApplicationError("VALIDATION_ERROR","裁片问题使用原质检返工，不是本厂做尾",400);
+    let authority:Awaited<ReturnType<typeof lockCraftProblemAuthority>>|null=null;
+    return this.mutate(actor, originalCraft?"rework.craft.draft.create":kind === "inhouse_finishing" ? "rework.finishing.draft.create" : "rework.draft.create", idempotencyKey, { ...input, kind,...(originalCraft?{originalCraft}:{}) }, 201, async (client) => {
       if (kind === "inhouse_finishing" && !input.receivingBatchId) {
         throw new ApplicationError("VALIDATION_ERROR", "本厂做尾必须选择收货批次", 400);
       }
@@ -262,15 +273,28 @@ export class ReworkInitiationService {
         throw new ApplicationError("VALIDATION_ERROR", "本厂做尾无需整查和QC报告", 400);
       }
       const reworkOrderId = randomUUID();
+      if(originalCraft&&!authority)throw new ApplicationError("FORBIDDEN","原工艺检查无办理权限",403);
+      const craft=originalCraft&&authority?await currentCraftProblemForRework(client,originalCraft.scope,authority):null;
+      if(originalCraft&&craft){
+        if(!Number.isSafeInteger(originalCraft.quantity)||originalCraft.quantity<1||originalCraft.quantity>craft.evidence.problemQuantity)
+          throw new ApplicationError("VALIDATION_ERROR",`本次返工不能超过原工艺问题范围 ${craft.evidence.problemQuantity} 片`,400);
+        const active=(await client.query<{rework_order_id:string}>(
+          "SELECT rework_order_id FROM rework_orders WHERE source_craft_qc_check_id=$1 AND status NOT IN ('cancelled','deleted')",
+          [craft.evidence.checkId],
+        )).rows[0];
+        if(active)return this.getOwnedWithClient(client,actor.actorId,active.rework_order_id);
+      }
       const specialProcess = resolveSpecialProcess(input, undefined, kind === "inhouse_finishing");
-      const sourceReceivingBatch = await this.resolveSourceReceivingBatch(
+      const sourceReceivingBatch = craft?{receivingBatchId:null,styleNo:craft.source.styleNo}:await this.resolveSourceReceivingBatch(
         client,
         input.receivingBatchId,
         input.styleNo,
       );
-      const factory = await this.resolveFactory(client, input.processingFactory ?? null);
-      if (input.merchandiserUserId) {
-        await this.ensureActiveMerchandiser(client, input.merchandiserUserId);
+      const merchandiserUserId=craft?craft.source.merchandiserId:input.merchandiserUserId??null;
+      const factoryInput=craft?(originalCraft?.execution==="factory"?{type:"supplier" as const,supplierId:craft.evidence.factoryId}:{type:"own_factory" as const}):input.processingFactory??null;
+      const factory = await this.resolveFactory(client, factoryInput);
+      if (merchandiserUserId) {
+        await this.ensureActiveMerchandiser(client, merchandiserUserId);
       }
       const attachmentIds = input.attachmentIds ?? [];
       const next = {
@@ -278,19 +302,20 @@ export class ReworkInitiationService {
         reworkNo: null,
         status: "draft" as const,
         reworkKind: kind,
+        ...(craft&&originalCraft?{originalCraftQuality:{checkId:craft.evidence.checkId,unit:"片",execution:originalCraft.execution},craftScope:originalCraft.scope}:{}),
         receivingBatchId: sourceReceivingBatch.receivingBatchId,
         styleNo: sourceReceivingBatch.styleNo,
         customerSupplyCode: input.customerSupplyCode ?? null,
         factoryStyleNo: input.factoryStyleNo ?? null,
         orderNo: input.orderNo ?? null,
         orderQuantity: input.orderQuantity ?? null,
-        merchandiserUserId: input.merchandiserUserId ?? null,
+        merchandiserUserId,
         processingFactory: factory,
         reworkReason: input.reworkReason ?? null,
         reworkProcess: input.reworkProcess ?? null,
         problemPart: input.problemPart ?? null,
         problemDescription: input.problemDescription ?? null,
-        reworkQuantity: input.reworkQuantity ?? null,
+        reworkQuantity: craft?originalCraft!.quantity:input.reworkQuantity??null,
         ...specialProcess,
         tailInspectionCostBearer: !specialProcess.tailInspectionRequired
           ? null
@@ -318,8 +343,8 @@ export class ReworkInitiationService {
            processing_factory_supplier_version,rework_reason,rework_process,
            problem_part,problem_description,rework_quantity,tail_inspection_required,
            tail_inspection_cost_bearer,tail_inspection_cost_bearer_source,inspection_report,
-           source_receiving_batch_id,created_by,updated_by,special_process_type,other_craft_description${kind === "inhouse_finishing" ? ",rework_kind" : ""}
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22,$23${kind === "inhouse_finishing" ? ",$24" : ""})`,
+           source_receiving_batch_id,created_by,updated_by,special_process_type,other_craft_description${kind === "inhouse_finishing" ? ",rework_kind" : ""}${craft?",source_craft_qc_check_id,craft_rework_execution":""}
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22,$23${kind === "inhouse_finishing" ? ",$24" : ""}${craft?",$24,$25":""})`,
         [
           reworkOrderId,
           next.styleNo,
@@ -345,12 +370,13 @@ export class ReworkInitiationService {
           next.specialProcessType,
           next.otherCraftDescription,
           ...(kind === "inhouse_finishing" ? [kind] : []),
+          ...(craft?[craft.evidence.checkId,originalCraft!.execution]:[]),
         ],
       );
-      await linkDigitalRework(client,reworkOrderId,sourceReceivingBatch.receivingBatchId);
+      if(!craft)await linkDigitalRework(client,reworkOrderId,sourceReceivingBatch.receivingBatchId);
       await this.syncAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
-    });
+    }, originalCraft ? async client=>{authority=await lockCraftProblemAuthority(client,actor,originalCraft.scope);} : undefined);
   }
 
   private async resolveSourceReceivingBatch(
@@ -437,18 +463,19 @@ export class ReworkInitiationService {
       const factory = input.processingFactory === undefined
         ? factoryFromRow(current)
         : await this.resolveFactory(client, input.processingFactory);
+      const exactCraft=Boolean(current.source_craft_qc_check_id);
       if (
-        current.source_receiving_batch_id
+        (current.source_receiving_batch_id||exactCraft)
         && input.styleNo !== undefined
         && input.styleNo?.trim().toUpperCase() !== current.style_no?.trim().toUpperCase()
       ) {
-        throw new ApplicationError("VALIDATION_ERROR", "来源收货批次的款号不能在返工单修改", 400);
+        throw new ApplicationError("VALIDATION_ERROR", exactCraft?"原工艺批次的款号不能在返工单修改":"来源收货批次的款号不能在返工单修改", 400);
       }
-      let nextStyleNo = current.source_receiving_batch_id
+      let nextStyleNo = current.source_receiving_batch_id||exactCraft
         ? current.style_no
         : input.styleNo === undefined ? current.style_no : input.styleNo;
       let sourceReceivingBatchId = current.source_receiving_batch_id;
-      if (!sourceReceivingBatchId) {
+      if (!sourceReceivingBatchId&&!exactCraft) {
         const legacySource = await this.resolveSourceReceivingBatch(client, undefined, nextStyleNo);
         sourceReceivingBatchId = legacySource.receivingBatchId;
         nextStyleNo = legacySource.styleNo;
@@ -1275,6 +1302,7 @@ export class ReworkInitiationService {
     payload: unknown,
     statusCode: number,
     work: (client: PoolClient) => Promise<T>,
+    authorizeBeforeReplay?: (client:PoolClient)=>Promise<void>,
   ): Promise<MutationResult<T>> {
     if (scope === "rework.finishing.draft.create") {
       this.ensureFinishingInitiator(actor);
@@ -1288,6 +1316,7 @@ export class ReworkInitiationService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await authorizeBeforeReplay?.(client);
       const result = await this.idempotency.execute<T>(client, {
         scope,
         actorKey: actor.actorId,
@@ -1821,6 +1850,7 @@ export class ReworkInitiationService {
       status: row.status,
       reworkKind: row.rework_kind,
       receivingBatchId: row.source_receiving_batch_id,
+      ...(row.source_craft_qc_check_id&&row.craft_rework_execution?{originalCraftQuality:{checkId:row.source_craft_qc_check_id,unit:"片" as const,execution:row.craft_rework_execution}}:{}),
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,

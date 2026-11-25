@@ -1287,6 +1287,10 @@
     {
       "version": "0307_craft_quality_quantity_scope",
       "checksum": "943ca4ec2c2155b321155582af3d2717c47f8d9b2d054f51f57efe93dfbb2f0c"
+    },
+    {
+      "version": "0308_rework_original_craft_quality_source",
+      "checksum": "6a53239526135e748bef9727e396e65b7c53e1e2aeed20b71894280dbef066f9"
     }
   ]
 }

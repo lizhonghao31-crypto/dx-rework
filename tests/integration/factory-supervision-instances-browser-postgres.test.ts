@@ -23,6 +23,8 @@ import {MemberModuleBindingService} from '../../apps/api/src/access/member-modul
 import {readWarehouseCraftFactoryBasis} from '../../apps/api/src/production-platform/warehouse-craft-factory-basis.js';
 import {lockCraftProblemForOriginalRework,readCurrentCraftProblem} from '../../apps/api/src/production-platform/quality-craft-problem-scope.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
+import {ensureWithinSourceReceivingActualQuantity} from '../../apps/api/src/rework/receiving-quantity-ceiling.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -207,6 +209,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    });
    await expect(lockCraftProblemForOriginalRework(sourceTx,qc,{...locate,checkId:randomUUID()})).rejects.toMatchObject({statusCode:409});
   }finally{await sourceTx.query('ROLLBACK');sourceTx.release();}
+  const rework=new ReworkInitiationService(f.db,'anchor-test');
+  const qaActor={...qc,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']};
+  const origin={scope:locate,execution:'factory' as const,quantity:2},startKey=randomUUID();
+  await expect(rework.createCraftDraft(qaActor,{...origin,quantity:3},randomUUID())).rejects.toMatchObject({statusCode:400});
+  const entered=await rework.createCraftDraft(qaActor,origin,startKey),draftId=entered.value.reworkOrderId;
+  expect(entered.value).toMatchObject({receivingBatchId:null,status:'draft',reworkQuantity:2,
+   processingFactory:{type:'supplier',supplierId:factories[1]},originalCraftQuality:{checkId:current.checkId,unit:'片',execution:'factory'}});
+  expect(await rework.createCraftDraft(qaActor,origin,startKey)).toMatchObject({reused:true,value:{reworkOrderId:draftId}});
+  expect((await rework.createCraftDraft(qaActor,origin,randomUUID())).value.reworkOrderId).toBe(draftId);
+  await expect(ensureWithinSourceReceivingActualQuantity(f.db,draftId,[{label:'原报量',quantity:3}])).rejects.toThrow('原工艺问题范围 2 片');
+  await expect(ensureWithinSourceReceivingActualQuantity(f.db,draftId,[{label:'原报量',quantity:2}])).resolves.toBeUndefined();
+  expect((await f.db.query('SELECT count(*)::int AS count FROM rework_orders WHERE source_craft_qc_check_id=$1',[current.checkId])).rows[0].count).toBe(1);
   await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,
     attachment_ids,checked_by,checked_at) VALUES($1,$2,$3,$4,'合格','','','{}',$5,$6)`,
    [randomUUID(),ready.preparationId,in4.factId,lineId,qc.actorId,businessNow().toISOString()])).rejects.toMatchObject({code:'23514'});

@@ -5,7 +5,7 @@ import {ApplicationError} from '../platform/errors.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 
-type ProblemLocator={orderId:string;preparationId:string;stepRef:string;returnFactId:string;lineId:string;checkId:string};
+export type CraftProblemLocator={orderId:string;preparationId:string;stepRef:string;returnFactId:string;lineId:string;checkId:string};
 type OriginalCheck={check_id:string;result:string;quantity_scope:unknown;returned_payload:unknown};
 
 /** Legacy 「需处理」 never implies a quantity, even if the whole PO or
@@ -19,7 +19,7 @@ export function countedCraftCheck(input:unknown,actualReturned:number):CraftChec
  return {inspectedQuantity,qualifiedQuantity,problemQuantity,unit};
 }
 
-export function qualifyCurrentCraftProblem(raw:OriginalCheck,locator:ProblemLocator){
+export function qualifyCurrentCraftProblem(raw:OriginalCheck,locator:CraftProblemLocator){
  if(raw.check_id!==locator.checkId||raw.result!=='需处理'||!raw.returned_payload||typeof raw.returned_payload!=='object')return null;
  const returned=raw.returned_payload as {stepRef?:string;sendFactId?:string;lines?:readonly {lineId:string;quantity:number}[];warehouseMotion?:{factoryId?:string}};
  if(returned.stepRef!==locator.stepRef||!returned.sendFactId||!returned.warehouseMotion?.factoryId||!Array.isArray(returned.lines))return null;
@@ -33,7 +33,7 @@ export function qualifyCurrentCraftProblem(raw:OriginalCheck,locator:ProblemLoca
 /** No broad authorization shortcut here. The original QC/rework command
  * supplies an already authorized order and uses its original lifecycle lock.
  * Only the latest native check for this exact return/PO can occupy pieces. */
-export async function readCurrentCraftProblem(db:Pick<PoolClient,'query'>,locator:ProblemLocator){
+export async function readCurrentCraftProblem(db:Pick<PoolClient,'query'>,locator:CraftProblemLocator){
  const {rows}=await db.query<OriginalCheck>(`SELECT q.check_id,q.result,q.quantity_scope,f.payload AS returned_payload
   FROM digital_factory_routes route JOIN digital_factory_facts f USING(preparation_id)
   JOIN digital_production_po_lines po ON po.production_order_id=route.production_order_id AND po.line_id=$5
@@ -52,7 +52,7 @@ export async function readCurrentCraftProblem(db:Pick<PoolClient,'query'>,locato
 /** Entry for the original rework mutation transaction. Match Warehouse/Factory
  * Flow's lock order before checking the actual role, route and latest check.
  * Reading an issue for N01 does not open or occupy a rework order. */
-export async function lockCraftProblemForOriginalRework(db:PoolClient,actor:TrustedActorContext,locator:ProblemLocator){
+export async function lockCraftProblemAuthority(db:PoolClient,actor:TrustedActorContext,locator:CraftProblemLocator){
  await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
  const access=new DigitalProductionAccessPolicy(db);
  await access.assert(actor,'order',locator.orderId,'technical');
@@ -66,11 +66,17 @@ export async function lockCraftProblemForOriginalRework(db:PoolClient,actor:Trus
   WHERE p.route_ref=$2 AND p.step_id=$3 AND a.production_order_id=$1 AND a.task_kind='bulk_qc'
     AND t.state IN ('ready','completed')`,[locator.orderId,locator.preparationId,locator.stepRef])).rows;
  if(task.length!==1||!root&&!await access.allowed(actor,'task',task[0]!.task_id,'execute'))return digitalForbidden();
+ return {styleNo:order.design_style_no as string|null,merchandiserId:order.primary_merchandiser_id as string|null,taskId:task[0]!.task_id,sourceId:order.source_id as string|null};
+}
+export async function currentCraftProblemForRework(db:PoolClient,locator:CraftProblemLocator,source:Awaited<ReturnType<typeof lockCraftProblemAuthority>>){
  const invalid=(await db.query(`SELECT 1 FROM digital_order_closures WHERE production_order_id=$1
   UNION ALL SELECT 1 FROM digital_production_resource_lifecycle
   WHERE (resource_kind='order' AND resource_id=$1 OR resource_kind='source' AND resource_id=$2) AND state<>'active'`,
- [locator.orderId,order.source_id])).rowCount;
+ [locator.orderId,source.sourceId])).rowCount;
  const evidence=invalid?null:await readCurrentCraftProblem(db,locator);
  if(!evidence)throw new ApplicationError('CONFLICT','原工艺问题范围已变更或不可办理，请刷新同批次检查',409);
- return {evidence,source:{styleNo:order.design_style_no as string|null,merchandiserId:order.primary_merchandiser_id as string|null,taskId:task[0]!.task_id}};
+ return {evidence,source};
+}
+export async function lockCraftProblemForOriginalRework(db:PoolClient,actor:TrustedActorContext,locator:CraftProblemLocator){
+ return currentCraftProblemForRework(db,locator,await lockCraftProblemAuthority(db,actor,locator));
 }
