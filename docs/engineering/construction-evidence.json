@@ -2,51 +2,51 @@
   "version": 1,
   "base": "686b2607eed56e6900ee5c8ca122384e8b838291",
   "risk": "full",
-  "sourceFingerprint": "2f03da98516b00d9413df504e74416d6564d207c3172dad4693b0e93c4a54769",
+  "sourceFingerprint": "a0976852ec9d2b27dc0da03c8ae73da5fb2f95008c99867f3a7a215b4a212b9f",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-append-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-review-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "65533b7be5e5b4619b2123391dff8ae6370ae5c2",
-      "sourceFingerprint": "2f03da98516b00d9413df504e74416d6564d207c3172dad4693b0e93c4a54769",
-      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing, canonical two-worker config and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
-      "startedAt": "2026-11-25T16:54:43.476Z",
-      "endedAt": "2026-11-25T16:56:17.723Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-append-final-native.log",
-      "logSha256": "8957ef39f389890f1047a20c7d4fdc20728df6bbb1a38720076a2d31bdcd013c",
+      "testedHead": "fd99f00db41543748ae030e6635fa3d9b408ccb7",
+      "sourceFingerprint": "a0976852ec9d2b27dc0da03c8ae73da5fb2f95008c99867f3a7a215b4a212b9f",
+      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing and two explicit workers and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
+      "startedAt": "2026-11-25T17:09:00.900Z",
+      "endedAt": "2026-11-25T17:10:41.709Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-review-final-native.log",
+      "logSha256": "4f213494c238b416df03ae67085f900ca1f8e3f89f291147fbe292d0b60b20af",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f2b348cdc37c268400c24be2f216080e9b2493f571d9243a58538f6b5d92c616"
+          "sha256": "32992317f197384c37e304d3c7a4a0cc0938a90c28c6c00d6492d1ec8f63b246"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-append-final-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-review-final-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 49,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "65533b7be5e5b4619b2123391dff8ae6370ae5c2",
-      "sourceFingerprint": "2f03da98516b00d9413df504e74416d6564d207c3172dad4693b0e93c4a54769",
+      "testedHead": "fd99f00db41543748ae030e6635fa3d9b408ccb7",
+      "sourceFingerprint": "a0976852ec9d2b27dc0da03c8ae73da5fb2f95008c99867f3a7a215b4a212b9f",
       "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
-      "startedAt": "2026-11-25T16:54:43.488Z",
-      "endedAt": "2026-11-25T16:54:45.858Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-append-final-unit.log",
-      "logSha256": "d7483bf9d5d0b0fac7319756118d2b3c9f48038b93cb62af78429f841c859754",
+      "startedAt": "2026-11-25T17:09:10.046Z",
+      "endedAt": "2026-11-25T17:09:11.954Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-review-final-unit.log",
+      "logSha256": "5e8f3a6afb2f178c893d11d766de26e0397ca073fb057e34f60f9d2d968ca5f8",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "04502ceec36cc868e058d6147d320f8270b71a9bb2576990526a05cda9f904d5"
+          "sha256": "1e1e5577375b58847676e2d871ec545f3efd2ec306b930c3ec58e44f77aba3d8"
         }
       ]
     }
@@ -210,6 +210,7 @@
         "apps/api/src/production-platform/task-routes.ts",
         "apps/api/src/production-platform/task-service.ts",
         "apps/api/src/production-platform/warehouse-craft-rework-return.ts",
+        "apps/web/src/factory-batch-panel.tsx",
         "apps/web/src/factory-flow-panel.tsx",
         "apps/web/src/warehouse-center.tsx",
         "apps/web/src/warehouse-craft-work.tsx",
