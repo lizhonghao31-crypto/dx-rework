@@ -10,6 +10,7 @@ import {designerAstryxCss} from './designer-astryx.js';
 import {digitalChildDetailHref} from './digital-detail-route.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {ListPagination} from './list-pagination.js';
+import {OrderRushBadge} from './order-rush-badge.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {readWarehouseWorkbenchRoute,warehouseWorkbenchPath,type WarehouseWorkbenchRoute} from './warehouse-workbench-route.js';
 import {WarehouseNativeTaskTable} from './warehouse-native-task-table.js';
@@ -45,7 +46,7 @@ function Receipts({route,change,back}:{route:WarehouseWorkbenchRoute;change:(nex
   {warning&&<p role="alert">{warning} <Button type="button" label="重试读取" variant="secondary" onClick={()=>setRetry(value=>value+1)}/></p>}
   {exact&&(!exact.items.length?<p>{exact.total?'本页暂无待收料，可返回前一页。':'没有符合授权及筛选的待收料。'}</p>:
    <div className="development-table-scroll"><Table data={exact.items} idKey="id" density="balanced" columns={[
-    {key:'orderNumber',header:'订单ID / 客户',renderCell:row=><>{row.orderNumber??'订单ID待核'}<small>{row.customerCode??'客户待核'}</small></>},
+    {key:'orderNumber',header:'订单ID / 客户',renderCell:row=><>{row.orderNumber??'订单ID待核'} <OrderRushBadge value={row.orderRush}/><small>{row.customerCode??'客户待核'}</small></>},
     {key:'poNumber',header:'PO',renderCell:row=>row.poNumber??(row.lineId?'PO待核':'共享物料')},
     {key:'name',header:'原收料任务',renderCell:row=><>{row.name}<small>{row.supplier??'供应方待核'}</small></>},
     {key:'invested',header:'投料 / 实收 / 待收',renderCell:row=><>{digit(row.invested.quantity,row.invested.unit)} / {digit(row.received?.quantity??null,row.invested.unit)} / {digit(row.balance.procurementRemaining,row.invested.unit)}</>},

@@ -21,7 +21,7 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('frozen double-special factory supervision through original App',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
- beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-factory-supervision-app-')),{fullApp:true});configureTimelineAdoption(h.f.db,'fixed_v2');});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-factory-supervision-app-')),{fullApp:true,workbenchNumberedCreation:true});configureTimelineAdoption(h.f.db,'fixed_v2');});
  afterAll(async()=>{if(h){configureTimelineAdoption(h.f.db,'legacy');await h.writeEvidence();await h.dispose();}});
  it('reads before/after cutting and keeps each process/QC window through Journey, selector rebuild and authenticated rendering',async()=>{
   const f=h.f,steps:CraftStepChoice[]=[],library=new SpecialCraftLibraryService(f.db);
@@ -93,7 +93,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const preparations=new BulkPreparationService(f.db),next=await preparations.read(f.root,ready.id);
   expect(next.preparationId).not.toBe(ready.preparationId);
   await preparations.dispatch(f.people['development-clerk']!,ready.id,{expectedVersion:next.dispatch.version,patternWorkerId:f.people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());
-  for(const kind of ['纸样完成','唛架完成','预缩完成'] as const)await completeBulkRangeFixture(f.db,kind==='预缩完成'?f.people.warehouse!:f.people['pattern-room-worker']!,ready.id,next.preparationId!,kind);
+  for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,ready.id,next.preparationId!,kind);
+  const preshrink=(await preparations.read(f.root,ready.id)).tasks.find(task=>task.taskKind==='warehouse_preshrink')!;
+  const style=(await f.db.query('SELECT design_style_no FROM digital_production_orders WHERE production_order_id=$1',[ready.id])).rows[0].design_style_no as string;
+  const tab=await h.open(f.people.warehouse!.actorId,1165,{},`/ui/digital-production?workspace=warehouse&tab=preshrink&search=${encodeURIComponent(style)}`);
+  try{
+   const queue=tab.page.getByRole('region',{name:'待预缩',exact:true}),open=queue.getByRole('link',{name:'进入原任务',exact:true});
+   expect(new URL((await open.getAttribute('href'))!,tab.page.url()).searchParams.get('task')).toBe(preshrink.taskId);
+   await open.click();
+   await tab.page.getByRole('heading',{name:'仓库预缩办理',exact:true}).waitFor();
+   const done=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/orders/${ready.id}/bulk-preparation/complete`));
+   await tab.page.getByRole('button',{name:'预缩完成',exact:true}).click();
+   const response=await done;expect(response.status(),await response.text()).toBe(200);
+   expect(response.request().postDataJSON()).toMatchObject({preparationId:next.preparationId,kind:'预缩完成'});
+   await tab.page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await queue.getByText('没有符合当前授权和筛选的原仓库任务。',{exact:true}).waitFor();
+   expect(new URL(tab.page.url()).searchParams.get('search')).toBe(style);
+  }finally{await tab.close();}
   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
   for(const cut of (await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows)await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
   const result=await new SlaOrderService(f.db).read(f.root,ready.id);expect(result.status).toBe('planned');if(result.status!=='planned')throw Error('TEST expected original SLA plan');
@@ -103,5 +119,33 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(result.evaluationPlan.nodes.find(node=>node.id==='bulk_cutting')!.dependsOn).toContain(own[0]!.id);expect(result.evaluationPlan.nodes.find(node=>node.id==='bulk_cutting')!.dependsOn).not.toContain('warehouse_preshrink');
   const journey=await new DigitalJourneyQuery(f.db).read(f.root,ready.id),node=journey.stages.flatMap(stage=>stage.nodes).find(node=>node.current&&node.key==='warehouse_preshrink')!;
   expect(node.timing).toMatchObject({id:own[0]!.id,actualEnd:result.facts.warehouse_preshrink!.completedAt});expect(journey.supervision!.nodes.filter(node=>node.id.startsWith('warehouse_preshrink'))).toHaveLength(1);
+ });
+ it('posts a real partial dispatch from the assigned warehouse task and reads the same fact from the original factory page',async()=>{
+  const f=h.f,warehouse=f.people.warehouse!,ready=await f.bulkReady('无',undefined,1,f.sourcing,{quantity:10});
+  const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0];
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const original=await new FactoryFlowService(f.db).read(warehouse,ready.id),task=original.tasks.find(row=>row.taskKind==='warehouse_dispatch')!;
+  const style=task.identity!.designStyleNo!;
+  const tab=await h.open(warehouse.actorId,1165,{},`/ui/digital-production?workspace=warehouse&tab=dispatch&search=${encodeURIComponent(style)}`);
+  try{
+   const queue=tab.page.getByRole('region',{name:'待发料及发厂',exact:true}),open=queue.getByRole('link',{name:'进入原任务',exact:true});
+   expect(new URL((await open.getAttribute('href'))!,tab.page.url()).searchParams.get('task')).toBe(task.taskId);
+   await open.click();
+   const work=tab.page.getByRole('region',{name:'仓库实际发厂',exact:true});await work.waitFor();
+   expect(await work.getByRole('button',{name:/保存本批检查|保存工艺记录/}).count()).toBe(0);
+   await work.locator(`input[name="quantity:${original.lines[0]!.lineId}"]`).fill('4');
+   await work.getByRole('textbox',{name:'发厂说明',exact:true}).fill('TEST original warehouse first 4 pieces');
+   const result=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/orders/${ready.id}/factory-flow/dispatch`));
+   await work.getByRole('button',{name:'保存本批实际发厂',exact:true}).click();
+   const response=await result;expect(response.status(),await response.text()).toBe(200);
+   expect(response.request().postDataJSON()).toMatchObject({lines:[{lineId:original.lines[0]!.lineId,quantity:4}],supplierId:f.supplierId});
+   await work.getByText(/裁片已发 4 \/ 应发 10/).waitFor();
+   await work.getByRole('button',{name:'返回来源',exact:true}).click();
+   await open.waitFor();expect(new URL(tab.page.url()).searchParams.get('search')).toBe(style);
+   await tab.page.goto(`${h.base}/ui/digital-production?factory=${ready.id}&factoryAction=dispatch`);
+   await tab.page.getByText(/裁片已发 4 \/ 应发 10/).waitFor();
+   expect((await f.db.query("SELECT count(*)::int AS total FROM digital_factory_facts WHERE preparation_id=$1 AND kind='仓库实际发厂'",[original.preparationId])).rows[0].total).toBe(1);
+  }finally{await tab.close();}
  });
 });

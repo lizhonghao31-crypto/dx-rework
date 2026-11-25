@@ -9,6 +9,7 @@ import {assignedWarehousePreparationResources} from './warehouse-assigned-resour
 import {developmentReadTables} from './development-amendment-repository.js';
 import {currentPreparationMaterials,instructionInvestmentMaterials,preparationHandoverCurrent,preparationHash} from './preparation-material-repository.js';
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
+import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 
 type Source={kind:'source'|'order';id:string;order_id:string|null;source_id:string|null;order_number:string|null;customer_code:string|null;
  assignee_name:string|null;development_version:number|null;development:DevelopmentDocument|null;instruction_version:number|null;instruction:InstructionDocument|null;
@@ -106,7 +107,9 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
    }
   }
   out.sort((a,b)=>Date.parse(b.investedAt)-Date.parse(a.investedAt)||a.id.localeCompare(b.id));
+  const prioritized=prioritizeWithinRushGroups(await projectDevelopmentRushResources(db,out),
+   row=>row.balance.procurementRemaining==='0'?null:row.kind,row=>row.orderRush===true);
   const offset=(input.page-1)*15;
-  await db.query('COMMIT');return {items:out.slice(offset,offset+15),page:input.page,total:out.length};
+  await db.query('COMMIT');return {items:prioritized.slice(offset,offset+15),page:input.page,total:out.length};
  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
 }

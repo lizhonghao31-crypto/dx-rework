@@ -15,3 +15,9 @@ export function warehouseWorkbenchPath(route:WarehouseWorkbenchRoute,base:string
  const url=createWebUrls(base).pageUrl('ui/digital-production');
  return url+'?'+new URLSearchParams({workspace:'warehouse',tab:route.tab,page:String(route.page),search:route.search,status:route.status});
 }
+export function warehouseWorkbenchReturnTab(path:string|null,base:string){
+ if(!path)return null;
+ const local=new URL(path,'https://workbench.invalid');
+ if(local.origin!=='https://workbench.invalid'||local.pathname!==createWebUrls(base).pageUrl('ui/digital-production'))return null;
+ return readWarehouseWorkbenchRoute(local.searchParams)?.tab??null;
+}
