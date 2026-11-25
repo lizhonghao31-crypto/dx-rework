@@ -10,6 +10,7 @@ import {useForegroundWait} from './foreground-loading.js';
 import {request,SourcingRequestError} from './sourcing-api-client.js';
 import {sourcingContractReturnLabel} from './sourcing-contract-return-presentation.js';
 import {contractReturnFileError,finishContractReturnUpload,submitSourcingContractReturn,type ContractReturnUpload,type SourcingContractReturnSubmission} from './sourcing-contract-return-upload.js';
+import {submissionFailure} from './submission-validation.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {useForegroundRead} from './use-foreground-read.js';
 
@@ -72,8 +73,10 @@ export function MerchandiserContractReturn({caseId,requestedDocumentId,onClose,o
   }catch(reason){
    if(!current())return;
    const message=reason instanceof Error?reason.message:'原合同回签未完成。';
-   if(reason instanceof SourcingRequestError&&[401,403,404,409].includes(reason.status)&&
-    reason.code!=='IDEMPOTENCY_IN_PROGRESS'&&reason.code!=='IDEMPOTENCY_CONFLICT'){
+   // A confirmed refusal releases the submitted files, but a lost response or
+   // an in-progress idempotency record must retain the exact request and key.
+   const rejected=!submissionFailure(reason).uncertain;
+   if(rejected&&(submission.current||reason instanceof SourcingRequestError&&[401,403,404,409].includes(reason.status))){
     pending.current=null;submission.current=null;setUnknown(false);read.refreshSilently();
    }else setUnknown(Boolean(submission.current));
    setError(pending.current?`${message} 已上传 ${pending.current.attachmentIds.length}/${pending.current.files.length} 个文件，尚未保存。`:message);

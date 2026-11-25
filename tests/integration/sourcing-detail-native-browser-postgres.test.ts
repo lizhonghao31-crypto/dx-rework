@@ -14,6 +14,7 @@ import {PostgresAuthStore} from "../../apps/api/src/auth/postgres-store.js";
 import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from "../../apps/api/src/auth/acceptance-provider.js";
 import {RootAuthority} from "../../apps/api/src/access/root-authority.js";
 import {ExportJobService} from "../../apps/api/src/tools/exports.js";
+import {AttachmentService} from "../../apps/api/src/tools/attachments.js";
 import {SourcingProductionService} from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import {SourcingService} from "../../apps/api/src/sourcing/sourcing-service.js";
 import {SourcingContractReturnService} from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
@@ -59,7 +60,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    todos:{authenticate,root,service:todos,merchandiserWorkbench:true},
    reporting:{authenticate,root,service:reporting,exportService:new ReportExportService(reporting,f.db,"TEST-ie-center")},
    processConfiguration:{authenticate,root,service:new ProcessConfigurationService(f.db),workerPlan:new ProcessWorkerPlanService(f.db)},
-   tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:f.attachments,exports:new ExportJobService(f.db),
+   tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:new AttachmentService(f.db,f.storage,{prefix:'TEST-anchor',ttlSeconds:60,maxUploadBytes:20*1024*1024}),exports:new ExportJobService(f.db),
     canDownloadBoundAttachment:(actor,binding)=>Promise.resolve(f.sourcing.canDownloadBoundAttachment({
      actorId:actor.actorId,actorRoles:actor.actorRoles,authorizationCapability:"sourcing:view",
      authorizationCapabilities:actor.capabilities,requestId:"TEST-sourcing-attachment-download",
@@ -169,6 +170,70 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.goto(base+`/ui/sourcing/orders/${id}?section=contract-return`);
    await page.getByRole('link',{name:'查看 V1 回签合同',exact:true}).waitFor();
    expect((await (await context.request.get(base+path)).json()).contractReturnedAt).toBe(stored.contractReturnedAt);
+  }finally{await context.close();if(previous===undefined)delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;}
+ });
+ it('releases a confirmed quota rejection in a stale signed contract tab and accepts a smaller replacement',async()=>{
+  const previous=process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+  process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT='2020-01-01T00:00:00Z';
+  const merch=f.people.merchandiser!,manager=f.people['production-management']!,owner=f.people.owner!,style=`TEST-X6-QUOTA-${randomUUID()}`;
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  await context.addCookies([{name:'dx_rework_session',value:merchToken,url:base}]);
+  try{
+   const craft=(await f.access.ensureCrafts(manager,{craftNames:['TEST X6 quota sewing']}))[0]!,prices=[{position:1,unitPrice:'5'}];
+   const order=await approvalService.createCase(merch,{gender:'男装',styleName:'TEST X6 quota contract',deliveryDate:'2026-12-20',
+    estimatedCutPieceSendDate:'2026-11-10',daxingUnitPrice:'5',lineItems:[{styleNo:style,color:'黑',quantity:10}]},randomUUID());
+   const id=order.value.sourcingCaseId,path=`/api/sourcing/cases/${id}/contract-return`;
+   await approvalService.quoteIePrice(f.people.ie!,id,{linePrices:prices},randomUUID());
+   await approvalService.recordManagementDecision(manager,id,{linePrices:prices,craftIds:[craft.craftId],supplierId:f.supplierId,cuttingProcess:'in_house'},randomUUID());
+   await decideSeenSourcingOwner(approvalService,owner,id,{decision:'approved'},randomUUID());
+   const before=await (await context.request.get(base+path)).json();
+   expect(before).toMatchObject({canUpload:true,uploadedFileCount:0,currentContractDocumentId:expect.any(String)});
+   const documentId=before.currentContractDocumentId;
+   await context.route('https://private.example.test/',async route=>{
+    const form=await new Response(new Uint8Array(route.request().postDataBuffer()!),{headers:{'content-type':route.request().headers()['content-type']!}}).formData();
+    const file=form.get('file'),key=form.get('key');
+    if(!(file instanceof Blob)||typeof key!=='string')throw Error('Expected the original signed attachment form');
+    const bytes=new Uint8Array(await file.arrayBuffer()),sha256=createHash('sha256').update(bytes).digest('hex');
+    expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+    await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});
+    await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+   });
+   const openPanel=async()=>{
+    const page=await context.newPage();page.setDefaultTimeout(15000);
+    await page.goto(`${base}/ui/digital-production?workspace=merchandiser&kind=sourcing&search=${encodeURIComponent(style)}`);
+    await page.getByRole('button',{name:'办理本单回签',exact:true}).click();
+    const panel=page.getByRole('region',{name:'本单合同回传',exact:true});
+    await panel.getByRole('button',{name:'上传本版回签',exact:true}).waitFor();
+    return {page,panel};
+   };
+   const first=await openPanel(),second=await openPanel();
+   const choose=async(tab:typeof first,name:string,buffer:Buffer)=>{
+    const response=tab.page.waitForResponse(reply=>reply.request().method()==='POST'&&new URL(reply.url()).pathname===path);
+    await tab.panel.locator('input[type=file]').setInputFiles({name,mimeType:'image/png',buffer});
+    return response;
+   };
+   const large=await sharp({create:{width:2048,height:2048,channels:3,background:'#165f79'}}).png({compressionLevel:0}).toBuffer();
+   const another=await sharp({create:{width:2048,height:2048,channels:3,background:'#8b4211'}}).png({compressionLevel:0}).toBuffer();
+   expect(large.length).toBeGreaterThan(10*1024*1024);expect(another.length).toBeGreaterThan(10*1024*1024);
+   expect(Math.max(large.length,another.length)).toBeLessThan(20*1024*1024);
+   const firstSaved=await choose(first,'TEST first signed copy.png',large);expect(firstSaved.status(),await firstSaved.text()).toBe(200);
+   const original=await firstSaved.json();
+   const denied=await choose(second,'TEST stale oversized copy.png',another);
+   expect(denied.status(),await denied.text()).toBe(400);
+   expect(await denied.json()).toMatchObject({error:{code:'VALIDATION_ERROR',message:expect.stringContaining('20 MB')}});
+   await second.panel.getByRole('alert').filter({hasText:'20 MB'}).waitFor();
+   expect(await second.panel.getByRole('button',{name:'核对同一次回签',exact:true}).count()).toBe(0);
+   expect(await second.panel.getByRole('button',{name:'返回跟单列表',exact:true}).isEnabled()).toBe(true);
+   await second.panel.getByRole('button',{name:'补传本版回签',exact:true}).waitFor();
+   const replacement=await sharp({create:{width:2,height:2,channels:3,background:'#337044'}}).png().toBuffer();
+   const saved=await choose(second,'TEST smaller corrected copy.png',replacement);expect(saved.status(),await saved.text()).toBe(200);
+   await second.panel.getByRole('status').filter({hasText:'本版回签已保存。'}).waitFor();
+   const latest=await (await context.request.get(base+path)).json();
+   expect(latest).toMatchObject({currentContractDocumentId:documentId,uploadedFileCount:2,contractReturnedAt:original.contractReturnedAt});
+   const filenames=latest.versions.flatMap((version:{signedContractDocumentId:string;attachments:{filename:string}[]})=>
+    version.signedContractDocumentId===documentId?version.attachments.map(file=>file.filename):[]);
+   expect(filenames.sort()).toEqual(['TEST first signed copy.png','TEST smaller corrected copy.png']);
+   expect(denied.request().headers()['idempotency-key']).not.toBe(saved.request().headers()['idempotency-key']);
   }finally{await context.close();if(previous===undefined)delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;}
  });
  it("shows authorized sourcing facts while records are pending or failed, then recovers without writes",async()=>{
