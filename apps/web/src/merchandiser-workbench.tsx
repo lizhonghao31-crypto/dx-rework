@@ -5,6 +5,7 @@ import {Selector} from '@astryxdesign/core/Selector';
 import {Table} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {MerchandiserWorkKindSchema,MerchandiserWorkResponseSchema,type MerchandiserWorkResponse} from '@dx-rework/contracts';
+import {DigitalIdSchema} from '@dx-rework/contracts/digital-production';
 import {todoDestination} from '@dx-rework/contracts/todo-destination';
 import {createWebUrls} from '../url-contract.js';
 import {designerAstryxCss} from './designer-astryx.js';
@@ -13,12 +14,15 @@ import {useForegroundWait} from './foreground-loading.js';
 import {ListPagination} from './list-pagination.js';
 import {MerchandiserContractReturn} from './merchandiser-contract-return.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
+import {DocumentGuardContext} from './use-digital-detail-navigation-guard.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {merchandiserWorkbenchPath,readMerchandiserWorkbenchRoute,type MerchandiserWorkbenchRoute} from './merchandiser-workbench-route.js';
 
 const labels={preparation:'接资料与投料',commercial:'预算与制单',sourcing:'外发与合同',delivery:'生产与交付',exceptions:'差异处理及返工协同'} as const;
 const urls=createWebUrls(import.meta.env.BASE_URL);
+type OpenAction={kind:'contract';caseId:string;documentId:string|null}|{kind:'investment';resource:{kind:'source'|'order';id:string}};
 export function MerchandiserWorkbench({search}:{search:string}){
  const [route,setRoute]=useState(()=>readMerchandiserWorkbenchRoute(new URLSearchParams(search)));
  const change=useCallback((next:MerchandiserWorkbenchRoute)=>{
@@ -31,7 +35,7 @@ export function MerchandiserWorkbench({search}:{search:string}){
 }
 function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchRoute;change:(value:MerchandiserWorkbenchRoute)=>void}){
  const [search,setSearch]=useState(route.search),[retry,setRetry]=useState(0);
- const [contract,setContract]=useState<{caseId:string;documentId:string|null}|null>(null);
+ const [action,setAction]=useState<OpenAction|null>(null),guards=useRef(new Set<()=>Promise<boolean>>());
  const listHeading=useRef<HTMLHeadingElement>(null),returnFocus=useRef<{button:HTMLButtonElement;scroll:number}|null>(null);
  const [data,setData]=useState<{key:string;value:MerchandiserWorkResponse}|null>(null),[issue,setIssue]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{
@@ -42,9 +46,9 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
  const parameters=new URLSearchParams({page:String(route.page),search:route.search,...(route.kind?{kind:route.kind}:{})});
  const path=urls.apiUrl('todos/merchandiser/current?'+parameters),key=`${path}:${retry}`;
  const exact=data?.key===key?data.value:null,error=issue?.key===key?issue.message:'',busy=!exact&&!error;
- useForegroundWait(busy&&!contract?`merchandiser:${key}`:undefined);useInternalReturnScroll(Boolean(exact||error));
+ useForegroundWait(busy&&!action?`merchandiser:${key}`:undefined);useInternalReturnScroll(Boolean(exact||error));
  useEffect(()=>{
-  if(contract||busy||!returnFocus.current)return;
+  if(action||busy||!returnFocus.current)return;
   const original=returnFocus.current;
   const frame=requestAnimationFrame(()=>{
    if(original.button.isConnected)original.button.focus({preventScroll:true});
@@ -52,7 +56,7 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    window.scrollTo(0,original.scroll);returnFocus.current=null;
   });
   return()=>cancelAnimationFrame(frame);
- },[contract,busy]);
+ },[action,busy]);
  useEffect(()=>{
   const abort=new AbortController();
   void feedbackFetch(path,{method:'GET',credentials:'include',cache:'no-store',signal:abort.signal})
@@ -62,10 +66,17 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
   return()=>abort.abort();
  },[key,path]);
  const returnTo=merchandiserWorkbenchPath(route,urls.base);
+ const open=(button:HTMLButtonElement,next:OpenAction)=>{returnFocus.current={button,scroll:window.scrollY};setAction(next);};
+ const close=async()=>{for(const guard of guards.current)if(!await guard())return;setAction(null);};
+ const saved=()=>setRetry(attempt=>attempt+1);
  return <>
-  {contract&&<MerchandiserContractReturn key={`${contract.caseId}:${contract.documentId}`} caseId={contract.caseId}
-   requestedDocumentId={contract.documentId} onClose={()=>setContract(null)} onSaved={()=>setRetry(attempt=>attempt+1)}/>}
-  <section hidden={Boolean(contract)} aria-label="待我办理"><h2 ref={listHeading} tabIndex={-1}>待我办理</h2>
+  {action?.kind==='contract'&&<MerchandiserContractReturn key={`${action.caseId}:${action.documentId}`} caseId={action.caseId}
+   requestedDocumentId={action.documentId} onClose={()=>setAction(null)} onSaved={saved}/>}
+  {action?.kind==='investment'&&<DocumentGuardContext.Provider value={guards.current}><section aria-label="本单投面辅料">
+   <h2>本单投面辅料</h2><Button label="返回跟单列表" variant="secondary" onClick={()=>void close()}/>
+   <ProductionReadinessPanel key={`${action.resource.kind}:${action.resource.id}`} resource={action.resource} investmentOnly onChanged={saved}/>
+  </section></DocumentGuardContext.Provider>}
+  <section hidden={Boolean(action)} aria-label="待我办理"><h2 ref={listHeading} tabIndex={-1}>待我办理</h2>
   <div className="pattern-actions"><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
    <Selector label="业务类型" value={route.kind??'all'} options={[{value:'all',label:'全部业务'},...Object.entries(labels).map(([value,label])=>({value,label}))]}
     onChange={value=>change({...route,page:1,kind:MerchandiserWorkKindSchema.safeParse(value).data})}/>
@@ -77,11 +88,17 @@ function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchR
    {key:'factory',header:'加工厂',renderCell:row=>row.factory??'待核'},
    {key:'title',header:'当前事项',renderCell:row=><>{row.title}<small>{labels[row.kind]}</small></>},
    {key:'dueAt',header:'原期限',renderCell:row=>row.dueAt?new Date(row.dueAt).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'}):'未记录'},
-   {key:'itemId',header:'操作',renderCell:row=>row.route.routeName==='sourcing_detail'&&row.route.tab==='contract_return'?
-    <Button label="办理本单回签" size="sm" variant="secondary" onClick={event=>{
-     returnFocus.current={button:event.currentTarget,scroll:window.scrollY};
-     setContract({caseId:row.route.entityId,documentId:row.route.contractReturn?.documentId??row.route.transferContract?.documentId??null});
-    }}/>:<Link type="inherit" href={digitalChildDetailHref(todoDestination(row.route),returnTo,urls.base)}>打开原办理</Link>},
+   {key:'itemId',header:'操作',renderCell:row=>{
+    const {route}=row;
+    const inlineContract=route.routeName==='sourcing_detail'&&route.tab==='contract_return';
+    const inlineInvestment=route.routeName==='digital_source_material_investment'||route.routeName==='digital_order_material_investment';
+    if((inlineContract||inlineInvestment)&&!DigitalIdSchema.safeParse(route.entityId).success)return <span>原办理范围待核</span>;
+    if(inlineContract)return <Button label="办理本单回签" size="sm" variant="secondary" onClick={event=>open(event.currentTarget,
+     {kind:'contract',caseId:route.entityId,documentId:route.contractReturn?.documentId??route.transferContract?.documentId??null})}/>;
+    if(inlineInvestment)return <Button label="办理本单投面辅料" size="sm" variant="secondary"
+     onClick={event=>open(event.currentTarget,{kind:'investment',resource:{kind:route.routeName==='digital_source_material_investment'?'source':'order',id:route.entityId}})}/>;
+    return <Link type="inherit" href={digitalChildDetailHref(todoDestination(row.route),returnTo,urls.base)}>打开原办理</Link>;
+   }},
   ]}/></div>)}
   <ListPagination page={route.page} total={exact?.total??null} totalPages={exact?Math.max(1,Math.ceil(exact.total/15)):null} busy={busy}
    ariaLabel="跟单原任务分页" onPageChange={page=>change({...route,page})}/>

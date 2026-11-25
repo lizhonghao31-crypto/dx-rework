@@ -127,11 +127,32 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const work=await h.open(merch.actorId,1165,{},newPath);
   try{
    const queue=work.page.getByRole('region',{name:'待我办理',exact:true}),row=queue.getByRole('row').filter({hasText:style});
-   const original=row.getByRole('link',{name:'打开原办理',exact:true});
-   expect(new URL((await original.getAttribute('href'))!,work.page.url()).searchParams.get('materialSource')).toBe(diagnosis.sourceId);
+   const original=row.getByRole('button',{name:'办理本单投面辅料',exact:true});
    await original.click();
-   await work.page.getByRole('group',{name:'投面辅料',exact:true}).waitFor();
-   await work.page.getByRole('button',{name:'返回来源',exact:true}).click();await original.waitFor();
+   const panel=work.page.getByRole('region',{name:'本单投面辅料',exact:true});
+   const form=panel.getByRole('group',{name:'投面辅料',exact:true});await form.waitFor();
+   expect(new URL(work.page.url()).searchParams.get('workspace')).toBe('merchandiser');
+   expect(await panel.getByText('指定仓管和对色确认人',{exact:true}).count()).toBe(0);
+   await form.getByRole('combobox',{name:/^办理状态/}).selectOption('partial');
+   await form.getByLabel('本次交接物料').selectOption(diagnosis.materialId);
+   await form.getByLabel('实际发生时间（北京时间）').fill(localTime);
+   await form.getByLabel('实际数量').fill('25');
+   await form.getByLabel('单位',{exact:true}).fill('米');
+   await form.getByLabel('本次情况 / 订正原因').fill('TEST 本单实际部分投出25米');
+   await panel.getByRole('button',{name:'返回跟单列表',exact:true}).click();
+   await work.page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();
+   expect(await form.getByLabel('实际数量').inputValue()).toBe('25');
+   const saved=work.page.waitForResponse(response=>response.request().method()==='POST'&&
+    new URL(response.url()).pathname.endsWith(`/sources/${diagnosis.sourceId}/production-readiness/materials`));
+   await form.getByRole('button',{name:'保存本项记录',exact:true}).click();
+   const response=await saved;
+   expect(response.status(),await response.text()).toBe(200);
+   expect(await response.json()).toMatchObject({sourceIsPreorderDraft:true,orderId:null,facts:expect.arrayContaining([
+    expect.objectContaining({kind:'material_investment',state:'partial',version:1,recordedBy:merch.actorId,
+     quantities:[expect.objectContaining({materialId:diagnosis.materialId,quantity:25,unit:'米'})]})
+   ])});
+   await panel.getByText('已保存原业务记录',{exact:true}).waitFor();
+   await panel.getByRole('button',{name:'返回跟单列表',exact:true}).click();await original.waitFor();
    expect(new URL(work.page.url()).searchParams.get('search')).toBe(style);
   }finally{await work.close();}
   const tab=await h.open(merch.actorId,1165,{},'/ui/my-tasks?q='+encodeURIComponent(style));
@@ -143,6 +164,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await task.click();
    await page.waitForURL(address=>address.searchParams.get('materialSource')===diagnosis.sourceId);
    const form=page.getByRole('group',{name:'投面辅料',exact:true});await form.waitFor();await acknowledged;
+   expect(await form.getByLabel('实际数量').inputValue()).toBe('25');
+   await form.getByRole('combobox',{name:/^办理状态/}).selectOption('ready');
    await form.getByLabel('本次交接物料').selectOption(diagnosis.materialId);
    await form.getByLabel('实际发生时间（北京时间）').fill(localTime);
    await form.getByLabel('实际数量').fill('75');
@@ -152,7 +175,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await form.getByRole('button',{name:'保存本项记录',exact:true}).click();
    const response=await receipt;expect(response.status()).toBe(200);
    expect(await response.json()).toMatchObject({sourceIsPreorderDraft:true,orderId:null,facts:expect.arrayContaining([
-    expect.objectContaining({kind:'material_investment',state:'ready',version:1,recordedBy:merch.actorId,occurredAt:at,
+    expect.objectContaining({kind:'material_investment',state:'ready',version:2,recordedBy:merch.actorId,occurredAt:at,
      quantities:[expect.objectContaining({materialId:diagnosis.materialId,quantity:75,unit:'米'})]})
    ])});
    await page.getByText('已保存原业务记录',{exact:true}).waitFor();
