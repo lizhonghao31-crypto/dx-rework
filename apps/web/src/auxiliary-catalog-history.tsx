@@ -46,7 +46,6 @@ export function AuxiliaryCatalogHistory({item,exactVersion,session,onClose}:{ite
    {key:'name',header:'原名称'},
    {key:'auxiliaryKind',header:'种类'},
    {key:'specification',header:'原规格',renderCell:row=>row.specification||'未填写'},
-   {key:'supplier',header:'原供应方',renderCell:row=>row.supplier||'未填写'},
    ...(result.items.some(row=>row.referencePricing!==undefined)?[{key:'referencePricing' as const,header:'原参考价 / 单位',
     renderCell:(row:(typeof result.items)[number])=>row.referencePricing?`${row.referencePricing.amount} 元 / ${row.referencePricing.unit}`:'未记录'}]:[]),
    {key:'action',header:'变更',renderCell:row=>actions[row.action]??'历史变更'},

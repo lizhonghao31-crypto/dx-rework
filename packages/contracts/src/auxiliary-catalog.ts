@@ -7,7 +7,9 @@ export const AuxiliaryReferencePricingSchema=z.object({amount:QuotationDecimalSc
 export const AuxiliaryReferenceSchema=z.object({id:z.string().uuid(),version:z.number().int().positive(),
  referencePricing:AuxiliaryReferencePricingSchema.nullable().optional(),
 }).strict();
-export const CreateAuxiliarySchema=z.object({name,specification:text,supplier:text,auxiliaryKind:AuxiliaryKindSchema,
+// Keep decoding old create envelopes so original receipt retries keep their hash.
+// The create command no longer accepts a supplier for a new catalog entry.
+export const CreateAuxiliarySchema=z.object({name,specification:text,supplier:text.optional(),auxiliaryKind:AuxiliaryKindSchema,
  referencePricing:AuxiliaryReferencePricingSchema.nullable().optional(),
 }).strict();
 export const RenameAuxiliarySchema=z.object({expectedVersion:z.number().int().positive(),name,reason}).strict();
@@ -17,7 +19,7 @@ export const ChangeAuxiliaryReferencePricingSchema=z.object({expectedVersion:z.n
 export const DisableAuxiliarySchema=z.object({expectedVersion:z.number().int().positive(),reason}).strict();
 export const MergeAuxiliarySchema=DisableAuxiliarySchema.extend({targetId:z.string().uuid(),expectedTargetVersion:z.number().int().positive()}).strict();
 export const AuxiliaryQuerySchema=z.object({q:z.string().trim().max(100).default(''),page:z.coerce.number().int().min(1).max(100000).default(1),includeInactive:z.enum(['true','false']).default('false').transform(x=>x==='true')}).strict();
-export const AuxiliaryItemSchema=z.object({id:z.string().uuid(),version:z.number().int().positive(),name,specification:text,supplier:text,
+export const AuxiliaryItemSchema=z.object({id:z.string().uuid(),version:z.number().int().positive(),name,specification:text,
  auxiliaryKind:AuxiliaryKindSchema,active:z.boolean(),mergedInto:z.string().uuid().nullable(),changedAt:z.string(),
  referencePricing:AuxiliaryReferencePricingSchema.nullable().optional(),
 });

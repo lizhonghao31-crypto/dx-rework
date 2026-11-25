@@ -18,11 +18,11 @@ import '../../apps/web/src/workflow-state-visual.css';
 import '../../apps/web/src/ui-polish.css';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,params=new URLSearchParams(location.search),mode=params.get('mode'),role=params.get('role')??'sample_designer';
 const initial=initialDevelopmentDocument();
-const document:DevelopmentDocument={...initial,quantity:2,sizeQuantities:[1,1],orderDate:'2026-10-21',customerOrderDraft:{withOrder:false,order:initialDevelopmentOrder([])},materials:[{...initial.materials[0]!,materialId:id(3),name:'TEST主布',specification:'TEST待核实规格',available:true},{...initial.materials[0]!,materialId:id(4),category:'辅料',label:'辅料',name:'TEST原辅料',specification:'TEST原规格',auxiliaryKind:'普通辅料',expectedDate:mode==='create'?null:'2099-12-31'}],files:params.has('noImage')?[]:[{attachmentId:id(5),kind:'款图'}]};
+const document:DevelopmentDocument={...initial,quantity:2,sizeQuantities:[1,1],orderDate:'2026-10-21',customerOrderDraft:{withOrder:false,order:initialDevelopmentOrder([])},materials:[{...initial.materials[0]!,materialId:id(3),name:'TEST主布',specification:'TEST待核实规格',available:true},{...initial.materials[0]!,materialId:id(4),category:'辅料',label:'辅料',name:'TEST原辅料',specification:'TEST原规格',supplier:'TEST原订单供应商',auxiliaryKind:'普通辅料',expectedDate:mode==='create'?null:'2099-12-31'}],files:params.has('noImage')?[]:[{attachmentId:id(5),kind:'款图'}]};
 document.customerOrderDraft!.order.designStyleNo='TEST-G1';
 if(mode==='create')document.materials[0]!.specification='TEST 100%棉180g';
 const stored=sessionStorage.getItem('TEST-G1-amendment');
-const state={document,draft:stored?JSON.parse(stored):null,requests:[] as {path:string;method:string;body:unknown;key:string|null}[],catalog:[{id:id(10),version:1,name:'TEST扁机完整名称',specification:'TEST40cm',supplier:'TEST厂',auxiliaryKind:'扁机',active:true,mergedInto:null,changedAt:'2026-10-21T00:00:00Z'}] as AuxiliaryItem[],sequence:20};
+const state={document,draft:stored?JSON.parse(stored):null,requests:[] as {path:string;method:string;body:unknown;key:string|null}[],catalog:[{id:id(10),version:1,name:'TEST扁机完整名称',specification:'TEST40cm',auxiliaryKind:'扁机',active:true,mergedInto:null,changedAt:'2026-10-21T00:00:00Z'}] as AuxiliaryItem[],sequence:20};
 Object.assign(window,{g1Fixture:state});
 window.fetch=async(input,init)=>{
  const url=new URL(String(input),location.origin),path=url.pathname,method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):null,key=new Headers(init?.headers).get('idempotency-key');state.requests.push({path,method,body,key});

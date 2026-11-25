@@ -20,7 +20,7 @@ const commercialCapabilities={sample_designer:'pattern_room:orders:create',order
 const amountText=(value:string)=>value.includes('.')?value.replace(/0+$/,'').replace(/\.$/,''):value;
 const referencePrice=(row:Row)=>row.reference_unit_price!=null&&row.reference_pricing_unit
  ?{amount:amountText(row.reference_unit_price),unit:row.reference_pricing_unit}:null;
-const item=(row:Row,prices=false):AuxiliaryItem=>({id:row.auxiliary_id,version:row.version,name:row.name,specification:row.specification,supplier:row.supplier,auxiliaryKind:row.auxiliary_kind,active:row.active,mergedInto:row.merged_into,changedAt:row.changed_at.toISOString(),
+const item=(row:Row,prices=false):AuxiliaryItem=>({id:row.auxiliary_id,version:row.version,name:row.name,specification:row.specification,auxiliaryKind:row.auxiliary_kind,active:row.active,mergedInto:row.merged_into,changedAt:row.changed_at.toISOString(),
  ...(prices&&Object.hasOwn(row,'reference_unit_price')?{referencePricing:referencePrice(row)}:{}),
 });
 export class AuxiliaryCatalogService{
@@ -47,7 +47,7 @@ export class AuxiliaryCatalogService{
  async list(actor:TrustedActorContext,input:AuxiliaryQuery){
   const query=AuxiliaryQuerySchema.parse({...input,includeInactive:String(input.includeInactive)}),db=await this.database.connect();
   try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const canReadReferencePricing=await this.authorize(db,actor,false);
-   const params=[query.includeInactive,query.q],where=`($1 OR (i.active AND i.merged_into IS NULL)) AND ($2='' OR strpos(lower(i.name||' '||i.specification||' '||i.supplier),lower($2))>0 OR EXISTS(SELECT 1 FROM auxiliary_catalog_versions v WHERE v.auxiliary_id=i.auxiliary_id AND strpos(lower(v.name),lower($2))>0) OR EXISTS(WITH RECURSIVE aliases(id) AS (SELECT i.auxiliary_id UNION ALL SELECT s.auxiliary_id FROM auxiliary_catalog_items s JOIN aliases a ON s.merged_into=a.id) SELECT 1 FROM aliases a JOIN auxiliary_catalog_versions v ON v.auxiliary_id=a.id WHERE strpos(lower(v.name),lower($2))>0))`;
+   const params=[query.includeInactive,query.q],where=`($1 OR (i.active AND i.merged_into IS NULL)) AND ($2='' OR strpos(lower(i.name||' '||i.specification),lower($2))>0 OR EXISTS(SELECT 1 FROM auxiliary_catalog_versions v WHERE v.auxiliary_id=i.auxiliary_id AND strpos(lower(v.name),lower($2))>0) OR EXISTS(WITH RECURSIVE aliases(id) AS (SELECT i.auxiliary_id UNION ALL SELECT s.auxiliary_id FROM auxiliary_catalog_items s JOIN aliases a ON s.merged_into=a.id) SELECT 1 FROM aliases a JOIN auxiliary_catalog_versions v ON v.auxiliary_id=a.id WHERE strpos(lower(v.name),lower($2))>0))`;
    const total=Number((await db.query(`SELECT count(*) n FROM auxiliary_catalog_items i WHERE ${where}`,params)).rows[0].n);
    const rows=(await db.query<Row>(`SELECT i.* FROM auxiliary_catalog_items i WHERE ${where} ORDER BY i.name,i.auxiliary_id LIMIT 15 OFFSET $3`,[...params,(query.page-1)*15])).rows;
    let canManage=false;try{await this.authorize(db,actor,true,false);canManage=true;}catch(error){if(!(error instanceof ApplicationError)||error.statusCode!==403)throw error;}
@@ -61,8 +61,11 @@ export class AuxiliaryCatalogService{
   }finally{db.release();}
  }
  private visibleReceipt<T extends AuxiliaryItem|null>(canReadReferencePricing:boolean,value:T):T{
-  if(!value||canReadReferencePricing)return value;
-  const visible={...value};delete visible.referencePricing;return visible;
+  if(!value)return value;
+  const visible={...value} as AuxiliaryItem&{supplier?:string};
+  delete visible.supplier; // Legacy receipts may contain the old catalog field.
+  if(!canReadReferencePricing)delete visible.referencePricing;
+  return visible as T;
  }
  async history(actor:TrustedActorContext,id:string,page:number,version?:number){
   const query=AuxiliaryHistoryQuerySchema.parse({page,version});
@@ -90,9 +93,9 @@ export class AuxiliaryCatalogService{
   }catch(error){await db.query('ROLLBACK');if(error instanceof ApplicationError&&error.code==='IDEMPOTENCY_CONFLICT')throw new ApplicationError(error.code,'原目录操作标识对应的内容不同，请先核对原结果，不要换内容重复提交',409);throw error;}finally{db.release();}
  }
  private async current(db:PoolClient,id:string,version:number){const row=(await db.query<Row>('SELECT * FROM auxiliary_catalog_items WHERE auxiliary_id=$1 FOR UPDATE',[id])).rows[0];if(!row) return fail('该辅料已不存在，请重新搜索',404);if(row.version!==version)fail('该辅料已被修改，本次未保存；请重新读取并核对');if(row.merged_into)fail('该辅料已合并，请在搜索结果选择目标条目');return row;}
- private async duplicate(db:PoolClient,name:string,specification:string,supplier:string,except?:string){
-  const found=(await db.query('SELECT name,active FROM auxiliary_catalog_items WHERE lower(btrim(name))=lower(btrim($1)) AND lower(btrim(specification))=lower(btrim($2)) AND lower(btrim(supplier))=lower(btrim($3)) AND merged_into IS NULL AND ($4::uuid IS NULL OR auxiliary_id<>$4)',[name,specification,supplier,except??null])).rows[0];
-  if(found)fail(`相同品名、规格与供应方的辅料“${found.name}”${found.active?'已存在，请复用已有项':'已停用，请核实旧条目；本操作不恢复启用'}`);
+ private async duplicate(db:PoolClient,name:string,specification:string,except?:string){
+  const found=(await db.query('SELECT name,active FROM auxiliary_catalog_items WHERE lower(btrim(name))=lower(btrim($1)) AND lower(btrim(specification))=lower(btrim($2)) AND merged_into IS NULL AND ($3::uuid IS NULL OR auxiliary_id<>$3) ORDER BY active DESC,auxiliary_id LIMIT 1',[name,specification,except??null])).rows[0];
+  if(found)fail(`相同品名、规格的辅料“${found.name}”${found.active?'已存在，请复用已有项':'已停用，请核实旧条目；本操作不恢复启用'}`);
  }
  private async record(db:PoolClient,actor:TrustedActorContext,row:Row,before:Row|null,action:string,reason:string){
   const result=item(row,true),event=await this.events.append(db,{...actor,authorizationCapability:'auxiliary_catalog:write'},{action:`auxiliary_catalog.${action}`,entityType:'auxiliary_catalog',entityId:row.auxiliary_id,...(before?{before:item(before,true)}:{}),after:result,reason});
@@ -102,8 +105,9 @@ export class AuxiliaryCatalogService{
  async create(actor:TrustedActorContext,input:unknown,key:string){const value=parse(CreateAuxiliarySchema,input);return this.command(actor,'create',key,value,async (db,canReadReferencePricing)=>{
   const price=value.referencePricing;
   if(price&&!canReadReferencePricing)fail('当前身份不能登记参考价',403);
-  await this.duplicate(db,value.name,value.specification,value.supplier);
-  const row=(await db.query<Row>(`INSERT INTO auxiliary_catalog_items(auxiliary_id,version,name,specification,supplier,auxiliary_kind,active${price?',reference_unit_price,reference_pricing_unit':''}) VALUES($1,1,$2,$3,$4,$5,true${price?',$6,$7':''}) RETURNING *`,[randomUUID(),value.name,value.specification,value.supplier,value.auxiliaryKind,...(price?[price.amount,price.unit]:[])])).rows[0]!;
+  if(value.supplier)fail('共享辅料目录不登记供应商，请在订单材料中从供应商库选择',400);
+  await this.duplicate(db,value.name,value.specification);
+  const row=(await db.query<Row>(`INSERT INTO auxiliary_catalog_items(auxiliary_id,version,name,specification,supplier,auxiliary_kind,active${price?',reference_unit_price,reference_pricing_unit':''}) VALUES($1,1,$2,$3,'',$4,true${price?',$5,$6':''}) RETURNING *`,[randomUUID(),value.name,value.specification,value.auxiliaryKind,...(price?[price.amount,price.unit]:[])])).rows[0]!;
   return(await this.record(db,actor,row,null,'create','业务页直接新增共享辅料')).result;
  });}
  async changeReferencePricing(actor:TrustedActorContext,id:string,input:unknown,key:string){
@@ -118,7 +122,7 @@ export class AuxiliaryCatalogService{
   });
  }
  async rename(actor:TrustedActorContext,id:string,input:unknown,key:string){const value=parse(RenameAuxiliarySchema,input);return this.command(actor,'rename',key,{id,...value},async db=>{
-  const before=await this.current(db,id,value.expectedVersion);await this.duplicate(db,value.name,before.specification,before.supplier,id);
+  const before=await this.current(db,id,value.expectedVersion);await this.duplicate(db,value.name,before.specification,id);
   const row=(await db.query<Row>('UPDATE auxiliary_catalog_items SET version=version+1,name=$2,changed_at=CURRENT_TIMESTAMP WHERE auxiliary_id=$1 RETURNING *',[id,value.name])).rows[0]!;return(await this.record(db,actor,row,before,'rename',value.reason)).result;
  });}
  async disable(actor:TrustedActorContext,id:string,input:unknown,key:string){const value=parse(DisableAuxiliarySchema,input);return this.command(actor,'disable',key,{id,...value},async db=>{
@@ -141,7 +145,7 @@ export class AuxiliaryCatalogService{
 export async function validateAuxiliaryReferences(db:PoolClient,document:DevelopmentDocument,previous?:DevelopmentDocument){
  for(const material of document.materials){const reference=material.auxiliaryCatalog;if(!reference)continue;
   const row=(await db.query<Row>('SELECT v.*,i.active AS current_active,i.version AS current_version,i.merged_into AS current_merge FROM auxiliary_catalog_versions v JOIN auxiliary_catalog_items i USING(auxiliary_id) WHERE v.auxiliary_id=$1 AND v.version=$2 FOR SHARE OF i',[reference.id,reference.version])).rows[0] as (Row&{current_active:boolean;current_version:number;current_merge:string|null})|undefined;
-  if(!row||material.category!=='辅料'||material.name!==row.name||material.specification!==row.specification||material.supplier!==row.supplier||(material.auxiliaryKind??'普通辅料')!==row.auxiliary_kind)return fail('辅料目录引用与本行资料不一致，请重新选择；手工修改品名、规格或供应方时应解除目录引用');
+  if(!row||material.category!=='辅料'||material.name!==row.name||material.specification!==row.specification||(material.auxiliaryKind??'普通辅料')!==row.auxiliary_kind)return fail('辅料目录引用与本行资料不一致，请重新选择；手工修改品名、规格或种类时应解除目录引用');
   if(reference.referencePricing!==undefined&&!isDeepStrictEqual(reference.referencePricing,referencePrice(row)))
    fail('辅料参考价与所选版本不一致，请重新读取原目录版本');
   const old=previous?.materials.find(m=>m.materialId===material.materialId)?.auxiliaryCatalog;

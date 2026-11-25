@@ -5,18 +5,21 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {Page} from 'playwright-core';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
+import {AuxiliaryCatalogService} from '../../apps/api/src/access/auxiliary-catalog-service.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import type {AuxiliaryItem} from '@dx-rework/contracts/auxiliary-catalog';
+import {chooseDevelopmentCreation} from './development-creation-browser-steps.js';
+import {CreateSupplierSchema} from '@dx-rework/contracts';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 async function createFromPage(page:Page,name:string,price?:{amount:string;unit:string}){
- await page.getByRole('button',{name:'直接新增辅料',exact:true}).click();
- const dialog=page.getByRole('dialog',{name:'直接新增共享辅料',exact:true});
+ await page.getByRole('button',{name:'新增辅料',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'新增辅料',exact:true});
  await dialog.getByRole('textbox',{name:'辅料品名',exact:true}).fill(name);
  await dialog.getByRole('textbox',{name:'规格',exact:true}).fill('TEST 原规格');
- await dialog.getByRole('textbox',{name:'供应方',exact:true}).fill('TEST 原供应方');
+ expect(await dialog.getByRole('textbox',{name:/供应方|供应商/}).count()).toBe(0);
  if(price){
   await dialog.getByRole('textbox',{name:'参考单价（人民币、不含税）',exact:true}).fill(price.amount);
   await dialog.getByRole('textbox',{name:'参考价计价单位',exact:true}).fill(price.unit);
@@ -33,16 +36,89 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-auxiliary-native-')),{fullApp:true,auxiliaryCatalog:true});});
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
 
+ it('does not accept an independently typed supplier in the auxiliary directory',async()=>{
+  const designer=h.f.people['sample-designer']!,tab=await h.open(designer.actorId,1165,{},'/ui/auxiliary-catalog');
+  try{
+   const name='TEST-无辅料目录供应商-'+randomUUID();
+   const rejected=await tab.page.evaluate(async name=>{
+    const response=await fetch('/api/master-data/auxiliaries',{method:'POST',headers:{'content-type':'application/json','idempotency-key':crypto.randomUUID()},body:JSON.stringify({name,specification:'TEST',supplier:'TEST 未选供应方',auxiliaryKind:'普通辅料'})});
+    return {status:response.status,body:await response.json()};
+   },name);
+   expect(rejected.status,JSON.stringify(rejected.body)).toBe(400);
+   expect((await h.db.query('SELECT count(*) n FROM auxiliary_catalog_items WHERE name=$1',[name])).rows[0].n).toBe('0');
+  }finally{await tab.close();}
+ });
+
+ it('saves the numbered C2 draft with an exact C3 reference and a separately chosen order supplier',async()=>{
+  const joined=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-c3-numbered-picker-')),{fullApp:true,auxiliaryCatalog:true,workbenchNumberedCreation:true,orderTimeFlow:true,orderTimeModel:true});
+  try{
+   const designer=joined.f.people['sample-designer']!,supplierName='TEST C3 订单供应商',supplierCode='TEST-C3-FABRIC';
+   const supplier=await joined.f.access.createSupplier(joined.f.root,CreateSupplierSchema.parse({supplierCode,supplierName,supplierType:'fabric',changeReason:'TEST 从原供应商目录选择'}));
+   const tab=await joined.open(designer.actorId,1165,{},'/ui/auxiliary-catalog');
+   try{
+    const {page}=tab,entry=await createFromPage(page,'TEST-C3-独立供应商-'+randomUUID(),{amount:'2.35',unit:'枚'});
+    expect(entry).not.toHaveProperty('supplier');
+    await page.goto(new URL('/ui/digital-production?workspace=designer&section=create',page.url()).href);
+    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+    await chooseDevelopmentCreation(page,'纯开发');
+    const all=()=>page.getByRole('button',{name:'查看全部 / 继续添加面辅料',exact:true}).click();
+    await all();
+    const materials=page.getByRole('dialog',{name:'全部面辅料',exact:true});
+    await materials.getByRole('button',{name:/添加辅料/}).click();
+    const shared=materials.getByRole('button',{name:'选择共享辅料 4',exact:true}),row=shared.locator('xpath=ancestor::tr');
+    await shared.click();
+    const picker=page.getByRole('dialog',{name:'共享辅料',exact:true});
+    await picker.getByRole('textbox',{name:'搜索品名或规格',exact:true}).fill(entry.name);
+    await picker.getByText(entry.name,{exact:true}).waitFor();
+    await picker.getByRole('button',{name:'选择此辅料',exact:true}).click();await picker.waitFor({state:'hidden'});
+    const supplierButton=row.getByRole('button',{name:'辅料 供应商',exact:true});
+    expect(await supplierButton.innerText()).toBe('选择面辅料供应商');
+    await supplierButton.click();
+    const suppliers=page.getByRole('dialog',{name:'选择面辅料供应商',exact:true});
+    await suppliers.getByRole('textbox',{name:'搜索面辅料供应商',exact:true}).fill(supplierName);
+    await suppliers.getByRole('button',{name:`${supplierName} · ${supplierCode}`,exact:true}).click();await suppliers.waitFor({state:'hidden'});
+    const price=row.getByRole('textbox',{name:'辅料材料单价',exact:true});
+    expect(await price.inputValue()).toBe('2.35');await price.fill('3.5');
+    await materials.getByRole('button',{name:'返回版单',exact:true}).click();await materials.waitFor({state:'hidden'});
+    const reserved=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/sources/numbered-drafts'));
+    const saved=page.waitForResponse(r=>r.request().method()==='PUT'&&/\/sources\/[a-f0-9-]+\/development$/.test(new URL(r.url()).pathname));
+    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+    const reservation=await reserved;expect(reservation.status(),await reservation.text()).toBe(200);
+    const {sourceId,orderNumber}=await reservation.json();expect(orderNumber).toBeNull();
+    const response=await saved;expect(response.status(),await response.text()).toBe(200);
+    const draft=await response.json(),expected={name:entry.name,specification:entry.specification,supplier:supplierName,
+     supplierReference:supplier,auxiliaryCatalog:{id:entry.id,version:entry.version,referencePricing:entry.referencePricing},unitPrice:'3.5',pricingUnit:'枚'};
+    expect(draft).toMatchObject({sourceId,status:'draft',document:{materialSupplierCatalog:true}});
+    expect(draft.document.materials[3]).toMatchObject(expected);
+    await page.getByText(/^开发资料与订购草稿已保存/).waitFor();
+    await page.reload();await all();
+    expect(await row.getByRole('textbox',{name:'辅料品名（材料资料）',exact:true}).inputValue()).toBe(entry.name);
+    expect(await supplierButton.innerText()).toBe(supplierName);expect(await price.inputValue()).toBe('3.5');
+    const invalid=await page.evaluate(async({sourceId,version,document})=>{
+     document.materials[3].supplier='TEST 不在供应商库';delete document.materials[3].supplierReference;
+     const response=await fetch(`/api/digital-production/sources/${sourceId}/development`,{method:'PUT',headers:{'content-type':'application/json','idempotency-key':crypto.randomUUID()},body:JSON.stringify({expectedVersion:version,document})});
+     return {status:response.status,body:await response.json()};
+    },draft);
+    expect(invalid.status,JSON.stringify(invalid.body)).toBe(400);
+    expect(JSON.stringify(invalid.body)).toContain('请选择有效的面辅料供应商');
+    const actual=await new DigitalDevelopmentService(joined.db,true).read(designer,sourceId);
+    expect(actual.version).toBe(draft.version);expect(actual.document!.materials[3]).toMatchObject(expected);
+    const directory=await page.evaluate(async(name)=>{const r=await fetch('/api/master-data/auxiliaries?'+new URLSearchParams({q:name}));return r.json();},entry.name);
+    expect(directory.items).toEqual([entry]);
+   }finally{await tab.close();}
+  }finally{await joined.writeEvidence();await joined.dispose();}
+ });
+
  it('keeps the original five directory identities and direct URL, shows its list immediately, and denies unrelated staff',async()=>{
   for(const alias of ['sample-designer','merchandiser','production-management','owner','root']){
    const tab=await h.open(h.f.people[alias]!.actorId,1165,{},'/ui/auxiliary-catalog');
    try{
     await tab.page.getByRole('heading',{name:'共享辅料目录',exact:true,level:1}).waitFor();
-    await tab.page.getByRole('button',{name:'直接新增辅料',exact:true}).waitFor({state:'visible'});
+    await tab.page.getByRole('button',{name:'新增辅料',exact:true}).waitFor({state:'visible'});
     expect(await tab.page.getByRole('table',{name:'共享辅料目录',exact:true}).count()).toBe(1);
     expect(await tab.page.getByRole('button',{name:'打开共享辅料目录',exact:true}).count()).toBe(0);
     expect(await tab.page.getByRole('dialog').count()).toBe(0);
-    expect(await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).evaluate(input=>input===document.activeElement)).toBe(false);
+    expect(await tab.page.getByRole('textbox',{name:'搜索品名或规格',exact:true}).evaluate(input=>input===document.activeElement)).toBe(false);
    }finally{await tab.close();}
   }
   for(const role of ['development_clerk','pmc']){
@@ -62,7 +138,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
   const source=async(name:string,entry?:AuxiliaryItem,active=false)=>{
    const created=await identity.createSource(designer,{designStyleNo:name,temporaryStyleNo:null,customerCode:'PD',developmentType:'头版'},randomUUID(),true);
    const photo=await h.f.image(designer),materialId=randomUUID();
-   const document={...initialDevelopmentDocument(),...(active?{quantity:1}:{}),materials:[{materialId,category:'辅料' as const,label:'TEST辅料',name:entry?.name??'TEST 待选料',specification:entry?.specification??'',supplier:entry?.supplier??'',auxiliaryKind:entry?.auxiliaryKind??'普通辅料' as const,
+   const document={...initialDevelopmentDocument(),...(active?{quantity:1}:{}),materials:[{materialId,category:'辅料' as const,label:'TEST辅料',name:entry?.name??'TEST 待选料',specification:entry?.specification??'',supplier:entry?'TEST 原订单供应商':'',auxiliaryKind:entry?.auxiliaryKind??'普通辅料' as const,
     ...(entry?{auxiliaryCatalog:{id:entry.id,version:entry.version,referencePricing:entry.referencePricing}}:{}),
     ...(entry?.referencePricing?{unitPrice:entry.referencePricing.amount,pricingUnit:entry.referencePricing.unit}:{}),
     width:'',weight:'',composition:'',consumption:'',color:'TEST 黑',quantity:'1',requiredThisRound:false,available:false,expectedDate:active?'2027-01-01':null}],files:[{attachmentId:photo,kind:'款图' as const}]};
@@ -71,11 +147,23 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    return {...created,materialId,saved};
   };
   try{
-   old=await createFromPage(tab.page,'TEST-旧目录-'+randomUUID(),{amount:'0',unit:'套'});
+   old=await createFromPage(tab.page,'TEST-旧目录中文长名称用于验证辅料品名不被截断和操作仍按两行展示-'+randomUUID(),{amount:'0',unit:'套'});
    const original=await source('TEST-目录旧快照-'+randomUUID(),old);
    const adopted=await source('TEST-已发布的目录采用依据-'+randomUUID(),old,true);
-   await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
+   await tab.page.getByRole('textbox',{name:'搜索品名或规格',exact:true}).fill(old.name);
    const row=tab.page.getByRole('row').filter({hasText:old.name});
+   await row.getByRole('cell',{name:'0 元 / 套',exact:true}).waitFor();
+   const table=tab.page.getByRole('table',{name:'共享辅料目录',exact:true});
+   expect(await table.getByRole('columnheader').allTextContents()).toEqual(['名称','种类','规格','参考价 / 单位','版本','状态','操作']);
+   for(const viewport of [{width:1165,height:747},{width:1440,height:900}]){
+    await tab.page.setViewportSize(viewport);
+    const positions=await Promise.all(['改名','修改参考价','停用','版本历史'].map(name=>row.getByRole('button',{name,exact:true}).boundingBox()));
+    const [rename,price,disable,history]=positions.map(box=>{expect(box).not.toBeNull();return box!;});
+    expect(rename.y).toBeCloseTo(price.y,1);expect(disable.y).toBeCloseTo(history.y,1);
+    expect(rename.x).toBeCloseTo(disable.x,1);expect(price.x).toBeCloseTo(history.x,1);expect(disable.y).toBeGreaterThan(rename.y);
+    expect(await tab.page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    await tab.page.screenshot({path:join(h.evidence,`catalog-table-${viewport.width}.png`)});
+   }
    await row.getByRole('button',{name:'改名',exact:true}).click();
    const editor=tab.page.getByRole('dialog',{name:'改名',exact:true});
    await editor.getByRole('textbox',{name:'辅料品名',exact:true}).fill('TEST-新目录-'+randomUUID());
@@ -93,6 +181,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    const confirmed=await priced;expect(confirmed.status(),await confirmed.text()).toBe(200);current=await confirmed.json();
    expect(current.referencePricing).toEqual({amount:'2.35',unit:'枚'});
    await pricing.waitFor({state:'hidden'});
+   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('cell',{name:'2.4 元 / 枚',exact:true}).waitFor();
    const directory=await tab.page.evaluate(async name=>{const r=await fetch('/api/master-data/auxiliaries?'+new URLSearchParams({q:name}));if(!r.ok)throw Error('Directory read failed '+r.status);return r.json();},old.name);
    expect(directory.items).toEqual([current]);
    const adoptedTab=await h.open(designer.actorId,1165,{},'/ui/digital-production?'+new URLSearchParams({
@@ -112,6 +201,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
     expect(exact.status()).toBe(200);expect(await exact.json()).toMatchObject({total:1,items:[{id:old.id,version:old.version,name:old.name}]});
     const originalBasis=adoptedTab.page.getByRole('dialog',{name:`${old.name} · 采用版本 ${old.version}`,exact:true});
     await originalBasis.getByRole('cell',{name:old.name,exact:true}).waitFor();
+    expect(await originalBasis.getByRole('columnheader',{name:/供应方|供应商/}).count()).toBe(0);
     expect(await originalBasis.getByRole('cell',{name:current.name,exact:true}).count()).toBe(0);
     await originalBasis.getByRole('button',{name:'关闭版本历史',exact:true}).click();await originalBasis.waitFor({state:'hidden'});
     await originals.getByRole('button',{name:'尺寸表',exact:true}).click();
@@ -150,12 +240,12 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
     const detail=oldTab.page.locator('details.development-material-details').first();
     if(await detail.getAttribute('open')===null)await detail.locator('summary').click();
     const supplier=oldTab.page.locator(`#development-${original.materialId}-supplier`);
-    expect(await supplier.isVisible()).toBe(true);expect(await supplier.inputValue()).toBe(old.supplier);
+    expect(await supplier.isVisible()).toBe(true);expect(await supplier.inputValue()).toBe('TEST 原订单供应商');
     expect(await oldTab.page.locator(`#development-${original.materialId}-unitPrice`).inputValue()).toBe('0');
     expect((await forms.read(designer,original.sourceId)).document).toEqual(original.saved.document);
     await oldTab.page.getByRole('button',{name:'选择共享辅料 1',exact:true}).click();
     const picker=oldTab.page.getByRole('dialog',{name:'共享辅料',exact:true});
-    await picker.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(current.name);
+    await picker.getByRole('textbox',{name:'搜索品名或规格',exact:true}).fill(current.name);
     const option=picker.getByText(current.name,{exact:true});await option.waitFor();
     const choose=picker.getByRole('button',{name:'选择此辅料',exact:true});await choose.click();
     const adopt=oldTab.page.getByRole('dialog',{name:'确认操作',exact:true});
@@ -163,6 +253,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
     await adopt.getByRole('button',{name:'取消',exact:true}).click();await picker.waitFor();
     await choose.click();await adopt.getByRole('button',{name:'确认',exact:true}).click();await picker.waitFor({state:'hidden'});
     expect(await oldTab.page.locator(`#development-${original.materialId}-unitPrice`).inputValue()).toBe('2.35');
+    expect(await supplier.inputValue()).toBe('TEST 原订单供应商');
     expect((await forms.read(designer,original.sourceId)).document).toEqual(original.saved.document);
    }finally{await oldTab.close();}
    const next=await source('TEST-新单选料-'+randomUUID()),newTab=await h.open(designer.actorId,1165,{},'/ui/digital-production?development='+next.sourceId);
@@ -181,7 +272,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
     await page.getByRole('button',{name:'选择共享辅料 1',exact:true}).click();
     const picker=page.getByRole('dialog',{name:'共享辅料',exact:true});
     const picked=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/master-data/auxiliaries'&&new URL(response.url()).searchParams.get('q')===old.name);
-    await picker.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
+    await picker.getByRole('textbox',{name:'搜索品名或规格',exact:true}).fill(old.name);
     expect((await (await picked).json()).items).toEqual([current]);
     await picker.getByRole('button',{name:'选择此辅料',exact:true}).click();await picker.waitFor({state:'hidden'});
     expect(await page.getByRole('textbox',{name:'辅料品名（材料资料）',exact:true}).inputValue()).toBe(current.name);
@@ -191,29 +282,41 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
     await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
     const saved=await savedResponse;expect(saved.status(),await saved.text()).toBe(200);
     const actual=(await forms.read(designer,next.sourceId)).document!;
-    expect(actual.materials[0]).toMatchObject({materialId:next.materialId,name:current.name,specification:current.specification,supplier:current.supplier,auxiliaryCatalog:{id:current.id,version:current.version},available:false,requiredThisRound:false,color:'TEST 黑'});
+    expect(actual.materials[0]).toMatchObject({materialId:next.materialId,name:current.name,specification:current.specification,supplier:'',auxiliaryCatalog:{id:current.id,version:current.version},available:false,requiredThisRound:false,color:'TEST 黑'});
     expect(actual.materials[0]).toMatchObject({unitPrice:'3.5',pricingUnit:'枚',auxiliaryCatalog:{referencePricing:{amount:'2.35',unit:'枚'}}});
     expect(actual.files).toEqual(next.saved.document!.files);
     expect((await forms.read(designer,original.sourceId)).document).toEqual(original.saved.document);
    }finally{await newTab.close();}
    const keeper=await createFromPage(tab.page,'TEST-保留目录-'+randomUUID());
-   await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
-   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('button',{name:'合并重复项',exact:true}).click();
-   const merge=tab.page.getByRole('dialog',{name:'合并重复项',exact:true});
-   await merge.getByRole('textbox',{name:'搜索合并目标',exact:true}).fill(keeper.name);
-   await merge.getByRole('row').filter({hasText:keeper.name}).getByRole('button',{name:'作为合并目标',exact:true}).click();
-   await merge.getByRole('textbox',{name:'本次变更原因',exact:true}).fill('TEST 合并真实重复项');
-   const merged=tab.page.waitForResponse(response=>new URL(response.url()).pathname===`/api/master-data/auxiliaries/${current.id}/merge`&&response.request().method()==='POST');
-   await merge.getByRole('button',{name:'保存共享目录',exact:true}).click();
-   const mergeResponse=await merged;expect(mergeResponse.status(),await mergeResponse.text()).toBe(200);expect(await mergeResponse.json()).toMatchObject({id:current.id,version:current.version+1,active:false,mergedInto:keeper.id});await merge.waitFor({state:'hidden'});
+   await tab.page.getByRole('textbox',{name:'搜索品名或规格',exact:true}).fill(old.name);
+   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('button',{name:'版本历史',exact:true}).waitFor();
+   expect(await tab.page.getByRole('button',{name:'合并重复项',exact:true}).count()).toBe(0);
+   const mergeInput={expectedVersion:current.version,targetId:keeper.id,expectedTargetVersion:keeper.version,reason:'TEST 历史合并'};
+   const deniedMerge=await tab.page.evaluate(async({id,body})=>(await fetch(`/api/master-data/auxiliaries/${id}/merge`,{method:'POST',headers:{'content-type':'application/json','idempotency-key':crypto.randomUUID()},body:JSON.stringify(body)})).status,{id:current.id,body:mergeInput});
+   expect(deniedMerge).toBe(404);
+   expect((await h.db.query('SELECT version,active,merged_into FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[current.id])).rows[0]).toEqual({version:current.version,active:true,merged_into:null});
+   // Arrange a pre-existing merge with its original command, never through a newly reachable HTTP action.
+   const historicalService=new AuxiliaryCatalogService(h.db,{isRootUser:async()=>false}),mergeKey=randomUUID();
+   const commercialCapabilities=(await h.db.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='sample_designer'")).rows.map(row=>row.capability);
+   const historical=await historicalService.merge({...designer,authorizationCapability:'auxiliary_catalog:write',authorizationCapabilities:commercialCapabilities},current.id,mergeInput,mergeKey);
+   expect(historical).toMatchObject({id:current.id,version:current.version+1,active:false,mergedInto:keeper.id});
+   const historicalReceipt=await tab.page.evaluate(async key=>{const r=await fetch(`/api/master-data/auxiliaries/receipt?action=merge&key=${key}`);if(!r.ok)throw Error('Legacy receipt failed '+r.status);return (await r.json()).receipt;},mergeKey);
+   expect(historicalReceipt).toEqual(historical);
    expect((await forms.read(designer,original.sourceId)).document).toEqual(original.saved.document);
-   await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
+   await tab.page.getByRole('checkbox',{name:'显示停用及已合并记录',exact:true}).check();
+   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('cell',{name:'已合并',exact:true}).waitFor();
+   await tab.page.getByRole('checkbox',{name:'显示停用及已合并记录',exact:true}).uncheck();
    const keeperRow=tab.page.getByRole('row').filter({hasText:keeper.name});
    await keeperRow.getByRole('button',{name:'停用',exact:true}).click();
    const disable=tab.page.getByRole('dialog',{name:'停用',exact:true});
    await disable.getByRole('textbox',{name:'本次变更原因',exact:true}).fill('TEST 保留旧资料后停用');
+   await disable.getByRole('button',{name:'保存共享目录',exact:true}).click();
+   const confirmDisable=tab.page.getByRole('alertdialog',{name:'确认停用辅料',exact:true});
+   await confirmDisable.getByRole('button',{name:'继续编辑',exact:true}).click();
+   expect((await h.db.query('SELECT active FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[keeper.id])).rows[0].active).toBe(true);
    const disabled=tab.page.waitForResponse(response=>new URL(response.url()).pathname===`/api/master-data/auxiliaries/${keeper.id}/disable`&&response.request().method()==='POST');
    await disable.getByRole('button',{name:'保存共享目录',exact:true}).click();
+   await confirmDisable.getByRole('button',{name:'确认停用',exact:true}).click();
    const disableResponse=await disabled;expect(disableResponse.status(),await disableResponse.text()).toBe(200);expect(await disableResponse.json()).toMatchObject({id:keeper.id,version:2,active:false});await disable.waitFor({state:'hidden'});
    await tab.page.getByText('没有匹配的辅料。',{exact:false}).waitFor();
    expect((await forms.read(designer,original.sourceId)).document).toEqual(original.saved.document);
@@ -228,7 +331,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    const page=tab.page;
    await page.evaluate(async()=>{
     for(let index=0;index<16;index++){
-     const response=await fetch('/api/master-data/auxiliaries',{method:'POST',headers:{'content-type':'application/json','idempotency-key':crypto.randomUUID()},body:JSON.stringify({name:'TEST-PAGE-'+crypto.randomUUID(),specification:'TEST',supplier:'TEST',auxiliaryKind:'普通辅料'})});
+     const response=await fetch('/api/master-data/auxiliaries',{method:'POST',headers:{'content-type':'application/json','idempotency-key':crypto.randomUUID()},body:JSON.stringify({name:'TEST-PAGE-'+crypto.randomUUID(),specification:'TEST',auxiliaryKind:'普通辅料'})});
      if(!response.ok)throw Error('Native catalog setup failed '+response.status);
     }
    });
@@ -265,11 +368,11 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
   const designer=h.f.people['sample-designer']!,tab=await h.open(designer.actorId,1165,{failRead:true,readPath:'/api/master-data/auxiliaries?q=&page=1&includeInactive=false',losePath:'/api/master-data/auxiliaries'},'/ui/auxiliary-catalog');
   try{
    const page=tab.page;await page.getByRole('button',{name:'重新读取目录',exact:true}).click();
-   await page.getByRole('button',{name:'直接新增辅料',exact:true}).click();
-   const editor=page.getByRole('dialog',{name:'直接新增共享辅料',exact:true}),name='TEST-目录回执-'+randomUUID();
+   await page.getByRole('button',{name:'新增辅料',exact:true}).click();
+   const editor=page.getByRole('dialog',{name:'新增辅料',exact:true}),name='TEST-目录回执-'+randomUUID();
    await editor.getByRole('textbox',{name:'辅料品名',exact:true}).fill(name);
    await editor.getByRole('button',{name:'取消本次编辑',exact:true}).click();
-   const confirmation=page.getByRole('dialog').filter({hasText:'目录资料尚未保存'});
+   const confirmation=page.getByRole('alertdialog').filter({hasText:'目录资料尚未保存'});
    await confirmation.getByRole('button',{name:'取消',exact:true}).click();
    expect(await editor.getByRole('textbox',{name:'辅料品名',exact:true}).inputValue()).toBe(name);
    await editor.getByRole('button',{name:'保存共享目录',exact:true}).click();
