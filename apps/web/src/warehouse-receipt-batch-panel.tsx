@@ -23,6 +23,14 @@ const asBusinessInstant=(local:string)=>/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(l
 
 export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:PreparationResource;onClose:()=>void}){
  const base=`${resource.kind==='order'?'orders':'sources'}/${resource.id}/production-readiness`;
+ const [wanted]=useState(()=>{
+  const search=new URLSearchParams(window.location.search);
+  const id=search.get('warehouseMaterial'),scope=search.get('warehouseScope'),kind=search.get('warehouseKind');
+  const keys=['warehouseMaterial','warehouseScope','warehouseKind','warehouseLine'];
+  const requested=keys.some(key=>search.has(key));
+  if(keys.some(key=>search.getAll(key).length>1)||requested&&(!id||!scope||!kind))return 'invalid-warehouse-scope';
+  return id&&scope&&kind?JSON.stringify([id,search.get('warehouseLine')||null,scope,kind]):null;
+ });
  const [items,setItems]=useState<WarehouseReceiptWorkItem[]|null>(null),[selected,setSelected]=useState(''),
   [correction,setCorrection]=useState(''),[quantity,setQuantity]=useState(''),[occurredAt,setOccurredAt]=useState(''),[note,setNote]=useState('');
  const [busy,setBusy]=useState(false),[reading,setReading]=useState(true),[readError,setReadError]=useState<Error|null>(null);
@@ -39,11 +47,11 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   try{
    const rows=await digitalRequest<WarehouseReceiptWorkItem[]>(`${base}/warehouse-receipt-work`,'GET',undefined,undefined,{signal:call.signal});
    if(!call.signal.aborted&&active.current){
-    setItems(rows);setSelected(value=>rows.some(row=>itemKey(row)===value)?value:rows.length?itemKey(rows[0]!):'');
+    setItems(rows);setSelected(value=>rows.some(row=>itemKey(row)===value)?value:wanted?rows.some(row=>itemKey(row)===wanted)?wanted:'':rows.length?itemKey(rows[0]!):'');
    }
   }catch(reason){if(!call.signal.aborted&&active.current)setReadError(reason instanceof Error?reason:new Error('收料范围读取失败'));}
   finally{if(!call.signal.aborted&&active.current)setReading(false);}
- },[base]);
+ },[base,wanted]);
  useEffect(()=>{active.current=true;void reload();return()=>{active.current=false;inflight.current?.abort();};},[reload]);
 
  const clearInput=()=>{setCorrection('');setQuantity('');setOccurredAt('');setNote('');setFile(null);setEvidence([]);};
@@ -90,8 +98,9 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   {notice&&<p role="status">{reading?notice:'本次实收已保存。'}</p>}
   {error&&<p role="alert">{error}</p>}
   {items&&!items.length&&!readError&&<p>当前没有已核实、由本人办理的待收物料。</p>}
-  {items&&items.length>0&&<Selector label="原投料范围" value={selected} options={items.map(row=>({value:itemKey(row),label:`${row.name} · ${lineText(row)}`}))}
-   isDisabled={disabled||dirty} onChange={value=>{setSelected(value);clearInput();}}/>}
+  {wanted&&items&&!current&&items.length>0&&<p>所选物料的原范围已变化，请返回仓库列表核对。</p>}
+  {items&&items.length>0&&(!wanted||current)&&<Selector label="原投料范围" value={selected} options={items.map(row=>({value:itemKey(row),label:`${row.name} · ${lineText(row)}`}))}
+   isDisabled={disabled||dirty||Boolean(wanted)} onChange={value=>{setSelected(value);clearInput();}}/>}
   {current&&<form className="development-technical-editor" onSubmit={event=>{event.preventDefault();void submit();}}>
    <h2>{current.name} · {current.kind==='fabric_receipt'?'实收面料':'实收辅料'}</h2>
    <p>供应方：{current.supplier||'原资料未登记'} · 原投料 {current.purchase.invested.quantity} {current.basis.unit}</p>

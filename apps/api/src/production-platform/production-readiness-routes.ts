@@ -1,6 +1,6 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
-import {WarehouseReceiptBatchSchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
+import {WarehouseReceiptBatchSchema,WarehouseReceiptPageQuerySchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
 import {CreateUploadIntentSchema} from '@dx-rework/contracts';
 import {ConfirmDevelopmentSampleHandoverSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {businessActor} from '../access/business-authority.js';
@@ -12,6 +12,10 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError('VALIDATION_ERROR',result.error.issues[0]?.message??'请核对办理内容',400);return result.data;};
  const actor=async(r:FastifyRequest)=>businessActor(deps.root,await deps.authenticate(r.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18)),r.id,'digital_production:view');
  const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
+ if(deps.workbenchNumberedCreation)app.get('/digital-production/warehouse/receipts',async(r,reply)=>{
+  reply.header('cache-control','private, no-store');
+  return service.warehouseReceipts(await actor(r),parse(WarehouseReceiptPageQuerySchema,r.query));
+ });
  for(const [route,kind] of [['orders','order'],['sources','source']] as const){
   const base=`/digital-production/${route}/:resourceId/production-readiness`;
   const resource=(r:FastifyRequest):PreparationResource=>({kind,id:parse(z.uuid(),(r.params as {resourceId:unknown}).resourceId)});

@@ -49,6 +49,10 @@ export const WarehouseNativeTaskQuerySchema=z.object({
  kind:z.enum(['preshrink','dispatch']),status:z.enum(['open','completed']).default('open'),
  page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
 }).strict();
+export const WarehouseReceiptPageQuerySchema=z.object({
+ page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
+}).strict();
+export type WarehouseReceiptPageQuery=z.infer<typeof WarehouseReceiptPageQuerySchema>;
 export type WarehouseNativeTaskQuery=z.infer<typeof WarehouseNativeTaskQuerySchema>;
 export type WarehouseReceiptBatch=z.infer<typeof WarehouseReceiptBatchSchema>;
 export type WarehouseReceiptBatchEvidence=Pick<WarehouseReceiptBatch,'kind'|'scopeRef'|'materialId'|'lineId'|'supplierId'|'unit'|'investment'|
@@ -64,6 +68,11 @@ export type WarehouseReceiptWorkItem={
  receiptVersion:number;
  activeBatches:{ref:WarehouseReceiptRef;quantity:WarehouseQuantity;occurredAt:string}[];
 };
+export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'balance'> & {
+ id:string;resource:PreparationResource;orderNumber:string|null;customerCode:string|null;
+ poNumber:string|null; assigneeName:string|null; invested:WarehouseQuantity; investedAt:string;
+};
+export type WarehouseReceiptPage={items:WarehouseReceiptListItem[];page:number;total:number};
 export type PreparationMaterialRecord=z.infer<typeof PreparationMaterialRecordSchema>;
 export const preparationInvestmentRowKey=(row:PreparationMaterialRecord['quantities'][number])=>
  JSON.stringify([row.materialId,row.lineId,row.unit,row.materialId?null:row.name]);

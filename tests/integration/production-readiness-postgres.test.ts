@@ -218,6 +218,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(after.facts.some(item=>item.kind==='fabric_receipt')).toBe(false);
   expect(await service.warehouseReceiptWork(warehouse,resource)).toMatchObject([{received:{quantity:'15',unit:'米'},
    balance:{procurementRemaining:'5',productionShortage:null}}]);
+  const filter={page:1,search:orderNumber!};
+  const queue=await service.warehouseReceipts(warehouse,filter);
+  expect(queue).toMatchObject({total:1,items:[{resource,orderNumber,materialId:material.materialId,received:{quantity:'15',unit:'米'}}]});
+  expect(await service.warehouseReceipts(warehouse,{...filter,page:2})).toEqual({total:1,page:2,items:[]});
+  expect(await service.warehouseReceipts(warehouse,{page:1,search:'TEST-NOT-OUR-WAREHOUSE-ORDER'})).toEqual({total:0,page:1,items:[]});
+  await expect(service.warehouseReceipts(primary,filter)).rejects.toMatchObject({statusCode:403});
   const next={...incoming,expectedReceiptVersion:3,quantity:'1',note:'TEST concurrent next physical receipt'};
   const race=await Promise.allSettled([service.recordWarehouseReceiptBatch(warehouse,resource,next,randomUUID()),
    service.recordWarehouseReceiptBatch(warehouse,resource,{...next,note:'TEST simultaneous different receipt'},randomUUID())]);

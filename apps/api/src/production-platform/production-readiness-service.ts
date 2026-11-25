@@ -1,4 +1,5 @@
-import {WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence} from '@dx-rework/contracts/production-readiness';
+import {WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence,type WarehouseReceiptPageQuery} from '@dx-rework/contracts/production-readiness';
+import {warehouseReceiptPage} from './warehouse-receipt-page.js';
 import {readWarehouseReceiptWork} from './warehouse-receipt-work.js';
 import {scopedWarehouseReceiptQuantity} from './warehouse-material-balance.js';
 import {deriveWarehouseReceiptWork,warehouseReceiptMovements,warehouseReceiptScope,warehouseReceiptScopePrefix} from './warehouse-receipt-projection.js';
@@ -283,6 +284,9 @@ export class ProductionReadinessService{
    if(row.entity_type||row.uploaded_by!==actor.actorId)digitalForbidden();
    await db.query("UPDATE attachments SET entity_type='digital_preparation',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[id,resource.id]);
   }
+ }
+ warehouseReceipts(actor:TrustedActorContext,input:WarehouseReceiptPageQuery){
+  return warehouseReceiptPage(this.database,actor,input);
  }
  warehouseReceiptWork(actor:TrustedActorContext,resource:PreparationResource){
   return readWarehouseReceiptWork(this.database,actor,resource,db=>this.read(actor,resource,db));

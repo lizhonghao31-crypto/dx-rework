@@ -1,3 +1,4 @@
+import {readWarehouseWorkbenchRoute,warehouseWorkbenchPath} from './warehouse-workbench-route.js';
 import {PatternHistoryQuerySchema} from '@dx-rework/contracts/pattern-orders';
 import {patternHistoryPath} from './pattern-history-query.js';
 import { DigitalIdSchema, type DigitalOrder, type DigitalSource } from "@dx-rework/contracts/digital-production";
@@ -66,6 +67,10 @@ function workbenchReturn(value: string | null, base: string): string | null {
   if(['/ui/pattern-room/history',urls.pageUrl('ui/pattern-room/history')].includes(url.pathname)){
     if([...url.searchParams.keys()].some(key=>!['q','source','status','creatorId','workerId','page'].includes(key)))return null;
     const parsed=PatternHistoryQuerySchema.safeParse(Object.fromEntries(url.searchParams));return parsed.success?urls.pageUrl(patternHistoryPath(parsed.data)):null;
+  }
+  if(['/ui/digital-production',urls.pageUrl('ui/digital-production')].includes(url.pathname)&&url.searchParams.get('workspace')==='warehouse'){
+    const route=readWarehouseWorkbenchRoute(url.searchParams);
+    return route?warehouseWorkbenchPath(route,base):null;
   }
   const localWorkspace=url.pathname.startsWith('/ui/')?urls.pageUrl(url.pathname)+url.search:value;
   const workspace = developmentWorkspaceReturnUrl(localWorkspace, base);

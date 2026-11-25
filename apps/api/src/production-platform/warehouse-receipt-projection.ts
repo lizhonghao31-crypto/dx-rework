@@ -25,7 +25,7 @@ function receivedAtBasis(fact:PreparationMaterialFact){
  return typeof (fact as PreparationMaterialFact&{materialBasis?:unknown}).materialBasis==='string';
 }
 
-export function deriveWarehouseReceiptWork(original:ProductionReadinessState,asOf=businessNow().toISOString()):WarehouseReceiptWorkItem[]{
+export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString()):WarehouseReceiptWorkItem[]{
  return original.facts.flatMap(investment=>{
   if(investment.kind!=='material_investment'||!investment.investmentScopeBasis)return [];
   const scope=investment.investmentScopeBasis;
