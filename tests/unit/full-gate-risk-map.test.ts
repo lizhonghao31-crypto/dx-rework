@@ -150,6 +150,7 @@ const amendmentPlan=(paths:string[])=>{
 describe('same-round correction source-only PG coverage',()=>{
  it.each([
   'apps/api/src/production-platform/development-document-format.ts',
+  'apps/api/src/production-platform/development-material-suppliers.ts',
   'apps/api/src/production-platform/development-amendment-service.ts',
   'packages/contracts/src/digital-development.ts',
   'packages/contracts/src/digital-development-amendments.ts',

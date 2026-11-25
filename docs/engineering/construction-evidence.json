@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "99e3451bb057e44a7079aaee52c8673b45e9cb16",
-  "sourceFingerprint": "91fb3e73482021c923da5a0c364e315403ea74a479f8653aef7cee1ce4559e2b",
+  "sourceFingerprint": "988ed6398f73475c1de184f15a9204f282c53b158e584bd31e4c79fdd16f5d8e",
   "rules": [
     {
       "source": "Approved v11.5 §4.6 and N07, centralized todo and existing authorized role lists from the current user instruction",
@@ -224,6 +224,32 @@
         "tests/unit/digital-pmc-readonly-access.test.ts",
         "tests/unit/special-craft-steps.test.ts"
       ]
+    },
+    {
+      "source": "Exact C2 Full non-database run 45553064575, completed job 138999652215, and its pre-existing direct dependency guard",
+      "rule": "An isolated change to the new shared development material supplier input must schedule the original same-round amendment PostgreSQL regression.",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-amendment-service.ts#validateDevelopmentMaterialSuppliers",
+        "tests/integration/development-amendment-postgres.test.ts"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/development-amendment-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "initialization": "Map only the new direct path to the pre-existing amendment lane, keeping deduplication and canonical suite configuration.",
+      "dateAndPermission": "No application permission, workflow, existing tests, database migration or clock changes. The risk classifier still runs the established lane, rather than swallowing the real dependency.",
+      "expectation": "The old generic direct-import assertion passes unchanged, the explicitly added path in isolation selects the required real PostgreSQL suite and unrelated paths remain excluded.",
+      "checks": [
+        "ci-map",
+        "ci-map-amendment-pg"
+      ]
     }
   ],
   "checks": [
@@ -248,13 +274,11 @@
           "sha256": "a90735457f3fd34db83bb36a584486d5f145b57d5f2077debab477368eaa8fd7"
         }
       ],
-      "context": "Local signed original App with Chromium and PostgreSQL dual URLs restricted to isolated TEST schemas. These are targeted cases, not Acceptance or final CI. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun.",
+      "context": "Local signed original App with Chromium and PostgreSQL dual URLs restricted to isolated TEST schemas. These are targeted cases, not Acceptance or final CI. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair.",
       "inputPaths": [
         "apps/web",
         "apps/api/migrations",
         "packages",
-        "scripts",
-        "tests/unit",
         "tests/helpers",
         "tests/acceptance",
         "tests/inspection-report-fixture.ts",
@@ -308,9 +332,24 @@
         "tests/integration/development-technical-postgres.test.ts",
         "tests/integration/digital-development-postgres.test.ts",
         "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration",
+        "scripts/deploy",
+        "scripts/acceptance",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/development-print-pair.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/unit/development-creation-garment.test.ts",
+        "tests/unit/development-order-editing.test.ts",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/special-craft-steps.test.ts"
       ],
-      "inputFingerprint": "148bd85d26e5a500bbb3f31b5186393c2521f08a0fef7098a262f13a38b308ef"
+      "inputFingerprint": "72ceef8b071951236e7494159b0d1304e2efb37e689f473ed76fc5c9236e654a"
     },
     {
       "id": "unit",
@@ -337,8 +376,6 @@
         "apps/web",
         "apps/api/migrations",
         "packages",
-        "scripts",
-        "tests/unit",
         "tests/helpers",
         "tests/acceptance",
         "tests/inspection-report-fixture.ts",
@@ -392,10 +429,25 @@
         "tests/integration/development-technical-postgres.test.ts",
         "tests/integration/digital-development-postgres.test.ts",
         "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration",
+        "scripts/deploy",
+        "scripts/acceptance",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/development-print-pair.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/unit/development-creation-garment.test.ts",
+        "tests/unit/development-order-editing.test.ts",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/special-craft-steps.test.ts"
       ],
-      "inputFingerprint": "148bd85d26e5a500bbb3f31b5186393c2521f08a0fef7098a262f13a38b308ef",
-      "context": "Node and Vitest on the exact candidate, scoped workbench, print, materials, existing authorization and todo consumers. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun."
+      "inputFingerprint": "72ceef8b071951236e7494159b0d1304e2efb37e689f473ed76fc5c9236e654a",
+      "context": "Node and Vitest on the exact candidate, scoped workbench, print, materials, existing authorization and todo consumers. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair."
     },
     {
       "id": "static",
@@ -413,8 +465,6 @@
         "apps/web",
         "apps/api/migrations",
         "packages",
-        "scripts",
-        "tests/unit",
         "tests/helpers",
         "tests/acceptance",
         "tests/inspection-report-fixture.ts",
@@ -468,10 +518,25 @@
         "tests/integration/development-technical-postgres.test.ts",
         "tests/integration/digital-development-postgres.test.ts",
         "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration",
+        "scripts/deploy",
+        "scripts/acceptance",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/development-print-pair.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/unit/development-creation-garment.test.ts",
+        "tests/unit/development-order-editing.test.ts",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/special-craft-steps.test.ts"
       ],
-      "inputFingerprint": "148bd85d26e5a500bbb3f31b5186393c2521f08a0fef7098a262f13a38b308ef",
-      "context": "Repository workspace TypeScript, affected-path ESLint, time site inventory, migrations manifest and diff checks. No deployment or remote test. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun."
+      "inputFingerprint": "72ceef8b071951236e7494159b0d1304e2efb37e689f473ed76fc5c9236e654a",
+      "context": "Repository workspace TypeScript, affected-path ESLint, time site inventory, migrations manifest and diff checks. No deployment or remote test. Review delta touched only the historical read response shape and the three uses of the original native creation fixture; unchanged source and tests are retained rather than rerun. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair."
     },
     {
       "id": "final-delta",
@@ -494,7 +559,33 @@
           "sha256": "c8d4cb1f58933ebad3764098d4fa25d400ef20903254439d28778571f002e0a5"
         }
       ],
-      "context": "Original signed Chromium and PostgreSQL 16 on two approved local isolated databases. Current versus exact historical issued identity via the real authenticated route, existing exact historical printing, and native publication plus confirmation receipt loss across reload."
+      "context": "Original signed Chromium and PostgreSQL 16 on two approved local isolated databases. Current versus exact historical issued identity via the real authenticated route, existing exact historical printing, and native publication plus confirmation receipt loss across reload. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair.",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/helpers",
+        "scripts/deploy",
+        "scripts/acceptance",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/development-print-pair.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/unit/development-creation-garment.test.ts",
+        "tests/unit/development-order-editing.test.ts",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/special-craft-steps.test.ts"
+      ],
+      "inputFingerprint": "ef5141f8259f7bf9cac62fcf04831c9d375c6c940be58dca0373bf79ce10eb46"
     },
     {
       "id": "delta-static",
@@ -508,7 +599,79 @@
       "status": "passed",
       "log": "/tmp/dx-c2-final/delta-static.log",
       "logSha256": "1656d0ad1cd553fbb32e198c53a62ac65c3975cd92a4a3e47e0de2b7141f6d0e",
-      "context": "Exact current API typecheck, targeted ESLint of changed consumer and tests, diff and time site inventory after the review fix."
+      "context": "Exact current API typecheck, targeted ESLint of changed consumer and tests, diff and time site inventory after the review fix. No application or existing browser/PG fixture was changed by the narrowly scoped gate risk map repair.",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/helpers",
+        "scripts/deploy",
+        "scripts/acceptance",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/development-print-pair.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "tests/unit/development-creation-draft.test.ts",
+        "tests/unit/development-creation-garment.test.ts",
+        "tests/unit/development-order-editing.test.ts",
+        "tests/unit/development-submit-recovery.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/special-craft-steps.test.ts"
+      ],
+      "inputFingerprint": "ef5141f8259f7bf9cac62fcf04831c9d375c6c940be58dca0373bf79ce10eb46"
+    },
+    {
+      "id": "ci-map",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-c2-final/ci-map.json",
+      "startedAt": "2026-11-25T05:34:22.178Z",
+      "endedAt": "2026-11-25T05:34:22.884Z",
+      "testedHead": "2829a51768808699ec225c5bdfbef11eb20b6bea",
+      "sourceFingerprint": "988ed6398f73475c1de184f15a9204f282c53b158e584bd31e4c79fdd16f5d8e",
+      "exitCode": 0,
+      "status": "passed",
+      "log": "/tmp/dx-c2-final/ci-map.log",
+      "logSha256": "a989d53ab87f3ca222c25dfbf28e884e51de4ae4201a4cbd2a0a59c054dc62c2",
+      "passed": 143,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "86df7d82405d36a89d2c7d79bc6b2bd1de02673a0519654f23cf8663fcbf59bc"
+        }
+      ],
+      "context": "Node 22 and original Vitest non-database profile. Existing generic direct-import and new isolated supplier helper input both select the real amendment PostgreSQL suite without duplication."
+    },
+    {
+      "id": "ci-map-amendment-pg",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-amendment-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-c2-final/ci-map-amendment-pg.json",
+      "startedAt": "2026-11-25T05:35:16.794Z",
+      "endedAt": "2026-11-25T05:35:32.450Z",
+      "testedHead": "2829a51768808699ec225c5bdfbef11eb20b6bea",
+      "sourceFingerprint": "988ed6398f73475c1de184f15a9204f282c53b158e584bd31e4c79fdd16f5d8e",
+      "exitCode": 0,
+      "status": "passed",
+      "log": "/tmp/dx-c2-final/ci-map-amendment-pg.log",
+      "logSha256": "765ab9d98d8a69f089a179734c7dcbb6d1a494b831cd06ad53379d3860657bc1",
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8d435a21006a4e654519f44919c22b8d44f95df607d0b2807e0c6f39b4d1efe9"
+        }
+      ],
+      "context": "Real PostgreSQL 16 isolated suite selected by the canonical classifier. Existing correction writes, assigned role, original records, and conflict checks unchanged."
     }
   ]
 }
