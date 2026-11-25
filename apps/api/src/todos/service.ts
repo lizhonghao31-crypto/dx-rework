@@ -1,7 +1,8 @@
 import {todoSelectionKey,type TodoSelection} from './selection.js';
 import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 import {sourcingTodoPresentation} from "./sla-presentation.js";
-import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
+import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow,businessScopeKey} from '../acceptance-clock/business-time.js';
+import {readJourneySelectionAccess} from '../production-platform/journey-selection-access.js';
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
 import {sourcingTodoSla,type SourcingOrderTimeWindow} from "../production-platform/sourcing-todo-sla.js";
 import {isDeepStrictEqual} from 'node:util';
@@ -13,7 +14,7 @@ import type { ProductionClosureService } from "../sourcing/production-closure-se
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import { DigitalProductionAccessPolicy } from "../production-platform/access-policy.js";
 import { isRootActor } from "../access/business-authority.js";
-import {merchandiserWorkCandidate,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories} from '../production-platform/merchandiser-work-candidates.js';
+import {merchandiserWorkCandidate,merchandiserWorkPage,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories,type AuthorizedMerchandiserWorkItem} from '../production-platform/merchandiser-work-candidates.js';
 import { randomUUID } from "node:crypto";
 import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
 
@@ -348,15 +349,46 @@ export class TodoService {
     const taskById=new Map(identities.rows.map(row=>[row.task_id,{taskId:row.task_id,taskKind:row.task_kind}]));
     const selected=native.filter(item=>taskById.has(item.key.todoId)||originalMerchandiserTodoCategories.includes(item.key.category));
     const originals=[...await sourcingTodoPresentation(this.database,stored.rows.map(todoResponse)),...await Promise.all(selected.map(item=>item.load()))];
-    const actions=new Map<string,{candidate:NonNullable<ReturnType<typeof merchandiserWorkCandidate>>;todo:TodoResponse}>();
+    const nativeScopes=new Map(selected.flatMap(item=>item.rushIdentity?[[item.key.todoId,item.rushIdentity] as const]:[]));
+    const actions=new Map<string,{candidate:NonNullable<ReturnType<typeof merchandiserWorkCandidate>>;todo:TodoResponse;identity:RushIdentity|null}>();
     for(const todo of originals){
       const candidate=merchandiserWorkCandidate(actor,todo,taskById.get(todo.todoId));
       if(!candidate)continue;
       const previous=actions.get(todo.todoId);
       if(previous&&!isDeepStrictEqual(previous.candidate,candidate))throw new ApplicationError('CONFLICT','原跟单工作身份已变化，请重新读取',409);
-      actions.set(todo.todoId,{candidate,todo});
+      const identity=nativeScopes.get(todo.todoId)??null;
+      if(previous?.identity&&identity&&!isDeepStrictEqual(previous.identity,identity))throw new ApplicationError('CONFLICT','原跟单工作范围已变化，请重新读取',409);
+      actions.set(todo.todoId,{candidate,todo,identity:identity??previous?.identity??null});
     }
     return [...actions.values()];
+  }
+
+  /** Request-local directory of current original actions. Order details are
+   * supplemental and may never widen a task or contract recipient's scope. */
+  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind'];search:string;page:number}){
+    const actions=await this.merchandiserActionSources(actor),db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const policy=new DigitalProductionAccessPolicy(db);
+      if(!isRootActor(actor)&&!await policy.activeRole(actor.actorId,'order_merchandiser'))throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+      const scopes=[...new Set(actions.flatMap(row=>row.identity?.orderId?[row.identity.orderId]:[]))].map(id=>({kind:'order' as const,id}));
+      const {resources}=await readJourneySelectionAccess(db,actor,scopes);
+      const allowed=scopes.flatMap(scope=>resources.get(businessScopeKey(scope))?.technical?[scope.id]:[]);
+      const deep=allowed.length?(await db.query<{id:string;order_no:string;customer_code:string;po_numbers:string[]}>(`SELECT o.production_order_id AS id,o.design_style_no AS order_no,o.customer_code,
+        ARRAY(SELECT p.po_number FROM digital_production_po_lines p WHERE p.production_order_id=o.production_order_id AND p.po_number IS NOT NULL ORDER BY p.position,p.line_id) AS po_numbers
+        FROM digital_production_orders o WHERE o.production_order_id=ANY($1::uuid[])`,[allowed])).rows:[];
+      const byId=new Map(deep.map(row=>[row.id,row]));
+      const authorized=actions.flatMap(row=>row.identity&&(!row.identity.orderId||byId.has(row.identity.orderId))?[row.identity]:[]);
+      const rush=await readDevelopmentOrderRush(db,authorized);
+      const rows=actions.map(({candidate,todo,identity}):AuthorizedMerchandiserWorkItem=>{
+        const order=identity?.orderId?byId.get(identity.orderId):undefined;
+        const context=todo.orderContext,key=identity&&developmentRushKey(identity);
+        return {...candidate,state:'mine',orderNumber:order?.order_no??context?.orderNo??context?.styleNo??null,styleNo:context?.styleNo??null,
+          customer:order?.customer_code??null,poNumbers:order?.po_numbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key))};
+      });
+      await db.query('COMMIT');
+      return merchandiserWorkPage(rows,{...filter,state:'mine'});
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 
   async listForActor(
