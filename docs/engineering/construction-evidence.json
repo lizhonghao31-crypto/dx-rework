@@ -2,7 +2,7 @@
   "version": 1,
   "base": "244ea83c391dbc7248fef491b9afbf3476f3d1b7",
   "risk": "full",
-  "sourceFingerprint": "58b0d37fcf2a07cec06919313643ec7e2c0d9f17001e1e78c318a3d741484c80",
+  "sourceFingerprint": "7b31b2d38e8d089a3009adc810d1e7afd15b68bb2cb6b36101f2d5910eeae98d",
   "checks": [
     {
       "id": "native",
@@ -15,7 +15,7 @@
       "skipped": 0,
       "testedHead": "4f4a2c750d6ec4fc506264b878172f4ecb7804d4",
       "sourceFingerprint": "58b0d37fcf2a07cec06919313643ec7e2c0d9f17001e1e78c318a3d741484c80",
-      "context": "Exact merged release base, matching dual database routing, two workers, authenticated original Chromium, synthetic data. No on-site acceptance.",
+      "context": "Exact merged release base, matching dual database routing, two workers, authenticated original Chromium, synthetic data. No on-site acceptance. The sole successor edit is a static unit case outside every actual native input path; exact source scope fingerprint verified.",
       "startedAt": "2026-11-25T20:06:57.082Z",
       "endedAt": "2026-11-25T20:11:11.805Z",
       "log": "/workspace/dx-v115-x6-evidence/x6-release-final-native.log",
@@ -25,28 +25,42 @@
           "format": "vitest-json",
           "sha256": "9dbb5bc719cd322faf573f1c98e4ee26feec396bf0c0d64ef29ea7bb187d1dd2"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/helpers",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json",
+        ".node-version"
+      ],
+      "inputFingerprint": "4ff6fbc12c4dbd23e63472df7fc0cf2c4847cc5a9ff4086e057b5a2b4f8fca41"
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-unit.json tests/unit/merchandiser-work-candidates.test.ts tests/unit/workbench-factory-communication.test.ts tests/unit/todo-read-split.test.ts",
+      "command": "vitest run --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-shared-transport-unit.json tests/unit/merchandiser-work-candidates.test.ts tests/unit/workbench-factory-communication.test.ts tests/unit/todo-read-split.test.ts tests/unit/craft-database-separation.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 13,
+      "passed": 14,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4f4a2c750d6ec4fc506264b878172f4ecb7804d4",
-      "sourceFingerprint": "58b0d37fcf2a07cec06919313643ec7e2c0d9f17001e1e78c318a3d741484c80",
-      "context": "Exact release-bound workbench role, work identity, pagination and original fabric/craft facts consumers.",
-      "startedAt": "2026-11-25T20:06:57.108Z",
-      "endedAt": "2026-11-25T20:06:59.962Z",
-      "log": "/workspace/dx-v115-x6-evidence/x6-release-final-unit.log",
-      "logSha256": "7050af4b5be1491a8b3e326c1322169cab3dbbf4299526bd068dc89745e51f1d",
+      "testedHead": "a6bc1b3c184f75e4e3c91aae78d0e9d023ea2745",
+      "sourceFingerprint": "7b31b2d38e8d089a3009adc810d1e7afd15b68bb2cb6b36101f2d5910eeae98d",
+      "context": "Exact static sourcing transport and read-split regression on the current source; no PostgreSQL escalation, production or site access.",
+      "startedAt": "2026-11-25T20:27:00.976Z",
+      "endedAt": "2026-11-25T20:27:03.118Z",
+      "log": "/workspace/dx-v115-x6-evidence/x6-shared-transport-unit.log",
+      "logSha256": "c48a21002b041ba3363ae0a6d3a56a40377e50746cba5b86b6bd1fea9a707173",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fdc9870a890477a4451395ab3ff826d87f2aa6f20961643a37ce962b2494edfa"
+          "sha256": "bc86fa05206440d5f6734237792560efbcd0a5f890520068cf5cbf1b57b19037"
         }
       ]
     }
@@ -117,7 +131,8 @@
         "apps/web/src/merchandiser-contract-return.tsx",
         "apps/web/src/sourcing-api-client.ts",
         "apps/web/src/sourcing-contract-return-upload.ts",
-        "apps/web/src/sourcing-workspace-page.tsx"
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "tests/unit/craft-database-separation.test.ts"
       ],
       "reads": [
         "apps/api/src/sourcing/sourcing-contract-return-service.ts",
@@ -125,11 +140,12 @@
       ],
       "oldTests": [
         "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/craft-database-separation.test.ts"
       ],
       "initialization": "Reads existing case/contract version and the original attach authorization.",
       "dateAndPermission": "Old role and special narrow permissions remain on the original service. Retrying the same response uses the same actual body and key.",
-      "expectation": "Signed ordinary actor actually uploads once, recovers the lost response and sees the original current record. No another slot, contract copy or restart.",
+      "expectation": "Signed ordinary actor actually uploads once, recovers the lost response and sees the original current record. No another slot, contract copy or restart. The original craft catalog and rework process database remain independent; the exact craft request still uses the shared bounded submission transport.",
       "checks": [
         "native",
         "unit"
