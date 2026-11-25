@@ -53,7 +53,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await read()).toMatchObject({resource,quoteId,version:first.version,unitCost:'30',confirmation:'joint_release_ready',saved:null});
    expect((await follow.page.request.get(base+'/quotation/workbench-pricing')).status()).toBe(404);
    const preview={field:'customerUnitPrice',value:'49.123456'} as const;
-   expect((await follow.page.request.put(base+'/quotation/workbench-pricing',{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:first.version,input:preview}})).status()).toBe(403);
+   const forbiddenKey=randomUUID();
+   const forbiddenSave=()=>follow.page.request.put(base+'/quotation/workbench-pricing',{headers:{'idempotency-key':forbiddenKey},data:{expectedVersion:first.version,input:preview}});
+   const denied=await Promise.all([forbiddenSave(),forbiddenSave()]);
+   expect(denied.map(response=>response.status())).toEqual([403,403]);
+   expect((await db.query('SELECT 1 FROM digital_quotation_pricing_drafts WHERE quote_id=$1',[quoteId])).rowCount).toBe(0);
    expect((await tab.page.request.post(base+'/quotation/line-reviews',{data:{action:'return'}})).status()).toBe(404);
    const newConfirmation={customerCode:'PD',expectedVersion:first.version,customerConfirmedTotal:preview.value,amountScope:'per_piece',
     quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',

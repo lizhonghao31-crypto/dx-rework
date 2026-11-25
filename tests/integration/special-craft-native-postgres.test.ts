@@ -40,7 +40,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const saved=await library.save(f.root,{id:null,expectedVersion:0,definition:{name,enabled:true,development:{minutes:60*(index+1),calendar:'continuous',reminder:{enabled:true,percent:70}},bulk:{minutes:240*(index+1),calendar:'continuous',reminder:{enabled:false,percent:80}}}},randomUUID());
    steps.push({craftKind:'special',sequence:index+1,specialCraft:saved});
   }
-  const created=await exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,undefined,[['特殊工艺','免洗']],{fixedCraftSteps:steps,automaticQuotation:true,onRouteComplete:async(sourceId,kind)=>{
+  const created=await exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,undefined,[['特殊工艺','免洗']],{fixedCraftSteps:steps,automaticQuotation:true,quotationAuthor:f.people['sample-designer']!,publishedConsumption:'1.5',onRouteComplete:async(sourceId,kind)=>{
    if(kind!=='development_craft_dispatch')return;
    const pending=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_printing' AND t.state='ready'",[sourceId])).rows[0];
    const todos=await new DigitalProductionNotificationService(f.db).todos(f.people['pattern-room-worker']!);
@@ -88,13 +88,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // special-craft fees into the separate garment-factory contract price.
   let full=await quotes.read(f.root,resource);
   full=await quotes.save(f.root,resource,{expectedVersion:full.version,document:full.document!,assignments:full.assignments.map(a=>a.rowId===ie.rowId?{...a,priceAssigneeId:f.people.ie!.actorId}:a)},randomUUID());
-  for(const row of full.rows){
-   if(own.some(value=>value.rowId===row.rowId))continue;
-   full=await quotes.fillRow(f.root,resource,row.rowId,{expectedVersion:full.version,...(row.section!=='外发工序'?{consumption:'1.5'}:{}),unitPrice:row.section==='外发工序'?'10':'20'},randomUUID());
-  }
+  const ieOnly=await quotes.fillRow(f.people.ie!,resource,ie.rowId,{expectedVersion:full.version,unitPrice:'10'},randomUUID());
+  expect(ieOnly.rows.map(row=>row.rowId)).toEqual([ie.rowId]);
+  full=await quotes.read(f.root,resource);
+  expect(full.rows.find(row=>row.section==='主料')).toMatchObject({consumption:'1.5',unitPrice:'20',consumptionSource:{kind:'technical_artifact'}});
   expect(full.complete).toBe(true);
   const confirmedVersion=full.version;
-  await quotes.confirm(f.root,resource,{expectedVersion:confirmedVersion,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST customer confirmed 50; cost 47',confirmedAt:businessNow().toISOString()},randomUUID());
+  await quotes.confirm(f.people['sample-designer']!,resource,{expectedVersion:confirmedVersion,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST customer confirmed 50; cost 47',workbenchPricing:{field:'customerUnitPrice',value:'50'},confirmedAt:businessNow().toISOString()},randomUUID());
   const identity=new DigitalProductionIdentityService(f.db,true),source=(await f.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[resource.id])).rows[0];
   const order=await identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.design_style_no,orderDate:'2026-11-13',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:100}]}]}),randomUUID(),resource.id);
   const budget=await new DigitalBudgetService(f.db,true).read(f.root,order.productionOrderId);
@@ -139,7 +139,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await new DigitalBudgetService(f.db,true).read(f.root,order.productionOrderId)).document).toEqual(budget.document);
   expect((await quotes.read(f.root,resource,undefined,confirmedVersion)).rows.filter(row=>row.craftBasis).map(row=>row.unitPrice)).toEqual(['3','4']);
   const pricedBulk=await quotes.read(f.root,bulkResource);
-  await quotes.confirm(f.root,bulkResource,{expectedVersion:pricedBulk.version,customerCode:'PD',customerConfirmedTotal:'70',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST bulk customer confirmed 70; cost 67',confirmedAt:businessNow().toISOString()},randomUUID());
+  await quotes.confirm(f.people['sample-designer']!,bulkResource,{expectedVersion:pricedBulk.version,customerCode:'PD',customerConfirmedTotal:'70',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST bulk customer confirmed 70; cost 67',workbenchPricing:{field:'customerUnitPrice',value:'70'},confirmedAt:businessNow().toISOString()},randomUUID());
   const budgets=new DigitalBudgetService(f.db,true);
   const unchangedBudget=await budgets.read(f.root,order.productionOrderId);
   expect(unchangedBudget.document).toEqual(budget.document);

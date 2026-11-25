@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "d1705aada1e5701c572d9303fa7b15505482df48",
-  "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
+  "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
   "rules": [
     {
       "source": "Approved v11.5 Workbench §7.2–7.4, G3 and ENT03–05, C6 only (final print addendum leaves these clauses unchanged).",
@@ -16,7 +16,12 @@
         "apps/api/migrations/0305_secondary_craft_decision_authority.sql",
         "apps/api/src/platform/migration-manifest.json",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/helpers/development-technical-fixture.ts",
+        "tests/helpers/development-sla-native-fixture.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/secondary-craft-suppliers.ts",
@@ -31,11 +36,11 @@
         "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
       ],
       "checks": [
-        "c6-static",
         "c6-unit",
         "c6-protocol",
-        "c6-native",
-        "c6-original-fixtures"
+        "c6-original-fixtures",
+        "c6-policy-chain",
+        "c6-denied-before-lock"
       ],
       "initialization": "Append nullable decision authority, preserve all existing approvals as original verified Wu evidence, and retain submitted-version, actual actor, unique decision and immutability rules. Preserve the existing recipient when eligible; only the other eligible actor may approve.",
       "dateAndPermission": "Signed Root is validated against the canonical active bootstrap identity; Wu is an individually bound active owner. Preserve exact craft, scope, supplier version, original maker eligibility, time choice, and original task/notification ownership.",
@@ -55,7 +60,9 @@
         "tests/unit/quotation-pricing-draft-receipt.test.ts",
         "tests/unit/quotation-workbench-confirmation.test.ts",
         "tests/unit/quotation-workbench-preview.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/quotation-assembly.ts",
@@ -75,11 +82,11 @@
         "tests/unit/quotation-pricing-draft-receipt.test.ts"
       ],
       "checks": [
-        "c6-static",
         "c6-unit",
         "c6-protocol",
-        "c6-native",
-        "c6-original-fixtures"
+        "c6-original-fixtures",
+        "c6-policy-chain",
+        "c6-denied-before-lock"
       ],
       "initialization": "Use the original pricing draft table and native command receipt, do not copy pricing into a confirmation on save. Reuse immutable workbench enrollment; legacy manual workflow retains its original basis. Do not stamp dates or backfill old records.",
       "dateAndPermission": "Preserve business time and actual customer confirmation date; seller authority derives from original current order/source and active designer, not survey display strings or a browser-only check. Detect unrepresented source craft evidence and do not allow old payload to bypass the active gate.",
@@ -110,11 +117,11 @@
         "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
       ],
       "checks": [
-        "c6-static",
         "c6-unit",
         "c6-protocol",
-        "c6-native",
-        "c6-original-fixtures"
+        "c6-original-fixtures",
+        "c6-policy-chain",
+        "c6-denied-before-lock"
       ],
       "initialization": "No historical writes. Test fixtures that are not historical Root-authored manual quotes now exercise the actual original designer command and retain their prior exact budget amounts.",
       "dateAndPermission": "Preserve original lead merchandiser and isolated sibling scope, immutable snapshots and original budget review. No quote alone creates an order. Keep rollout paused on a same-candidate Acceptance until C5 joint readiness; no deployment in this PR.",
@@ -122,20 +129,6 @@
     }
   ],
   "checks": [
-    {
-      "id": "c6-static",
-      "kind": "command",
-      "command": "ESLint on changed TS and TSX; npm run typecheck -w @dx-rework/api; npm run typecheck -w @dx-rework/web; npm run db:migrate:lint; git diff --check",
-      "context": "Locked Node 22 workspace and precise source list. Replays normal migration checksum and sequence checks.",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-25T09:10:13Z",
-      "endedAt": "2026-11-25T09:11:04Z",
-      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
-      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
-      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-static.log",
-      "logSha256": "5e03fd8d69c0157e523a4b51cb6f5527cf2dacac8393983356f36efaa3230959"
-    },
     {
       "id": "c6-unit",
       "kind": "tests",
@@ -146,16 +139,16 @@
       "passed": 82,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T09:10:13Z",
-      "endedAt": "2026-11-25T09:10:23Z",
-      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
-      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
-      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-unit.log",
-      "logSha256": "6a5eef3bd16269d21f31d6517ec4175d27e47ce2b2fa3acf42786fd6153a4646",
+      "startedAt": "2026-11-25T09:44:48Z",
+      "endedAt": "2026-11-25T09:45:03Z",
+      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
+      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
+      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-unit.log",
+      "logSha256": "d994816be5a50a3064d89fb92a705846bc6e758f016b0e36f5b3d7ba0afb604a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6d44c66da6eb3a7a1d00434a0b89df63f86c33075ce33ac23a4c71868aea76f0"
+          "sha256": "bfed8e03b52fd051bde3ab1edd21ab3b44db939fd0424a6b83d63197c4161c9c"
         }
       ]
     },
@@ -169,35 +162,12 @@
       "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T09:10:13Z",
-      "endedAt": "2026-11-25T09:10:15Z",
-      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
-      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
-      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-protocol.log",
-      "logSha256": "e4270e2bc315d92bc4f6f0909ec03e41308b4c1230c65f1809de8fd4d834ad04"
-    },
-    {
-      "id": "c6-native",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts tests/integration/customer-quotation-postgres.test.ts --reporter=verbose --reporter=json",
-      "context": "Guarded dual database names and native signed Chromium, isolated schema, original ordinary actors and real commands. No live system data or settings.",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 29,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-25T09:10:13Z",
-      "endedAt": "2026-11-25T09:11:36Z",
-      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
-      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
-      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-native.log",
-      "logSha256": "68d3b88fef50fe518c02dcc46d0599f7b0425487476745502c02591c6163a04e",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "c85c9e8e3df296985f4e3d20c35818f29b976f399db8a72de0b4e0dcc629393c"
-        }
-      ]
+      "startedAt": "2026-11-25T09:44:48Z",
+      "endedAt": "2026-11-25T09:44:51Z",
+      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
+      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
+      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-protocol.log",
+      "logSha256": "878535f162109ad38f359f26f0c5cd9ef397fd0dc25bb84d7d0d6cdcefe2b65b"
     },
     {
       "id": "c6-original-fixtures",
@@ -209,18 +179,65 @@
       "passed": 6,
       "failed": 0,
       "skipped": 167,
-      "startedAt": "2026-11-25T09:11:36Z",
-      "endedAt": "2026-11-25T09:11:47Z",
-      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
-      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
-      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-original-fixtures.log",
-      "logSha256": "3b2771a99028d754ebf05056a61cddf229538c3e77d1b0a459bd4bb1d3d756b8",
+      "startedAt": "2026-11-25T09:46:25Z",
+      "endedAt": "2026-11-25T09:46:38Z",
+      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
+      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
+      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-original-fixtures.log",
+      "logSha256": "c8746cf01f58b96661ed7940935c11a8eb8bb4fddb47e76ec772a8c16984ce73",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "57c0f2209e9060a0894d259d616603381d7e3932596c4a6ce1d47398f8930a11"
+          "sha256": "e44413b9741c814d0bc5a7c37710eef997375a80fb6419c4eb6298eb40671103"
+        }
+      ]
+    },
+    {
+      "id": "c6-policy-chain",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts --maxWorkers 2 tests/integration/full-business-chain-postgres.test.ts --reporter=verbose --reporter=json",
+      "context": "Canonical original business-chain suite. Ordinary owner, wrong bound and disabled Root remain denied while real canonical active Root reads; other original assertions are unchanged.",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 61,
+      "failed": 0,
+      "skipped": 0,
+      "startedAt": "2026-11-25T09:46:38Z",
+      "endedAt": "2026-11-25T09:47:44Z",
+      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
+      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
+      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-policy-chain.log",
+      "logSha256": "12e70cc5e114ba5ffa4a199402dc022e0054f7c0e793e33496229e989d6f1347",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "514edadd11a8ddf04ded6cf059779afdb7d7042954ad52c04b424c76cbd706c8"
+        }
+      ]
+    },
+    {
+      "id": "c6-denied-before-lock",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/automatic-quotation-native-browser-postgres.test.ts -t 'keeps jointly enabled R4 row reviews' --reporter=verbose --reporter=json",
+      "context": "Exact current targeted signed Browser/PG. Concurrent denied merchandising writes returned 403/403 with zero draft rows; retains native designer quote and existing row reviews. A separate all-suite attempt was resource-interrupted and is not asserted successful.",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 9,
+      "startedAt": "2026-11-25T09:44:23.719000Z",
+      "endedAt": "2026-11-25T09:44:38.379480Z",
+      "sourceFingerprint": "a8b3fe338fb1b2f68634f87c2190f9e6fa2b01c71a3c56dbb470ba1ad26aef36",
+      "testedHead": "7d27db6e68110c1b94fb0f68f44f4d7c8e33c050",
+      "log": "/workspace/dx-v115-c6-evidence/prepush-exact/c6-denied-before-lock.log",
+      "logSha256": "6bbacc7753ff2861bbf0069157c0e687c04d01eef74dc9a52f97d3bbebcc221b",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8753acf723227df727e07b11f66b0466fd5014a18cafcd2dd8537ef334c7c031"
         }
       ]
     }
-  ]
+  ],
+  "executionBoundary": "User authorized immediate push and Full after real focused proof. Full final now remains to be run. Local full typecheck and the all-browser report were interrupted by the executor memory limit and are not marked passed. Earlier exact original workflow/roles and 74 original scenarios are retained separately."
 }

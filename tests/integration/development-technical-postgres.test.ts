@@ -229,7 +229,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const sourceAfter=await forms.read(f.root,p.sourceId);expect(sourceAfter.document).toEqual(sourceBefore.document);expect(sourceAfter.version).toBe(sourceBefore.version);
   expect((await technical.read(p.worker,p.sourceId)).artifacts).toEqual(technicalBefore.artifacts);expect((await technical.read(p.worker,p.sourceId)).effective).toEqual(technicalBefore.effective);
   expect((await execution.read(f.root,p.sourceId)).tasks.map(({taskId,state,enteredAt,dueAt,completedAt})=>({taskId,state,enteredAt,dueAt,completedAt}))).toEqual(tasksBefore);
-  const frozen=q.version;await quotes.confirm(p.designer,resource,QuotationConfirmationSchema.parse({expectedVersion:frozen,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST real customer confirmation separate from commercial correction',confirmedAt:businessNow().toISOString()}),randomUUID());
+  const frozen=q.version;await quotes.confirm(p.designer,resource,QuotationConfirmationSchema.parse({expectedVersion:frozen,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST real customer confirmation separate from commercial correction',workbenchPricing:{field:'customerUnitPrice',value:'50'},confirmedAt:businessNow().toISOString()}),randomUUID());
   const order=await identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:sourceAfter.designStyleNo,temporaryStyleNo:null,orderDate:'2026-10-20',lines:[{color:'黑',sizes:[{size:'M',quantity:10}],deliveryDate:'2027-03-01'}]}),randomUUID(),p.sourceId),budgets=new DigitalBudgetService(f.db,true),budgetBefore=await budgets.read(f.root,order.productionOrderId);
   q=await quotes.read(p.designer,resource);q=await quotes.fillRow(p.designer,resource,p.materialId,{expectedVersion:q.version,pricingUnit:'码',unitPrice:'0'},randomUUID());
   expect(q.complete).toBe(false);expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({unit:'码',unitPrice:'0',consumption:''});
@@ -299,7 +299,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await approveFixtureCraftPrice(quotes,p.worker,approver,resource,craft.rowId,'3');
   q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('45');
   await expect(quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,consumption:'2'},randomUUID())).rejects.toMatchObject({statusCode:403});
-  const confirmation=QuotationConfirmationSchema.parse({expectedVersion:q.version,customerCode:'PD',customerConfirmedTotal:'45',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST independently confirmed 45, not assumed from cost',confirmedAt:businessNow().toISOString()});
+  const terms={customerCode:'PD',customerConfirmedTotal:'45',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST independently confirmed 45, not assumed from cost',workbenchPricing:{field:'customerUnitPrice',value:'45'},confirmedAt:businessNow().toISOString()};
+  await expect(quotes.confirm(p.designer,resource,QuotationConfirmationSchema.parse({...terms,expectedVersion:q.version}),randomUUID())).rejects.toMatchObject({statusCode:409});
+  const body:TechnicalArtifactBody={pltAttachmentIds:[await plot(p)],consumptionRows:[{materialId:p.materialId,unit:'米',consumption:'1.5'},{materialId:p.accessoryId!,unit:'件',consumption:'1'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['48']}],gradingNote:'TEST current independently published technical basis',templateRef:null},note:'TEST actual confirmed technical version',basedOnFinalComment:null};
+  const originalArtifact=await artifact(p,{body});
+  q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('45');
+  const confirmation=QuotationConfirmationSchema.parse({...terms,expectedVersion:q.version});
   const confirmedVersion=q.version;
   const simultaneous=await Promise.allSettled([quotes.confirm(p.designer,resource,confirmation,randomUUID()),quotes.confirm(p.designer,resource,confirmation,randomUUID())]);
   expect(simultaneous.filter(r=>r.status==='fulfilled')).toHaveLength(1);
@@ -312,8 +317,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const version=q.version;expect(calculateBudget(q.document!).cost).toBe('48');
   await quotes.fillRow(p.designer,resource,p.materialId,priceInput,priceKey);expect((await quotes.read(p.designer,resource)).version).toBe(version);
   await expect(quotes.confirm(p.designer,resource,{...confirmation,expectedVersion:confirmedVersion},randomUUID())).rejects.toMatchObject({statusCode:409});
-  const body:TechnicalArtifactBody={pltAttachmentIds:[await plot(p)],consumptionRows:[{materialId:p.materialId,unit:'米',consumption:'1.6'},{materialId:p.accessoryId!,unit:'件',consumption:'1'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['48']}],gradingNote:'TEST',templateRef:null},note:'TEST source version',basedOnFinalComment:null};
-  await artifact(p,{body});q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('50.2');
+  await artifact(p,{expectedVersion:originalArtifact.version,body:{...body,pltAttachmentIds:[await plot(p)],
+   consumptionRows:[{materialId:p.materialId,unit:'米',consumption:'1.6'},{materialId:p.accessoryId!,unit:'件',consumption:'1'}],note:'TEST new source version'}});
+  q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('50.2');
   await approveFixtureCraftPrice(quotes,p.worker,approver,resource,craft.rowId,'5');
   q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('52.2');
   const preserved=await quotes.read(p.designer,resource,undefined,confirmedVersion);expect(calculateBudget(preserved.document!).cost).toBe('45');

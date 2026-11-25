@@ -53,7 +53,7 @@ async function quotationWriteReceipt(page:Page,path:string,method:'PUT'|'POST',c
 async function submitCraftFromOriginalQuote(page:Page,name:string,amount:string,path:string){
  await page.getByRole('link',{name:`${name}报价与选厂`,exact:true}).click();
  await page.getByRole('textbox',{name:'工艺单价',exact:true}).fill(amount);
- return quotationWriteReceipt(page,path,'POST',()=>page.getByRole('button',{name:'提交伍云峰审批',exact:true}).click());
+ return quotationWriteReceipt(page,path,'POST',()=>page.getByRole('button',{name:'提交工艺报价审批',exact:true}).click());
 }
 
 (url?describe:describe.skip)('special craft library original App settings',()=>{
@@ -184,12 +184,16 @@ async function submitCraftFromOriginalQuote(page:Page,name:string,amount:string,
  it('assigns a bulk-only craft and fills only that price through the original authenticated quotation page',async()=>{
   configureTimelineAdoption(h.db,'fixed_v2');
   const f=h.f,worker=f.people['pattern-room-worker']!,quotes=new DigitalQuotationService(h.db,true);
-  const created=await exerciseDevelopmentSlaNative(h.db,new TodoProjectionService(new TodoService(h.db)),f.root,worker.actorId,undefined,[['无','免洗']],{automaticQuotation:true});
+  const created=await exerciseDevelopmentSlaNative(h.db,new TodoProjectionService(new TodoService(h.db)),f.root,worker.actorId,undefined,[['无','免洗']],{fixedCraftSteps:[],automaticQuotation:true,quotationAuthor:f.people['sample-designer']!,publishedConsumption:'1.5'});
   const resource={kind:'source' as const,id:created[0]!.sourceId};
   let q=await quotes.read(f.root,resource);
   q=await quotes.save(f.root,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>q.rows.find(row=>row.rowId===a.rowId)?.name==='IE加工单价'?{...a,priceAssigneeId:f.people.ie!.actorId}:a)},randomUUID());
-  for(const row of q.rows)q=await quotes.fillRow(f.root,resource,row.rowId,{expectedVersion:q.version,...(row.section!=='外发工序'?{consumption:'1.5'}:{}),unitPrice:row.section==='外发工序'?'10':'20'},randomUUID());
-  await quotes.confirm(f.root,resource,{expectedVersion:q.version,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST bulk-only UI',confirmedAt:businessNow().toISOString()},randomUUID());
+  const ieRow=q.rows.find(row=>row.section==='外发工序')!;
+  const ieOnly=await quotes.fillRow(f.people.ie!,resource,ieRow.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
+  expect(ieOnly.rows.map(row=>row.rowId)).toEqual([ieRow.rowId]);
+  q=await quotes.read(f.root,resource);
+  expect(q.rows.find(row=>row.section==='主料')).toMatchObject({consumption:'1.5',unitPrice:'20',consumptionSource:{kind:'technical_artifact'}});
+  await quotes.confirm(f.people['sample-designer']!,resource,{expectedVersion:q.version,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST bulk-only UI',workbenchPricing:{field:'customerUnitPrice',value:'50'},confirmedAt:businessNow().toISOString()},randomUUID());
   const source=(await h.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[resource.id])).rows[0];
   const order=await new DigitalProductionIdentityService(h.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.design_style_no,orderDate:'2026-11-13',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:100}]}]}),randomUUID(),resource.id);
   const standard={minutes:120,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};

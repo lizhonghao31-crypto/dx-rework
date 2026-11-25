@@ -120,9 +120,13 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
         .rejects.toMatchObject({code:"55P03"});
     });
     expect(await canReadSecondaryCraftApprovalQueue(database,actor(ids.wu_yunfeng))).toBe(true);
-    for(const id of [ids.li_zhonghao,ids.li_junyue,extraOwner]){
+    // The actual bootstrap Root may approve secondary-craft quotes under C6.
+    // Ordinary owner bindings and a stale claimed Root role remain insufficient.
+    expect(await canReadSecondaryCraftApprovalQueue(database,actor(ids.li_junyue))).toBe(true);
+    for(const id of [ids.li_zhonghao,extraOwner]){
       expect(await canReadSecondaryCraftApprovalQueue(database,actor(id))).toBe(false);
     }
+    expect(await canReadSecondaryCraftApprovalQueue(database,{...actor(extraOwner),actorRoles:['root_superuser']})).toBe(false);
     await tx(async client=>{
       await client.query("UPDATE app_users SET display_name=(SELECT display_name FROM app_users WHERE id=$1) WHERE id=$2",[ids.wu_yunfeng,extraOwner]);
       expect(await canReadSecondaryCraftApprovalQueue(client,actor(extraOwner))).toBe(false);
@@ -131,6 +135,9 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       expect(await lockSecondaryCraftApprover(client)).toBeNull();
       expect(await canReadSecondaryCraftApprovalQueue(client,actor(ids.wu_yunfeng))).toBe(false);
       await client.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1 AND corp_id='corp'",[ids.wu_yunfeng]);
+      await client.query("UPDATE identity_mappings SET employed=false WHERE user_id=$1 AND corp_id='corp'",[ids.li_junyue]);
+      expect(await canReadSecondaryCraftApprovalQueue(client,actor(ids.li_junyue))).toBe(false);
+      await client.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1 AND corp_id='corp'",[ids.li_junyue]);
       await client.query("UPDATE app_users SET display_name=$2 WHERE id=$1",[extraOwner,'测试映射-extra_owner']);
     });
     expect((await binder.run(ids.li_junyue, ids, true)).cancelled).toBe(0);

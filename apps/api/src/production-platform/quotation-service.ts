@@ -140,7 +140,6 @@ export class DigitalQuotationService{
   const input=SaveQuotationPricingDraftSchema.parse(raw);
   return this.command(actor,resource,'workbench-pricing-draft',key,input,async(db,context)=>{
    if(!await secondaryCraftReady(db))conflict('联合报价流程尚未就绪');
-   if(context.designerId!==actor.actorId||!context.roles.has('sample_designer'))digitalForbidden();
    const quote=context.quote??digitalNotFound();
    if(quote.version!==input.expectedVersion||quote.version===quote.confirmed_version)conflict('报价依据已更新或本版已确认，请读取当前报价');
    await persistWorkbenchPricing(db,quote,actor.actorId,input.input);
@@ -309,6 +308,9 @@ export class DigitalQuotationService{
   const db=await this.database.connect();try{
    await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    const c=await this.context(db,actor,resource);
+   // Read access never permits a pricing save or its receipt. Reject these
+   // requests before competing with a session refresh for unrelated role rows.
+   if(action==='workbench-pricing-draft'&&(c.designerId!==actor.actorId||!c.roles.has('sample_designer')))digitalForbidden();
    for(const role of c.roles){
     if(action.startsWith('secondary-craft:')&&action.endsWith(':decision')&&role==='owner_group')continue;
     if(!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,role))digitalForbidden();

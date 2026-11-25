@@ -20,7 +20,7 @@ import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 
 /** Current enrollment, real migrated schema and original native execution/wage integration. */
 export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjectionService, root: TrustedActorContext, workerId: string, clock?:BusinessClock,
-  variants:readonly (readonly [DevelopmentDocument['craft'],DevelopmentDocument['washing']])[]=[["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]],options?:{fixedCraftSteps:CraftStepChoice[];automaticQuotation?:boolean;routeActualTime?(kind:string):DevelopmentOccurrence|undefined;onRouteComplete?(sourceId:string,kind:string,taskId:string):Promise<void>}) {
+  variants:readonly (readonly [DevelopmentDocument['craft'],DevelopmentDocument['washing']])[]=[["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]],options?:{fixedCraftSteps:CraftStepChoice[];automaticQuotation?:boolean;quotationAuthor?:TrustedActorContext;publishedConsumption?:string;routeActualTime?(kind:string):DevelopmentOccurrence|undefined;onRouteComplete?(sourceId:string,kind:string,taskId:string):Promise<void>}) {
   const created:Array<{sourceId:string;orderId:string}>=[];
   const native = new PatternRoomOrderService(db, todos, { ordersEnabled: true });
   const forms = new DigitalDevelopmentService(db, true, native), execution = new DevelopmentExecutionService(db, true, native);
@@ -29,16 +29,21 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
   const clerk = { ...root, actorId: clerkId, actorRoles: ["development_clerk"], authorizationCapability: "digital_production:view", authorizationCapabilities: ["digital_production:view", "todo:view"] };
   const worker = { ...root, actorId: workerId, actorRoles: ["pattern_room_worker"], authorizationCapability: "pattern_room:orders:complete", authorizationCapabilities: ["pattern_room:orders:complete", "pattern_room:orders:view", "digital_production:view"] };
   const price = (await db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
+  const quotationAuthor = options?.quotationAuthor;
+  const author = quotationAuthor ? { ...quotationAuthor, authorizationCapabilities: (await db.query<{capability:string}>(
+    'SELECT DISTINCT c.capability FROM user_role_assignments a JOIN role_capabilities c USING(role_code) WHERE a.user_id=$1 AND a.revoked_at IS NULL',
+    [quotationAuthor.actorId],
+  )).rows.map(row=>row.capability) } : root;
   for (const [craft, washing] of variants) {
-    const { sourceId } = await identity.createSource(root, { developmentType: "头版", designStyleNo: `TEST-SLA03-${randomUUID()}`, temporaryStyleNo: null, customerCode: options?.automaticQuotation?"PD":null }, randomUUID());
+    const { sourceId } = await identity.createSource(author, { developmentType: "头版", designStyleNo: `TEST-SLA03-${randomUUID()}`, temporaryStyleNo: null, customerCode: options?.automaticQuotation?"PD":null }, randomUUID());
     const fileId = randomUUID(), materialId = randomUUID();
-    await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `test-sla03/${fileId}`, "a".repeat(64), root.actorId]);
+    await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `test-sla03/${fileId}`, "a".repeat(64), author.actorId]);
     const document = DevelopmentDocumentSchema.parse({ ...(options?.automaticQuotation?{quotationMode:'automatic_v1'}:{}),documentFormatVersion: 2, sizeQuantities: [1], template: "上衣", quantity: 1, sampleSize: "M", orderDate: null, returnDate: null,
       unit: "cm", sizes: ["M"], measurements: [{ name: "胸围", values: ["50"] }], interlining: "", placketInterlining: "", sewingThread: "", buttonholeThread: "", stitchDensity: "", washingIroning: "", packaging: "", formalSizes: "", casualSizes: "",
       mainLabel: false, mainLabelMethod: "", sizeLabel: false, careLabel: false, instructions: "", craft, washing,...(options?{craftSteps:options.fixedCraftSteps}:{}),
       materials: [{ ...(options?.automaticQuotation?{pricingUnit:'米',unitPrice:'20'}:{}),materialId, category: "主布", label: "主布", name: "棉", supplier: "TEST", width: "", weight: "", composition: "", consumption: "", color: "黑", specification: "TEST40支", quantity: "1", requiredThisRound: true, available: true, expectedDate: null }], files: [{ attachmentId: fileId, kind: "款图" }] });
-    const draft = await forms.save(root, sourceId, { expectedVersion: 0, document }, randomUUID());
-    const published = await forms.publish(root, sourceId, draft.version, randomUUID(), { categoryId: price.price_id, priceVersion: price.version });
+    const draft = await forms.save(author, sourceId, { expectedVersion: 0, document }, randomUUID());
+    const published = await forms.publish(author, sourceId, draft.version, randomUUID(), { categoryId: price.price_id, priceVersion: price.version });
     const state = () => execution.read(root, sourceId);
     const task = async (kind: string) => (await state()).tasks.filter(row => row.routeVersion === 1 && row.taskKind === kind).at(-1)!;
     expect(await task("development_materials")).toMatchObject({ slaHours: 4, enteredAt: published.publishedAt });
@@ -52,7 +57,8 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     for (const kind of ["development_pattern", "development_cutting"]) {
       const current = await task(kind);
       expect(current).toMatchObject({ state: "ready", slaHours: kind === "development_pattern" ? 48 : 4, assigneeId: workerId });
-      const artifact=kind==='development_pattern'?await publishedTechnicalFixture(db,root,sourceId,published.document!,published.version,workerId):null;
+      const artifact=kind==='development_pattern'?await publishedTechnicalFixture(db,root,sourceId,published.document!,published.version,workerId,undefined,undefined,1,
+       options?.publishedConsumption?[{materialId,unit:'米',consumption:options.publishedConsumption}]:undefined):null;
       await execution.complete(root, sourceId, { taskId: current.taskId, note: "TEST完成", attachmentIds:[],...(artifact?{artifactRef:{id:artifact.artifactSetId,version:artifact.version,scopeRef:'整款'}}:{}) }, randomUUID());
     }
     const route = async (kind: string) => {
