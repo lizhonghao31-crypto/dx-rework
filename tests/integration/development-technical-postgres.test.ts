@@ -1173,6 +1173,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await readDevelopmentRevisionCommentBasis(f.db,{...ref,commentId:b.commentId,version:b.version})).toMatchObject({text:'TEST 后录评语 B',evidenceRefs:[attachmentB]});
   for(const different of [{version:b.version},{roundNumber:2},{scopeRef:'另一工艺'},{sourceId:randomUUID()}])
    expect(await readDevelopmentRevisionCommentBasis(f.db,{...ref,...different})).toBeNull();
+  await expect(readDevelopmentRevisionCommentBasis(f.db,{...ref,version:2_147_483_648})).rejects.toMatchObject({name:'ZodError'});
  });
 
  it('P03-06: retrieves complete original PNG PDF and PLT bytes through native source authorization and private storage grants',async()=>{
