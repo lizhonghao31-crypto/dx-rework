@@ -2,65 +2,51 @@
   "version": 1,
   "base": "686b2607eed56e6900ee5c8ca122384e8b838291",
   "risk": "full",
-  "sourceFingerprint": "b7b9d80345ed9eb8a36a92798c9ae207fbebf5a66aa90b403249326bc99b8aed",
+  "sourceFingerprint": "2f03da98516b00d9413df504e74416d6564d207c3172dad4693b0e93c4a54769",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-formal-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-append-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "a9f230e72235c70af7f2ab47d846ce267305a4a9",
-      "sourceFingerprint": "2f826fd23c17292c25b20b3345ec3c1b320eee6c4c77e8bc584b72301b3da4fc",
-      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing, canonical two-worker config and original object intent, finalization and report commands. Only synthetic storage responses use a fixture. Native inputs are byte-identical to the frozen first candidate; the closing diff only changes a non-database test assertion.",
-      "startedAt": "2026-11-25T16:41:21.425Z",
-      "endedAt": "2026-11-25T16:42:34.931Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-formal-final-native.log",
-      "logSha256": "749033dd1612ec925b03d7c5a1afc3cdefe26ff0548a1b7ffe8725800e73cb06",
+      "testedHead": "65533b7be5e5b4619b2123391dff8ae6370ae5c2",
+      "sourceFingerprint": "2f03da98516b00d9413df504e74416d6564d207c3172dad4693b0e93c4a54769",
+      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing, canonical two-worker config and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
+      "startedAt": "2026-11-25T16:54:43.476Z",
+      "endedAt": "2026-11-25T16:56:17.723Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-append-final-native.log",
+      "logSha256": "8957ef39f389890f1047a20c7d4fdc20728df6bbb1a38720076a2d31bdcd013c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "43c55658e07a3b790755f661d20821f2ab9e6c7d283e760ede04132a592d6e64"
+          "sha256": "f2b348cdc37c268400c24be2f216080e9b2493f571d9243a58538f6b5d92c616"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/acceptance",
-        "tests/helpers",
-        "tests/fixtures",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "5fa6ad95a51c895fb4ec5075823c04fc1ee1a8427b0730931e61be2c23e3bea4"
+      ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-first-light-fixed-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-append-final-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 48,
+      "passed": 49,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "dc04035eb00f605040c9d847e4a84e3d0f46c021",
-      "sourceFingerprint": "b7b9d80345ed9eb8a36a92798c9ae207fbebf5a66aa90b403249326bc99b8aed",
+      "testedHead": "65533b7be5e5b4619b2123391dff8ae6370ae5c2",
+      "sourceFingerprint": "2f03da98516b00d9413df504e74416d6564d207c3172dad4693b0e93c4a54769",
       "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
-      "startedAt": "2026-11-25T16:46:26.199Z",
-      "endedAt": "2026-11-25T16:46:27.730Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-first-light-fixed-unit.log",
-      "logSha256": "a10648335874b7b7c252d0406daf55f0fcb9da2f20d1918f979e34ab43d20efe",
+      "startedAt": "2026-11-25T16:54:43.488Z",
+      "endedAt": "2026-11-25T16:54:45.858Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-append-final-unit.log",
+      "logSha256": "d7483bf9d5d0b0fac7319756118d2b3c9f48038b93cb62af78429f841c859754",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ead854ddb446ae11aef1816816a3cb553953ded1af52564d851646731a644363"
+          "sha256": "04502ceec36cc868e058d6147d320f8270b71a9bb2576990526a05cda9f904d5"
         }
       ]
     }
@@ -219,6 +205,7 @@
         "apps/api/src/production-platform/factory-flow-routes.ts",
         "apps/api/src/production-platform/factory-flow-service.ts",
         "apps/api/src/production-platform/factory-step-ledger.ts",
+        "apps/api/src/production-platform/fixed-factory-dispatch.ts",
         "apps/api/src/production-platform/quality-warehouse-craft-occupation.ts",
         "apps/api/src/production-platform/task-routes.ts",
         "apps/api/src/production-platform/task-service.ts",
@@ -246,7 +233,7 @@
       ],
       "initialization": "由原仓管用实际发出、回仓、材料登记和原生产写命令，保持唯一原记录。",
       "dateAndPermission": "同一真实范围才扣返工，不因旧工艺日期或来自别厂而推定结束。",
-      "expectation": "真实半量发厂、辅料/验布原岗位和原版本保持，质检未放行不当合格。",
+      "expectation": "先检先发后仍可检查剩余裁片，已发库存不重复释放。实际超检、串批或重试均不新增重复实物或检查。原仓库权限不变。",
       "checks": [
         "native",
         "unit"
