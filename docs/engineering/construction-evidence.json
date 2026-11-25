@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "7e61cad8bebed19dd91160f7739a5c9a3882a0c8",
-  "sourceFingerprint": "1bab1db3411cb4873d5a1019e8c957ac46abbfe5c732fc8fc0b1151b38caf4ca",
+  "sourceFingerprint": "effdee0cd2bcd15c7b7d2d048b39b391ec6d2223ab44d852c398b131ee64f350",
   "risk": "full",
   "rules": [
     {
@@ -163,6 +163,27 @@
         "scoped-lint",
         "preflight"
       ]
+    },
+    {
+      "rule": "保留既有技术岗位和 PMC 的准备详情、原发料历史范围及最小字段；不对仓库批次数据增加可见性。",
+      "source": "v11.5 §9.3 X3 原入口与现行权限边界，以及 #1106 Full 首轮非数据库实报。",
+      "writes": [
+        "tests/unit/digital-task-read-boundary.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/warehouse-material-issue.ts"
+      ],
+      "oldTests": [
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
+      ],
+      "initialization": "沿用原有技术岗位模拟订单、权限和订单号；只增加同一原发料记录的内部批次描述用于反例。",
+      "dateAndPermission": "原正式订单过滤、原权限拒绝、真实发料时间和岗位投影不变。",
+      "expectation": "仅允许原订单过滤语义的精确读取，分行排版不触发错误；授权技术摘要不会返还原始仓库批次详情。",
+      "checks": [
+        "nondb-task-authority"
+      ]
     }
   ],
   "checks": [
@@ -187,7 +208,23 @@
       "startedAt": "2026-11-25T12:59:07.748Z",
       "endedAt": "2026-11-25T13:02:06.953Z",
       "logSha256": "9a0335d3fa7d26db37158bb6e8b8b5b6e4cd951c3dd1b5433b9d6e40829b2a5b",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.log",
+      "inputPaths": [
+        "apps",
+        "packages",
+        ".github",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "eslint.config.js",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/integration"
+      ],
+      "inputFingerprint": "645234905ef8553ad97f237b69d6a1d0b98d8d18404f416143490003d25332b5"
     },
     {
       "id": "signed-creation",
@@ -210,7 +247,23 @@
       "startedAt": "2026-11-25T12:59:07.768Z",
       "endedAt": "2026-11-25T12:59:58.793Z",
       "logSha256": "d0648284b5833db0a8a2d5e6376194dc27ee452e30b9cac5713066a388d8798e",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.log",
+      "inputPaths": [
+        "apps",
+        "packages",
+        ".github",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "eslint.config.js",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/integration"
+      ],
+      "inputFingerprint": "645234905ef8553ad97f237b69d6a1d0b98d8d18404f416143490003d25332b5"
     },
     {
       "id": "warehouse-unit",
@@ -233,7 +286,29 @@
       "startedAt": "2026-11-25T12:59:07.406Z",
       "endedAt": "2026-11-25T12:59:17.357Z",
       "logSha256": "9dfa1123d2098e06462d11d064af8d41bb33f855862d49ee0e9f22e3c0ad24bd",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-unit.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-unit.log",
+      "inputPaths": [
+        "apps",
+        "packages",
+        ".github",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "eslint.config.js",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/warehouse-adopted-demand.test.ts",
+        "tests/unit/warehouse-craft-factory-basis.test.ts",
+        "tests/unit/warehouse-craft-movement.test.ts",
+        "tests/unit/warehouse-issue-allocation.test.ts",
+        "tests/unit/warehouse-material-balance.test.ts",
+        "tests/unit/warehouse-supervisor-access.test.ts"
+      ],
+      "inputFingerprint": "fe3482d48bbbb0cb07ba09c83d8d873ef00342529b2418b8bf6d4f9fc02f907e"
     },
     {
       "id": "typecheck",
@@ -247,7 +322,15 @@
       "startedAt": "2026-11-25T12:59:07.097Z",
       "endedAt": "2026-11-25T13:00:08.193Z",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-typecheck.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-typecheck.log",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "9539fa59e485e385a7ebc87924b1be74e8757378f4ad6793e6e13af17b6ed91f"
     },
     {
       "id": "scoped-lint",
@@ -261,7 +344,65 @@
       "startedAt": "2026-11-25T12:59:07.053Z",
       "endedAt": "2026-11-25T12:59:07.053Z",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-source-lint.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-source-lint.log",
+      "inputPaths": [
+        "eslint.config.js",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/api/src/production-platform/bulk-fabric-facts.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/journey-selection-access.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/warehouse-adopted-demand.ts",
+        "apps/api/src/production-platform/warehouse-assigned-resources.ts",
+        "apps/api/src/production-platform/warehouse-craft-factory-basis.ts",
+        "apps/api/src/production-platform/warehouse-craft-movement.ts",
+        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
+        "apps/api/src/production-platform/warehouse-factory-dispatch-evidence.ts",
+        "apps/api/src/production-platform/warehouse-instruction-demand.ts",
+        "apps/api/src/production-platform/warehouse-issue-allocation.ts",
+        "apps/api/src/production-platform/warehouse-material-balance.ts",
+        "apps/api/src/production-platform/warehouse-material-issue.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts",
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
+        "apps/api/src/production-platform/warehouse-receipt-work.ts",
+        "apps/api/src/sourcing/sourcing-production-service.ts",
+        "apps/web/src/App.tsx",
+        "apps/web/src/bulk-fabric-panel.tsx",
+        "apps/web/src/bulk-materials-panel.tsx",
+        "apps/web/src/bulk-preparation-panel.tsx",
+        "apps/web/src/components.tsx",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/factory-flow-panel.tsx",
+        "apps/web/src/warehouse-center.tsx",
+        "apps/web/src/warehouse-native-task-table.tsx",
+        "apps/web/src/warehouse-receipt-batch-panel.tsx",
+        "apps/web/src/warehouse-workbench-route.ts",
+        "packages/contracts/src/bulk-preparation.ts",
+        "packages/contracts/src/production-readiness.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/production-readiness-fixture.ts",
+        "tests/helpers/warehouse-original-issue-fixture.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/production-facts-consistency-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/warehouse-adopted-demand.test.ts",
+        "tests/unit/warehouse-craft-factory-basis.test.ts",
+        "tests/unit/warehouse-craft-movement.test.ts",
+        "tests/unit/warehouse-issue-allocation.test.ts",
+        "tests/unit/warehouse-material-balance.test.ts"
+      ],
+      "inputFingerprint": "738e82d4839356f3a110b8cfebf6d31e6059fbf31d8ec29c229ecd22a1ab46a9"
     },
     {
       "id": "preflight",
@@ -275,7 +416,47 @@
       "startedAt": "2026-11-25T12:59:07.105Z",
       "endedAt": "2026-11-25T12:59:22.244Z",
       "logSha256": "ee192d6d999a0c98f172c58d5bdf00dfe6e3fef39d3ff00f8dca264e84e6f27f",
-      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-preflight.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-preflight.log",
+      "inputPaths": [
+        "apps",
+        "packages",
+        ".github",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "eslint.config.js",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/integration",
+        "docs/governance"
+      ],
+      "inputFingerprint": "0fffcaf1b46a329418452fd0d888d07790672b5ca2a01c4835a3ceb5a62d768f"
+    },
+    {
+      "id": "nondb-task-authority",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-v115-x3-evidence/x3-nondb-authority-fix.json tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 68,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "84391707a8fc27fb377fb8c2109b5fc7155f34c7",
+      "sourceFingerprint": "effdee0cd2bcd15c7b7d2d048b39b391ec6d2223ab44d852c398b131ee64f350",
+      "context": "The CI non-DB configuration has no database URL. The original task/PMC role gates are strict isolated SQL fixtures, now normalize lexical whitespace only and reject every unexpected read, including any cross-order or raw warehouse history projection.",
+      "startedAt": "2026-11-25T13:24:27.916Z",
+      "endedAt": "2026-11-25T13:24:31.299Z",
+      "log": "/workspace/dx-v115-x3-evidence/x3-nondb-authority-fix.log",
+      "logSha256": "706730f5a22eb55c5fb16c1b60dc4bcfdb548a4f7791e963d0074717cc75672e",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2d34f3372deb3f4d8198be6d2c7a69d7213fbbc368d4ae6fcc740e02f5aab842"
+        }
+      ]
     }
   ]
 }

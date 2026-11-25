@@ -28,6 +28,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
   const own = task("bulk_pattern", workerId, "pattern_room_worker"), foreign = task("warehouse_preshrink", warehouseId, "warehouse_receiver");
   const eligibility={managed:false,effective:true,state:'active',closed:false};
   const rows = [own, foreign];
+  const materialItems:Record<string,unknown>[]=[];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
     if (['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY','COMMIT','ROLLBACK'].includes(sql)) found=[];
@@ -93,14 +94,17 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     else if (sql.startsWith("SELECT po.line_id AS")) found = [];
     else if (sql.startsWith("SELECT kind,recorded_at")) found = [{ kind: "预缩完成", recordedAt: "2026-10-06T14:30:00Z" }];
     else if (sql.startsWith("SELECT t.*,a.task_kind,a.assignee_id")) found = rows;
-    else if (sql === "SELECT e.event_id,e.occurred_at,e.payload,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='bulk_materials_dispatched' ORDER BY e.recorded_at,e.event_id") found = params[0] === orderId ? [{event_id:'TEST-material-dispatch',occurred_at:'2026-10-06T14:30:00Z',payload:{note:'TEST原辅料已发出',items:[]},display_name:'TEST仓库'}] : [];
+    else if (sql.replace(/\s+/g,' ') === "SELECT e.event_id,e.occurred_at,e.payload,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='bulk_materials_dispatched' ORDER BY e.recorded_at,e.event_id") {
+      expect(params).toEqual([orderId]);
+      found=[{event_id:'TEST-material-dispatch',occurred_at:'2026-10-06T14:30:00Z',payload:{note:'TEST原辅料已发出',items:materialItems},display_name:'TEST仓库'}];
+    }
     else if (sql.startsWith("SELECT min(customer_warehouse_arrival_date")) found = [{ day: "2026-10-20" }];
     else if (sql.startsWith("SELECT child_id FROM digital_production_child_links")) found = [];
     else throw new Error(`Unexpected isolated query: ${sql}`);
     return { rows: found, rowCount: found.length };
   });
   const pool = { query,connect:async()=>({query,release:vi.fn()}) } as unknown as Pool, policy = new DigitalProductionAccessPolicy(pool), service = new DigitalProductionTaskService(pool);
-  return { orderId, sourceId, preparationId, workerId, warehouseId, designerId, primaryId, own, foreign, rows, actor, activeRoles, order, source, pool, query, policy, service,eligibility };
+  return { orderId, sourceId, preparationId, workerId, warehouseId, designerId, primaryId, own, foreign, rows, actor, activeRoles, order, source, pool, query, policy, service,eligibility,materialItems };
 }
 
 describe("task metadata is authorized independently from necessary order documents", () => {
@@ -188,6 +192,10 @@ describe("task metadata is authorized independently from necessary order documen
     expect(sheet.tasks.map(task => task.taskId)).toEqual([f.own.task_id]);
     expect(sheet.facts[0]?.kind).toBe("预缩完成");
     expect(sheet.materials?.history).toMatchObject([{eventId:"TEST-material-dispatch",note:"TEST原辅料已发出",items:[]}]);
+    f.materialItems.push({materialId:'TEST-original-material',name:'TEST辅料',quantity:3,unit:'米',
+      warehouseBasis:{sourceId:'TEST-hidden-warehouse-source'},scope:{allocations:[{receiptId:'TEST-hidden-physical-lot'}]}});
+    const retained=(await bulk.read(f.actor(),f.orderId)).materials?.history[0]?.items;
+    expect(retained).toEqual([{materialId:'TEST-original-material',name:'TEST辅料',quantity:3,unit:'米'}]);
     expect(JSON.stringify(sheet)).not.toContain(f.warehouseId);
     const manager = f.actor(randomUUID(), ["production_management"]);
     expect((await bulk.read(manager, f.orderId)).tasks).toHaveLength(2);
