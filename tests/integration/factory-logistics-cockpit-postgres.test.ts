@@ -13,6 +13,7 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
+import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '../../apps/api/src/receiving/pending-receiving-native-receipts.js';
 import {nativeFactoryTimeline} from '../../apps/api/src/production-platform/factory-production-facts.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
@@ -149,6 +150,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const current=await service.createRepeated(receiver,{cuttingOrderId:r.cuts[0].cutting_order_id,receivingBatchId:original.value.receivingBatchId,source:'other_factory',documentQuantity:8,actualQuantity:8,productionOrderId:r.productionId,factoryDecisionId},randomUUID());
    expect((await closure.receiptSummary(f.root,r.productionId,null)).shipment?.receipts.map(row=>row.receiptId)).toEqual([original.value.receiptId]);
    expect((await closure.receiptSummary(f.root,r.productionId,factoryDecisionId)).shipment?.receipts.map(row=>row.receiptId)).toEqual([current.value.receiptId]);
+   const exact=(await readPendingReceivingNativeReceipts(f.db,[r.id])).get(r.id)!;
+   expect(exact).toHaveLength(2);
+   expect(exact.find(row=>row.receiptId===original.value.receiptId)?.identity).toMatchObject({productionId:r.productionId,
+    cuttingOrderId:r.cuts[0].cutting_order_id,factoryAllocationKey:receivingFactoryAllocationKey(r.productionId,null)});
+   expect(exact.find(row=>row.receiptId===current.value.receiptId)?.identity).toMatchObject({productionId:r.productionId,
+    cuttingOrderId:r.cuts[0].cutting_order_id,factoryAllocationKey:receivingFactoryAllocationKey(r.productionId,factoryDecisionId)});
   });
  });
  it('R5 exposes the current approved factory after all original allocation is transferred',async()=>{
