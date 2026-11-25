@@ -56,7 +56,7 @@ export function CraftOriginalQuality({sheet,target,busy,paused,save,upload,image
   return()=>abort.abort();
  },[proofPath,proofKey,refresh]);
  const remaining=actual?.uninspectedQuantity??(!history.length?actual?.returned??0:0);
- useDigitalDetailNavigationGuard(unknown||(remaining>0||Boolean(remedy?.canConfirmReinspection))&&Boolean(images[photoKey]?.length||failed.length),posting,writing,'本次检查的图片或原返工草稿回执尚未确认，仍要离开？');
+ useDigitalDetailNavigationGuard(unknown||!canCount&&Boolean(images[target.lineId]?.length)||(remaining>0||Boolean(remedy?.canConfirmReinspection))&&Boolean(images[photoKey]?.length||failed.length),posting,writing,'本次检查的图片或原返工草稿回执尚未确认，仍要离开？');
  if(!task||!batch||!line||!actual||!original)return <p role="alert">原工艺检查的任务、回仓或 PO 范围已变化，请返回质量中心重新读取。</p>;
  const canWrite=task.canExecute&&task.state==='ready'&&!task.paused&&!sheet.dispatched&&!paused;
  const max=latest?.quantityScope?.problemQuantity??0;

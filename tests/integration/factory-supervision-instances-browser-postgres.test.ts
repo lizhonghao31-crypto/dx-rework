@@ -5,12 +5,14 @@ import {createHash,randomUUID} from 'node:crypto';
 import sharp from 'sharp';
 import type {BrowserContext} from 'playwright';
 import type {FakeObjectStorage} from '../../apps/api/src/tools/storage.js';
+import pg from 'pg';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {readGarmentReworkSource} from '../../apps/api/src/production-platform/garment-quality.js';
+import {garmentSlaEvidence} from '../../apps/api/src/production-platform/garment-sla-evidence.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
@@ -46,7 +48,7 @@ import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
-async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObjectStorage){
+async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObjectStorage,beforeStore?:()=>Promise<void>){
  await context.route('https://private.example.test/',async route=>{
   const request=route.request();
   if(request.method()!=='POST')return route.abort();
@@ -55,6 +57,7 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
   const sha256=createHash('sha256').update(bytes).digest('hex');
   expect(storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);
   expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+  await beforeStore?.();
   await storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});
   await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
  });
@@ -84,6 +87,20 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
   const originalBalance=async()=>pendingReceivingForAuthorizedOrders(f.db,[original.id]);
   const balance=await originalBalance();
   expect(balance).toMatchObject([{expectedQuantity:500,balance:{received:280,remaining:220}}]);
+  const service=new DigitalProductionTaskService(f.db);
+  const directoryQuery={kind:'garment' as const,status:'open' as const,page:1,search:style??''};
+  const receiptWindow=(await garmentSlaEvidence(f.db,original.id)).windows.find(row=>row.receiptId===intake.value.receiptId);
+  const directoryReads=vi.spyOn(pg.Client.prototype,'query');
+  try{
+   const data=await service.qualityDirectory(qc,'garment',directoryQuery);
+   expect(data).toMatchObject({total:1,items:[{id:intake.value.receiptId,dueAt:receiptWindow?.deadline??null,quantity:280,inspected:false}]});
+   expect(await service.qualityDirectory(qc,'garment',{...directoryQuery,page:9})).toEqual({page:9,total:1,items:[]});
+   expect(await service.qualityDirectory(qc,'garment',{...directoryQuery,search:randomUUID()})).toEqual({page:1,total:0,items:[]});
+   const statements=directoryReads.mock.calls.map(([query])=>typeof query==='string'?query:'');
+   expect(statements.filter(sql=>sql.includes('qualified_quantity')&&sql.includes('quantity.version'))).toHaveLength(2);
+   expect(statements.filter(sql=>sql.includes("e.event_kind='sla_standard_applied'")&&sql.includes('ANY($1::uuid[])'))).toHaveLength(receiptWindow?.snapshotId?2:0);
+   expect(statements.some(sql=>sql.includes('verification_event_id')||sql.includes('digital_production_po_sizes'))).toBe(false);
+  }finally{directoryReads.mockRestore();}
   const pagePath=`/ui/digital-production?workspace=quality&kind=factory&search=${encodeURIComponent(style)}`;
   const tab=await h.open(qc.actorId,1165,{},pagePath);
   try{
@@ -96,6 +113,29 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
    expect(await plantForm.getByLabel('本次结论').count()).toBe(1);
    expect(await tab.page.getByRole('heading',{name:'大货洗水',exact:true}).count()).toBe(0);
    const beforePlant=(await f.db.query('SELECT count(*)::int AS count FROM rework_orders')).rows[0].count;
+   const uploadStarted=Promise.withResolvers<void>(),uploadProceed=Promise.withResolvers<void>();
+   const plantPhoto=await routeIsolatedQualityPhotos(tab.context,f.storage,()=>{uploadStarted.resolve();return uploadProceed.promise;});
+   const plantBack=tab.page.getByRole('button',{name:'返回来源',exact:true});
+   try{
+    await plantForm.getByLabel('质检报告图片（选填）',{exact:true}).setInputFiles(plantPhoto);
+    await uploadStarted.promise;
+    await plantBack.click();
+    expect(new URL(tab.page.url()).searchParams.get('qualityProduction')).toBe(production);
+    expect(await tab.page.locator('[data-system-dialog-kind="confirm"]').count()).toBe(0);
+   }finally{uploadProceed.resolve();}
+   await plantForm.getByText(/文件已就绪，尚未登记检查/).waitFor();
+   await plantBack.click();
+   const leave=tab.page.locator('[data-system-dialog-kind="confirm"]');
+   await leave.getByText('加工检查报告图片尚未保存，仍要离开？',{exact:true}).waitFor();
+   await leave.getByRole('button',{name:'取消',exact:true}).click();
+   await plantForm.getByRole('img',{name:plantPhoto.name,exact:true}).waitFor();
+   await plantBack.click();
+   await leave.getByRole('button',{name:'确认',exact:true}).click();
+   await plantLink.waitFor();
+   await plantLink.click();
+   await plantForm.waitFor();
+   expect(await plantForm.getByRole('img',{name:plantPhoto.name,exact:true}).count()).toBe(0);
+   await tab.context.unroute('https://private.example.test/');
    const inspected=await tab.context.request.post(`${h.base}/api/digital-production/orders/${original.id}/factory-flow/production-qc`,{
     headers:{'idempotency-key':randomUUID()},data:{expectedRevision:(await flow.read(qc,original.id)).revision,
      occurredAt:businessNow().toISOString(),factoryDecisionId:null,note:'',

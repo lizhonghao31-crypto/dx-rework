@@ -65,6 +65,6 @@ export function useScopedQualityPhotos(origin:string,label:string){
    <Button type="button" label={`移除 ${file.file.name}`} isDisabled={busy} onClick={()=>{release(file.preview);setFiles(current=>current.filter(row=>row.key!==file.key));}}/>
   </li>)}</ul>
  </section>;
- return {controls,busy,unready:files.some(file=>!file.attachmentId),dirty:files.length>0,clear,
+ return {controls,busy,inFlight,unready:files.some(file=>!file.attachmentId),dirty:files.length>0,clear,
   attachmentIds:files.flatMap(file=>file.attachmentId?[file.attachmentId]:[])};
 }

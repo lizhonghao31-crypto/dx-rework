@@ -96,8 +96,11 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
   return <Surface><Button onClick={onClose}>返回来源</Button><p role="alert">该发厂任务已变更，请从仓库中心重新核对。</p></Surface>;
  const paused=Boolean(sheet?.tasks.some(task=>task.paused&&!['completed','cancelled'].includes(task.state)));
  const qualityTarget=qualityRecordTarget(new URLSearchParams(search));
+ // Close delegates to the internal router, which already calls the registered
+ // photo guard. Only the in-place refresh uses the local guard directly.
+ const closeQuality=()=>{if(!writing.current)onClose();};
  if(qualityTarget?.kind==='craft')return <DocumentGuardContext.Provider value={guards}><Surface className="factory-flow">
-  <div className="pattern-actions"><Button disabled={working} onClick={()=>void guarded(onClose)}>返回来源</Button>
+  <div className="pattern-actions"><Button disabled={working} onClick={closeQuality}>返回来源</Button>
    <Button disabled={busy} onClick={()=>void guarded(reload).catch(()=>undefined)}>刷新原检查</Button></div>
   <h2>二次工艺回仓检查</h2>{error&&<p role="alert">{error}</p>}{readError&&<p role="alert">{readError}</p>}
   {loading&&<p role="status">正在读取原工艺检查…</p>}
@@ -106,7 +109,7 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
    removePendingPhoto={removePendingPhoto} clearFailed={key=>setFailedUploads(current=>({...current,[key]:[]}))}/>}
  </Surface></DocumentGuardContext.Provider>;
  if(qualityTarget?.kind==='factory')return <DocumentGuardContext.Provider value={guards}><Surface className="factory-flow">
-  <div className="pattern-actions"><Button disabled={working} onClick={()=>void guarded(onClose)}>返回来源</Button>
+  <div className="pattern-actions"><Button disabled={working} onClick={closeQuality}>返回来源</Button>
    <Button disabled={busy} onClick={()=>void guarded(reload).catch(()=>undefined)}>刷新原检查</Button></div>
   <h2>加工检查</h2>{error&&<p role="alert">{error}</p>}{readError&&<p role="alert">{readError}</p>}
   {loading&&<p role="status">正在读取原加工检查…</p>}

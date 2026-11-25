@@ -3,6 +3,7 @@ import {Button} from '@dx-rework/ui';
 import type {FactoryFlowSheet} from '@dx-rework/contracts/factory-flow';
 import {createWebUrls} from '../url-contract.js';
 import {useScopedQualityPhotos} from './garment-quality-photos.js';
+import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 
 type PhotoDraft={attachmentIds:string[];blocked:boolean};
 type Check=NonNullable<FactoryFlowSheet['productionChecks']>[number];
@@ -13,9 +14,10 @@ const scopePath=(orderId:string,productionId:string,factoryDecisionId:string|nul
  `orders/${orderId}/factory-flow/production-qc/${productionId}/${factoryDecisionId??'original'}/${lineId}`;
 const scopeKey=(row:FactoryInspectionFocus)=>JSON.stringify([row.productionId,row.factoryDecisionId,row.lineId]);
 
-function FactoryQcPhotoDraft({orderId,row,savedPhotos,register}:{orderId:string;row:Check;savedPhotos:ReadonlySet<string>;register:Map<string,PhotoDraft>}){
+function FactoryQcPhotoDraft({orderId,row,savedPhotos,register,saving}:{orderId:string;row:Check;savedPhotos:ReadonlySet<string>;register:Map<string,PhotoDraft>;saving:boolean}){
  const key=scopeKey(row),photos=useScopedQualityPhotos(scopePath(orderId,row.productionId,row.factoryDecisionId,row.lineId),'工厂检查报告图片');
  const local=photos.attachmentIds.filter(id=>!savedPhotos.has(id));
+ useDigitalDetailNavigationGuard(local.length>0||photos.unready,saving||photos.busy,photos.inFlight,'加工检查报告图片尚未保存，仍要离开？');
  useEffect(()=>{
   register.set(key,{attachmentIds:local,blocked:photos.busy||photos.unready});
   return()=>{register.delete(key);};
@@ -62,7 +64,7 @@ export function FactoryProductionQcPanel({sheet,busy,paused,open,save,focus}:{sh
     void save('/production-qc',{factoryDecisionId:factory,occurredAt:new Date(`${String(fields.get('at'))}+08:00`).toISOString(),checks,note:''});
    }}><fieldset disabled={busy||paused}><legend>本次检查</legend><label>检查完成时间（北京时间）<input name="at" type="datetime-local" required/></label>
     {lines.map(row=><section key={scopeKey(row)} className="factory-batch-qc"><h4>{row.poNumber??'待补PO'} · {row.color} · 原生产范围 {row.quantity} 件 · {row.result??'未检查'}</h4><label>本次结论<select name={`result:${row.lineId}`} defaultValue=""><option value="">本次不登记</option><option>合格</option><option>需处理</option></select></label><label>质量问题／处理说明<input name={`problem:${row.lineId}`} maxLength={2000}/></label>{row.problem&&<p>{row.problem}</p>}
-     <FactoryQcPhotoDraft orderId={sheet.orderId} row={row} savedPhotos={savedPhotos} register={register.current}/>
+     <FactoryQcPhotoDraft orderId={sheet.orderId} row={row} savedPhotos={savedPhotos} register={register.current} saving={busy}/>
     </section>)}<Button type="submit">保存工厂检查</Button></fieldset></form>:lines.map(row=><p key={scopeKey(row)}>{row.poNumber??'待补PO'} · {row.color} · {row.inspected?'已检查':'未检查'} · {row.result??'—'} {row.problem}</p>)}</section>;
   })}<InspectionHistory orderId={sheet.orderId} events={history} lines={sheet.lines}/>
  </details>;
