@@ -2,7 +2,7 @@
   "version": 1,
   "base": "686b2607eed56e6900ee5c8ca122384e8b838291",
   "risk": "full",
-  "sourceFingerprint": "1512c078d6fba2c9a854dbd3b5da539e6196bd2181031a59b985e94aa4b887d6",
+  "sourceFingerprint": "cddae446030400edae0ce7e2f6388405739f27d1c4a8baeb9c83633cd5739281",
   "checks": [
     {
       "id": "native",
@@ -15,7 +15,7 @@
       "skipped": 0,
       "testedHead": "4b0f294e3525427080014fe74d82e30209c8246c",
       "sourceFingerprint": "1512c078d6fba2c9a854dbd3b5da539e6196bd2181031a59b985e94aa4b887d6",
-      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing and two explicit workers and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
+      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing and two explicit workers and original object intent, finalization and report commands. Only synthetic storage responses use a fixture. The only later changes are two isolated non-database unit fixtures, which neither this signed App build nor this PostgreSQL command imports. Input paths and sha captured on exact a5b249ee before editing and checked again on this candidate.",
       "startedAt": "2026-11-25T18:04:23.537Z",
       "endedAt": "2026-11-25T18:05:58.287Z",
       "log": "/workspace/dx-v115-x5-progress/x5-actual-form-release-native.log",
@@ -25,28 +25,43 @@
           "format": "vitest-json",
           "sha256": "7d5da36e4673f6da03b9f7635495050f2adcc14f8f1fc6475c117b0f582d96ff"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/integration",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/fixtures",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "75a2b7d168b9d4068c989a80bf688a511e6b49c5d7b848eaee2fa3bb94050064"
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-actual-form-release-consumers.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/factory-production-facts.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/fixed-factory-dispatch-windows.test.ts tests/unit/rework-v2*test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-ci-unit-compatibility.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/factory-production-facts.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/fixed-factory-dispatch-windows.test.ts tests/unit/work-reporting-batch-performance.test.ts tests/unit/tail-inspection-cost-bearer.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 96,
+      "passed": 103,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4b0f294e3525427080014fe74d82e30209c8246c",
-      "sourceFingerprint": "1512c078d6fba2c9a854dbd3b5da539e6196bd2181031a59b985e94aa4b887d6",
-      "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
-      "startedAt": "2026-11-25T18:01:54.252Z",
-      "endedAt": "2026-11-25T18:01:56.523Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-actual-form-release-consumers.log",
-      "logSha256": "d517d69fed5f5cd65a08411641f69d388485bc21fdc3a78fde5f0be392f85cb9",
+      "testedHead": "3be49437c9af450c21e27ca4e6ba328b4f3d5b06",
+      "sourceFingerprint": "cddae446030400edae0ce7e2f6388405739f27d1c4a8baeb9c83633cd5739281",
+      "context": "All previously relevant unit consumers plus the exact two failed Full non-database files, preserving set-based cardinality, auth, rollback and responsibility rules.",
+      "startedAt": "2026-11-25T18:24:27.668Z",
+      "endedAt": "2026-11-25T18:24:29.678Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-ci-unit-compatibility.log",
+      "logSha256": "89bc27c8e8b1eef1b9f38610bfefb6f18594f2873065172a2eb1a53502b1214d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0e7f6cf6a53de7efd81d1e934e60ca180bb1f9e162acece3c3c13e79f786d216"
+          "sha256": "2caf0367dfd9cad376c7e8f198a59564dad8cce4be1b6e533bd931a7a33d7c7b"
         }
       ]
     }
@@ -181,7 +196,9 @@
         "tests/unit/quality-craft-problem-scope.test.ts",
         "tests/unit/receiving-quantity-ceiling.test.ts",
         "tests/unit/rework-v2-pr06-responsibility-2.test.ts",
-        "tests/unit/rework-v2-unified-execution.test.ts"
+        "tests/unit/rework-v2-unified-execution.test.ts",
+        "tests/unit/tail-inspection-cost-bearer.test.ts",
+        "tests/unit/work-reporting-batch-performance.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/quality-craft-problem-scope.ts",
