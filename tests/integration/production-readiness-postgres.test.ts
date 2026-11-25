@@ -242,6 +242,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await assignedWarehousePreparationResources(f.db,p.warehouse)).not.toContainEqual(formal);
   expect(await assignedWarehousePreparationResources(f.db,p.warehouse)).not.toContainEqual(p.resource);
  });
+ it('X3 pages and searches the exact assigned original warehouse preshrink task before paging',async()=>{
+  const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),warehouse=f.people.warehouse!;
+  const orders=await identity.read(f.root,ready.id),task=(await bulk.read(warehouse,ready.id)).tasks.find(item=>item.taskKind==='warehouse_preshrink')!;
+  expect(task).toBeDefined();expect(task.assigneeId).toBe(warehouse.actorId);
+  const originalTasks=new DigitalProductionTaskService(f.db),query={kind:'preshrink' as const,status:'open' as const,page:1,
+   search:orders.lines[0]!.formalPoNo!};
+  const page=await originalTasks.list(warehouse,query.page,query);
+  expect(page).toMatchObject({total:1,page:1,items:[{taskId:task.taskId,orderId:ready.id,taskKind:'warehouse_preshrink',dueAt:task.dueAt}]});
+  await expect(originalTasks.list(f.people.merchandiser!,query.page,query)).rejects.toMatchObject({statusCode:403});
+  expect(await originalTasks.list(warehouse,2,{...query,page:2})).toMatchObject({total:1,page:2,items:[]});
+  expect(await originalTasks.list(warehouse,1,{...query,search:'TEST-not-this-source'})).toMatchObject({total:0,items:[]});
+  expect(await originalTasks.list(warehouse,1,{...query,status:'completed'})).toMatchObject({total:0,items:[]});
+ });
  for(const external of [false,true])it(`P01 records each PO cutting gate only after its actual labels and retains earlier PO readiness (${external?'external':'internal'})`,async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
   const ready=await run(async()=>{

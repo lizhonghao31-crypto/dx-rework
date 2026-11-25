@@ -1,3 +1,5 @@
+import type {WarehouseNativeTaskQuery} from '@dx-rework/contracts/production-readiness';
+import {digitalForbidden} from './access-policy.js';
 import type {PoolClient} from 'pg';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import type {BusinessTimeScope} from '@dx-rework/domain/business-clock';
@@ -115,7 +117,7 @@ async function authorizeTaskBatch(db:PoolClient,actor:TrustedActorContext,taskId
 
 /** Keep the legacy task-list membership and the native task read policy
  * ahead of pagination. Return empty pages with the same snapshot's total. */
-export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActorContext,page:number){
+export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActorContext,page:number,warehouse?:WarehouseNativeTaskQuery){
  const {liveRoles}=await readJourneySelectionAccess(db,actor,[]);
  const activeTask=await wholeOrderActiveSql(db,'task','a.task_id');
  const activeOrder=await wholeOrderActiveSql(db,'order','o.production_order_id');
@@ -124,13 +126,23 @@ export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActor
  const owns=actor.actorRoles.includes('sample_designer');
  const merch=actor.actorRoles.includes('order_merchandiser');
  const clerk=actor.actorRoles.includes('development_clerk');
+ if(warehouse&&!isRootActor(actor)&&!activeRole(liveRoles,'warehouse_receiver'))return digitalForbidden();
+ const scene=warehouse?acceptanceBusinessContext()?.scenarioId:null;
+ const filter=warehouse?`AND a.task_kind=$9 AND ($10 OR a.assignee_id=$2)
+    AND ($11 AND t.state='completed' OR NOT $11 AND t.state IN ('pending','ready','blocked'))
+    AND ($12='' OR strpos(lower(COALESCE(o.design_style_no,s.design_style_no,'')),lower($12))>0 OR EXISTS(
+      SELECT 1 FROM digital_production_po_lines po WHERE po.production_order_id=o.production_order_id
+       AND strpos(lower(COALESCE(po.po_number,po.formal_style_no,'')),lower($12))>0))
+    ${scene?`AND EXISTS(SELECT 1 FROM acceptance_sla_clock_resources scene
+       WHERE scene.scenario_id=$13 AND ((scene.resource_kind='order' AND scene.resource_id=a.production_order_id)
+        OR (scene.resource_kind='source' AND a.production_order_id IS NULL AND scene.resource_id=a.source_id)))`:''}`:'';
  const {rows}=await db.query<{total:number;ids:string[]}>(`
   WITH eligible AS (
     SELECT t.task_id,t.created_at
     FROM digital_production_tasks t JOIN digital_production_task_access a ON a.task_id=t.task_id
     LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
     LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
-    WHERE ${activeTask} AND t.node_key<>'factory_material_count' AND NOT(t.task_id=ANY($8::uuid[]))
+    WHERE ${activeTask} AND t.node_key<>'factory_material_count' AND NOT(t.task_id=ANY($8::uuid[])) ${filter}
       AND ($1 OR a.assignee_id=$2 OR ($3 AND (o.created_by=$2 OR s.created_by=$2))
         OR ($4 AND o.primary_merchandiser_id=$2) OR ($5 AND a.task_kind LIKE 'development_%'))
       AND ($1 OR ($5 AND starts_with(a.task_kind,'development_'))
@@ -147,6 +159,8 @@ export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActor
   )
   SELECT (SELECT count(*)::int FROM eligible) AS total,
     coalesce(array_agg(task_id ORDER BY created_at DESC,task_id DESC),'{}'::uuid[]) AS ids
-  FROM selected`,[global,actor.actorId,owns,merch,clerk,[...liveRoles],(page-1)*15,await retiredBulkPreshrinkTaskIds(db)]);
+  FROM selected`,[global,actor.actorId,owns,merch,clerk,[...liveRoles],(page-1)*15,await retiredBulkPreshrinkTaskIds(db),
+  ...(warehouse?[warehouse.kind==='preshrink'?'warehouse_preshrink':'warehouse_dispatch',isRootActor(actor),warehouse.status==='completed',warehouse.search]:[]),
+  ...(scene?[scene]:[])]);
  return rows[0]!;
 }

@@ -45,6 +45,11 @@ export const WarehouseReceiptBatchSchema=z.object({
  occurredAt:z.iso.datetime({offset:true}),note:z.string().trim().min(1).max(1000),
  evidenceIds:z.array(z.uuid()).max(40).refine(ids=>new Set(ids).size===ids.length,'凭证不可重复').default([]),
 }).strict().refine(value=>Number(value.quantity)>0||Boolean(value.replaces),'只有订正已登记的原收料才能记录零');
+export const WarehouseNativeTaskQuerySchema=z.object({
+ kind:z.enum(['preshrink','dispatch']),status:z.enum(['open','completed']).default('open'),
+ page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
+}).strict();
+export type WarehouseNativeTaskQuery=z.infer<typeof WarehouseNativeTaskQuerySchema>;
 export type WarehouseReceiptBatch=z.infer<typeof WarehouseReceiptBatchSchema>;
 export type WarehouseReceiptBatchEvidence=Pick<WarehouseReceiptBatch,'kind'|'scopeRef'|'materialId'|'lineId'|'supplierId'|'unit'|'investment'|
  'materialFingerprint'|'replaces'|'quantity'>;
