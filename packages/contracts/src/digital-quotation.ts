@@ -44,6 +44,18 @@ export const IeProcessingDirectorySchema=z.object({page:z.number().int().positiv
  items:z.array(IeProcessingEntrySchema).max(15)}).strict();
 export type IeProcessingEntry=z.infer<typeof IeProcessingEntrySchema>;
 export type IeProcessingQuery=z.infer<typeof IeProcessingQuerySchema>;
+export const UnifiedIeDirectoryKindSchema=z.enum(['processing_quote','sourcing_review','rework_review']);
+export const UnifiedIeDirectoryStateSchema=z.enum(['not_started','awaiting_price','returned','priced']);
+export const UnifiedIeDirectoryQuerySchema=z.object({kind:z.union([z.literal('all'),UnifiedIeDirectoryKindSchema]).default('all'),
+ state:z.union([z.literal('all'),UnifiedIeDirectoryStateSchema]).optional(),
+ page:z.coerce.number().int().min(1).max(100_000).default(1),search:z.string().trim().max(100).default('')}).strict();
+export const UnifiedIeDirectoryEntrySchema=z.object({kind:UnifiedIeDirectoryKindSchema,objectId:z.uuid(),entryId:z.uuid(),
+ resourceId:z.uuid(),orderId:z.string().nullable(),styleNo:z.string().nullable(),customerCode:z.string().nullable(),
+ version:z.number().int().positive(),round:z.number().int().positive().nullable(),nativeStatus:z.string(),state:UnifiedIeDirectoryStateSchema,sortAt:z.iso.datetime({offset:true})}).strict();
+export const UnifiedIeDirectoryPageSchema=z.object({page:z.number().int().positive(),pageSize:z.literal(15),total:z.number().int().nonnegative(),
+ items:z.array(UnifiedIeDirectoryEntrySchema).max(15)}).strict();
+export type UnifiedIeDirectoryQuery=z.infer<typeof UnifiedIeDirectoryQuerySchema>;
+export type UnifiedIeDirectoryEntry=z.infer<typeof UnifiedIeDirectoryEntrySchema>;
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;

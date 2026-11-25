@@ -17,11 +17,14 @@ import {DigitalBudgetService} from '../../apps/api/src/production-platform/budge
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {CreateSourcingCaseSchema} from '@dx-rework/contracts';
+import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/ie-directory-reader.js';
+import {ManagementReportingService} from '../../apps/api/src/reporting/management-reporting-service.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR03 automatic quotation through original authenticated App and real PG',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
- beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true});});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true,unifiedIeDirectory:true});});
  afterAll(async()=>{await h?.writeEvidence();await h?.dispose();});
  it('keeps jointly enabled R4 row reviews and prices on the exact stored version and leaves the budget locked before customer confirmation',async()=>{
   const {f,db}=h,designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!,merch=f.people.merchandiser!;
@@ -240,6 +243,146 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(new URL(ieTab.page.url()).searchParams.get('page')).toBe('2');
    expect(new URL(ieTab.page.url()).searchParams.get('search')).toBe(prefix);
   }finally{await Promise.all([ieTab.context.close(),rootTab.context.close(),designerTab.context.close()]);}
+ });
+ it('searches the authorized IE quotation rows by actual formal order ID and PO without widening the directory',async()=>{
+  const {f,db}=h,designer=f.people['sample-designer']!,ie=f.people.ie!,identity=new DigitalProductionIdentityService(db,true);
+  const forms=new DigitalDevelopmentService(db,true),quotes=new DigitalQuotationService(db,true);
+  const po=`TEST-IE-PO-${randomUUID()}`,temporary=`TEST-IE-TEMP-${randomUUID()}`;
+  const create=async(assigned:boolean)=>{
+   const designStyleNo=`TEST-IE-ORDER-${randomUUID()}`;
+   const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
+    quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
+    files:[{attachmentId:await f.image(designer),kind:'款图'}]});
+   const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
+   await forms.publish(designer,source.sourceId,saved.version,randomUUID());
+   const resource={kind:'source' as const,id:source.sourceId},quote=await quotes.read(designer,resource);
+   const line=quote.rows.find(row=>row.assignment.priceRole==='ie_reviewer')!;
+   if(assigned)await quotes.save(designer,resource,{expectedVersion:quote.version,document:quote.document!,
+    assignments:quote.assignments.map(item=>item.rowId===line.rowId?{...item,priceAssigneeId:ie.actorId}:item)},randomUUID());
+   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+    designStyleNo,orderDate:beijingCalendarDate(new Date()),
+    lines:(assigned?['白','黑']:['白']).map((color,index)=>({color,formalPoNo:`${po}-${index+1}`,temporaryStyleNo:temporary,
+     customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}))}),randomUUID(),source.sourceId);
+   return {resource:{kind:'order',id:order.productionOrderId},quoteId:quote.quoteId,rowId:line.rowId,styleNo:designStyleNo};
+  };
+  const own=await create(true),other=await create(false);
+  const ieTab=await h.open(ie.actorId,1165,{},'/ui/ie-processing'),rootTab=await h.open(f.root.actorId,1165,{},'/'),
+   designerTab=await h.open(designer.actorId,1165,{},'/');
+  const uri=(search:string)=>h.base+'/api/digital-production/quotations/ie-processing?'+new URLSearchParams({page:'1',search,state:'all'});
+  const lookup=async(page:Page,search:string)=>{
+   const response=await page.request.get(uri(search));expect(response.status(),await response.text()).toBe(200);return response.json();
+  };
+  try{
+   expect(await lookup(ieTab.page,own.resource.id.toUpperCase())).toMatchObject({total:1,items:[own]});
+   expect(await lookup(ieTab.page,po.toLowerCase())).toMatchObject({total:1,items:[own]});
+   expect(await lookup(ieTab.page,`${po}-2`)).toMatchObject({total:1,items:[own]});
+   expect(await lookup(ieTab.page,other.resource.id)).toMatchObject({total:0,items:[]});
+   expect(await lookup(ieTab.page,temporary)).toMatchObject({total:0,items:[]});
+   expect(await lookup(rootTab.page,po)).toMatchObject({total:2,items:expect.arrayContaining([expect.objectContaining(own),expect.objectContaining(other)])});
+   expect((await designerTab.page.request.get(uri(po))).status()).toBe(403);
+   await ieTab.page.getByRole('textbox',{name:'搜索订单ID、款号、PO或客户'}).fill(`${po}-2`);
+   await ieTab.page.getByRole('button',{name:'搜索',exact:true}).click();
+   await ieTab.page.getByRole('link',{name:own.styleNo,exact:true}).waitFor();
+   expect(await ieTab.page.getByRole('link',{name:other.styleNo,exact:true}).count()).toBe(0);
+  }finally{await Promise.all([ieTab.close(),rootTab.close(),designerTab.close()]);}
+ });
+ it('filters three real IE candidate sets before global pagination and retains the original department scopes',async()=>{
+  const {f,db}=h,designer=f.people['sample-designer']!,merch=f.people.merchandiser!,ie=f.people.ie!;
+  const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),quotes=new DigitalQuotationService(db,true);
+  const prefix=`TEST-IE-MERGED-${randomUUID()}`;
+  const ieStyle=`${prefix}-PROCESS`,source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:ieStyle,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
+   quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
+   files:[{attachmentId:await f.image(designer),kind:'款图'}]});
+  const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
+  await forms.publish(designer,source.sourceId,saved.version,randomUUID());
+  const resource={kind:'source' as const,id:source.sourceId},quote=await quotes.read(designer,resource);
+  const ieRow=quote.rows.find(row=>row.assignment.priceRole==='ie_reviewer')!;
+  const assigned=await quotes.save(designer,resource,{expectedVersion:quote.version,document:quote.document!,
+   assignments:quote.assignments.map(item=>item.rowId===ieRow.rowId?{...item,priceAssigneeId:ie.actorId}:item)},randomUUID());
+  const priced=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:assigned.version,unitPrice:'7.125'},randomUUID());
+  await quotes.reviewWorkbenchLine(designer,resource,{action:'return',rowId:ieRow.rowId,field:'unitPrice',expectedRound:1,
+   expectedFieldVersion:priced.version,reason:'TEST 原核价需重报，旧价格保留'},randomUUID());
+  const makeSourcing=async(suffix:string)=>(await f.sourcing.createCase(merch,CreateSourcingCaseSchema.parse({gender:'男装',
+   styleName:'TEST IE 汇合',estimatedCutPieceSendDate:'2026-12-01',deliveryDate:'2027-01-10',daxingUnitPrice:'5',
+   attachmentIds:[await f.image(merch)],lineItems:[{styleNo:`${prefix}-${suffix}`,color:'黑',quantity:2}]}),randomUUID())).value;
+  const historic=await makeSourcing('HISTORY');
+  await f.sourcing.quoteIePrice(ie,historic.sourcingCaseId,{linePrices:[{position:1,unitPrice:'3.25'}]},randomUUID());
+  const sourcingActor={...ie,authorizationCapability:'sourcing:view'};
+  const reportingActor={...ie,authorizationCapability:'report:view',authorizationCapabilities:['process:review']};
+  const actors={processing:ie,sourcing:sourcingActor,rework:reportingActor};
+  await f.reworkReady(1,async id=>{
+   for(let index=0;index<16;index++)await makeSourcing(`OTHER-${index}`);
+   const first=await readIntegratedIeDirectory(db,actors,{kind:'all',page:1,search:''}),
+    second=await readIntegratedIeDirectory(db,actors,{kind:'all',page:2,search:''});
+   expect(first.total).toBe(second.total);expect(first.items).toHaveLength(15);
+   expect(first.items.map(row=>row.objectId)).not.toContain(historic.sourcingCaseId);
+   expect(second.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({kind:'processing_quote',objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned'}),
+    expect.objectContaining({kind:'sourcing_review',objectId:historic.sourcingCaseId}),
+    expect.objectContaining({kind:'rework_review',objectId:id,nativeStatus:'pending_ie_review'}),
+   ]));
+   const keys=[...first.items,...second.items].map(row=>`${row.kind}:${row.objectId}:${row.entryId}`);
+   expect(new Set(keys).size).toBe(keys.length);
+   expect(await readIntegratedIeDirectory(db,actors,{kind:'all',page:2,search:prefix})).toMatchObject({total:18,items:expect.arrayContaining([
+    expect.objectContaining({kind:'processing_quote',objectId:quote.quoteId}),expect.objectContaining({kind:'sourcing_review',objectId:historic.sourcingCaseId}),
+   ])});
+   expect(await readIntegratedIeDirectory(db,actors,{kind:'all',page:1,search:`${prefix}-HISTORY`})).toMatchObject({
+    total:1,items:[{kind:'sourcing_review',objectId:historic.sourcingCaseId,nativeStatus:'pending_management_decision'}]});
+   expect(await readIntegratedIeDirectory(db,actors,{kind:'all',page:100_000,search:''})).toMatchObject({total:first.total,items:[]});
+   const originalRework=await new ManagementReportingService(db).listReworkQueue(reportingActor,{page:1,limit:15,
+    status:'pending_ie_review',statuses:['pending_ie_review']});
+   expect(originalRework.page.items.map(row=>row.reworkOrderId)).toContain(id);
+   const originalSourcing=await f.sourcing.listCases(sourcingActor,`${prefix}-HISTORY`,'all',1,{stage:'ie_history'});
+   expect(originalSourcing.items.map(row=>row.sourcingCaseId)).toEqual([historic.sourcingCaseId]);
+   const follow={...merch,authorizationCapability:'sourcing:view'};
+   expect(await readIntegratedIeDirectory(db,{processing:follow,sourcing:follow,rework:null},{kind:'all',page:1,search:`${prefix}-HISTORY`})).toMatchObject({total:0,items:[]});
+   await expect(readIntegratedIeDirectory(db,{processing:designer,sourcing:null,rework:designer},
+    {kind:'rework_review',page:1,search:id})).rejects.toMatchObject({statusCode:403});
+   const tab=await h.open(ie.actorId,1165,{},'/ui/ie-processing?directory=unified&kind=all&page=2');
+   const page=tab.page,list=page.getByRole('region',{name:'IE 报价与核价目录'});
+   const link=(kind:string,objectId:string,entryId=objectId)=>page.locator(`[id="ie-center-work-${kind}:${objectId}:${entryId}"]`);
+   const search=list.getByRole('textbox',{name:'搜索订单 ID、原款号、PO 或客户'});
+   try{
+    const url=h.base+'/api/digital-production/quotations/ie-directory';
+    const authorized=await page.request.get(url+'?kind=all&page=2');
+    expect(authorized.status()).toBe(200);
+    expect(authorized.headers()['cache-control']).toMatch(/(?:^|,\s*)no-store(?:,|$)/);
+    expect((await page.request.get(url+'?kind=all&page=0')).status()).toBe(400);
+    const needsRevision=await page.request.get(url+'?kind=all&state=returned&page=1');
+    expect(needsRevision.status()).toBe(200);
+    expect(await needsRevision.json()).toMatchObject({total:1,items:[{objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned'}]});
+    const forbidden=await h.open(designer.actorId,1165,{},'/ui/home');
+    try{expect((await forbidden.page.request.get(url+'?kind=rework_review')).status()).toBe(403);}
+    finally{await forbidden.close();}
+    for(const [row,api] of [
+     [link('processing_quote',quote.quoteId!,ieRow.rowId),`/api/digital-production/quotations/ie-processing/${quote.quoteId}/${ieRow.rowId}`],
+     [link('sourcing_review',historic.sourcingCaseId),`/api/sourcing/cases/${historic.sourcingCaseId}`],
+     [link('rework_review',id),`/api/rework-orders/${id}/process-configuration`],
+    ] as const){
+     const [response]=await Promise.all([page.waitForResponse(result=>new URL(result.url()).pathname===api),row.click()]);
+     expect(response.status()).toBe(200);
+     await page.getByRole('link',{name:/返回.*(报价列表|IE 报价与核价中心)/}).click();
+     await row.waitFor();
+     expect(new URL(page.url()).searchParams.get('page')).toBe('2');
+     await expect.poll(()=>row.evaluate(node=>node===document.activeElement)).toBe(true);
+    }
+    const [filtered]=await Promise.all([page.waitForResponse(result=>{
+     const target=new URL(result.url());return target.pathname.endsWith('/ie-directory')&&target.searchParams.get('search')===`${prefix}-HISTORY`;
+    }),search.fill(`${prefix}-HISTORY`)]);
+    expect(filtered.status()).toBe(200);
+    await link('sourcing_review',historic.sourcingCaseId).waitFor();
+    expect(new URL(page.url()).searchParams.get('page')).toBe('1');
+    const type=list.getByRole('combobox',{name:'报价类型'});
+    await type.click();
+    const [sourcingOnly]=await Promise.all([page.waitForResponse(result=>{
+     const target=new URL(result.url());return target.pathname.endsWith('/ie-directory')&&target.searchParams.get('kind')==='sourcing_review';
+    }),page.getByRole('option',{name:'外发加工核价',exact:true}).click()]);
+    expect(sourcingOnly.status()).toBe(200);
+    expect(await sourcingOnly.json()).toMatchObject({total:1,items:[{kind:'sourcing_review',objectId:historic.sourcingCaseId}]});
+   }finally{await tab.close();}
+  });
  });
  it('opens exact saved quotation, budget and instruction originals through the real authorized App without writes or latest substitution',async()=>{
   const f=h.f,designer=f.people['sample-designer']!,merch=f.people.merchandiser!,worker=f.people['pattern-room-worker']!,identity=new DigitalProductionIdentityService(h.db,true),quotes=new DigitalQuotationService(h.db,true),budgets=new DigitalBudgetService(h.db,true),instructions=new ProductionInstructionService(h.db,true);

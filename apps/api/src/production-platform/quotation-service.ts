@@ -19,7 +19,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './access-policy.js';
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
-import {readIeProcessingDirectory} from './ie-processing-directory.js';
+import {ieProcessingViewer,readIeProcessingDirectory} from './ie-processing-directory.js';
 import {readDevelopmentOrderRush,type RushIdentity} from './development-order-rush.js';
 import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
 import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
@@ -270,11 +270,8 @@ export class DigitalQuotationService{
   const db=await this.database.connect();
   try{
    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-   const active=await quotationRoles(db,actor,['ie_reviewer','production_management','owner_group']);
-   const root=isRootActor(actor),canPrice=active.has('ie_reviewer');
-   const canReadAll=root||active.has('production_management')||active.has('owner_group');
-   if(!canReadAll&&!canPrice)digitalForbidden();
-   const result=await readIeProcessingDirectory(db,this.database,input,{id:actor.actorId,canPrice,canReadAll,isRoot:root},target);
+   const viewer=await ieProcessingViewer(db,actor)??digitalForbidden();
+   const result=await readIeProcessingDirectory(db,this.database,input,viewer,target);
    await db.query('COMMIT');return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }

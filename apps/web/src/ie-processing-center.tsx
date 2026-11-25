@@ -1,5 +1,6 @@
 import {lazy,useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Link} from '@astryxdesign/core/Link';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Stack} from '@astryxdesign/core/Stack';
@@ -7,6 +8,7 @@ import {Table,type TableColumn} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {z} from 'zod';
 import {IeProcessingDirectorySchema,IeProcessingEntrySchema,IeProcessingQuerySchema,IeProcessingStateSchema,QuotationResourceSchema,QuotationRowInputSchema,
+ UnifiedIeDirectoryPageSchema,UnifiedIeDirectoryQuerySchema,type UnifiedIeDirectoryEntry,type UnifiedIeDirectoryQuery,
  type IeProcessingEntry,type IeProcessingQuery} from '@dx-rework/contracts/digital-quotation';
 import type {ManagementReworkRow} from '@dx-rework/contracts/reporting';
 import type {SourcingCaseSummary} from '@dx-rework/contracts';
@@ -26,9 +28,15 @@ import {SubmissionRequestError} from './submission-validation.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {useForegroundRead} from './use-foreground-read.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
+import {useLiveSearch} from './use-live-search.js';
+import {parseUnifiedIeLocation,unifiedIeEntryKey,unifiedIeHref,unifiedIeListLabel,unifiedIeOriginalHref,unifiedIeStateLabel,type UnifiedIeLocation} from './ie-unified-directory-routes.js';
+import {readUnifiedIeDirectory,type UnifiedDirectoryLoad} from './ie-unified-directory-source.js';
 
 const urls=createWebUrls(import.meta.env.BASE_URL);
 const entryRoute='ui/ie-processing';
+const unifiedPaths={directory:urls.pageUrl(entryRoute),reworkProcess:urls.pageUrl('ui/process-configuration'),
+ reworkReporting:urls.pageUrl('ui/work-reporting')};
+const processingQuoteLabel='外发加工报价';
 const entryIdentity=z.object({resource:QuotationResourceSchema,quoteId:z.string().uuid(),rowId:z.string().uuid()});
 const stateNames={all:'全部状态',needs_assignment:'待指派',waiting:'等待业务前置',awaiting_price:'待核价',priced:'已核价'};
 const detailKeys=['kind','id','quoteId','rowId'] as const;
@@ -93,8 +101,10 @@ export function IeReworkReturn(){
  if(target.origin!==location.origin||target.pathname!==urls.pageUrl(entryRoute)||target.hash)return null;
  if([...target.searchParams.keys()].some(key=>target.searchParams.getAll(key).length!==1))return null;
  const parsed=reworkQuery.safeParse(Object.fromEntries(target.searchParams));
- return parsed.success?<div className="dx-designer-astryx">
-  <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><Link href={reworkHref(parsed.data)}>返回 IE 报价与核价中心</Link>
+ const unified=parseUnifiedIeLocation(target.searchParams);
+ const href=parsed.success?reworkHref(parsed.data):unified&&!unified.detail?unifiedIeHref(unifiedPaths.directory,unified,{focus:unified.focus}):null;
+ return href?<div className="dx-designer-astryx">
+  <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><Link href={href}>返回 IE 报价与核价中心</Link>
  </div>:null;
 }
 
@@ -135,11 +145,11 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
    }finally{saving.current=false;}
   });
  };
- return <section aria-label="产品加工报价">
+ return <section aria-label={processingQuoteLabel}>
   <Link href={back}>返回报价列表</Link>
   {read.error&&<p role="alert">{receipt!==null?'报价已保存，重新读取失败。 ':''}{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
   {sheet&&row&&<>
-   <h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/> · 产品加工报价</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
+   <h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/> · {processingQuoteLabel}</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
    <form onSubmit={event=>{event.preventDefault();save();}}>
     <Stack gap={2} maxWidth={480}>
      <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
@@ -176,10 +186,10 @@ function ProcessingDirectory({query,focus}:{query:IeProcessingQuery;focus?:strin
   {key:'assignee',header:'负责人',renderCell:row=>row.assigneeName??'待指派'},
   {key:'state',header:'状态',renderCell:row=>stateNames[row.state]},
  ];
- return <section aria-label="产品加工报价列表">
+ return <section aria-label={`${processingQuoteLabel}列表`}>
   <form id="ie-center-search" onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
    onSubmit={event=>{event.preventDefault();if(!composing.current&&search.trim()!==query.search&&search.trim().length<=100)change({...query,page:1,search:search.trim()});}}>
-   <TextInput label="搜索款号或客户" value={search} onChange={setSearch}
+   <TextInput label="搜索订单ID、款号、PO或客户" value={search} onChange={setSearch}
     onKeyDown={event=>{if(event.key==='Enter'&&(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229))event.preventDefault();}}/>
    <Button label="搜索" type="submit" isDisabled={search.trim().length>100||search.trim()===query.search}/>
    <Selector label="报价状态" value={query.state} options={Object.entries(stateNames).map(([value,label])=>({value,label}))}
@@ -187,8 +197,8 @@ function ProcessingDirectory({query,focus}:{query:IeProcessingQuery;focus?:strin
   </form>
   {read.error&&<p role="alert">{read.error.message} <Button label="重新读取报价列表" onClick={read.retry}/></p>}
   {read.value?.items.length?<div className="development-table-scroll"><Table columns={columns} data={read.value.items} idKey={identityKey} density="compact"/></div>:null}
-  {read.value&&!read.value.items.length&&<p>{read.value.total?'本页没有已授权报价，请回到有效页。':'暂无该条件下的产品加工报价。'}</p>}
-  {read.value&&<AstryxPageControls page={query.page} total={read.value.total} pageSize={read.value.pageSize} label="产品加工报价分页" onPageChange={page=>change({...query,page})}/>}
+  {read.value&&!read.value.items.length&&<p>{read.value.total?'本页没有已授权报价，请回到有效页。':`暂无该条件下的${processingQuoteLabel}。`}</p>}
+  {read.value&&<AstryxPageControls page={query.page} total={read.value.total} pageSize={read.value.pageSize} label={`${processingQuoteLabel}分页`} onPageChange={page=>change({...query,page})}/>}
  </section>;
 }
 
@@ -263,8 +273,66 @@ function SourcingDirectory({query}:{query:SourcingQuery}){
  </section>;
 }
 
+function UnifiedIeDirectory({location,readDirectory}:{location:UnifiedIeLocation;readDirectory:UnifiedDirectoryLoad}){
+ const {kind,page,search,state='all'}=location;
+ const query={kind,page,search,state};
+ const [draft,setDraft]=useState(search);
+ useEffect(()=>setDraft(search),[search]);
+ const change=(next:UnifiedIeDirectoryQuery,replace=false)=>void navigateInternalPage(unifiedIeHref(unifiedPaths.directory,next),{replace});
+ const live=useLiveSearch(draft.length<=100?draft:search,search,value=>change({...query,search:value,page:1},true));
+ const key=unifiedIeHref(unifiedPaths.directory,query);
+ const load=useCallback(async(signal:AbortSignal)=>{
+  const result=UnifiedIeDirectoryPageSchema.parse(await readDirectory({kind,page,search,state},signal));
+  if(result.page!==page||result.items.some(row=>kind!=='all'&&row.kind!==kind||state!=='all'&&row.state!==state))throw Error('读取的 IE 报价目录与当前选择不一致。');
+  return result;
+ },[kind,page,search,state,readDirectory]);
+ const read=useForegroundRead('unified-ie',key,load);
+ useForegroundWait(read.foregroundKey);
+ useDirectoryReturn(read.value!==null,location.focus);
+ const columns:TableColumn<UnifiedIeDirectoryEntry>[]=[
+  {key:'orderId',header:'订单 ID／款号',renderCell:row=>{
+   const href=unifiedIeOriginalHref(unifiedPaths,query,row),label=row.orderId??row.styleNo??'查看原记录';
+   return href?<Link id={resultLinkId(unifiedIeEntryKey(row))} href={href}>{label}</Link>:label;
+  }},
+  {key:'customerCode',header:'客户',renderCell:row=>row.customerCode??'—'},
+  {key:'kind',header:'报价类型',renderCell:row=>unifiedIeListLabel[row.kind]},
+  {key:'version',header:'轮次／版本',renderCell:row=>row.round===null?`v${row.version}`:`第 ${row.round} 轮 · v${row.version}`},
+  {key:'state',header:'状态',renderCell:row=><Badge label={unifiedIeStateLabel[row.state]} variant={row.state==='priced'?'success':row.state==='not_started'?'neutral':'error'}/>},
+  {key:'nativeStatus',header:'当前办理',renderCell:row=>row.kind==='rework_review'&&Object.hasOwn(reworkQueues,row.nativeStatus)
+   ?reworkQueues[row.nativeStatus as keyof typeof reworkQueues]:row.kind==='sourcing_review'&&row.nativeStatus==='pending_ie_quote'?'待核价':'—'},
+ ];
+ return <section aria-label="IE 报价与核价目录">
+  <Stack id="ie-center-search" direction="horizontal" gap={3} wrap="wrap">
+   <div onCompositionStart={live.onCompositionStart} onCompositionEnd={live.onCompositionEnd}>
+    <TextInput label="搜索订单 ID、原款号、PO 或客户" value={draft} onChange={setDraft}
+     {...(draft.length>100?{status:{type:'error',message:'请输入不超过 100 字的搜索内容'}}:{})}/>
+   </div>
+   <Selector label="报价状态" value={state} options={Object.entries(unifiedIeStateLabel).map(([value,label])=>({value,label}))}
+    onChange={value=>{const next=UnifiedIeDirectoryQuerySchema.safeParse({kind,state:value,search,page:1});if(next.success&&next.data.state!==state)change(next.data);}}/>
+   <Selector label="报价类型" value={kind} options={Object.entries(unifiedIeListLabel).map(([value,label])=>({value,label}))}
+    onChange={value=>{const next=UnifiedIeDirectoryQuerySchema.safeParse({kind:value,state,search,page:1});if(next.success&&next.data.kind!==kind)change(next.data);}}/>
+  </Stack>
+  {read.error&&<p role="alert">{read.error.message} <Button label="重新读取目录" onClick={read.retry}/></p>}
+  {read.value?.items.length?<div className="development-table-scroll"><Table columns={columns} data={read.value.items} idKey={unifiedIeEntryKey} density="compact"/></div>:null}
+  {read.value&&!read.value.items.length&&<p>{read.value.total?'本页没有匹配记录，请回到有效页。':'没有匹配的已授权报价或核价记录。'}</p>}
+  {read.value&&<AstryxPageControls page={page} total={read.value.total} pageSize={read.value.pageSize} label="IE 报价与核价分页"
+   busy={read.waiting||live.pending||draft.length>100} onPageChange={next=>change({...query,page:next})}/>}
+ </section>;
+}
+
 export function IeProcessingCenter({search}:{search:string}){
  const values=new URLSearchParams(search),query=IeProcessingQuerySchema.safeParse(Object.fromEntries([...values].filter(([key])=>['page','search','state'].includes(key))));
+ const unified=parseUnifiedIeLocation(values);
+ if(values.get('directory')==='unified'&&!unified)return <p role="alert">IE 报价目录链接无效。</p>;
+ if(unified){
+  const pick=unified.detail,back=unifiedIeHref(unifiedPaths.directory,unified,{focus:unified.focus});
+  return <div className="development-workspace digital-production dx-designer-astryx">
+   <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><h1>IE 报价与核价中心</h1>
+   {pick?.type==='processing_quote'?<ProcessingPriceDetail key={pick.rowId} selection={{resource:{kind:pick.resourceKind,id:pick.id},quoteId:pick.quoteId,rowId:pick.rowId}} back={back}/>
+    :pick?.type==='sourcing_review'?<SourcingIeCenterDetail key={pick.caseId} sourcingCaseId={pick.caseId} back={back}/>
+    :<UnifiedIeDirectory location={unified} readDirectory={readUnifiedIeDirectory}/>}
+  </div>;
+ }
  const selected=entryIdentity.safeParse({resource:{kind:values.get('kind'),id:values.get('id')},quoteId:values.get('quoteId'),rowId:values.get('rowId')});
  const detail=detailKeys.some(key=>values.has(key));
  const channel=values.get('channel');
@@ -277,7 +345,7 @@ export function IeProcessingCenter({search}:{search:string}){
  return <div className="development-workspace digital-production dx-designer-astryx">
   <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><h1>IE 报价与核价中心</h1>
   <nav aria-label="报价来源"><Stack direction="horizontal" gap={3} wrap="wrap">
-   <Link href={urls.pageUrl(entryRoute)} hasUnderline={!channel} aria-current={!channel?'page':undefined}>产品加工报价</Link>
+   <Link href={urls.pageUrl(entryRoute)} hasUnderline={!channel} aria-current={!channel?'page':undefined}>{processingQuoteLabel}</Link>
    <Link href={sourcingHref({channel:'sourcing',search:'',page:1})} hasUnderline={Boolean(sourcing?.success)} aria-current={sourcing?.success?'page':undefined}>外发加工核价</Link>
    <Link href={reworkHref({channel:'rework',queue:'pending_ie_review',search:'',page:1})} hasUnderline={Boolean(rework?.success)} aria-current={rework?.success?'page':undefined}>返工核价与复核</Link>
   </Stack></nav>

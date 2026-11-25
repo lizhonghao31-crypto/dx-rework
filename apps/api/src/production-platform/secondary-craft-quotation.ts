@@ -216,6 +216,7 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
    const entry={resource,styleNo:quote.style_no,rowId:target.rowId,label:target.label,round:target.round,stage:target.stage,
     sourceVersion:target.sourceVersion,version:item.version,state:item.state,authorName:target.authorId?quote.people?.[target.authorId]??null:null,
     supplier:item.supplier,note:item.note,canDecide:item.canDecide,
+    savedPricing:item.draft?{mode:item.draft.mode,amount:item.draft.unitPrice,unit:item.draft.unit}:null,
     approvalTodoId:item.canDecide?revision?.revision_id??null:null,
     submittedAt:item.canDecide&&revision?new Date(revision.recorded_at).toISOString():null};
    items.push(entry);

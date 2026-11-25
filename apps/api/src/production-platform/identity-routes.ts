@@ -54,6 +54,7 @@ import { NumberedDraftInputSchema, OrderNumberContextSchema, OrderNumberPreviewS
 import { businessActor } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
+import {registerIeDirectoryRoutes,type ReadIntegratedIeDirectory} from './ie-directory-routes.js';
 import { ApplicationError } from "../platform/errors.js";
 import { assertIdentityActor, type DigitalProductionIdentityService } from "./identity-service.js";
 
@@ -67,6 +68,7 @@ export type DigitalIdentityDependencies = {
   journeys?: DigitalJourneyQuery;
   budgetService?: DigitalBudgetService;
   quotationService?:DigitalQuotationService;
+  readIeDirectory?:ReadIntegratedIeDirectory;
   seriesPlans?:SeriesPlanService; shortLead?:ShortLeadService;
   instructionService?: ProductionInstructionService;
   bulkPreparationService?: BulkPreparationService;
@@ -97,6 +99,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   if(dependencies.readinessService&&dependencies.developmentAttachments)registerProductionReadinessRoutes(app,dependencies,dependencies.readinessService,dependencies.developmentAttachments);
   if(dependencies.seriesPlans&&dependencies.shortLead)registerSeriesPlanRoutes(app,dependencies,dependencies.seriesPlans,dependencies.shortLead);
   if(dependencies.quotationService)registerQuotationRoutes(app,dependencies,dependencies.quotationService);
+  if(dependencies.readIeDirectory)registerIeDirectoryRoutes(app,{read:dependencies.readIeDirectory,root:dependencies.root,authenticate:dependencies.authenticate});
   if(dependencies.deliveryCalendar)registerDeliveryCalendarRoutes(app,dependencies,dependencies.deliveryCalendar);
   if(dependencies.analysis) registerDigitalAnalysisRoutes(app,dependencies,dependencies.analysis);
   if(dependencies.closureService)registerOrderClosureRoutes(app,dependencies,dependencies.closureService);

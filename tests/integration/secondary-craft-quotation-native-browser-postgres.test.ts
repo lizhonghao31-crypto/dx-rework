@@ -109,8 +109,24 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   await write(makerSession,409,quotation+`/rows/${embroidery.rowId}`,{expectedVersion:sheet.version,unitPrice:'2'});
   await write(makerSession,403,external+'/draft',{...terms,attachmentIds:[photo]},key(),'PUT');
   await makerPage.goto(center);
+  const browseSearch=makerPage.getByRole('textbox',{name:'搜索款号或工艺',exact:true});
+  const embroideryLink=makerPage.getByRole('link',{name:/ · 绣花$/});
   await makerPage.getByRole('row').filter({has:makerPage.getByRole('link',{name:/ · 绣花$/})}).getByText('急单',{exact:true}).waitFor();
-  await makerPage.getByRole('link',{name:/ · 绣花$/}).click();
+  await makerPage.getByRole('link',{name:/ · 印花$/}).waitFor();
+  await browseSearch.fill(styleNo);
+  await makerPage.getByRole('combobox',{name:'工艺项目',exact:true}).click();
+  await makerPage.getByRole('option',{name:'绣花',exact:true}).click();
+  await makerPage.getByRole('link',{name:/ · 印花$/}).waitFor({state:'hidden'});
+  await expect.poll(()=>new URL(makerPage.url()).searchParams.get('craftSearch')).toBe(styleNo);
+  await embroideryLink.click();
+  await makerPage.getByRole('heading',{name:'绣花报价',exact:true}).waitFor();
+  await makerPage.getByRole('link',{name:'返回二次工艺报价列表',exact:true}).click();
+  await embroideryLink.waitFor();
+  expect(await browseSearch.inputValue()).toBe(styleNo);
+  expect(new URL(makerPage.url()).searchParams.get('craftType')).toBe('绣花');
+  expect(await makerPage.getByRole('link',{name:/ · 印花$/}).count()).toBe(0);
+  await expect.poll(()=>embroideryLink.evaluate(link=>link===document.activeElement)).toBe(true);
+  await embroideryLink.click();
   await makerPage.getByRole('heading',{name:'绣花报价',exact:true}).waitFor();
   await makerPage.getByRole('combobox',{name:'制作方式'}).click();
   await makerPage.getByRole('option',{name:'外发',exact:true}).click();
@@ -138,7 +154,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect(sends[0]?.key).toBe(sends[1]?.key);
   expect(sends[0]?.bodyHash).toBe(sends[1]?.bodyHash);
   const approvalItem=(await currentDirectory(approvalSession))[0];
-  expect(approvalItem).toMatchObject({resource,rowId:embroidery.rowId,version:2,canDecide:true,state:'submitted',orderRush:true});
+  expect(approvalItem).toMatchObject({resource,rowId:embroidery.rowId,version:2,canDecide:true,state:'submitted',orderRush:true,savedPricing:{mode:'outsourced',amount:'2.125',unit:'件'}});
   expect(await currentDirectory(otherSession)).toEqual([]);
   const notice=await db.query(`SELECT e.todo_id,r.recipient_id FROM digital_production_notification_events e
    JOIN digital_production_notification_receipts r USING(event_id) WHERE event_kind='secondary_craft_approval'`);
@@ -156,6 +172,8 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
    VALUES($1,$2,$3,2,$4,'approved','',CURRENT_TIMESTAMP)`,[key(),sheet.quoteId,embroidery.rowId,otherOwner.id]))
    .rejects.toMatchObject({code:'23514'});
   await ownerPage.goto(center);
+  await ownerPage.getByText('2.1 元 / 件',{exact:true}).waitFor();
+  expect(await ownerPage.getByText('2.1 元 / 件',{exact:true}).getAttribute('title')).toBe('2.125 元 / 件');
   await ownerPage.getByRole('link',{name:/ · 绣花$/}).click();
   await ownerPage.getByRole('heading',{name:'绣花报价',exact:true}).waitFor();
   expect(await ownerPage.getByRole('button',{name:'提交伍云峰审批'}).count()).toBe(0);

@@ -111,6 +111,24 @@ describe("thin platform module routing", () => {
     expect(sourcing && platformModuleHref(sourcing)).toBe("ui/sourcing/pending");
   });
 
+  it("moves IE into product development while retaining mobile reachability and the same protected deep link", async () => {
+    const [app, shell, center] = await Promise.all([
+      readFile("apps/web/src/App.tsx", "utf8"),
+      readFile("apps/web/src/components.tsx", "utf8"),
+      readFile("apps/web/src/ie-processing-center.tsx", "utf8"),
+    ]);
+    const development = shell.slice(shell.indexOf("const developmentNavigation:"), shell.indexOf("const preparationNavigation:"));
+    expect(development).toContain("isRoot || IE_PROCESSING_ROLES.some(hasRole)");
+    expect(development).toContain('href: "/ui/ie-processing?directory=unified"');
+    expect(shell.match(/href: "\/ui\/ie-processing(?:\?directory=unified)?"/g)).toHaveLength(1);
+    expect(shell).toContain('name: "产品开发打板", description: "开发、打板与分析", entries: developmentNavigation');
+    expect(shell).toContain("...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry))");
+    expect(app).toContain('path === "/ui/ie-processing")return <AuthGate requiredAnyOf={IE_PROCESSING_ROLES.map');
+    expect(center).toContain("processingQuoteLabel='外发加工报价'");
+    expect(center).toContain('>外发加工核价</Link>');
+    expect(center).toContain('>返工核价与复核</Link>');
+  });
+
   it("protects sourcing with AuthGate and keeps the unified desktop CSS token-based", async () => {
     const [app, components, shellCss, sourcingCss, sourcingPage, tokens] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),

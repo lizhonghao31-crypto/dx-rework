@@ -54,6 +54,7 @@ export const SecondaryCraftListSchema=z.object({ready:z.boolean(),items:z.array(
  resource:QuotationResourceSchema,styleNo:z.string(),rowId:z.uuid(),label:z.string(),round:decisionVersion,stage,
  sourceVersion:decisionVersion,version:expectedVersion,state,authorName:z.string().nullable(),supplier:supplier.nullable(),
  note:z.string().nullable(),canDecide:z.boolean(),approvalTodoId:z.uuid().nullable(),submittedAt:z.string().nullable(),orderRush:z.literal(true).optional(),
+ savedPricing:z.object({mode:z.enum(['in_house','outsourced']),amount:z.string(),unit:z.string()}).nullable().optional(),
 }))});
 export type SecondaryCraftDetail=z.infer<typeof SecondaryCraftDetailSchema>;
 export type SecondaryCraftList=z.infer<typeof SecondaryCraftListSchema>;
