@@ -4,6 +4,7 @@ import {registerProductionClosureRoutes} from '../../apps/api/src/sourcing/produ
 import {BulkWashingService} from '../../apps/api/src/production-platform/bulk-washing-service.js';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {readQualityWarehouseCraftOccupation} from '../../apps/api/src/production-platform/quality-warehouse-craft-occupation.js';
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
 import assert from 'node:assert/strict';
@@ -50,6 +51,16 @@ import {registerAuxiliaryCatalogRoutes} from '../../apps/api/src/access/auxiliar
 import {registerAccessRoutes} from '../../apps/api/src/access/routes.js';
 import {registerSourcingRoutes} from '../../apps/api/src/sourcing/sourcing-routes.js';
 import {registerProcessConfigurationRoutes} from '../../apps/api/src/rework/process-configuration-routes.js';
+import {registerReworkRoutes} from '../../apps/api/src/rework/routes.js';
+import {ReworkBusinessDetailService} from '../../apps/api/src/rework/rework-business-detail-service.js';
+import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
+import {ReworkV2SubmissionService} from '../../apps/api/src/rework/v2-submission-service.js';
+import {ReworkV2DraftService} from '../../apps/api/src/rework/v2-draft-service.js';
+import {ReworkSupplyContextService} from '../../apps/api/src/rework/supply-context-service.js';
+import {WorkReportingService} from '../../apps/api/src/rework/work-reporting-service.js';
+import {registerWorkReportingRoutes} from '../../apps/api/src/rework/work-reporting-routes.js';
+import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
+import {registerWholeOrderReviewRoutes} from '../../apps/api/src/rework/whole-order-review-routes.js';
 import {ProcessConfigurationService} from '../../apps/api/src/rework/process-configuration-service.js';
 import {ProcessWorkerPlanService} from '../../apps/api/src/rework/process-worker-plan-service.js';
 import type {ApplicationError} from '../../apps/api/src/platform/errors.js';
@@ -57,7 +68,7 @@ import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean;readPath?:string;afterWriteRead?:string};
 /** Original full App, original auth routes/store/membership and actual native
  * services. Only DingTalk and named transport faults are TEST adapters. */
-export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean;accessCatalog?:boolean;workbenchNumberedCreation?:boolean;throughVersion?:string;unifiedIeDirectory?:boolean}){
+export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean;accessCatalog?:boolean;workbenchNumberedCreation?:boolean;throughVersion?:string;unifiedIeDirectory?:boolean;originalCraftRework?:boolean}){
  const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url,options?.throughVersion?{throughVersion:options.throughVersion}:undefined),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
@@ -71,7 +82,18 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   if(options?.unifiedIeDirectory){
    const authenticate=(token:string|undefined)=>auth.authenticate(token);
    registerSourcingRoutes(app,{authenticate,root,service:f.sourcing,contracts:f.contracts});
+  }
+  if(options?.unifiedIeDirectory||options?.originalCraftRework){
+   const authenticate=(token:string|undefined)=>auth.authenticate(token);
    registerProcessConfigurationRoutes(app,{authenticate,root,service:new ProcessConfigurationService(db),workerPlan:new ProcessWorkerPlanService(db)});
+  }
+  if(options?.originalCraftRework){
+   const authenticate=(token:string|undefined)=>auth.authenticate(token);
+   registerReworkRoutes(app,{authenticate,root,service:new ReworkInitiationService(db,'anchor-test'),v2DraftService:new ReworkV2DraftService(db,'anchor-test'),
+    v2SubmissionService:new ReworkV2SubmissionService(db,'anchor-test'),supplyContextService:new ReworkSupplyContextService(db,'anchor-test'),
+    businessDetailService:new ReworkBusinessDetailService(db),originalCraftQuality:true});
+   registerWorkReportingRoutes(app,{authenticate,root,service:new WorkReportingService(db)});
+   registerWholeOrderReviewRoutes(app,{authenticate,root,service:new WholeOrderReviewService(db)});
   }
   app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(error instanceof AuthDeniedError?401:e.statusCode??500).send({error:{code:e.code,message:e.message}});});
   const notifications=options?.orderTimeFlow?new DigitalProductionNotificationService(db):undefined,todos=notifications?new TodoService(db,undefined,undefined,undefined,notifications):undefined,patternOrders=todos?new PatternRoomOrderService(db,new TodoProjectionService(todos),{ordersEnabled:true}):undefined;
@@ -79,7 +101,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   let controlToken:string|undefined;
   if(options?.orderTimeFlow){registerAcceptanceClockRoutes(app,f.runtime,auth,root);controlToken=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));registerPatternRoomPriceRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new PatternRoomPriceService(db)});registerTodoRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:todos!});}
   registerProductionClosureRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new ProductionClosureService(db,root)});
-  registerDigitalIdentityRoutes(app,{...(options?.unifiedIeDirectory?{readIeDirectory:(actors,input)=>readIntegratedIeDirectory(db,actors,input)}:{}),bulkWashing:options?.fullApp?new BulkWashingService(db):undefined,service:new DigitalProductionIdentityService(db,true),quotationService:options?.fullApp?new DigitalQuotationService(db,true):undefined,budgetService:options?.fullApp?new DigitalBudgetService(db,true):undefined,creationEnabled:true,...(options?.workbenchNumberedCreation?{workbenchNumberedCreation:true}:{}),root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(db),journeys:new DigitalJourneyQuery(db),...(options?.fullApp?{closureService:new OrderClosureService(db),deliveryCalendar:new DeliveryCalendarQuery(db),factoryFlowService:new FactoryFlowService(db),bulkPreparationService:new BulkPreparationService(db)}:{}),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
+  registerDigitalIdentityRoutes(app,{...(options?.unifiedIeDirectory?{readIeDirectory:(actors,input)=>readIntegratedIeDirectory(db,actors,input)}:{}),bulkWashing:options?.fullApp?new BulkWashingService(db):undefined,service:new DigitalProductionIdentityService(db,true),quotationService:options?.fullApp?new DigitalQuotationService(db,true):undefined,budgetService:options?.fullApp?new DigitalBudgetService(db,true):undefined,creationEnabled:true,...(options?.workbenchNumberedCreation?{workbenchNumberedCreation:true}:{}),root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(db),journeys:new DigitalJourneyQuery(db),...(options?.fullApp?{closureService:new OrderClosureService(db),deliveryCalendar:new DeliveryCalendarQuery(db),factoryFlowService:new FactoryFlowService(db,options?.originalCraftRework?readQualityWarehouseCraftOccupation:undefined),bulkPreparationService:new BulkPreparationService(db)}:{}),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
   // Unrelated navigation indicator is a clearly labelled TEST response.
   if(!options?.orderTimeFlow)app.get('/todos/mine/indicator',async(request,reply)=>{const user=await auth.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18));reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
   await app.ready();
@@ -113,7 +135,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
    if(fault?.losePath===path&&!fault.lost&&method==='POST'&&result.statusCode===200){fault.lost=true;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_COMMITTED_RECEIPT_LOST',message:'TEST 已提交，回执暂时不可用'}}));return;}
    // Keep the real endpoint's redirects and binary payloads. Converting every
    // response to JSON concealed whether an authorized original image opened.
-   res.writeHead(result.statusCode,{'content-type':result.headers['content-type']??'application/json','cache-control':result.headers['cache-control']??'no-store',...(typeof result.headers.location==='string'?{location:result.headers.location}:{}),...(result.headers['x-dx-rework-actor-id']?{'x-dx-rework-actor-id':result.headers['x-dx-rework-actor-id']}:{})});res.end(result.rawPayload);
+   res.writeHead(result.statusCode,{'content-type':result.headers['content-type']??'application/json','cache-control':result.headers['cache-control']??'no-store',...(typeof result.headers.location==='string'?{location:result.headers.location}:{}),...(result.headers['x-dx-rework-actor-id']?{'x-dx-rework-actor-id':result.headers['x-dx-rework-actor-id']}:{}),...(result.headers['idempotency-replayed']?{'idempotency-replayed':result.headers['idempotency-replayed']}:{})});res.end(result.rawPayload);
   }catch(e){res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_NATIVE_HTTP',message:(e as Error).message}}));}
    finally{settle?.();}
   });

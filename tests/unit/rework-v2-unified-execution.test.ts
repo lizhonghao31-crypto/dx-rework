@@ -78,6 +78,11 @@ describe("PR-04 unified rework execution", () => {
     expect(reviewPanel).toContain('report.executionKind === "tail_inspection"');
     expect(reporting).toContain('task.execution_kind === "tail_inspection"');
     expect(reporting).toContain("rework_work_reports");
-    expect(responsibility).toContain("item.execution_kind='worker'");
+    // Responsibility may reference a confirmed outside repair, but the original
+    // work report and member share remain the source for any worker wage amount.
+    expect(responsibility).toContain("item.execution_kind IN ('worker','external_craft')");
+    expect(responsibility).toContain('report.configuration_item_id=item.configuration_item_id');
+    expect(responsibility).toContain('LEFT JOIN rework_work_report_member_shares share USING(work_report_id)');
+    expect(responsibility).toContain('wage.invalidated_at IS NULL');
   });
 });

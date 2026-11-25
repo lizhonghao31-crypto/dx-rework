@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {createWebUrls} from '../url-contract.js';
 
-const values=z.object({workspace:z.literal('warehouse'),tab:z.enum(['receive','preshrink','dispatch']).default('receive'),
+const values=z.object({workspace:z.literal('warehouse'),tab:z.enum(['receive','preshrink','dispatch','craft']).default('receive'),
  page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
  status:z.enum(['open','completed']).default('open')}).strict();
 export type WarehouseWorkbenchRoute=z.infer<typeof values>;
@@ -20,4 +20,8 @@ export function warehouseWorkbenchReturnTab(path:string|null,base:string){
  const local=new URL(path,'https://workbench.invalid');
  if(local.origin!=='https://workbench.invalid'||local.pathname!==createWebUrls(base).pageUrl('ui/digital-production'))return null;
  return readWarehouseWorkbenchRoute(local.searchParams)?.tab??null;
+}
+export function warehouseCraftTarget(query:URLSearchParams){
+ if(!query.has('warehouseCraft'))return undefined;
+ return query.getAll('warehouseCraft').length===1&&query.get('warehouseCraft')==='1'&&query.get('factoryAction')==='logistics'&&query.getAll('factory').length===1?true:null;
 }

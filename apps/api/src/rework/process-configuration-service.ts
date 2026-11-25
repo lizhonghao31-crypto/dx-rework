@@ -14,6 +14,7 @@ import { specialProcessLabel, specialProcessName } from "@dx-rework/contracts";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
+import {DigitalProductionAccessPolicy} from "../production-platform/access-policy.js";
 import { ensureWithinSourceReceivingActualQuantity } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
@@ -27,6 +28,8 @@ type DatabaseError = Readonly<{ code?: string }>;
 type MutationResult<T> = Readonly<{ value: T; reused: boolean }>;
 type OrderRow = Readonly<{
   rework_order_id: string;
+  source_craft_qc_check_id?: string|null;
+  craft_rework_execution?: "internal"|"factory"|null;
   rework_no: string | null;
   status: ReworkOrderStatus;
   style_no: string | null;
@@ -66,7 +69,7 @@ type ConfigurationItemRow = Readonly<{
   catalog_process_id: string | null;
   catalog_process_version: number | null;
   process_name: string;
-  execution_kind: "worker" | "tail_inspection";
+  execution_kind: "worker" | "tail_inspection" | "external_craft";
   special_process_type?: "inspection" | "other_craft" | null;
   pricing_unit: "piece" | "hour";
   planned_quantity: string | number;
@@ -221,6 +224,48 @@ export class ProcessConfigurationService {
     };
   }
 
+  async activateExternalCraft(actor:TrustedActorContext,reworkOrderId:string,input:{expectedOrderVersion:number},idempotencyKey:string):Promise<MutationResult<ProcessConfigurationResponse>>{
+    this.ensureConfigure(actor);
+    return this.mutate(actor,"rework.process_configuration.external_activate",idempotencyKey,{reworkOrderId,...input},200,async client=>{
+      const order=await this.lockOrder(client,reworkOrderId);
+      this.ensureOrderVersion(order,input.expectedOrderVersion);
+      if(order.status!=="pending_process_configuration"||order.craft_rework_execution!=="factory"||
+         !order.source_craft_qc_check_id||order.tail_inspection_required||!order.rework_quantity||
+         await this.latestConfiguration(client,reworkOrderId,true))
+        throw new ApplicationError("CONFLICT","仅当前无本厂工人或特殊工序的外厂裁片返工可确认外厂执行",409);
+      const configurationId=randomUUID(),itemId=randomUUID(),context={configurationId,configurationVersion:1,kind:"initial",changeReason:null,
+        status:"draft",workerPreassignmentRequired:false,unifiedExecutionRequired:true,items:[{
+          configurationItemId:itemId,source:"custom",processName:"外厂返修",executionKind:"external_craft",
+          plannedQuantity:order.rework_quantity,pricingUnit:"piece",unitPrice:null,processId:null,processVersion:null,promotedProcessId:null,
+        }]};
+      const base=this.auditOrder(order);
+      const draftEvent=await this.events.append(client,actor,{action:"rework.process_configuration.save",entityType:"rework_order",
+        entityId:reworkOrderId,before:base,after:{...base,configuration:context}});
+      await this.setConfigurationContext(client,draftEvent,actor.requestId);
+      await client.query(`INSERT INTO rework_process_configurations(configuration_id,rework_order_id,configuration_version,
+        configuration_kind,status,created_by,worker_preassignment_required,unified_execution_required)
+        VALUES($1,$2,1,'initial','draft',$3,false,true)`,[configurationId,reworkOrderId,actor.actorId]);
+      await client.query(`INSERT INTO rework_process_configuration_items(configuration_item_id,configuration_id,position,source,
+        custom_process_name,process_name,execution_kind,pricing_unit,planned_quantity,unit_price)
+        VALUES($1,$2,1,'custom','外厂返修','外厂返修','external_craft','piece',$3,NULL)`,[itemId,configurationId,order.rework_quantity]);
+      const reviewReason="纯外厂实际返工，本厂工人及计件 IE 核价不适用";
+      const eventId=await this.events.append(client,actor,{action:"rework.process_configuration.external_activate",entityType:"rework_order",
+        entityId:reworkOrderId,reason:reviewReason,before:{...base,configuration:context},
+        after:{...this.auditOrder(order,"in_progress",order.version+1),configuration:{...context,status:"approved",reviewReason}}});
+      await this.setConfigurationContext(client,eventId,actor.requestId);
+      await this.setReworkContext(client,eventId,actor.requestId);
+      await client.query(`UPDATE rework_process_configurations SET status='approved',review_reason=$2,reviewed_by=$3,
+        submitted_at=CURRENT_TIMESTAMP,reviewed_at=CURRENT_TIMESTAMP WHERE configuration_id=$1`,[configurationId,reviewReason,actor.actorId]);
+      await client.query(`UPDATE rework_orders SET status='in_progress',updated_by=$2,version=version+1,
+        updated_at=CURRENT_TIMESTAMP WHERE rework_order_id=$1`,[reworkOrderId,actor.actorId]);
+      return this.dto(client,await this.order(client,reworkOrderId));
+    },async client=>{
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(client).lockActiveRole(actor.actorId,'tail_supervisor'))
+        throw new ApplicationError("FORBIDDEN","当前尾部角色已无权确认原外厂执行",403);
+    });
+  }
+
   async saveDraft(
     actor: TrustedActorContext,
     reworkOrderId: string,
@@ -233,6 +278,9 @@ export class ProcessConfigurationService {
       this.ensureOrderVersion(order, input.expectedOrderVersion);
       if (order.status !== "pending_process_configuration") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "当前返工单不允许保存工序配置", 409);
+      }
+      if (order.craft_rework_execution === "factory") {
+        throw new ApplicationError("INVALID_STATE_TRANSITION", "纯外厂返修须确认原外厂执行，不可登记本厂工人和计件工序", 409);
       }
       const kind = "initial" as const;
       if (input.changeReason) {
@@ -513,10 +561,12 @@ export class ProcessConfigurationService {
     payload: unknown,
     statusCode: number,
     work: (client: PoolClient) => Promise<T>,
+    authorizeBeforeReplay?: (client:PoolClient)=>Promise<void>,
   ): Promise<MutationResult<T>> {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await authorizeBeforeReplay?.(client);
       const result = await this.idempotency.execute<T>(client, {
         scope,
         actorKey: actor.actorId,
@@ -765,6 +815,7 @@ export class ProcessConfigurationService {
       reworkStatus: order.status,
       orderVersion: order.version,
       tailInspectionRequired: order.tail_inspection_required,
+      ...(order.craft_rework_execution === "factory" ? { externalCraftOnly: true } : {}),
       specialProcessType: order.special_process_type ?? null,
       otherCraftDescription: order.other_craft_description ?? null,
       configuration: configuration ? {

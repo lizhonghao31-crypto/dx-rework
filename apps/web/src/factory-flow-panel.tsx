@@ -7,6 +7,8 @@ import {DocumentGuardContext} from './use-digital-detail-navigation-guard.js';
 import {FactoryDispatchTimeInput,factoryDispatchTime} from './factory-dispatch-time-input.js';
 import {acceptanceInputNow} from './acceptance-business-time.js';
 import {FactoryProductionQcPanel} from './factory-production-qc-panel.js';
+import {qualityRecordTarget} from './quality-workbench-route.js';
+import {CraftOriginalQuality} from './craft-original-quality.js';
 import {FactoryBatchPanel} from './factory-batch-panel.js';
 import {roleLabel} from "./components.js";
 import { digitalTaskDisplayStatus } from "./digital-workspace-copy.js";
@@ -44,7 +46,14 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
  const {sheet,people,loading,readError,peopleError,reload,accept:setSheet}=useFactoryFlowRead(orderId,target.action!=='washing'&&!target.error);
  const busy=working||loading;
  const [images,setImages]=useState<Record<string,string[]>>({}),writing=useRef(false),pending=useRef<{payload:string;key:string}|null>(null);
- const save=async(path:string,body:Record<string,unknown>,outside=false)=>{if(writing.current||loading||!sheet)return;writing.current=true;setBusy(true);setError('');const data=outside?body:{...body,expectedRevision:sheet.revision};const payload=JSON.stringify([path,data]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{const response=await digitalRequest<FactoryFlowSheet>(outside?path:base+path,'POST',data,pending.current.key);if(outside)await reload();else setSheet(response);pending.current=null;eventTime.current=null;if(path==='/qc'){const completed=(body.checks as Array<{lineId:string}>).map(check=>check.lineId);setImages(current=>Object.fromEntries(Object.entries(current).filter(([line])=>!completed.includes(line))));setPreviews(current=>{for(const line of completed)for(const photo of current[line]??[]){URL.revokeObjectURL(photo.url);previewUrls.current.delete(photo.url);}return Object.fromEntries(Object.entries(current).filter(([line])=>!completed.includes(line)));});}}catch(e){setError(e instanceof Error?e.message:'办理失败');}finally{writing.current=false;setBusy(false);}};
+ const save=async(path:string,body:Record<string,unknown>,outside=false)=>{if(writing.current||loading||!sheet)return;writing.current=true;setBusy(true);setError('');const data=outside?body:{...body,expectedRevision:sheet.revision};const payload=JSON.stringify([path,data]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{const response=await digitalRequest<FactoryFlowSheet>(outside?path:base+path,'POST',data,pending.current.key);if(outside)await reload();else setSheet(response);pending.current=null;eventTime.current=null;if(path==='/qc'){
+ const acknowledged=new Set((body.checks as Array<{attachmentIds?:string[]}>).flatMap(check=>check.attachmentIds??[]));
+ setImages(current=>Object.fromEntries(Object.entries(current).map(([scope,ids])=>[scope,ids.filter(id=>!acknowledged.has(id))])));
+ setPreviews(current=>Object.fromEntries(Object.entries(current).map(([scope,photos])=>[scope,photos.filter(photo=>{
+  if(!acknowledged.has(photo.attachmentId))return true;
+  URL.revokeObjectURL(photo.url);previewUrls.current.delete(photo.url);return false;
+ })])));
+}}catch(e){setError(e instanceof Error?e.message:'办理失败');}finally{writing.current=false;setBusy(false);}};
  const at=(f:FormData)=>{if(f.get('unknown')==='on')return null;if(f.get('at'))return new Date(`${String(f.get('at'))}+08:00`).toISOString();const signature=JSON.stringify([...f.entries()]);if(eventTime.current?.signature!==signature)eventTime.current={signature,value:acceptanceInputNow().toISOString()};return eventTime.current.value;};
  const upload=async(lineId:string,files:File[])=>{
   if(writing.current||loading||!files.length)return;
@@ -72,6 +81,12 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
   }catch(e){setFailedUploads(current=>({...current,[lineId]:remaining}));setError(e instanceof Error?e.message:'上传失败');}
   finally{writing.current=false;setBusy(false);}
  };
+ const removePendingPhoto=(key:string,id:string)=>{
+  const preview=previews[key]?.find(photo=>photo.attachmentId===id);
+  if(preview){URL.revokeObjectURL(preview.url);previewUrls.current.delete(preview.url);}
+  setImages(current=>({...current,[key]:(current[key]??[]).filter(attachment=>attachment!==id)}));
+  setPreviews(current=>({...current,[key]:(current[key]??[]).filter(photo=>photo.attachmentId!==id)}));
+ };
  useEffect(()=>{if(!sheet||target.error||target.lineId&&!sheet.lines.some(line=>line.lineId===target.lineId))return;const elementId=target.lineId?`factory-qc-line-${target.lineId}`:`factory-${target.action}`;const frame=window.requestAnimationFrame(()=>document.getElementById(elementId)?.scrollIntoView({block:'start'}));return()=>window.cancelAnimationFrame(frame);},[sheet?.revision,target]);
  const time=(unknown=false)=><><label>真实发生时间（北京时间，留空为当前）<input name="at" type="datetime-local"/></label>{unknown&&<label><input name="unknown" type="checkbox"/>真实时间暂不明确</label>}</>;
  if(target.error)return <Surface><Button onClick={()=>void guarded(onClose)}>返回这张订单</Button><p role="alert">{target.error}</p></Surface>;
@@ -80,6 +95,26 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
  if(warehouseDispatchTask&&sheet&&!sheet.tasks.some(task=>task.taskKind==='warehouse_dispatch'&&task.taskId===warehouseDispatchTask))
   return <Surface><Button onClick={onClose}>返回来源</Button><p role="alert">该发厂任务已变更，请从仓库中心重新核对。</p></Surface>;
  const paused=Boolean(sheet?.tasks.some(task=>task.paused&&!['completed','cancelled'].includes(task.state)));
+ const qualityTarget=qualityRecordTarget(new URLSearchParams(search));
+ // Close delegates to the internal router, which already calls the registered
+ // photo guard. Only the in-place refresh uses the local guard directly.
+ const closeQuality=()=>{if(!writing.current)onClose();};
+ if(qualityTarget?.kind==='craft')return <DocumentGuardContext.Provider value={guards}><Surface className="factory-flow">
+  <div className="pattern-actions"><Button disabled={working} onClick={closeQuality}>返回来源</Button>
+   <Button disabled={busy} onClick={()=>void guarded(reload).catch(()=>undefined)}>刷新原检查</Button></div>
+  <h2>二次工艺回仓检查</h2>{error&&<p role="alert">{error}</p>}{readError&&<p role="alert">{readError}</p>}
+  {loading&&<p role="status">正在读取原工艺检查…</p>}
+  {sheet&&<CraftOriginalQuality key={`${qualityTarget.returnFactId}:${qualityTarget.lineId}`} sheet={sheet} target={qualityTarget} busy={busy} paused={paused} parentWriting={writing}
+   save={save} upload={upload} images={images} previews={previews} failedUploads={failedUploads}
+   removePendingPhoto={removePendingPhoto} clearFailed={key=>setFailedUploads(current=>({...current,[key]:[]}))}/>}
+ </Surface></DocumentGuardContext.Provider>;
+ if(qualityTarget?.kind==='factory')return <DocumentGuardContext.Provider value={guards}><Surface className="factory-flow">
+  <div className="pattern-actions"><Button disabled={working} onClick={closeQuality}>返回来源</Button>
+   <Button disabled={busy} onClick={()=>void guarded(reload).catch(()=>undefined)}>刷新原检查</Button></div>
+  <h2>加工检查</h2>{error&&<p role="alert">{error}</p>}{readError&&<p role="alert">{readError}</p>}
+  {loading&&<p role="status">正在读取原加工检查…</p>}
+  {sheet&&<FactoryProductionQcPanel sheet={sheet} busy={busy} paused={paused} open save={save} focus={qualityTarget}/>}
+ </Surface></DocumentGuardContext.Provider>;
  const qcDisabled=busy||paused||Boolean(target.error)||Boolean(target.lineId&&!sheet?.lines.some(line=>line.lineId===target.lineId))||Boolean(sheet?.inTransit)||sheet?.tasks.find(t=>t.taskKind==='bulk_qc')?.state!=='ready';
  const wholeDispatch=sheet&&!sheet.batchMode&&sheet.canWarehouse&&!sheet.dispatched&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('/dispatch',{...factoryDispatchTime(f),supplierId:sheet.supplierId,note:String(f.get('note')??'')});}}><fieldset disabled={busy||paused||!sheet.allQc||!sheet.supplierId}><legend id="factory-dispatch">仓库整款实际发厂</legend><p>全部PO一起发给 {sheet.supplierName}。登记实际发出后启动原生产监控。</p><FactoryDispatchTimeInput/><label>发厂说明<textarea name="note" maxLength={2000}/></label><Button type="submit">确认整款已实际发厂</Button></fieldset></form>;
  if(warehouseDispatchTask)return <DocumentGuardContext.Provider value={guards}><DocumentEntryScope orderId={orderId}>

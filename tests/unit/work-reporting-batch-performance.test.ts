@@ -31,6 +31,7 @@ const createHarness = (input: {
   memberAppUserId?: (taskIndex: number, memberIndex: number) => string | null;
   executionKind?: (taskIndex: number) => "worker" | "tail_inspection";
   failShares?: boolean;
+  sourceQuantityLimit?: number;
 }) => {
   const orderId = uuid(1);
   const taskIds = Array.from({ length: input.taskCount }, (_, index) => uuid(100 + index));
@@ -66,8 +67,9 @@ const createHarness = (input: {
     if (sql.includes("SELECT task.work_task_id,task.rework_order_id") && sql.includes("task.work_task_id=ANY")) {
       return { rowCount: tasks.length, rows: tasks };
     }
-    if (sql.includes("source_receiving_batch_id IS NULL") && sql.includes("AS quantity")) {
-      return { rowCount: 1, rows: [{ quantity: null }] };
+    if (sql === "SELECT quantity::text AS quantity,unit FROM rework_original_quantity_bound($1)") {
+      expect(values).toEqual([orderId]);
+      return { rowCount: 1, rows: [{ quantity: input.sourceQuantityLimit === undefined ? null : String(input.sourceQuantityLimit), unit: "件" }] };
     }
     if (sql.includes("FROM rework_orders WHERE rework_order_id=$1")) {
       return {
@@ -167,7 +169,7 @@ describe("work report batch set-based persistence", () => {
     expect(harness.insertedShares()).toBe(400);
     expect(writesAfterFirst).toHaveLength(3);
     expect(callsAfterFirst).toBeLessThanOrEqual(14);
-    expect(harness.commands.filter((sql) => sql.includes("source_receiving_batch_id IS NULL"))).toHaveLength(1);
+    expect(harness.commands.filter((sql) => sql.includes("rework_original_quantity_bound($1)"))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO operation_events("))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_reports("))).toHaveLength(1);
     expect(harness.commands.filter((sql) => sql.includes("INSERT INTO rework_work_report_member_shares"))).toHaveLength(1);
@@ -235,6 +237,18 @@ describe("work report batch set-based persistence", () => {
 
     expect(harness.commands.some((sql) => sql.includes("INSERT INTO operation_events("))).toBe(false);
     expect(harness.commands.some((sql) => sql.includes("INSERT INTO rework_work_reports("))).toBe(false);
+    expect(harness.commands).toContain("ROLLBACK");
+  });
+
+  it("rejects amounts above the same original quantity bound before any batch writes", async () => {
+    const actorId = uuid(2);
+    const harness = createHarness({ taskCount: 2, membersPerTask: 1, actorId, sourceQuantityLimit: 80 });
+    await expect(harness.service.submitReportsBatch(root(actorId), harness.orderId, {
+      expectedOrderVersion: 2,
+      reports: harness.taskIds.map((workTaskId, index) => ({ workTaskId, actualQuantity: 80 + index })),
+    }, "original-bound")).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400, message: expect.stringContaining("80 件") });
+    expect(harness.commands.filter((sql) => sql.includes("rework_original_quantity_bound($1)"))).toHaveLength(1);
+    expect(harness.commands.some((sql) => sql.includes("INSERT INTO"))).toBe(false);
     expect(harness.commands).toContain("ROLLBACK");
   });
 });

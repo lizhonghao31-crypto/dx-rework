@@ -1,5 +1,9 @@
 import {craftStepIdentity,type AdoptedCraftStep} from '@dx-rework/contracts/digital-craft';
-import {factoryBatchLedger,scopes,type BatchFact,type BatchCheck,type FactoryScope} from './factory-batch-ledger.js';
+import {factoryBatchLedger,factoryBatchReleaseAvailable,scopes,type BatchFact,type BatchCheck,type BatchRow,type FactoryScope} from './factory-batch-ledger.js';
+
+export function priorCraftReleasedPieces(prior:{completion:ReadonlyArray<{lineId:string;complete:boolean}>},row:BatchRow){
+ return prior.completion.find(item=>item.lineId===row.lineId)?.complete?factoryBatchReleaseAvailable(row):row.releasedAvailable??0;
+}
 
 type Step=Pick<AdoptedCraftStep,'stepId'|'craftKind'|'sequence'|'specialCraft'>;
 /** Original immutable movements stay the quantity source. A second craft is
@@ -18,9 +22,9 @@ export function factoryStepLedger(lines:FactoryScope[],facts:BatchFact[],checks:
   const batches=ledger.batches.map(batch=>({...batch,stepRef:step.stepId}));
   const completion=lines.map(line=>{
    const qualified=batches.reduce((sum,batch)=>{
-    const row=batch.rows.find(row=>row.lineId===line.lineId);if(!row?.allowDispatch)return sum;
+    const row=batch.rows.find(row=>row.lineId===line.lineId);if(!row||!row.allowDispatch&&row.releasedAvailable===undefined)return sum;
     const handedOn=transfers.filter(fact=>fact.payload.fromReturnId===batch.factId).reduce((n,fact)=>n+(scopes(fact.payload.lines).find(scope=>scope.lineId===line.lineId)?.quantity??0),0);
-    return sum+row.available+row.sent+handedOn;
+    return sum+factoryBatchReleaseAvailable(row)+row.sent+handedOn;
    },0);
    return {lineId:line.lineId,qualified,complete:qualified===line.quantity,conflict:qualified>line.quantity};
   });
@@ -32,12 +36,15 @@ export function factoryStepLedger(lines:FactoryScope[],facts:BatchFact[],checks:
   batches:terminal.batches,totals:terminal.totals,pendingSends:result.flatMap(step=>step.pendingSends.map(send=>({...send,stepRef:step.step.stepId}))),
   quantityConflict:result.some(step=>step.quantityConflict),
   complete:terminal.totals.length>0&&terminal.totals.every(line=>line.sent===line.quantity),
-  canDispatch:terminal.batches.some(batch=>batch.rows.some(row=>row.available>0&&row.allowDispatch)),
+  canDispatch:terminal.batches.some(batch=>batch.rows.some(row=>factoryBatchReleaseAvailable(row)>0)),
   // Requested lines must additionally satisfy these per-PO predecessor facts
   // in the original write transaction; one ready PO does not unlock a sibling.
   sendable:result.map((step,index)=>({stepRef:step.step.stepId,lines:lines.map(line=>{
    const own=step.totals.find(total=>total.lineId===line.lineId)!;
-   const prior=index?result[index-1]!:null,available=prior?.batches.reduce((sum,batch)=>sum+batch.rows.filter(row=>row.lineId===line.lineId&&row.allowDispatch).reduce((n,row)=>n+row.available,0),0);
-   return {lineId:line.lineId,remaining:!prior?own.craftRemaining:prior.completion.find(item=>item.lineId===line.lineId)?.complete?Math.min(own.craftRemaining,available??0):0};
+   const prior=index?result[index-1]!:null,priorRows=prior?.batches.flatMap(batch=>batch.rows.filter(row=>row.lineId===line.lineId))??[];
+   // Existing orders wait for their original whole-PO release. A new counted check
+   // can additionally prove an explicit partial scope on its own exact lot.
+   const available=prior?priorRows.reduce((sum,row)=>sum+priorCraftReleasedPieces(prior,row),0):0;
+   return {lineId:line.lineId,remaining:!prior?own.craftRemaining:Math.min(own.craftRemaining,available)};
   })}))};
 }

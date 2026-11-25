@@ -347,11 +347,11 @@ export function WorkReportingForm({
       ]);
       if(!live)return;
       setPeople(peopleResult.people);
-      setConfigItems(configuration.configuration?.items.map((item) => ({
+      setConfigItems(configuration.configuration?.items.flatMap((item) => item.executionKind==="external_craft"?[]:[{
         configurationItemId: item.configurationItemId,
         processName: item.executionKind === "tail_inspection" && item.specialProcessType !== "other_craft" ? "整查" : item.processName,
         executionKind: item.executionKind,
-      })) ?? []);
+      }]) ?? []);
     };
     void load().catch((cause:unknown)=>{
       if(live)setMessage(cause instanceof Error?cause.message:"当前节点加载失败");
@@ -607,7 +607,7 @@ export function WorkReportingForm({
   const completeExecution = async () => {
     if (!data || data.reworkStatus !== "in_progress" || busy) return;
     setBusy(true);
-    setMessage(`正在核验返工与${specialLabel}报数…`);
+    setMessage(data.externalRepair ? "正在核验原外厂返修回仓…" : `正在核验返工与${specialLabel}报数…`);
     try {
       const completed = await request(
         `rework-orders/${data.reworkOrderId}/work-tasks/complete`,
@@ -705,7 +705,12 @@ export function WorkReportingForm({
     </>}
     {ieN05FactsView && <p>核对返工执行事实，按返工工序记录 IE 预核数量。</p>}
     {(effectiveTaskMode === "work_reporting" || ieN05FactsView) && <>
-      {managerProgressView ? <div className="n04-progress-board">
+      {managerProgressView && data?.externalRepair !== undefined ? <Surface>
+        <h2>原外厂返修回仓进度</h2>
+        <p>{data.externalRepair ? `已回仓 ${data.externalRepair.returnedQuantity} / ${data.externalRepair.requiredQuantity} 片` : "本轮回仓依据待核。"}</p>
+        {workReportingWritable && canAssign && data.reworkStatus === "in_progress" && data.externalRepair?.physicalCompletedAt &&
+          <Button variant="primary" onClick={() => void completeExecution()} disabled={busy}>全部完成，进入节点05</Button>}
+      </Surface> : managerProgressView ? <div className="n04-progress-board">
         <div className="n04-progress-summary" aria-label="返工任务进度汇总">
           <strong>任务进度</strong>
           <span className="is-pending">未完成 {incompleteTasks.length}</span>

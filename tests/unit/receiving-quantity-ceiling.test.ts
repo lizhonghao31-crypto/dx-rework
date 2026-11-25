@@ -36,6 +36,16 @@ describe("receiving-linked rework quantity ceiling", () => {
     )).resolves.toBeUndefined();
   });
 
+  it("applies the exact original craft ceiling without converting pieces into garments", async () => {
+    const database = { query: async () => ({ rows: [{ quantity: "20",unit:"片" }] }) };
+    const id = "00000000-0000-4000-8000-000000000003";
+    await expect(ensureWithinSourceReceivingActualQuantity(database as never,id,[{label:"实际发出",quantity:21}])).rejects.toThrow("实际发出不能超过本次原工艺问题范围 20 片");
+    await expect(ensureWithinSourceReceivingActualQuantity(database as never,id,[{label:"实际发出",quantity:20}])).resolves.toBeUndefined();
+    expect(sourceReceivingQuantityCeilingError({code:"23514",message:"rework quantity exceeds source craft issue quantity ceiling 20"})).toMatchObject({
+      code:"VALIDATION_ERROR",message:"确认数量不能超过本次原工艺问题范围 20 片，请刷新后重试",
+    });
+  });
+
   it("covers every persisted quantity path with a database guard", async () => {
     const migration = await readFile("apps/api/migrations/0141_rework_receiving_quantity_ceiling.sql", "utf8");
     for (const table of [

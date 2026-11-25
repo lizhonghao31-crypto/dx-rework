@@ -49,6 +49,7 @@ const SecondaryCraftQuotationPage=lazyBusinessPage(()=>import('./secondary-craft
 const DigitalProductionPage=lazyBusinessPage(()=>import('./digital-production-page.js').then(module=>({default:module.DigitalProductionPage})));
 const DigitalDesignerWorkspace=lazyBusinessPage(()=>import('./digital-designer-workspace.js').then(module=>({default:module.DigitalDesignerWorkspace})));
 const WarehouseCenter=lazyBusinessPage(()=>import('./warehouse-center.js').then(module=>({default:module.WarehouseCenter})));
+const QualityCenter=lazyBusinessPage(()=>import('./quality-center.js').then(module=>({default:module.QualityCenter})));
 const DigitalPatternWorkspace=lazyBusinessPage(()=>import('./digital-pattern-workspace.js').then(module=>({default:module.DigitalPatternWorkspace})));
 const PatternOrderCreatePage=lazyBusinessPage(()=>import('./pattern-order-create-page.js').then(module=>({default:module.PatternOrderCreatePage})));
 const CuttingDetailPage=lazyBusinessPage(()=>import('./cutting-page.js').then(module=>({default:module.CuttingDetailPage})));
@@ -324,6 +325,8 @@ function routeContent(navigation:InternalLocation){
   else if(path === "/ui/secondary-craft-quotation") page = <Shell active="二次工艺报价与选厂" appearance="digital"><ProductionWorkspace><SecondaryCraftQuotationPage key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-production"&&new URLSearchParams(search).get('workspace')==='warehouse')
     page = <Shell active="digital-warehouse" appearance="digital"><ProductionWorkspace><WarehouseCenter key={search}/></ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-production"&&new URLSearchParams(search).get('workspace')==='quality')
+    page = <Shell active="digital-quality" appearance="digital"><ProductionWorkspace><QualityCenter key={search} search={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "designer" ? <DigitalDesignerWorkspace key={search}/> : <><DevelopmentWorkspaceReturn/><DigitalProductionPage key={search} /></>}</ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-pattern-room") page = <Shell active="digital-pattern" appearance="digital"><ProductionWorkspace><DigitalPatternWorkspace key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
@@ -408,6 +411,8 @@ function routeContent(navigation:InternalLocation){
   if(path==='/ui/digital-analysis'&&new URLSearchParams(navigation.search).get('view')==='production')return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole,requiredCapability:'report:view'}))}>{page}</AuthGate>;
   if (path === "/ui/digital-production"&&new URLSearchParams(navigation.search).get('workspace')==='warehouse')
     return <AuthGate requiredAnyOf={['warehouse_receiver','warehouse_supervisor'].map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
+  if (path === "/ui/digital-production"&&new URLSearchParams(navigation.search).get('workspace')==='quality')
+    return <AuthGate requiredRole="quality_control">{page}</AuthGate>;
   if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
