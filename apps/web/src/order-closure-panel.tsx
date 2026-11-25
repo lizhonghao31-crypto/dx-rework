@@ -1,5 +1,6 @@
 import {BulkWashingPanel} from './bulk-washing-panel.js';
 import {GarmentQualityForm} from './garment-quality-form.js';
+import {GarmentOriginalRework} from './garment-original-rework.js';
 import {OriginalGarmentQualityPhotos} from './garment-quality-photos.js';
 import {closureFeedbackProjection} from './document-feedback-projections.js';
 import {SubmissionAttempt} from './submission-attempt.js';
@@ -57,6 +58,9 @@ function CurrentOrderClosurePanel({orderId,onClose}:Props){
     <p>本批实收 {actual.quantity} 件 · {actual.inspected?`已检查，合格 ${actual.qualifiedQuantity}`:'待检查'}</p>
     {sheet?.canRecordQuality&&!sheet.closed?<GarmentQualityForm key={`${actual.receiptId}:${actual.quantityVersion}`} orderId={orderId} receipt={actual}
      canVerify={sheet.canVerifyQualityTime===true} onSaved={reload}/>:<><p>{actual.problem}</p><OriginalGarmentQualityPhotos orderId={orderId} receipt={actual}/></>}
+    {sheet?.canRecordQuality&&sheet.canOpenRework&&!sheet.closed&&actual.inspected&&actual.eventId&&actual.qualifiedQuantity<actual.quantity&&actual.problem.trim()&&
+     <GarmentOriginalRework key={actual.eventId} source={{orderId,receiptId:actual.receiptId,quantityVersion:actual.quantityVersion,eventId:actual.eventId}}
+      maximum={actual.quantity-actual.qualifiedQuantity}/>}
    </section>}
   </Surface>;
  }

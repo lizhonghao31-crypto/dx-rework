@@ -6,6 +6,8 @@ import type { Pool, PoolClient } from "pg";
 import { ApplicationError } from "../platform/errors.js";
 import { ensureOtherCraftComplete } from "./special-process.js";
 import {currentCraftProblemForRework,lockCraftProblemAuthority,reworkCraftLocator,type CraftProblemLocator} from "../production-platform/quality-craft-problem-scope.js";
+import {lockOriginalGarmentReworkOrder,readGarmentReworkSource} from "../production-platform/garment-quality.js";
+import type {GarmentReworkSource} from '@dx-rework/contracts/order-closure';
 import {
   IdempotencyService,
   MessageOutboxRepository,
@@ -123,6 +125,7 @@ export class ReworkV2SubmissionService {
       await client.query("BEGIN");
       const locator=await reworkCraftLocator(client,actor,reworkOrderId);
       const originalCraft=locator?{locator,authority:await lockCraftProblemAuthority(client,actor,locator)}:null;
+      const originalGarment=originalCraft?null:await lockOriginalGarmentReworkOrder(client,actor,reworkOrderId);
       const scope = kind === "inhouse_finishing" ? "rework.finishing.submit.v2" : "rework.submit.v2";
       const result = await this.idempotency.execute<ReworkOrderResponse>(client, {
         scope,
@@ -132,7 +135,7 @@ export class ReworkV2SubmissionService {
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       }, async () => ({
         statusCode: 200,
-        response: await this.submitOnce(client, actor, reworkOrderId, input, kind,originalCraft),
+        response: await this.submitOnce(client, actor, reworkOrderId, input, kind,originalCraft,originalGarment),
       }));
       await client.query("COMMIT");
       return { value: result.response, reused: result.reused };
@@ -151,6 +154,7 @@ export class ReworkV2SubmissionService {
     input: SubmitReworkOrder,
     kind: "qc_rework" | "inhouse_finishing",
     originalCraft:CraftSubmissionScope|null,
+    originalGarment:GarmentReworkSource|null,
   ): Promise<ReworkOrderResponse> {
     const current = await this.lockOwnedDraft(client, actor, reworkOrderId);
     ensureOtherCraftComplete(current);
@@ -167,6 +171,7 @@ export class ReworkV2SubmissionService {
     if (current.status !== "draft") {
       throw new ApplicationError("INVALID_STATE_TRANSITION", "只有草稿可以提交", 409);
     }
+    if(originalGarment)await readGarmentReworkSource(client,actor,originalGarment);
     if(current.source_craft_qc_check_id){
       if(!originalCraft||originalCraft.locator.checkId!==current.source_craft_qc_check_id)
         throw new ApplicationError("FORBIDDEN","原工艺问题范围不可办理",403);

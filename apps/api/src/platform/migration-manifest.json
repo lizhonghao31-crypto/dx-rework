@@ -1303,6 +1303,10 @@
     {
       "version": "0311_internal_craft_quality_reinspection",
       "checksum": "f87a4dfba92df6f9a19985db58e846953afb3baf44b1facb8be71c38d07ca4ca"
+    },
+    {
+      "version": "0312_original_garment_quality_rework",
+      "checksum": "81e08372416c867d751f0cbbfd7de0bdf61a7ac4e3e2132386c6785281423dfd"
     }
   ]
 }

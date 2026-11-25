@@ -4,7 +4,7 @@ import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {TrustedActorContext} from '../tools/repositories.js';
-import type {ReceiptQuality,ReceiptQualityFact,ReceiptQualityVerification} from '@dx-rework/contracts/order-closure';
+import type {GarmentReworkSource,ReceiptQuality,ReceiptQualityFact,ReceiptQualityVerification} from '@dx-rework/contracts/order-closure';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 import {receiptTime} from './receiving-summary.js';
@@ -13,6 +13,43 @@ type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('GARMENT_QUALITY_CONFLICT',message,409);};
 async function ensureCurrentQualityOrder(db:DB,orderId:string){
  if((await db.query("SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 UNION ALL SELECT 1 FROM digital_production_resource_lifecycle WHERE (resource_kind='order' AND resource_id=$1 OR resource_kind='source' AND resource_id=(SELECT source_id FROM digital_production_orders WHERE production_order_id=$1)) AND state<>'active'",[orderId])).rowCount)fail('订单或开发来源已暂停、取消或结案，原质检历史保留');
+}
+async function assertGarmentReworkAuthority(db:DB,actor:TrustedActorContext,orderId:string,lockRole:boolean){
+ const policy=new DigitalProductionAccessPolicy(db);
+ await policy.assert(actor,'order',orderId,'technical');
+ if(!actor.actorRoles.includes('root_superuser')&&(!actor.actorRoles.includes('quality_control')||
+  !await (lockRole?policy.lockActiveRole(actor.actorId,'quality_control'):policy.activeRole(actor.actorId,'quality_control'))))return digitalForbidden();
+}
+export async function lockGarmentReworkAuthority(db:PoolClient,actor:TrustedActorContext,orderId:string){
+ await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+ await assertGarmentReworkAuthority(db,actor,orderId,true);
+}
+/** Resolve only the selected receipt, effective quantity revision and current original QC event. */
+export async function readGarmentReworkSource(db:DB,actor:TrustedActorContext,source:GarmentReworkSource){
+ await assertGarmentReworkAuthority(db,actor,source.orderId,false);
+ await ensureCurrentQualityOrder(db,source.orderId);
+ const receipt=(await garmentQuality(db,source.orderId)).find(row=>row.receiptId===source.receiptId);
+ if(!receipt?.inspected||receipt.quantityVersion!==source.quantityVersion||receipt.eventId!==source.eventId||receipt.qualifiedQuantity>=receipt.quantity||!receipt.problem.trim())
+  return fail('原检查或本批实收数量版本已变化，或没有可计量的实际质量问题');
+ const metadata=(await db.query<{merchandiser_id:string|null;factory_supplier_id:string|null}>(`SELECT o.primary_merchandiser_id AS merchandiser_id,
+    f.supplier_id AS factory_supplier_id FROM digital_production_orders o
+    LEFT JOIN sourcing_production_receipt_links r ON r.receipt_id=$2
+    LEFT JOIN sourcing_production_factory_orders f ON f.production_order_id=r.production_order_id AND f.factory_decision_id IS NOT DISTINCT FROM r.factory_decision_id
+    WHERE o.production_order_id=$1`,[source.orderId,source.receiptId])).rows;
+ return {receivingBatchId:receipt.batchId,lineId:receipt.lineId,sourceEventId:source.eventId,quantity:receipt.quantity-receipt.qualifiedQuantity,
+  problem:receipt.problem,merchandiserId:metadata[0]?.merchandiser_id??null,factorySupplierId:metadata.length===1?metadata[0]?.factory_supplier_id??null:null};
+}
+export async function lockOriginalGarmentReworkOrder(db:PoolClient,actor:TrustedActorContext,reworkId:string){
+ const binding=(await db.query<{check_id:string|null}>(`SELECT to_jsonb(orders)->>'source_garment_qc_event_id' AS check_id
+  FROM rework_orders orders WHERE orders.rework_order_id=$1 AND ($2 OR orders.created_by=$3) AND orders.status<>'deleted'`,
+ [reworkId,actor.actorRoles.includes('root_superuser'),actor.actorId])).rows[0]?.check_id;
+ if(!binding)return null;
+ const original=(await db.query<GarmentReworkSource>(`SELECT resource_id AS "orderId",event_id AS "eventId",
+  payload->>'receiptId' AS "receiptId",payload->>'quantityVersion' AS "quantityVersion" FROM digital_production_task_events
+  WHERE event_id=$1 AND resource_kind='order' AND event_kind='garment_receipt_qc'`,[binding])).rows[0];
+ if(!original)fail('无法核对这张原返工单的成衣质检来源');
+ await lockGarmentReworkAuthority(db,actor,original!.orderId);
+ return original!;
 }
 /** Each native receipt is a batch. Current quantity correction invalidates coverage, never deletes inspection history. */
 export async function garmentQuality(db:DB,orderId:string){

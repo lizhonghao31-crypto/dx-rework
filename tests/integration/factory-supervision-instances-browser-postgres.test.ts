@@ -7,6 +7,7 @@ import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-bro
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {readGarmentReworkSource} from '../../apps/api/src/production-platform/garment-quality.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
@@ -108,15 +109,62 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await inspect.getByRole('button',{name:'保存到仓质检',exact:true}).click();const result=await checked;
    expect(result.status(),await result.text()).toBe(200);
    expect(result.request().postDataJSON()).toMatchObject({receiptId:intake.value.receiptId,quantityVersion:intake.value.receiptId,qualifiedQuantity:260});
+   const checkedGarment={orderId:original.id,receiptId:intake.value.receiptId,quantityVersion:intake.value.receiptId,eventId:(await result.json()).eventId as string};
+   await expect(readGarmentReworkSource(f.db,qc,checkedGarment)).resolves.toMatchObject({receivingBatchId:intake.value.receivingBatchId,
+    lineId:line.lineId,sourceEventId:checkedGarment.eventId,quantity:20});
+   await expect(readGarmentReworkSource(f.db,warehouse,checkedGarment)).rejects.toMatchObject({statusCode:403});
+   await expect(readGarmentReworkSource(f.db,qc,{...checkedGarment,eventId:randomUUID()})).rejects.toMatchObject({statusCode:409});
    await inspect.getByText('本批实收 280 件 · 已检查，合格 260',{exact:true}).waitFor();
+   const draftResponse=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith('/rework-orders/garment-quality/drafts'));
+   await inspect.getByRole('button',{name:'按本批问题发起返工',exact:true}).click();
+   const entered=await draftResponse;
+   expect(entered.status(),await entered.text()).toBe(201);
+   expect(entered.request().postDataJSON()).toEqual(checkedGarment);
+   const draftKey=entered.request().headers()['idempotency-key']!;
+   const draft=await entered.json();
+   expect(draft).toMatchObject({receivingBatchId:intake.value.receivingBatchId,reworkQuantity:20,status:'draft'});
+   const reworkLink=inspect.getByRole('link',{name:'查看原成衣返工单',exact:true});await reworkLink.waitFor();
+   expect(await reworkLink.getAttribute('href')).toContain(`/ui/tasks/${draft.reworkOrderId}`);
+   const retry=await tab.context.request.post(`${h.base}/api/rework-orders/garment-quality/drafts`,{
+    headers:{'idempotency-key':randomUUID()},data:checkedGarment,
+   });
+   expect(retry.status(),await retry.text()).toBe(201);
+   expect(await retry.json()).toMatchObject({reworkOrderId:draft.reworkOrderId});
+   const duplicate=await tab.context.request.post(`${h.base}/api/rework-orders/drafts`,{
+    headers:{'idempotency-key':randomUUID()},data:{receivingBatchId:intake.value.receivingBatchId},
+   });
+   expect(duplicate.status()).toBe(409);
+   expect((await f.db.query('SELECT source_garment_qc_event_id,rework_quantity FROM rework_orders WHERE rework_order_id=$1',[draft.reworkOrderId])).rows).toEqual([
+    expect.objectContaining({source_garment_qc_event_id:checkedGarment.eventId,rework_quantity:20})]);
+   await expect(ensureWithinSourceReceivingActualQuantity(f.db,draft.reworkOrderId,[{label:'实际返工',quantity:21}])).rejects.toMatchObject({statusCode:400});
    expect(await originalBalance()).toEqual(balance);
    const second=await receiving.createRepeated(receiver,{receivingBatchId:intake.value.receivingBatchId,cuttingOrderId:cut,productionOrderId:production,factoryDecisionId:null,source:'other_factory',documentQuantity:2,actualQuantity:2},randomUUID());
+   await expect(readGarmentReworkSource(f.db,qc,{...checkedGarment,receiptId:second.value.receiptId,quantityVersion:second.value.receiptId})).rejects.toMatchObject({statusCode:409});
    expect(await inspect.getByText('本批实收 2 件',{exact:false}).count()).toBe(0);
    await tab.page.getByRole('button',{name:'返回来源',exact:true}).click();
    const remaining=queue.getByRole('link',{name:'办理本批检查',exact:true});
    expect(new URL((await remaining.getAttribute('href'))!,tab.page.url()).searchParams.get('qualityReceipt')).toBe(second.value.receiptId);
    const version=Number((await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[intake.value.receivingBatchId])).rows[0].version);
    await receiving.correctReceipt({...f.root,authorizationCapability:'receiving:correct',authorizationCapabilities:['receiving:correct']},intake.value.receiptId,{expectedVersion:version,documentQuantity:280,actualQuantity:270,defectiveQuantity:0});
+   await expect(readGarmentReworkSource(f.db,qc,checkedGarment)).rejects.toMatchObject({statusCode:409});
+   const staleDraft=await tab.context.request.post(`${h.base}/api/rework-orders/garment-quality/drafts`,{
+    headers:{'idempotency-key':randomUUID()},data:checkedGarment,
+   });
+   expect(staleDraft.status()).toBe(409);
+   const replay=await tab.context.request.post(`${h.base}/api/rework-orders/garment-quality/drafts`,{
+    headers:{'idempotency-key':draftKey},data:checkedGarment,
+   });
+   expect(replay.status(),await replay.text()).toBe(201);
+   expect(replay.headers()['idempotency-replayed']).toBe('true');
+   expect((await replay.json()).reworkOrderId).toBe(draft.reworkOrderId);
+   for(const action of ['submit','submit-v2']){
+    const refused=await tab.context.request.post(`${h.base}/api/rework-orders/${draft.reworkOrderId}/${action}`,{
+     headers:{'idempotency-key':randomUUID()},data:{expectedVersion:draft.version},
+    });
+    expect(refused.status(),await refused.text()).toBe(409);
+    expect(await refused.text()).toContain('原检查或本批实收数量版本已变化');
+   }
+   expect((await f.db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[draft.reworkOrderId])).rows[0]?.status).toBe('draft');
    await tab.page.goto(firstLink);
    await tab.page.getByRole('alert').filter({hasText:'本批实收或数量版本已变化'}).waitFor();
    expect(await tab.page.getByRole('button',{name:'保存到仓质检',exact:true}).count()).toBe(0);

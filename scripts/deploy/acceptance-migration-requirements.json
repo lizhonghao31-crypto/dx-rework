@@ -2632,5 +2632,34 @@
       "guard_internal_craft_reinspection"
     ],
     "sequences": []
+  },
+  "0312_original_garment_quality_rework": {
+    "checksum": "81e08372416c867d751f0cbbfd7de0bdf61a7ac4e3e2132386c6785281423dfd",
+    "tables": [
+      "digital_order_closures",
+      "digital_production_child_lines",
+      "digital_production_orders",
+      "digital_production_resource_lifecycle",
+      "digital_production_task_events",
+      "receiving_batches",
+      "receiving_receipt_corrections",
+      "receiving_receipts",
+      "rework_orders"
+    ],
+    "functions": [
+      "rework_original_quantity_bound"
+    ],
+    "references": [
+      "digital_production_task_events"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_original_garment_quality_rework",
+      "original_garment_qc_problem_quantity",
+      "rework_source_receiving_actual_quantity"
+    ],
+    "sequences": []
   }
 }

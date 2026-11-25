@@ -1,6 +1,9 @@
 import {reworkTransitionRejection} from "../platform/business-rejection-guidance.js";
 import {linkDigitalRework} from "../production-platform/receiving-link-adapter.js";
+import {linkNewDigitalChild} from "../production-platform/child-link-repository.js";
 import {currentCraftProblemForRework,lockCraftProblemAuthority,type CraftProblemLocator} from "../production-platform/quality-craft-problem-scope.js";
+import {lockGarmentReworkAuthority,lockOriginalGarmentReworkOrder,readGarmentReworkSource} from "../production-platform/garment-quality.js";
+import type {GarmentReworkSource} from '@dx-rework/contracts/order-closure';
 import { createHash, randomUUID } from "node:crypto";
 
 import {
@@ -255,16 +258,21 @@ export class ReworkInitiationService {
     return this.createDraft(actor,original.execution==="factory"?{tailInspectionRequired:false}:{},idempotencyKey,"qc_rework",original);
   }
 
+  async createGarmentDraft(actor:TrustedActorContext,source:GarmentReworkSource,idempotencyKey:string){
+    return this.createDraft(actor,{},idempotencyKey,'qc_rework',undefined,source);
+  }
+
   async createDraft(
     actor: TrustedActorContext,
     input: CreateReworkDraftWithReceivingBatch,
     idempotencyKey: string,
     kind: "qc_rework" | "inhouse_finishing" = "qc_rework",
     originalCraft?: OriginalCraftDraft,
+    originalGarment?: GarmentReworkSource,
   ): Promise<MutationResult<ReworkOrderResponse>> {
-    if(originalCraft&&kind!=="qc_rework")throw new ApplicationError("VALIDATION_ERROR","裁片问题使用原质检返工，不是本厂做尾",400);
+    if((originalCraft||originalGarment)&&kind!=="qc_rework"||originalCraft&&originalGarment)throw new ApplicationError("VALIDATION_ERROR","仅可选择一个原质检返工来源，不是本厂做尾",400);
     let authority:Awaited<ReturnType<typeof lockCraftProblemAuthority>>|null=null;
-    return this.mutate(actor, originalCraft?"rework.craft.draft.create":kind === "inhouse_finishing" ? "rework.finishing.draft.create" : "rework.draft.create", idempotencyKey, { ...input, kind,...(originalCraft?{originalCraft}:{}) }, 201, async (client) => {
+    return this.mutate(actor, originalCraft?"rework.craft.draft.create":originalGarment?'rework.garment.draft.create':kind === "inhouse_finishing" ? "rework.finishing.draft.create" : "rework.draft.create", idempotencyKey, { ...input, kind,...(originalCraft?{originalCraft}:{}),...(originalGarment?{originalGarment}:{}) }, 201, async (client) => {
       if (kind === "inhouse_finishing" && !input.receivingBatchId) {
         throw new ApplicationError("VALIDATION_ERROR", "本厂做尾必须选择收货批次", 400);
       }
@@ -284,14 +292,23 @@ export class ReworkInitiationService {
         )).rows[0];
         if(active)return this.getOwnedWithClient(client,actor.actorId,active.rework_order_id);
       }
+      const garment=originalGarment?await this.lockGarmentDraftSource(client,actor,originalGarment):null;
+      if(garment){
+        const active=(await client.query<{rework_order_id:string;source_garment_qc_event_id:string|null;created_by:string}>(`SELECT rework_order_id,source_garment_qc_event_id,created_by FROM rework_orders
+          WHERE source_receiving_batch_id=$1 AND status NOT IN ('cancelled','deleted')`,[garment.receivingBatchId])).rows;
+        if(active.length===1&&active[0]?.source_garment_qc_event_id===garment.sourceEventId&&active[0].created_by===actor.actorId)
+          return this.getOwnedWithClient(client,actor.actorId,active[0].rework_order_id);
+        if(active.length)throw new ApplicationError('CONFLICT','该收货批次已有返工，请查看原单，不能重复发起',409);
+      }
       const specialProcess = resolveSpecialProcess(input, undefined, kind === "inhouse_finishing");
       const sourceReceivingBatch = craft?{receivingBatchId:null,styleNo:craft.source.styleNo}:await this.resolveSourceReceivingBatch(
         client,
-        input.receivingBatchId,
+        garment?.receivingBatchId??input.receivingBatchId,
         input.styleNo,
       );
-      const merchandiserUserId=craft?craft.source.merchandiserId:input.merchandiserUserId??null;
-      const factoryInput=craft?(originalCraft?.execution==="factory"?{type:"supplier" as const,supplierId:craft.evidence.factoryId}:{type:"own_factory" as const}):input.processingFactory??null;
+      const merchandiserUserId=craft?craft.source.merchandiserId:garment?garment.merchandiserId:input.merchandiserUserId??null;
+      const factoryInput=craft?(originalCraft?.execution==="factory"?{type:"supplier" as const,supplierId:craft.evidence.factoryId}:{type:"own_factory" as const}):
+        garment?.factorySupplierId?{type:'supplier' as const,supplierId:garment.factorySupplierId}:input.processingFactory??null;
       const factory = await this.resolveFactory(client, factoryInput);
       if (merchandiserUserId) {
         await this.ensureActiveMerchandiser(client, merchandiserUserId);
@@ -303,6 +320,7 @@ export class ReworkInitiationService {
         status: "draft" as const,
         reworkKind: kind,
         ...(craft&&originalCraft?{originalCraftQuality:{checkId:craft.evidence.checkId,unit:"片",execution:originalCraft.execution},craftScope:originalCraft.scope}:{}),
+        ...(garment?{garmentQualitySource:originalGarment}:{}),
         receivingBatchId: sourceReceivingBatch.receivingBatchId,
         styleNo: sourceReceivingBatch.styleNo,
         customerSupplyCode: input.customerSupplyCode ?? null,
@@ -314,8 +332,8 @@ export class ReworkInitiationService {
         reworkReason: input.reworkReason ?? null,
         reworkProcess: input.reworkProcess ?? null,
         problemPart: input.problemPart ?? null,
-        problemDescription: input.problemDescription ?? null,
-        reworkQuantity: craft?originalCraft!.quantity:input.reworkQuantity??null,
+        problemDescription: garment?.problem??input.problemDescription??null,
+        reworkQuantity: craft?originalCraft!.quantity:garment?.quantity??input.reworkQuantity??null,
         ...specialProcess,
         tailInspectionCostBearer: !specialProcess.tailInspectionRequired
           ? null
@@ -343,8 +361,8 @@ export class ReworkInitiationService {
            processing_factory_supplier_version,rework_reason,rework_process,
            problem_part,problem_description,rework_quantity,tail_inspection_required,
            tail_inspection_cost_bearer,tail_inspection_cost_bearer_source,inspection_report,
-           source_receiving_batch_id,created_by,updated_by,special_process_type,other_craft_description${kind === "inhouse_finishing" ? ",rework_kind" : ""}${craft?",source_craft_qc_check_id,craft_rework_execution":""}
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22,$23${kind === "inhouse_finishing" ? ",$24" : ""}${craft?",$24,$25":""})`,
+           source_receiving_batch_id,created_by,updated_by,special_process_type,other_craft_description${kind === "inhouse_finishing" ? ",rework_kind" : ""}${craft?",source_craft_qc_check_id,craft_rework_execution":""}${garment?',source_garment_qc_event_id':''}
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22,$23${kind === "inhouse_finishing" ? ",$24" : ""}${craft?",$24,$25":""}${garment?',$24':''})`,
         [
           reworkOrderId,
           next.styleNo,
@@ -371,12 +389,25 @@ export class ReworkInitiationService {
           next.otherCraftDescription,
           ...(kind === "inhouse_finishing" ? [kind] : []),
           ...(craft?[craft.evidence.checkId,originalCraft!.execution]:[]),
+          ...(garment?[garment.sourceEventId]:[]),
         ],
       );
-      if(!craft)await linkDigitalRework(client,reworkOrderId,sourceReceivingBatch.receivingBatchId);
+      if(garment&&originalGarment)await linkNewDigitalChild(client,{module:'rework',childId:reworkOrderId,
+        productionOrderId:originalGarment.orderId,lines:[{childLineKey:'record',lineId:garment.lineId}]});
+      else if(!craft)await linkDigitalRework(client,reworkOrderId,sourceReceivingBatch.receivingBatchId);
       await this.syncAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
-    }, originalCraft ? async client=>{authority=await lockCraftProblemAuthority(client,actor,originalCraft.scope);} : undefined);
+    }, originalCraft ? async client=>{authority=await lockCraftProblemAuthority(client,actor,originalCraft.scope);} :
+      originalGarment?client=>lockGarmentReworkAuthority(client,actor,originalGarment.orderId):undefined);
+  }
+
+  private async lockGarmentDraftSource(client:PoolClient,actor:TrustedActorContext,source:GarmentReworkSource){
+    const proof=await readGarmentReworkSource(client,actor,source);
+    const batch=(await client.query<{style_no:string}>('SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1',[proof.receivingBatchId])).rows[0];
+    if(!batch)throw new ApplicationError('NOT_FOUND','原收货批次不存在',404);
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[batch.style_no.trim().toUpperCase()]);
+    await client.query('SELECT 1 FROM receiving_batches WHERE receiving_batch_id=$1 FOR UPDATE',[proof.receivingBatchId]);
+    return readGarmentReworkSource(client,actor,source);
   }
 
   private async resolveSourceReceivingBatch(
@@ -892,10 +923,12 @@ export class ReworkInitiationService {
     input: SubmitReworkOrder,
     idempotencyKey: string,
   ): Promise<MutationResult<ReworkOrderResponse>> {
+    let originalGarment:GarmentReworkSource|null=null;
     return this.mutate(actor, "rework.submit", idempotencyKey, { reworkOrderId, ...input }, 200, async (client) => {
       const current = await this.lockOwned(client, actor.actorId, reworkOrderId);
       this.ensureVersion(current, input.expectedVersion);
       transitionReworkOrder(current.status, "pending_process_configuration");
+      if(originalGarment)await readGarmentReworkSource(client,actor,originalGarment);
       this.ensureComplete(current);
       if (current.merchandiser_user_id) {
         await this.ensureActiveMerchandiser(client, current.merchandiser_user_id);
@@ -952,7 +985,7 @@ export class ReworkInitiationService {
         dedupeKey: `process-config:${reworkOrderId}:${nextVersion}`,
       });
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
-    });
+    },async client=>{originalGarment=await lockOriginalGarmentReworkOrder(client,actor,reworkOrderId);});
   }
 
   async withdraw(
