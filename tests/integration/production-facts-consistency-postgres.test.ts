@@ -14,6 +14,7 @@ import {OrderClosureService} from '../../apps/api/src/production-platform/order-
 import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '../../apps/api/src/receiving/pending-receiving-native-receipts.js';
+import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('original production completion and receipt correction facts',()=>{
@@ -73,9 +74,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('makes a single original receipt zero across cumulative quantity, effective quality and first delivery without rewriting its occurrence',async()=>{
   const r=await prepare();await f.runtime.run(r.scene,f.root,async()=>{
    const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,r.id);
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toEqual([]);
    await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST native complete dispatch'},randomUUID());
    const production=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id;
    const reports=new ProductionReportingService(f.db),day='2026-11-21';await reports.report(f.root,production,{position:1,businessDate:day,quantity:10},randomUUID());
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{factoryDecisionId:null,expectedQuantity:10,
+    factoryShipmentRecorded:false,balance:{actualDispatched:10,remaining:10,status:'pending'}}]);
    await reports.execute(f.root,production,'complete',{businessDate:day,confirmed:true},randomUUID());await reports.execute(f.root,production,'ship',{businessDate:day,confirmed:true},randomUUID());
    const receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
    const created=await receiving.create(receiver,{cuttingOrderId:r.cuts[0]!.cutting_order_id,productionOrderId:production,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(receiver)]},randomUUID());
@@ -85,6 +89,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     factoryAllocationKey:receivingFactoryAllocationKey(production,null)};
    expect(initialReceipts.get(r.id)).toEqual([{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,actualQuantity:2,identity:scope}]);
    expect(initialReceipts.has(unrelated)).toBe(false);
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id,unrelated])).toMatchObject([{identity:scope,expectedQuantity:10,
+    factoryShipmentRecorded:true,balance:{actualDispatched:10,received:2,remaining:8}}]);
    await new GarmentQualityService(f.db).record(f.root,r.id,{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:businessNow().toISOString(),qualifiedQuantity:2,problem:''},randomUUID());
    const before=(await f.db.query('SELECT * FROM receiving_receipts WHERE receipt_id=$1',[created.value.receiptId])).rows[0],closure=new OrderClosureService(f.db);
    const version=Number((await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[created.value.receivingBatchId])).rows[0].version);
@@ -99,6 +105,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await readPendingReceivingNativeReceipts(f.db,[r.id])).get(r.id)).toEqual([
     {receiptId:quality.receiptId,quantityVersion:correction.correction_id,actualQuantity:0,identity:scope},
    ]);
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{balance:{status:'pending',received:0,remaining:10}}]);
    const restored=await receiving.correctReceipt(root,created.value.receiptId,{expectedVersion:corrected.version,documentQuantity:2,actualQuantity:2,defectiveQuantity:0});expect(restored.actualQuantity).toBe(2);
    expect((await closure.read(f.root,r.id)).factoryDeliveries?.[0]).toMatchObject({delivered:true,received:2});
    const repeated=await receiving.createRepeated(receiver,{receivingBatchId:created.value.receivingBatchId,cuttingOrderId:r.cuts[0]!.cutting_order_id,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID());
