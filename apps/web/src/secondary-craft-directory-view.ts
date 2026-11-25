@@ -32,7 +32,7 @@ export function writeCraftDirectoryView(view:CraftDirectoryView){
 export function pageAuthorizedCraftDirectory(rows:readonly CraftRow[],view:CraftDirectoryView){
  const keyword=view.search.trim().toLocaleLowerCase('zh-CN');
  const matching=rows.filter(row=>(view.state==='all'||row.state===view.state)&&(!view.craft||row.label===view.craft)&&
-  (!keyword||[row.styleNo,row.label].some(value=>value.toLocaleLowerCase('zh-CN').includes(keyword))));
+  (!keyword||[row.resource.id,row.styleNo,row.label,row.customerCode??'',...(row.formalPoNos??[])].some(value=>value.toLocaleLowerCase('zh-CN').includes(keyword))));
  const total=matching.length,totalPages=Math.max(1,Math.ceil(total/LIST_PAGE_SIZE)),page=Math.min(view.page,totalPages);
  return {total,totalPages,page,items:matching.slice((page-1)*LIST_PAGE_SIZE,page*LIST_PAGE_SIZE)};
 }

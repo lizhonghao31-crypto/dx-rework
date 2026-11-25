@@ -17,7 +17,8 @@ export async function readAuthorizedIeDirectoryPage(db:Pick<PoolClient,'query'>,
  const selected=ieDirectoryKinds.filter(kind=>(input.kind==='all'||kind===input.kind)&&authorized[kind]!==undefined);
  if(!selected.length)return {page:input.page,pageSize,total:0,items:[] as UnifiedIeDirectoryEntry[]};
  const search=bind(input.search);
- const candidates=selected.map(kind=>`SELECT '${kind}'::text AS kind,source.* FROM (${authorized[kind]!({bind,search})}) source`).join('\nUNION ALL\n');
+ const candidates=selected.map(kind=>`SELECT '${kind}'::text AS kind,object_id,entry_id,resource_id,order_id,style_no,customer_code,
+  version,round,native_status,sort_at,state,assignee_name,pricing FROM (${authorized[kind]!({bind,search})}) source`).join('\nUNION ALL\n');
  const sorted='sort_at DESC,kind,object_id,entry_id';
  const offset=bind((input.page-1)*pageSize),state=bind(input.state??'all');
  const {rows:[result]}=await db.query<{total:number;items:UnifiedIeDirectoryEntry[]}>(`WITH candidates AS (
@@ -28,7 +29,8 @@ export async function readAuthorizedIeDirectoryPage(db:Pick<PoolClient,'query'>,
   SELECT * FROM authorized ORDER BY ${sorted} LIMIT ${pageSize} OFFSET ${offset}
  ) SELECT (SELECT count(*)::int FROM authorized) AS total,
   coalesce((SELECT json_agg(json_build_object('kind',kind,'objectId',object_id,'entryId',entry_id,'resourceId',resource_id,'orderId',order_id,
-    'styleNo',style_no,'customerCode',customer_code,'version',version,'round',round,'nativeStatus',native_status,'state',state,'sortAt',sort_at)
+    'styleNo',style_no,'customerCode',customer_code,'version',version,'round',round,'nativeStatus',native_status,'state',state,'sortAt',sort_at,
+    'assigneeName',assignee_name,'pricing',pricing)
     ORDER BY ${sorted}) FROM page),'[]'::json) AS items`,values);
  if(!result)throw new Error('IE directory did not return its authorized total');
  return {page:input.page,pageSize,total:result.total,items:result.items};

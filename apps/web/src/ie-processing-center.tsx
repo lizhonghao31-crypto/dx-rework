@@ -7,6 +7,7 @@ import {Stack} from '@astryxdesign/core/Stack';
 import {Table,type TableColumn} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {z} from 'zod';
+import {formatBusinessDecimal} from '@dx-rework/contracts/business-display';
 import {IeProcessingDirectorySchema,IeProcessingEntrySchema,IeProcessingQuerySchema,IeProcessingStateSchema,QuotationResourceSchema,QuotationRowInputSchema,
  UnifiedIeDirectoryPageSchema,UnifiedIeDirectoryQuerySchema,type UnifiedIeDirectoryEntry,type UnifiedIeDirectoryQuery,
  type IeProcessingEntry,type IeProcessingQuery} from '@dx-rework/contracts/digital-quotation';
@@ -20,6 +21,8 @@ import {designerAstryxCss} from './designer-astryx.js';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {quotationRequest} from './digital-quotation-panel.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {QuotationBasisImage} from './quotation-basis-image.js';
+import './quotation-basis.css';
 import {useForegroundWait} from './foreground-loading.js';
 import {navigateInternalPage} from './internal-navigation.js';
 import {loadReworkQueue} from './reporting/reporting-client.js';
@@ -116,13 +119,17 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   if(identityKey(directoryEntry)!==target)throw Error('当前账号无法查看所选报价行，请返回列表重新选择。');
   const sheet=await quotationRequest(base,resource);
   if(sheet.version!==directoryEntry.version||sheet.quoteId!==quoteId||!sheet.rows.some(row=>row.rowId===rowId))throw Error('报价行已更新，请重新读取。');
-  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush};
+  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush,basis:directoryEntry.basis};
  },[base,resource,quoteId,rowId,target]);
  const read=useForegroundRead(resource.id,target,load);
  useForegroundWait(read.foregroundKey);
  const [draft,setDraft]=useState<string|null>(null),[busy,setBusy]=useState(false),[fieldError,setFieldError]=useState(''),[receipt,setReceipt]=useState<number|null>(null);
  const saving=useRef(false),feedback=useSubmissionFeedback(setBusy);
  const sheet=read.value?.sheet,row=sheet?.rows.find(row=>row.rowId===rowId),canEdit=Boolean(read.value?.canEdit&&row?.canEditPrice);
+ const basis=read.value?.basis,photo=basis?.styleImage;
+ const sizeColumns:TableColumn<NonNullable<typeof basis>['measurements'][number]>[]=basis?[
+  {key:'name',header:`尺寸项（${basis.sizeUnit}）`},...basis.sizes.map((size,index)=>({key:`size-${index}`,header:size,renderCell:(measure:NonNullable<typeof basis>['measurements'][number])=>measure.values[index]||'—'})),
+ ]:[];
  const price=receipt===null?(row?.unitPrice??''):(draft??row?.unitPrice??'');
  const changed=draft!==null&&draft!==(row?.unitPrice??'')&&receipt===null;
  useDigitalDetailNavigationGuard(changed||feedback.uncertain,busy,saving,'本行报价仍有未保存内容或待核回执，确定离开？');
@@ -150,6 +157,15 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   {read.error&&<p role="alert">{receipt!==null?'报价已保存，重新读取失败。 ':''}{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
   {sheet&&row&&<>
    <h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/> · {processingQuoteLabel}</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
+   {basis&&<section aria-label="本行核价依据" className="quotation-basis">
+    <h3>本行核价依据</h3>
+    {photo?<QuotationBasisImage key={photo.attachmentId} label="本版款图" href={urls.apiUrl(`digital-production/quotations/ie-processing/${quoteId}/${rowId}/style-image/${photo.attachmentId}?documentVersion=${photo.documentVersion}`)}/>:<p>本版未登记款图。</p>}
+    <p>{basis.developmentType} · {basis.template} · 资料 v{basis.sourceVersion}{basis.technicalVersion!==null&&` · 采用技术成果 v${basis.technicalVersion}`}</p>
+    <dl><dt>制作要求</dt><dd>{basis.instructions||'—'}</dd><dt>工艺 / 洗水</dt><dd>{basis.craft} / {basis.washing}</dd>
+     <dt>样衣数量</dt><dd>{basis.quantity??'—'}</dd><dt>PO</dt><dd>{basis.formalPoNos.join('、')||'—'}</dd>
+     <dt>材料</dt><dd>{basis.materials.map(item=>[item.category,item.name,item.specification].filter(Boolean).join(' · ')).join('；')||'—'}</dd></dl>
+    {basis.measurements.length>0&&<div className="development-table-scroll"><Table columns={sizeColumns} data={basis.measurements} idKey={measure=>measure.name} aria-label="核价尺寸依据" density="compact"/></div>}
+   </section>}
    <form onSubmit={event=>{event.preventDefault();save();}}>
     <Stack gap={2} maxWidth={480}>
      <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
@@ -292,11 +308,14 @@ function UnifiedIeDirectory({location,readDirectory}:{location:UnifiedIeLocation
  const columns:TableColumn<UnifiedIeDirectoryEntry>[]=[
   {key:'orderId',header:'订单 ID／款号',renderCell:row=>{
    const href=unifiedIeOriginalHref(unifiedPaths,query,row),label=row.orderId??row.styleNo??'查看原记录';
-   return href?<Link id={resultLinkId(unifiedIeEntryKey(row))} href={href}>{label}</Link>:label;
+   return href?<><Link id={resultLinkId(unifiedIeEntryKey(row))} href={href}>{label}</Link><OrderRushBadge value={row.orderRush}/></>:label;
   }},
   {key:'customerCode',header:'客户',renderCell:row=>row.customerCode??'—'},
   {key:'kind',header:'报价类型',renderCell:row=>unifiedIeListLabel[row.kind]},
+  {key:'pricing',header:'报价 / 单位',renderCell:row=>row.pricing?.kind==='multiple'?'多项价格':row.pricing?.kind==='single'
+   ?<span title={`${row.pricing.amount} 元 / ${row.pricing.unit}`}>{formatBusinessDecimal(row.pricing.amount,1)} 元 / {row.pricing.unit}{row.state==='returned'?'（上次）':''}</span>:'—'},
   {key:'version',header:'轮次／版本',renderCell:row=>row.round===null?`v${row.version}`:`第 ${row.round} 轮 · v${row.version}`},
+  {key:'assigneeName',header:'负责人',renderCell:row=>row.assigneeName??'—'},
   {key:'state',header:'状态',renderCell:row=><Badge label={unifiedIeStateLabel[row.state]} variant={row.state==='priced'?'success':row.state==='not_started'?'neutral':'error'}/>},
   {key:'nativeStatus',header:'当前办理',renderCell:row=>row.kind==='rework_review'&&Object.hasOwn(reworkQueues,row.nativeStatus)
    ?reworkQueues[row.nativeStatus as keyof typeof reworkQueues]:row.kind==='sourcing_review'&&row.nativeStatus==='pending_ie_quote'?'待核价':'—'},

@@ -5,6 +5,7 @@ import {sourcingIeCandidates} from '../sourcing/sourcing-ie-directory.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {readAuthorizedIeDirectoryPage,type IeAuthorizedCandidates,type IeDirectoryPageInput} from './ie-authorized-directory.js';
 import {ieProcessingViewer,processingIeCandidates} from './ie-processing-directory.js';
+import {developmentRushKey,readDevelopmentOrderRush} from './development-order-rush.js';
 
 export type IntegratedIeActors=Readonly<{processing:TrustedActorContext;sourcing:TrustedActorContext|null;rework:TrustedActorContext|null}>;
 
@@ -41,7 +42,10 @@ export async function readIntegratedIeDirectory(database:Pool,actors:IntegratedI
   }
   if(!Object.keys(allowed).length)throw new ApplicationError('FORBIDDEN','当前账号没有可查看的 IE 核价范围',403);
   const result=await readAuthorizedIeDirectoryPage(db,input,allowed);
+  const identity=(item:(typeof result.items)[number])=>item.orderId===null?{sourceId:item.resourceId,orderId:null}:{sourceId:null,orderId:item.resourceId};
+  const rush=await readDevelopmentOrderRush(db,result.items.filter(item=>item.kind==='processing_quote').map(identity));
+  const items=result.items.map(item=>item.kind==='processing_quote'&&rush.has(developmentRushKey(identity(item))??'')?{...item,orderRush:true as const}:item);
   await db.query('COMMIT');
-  return result;
+  return {...result,items};
  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
 }

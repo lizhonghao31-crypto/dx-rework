@@ -52,7 +52,7 @@ import {registerSourcingRoutes} from '../../apps/api/src/sourcing/sourcing-route
 import {registerProcessConfigurationRoutes} from '../../apps/api/src/rework/process-configuration-routes.js';
 import {ProcessConfigurationService} from '../../apps/api/src/rework/process-configuration-service.js';
 import {ProcessWorkerPlanService} from '../../apps/api/src/rework/process-worker-plan-service.js';
-import {ApplicationError} from '../../apps/api/src/platform/errors.js';
+import type {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/ie-directory-reader.js';
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean;readPath?:string;afterWriteRead?:string};
 /** Original full App, original auth routes/store/membership and actual native

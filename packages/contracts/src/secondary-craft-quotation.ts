@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {QuotationDecimalSchema,QuotationResourceSchema} from './digital-quotation.js';
+import {QuotationDecimalSchema,QuotationResourceSchema,QuotationStyleImageSchema} from './digital-quotation.js';
 
 const decisionVersion=z.number().int().positive();
 const expectedVersion=z.number().int().nonnegative();
@@ -46,7 +46,8 @@ const supplier=z.object({supplierId:z.uuid(),code:z.string(),name:z.string()}).s
 export const SecondaryCraftSuppliersSchema=z.object({items:z.array(supplier)});
 export const SecondaryCraftDetailSchema=z.object({target,version:expectedVersion,state,note:z.string().nullable(),
  draft:storedDraft.nullable(),supplier:supplier.nullable(),canEdit:z.boolean(),canDecide:z.boolean(),
- versions:z.array(decisionVersion),historical:z.boolean()});
+ versions:z.array(decisionVersion),historical:z.boolean(),
+ display:z.object({orderNumber:z.string(),customerCode:z.string().nullable(),styleImage:QuotationStyleImageSchema.nullable()}).optional()});
 export const SecondaryCraftReceiptSchema=SecondaryCraftDetailSchema.extend({
  receipt:z.object({action:z.enum(['draft','submit','decision']),appliedVersion:decisionVersion}),
 });
@@ -55,6 +56,7 @@ export const SecondaryCraftListSchema=z.object({ready:z.boolean(),items:z.array(
  sourceVersion:decisionVersion,version:expectedVersion,state,authorName:z.string().nullable(),supplier:supplier.nullable(),
  note:z.string().nullable(),canDecide:z.boolean(),approvalTodoId:z.uuid().nullable(),submittedAt:z.string().nullable(),orderRush:z.literal(true).optional(),
  savedPricing:z.object({mode:z.enum(['in_house','outsourced']),amount:z.string(),unit:z.string()}).nullable().optional(),
+ customerCode:z.string().nullable().optional(),formalPoNos:z.array(z.string()).optional(),
 }))});
 export type SecondaryCraftDetail=z.infer<typeof SecondaryCraftDetailSchema>;
 export type SecondaryCraftList=z.infer<typeof SecondaryCraftListSchema>;

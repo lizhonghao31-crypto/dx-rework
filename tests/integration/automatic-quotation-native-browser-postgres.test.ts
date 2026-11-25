@@ -20,6 +20,7 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {CreateSourcingCaseSchema} from '@dx-rework/contracts';
 import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/ie-directory-reader.js';
 import {ManagementReportingService} from '../../apps/api/src/reporting/management-reporting-service.js';
+import {renderAuthorizedQuotationImages} from '../helpers/render-authorized-quotation-images.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR03 automatic quotation through original authenticated App and real PG',()=>{
@@ -288,13 +289,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await Promise.all([ieTab.close(),rootTab.close(),designerTab.close()]);}
  });
  it('filters three real IE candidate sets before global pagination and retains the original department scopes',async()=>{
-  const {f,db}=h,designer=f.people['sample-designer']!,merch=f.people.merchandiser!,ie=f.people.ie!;
+  const {f,db}=h,merch=f.people.merchandiser!,ie=f.people.ie!;
+  // The original publish/return generates real notices. Keep this source owner
+  // separate so reminders from this case do not cover later draft actions.
+  const directoryDesigner=await h.dedicated('sample_designer','TEST C4 目录设计师');
+  const designer={...f.people['sample-designer']!,actorId:directoryDesigner.id};
   const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),quotes=new DigitalQuotationService(db,true);
   const prefix=`TEST-IE-MERGED-${randomUUID()}`;
   const ieStyle=`${prefix}-PROCESS`,source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:ieStyle,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
-  const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
-   quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
-   files:[{attachmentId:await f.image(designer),kind:'款图'}]});
+  const image=await f.image(designer);
+  const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',instructions:'TEST 本轮加工要求',
+   rush:true,quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
+   files:[{attachmentId:image,kind:'款图'}]});
   const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
   await forms.publish(designer,source.sourceId,saved.version,randomUUID());
   const resource={kind:'source' as const,id:source.sourceId},quote=await quotes.read(designer,resource);
@@ -319,8 +325,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(first.total).toBe(second.total);expect(first.items).toHaveLength(15);
    expect(first.items.map(row=>row.objectId)).not.toContain(historic.sourcingCaseId);
    expect(second.items).toEqual(expect.arrayContaining([
-    expect.objectContaining({kind:'processing_quote',objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned'}),
-    expect.objectContaining({kind:'sourcing_review',objectId:historic.sourcingCaseId}),
+    expect.objectContaining({kind:'processing_quote',objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned',orderRush:true,pricing:{kind:'single',amount:'7.125',unit:'件'}}),
+    expect.objectContaining({kind:'sourcing_review',objectId:historic.sourcingCaseId,pricing:{kind:'single',amount:'3.2500',unit:'件'}}),
     expect.objectContaining({kind:'rework_review',objectId:id,nativeStatus:'pending_ie_review'}),
    ]));
    const keys=[...first.items,...second.items].map(row=>`${row.kind}:${row.objectId}:${row.entryId}`);
@@ -341,6 +347,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect(readIntegratedIeDirectory(db,{processing:designer,sourcing:null,rework:designer},
     {kind:'rework_review',page:1,search:id})).rejects.toMatchObject({statusCode:403});
    const tab=await h.open(ie.actorId,1165,{},'/ui/ie-processing?directory=unified&kind=all&page=2');
+   await renderAuthorizedQuotationImages(tab.context,f.storage);
    const page=tab.page,list=page.getByRole('region',{name:'IE 报价与核价目录'});
    const link=(kind:string,objectId:string,entryId=objectId)=>page.locator(`[id="ie-center-work-${kind}:${objectId}:${entryId}"]`);
    const search=list.getByRole('textbox',{name:'搜索订单 ID、原款号、PO 或客户'});
@@ -353,6 +360,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const needsRevision=await page.request.get(url+'?kind=all&state=returned&page=1');
     expect(needsRevision.status()).toBe(200);
     expect(await needsRevision.json()).toMatchObject({total:1,items:[{objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned'}]});
+    await page.getByRole('row').filter({has:link('processing_quote',quote.quoteId!,ieRow.rowId)}).getByText('急单',{exact:true}).waitFor();
+    await page.getByText('7.1 元 / 件（上次）',{exact:true}).waitFor();
     const forbidden=await h.open(designer.actorId,1165,{},'/ui/home');
     try{expect((await forbidden.page.request.get(url+'?kind=rework_review')).status()).toBe(403);}
     finally{await forbidden.close();}
@@ -363,6 +372,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     ] as const){
      const [response]=await Promise.all([page.waitForResponse(result=>new URL(result.url()).pathname===api),row.click()]);
      expect(response.status()).toBe(200);
+     if(api.includes('/quotations/ie-processing/')){
+      const basis=page.getByRole('region',{name:'本行核价依据'});
+      await basis.getByText('TEST 本轮加工要求',{exact:true}).waitFor();
+      await basis.getByRole('cell',{name:'50',exact:true}).waitFor();
+      const img=basis.getByRole('img',{name:'本版款图'});
+      await img.scrollIntoViewIfNeeded();
+      const imageUrl=(await img.getAttribute('src'))!;
+      expect(imageUrl).toContain(image);
+      await expect.poll(()=>img.evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      expect((await page.request.get(h.base+imageUrl.replace(image,randomUUID()),{maxRedirects:0})).status()).toBe(404);
+     }
      await page.getByRole('link',{name:/返回.*(报价列表|IE 报价与核价中心)/}).click();
      await row.waitFor();
      expect(new URL(page.url()).searchParams.get('page')).toBe('2');
@@ -620,7 +640,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await d.page.getByRole('button',{name:'面辅料',exact:true}).click();
    await d.page.getByText('技术详情',{exact:true}).click();
    await d.page.getByLabel('主布材料单价',{exact:true}).fill('20');
-   await d.page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   const saveDraft=d.page.getByRole('button',{name:'保存开发资料草稿',exact:true});
+   // Earlier original-order cases can leave real read-only notices for this
+   // signed role. Close only an actual overlay via the normal user action.
+   const notice=d.page.getByRole('region',{name:'站内提醒'}).filter({hasText:'此消息仅供知悉。'});
+   for(let closed=0;;closed++){
+    try{await saveDraft.click({timeout:2500});break;}
+    catch(error){
+     if(closed>=8||!String(error).includes('digital-notification-toast')||!await notice.isVisible())throw error;
+     const [ack]=await Promise.all([d.page.waitForResponse(response=>/\/notifications\/[^/]+\/acknowledge$/.test(new URL(response.url()).pathname)),
+      notice.getByRole('button',{name:'我知道了',exact:true}).click()]);
+     expect(ack.status()).toBe(200);
+    }
+   }
    await expect.poll(async()=>(await forms.read(designer,source.sourceId)).version).toBe(2);
    const edited=await forms.read(designer,source.sourceId);
    const publication=await forms.save(designer,source.sourceId,{expectedVersion:edited.version,

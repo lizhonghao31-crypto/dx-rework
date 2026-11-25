@@ -11,7 +11,7 @@ const id='1a000000-0000-4000-8000-000000000001';
 const actor=(authorizationCapability:string,authorizationCapabilities:string[],actorRoles=['ie_reviewer']):TrustedActorContext=>
  ({actorId:id,requestId:'TEST-ie-directory',authorizationCapability,authorizationCapabilities,actorRoles});
 const domain=(label:string)=>vi.fn(({bind,search}:Parameters<NonNullable<IeAuthorizedCandidates['processing_quote']>>[0])=>
- `SELECT object_id,entry_id,order_id,style_no,customer_code,version,round,native_status,sort_at,state FROM fixture
+ `SELECT object_id,entry_id,resource_id,order_id,style_no,customer_code,version,round,native_status,sort_at,state,assignee_name,pricing FROM fixture
    WHERE category=${bind(label)} AND style_no=${search}::text`);
 
 describe('authorized IE directory database composition',()=>{

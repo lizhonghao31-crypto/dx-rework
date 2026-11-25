@@ -12,6 +12,7 @@ import {MemberModuleBindingService} from '../../apps/api/src/access/member-modul
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import type {APIRequestContext} from 'playwright-core';
+import {renderAuthorizedQuotationImages} from '../helpers/render-authorized-quotation-images.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 const check=(url?it:it.skip);
@@ -41,7 +42,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   const published=await forms.publish(designer,source.sourceId,draft.version,key());
   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({
    customerCode:'PD',productGroup:'男装',designStyleNo:styleNo,orderDate:beijingCalendarDate(new Date()),
-   lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}],
+   lines:[{formalPoNo:'TEST-R6-C4-PO',color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}],
   }),key(),source.sourceId);
   // Seed existing assignment facts on this new fixture. The real quotation
   // command refreshes the actual assembly and original authorizations.
@@ -102,17 +103,27 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect((await (await makerSession.get(quoteList)).json()).items).toContainEqual(expect.objectContaining({resource,orderRush:true}));
   expect((await makerSession.get(external+'/attachments/'+board,{maxRedirects:0})).status()).toBe(302);
   expect((await makerSession.get(external+'/attachments/'+photo,{maxRedirects:0})).status()).toBe(404);
+  const exactStyleImage=external+'/style-image/'+photo+'?documentVersion='+published.version;
+  expect((await makerSession.get(exactStyleImage,{maxRedirects:0})).status()).toBe(302);
+  expect((await makerSession.get(exactStyleImage.replace(photo,board),{maxRedirects:0})).status()).toBe(404);
+  expect((await makerSession.get(exactStyleImage.replace(/documentVersion=\d+$/,'documentVersion=99999'),{maxRedirects:0})).status()).toBe(404);
   await write(makerSession,403,h.base+'/api/master-data/suppliers',{supplierCode:'TEST-R6-DENIED'});
   await write(makerSession,403,h.base+`/api/master-data/suppliers/${f.supplierId}/versions`,{active:false});
   const terms={expectedVersion:0,unitPrice:'2.125',unit:'件',applicableQuantity:null,note:'',attachmentIds:[board],
    mode:'outsourced',supplierId:f.supplierId};
   await write(makerSession,409,quotation+`/rows/${embroidery.rowId}`,{expectedVersion:sheet.version,unitPrice:'2'});
   await write(makerSession,403,external+'/draft',{...terms,attachmentIds:[photo]},key(),'PUT');
+  await renderAuthorizedQuotationImages(makerTab.context,f.storage);
   await makerPage.goto(center);
-  const browseSearch=makerPage.getByRole('textbox',{name:'搜索款号或工艺',exact:true});
+  const browseSearch=makerPage.getByRole('textbox',{name:'搜索订单 ID、PO、客户或工艺',exact:true});
   const embroideryLink=makerPage.getByRole('link',{name:/ · 绣花$/});
   await makerPage.getByRole('row').filter({has:makerPage.getByRole('link',{name:/ · 绣花$/})}).getByText('急单',{exact:true}).waitFor();
   await makerPage.getByRole('link',{name:/ · 印花$/}).waitFor();
+  for(const keyword of ['PD','TEST-R6-C4-PO',order.productionOrderId]){
+   await browseSearch.fill(keyword);
+   await expect.poll(()=>new URL(makerPage.url()).searchParams.get('craftSearch')).toBe(keyword);
+   expect(await embroideryLink.isVisible()).toBe(true);
+  }
   await browseSearch.fill(styleNo);
   await makerPage.getByRole('combobox',{name:'工艺项目',exact:true}).click();
   await makerPage.getByRole('option',{name:'绣花',exact:true}).click();
@@ -120,6 +131,12 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   await expect.poll(()=>new URL(makerPage.url()).searchParams.get('craftSearch')).toBe(styleNo);
   await embroideryLink.click();
   await makerPage.getByRole('heading',{name:'绣花报价',exact:true}).waitFor();
+  for(const [label,attachment] of [['本版款图',photo],['本项工艺图 1',board]] as const){
+   const img=makerPage.getByRole('img',{name:label,exact:true});
+   await img.scrollIntoViewIfNeeded();
+   expect(await img.getAttribute('src')).toContain(attachment);
+   await expect.poll(()=>img.evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  }
   await makerPage.getByRole('link',{name:'返回二次工艺报价列表',exact:true}).click();
   await embroideryLink.waitFor();
   expect(await browseSearch.inputValue()).toBe(styleNo);

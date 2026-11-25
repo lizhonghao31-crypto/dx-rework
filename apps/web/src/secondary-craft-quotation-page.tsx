@@ -16,6 +16,8 @@ import {designerAstryxCss} from './designer-astryx.js';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {DocumentTableScroll} from './document-editor.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {QuotationBasisImage} from './quotation-basis-image.js';
+import './quotation-basis.css';
 import {useForegroundWait} from './foreground-loading.js';
 import {unknownWriteResult} from './request-response-feedback.js';
 import {SUBMISSION_RECOVERY_WINDOW_MS} from './submission-attempt.js';
@@ -73,6 +75,7 @@ function CraftDirectory({initial}:{initial:CraftDirectoryView}){
  useEffect(()=>{if(current&&ready)history.replaceState(history.state,'',secondaryCraftHref(undefined,undefined,{...view,page:page.page}));},[current,ready,view,page.page]);
  const columns:TableColumn<SecondaryCraftList['items'][number]>[]=[
   {key:'styleNo',header:'款号 / 工艺',renderCell:item=>{const id=craftDirectoryRowKey(item);return <><a id={focusId(id)} href={secondaryCraftHref(item.resource,item.rowId,{...view,search,page:page.page,focus:id})}>{item.styleNo} · {item.label}</a><OrderRushBadge value={item.orderRush}/></>;}},
+  {key:'customerCode',header:'客户',renderCell:item=>item.customerCode??'—'},
   {key:'stage',header:'阶段与资料',renderCell:item=>`${stageLabel[item.stage]} · 第 ${item.round} 轮 · 资料 v${item.sourceVersion}`},
   {key:'authorName',header:'报价人',renderCell:item=>item.authorName??'—'},
   {key:'supplier',header:'加工厂',renderCell:item=>item.savedPricing?.mode==='in_house'?'本厂':item.supplier?.name??'—'},
@@ -81,7 +84,7 @@ function CraftDirectory({initial}:{initial:CraftDirectoryView}){
  ];
  return <Surface><h1>二次工艺报价与选厂</h1>
   <div className="budget-heading" aria-label="二次工艺目录筛选">
-   <TextInput id="secondary-craft-directory-search" label="搜索款号或工艺" value={searchInput} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={event=>{composing.current=false;const next=(event.target instanceof HTMLInputElement?event.target.value:searchInput).slice(0,100);setSearchInput(next);change({search:next,page:1});}} onChange={value=>{const next=value.slice(0,100);setSearchInput(next);if(!composing.current)change({search:next,page:1});}}/>
+   <TextInput id="secondary-craft-directory-search" label="搜索订单 ID、PO、客户或工艺" value={searchInput} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={event=>{composing.current=false;const next=(event.target instanceof HTMLInputElement?event.target.value:searchInput).slice(0,100);setSearchInput(next);change({search:next,page:1});}} onChange={value=>{const next=value.slice(0,100);setSearchInput(next);if(!composing.current)change({search:next,page:1});}}/>
    <Selector label="报价 / 审批状态" value={view.state} options={[{value:'all',label:'全部状态'},...Object.entries(labels).map(([value,label])=>({value,label}))]} onChange={value=>{if(value==='all'||Object.hasOwn(labels,value))change({state:value as CraftDirectoryView['state'],page:1});}}/>
    <Selector label="工艺项目" value={view.craft} options={[{value:'',label:'全部工艺'},...craftOptions.map(value=>({value,label:value}))]} onChange={craft=>change({craft,page:1})}/>
   </div>
@@ -125,6 +128,8 @@ function CraftForm({original,path,href,version}:{original:SecondaryCraftDetail;p
  const values=factories.value?.items??[];
  const initialSupplier=item.supplier&&current.supplierId===item.supplier.supplierId&&!values.some(value=>value.supplierId===item.supplier?.supplierId)?[item.supplier]:[];
  const disabled=busy||uncertain!==null;
+ const photo=original.display?.styleImage;
+ const originalVersion=original.historical?`&version=${original.version}`:'';
  const send=async(attempt:Attempt)=>{
   if(writing.current)return;
   if(Date.now()-attempt.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError('已超过安全重试期限，请先核对本项最新版本。');return;}
@@ -151,12 +156,14 @@ function CraftForm({original,path,href,version}:{original:SecondaryCraftDetail;p
  };
  return <>
   <h1>{item.target.label}报价</h1>
+  {original.display&&<p>{[original.display.orderNumber,original.display.customerCode].filter(Boolean).join(' · ')}</p>}
   <p>{stageLabel[item.target.stage]} · 第 {item.target.round} 轮 · 资料 v{item.target.sourceVersion} · {labels[item.state]}{item.version>0&&` · 报价 v${item.version}`}</p>
-  {item.target.instructions&&<p>{item.target.instructions}</p>}
+  {photo&&<QuotationBasisImage key={photo.attachmentId} label="本版款图" href={urls.apiUrl(`digital-production/${path}/style-image/${photo.attachmentId}?documentVersion=${photo.documentVersion}${originalVersion}`)}/>}
+  {item.target.instructions&&<p className="quotation-basis-instructions">{item.target.instructions}</p>}
   {item.versions.length>0&&<Selector label="原报价版本" value={version} isDisabled={disabled||edited!==null}
    options={[{value:'',label:'当前工艺报价'},...item.versions.map(saved=>({value:String(saved),label:`报价 v${saved}`}))]}
    onChange={value=>{location.assign(value?`${href}&version=${value}`:href);}}/>}
-  {item.target.attachmentIds.map((id,index)=><p key={id}><a href={urls.apiUrl(`digital-production/${path}/attachments/${id}`)+(item.historical?`?version=${item.version}`:'')}>查看本项工艺要求附件 {index+1}</a></p>)}
+  {item.target.attachmentIds.map((id,index)=><div key={id}><QuotationBasisImage label={`本项工艺图 ${index+1}`} href={urls.apiUrl(`digital-production/${path}/attachments/${id}`)+(item.historical?`?version=${item.version}`:'')}/></div>)}
   {item.note&&<p>退回原因：{item.note}</p>}
   {item.state==='approved'&&item.draft?.unit!==item.target.pricingUnit&&<p>本版已批准，缺少客户报价所用单位的换算依据。</p>}
   {item.canEdit?<div className="budget-heading">

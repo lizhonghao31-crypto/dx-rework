@@ -177,7 +177,7 @@ export async function secondaryCraftDetail(db:PoolClient,actor:TrustedActorConte
   canEdit:false,canDecide:false,versions,historical:true};
 }
 
-type DirectoryQuote=AssembledQuotation&{style_no:string;people:Record<string,string>};
+type DirectoryQuote=AssembledQuotation&{style_no:string;people:Record<string,string>;customer_code:string|null;formal_po_nos:string[]};
 
 export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:TrustedActorContext,roles:ReadonlySet<string>):Promise<SecondaryCraftList>{
  if(!await secondaryCraftReady(db))return {ready:false,items:[]};
@@ -185,6 +185,12 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
  const approver=roles.has('owner_group')&&await readSecondaryCraftApprover(db)===actor.actorId;
  if(!makerRoles.length&&!approver)return {ready:true,items:[]};
  const {rows}=await db.query<DirectoryQuote>(`SELECT q.*,coalesce(o.design_style_no,s.design_style_no) style_no,
+  coalesce(o.customer_code,s.customer_code) customer_code,
+  ARRAY(SELECT coalesce(nullif(btrim(line.formal_style_no),''),nullif(btrim(line.po_number),''))
+   FROM digital_production_po_lines line WHERE line.production_order_id=q.production_order_id
+    AND (nullif(btrim(line.formal_style_no),'') IS NOT NULL OR nullif(btrim(line.po_number),'') IS NOT NULL)
+    AND (nullif(btrim(line.formal_style_no),'') IS NULL OR nullif(btrim(line.po_number),'') IS NULL
+      OR normalize_sourcing_style_key(line.formal_style_no)=normalize_sourcing_style_key(line.po_number)) ORDER BY line.position) formal_po_nos,
   (SELECT jsonb_object_agg(u.id,u.display_name) FROM app_users u
    WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(q.assignments) a WHERE a->>'priceAssigneeId'=u.id::text)) people
   FROM digital_quotation_documents q
@@ -213,7 +219,8 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
    const revision=revisions.get(target.rowId);
    const item=detailFor(actor,roles,approver,target,revision);
    if(!item)continue;
-   const entry={resource,styleNo:quote.style_no,rowId:target.rowId,label:target.label,round:target.round,stage:target.stage,
+   const entry={resource,styleNo:quote.style_no,customerCode:quote.customer_code,
+    ...(resource.kind==='order'?{formalPoNos:quote.formal_po_nos}:{}),rowId:target.rowId,label:target.label,round:target.round,stage:target.stage,
     sourceVersion:target.sourceVersion,version:item.version,state:item.state,authorName:target.authorId?quote.people?.[target.authorId]??null:null,
     supplier:item.supplier,note:item.note,canDecide:item.canDecide,
     savedPricing:item.draft?{mode:item.draft.mode,amount:item.draft.unitPrice,unit:item.draft.unit}:null,

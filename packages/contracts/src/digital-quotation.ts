@@ -37,9 +37,18 @@ export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {sec
 export const IeProcessingStateSchema=z.enum(['needs_assignment','waiting','awaiting_price','priced']);
 export const IeProcessingQuerySchema=z.object({page:z.coerce.number().int().min(1).max(100_000).default(1),
  search:z.string().trim().max(100).default(''),state:z.union([z.literal('all'),IeProcessingStateSchema]).default('all')}).strict();
+export const QuotationStyleImageSchema=z.object({sourceId:z.uuid(),attachmentId:z.uuid(),documentVersion:z.number().int().positive()}).strict();
+export const IeProcessingBasisSchema=z.object({
+ sourceVersion:z.number().int().positive(),developmentType:z.string(),template:z.string(),instructions:z.string(),craft:z.string(),washing:z.string(),
+ materials:z.array(z.object({category:z.string(),name:z.string(),specification:z.string()})),
+ sizeUnit:z.string(),sizes:z.array(z.string()),measurements:z.array(z.object({name:z.string(),values:z.array(z.string())})),
+ quantity:z.number().int().positive().nullable(),technicalVersion:z.number().int().positive().nullable(),
+ formalPoNos:z.array(z.string()),styleImage:QuotationStyleImageSchema.nullable(),
+}).strict();
 export const IeProcessingEntrySchema=z.object({resource:QuotationResourceSchema,quoteId:z.string().uuid(),rowId:z.string().uuid(),
  version:z.number().int().positive(),round:z.number().int().positive(),styleNo:z.string(),customerCode:z.string().nullable(),
- assigneeId:z.string().uuid().nullable(),assigneeName:z.string().nullable(),state:IeProcessingStateSchema,canEditPrice:z.boolean(),orderRush:z.literal(true).optional()}).strict();
+ assigneeId:z.string().uuid().nullable(),assigneeName:z.string().nullable(),state:IeProcessingStateSchema,canEditPrice:z.boolean(),orderRush:z.literal(true).optional(),
+ basis:IeProcessingBasisSchema.nullable().optional()}).strict();
 export const IeProcessingDirectorySchema=z.object({page:z.number().int().positive(),pageSize:z.literal(15),total:z.number().int().nonnegative(),
  items:z.array(IeProcessingEntrySchema).max(15)}).strict();
 export type IeProcessingEntry=z.infer<typeof IeProcessingEntrySchema>;
@@ -51,7 +60,10 @@ export const UnifiedIeDirectoryQuerySchema=z.object({kind:z.union([z.literal('al
  page:z.coerce.number().int().min(1).max(100_000).default(1),search:z.string().trim().max(100).default('')}).strict();
 export const UnifiedIeDirectoryEntrySchema=z.object({kind:UnifiedIeDirectoryKindSchema,objectId:z.uuid(),entryId:z.uuid(),
  resourceId:z.uuid(),orderId:z.string().nullable(),styleNo:z.string().nullable(),customerCode:z.string().nullable(),
- version:z.number().int().positive(),round:z.number().int().positive().nullable(),nativeStatus:z.string(),state:UnifiedIeDirectoryStateSchema,sortAt:z.iso.datetime({offset:true})}).strict();
+ version:z.number().int().positive(),round:z.number().int().positive().nullable(),nativeStatus:z.string(),state:UnifiedIeDirectoryStateSchema,orderRush:z.literal(true).optional(),sortAt:z.iso.datetime({offset:true}),
+ assigneeName:z.string().nullable().optional(),pricing:z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('single'),amount:QuotationDecimalSchema,unit:z.string()}),z.object({kind:z.literal('multiple')}),
+ ]).nullable().optional()}).strict();
 export const UnifiedIeDirectoryPageSchema=z.object({page:z.number().int().positive(),pageSize:z.literal(15),total:z.number().int().nonnegative(),
  items:z.array(UnifiedIeDirectoryEntrySchema).max(15)}).strict();
 export type UnifiedIeDirectoryQuery=z.infer<typeof UnifiedIeDirectoryQuerySchema>;

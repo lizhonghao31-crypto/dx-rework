@@ -31,7 +31,7 @@ function processingSource({id,readAll,price,search,clockEnabled,scene,target}:Re
    coalesce(o.design_style_no,s.design_style_no) AS style_no,coalesce(o.customer_code,s.customer_code) AS customer_code,
    (q.assembly->>'roundNumber')::int AS round, price_row->>'rowId' AS row_id,
    nullif(assignment->>'priceAssigneeId','') AS assignee_id,
-   coalesce(lifecycle.state,'active') AS lifecycle_state,coalesce(price_row->>'unitPrice','') AS unit_price,
+   coalesce(lifecycle.state,'active') AS lifecycle_state,coalesce(price_row->>'unitPrice','') AS unit_price,price_row->>'unit' AS price_unit,
    q.price_sources->ref.key->>'version' AS price_version
   FROM digital_quotation_documents q
   JOIN digital_production_sources s ON s.source_id=q.source_id
@@ -47,7 +47,7 @@ function processingSource({id,readAll,price,search,clockEnabled,scene,target}:Re
    ${target?`AND (${target.quote}::uuid IS NULL OR q.quote_id=${target.quote} AND ref.key=${target.row}::text)`:''}
    AND (${search}::text='' OR position(lower(${search}::text) in lower(coalesce(o.design_style_no,s.design_style_no)))>0
     OR position(lower(${search}::text) in lower(coalesce(o.customer_code,s.customer_code,'')))>0
-    OR position(lower(${search}::text) in o.production_order_id::text)>0
+    OR position(lower(${search}::text) in coalesce(o.production_order_id,s.source_id)::text)>0
     OR EXISTS (SELECT 1 FROM digital_production_po_lines line WHERE line.production_order_id=o.production_order_id
      AND (nullif(btrim(line.formal_style_no),'') IS NULL OR nullif(btrim(line.po_number),'') IS NULL
       OR normalize_sourcing_style_key(line.formal_style_no)=normalize_sourcing_style_key(line.po_number))
@@ -62,6 +62,8 @@ export function processingIeCandidates(database:object,viewer:IeProcessingViewer
    clockEnabled,scene:bind(clockEnabled?acceptanceBusinessContext()?.scenarioId??null:null)});
   return `SELECT quote_id AS object_id,row_id::uuid AS entry_id,coalesce(production_order_id,source_id) AS resource_id,production_order_id::text AS order_id,
    style_no,customer_code,version,round,lifecycle_state AS native_status,order_created_at AS sort_at,
+   (SELECT u.display_name FROM app_users u WHERE u.id=processing.assignee_id::uuid) AS assignee_name,
+   CASE WHEN unit_price<>'' AND price_unit<>'' THEN json_build_object('kind','single','amount',unit_price,'unit',price_unit) END AS pricing,
    CASE WHEN lifecycle_state='active' AND EXISTS (SELECT 1 FROM digital_quotation_line_reviews review
     WHERE review.quote_id=processing.quote_id AND review.round_number=processing.round AND review.row_id=processing.row_id::uuid
        AND review.field='unitPrice' AND review.recipient_id::text=processing.assignee_id AND review.resolve_at IS NULL

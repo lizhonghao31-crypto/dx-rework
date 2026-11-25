@@ -85,7 +85,8 @@ export async function reworkIeCandidates(client:Pick<PoolClient,'query'>,actor:T
   const related=access.relatedOrderScoped?`AND ${relatedReworkOrderPredicate(bind(actor.actorId))}`:'';
   return `SELECT order_record.rework_order_id AS object_id,order_record.rework_order_id AS entry_id,order_record.rework_order_id AS resource_id,
     order_record.order_no AS order_id,order_record.style_no,NULL::text AS customer_code,order_record.version,
-    NULL::int AS round,order_record.status AS native_status,order_record.updated_at AS sort_at,'awaiting_price'::text AS state
+    NULL::int AS round,order_record.status AS native_status,order_record.updated_at AS sort_at,
+    NULL::text AS assignee_name,NULL::json AS pricing,'awaiting_price'::text AS state
    FROM rework_orders order_record WHERE order_record.status=ANY(${scopes}::text[])
     ${related}
     AND (${search}::text='' OR position(lower(${search}) in lower(order_record.rework_no))>0
