@@ -14,6 +14,8 @@ const nativeIntents=[
  {category:'digital_preparation_instruction',route:'digital_production_instruction',kind:'commercial'},
  {category:'sourcing_merchandiser_correction',route:'sourcing_detail',kind:'sourcing'},
  {category:'sourcing_contract_return',route:'sourcing_detail',kind:'sourcing'},
+ {category:'sourcing_transfer_contract_return',route:'sourcing_detail',kind:'sourcing'},
+ {category:'sourcing_price_contract_return',route:'sourcing_detail',kind:'sourcing'},
 ] as const;
 
 /** Only after the original provider authorizes the item. A module/route
@@ -25,6 +27,8 @@ export function merchandiserWorkCandidate(actor:TrustedActorContext,item:NativeW
   item.route.todoId!==item.todoId)return null;
  const intent=nativeIntents.find(row=>row.category===item.category&&row.route===item.route.routeName);
  if(item.category==='sourcing_contract_return'&&item.route.tab!=='contract_return')return null;
+ if(item.category==='sourcing_transfer_contract_return'&&(item.route.tab!=='contract_return'||!item.route.transferContract))return null;
+ if(item.category==='sourcing_price_contract_return'&&(item.route.tab!=='contract_return'||item.route.contractReturn?.source!=='price_reapplication'))return null;
  return intent?{itemId:item.todoId,kind:intent.kind,title:item.taskTitle,route:item.route,dueAt:item.dueAt}:null;
 }
 

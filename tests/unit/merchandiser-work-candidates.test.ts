@@ -30,6 +30,16 @@ describe('only native actionable merchandiser work is eligible for the new workb
   expect(merchandiserWorkCandidate(actor,{...candidate,category:'sourcing_owner_approval'})).toBeNull();
   expect(merchandiserWorkCandidate(actor,{...candidate,route:route('sourcing_detail')})).toBeNull();
  });
+ it('keeps transfer and price-application returns on their distinct original contract document versions',()=>{
+  const transfer={documentId:'transfer-document',version:3,supplierName:'TEST next factory'};
+  const price={documentId:'price-document',version:4,supplierName:'TEST price factory',source:'price_reapplication' as const};
+  const transferRoute={...route('sourcing_detail'),tab:'contract_return' as const,transferContract:transfer};
+  const priceRoute={...route('sourcing_detail'),tab:'contract_return' as const,contractReturn:price};
+  expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_transfer_contract_return',route:transferRoute})?.route).toEqual(transferRoute);
+  expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_price_contract_return',route:priceRoute})?.route).toEqual(priceRoute);
+  expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_price_contract_return',route:transferRoute})).toBeNull();
+  expect(merchandiserWorkCandidate(actor,{...task,category:'sourcing_transfer_contract_return',route:priceRoute})).toBeNull();
+ });
  it('filters the authorized set first and uses urgency, real due and stable original IDs before paging',()=>{
   const projected=merchandiserWorkCandidate(actor,task)!;
   const rows=Array.from({length:32},(_,index)=>({...projected,itemId:`task-${String(index).padStart(2,'0')}`,
