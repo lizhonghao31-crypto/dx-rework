@@ -1,191 +1,241 @@
 {
   "version": 1,
-  "base": "65717a188b3ab4dec6a8f02802d8a813f9e9117c",
+  "base": "686b2607eed56e6900ee5c8ca122384e8b838291",
   "risk": "full",
-  "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
+  "sourceFingerprint": "2f826fd23c17292c25b20b3345ec3c1b320eee6c4c77e8bc584b72301b3da4fc",
   "checks": [
     {
       "id": "native",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-board-scope-native.json tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/receiving-board-native-browser-postgres.test.ts tests/unit/pending-receiving-scope.test.ts",
-      "context": "Exact X4 source. Isolated native PostgreSQL with the CI dual routing and two workers, signed real Chromium using the production build. The test object uploader is isolated; receipt and factory operations use their original services.",
-      "startedAt": "2026-11-25T15:17:18.506Z",
-      "endedAt": "2026-11-25T15:18:09.740Z",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-formal-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
-      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
-      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-native.log",
-      "logSha256": "a52f15d6f8051daf3df52961d23360e35c2e1992c219c7b2892b137c9d4aaa51",
-      "kind": "tests",
-      "passed": 33,
+      "passed": 15,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "a9f230e72235c70af7f2ab47d846ce267305a4a9",
+      "sourceFingerprint": "2f826fd23c17292c25b20b3345ec3c1b320eee6c4c77e8bc584b72301b3da4fc",
+      "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing, canonical two-worker config and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
+      "startedAt": "2026-11-25T16:41:21.425Z",
+      "endedAt": "2026-11-25T16:42:34.931Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-formal-final-native.log",
+      "logSha256": "749033dd1612ec925b03d7c5a1afc3cdefe26ff0548a1b7ffe8725800e73cb06",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2bb77d1c6fdde7cdb7856043465ec87944d6ff9c6afc03cab1788d601c8f5747"
+          "sha256": "43c55658e07a3b790755f661d20821f2ab9e6c7d283e760ede04132a592d6e64"
         }
       ]
     },
     {
-      "id": "receiving-nondb",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-board-scope-nondb.json tests/unit/pending-receiving-scope.test.ts tests/unit/receiving-*.test.ts tests/unit/order-board-*.test.ts tests/unit/factory-production-facts.test.ts tests/unit/rework-v2-pr08-information-display.test.ts",
-      "context": "Exact X4 source without any DB URL; tests cover the original receiving and order-board layout, authorization contracts and quantity/receipt UI, including the original range KPIs and search view.",
-      "startedAt": "2026-11-25T15:17:16.067Z",
-      "endedAt": "2026-11-25T15:17:18.277Z",
+      "id": "unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-report-scope-final-unit.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
-      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
-      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-nondb.log",
-      "logSha256": "597d215c90669291e1cf5137099d673257c71396409c846df980a537f4da72ea",
-      "kind": "tests",
-      "passed": 80,
+      "passed": 48,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "a9f230e72235c70af7f2ab47d846ce267305a4a9",
+      "sourceFingerprint": "2f826fd23c17292c25b20b3345ec3c1b320eee6c4c77e8bc584b72301b3da4fc",
+      "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
+      "startedAt": "2026-11-25T16:41:07.774Z",
+      "endedAt": "2026-11-25T16:41:08.956Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-report-scope-final-unit.log",
+      "logSha256": "8f0df4901d4896768694e3f3eddf64b5c8d1b1a7ee299aef1da64220750dbd2d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dc6efb133cbd50565f4a91a137780628aacc80f4ece92d4faaf5c1e7672baec5"
+          "sha256": "a422ea8e54f928186cd89b67f7c3a4b6ac7c6cf4195e78ebc0659601e53c3eb4"
         }
       ]
-    },
-    {
-      "id": "packages",
-      "command": "npm run build:packages",
-      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T15:16:16.411Z",
-      "endedAt": "2026-11-25T15:16:24.376Z",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
-      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
-      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-packages.log",
-      "logSha256": "a8c320e2397cda70c4b959cad7754744d59731af921c5dc23ef05b7368ae82c1",
-      "kind": "command"
-    },
-    {
-      "id": "typecheck",
-      "command": "npm run typecheck",
-      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T15:16:24.380Z",
-      "endedAt": "2026-11-25T15:17:07.877Z",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
-      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
-      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-typecheck.log",
-      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "kind": "command"
-    },
-    {
-      "id": "lint",
-      "command": "bash -o pipefail -c git\\ diff\\ --name-only\\ -z\\ \\\"\\$1\\\"\\ --\\ \\\"\\*.ts\\\"\\ \\\"\\*.tsx\\\"\\ \\|\\ xargs\\ -0\\ node\\ node_modules/eslint/bin/eslint.js\\ --max-warnings=0 _ 65717a188b3ab4dec6a8f02802d8a813f9e9117c",
-      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T15:17:07.881Z",
-      "endedAt": "2026-11-25T15:17:09.390Z",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
-      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
-      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "kind": "command"
-    },
-    {
-      "id": "preflight",
-      "command": "npm run test:preflight",
-      "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T15:17:09.395Z",
-      "endedAt": "2026-11-25T15:17:15.868Z",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
-      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
-      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-preflight.log",
-      "logSha256": "372b6567298453dc0cc6834ef23ca511ade82d048606787ffd37c46cff3fafd2",
-      "kind": "command"
     }
   ],
   "rules": [
     {
-      "rule": "自动待收按实际原发厂证据及同一母单、PO、裁单、厂分配聚合。",
-      "source": "v11.5 §10.1–10.3、N21–24、X03/X04",
+      "rule": "六份增量迁移只增加X5真实问题来源、原报告、数量和返工规则，不改历史数据或部署流程。",
+      "source": "v11.5 §11.2–11.6、N26/N27/G4",
       "writes": [
-        "apps/api/src/receiving/pending-receiving-native-receipts.ts",
-        "apps/api/src/receiving/pending-receiving-original-allocation.ts",
-        "apps/api/src/receiving/pending-receiving-scope.ts",
-        "apps/api/src/receiving/pending-receiving-view.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-facts-consistency-postgres.test.ts",
-        "tests/unit/pending-receiving-scope.test.ts"
+        "apps/api/migrations/0307_craft_quality_quantity_scope.sql",
+        "apps/api/migrations/0308_rework_original_craft_quality_source.sql",
+        "apps/api/migrations/0309_original_external_craft_configuration.sql",
+        "apps/api/migrations/0310_original_external_craft_final_quantity.sql",
+        "apps/api/migrations/0311_internal_craft_quality_reinspection.sql",
+        "apps/api/migrations/0312_original_garment_quality_rework.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json"
+      ],
+      "reads": [
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/rework/receiving-quantity-ceiling.ts"
+      ],
+      "oldTests": [
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/effective-packing-postgres.test.ts"
+      ],
+      "initialization": "新鲜隔离库依 manifest 应用迁移；旧来源按原身份读取，旧二进制不作为新增裁片来源的写入回退。",
+      "dateAndPermission": "原检查、数量版本和审计保持；数据库独立守住原子变更、实物上限及真实报告。",
+      "expectation": "按真实20片/件范围返工，旧问题与新版回货不互相覆盖；原质检报告保原所有权。",
+      "checks": [
+        "native",
+        "unit"
+      ]
+    },
+    {
+      "rule": "质量中心保原岗位资格，真实加工检查及回仓检查只打开原事项，不把未量化记录当返工。",
+      "source": "v11.5 §11.2/11.5、ENT21/24/25",
+      "writes": [
+        "apps/api/src/production-platform/journey-selection-access.ts",
+        "apps/api/src/production-platform/qc-production-progress-routes.ts",
+        "apps/api/src/production-platform/qc-production-progress-service.ts",
+        "apps/api/src/production-platform/quality-center-craft-directory.ts",
+        "apps/api/src/production-platform/quality-center-factory-directory.ts",
+        "apps/api/src/production-platform/quality-center-garment-directory.ts",
+        "apps/web/src/App.tsx",
+        "apps/web/src/components.tsx",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/quality-center.tsx",
+        "apps/web/src/quality-directory-table.tsx",
+        "apps/web/src/quality-workbench-route.ts",
+        "packages/contracts/src/production-readiness.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/production-platform/factory-flow-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts"
+      ],
+      "initialization": "入口复用原权限和主题；已派工、实际工厂、工艺、PO、真实仓储批次分别定位。",
+      "dateAndPermission": "普通QC只能办理原授权范围；不由今天、计划数量或大货洗水记录替代真实范围。",
+      "expectation": "按原订单搜索和定位，非原岗位不扩大范围，旧工厂进度仍能打开。",
+      "checks": [
+        "native",
+        "unit"
+      ]
+    },
+    {
+      "rule": "同批成衣原质检、报告、实际收货数量版和原返工一致，不改变回货、装箱或覆盖规则。",
+      "source": "v11.5 §11.2–11.3、N24–27",
+      "writes": [
+        "apps/api/src/production-platform/factory-production-facts.ts",
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/production-platform/order-closure-routes.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/original-quality-photo.ts",
+        "apps/web/src/factory-production-qc-panel.tsx",
+        "apps/web/src/garment-original-rework.tsx",
+        "apps/web/src/garment-quality-form.tsx",
+        "apps/web/src/garment-quality-photos.tsx",
+        "apps/web/src/order-closure-panel.tsx",
+        "packages/contracts/src/order-closure.ts",
+        "tests/unit/original-quality-photo.test.ts"
       ],
       "reads": [
         "apps/api/src/receiving/receiving-service.ts",
+        "apps/api/src/rework/v2-submission-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/effective-packing-postgres.test.ts"
+      ],
+      "initialization": "从真实收货、检查命令和其绑定的原图片读取，不重绑文件或搬移历史。",
+      "dateAndPermission": "活动订单原授权QC才可发起和正式提交，纠正使旧提交拒绝而原回执可重读。",
+      "expectation": "500发厂280实收260合格20问题，剩220，换版拒绝旧稿。正式提交使用当前真实原质检图片，且没有重复上传。",
+      "checks": [
+        "native",
+        "unit"
+      ]
+    },
+    {
+      "rule": "裁片质量返工沿同一原返工流程执行，外厂不伪造工人/工资，原本厂返工不变。",
+      "source": "v11.5 §11.3–11.6、N34–40",
+      "writes": [
+        "apps/api/src/production-platform/internal-craft-quality-reinspection.ts",
+        "apps/api/src/production-platform/quality-craft-problem-scope.ts",
+        "apps/api/src/rework/process-configuration-routes.ts",
+        "apps/api/src/rework/process-configuration-service.ts",
+        "apps/api/src/rework/receiving-quantity-ceiling.ts",
+        "apps/api/src/rework/responsibility-determination-service.ts",
+        "apps/api/src/rework/rework-history-review.ts",
+        "apps/api/src/rework/rework-node-history.ts",
+        "apps/api/src/rework/routes.ts",
+        "apps/api/src/rework/service.ts",
+        "apps/api/src/rework/v2-draft-service.ts",
+        "apps/api/src/rework/v2-submission-service.ts",
+        "apps/api/src/rework/whole-order-review-service.ts",
+        "apps/api/src/rework/work-reporting-service.ts",
+        "apps/web/src/craft-original-quality.tsx",
+        "apps/web/src/process-worker-assignment-form.tsx",
+        "apps/web/src/responsibility-determination-panel.tsx",
+        "apps/web/src/rework-v2-form.tsx",
+        "apps/web/src/whole-order-review-panel.tsx",
+        "apps/web/src/work-reporting-form.tsx",
+        "packages/contracts/src/index.ts",
+        "tests/unit/quality-craft-problem-scope.test.ts",
+        "tests/unit/receiving-quantity-ceiling.test.ts",
+        "tests/unit/rework-v2-pr06-responsibility-2.test.ts",
+        "tests/unit/rework-v2-unified-execution.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/quality-craft-problem-scope.ts",
+        "apps/api/src/production-platform/warehouse-craft-rework-return.ts"
+      ],
+      "oldTests": [
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/unit/rework-v2-unified-execution.test.ts",
+        "tests/unit/rework-v2-pr06-responsibility-2.test.ts"
+      ],
+      "initialization": "真实回仓范围和检查问题量固定原来源；复用返工单、责任和下游账本。",
+      "dateAndPermission": "现有权限下才能进入N01至N09，原整查、IE与工资仅按真实原数据产生。",
+      "expectation": "300片中20片问题，实物回仓前不记完成，外部无虚假工资，原内部真报工及复检仍适用。",
+      "checks": [
+        "native",
+        "unit"
+      ]
+    },
+    {
+      "rule": "原仓库实物动作保单据及工艺批次精确范围，返工占用避免重复发厂和跨批次。",
+      "source": "v11.5 §11.4–11.6、N34–40、ENT21",
+      "writes": [
+        "apps/api/src/production-platform/factory-batch-ledger.ts",
+        "apps/api/src/production-platform/factory-flow-routes.ts",
         "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/garment-quality.ts"
-      ],
-      "oldTests": [
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-facts-consistency-postgres.test.ts"
-      ],
-      "initialization": "沿实际发厂与原收货既有事实；不创建第二份收货记录或历史写回。",
-      "dateAndPermission": "原发出、工厂发回和有效订正独立保留；只读取现有收货资格对应的范围。",
-      "expectation": "同厂发500收280余220，B厂不变；未证明的收货批次不猜；旧检查不会覆盖新数量版本。",
-      "checks": [
-        "native",
-        "receiving-nondb"
-      ]
-    },
-    {
-      "rule": "用现有仓管身份及原收货命令，不改退回、差异、装箱或返工权。",
-      "source": "v11.5 §10.3–10.4、N21–24、N26–27",
-      "writes": [
-        "apps/api/src/receiving/receiving-routes.ts",
-        "apps/api/src/receiving/receiving-service.ts"
+        "apps/api/src/production-platform/factory-step-ledger.ts",
+        "apps/api/src/production-platform/quality-warehouse-craft-occupation.ts",
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/warehouse-craft-rework-return.ts",
+        "apps/web/src/factory-flow-panel.tsx",
+        "apps/web/src/warehouse-center.tsx",
+        "apps/web/src/warehouse-craft-work.tsx",
+        "apps/web/src/warehouse-native-task-table.tsx",
+        "apps/web/src/warehouse-workbench-route.ts",
+        "packages/contracts/src/factory-flow.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/production-facts-consistency-postgres.test.ts",
+        "tests/unit/factory-step-ledger.test.ts",
+        "tests/unit/warehouse-craft-rework-return.test.ts"
       ],
       "reads": [
-        "apps/api/src/receiving/pending-receiving-view.ts",
-        "apps/api/src/production-platform/order-closure-service.ts"
+        "apps/api/src/rework/service.ts",
+        "apps/api/src/production-platform/quality-warehouse-craft-occupation.ts"
       ],
       "oldTests": [
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/receiving-board-native-browser-postgres.test.ts"
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/production-facts-consistency-postgres.test.ts",
+        "tests/unit/warehouse-craft-rework-return.test.ts"
       ],
-      "initialization": "待收行仅定位；提交后才走原首次或追加路径。",
-      "dateAndPermission": "原活动仓管及厂/裁单分配在原事务复核，原授权、幂等与登记时间不替换。",
-      "expectation": "原可见记录同键重试不会重复收货，错误厂或旧选择拒绝，覆盖原历史与原控制。",
+      "initialization": "由原仓管用实际发出、回仓、材料登记和原生产写命令，保持唯一原记录。",
+      "dateAndPermission": "同一真实范围才扣返工，不因旧工艺日期或来自别厂而推定结束。",
+      "expectation": "真实半量发厂、辅料/验布原岗位和原版本保持，质检未放行不当合格。",
       "checks": [
         "native",
-        "receiving-nondb"
-      ]
-    },
-    {
-      "rule": "既有回货看板增加待收入口，沿同范围原表办理并返回原筛选与焦点。",
-      "source": "v11.5 §10.2–10.4、V17、GOV12",
-      "writes": [
-        "apps/web/src/order-board-page.tsx",
-        "apps/web/src/pending-receiving-board.tsx",
-        "apps/web/src/pending-receiving-entry.ts",
-        "apps/web/src/receiving-page.tsx",
-        "tests/unit/rework-v2-pr08-information-display.test.ts",
-        "tests/integration/receiving-board-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/list-pagination.tsx",
-        "apps/web/src/foreground-loading.tsx",
-        "apps/api/src/receiving/receiving-routes.ts"
-      ],
-      "oldTests": [
-        "tests/integration/receiving-board-native-browser-postgres.test.ts",
-        "tests/unit/rework-v2-pr08-information-display.test.ts"
-      ],
-      "initialization": "由原仓管菜单打开同一个收货域，旧入口、返工和本厂做尾继续可用。",
-      "dateAndPermission": "选择、提交与回到原行不改变能力、角色或业务日期；真实状态不凭计划。",
-      "expectation": "授权仓管真实首收、追加，再回到原筛选原行；旧装箱与差异、角色隔离正常。",
-      "checks": [
-        "native",
-        "receiving-nondb"
+        "unit"
       ]
     }
   ]
