@@ -8,6 +8,7 @@ DECLARE
   qualified numeric;
   problem numeric;
   actual numeric;
+  already_checked numeric;
   matching_lines integer;
 BEGIN
   PERFORM 1 FROM digital_factory_routes WHERE preparation_id=NEW.preparation_id FOR UPDATE;
@@ -47,6 +48,17 @@ BEGIN
     OR checked<>trunc(checked) OR qualified<>trunc(qualified) OR problem<>trunc(problem)
     OR qualified+problem<>checked OR (NEW.result='需处理') IS DISTINCT FROM (problem>0) THEN
     RAISE EXCEPTION 'counted craft check exceeds original return scope' USING ERRCODE='23514';
+  END IF;
+  -- Independent checks consume only the uninspected balance. Reinspection is
+  -- a replacement of a single scope, separately verified by its own trigger.
+  IF to_jsonb(NEW)->>'supersedes_check_id' IS NULL THEN
+    SELECT coalesce(sum((prior.quantity_scope->>'inspectedQuantity')::numeric),0) INTO already_checked
+      FROM digital_factory_qc prior WHERE prior.preparation_id=NEW.preparation_id AND prior.return_fact_id=NEW.return_fact_id
+        AND prior.line_id=NEW.line_id AND prior.quantity_scope IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM digital_factory_qc replaced WHERE to_jsonb(replaced)->>'supersedes_check_id'=prior.check_id::text);
+    IF already_checked+checked>actual THEN
+      RAISE EXCEPTION 'counted craft check exceeds uninspected return balance' USING ERRCODE='23514';
+    END IF;
   END IF;
   RETURN NEW;
 END;

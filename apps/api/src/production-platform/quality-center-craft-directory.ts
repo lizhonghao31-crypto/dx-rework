@@ -32,10 +32,10 @@ export async function qualityCenterCraftDirectory(pool:Pool,actor:TrustedActorCo
     const supplierName=typeof origin?.payload.supplier==='string'&&origin.payload.supplier.trim()?origin.payload.supplier:null;
     for(const row of batch.rows){
      const inspected=row.result!==null,identity=sheet.lines.find(line=>line.lineId===row.lineId);
-     if(!identity||row.returned<=0||inspected!==(input.status==='completed'))continue;
+     if(!identity||row.returned<=0||(input.status==='completed'?!inspected:inspected&&!(row.uninspectedQuantity&&row.uninspectedQuantity>0)))continue;
      if(search&&![task.identity?.designStyleNo,task.identity?.customerCode,identity.poNumber,supplierName].some(value=>value?.toLowerCase().includes(search)))continue;
      items.push({id:`${batch.factId}:${row.lineId}`,orderId,designStyleNo:task.identity?.designStyleNo??null,customerCode:task.identity?.customerCode??null,
-      poNumber:identity.poNumber,supplierName,quantity:row.returned,qualifiedQuantity:null,dueAt:task.dueAt,inspected,
+      poNumber:identity.poNumber,supplierName,quantity:row.returned,qualifiedQuantity:row.qualifiedQuantity??null,dueAt:task.dueAt,inspected:input.status==='completed'&&inspected,
       result:row.result==='合格'?'passed':row.result==='需处理'?'problem':null,
       source:{kind:'craft',stepRef:batch.stepRef??null,returnFactId:batch.factId,lineId:row.lineId,taskId:task.taskId}});
     }

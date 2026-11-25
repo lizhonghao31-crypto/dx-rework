@@ -32,7 +32,7 @@ export function qualifyCurrentCraftProblem(raw:OriginalCheck,locator:CraftProble
 
 /** No broad authorization shortcut here. The original QC/rework command
  * supplies an already authorized order and uses its original lifecycle lock.
- * Only the latest native check for this exact return/PO can occupy pieces. */
+ * Each still-active counted scope can occupy only its own exact pieces. */
 export async function readCurrentCraftProblem(db:Pick<PoolClient,'query'>,locator:CraftProblemLocator){
  const {rows}=await db.query<OriginalCheck>(`SELECT q.check_id,q.result,q.quantity_scope,f.payload AS returned_payload
   FROM digital_factory_routes route JOIN digital_factory_facts f USING(preparation_id)
@@ -40,9 +40,8 @@ export async function readCurrentCraftProblem(db:Pick<PoolClient,'query'>,locato
   JOIN digital_factory_facts outgoing ON outgoing.preparation_id=f.preparation_id AND outgoing.fact_id::text=f.payload->>'sendFactId'
    AND outgoing.kind='工艺发出' AND outgoing.payload->>'stepRef'=f.payload->>'stepRef'
    AND outgoing.payload#>>'{warehouseMotion,factoryId}'=f.payload#>>'{warehouseMotion,factoryId}'
-  JOIN LATERAL (SELECT check_row.* FROM digital_factory_qc check_row
-   WHERE check_row.preparation_id=route.preparation_id AND check_row.return_fact_id=f.fact_id AND check_row.line_id=$5
-   ORDER BY check_row.sequence DESC LIMIT 1) q ON q.check_id=$6
+  JOIN digital_factory_qc q ON q.check_id=$6 AND q.preparation_id=route.preparation_id AND q.return_fact_id=f.fact_id AND q.line_id=$5
+   AND NOT EXISTS (SELECT 1 FROM digital_factory_qc newer WHERE to_jsonb(newer)->>'supersedes_check_id'=q.check_id::text)
   WHERE route.production_order_id=$1 AND route.preparation_id=$2 AND f.payload->>'stepRef'=$3
    AND f.fact_id=$4 AND f.kind='工艺回仓'`,
  [locator.orderId,locator.preparationId,locator.stepRef,locator.returnFactId,locator.lineId,locator.checkId]);

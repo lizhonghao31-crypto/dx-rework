@@ -57,4 +57,16 @@ describe('independent craft scopes and terminal-only physical supply',()=>{
   expect(after.steps[0]!.completion[0]).toMatchObject({qualified:300,complete:true,conflict:false});
   expect(factoryStepLedger(lines,[...original,outgoing,returned],[held],stepsForTest).batches[0]!.rows[0]!.releasedAvailable).toBe(260);
  });
+ it('appends uninspected pieces and only replaces the exact internally repaired scope',()=>{
+  const lines=[{lineId:'po',quantity:100}],single=steps.slice(0,1);
+  const checked=(id:string,inspected:number,qualified:number):BatchCheck=>({...qc('return1'),check_id:id,
+   result:inspected>qualified?'需处理':'合格',quantity_scope:{inspectedQuantity:inspected,qualifiedQuantity:qualified,problemQuantity:inspected-qualified,unit:'片'}});
+  const old=checked('original-problem',40,35),more=checked('new-scope',60,55);
+  const stock=[...first,fact('shipped','仓库实际发厂','emb',20,{returnFactId:'return1'})];
+  const reinspection={...checked('original-recheck',40,40),supersedes_check_id:old.check_id!};
+  const read=(checks:BatchCheck[])=>factoryStepLedger(lines,stock,checks,single).batches[0]!.rows[0]!;
+  expect(read([old])).toMatchObject({available:80,uninspectedQuantity:60,releasedAvailable:15,result:'需处理'});
+  expect(read([old,more])).toMatchObject({available:80,uninspectedQuantity:0,qualifiedQuantity:90,releasedAvailable:70,result:'需处理'});
+  expect(read([old,more,reinspection])).toMatchObject({available:80,uninspectedQuantity:0,qualifiedQuantity:95,releasedAvailable:75,result:'需处理'});
+ });
 });

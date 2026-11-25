@@ -405,7 +405,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect([in3,in4].map(row=>row.payload)).toEqual([firstSecondReturn,problemReturn].map(quantity=>expect.objectContaining({sendFactId:out2.factId,lines:[{lineId,quantity}]})));
   expect((await flow.read(f.root,ready.id)).inTransit).toBe(false);
   expect(await count()).toBe(before+3);
-  await flow.qc(f.root,ready.id,{expectedRevision:(await flow.read(f.root,ready.id)).revision,stepRef:second!.stepId,returnFactId:in3.factId,note:'TEST exact final QC release',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[]}]},randomUUID());
+  const firstInspected=firstSecondReturn-oldOccupied;
+  const firstInspection=await flow.qc(f.root,ready.id,{expectedRevision:(await flow.read(f.root,ready.id)).revision,stepRef:second!.stepId,returnFactId:in3.factId,note:'TEST exact partial QC release',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[],
+   quantityScope:{inspectedQuantity:firstInspected,qualifiedQuantity:firstInspected,problemQuantity:0,unit:'片'}}]},randomUUID());
+  const firstCheck=firstInspection.checks.find(check=>check.returnFactId===in3.factId)!;
   occupiedOrigin=in3.factId;
   const dispatch={expectedRevision:(await flow.read(f.root,ready.id)).revision,returnFactId:in3.factId,supplierId:f.supplierId,occurredAt:businessNow().toISOString(),note:'TEST final accepted physical dispatch'};
   await expect(flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:firstSecondReturn-oldOccupied+1}]},randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -417,6 +420,35 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const taskService=new DigitalProductionTaskService(f.db);
   await taskService.reassign(f.root,qcTask.task_id,qc.actorId,randomUUID());
   const qualityQuery={kind:'craft' as const,status:'open' as const,page:1,search:''};
+  const partialDirectory=await taskService.qualityDirectory(qc,'craft',qualityQuery),pendingRow=partialDirectory.items.find(item=>item.source.kind==='craft'&&item.source.returnFactId===in3.factId)!;
+  expect(pendingRow).toMatchObject({inspected:false,qualifiedQuantity:firstInspected,source:{returnFactId:in3.factId,taskId:qcTask.task_id}});
+  const partialState=await live.read(qc,ready.id),continued={expectedRevision:partialState.revision,stepRef:second!.stepId,returnFactId:in3.factId,note:'TEST inspect only remaining pieces',checks:[{lineId,result:'合格' as const,problem:'',treatment:'',attachmentIds:[],
+   quantityScope:{inspectedQuantity:oldOccupied+1,qualifiedQuantity:oldOccupied+1,problemQuantity:0,unit:'片' as const}}]};
+  expect(partialState.batches?.find(row=>row.factId===in3.factId)?.rows[0]).toMatchObject({sent:firstInspected,uninspectedQuantity:oldOccupied,releasedAvailable:0});
+  await expect(live.qc(qc,ready.id,continued,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('未检查')});
+  await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by,checked_at,quantity_scope)
+   VALUES($1,$2,$3,$4,'合格','','','{}',$5,now(),$6)`,[randomUUID(),ready.preparationId,in3.factId,lineId,qc.actorId,continued.checks[0]!.quantityScope])).rejects.toMatchObject({code:'23514',message:expect.stringContaining('uninspected')});
+  const continuation=await h.open(qc.actorId,1165,{},`/ui/digital-production?workspace=quality&kind=craft`);
+  try{
+   const open=continuation.page.locator(`a[href*="qualityReturn=${in3.factId}"]`).filter({hasText:'办理本批检查'});
+   await open.click();
+   const panel=continuation.page.getByRole('region',{name:'本批原工艺检查',exact:true});
+   await panel.getByText(`本批还有 ${oldOccupied} 片未检查`,{exact:true}).waitFor();
+   await panel.getByRole('textbox',{name:'本次实际检查片数',exact:true}).fill(String(oldOccupied));
+   await panel.getByRole('textbox',{name:'本次实际合格片数',exact:true}).fill(String(oldOccupied));
+   const response=continuation.page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith(`/orders/${ready.id}/factory-flow/qc`));
+   await panel.getByRole('button',{name:'保存本批检查',exact:true}).click();
+   const saved=await response;expect(saved.status(),await saved.text()).toBe(200);
+   const after=await saved.json();
+   expect(after.checks.filter((entry:{returnFactId:string})=>entry.returnFactId===in3.factId)).toEqual([firstCheck,expect.objectContaining({
+    quantityScope:{inspectedQuantity:oldOccupied,qualifiedQuantity:oldOccupied,problemQuantity:0,unit:'片'}})]);
+   expect(after.batches.find((batch:{factId:string})=>batch.factId===in3.factId).rows[0]).toMatchObject({
+    sent:firstInspected,uninspectedQuantity:0,available:oldOccupied,releasedAvailable:oldOccupied});
+   const responseKey=saved.request().headers()['idempotency-key']!;
+   const repeated=await continuation.context.request.post(saved.url(),{headers:{'idempotency-key':responseKey},data:saved.request().postDataJSON()});
+   expect(repeated.status(),await repeated.text()).toBe(200);
+   expect((await repeated.json()).checks.filter((entry:{returnFactId:string})=>entry.returnFactId===in3.factId)).toHaveLength(2);
+  }finally{await continuation.close();}
   const qualityWork=await taskService.qualityDirectory(qc,'craft',qualityQuery);
   expect(qualityWork).toMatchObject({page:1,items:[{source:{taskId:qcTask.task_id,returnFactId:in4.factId}}],total:1});
   expect(await taskService.qualityDirectory(qc,'craft',{...qualityQuery,page:2})).toEqual({page:2,items:[],total:1});
@@ -648,11 +680,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const internalPhoto=await f.image(qc);
   const internalCounted=await nativeFlow.qc(qc,ready.id,{expectedRevision:(await nativeFlow.read(qc,ready.id)).revision,
    stepRef:first!.stepId,returnFactId:in2.factId,note:'TEST actual internal issue',checks:[{lineId,result:'需处理',problem:'TEST internal repairs',treatment:'',
-    attachmentIds:[internalPhoto],quantityScope:{inspectedQuantity:40,qualifiedQuantity:37,problemQuantity:3,unit:'片'}}]},randomUUID());
+    attachmentIds:[internalPhoto],quantityScope:{inspectedQuantity:20,qualifiedQuantity:17,problemQuantity:3,unit:'片'}}]},randomUUID());
   const originalCheck=internalCounted.checks.filter(row=>row.returnFactId===in2.factId&&row.lineId===lineId).at(-1)!;
   const internalScope={...locate,stepRef:first!.stepId,returnFactId:in2.factId,checkId:originalCheck.checkId};
   const repair=await rework.createCraftDraft(qaActor,{scope:internalScope,execution:'internal',quantity:3},randomUUID());
   const internalId=repair.value.reworkOrderId;
+  const afterAdditional=await nativeFlow.qc(qc,ready.id,{expectedRevision:(await nativeFlow.read(qc,ready.id)).revision,
+   stepRef:first!.stepId,returnFactId:in2.factId,note:'TEST remaining inspection does not supersede the original problem',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[],
+    quantityScope:{inspectedQuantity:20,qualifiedQuantity:20,problemQuantity:0,unit:'片'}}]},randomUUID());
+  expect(afterAdditional.batches?.find(batch=>batch.factId===in2.factId)?.rows).toMatchObject([{uninspectedQuantity:0,releasedAvailable:37,result:'需处理'}]);
+  await expect(readCurrentCraftProblem(f.db,internalScope)).resolves.toMatchObject({checkId:originalCheck.checkId,problemQuantity:3});
   const correctedDraft=await rework.updateDraft(qaActor,internalId,{expectedVersion:repair.value.version,tailInspectionRequired:false},randomUUID());
   const acceptedInternal=await submit.submit(qaActor,internalId,{expectedVersion:correctedDraft.value.version},randomUUID());
   expect(acceptedInternal.value).toMatchObject({reworkNo:expect.any(String),status:'pending_process_configuration',receivingBatchId:null,
@@ -695,12 +732,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(response.request().postDataJSON()).toMatchObject({internalReworkId:internalId,returnFactId:in2.factId,stepRef:first!.stepId,
     checks:[{lineId,quantityScope:{inspectedQuantity:3,qualifiedQuantity:3,problemQuantity:0,unit:'片'}}]});
    afterInternal=await response.json();
-   await internalUi.page.getByText('实际已检 40 片 · 合格 40 片 · 问题 0 片',{exact:true}).waitFor();
+   await expect.poll(()=>internalUi.page.getByText('实际已检 20 片 · 合格 20 片 · 问题 0 片',{exact:true}).count()).toBe(2);
   }finally{await internalUi.close();}
   expect(afterInternal.batches?.find(batch=>batch.factId===in2.factId)?.rows).toMatchObject([{releasedAvailable:40}]);
   expect(afterInternal.checks.filter(row=>row.returnFactId===in2.factId&&row.lineId===lineId)).toEqual(expect.arrayContaining([
-   expect.objectContaining({checkId:originalCheck.checkId,result:'需处理',quantityScope:{inspectedQuantity:40,qualifiedQuantity:37,problemQuantity:3,unit:'片'}}),
-   expect.objectContaining({result:'合格',quantityScope:{inspectedQuantity:40,qualifiedQuantity:40,problemQuantity:0,unit:'片'}}),
+   expect.objectContaining({checkId:originalCheck.checkId,result:'需处理',quantityScope:{inspectedQuantity:20,qualifiedQuantity:17,problemQuantity:3,unit:'片'}}),
+   expect.objectContaining({result:'合格',supersedesCheckId:originalCheck.checkId,quantityScope:{inspectedQuantity:20,qualifiedQuantity:20,problemQuantity:0,unit:'片'}}),
   ]));
   expect((await f.db.query('SELECT count(*)::int AS count FROM rework_work_reports WHERE rework_order_id=$1',[internalId])).rows[0].count).toBe(1);
  });

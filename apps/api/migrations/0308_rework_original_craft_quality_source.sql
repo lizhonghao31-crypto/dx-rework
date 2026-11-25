@@ -51,7 +51,7 @@ BEGIN
     END IF;
     IF EXISTS (SELECT 1 FROM digital_factory_qc q
       WHERE q.preparation_id=source_check.preparation_id AND q.return_fact_id=source_check.return_fact_id
-        AND q.line_id=source_check.line_id AND q.sequence>source_check.sequence) THEN
+        AND q.line_id=source_check.line_id AND to_jsonb(q)->>'supersedes_check_id'=source_check.check_id::text) THEN
       RAISE EXCEPTION 'original craft check is no longer current' USING ERRCODE='55000';
     END IF;
     IF EXISTS (SELECT 1 FROM digital_factory_facts f JOIN rework_orders prior
