@@ -306,6 +306,16 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     const {productionOrderId}=await response.json();
     expect((await h.db.query('SELECT production_order_id,design_style_no FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows)
       .toEqual([{production_order_id:productionOrderId,design_style_no:orderNumber}]);
+    const prints=await page.evaluate(async sourceId=>{
+     const path='/api/digital-production/sources/'+sourceId+'/development';
+     const live=await fetch(path),current=await live.json();
+     const exact=await fetch(path+'/versions/'+current.version+'?round='+current.roundNumber),history=await exact.json();
+     return {live:live.status,exact:exact.status,current,history};
+    },sourceId);
+    expect(prints.live).toBe(200);expect(prints.exact).toBe(200);
+    expect(prints.current).toMatchObject({sourceId,designStyleNo:orderNumber,numberedIdentity:{orderNumber}});
+    expect(prints.history).toMatchObject({sourceId,roundNumber:prints.current.roundNumber,documentVersion:prints.current.version,
+     designStyleNo:orderNumber,numberedIdentity:prints.current.numberedIdentity});
     expect(h.requests.filter(request=>request.session===formal.session&&request.method==='POST'&&request.path.endsWith('/sources/numbered-drafts'))).toHaveLength(1);
    }catch(error){await writeFile(join(evidence,'formal-numbering-failure.txt'),await formal.page.locator('body').innerText());throw error;}
    finally{await formal.context.close();}
@@ -1389,7 +1399,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   const actor=h.f.root,style='TEST-CREATION-'+operation+'-'+randomUUID(),source=await new DigitalProductionIdentityService(h.db,true).createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:operation==='confirm'?'PD':null},randomUUID());
   const forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),category=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!,price=await new PatternRoomPriceService(h.db).quote(actor,'category',category.price_id);
   const order=operation==='confirm'?InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,primaryMerchandiserId:h.f.people.merchandiser!.actorId,orderDate:'2026-11-17',contractDeliveryDate:null,requiresColorMatching:false,salesYear:2027,salesSeries:'P03',lines:[{formalPoNo:style+'-PO',color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:'2'}]}]}):null;
-  let sheet=await forms.save(actor,source.sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,files:[{attachmentId:await h.f.image(actor),kind:'款图'}],patternCategoryId:category.price_id,...(order?{productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order}}:{})}},randomUUID());
+  let sheet=await forms.save(actor,source.sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),templateConfirmed:true,sizeTableInitialized:true,quantity:1,files:[{attachmentId:await h.f.image(actor),kind:'款图'}],patternCategoryId:category.price_id,...(order?{productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order}}:{})}},randomUUID());
   if(operation==='confirm')sheet=await forms.publish(actor,source.sourceId,sheet.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version});
   const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
@@ -1397,7 +1407,14 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    // Isolated restoration fixture: the source/document are prepared by their
    // real services, and this is the same bound state following an acknowledged
    // original draft save. Publication and receipt lookup below are unmocked.
-   await page.evaluate(({sheet,categoryId,priceVersion,order})=>{const key=Object.keys(sessionStorage).find(key=>key.startsWith('dx:development-creation:'))!,draft=JSON.parse(sessionStorage.getItem(key)!);draft.phase='bound';draft.sourceId=sheet.sourceId;draft.version=sheet.version;draft.snapshot.document=sheet.document;draft.snapshot.quantityInput='1';draft.snapshot.patternChoice={categoryId,priceVersion};if(order){draft.snapshot.intent='certain_order';draft.snapshot.form=order;}sessionStorage.setItem(key,JSON.stringify(draft));},{sheet,categoryId:category.price_id,priceVersion:price.version,order});
+   await page.evaluate(({sheet,categoryId,priceVersion,order})=>{
+    const key=Object.keys(sessionStorage).find(key=>key.startsWith('dx:development-creation:'))!,draft=JSON.parse(sessionStorage.getItem(key)!);
+    draft.phase='bound';draft.sourceId=sheet.sourceId;draft.version=sheet.version;
+    draft.snapshot.document=sheet.document;draft.snapshot.quantityInput='1';draft.snapshot.patternChoice={categoryId,priceVersion};
+    draft.snapshot.measurementIds=sheet.document!.measurements.map(()=>crypto.randomUUID());
+    if(order){draft.snapshot.intent='certain_order';draft.snapshot.form=order;draft.snapshot.poSizeIds=Array.from({length:Math.max(...order.lines.map(line=>line.sizes.length))},()=>crypto.randomUUID());}
+    sessionStorage.setItem(key,JSON.stringify(draft));
+   },{sheet,categoryId:category.price_id,priceVersion:price.version,order});
    await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();await wizardNext(page);
    if(operation==='publish')await page.getByText(/^执行单价：/).waitFor();else await wizardNext(page);
    const path=`/api/digital-production/sources/${source.sourceId}/${operation==='publish'?'development/publish':'confirm'}`,attempts:Array<{key:string|undefined;body:string|null}>=[];

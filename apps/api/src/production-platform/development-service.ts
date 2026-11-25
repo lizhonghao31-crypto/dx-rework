@@ -94,7 +94,8 @@ export class DigitalDevelopmentService {
         sourceId,round:roundNumber,documentVersion,designerId:source.created_by,asOf:observedBusinessTime(this.now).now,
       },await developmentRevisionSource(db,sourceId));
       const result={sourceId,designStyleNo:source.design_style_no,temporaryStyleNo:source.temporary_style_no,customerCode:source.customer_code,
-        developmentType:source.development_type,designerName:source.designer_name,roundNumber,documentVersion,document,publishedAt:metadata.published.at,metadata,...details};
+        developmentType:source.development_type,designerName:source.designer_name,roundNumber,documentVersion,document,publishedAt:metadata.published.at,metadata,...details,
+        ...(source.workbench_generated_number?{numberedIdentity:{orderNumber:source.design_style_no??null}}:{})};
       await db.query('COMMIT');return result;
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
