@@ -93,10 +93,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await reports.execute(f.root,production,'complete',{businessDate:day,confirmed:true},randomUUID());await reports.execute(f.root,production,'ship',{businessDate:day,confirmed:true},randomUUID());
    const process=await flow.read(assignedQc,r.id);
    const factoryPhoto=await f.image(assignedQc),factoryLineId=waiting.items[0]!.lineId;
-   const scope={productionId:production,factoryDecisionId:null,lineId:factoryLineId};
-   await expect(flow.authorizeProductionQcPhoto(assignedQc,r.id,scope)).resolves.toBeUndefined();
-   await expect(flow.authorizeProductionQcPhoto(assignedQc,r.id,{...scope,factoryDecisionId:randomUUID()})).rejects.toMatchObject({statusCode:409});
-   await expect(flow.authorizeProductionQcPhoto(f.people.warehouse!,r.id,scope)).rejects.toMatchObject({statusCode:403});
+   const factoryScope={productionId:production,factoryDecisionId:null,lineId:factoryLineId};
+   await expect(flow.authorizeProductionQcPhoto(assignedQc,r.id,factoryScope)).resolves.toBeUndefined();
+   await expect(flow.authorizeProductionQcPhoto(assignedQc,r.id,{...factoryScope,factoryDecisionId:randomUUID()})).rejects.toMatchObject({statusCode:409});
+   await expect(flow.authorizeProductionQcPhoto(f.people.warehouse!,r.id,factoryScope)).rejects.toMatchObject({statusCode:403});
    const recordedFactory=await flow.productionQc(assignedQc,r.id,{expectedRevision:process.revision,factoryDecisionId:null,occurredAt:businessNow().toISOString(),
     checks:[{lineId:factoryLineId,result:'合格',problem:'',attachmentIds:[factoryPhoto]}],note:'TEST original factory inspection'},randomUUID());
    const factoryRef={kind:'factory-inspection' as const,orderId:r.id,eventId:recordedFactory.productionInspectionHistory![0]!.eventId,

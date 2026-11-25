@@ -7,10 +7,11 @@ import {useScopedQualityPhotos} from './garment-quality-photos.js';
 type PhotoDraft={attachmentIds:string[];blocked:boolean};
 type Check=NonNullable<FactoryFlowSheet['productionChecks']>[number];
 type Inspection=NonNullable<FactoryFlowSheet['productionInspectionHistory']>[number];
+export type FactoryInspectionFocus=Pick<Check,'productionId'|'factoryDecisionId'|'lineId'>;
 const {apiUrl}=createWebUrls(import.meta.env.BASE_URL);
 const scopePath=(orderId:string,productionId:string,factoryDecisionId:string|null,lineId:string)=>
  `orders/${orderId}/factory-flow/production-qc/${productionId}/${factoryDecisionId??'original'}/${lineId}`;
-const scopeKey=(row:Check)=>JSON.stringify([row.productionId,row.factoryDecisionId,row.lineId]);
+const scopeKey=(row:FactoryInspectionFocus)=>JSON.stringify([row.productionId,row.factoryDecisionId,row.lineId]);
 
 function FactoryQcPhotoDraft({orderId,row,savedPhotos,register}:{orderId:string;row:Check;savedPhotos:ReadonlySet<string>;register:Map<string,PhotoDraft>}){
  const key=scopeKey(row),photos=useScopedQualityPhotos(scopePath(orderId,row.productionId,row.factoryDecisionId,row.lineId),'工厂检查报告图片');
@@ -38,9 +39,13 @@ function InspectionHistory({orderId,events,lines}:{orderId:string;events:readonl
  </section>)}</details>;
 }
 
-export function FactoryProductionQcPanel({sheet,busy,paused,open,save}:{sheet:FactoryFlowSheet;busy:boolean;paused:boolean;open:boolean;save:(path:string,body:Record<string,unknown>)=>Promise<void>}){
- const rows=sheet.productionChecks??[],factories=[...new Set(rows.map(row=>row.factoryDecisionId))],register=useRef(new Map<string,PhotoDraft>());
- const [error,setError]=useState(''),savedPhotos=new Set((sheet.productionInspectionHistory??[]).flatMap(event=>event.checks.flatMap(check=>check.attachmentIds??[])));
+export function FactoryProductionQcPanel({sheet,busy,paused,open,save,focus}:{sheet:FactoryFlowSheet;busy:boolean;paused:boolean;open:boolean;save:(path:string,body:Record<string,unknown>)=>Promise<void>;focus?:FactoryInspectionFocus}){
+ const rows=focus?(sheet.productionChecks??[]).filter(row=>scopeKey(row)===scopeKey(focus)):(sheet.productionChecks??[]);
+ const history=focus?(sheet.productionInspectionHistory??[]).filter(event=>event.productionId===focus.productionId&&event.factoryDecisionId===focus.factoryDecisionId&&event.checks.some(check=>check.lineId===focus.lineId))
+  .map(event=>({...event,checks:event.checks.filter(check=>check.lineId===focus.lineId)})):(sheet.productionInspectionHistory??[]);
+ const factories=[...new Set(rows.map(row=>row.factoryDecisionId))],register=useRef(new Map<string,PhotoDraft>());
+ const [error,setError]=useState(''),savedPhotos=new Set(history.flatMap(event=>event.checks.flatMap(check=>check.attachmentIds??[])));
+ if(focus&&rows.length!==1)return <p role="alert">原加工检查的工厂或 PO 范围已变更，请返回质量中心刷新。</p>;
  return <details className="factory-production-qc" open={open}><summary>工厂成衣QC</summary><p>检查完成与质量结论分别记录。</p>
   {error&&<p role="alert">{error}</p>}
   {factories.map(factory=>{
@@ -59,6 +64,6 @@ export function FactoryProductionQcPanel({sheet,busy,paused,open,save}:{sheet:Fa
     {lines.map(row=><section key={scopeKey(row)} className="factory-batch-qc"><h4>{row.poNumber??'待补PO'} · {row.color} · 原生产范围 {row.quantity} 件 · {row.result??'未检查'}</h4><label>本次结论<select name={`result:${row.lineId}`} defaultValue=""><option value="">本次不登记</option><option>合格</option><option>需处理</option></select></label><label>质量问题／处理说明<input name={`problem:${row.lineId}`} maxLength={2000}/></label>{row.problem&&<p>{row.problem}</p>}
      <FactoryQcPhotoDraft orderId={sheet.orderId} row={row} savedPhotos={savedPhotos} register={register.current}/>
     </section>)}<Button type="submit">保存工厂检查</Button></fieldset></form>:lines.map(row=><p key={scopeKey(row)}>{row.poNumber??'待补PO'} · {row.color} · {row.inspected?'已检查':'未检查'} · {row.result??'—'} {row.problem}</p>)}</section>;
-  })}<InspectionHistory orderId={sheet.orderId} events={sheet.productionInspectionHistory??[]} lines={sheet.lines}/>
+  })}<InspectionHistory orderId={sheet.orderId} events={history} lines={sheet.lines}/>
  </details>;
 }

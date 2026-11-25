@@ -1,5 +1,9 @@
 import type {PoolClient} from 'pg';
 import type {CraftCheckQuantityScope} from '@dx-rework/contracts/factory-flow';
+import {isRootActor} from '../access/business-authority.js';
+import {ApplicationError} from '../platform/errors.js';
+import type {TrustedActorContext} from '../tools/repositories.js';
+import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 
 type ProblemLocator={orderId:string;preparationId:string;stepRef:string;returnFactId:string;lineId:string;checkId:string};
 type OriginalCheck={check_id:string;result:string;quantity_scope:unknown;returned_payload:unknown};
@@ -30,8 +34,9 @@ export function qualifyCurrentCraftProblem(raw:OriginalCheck,locator:ProblemLoca
  * supplies an already authorized order and uses its original lifecycle lock.
  * Only the latest native check for this exact return/PO can occupy pieces. */
 export async function readCurrentCraftProblem(db:Pick<PoolClient,'query'>,locator:ProblemLocator){
- const {rows}=await db.query<OriginalCheck>(`SELECT q.check_id,q.result,to_jsonb(q)->'quantity_scope' AS quantity_scope,f.payload AS returned_payload
+ const {rows}=await db.query<OriginalCheck>(`SELECT q.check_id,q.result,q.quantity_scope,f.payload AS returned_payload
   FROM digital_factory_routes route JOIN digital_factory_facts f USING(preparation_id)
+  JOIN digital_production_po_lines po ON po.production_order_id=route.production_order_id AND po.line_id=$5
   JOIN digital_factory_facts outgoing ON outgoing.preparation_id=f.preparation_id AND outgoing.fact_id::text=f.payload->>'sendFactId'
    AND outgoing.kind='工艺发出' AND outgoing.payload->>'stepRef'=f.payload->>'stepRef'
    AND outgoing.payload#>>'{warehouseMotion,factoryId}'=f.payload#>>'{warehouseMotion,factoryId}'
@@ -42,4 +47,30 @@ export async function readCurrentCraftProblem(db:Pick<PoolClient,'query'>,locato
    AND f.fact_id=$4 AND f.kind='工艺回仓'`,
  [locator.orderId,locator.preparationId,locator.stepRef,locator.returnFactId,locator.lineId,locator.checkId]);
  return rows.length===1?qualifyCurrentCraftProblem(rows[0]!,locator):null;
+}
+
+/** Entry for the original rework mutation transaction. Match Warehouse/Factory
+ * Flow's lock order before checking the actual role, route and latest check.
+ * Reading an issue for N01 does not open or occupy a rework order. */
+export async function lockCraftProblemForOriginalRework(db:PoolClient,actor:TrustedActorContext,locator:ProblemLocator){
+ await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+ const access=new DigitalProductionAccessPolicy(db);
+ await access.assert(actor,'order',locator.orderId,'technical');
+ const order=(await db.query(`SELECT production_order_id,design_style_no,primary_merchandiser_id,source_id
+  FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE`,[locator.orderId])).rows[0];
+ if(!order)return digitalForbidden();
+ const root=isRootActor(actor);
+ if(!root&&(!actor.actorRoles.includes('quality_control')||!await access.lockActiveRole(actor.actorId,'quality_control')))return digitalForbidden();
+ const task=(await db.query<{task_id:string}>(`SELECT t.task_id FROM digital_production_tasks t
+  JOIN digital_timeline_task_positions p USING(task_id) JOIN digital_production_task_access a USING(task_id)
+  WHERE p.route_ref=$2 AND p.step_id=$3 AND a.production_order_id=$1 AND a.task_kind='bulk_qc'
+    AND t.state IN ('ready','completed')`,[locator.orderId,locator.preparationId,locator.stepRef])).rows;
+ if(task.length!==1||!root&&!await access.allowed(actor,'task',task[0]!.task_id,'execute'))return digitalForbidden();
+ const invalid=(await db.query(`SELECT 1 FROM digital_order_closures WHERE production_order_id=$1
+  UNION ALL SELECT 1 FROM digital_production_resource_lifecycle
+  WHERE (resource_kind='order' AND resource_id=$1 OR resource_kind='source' AND resource_id=$2) AND state<>'active'`,
+ [locator.orderId,order.source_id])).rowCount;
+ const evidence=invalid?null:await readCurrentCraftProblem(db,locator);
+ if(!evidence)throw new ApplicationError('CONFLICT','原工艺问题范围已变更或不可办理，请刷新同批次检查',409);
+ return {evidence,source:{styleNo:order.design_style_no as string|null,merchandiserId:order.primary_merchandiser_id as string|null,taskId:task[0]!.task_id}};
 }

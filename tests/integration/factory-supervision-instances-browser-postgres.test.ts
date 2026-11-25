@@ -21,7 +21,7 @@ import {productionReadinessFixture,completeBulkRangeFixture} from '../helpers/pr
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {MemberModuleBindingService} from '../../apps/api/src/access/member-module-binding-service.js';
 import {readWarehouseCraftFactoryBasis} from '../../apps/api/src/production-platform/warehouse-craft-factory-basis.js';
-import {readCurrentCraftProblem} from '../../apps/api/src/production-platform/quality-craft-problem-scope.js';
+import {lockCraftProblemForOriginalRework,readCurrentCraftProblem} from '../../apps/api/src/production-platform/quality-craft-problem-scope.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -198,6 +198,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const locate={orderId:ready.id,preparationId:ready.preparationId,stepRef:second!.stepId,returnFactId:in4.factId,lineId,checkId:current.checkId};
   await expect(readCurrentCraftProblem(f.db,locate)).resolves.toMatchObject({problemQuantity:2,qualifiedQuantity:9,actualReturned:15,sourceSendFactId:out2.factId,factoryId:factories[1]});
   await expect(readCurrentCraftProblem(f.db,{...locate,stepRef:first!.stepId})).resolves.toBeNull();
+  const sourceTx=await f.db.connect();
+  try{
+   await sourceTx.query('BEGIN');
+   await expect(lockCraftProblemForOriginalRework(sourceTx,warehouse,locate)).rejects.toMatchObject({statusCode:403});
+   await expect(lockCraftProblemForOriginalRework(sourceTx,qc,locate)).resolves.toMatchObject({
+    evidence:{checkId:current.checkId,problemQuantity:2,unit:'片'},source:{taskId:qcTask.task_id},
+   });
+   await expect(lockCraftProblemForOriginalRework(sourceTx,qc,{...locate,checkId:randomUUID()})).rejects.toMatchObject({statusCode:409});
+  }finally{await sourceTx.query('ROLLBACK');sourceTx.release();}
   await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,
     attachment_ids,checked_by,checked_at) VALUES($1,$2,$3,$4,'合格','','','{}',$5,$6)`,
    [randomUUID(),ready.preparationId,in4.factId,lineId,qc.actorId,businessNow().toISOString()])).rejects.toMatchObject({code:'23514'});
