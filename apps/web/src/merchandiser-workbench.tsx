@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
+import {Dialog,DialogHeader} from '@astryxdesign/core/Dialog';
 import {Link} from '@astryxdesign/core/Link';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Table} from '@astryxdesign/core/Table';
@@ -14,6 +15,8 @@ import {useForegroundWait} from './foreground-loading.js';
 import {ListPagination} from './list-pagination.js';
 import {MerchandiserContractReturn} from './merchandiser-contract-return.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {OriginalDocumentDirectory,originalDocumentHref} from './original-document-directory.js';
+import {navigateInternalPage} from './internal-navigation.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
 import {DocumentGuardContext} from './use-digital-detail-navigation-guard.js';
@@ -32,7 +35,7 @@ export function MerchandiserWorkbench({search}:{search:string}){
  },[]);
  if(!route)return <p role="alert">跟单工作区筛选不正确，请从原入口重新进入。</p>;
  return <div className="dx-designer-astryx" lang="zh-CN"><style>{designerAstryxCss}</style><h1>跟单工作区</h1>
-  {route.view==='orders'?<><Button label="返回跟单事项" variant="secondary" onClick={()=>change({...route,page:1,view:'work'})}/>
+  {route.view==='orders'?<><Button label="返回跟单事项" variant="secondary" onClick={()=>change({...route,page:1,view:'work',documentOrder:undefined})}/>
    <OriginalMerchandiserOrders route={route} change={change}/></>:<CurrentMerchandiserActions route={route} change={change}/>}
  </div>;
 }
@@ -62,7 +65,7 @@ function OriginalMerchandiserOrders({route,change}:{route:MerchandiserWorkbenchR
  const [result,setResult]=useState<{key:string;value:MerchandiserOrderResponse}|null>(null),[issue,setIssue]=useState<{key:string;message:string}|null>(null);
  useEffect(()=>{
   const value=search.trim();if(value===route.search||value.length>100)return;
-  const marker=window.setTimeout(()=>change({...route,page:1,search:value}),250);
+  const marker=window.setTimeout(()=>change({...route,page:1,search:value,documentOrder:undefined}),250);
   return()=>window.clearTimeout(marker);
  },[search,route,change]);
  const params=new URLSearchParams({page:String(route.page),search:route.search}),path=urls.apiUrl('todos/merchandiser/orders?'+params),key=`${path}:${retry}`;
@@ -77,16 +80,27 @@ function OriginalMerchandiserOrders({route,change}:{route:MerchandiserWorkbenchR
   return()=>abort.abort();
  },[path,key]);
  const region=useOriginalReturnFocus(route.focus,Boolean(exact||error));
+ const documents=route.documentOrder&&exact?.items.find(row=>row.id===route.documentOrder);
+ const closeDocuments=()=>change({...route,documentOrder:undefined});
  return <section ref={region} aria-label="原授权订单"><h2 tabIndex={-1}>原授权订单</h2><TextInput label="搜索订单ID、PO、客户或工厂" value={search} onChange={setSearch}/>
   {error&&<p role="alert">{error} <Button label="重试读取" variant="secondary" onClick={()=>setRetry(value=>value+1)}/></p>}
   {exact&&(exact.items.length===0?<p>没有符合当前搜索及授权范围的原订单。</p>:<div className="development-table-scroll"><Table data={exact.items} idKey="id" density="balanced" columns={[
    {key:'orderNumber',header:'订单ID / 原款号',renderCell:row=><>{row.orderNumber??row.styleNo} <OrderRushBadge value={row.urgent}/></>},
    {key:'customer',header:'客户 / PO',renderCell:row=><>{row.customer}<small>{row.poNumbers.join('、')||'PO 待核'}</small></>},
    {key:'factories',header:'加工厂',renderCell:row=>row.factories.join('、')||'待核'},
-   {key:'id',header:'操作',renderCell:row=><MerchandiserOriginalLink route={route} rowId={row.id} target={`/ui/digital-production?order=${row.id}`} label="打开原订单"/>},
+   {key:'id',header:'操作',renderCell:row=><div className="pattern-actions"><MerchandiserOriginalLink route={{...route,documentOrder:undefined}} rowId={row.id}
+     target={`/ui/digital-production?order=${row.id}`} label="打开原订单"/>
+    <Button label="订单单据" variant="secondary" size="sm" onClick={()=>change({...route,documentOrder:row.id})}/></div>},
   ]}/></div>)}
   <ListPagination page={route.page} total={exact?.total??null} totalPages={exact?Math.max(1,Math.ceil(exact.total/15)):null} busy={busy}
-   ariaLabel="原授权订单分页" onPageChange={page=>change({...route,page})}/>
+   ariaLabel="原授权订单分页" onPageChange={page=>change({...route,page,documentOrder:undefined})}/>
+  {documents&&<Dialog isOpen className="dx-designer-astryx" onOpenChange={open=>{if(!open)closeDocuments();}}>
+   <style>{designerAstryxCss}</style><DialogHeader title="订单单据" onOpenChange={open=>{if(!open)closeDocuments();}}/>
+   <p>{documents.orderNumber??documents.styleNo}</p>
+   <OriginalDocumentDirectory key={documents.id} resource={{kind:'order',id:documents.id}} onSelect={reference=>{
+    const href=originalDocumentHref(reference,merchandiserWorkbenchPath(route,urls.base),urls.base);if(href)void navigateInternalPage(href);
+   }}/>
+  </Dialog>}
  </section>;
 }
 function CurrentMerchandiserActions({route,change}:{route:MerchandiserWorkbenchRoute;change:(value:MerchandiserWorkbenchRoute)=>void}){

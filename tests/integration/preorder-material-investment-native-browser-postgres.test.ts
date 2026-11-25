@@ -46,6 +46,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const response=await emptyDirectory;expect(response.status(),await response.text()).toBe(200);
    expect(await response.json()).toMatchObject({page:1,total:1,items:[{id:original.id,styleNo:search,customer:order.customerCode,orderNumber:null}]});
    const row=tab.page.getByRole('region',{name:'原授权订单',exact:true}).getByRole('row').filter({hasText:search});
+   const documentRead=tab.page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname.endsWith(`/document-directory/order/${original.id}`));
+   await row.getByRole('button',{name:'订单单据',exact:true}).click();
+   const directory=await documentRead;expect(directory.status(),await directory.text()).toBe(200);
+   const reader=tab.page.getByRole('dialog');await reader.getByRole('heading',{name:'订单单据',exact:true}).waitFor();
+   await reader.press('Escape');await reader.waitFor({state:'hidden'});
    const open=row.getByRole('link',{name:'打开原订单',exact:true});
    expect(new URL((await open.getAttribute('href'))!,tab.page.url()).searchParams.get('order')).toBe(original.id);
    await open.focus();await open.press('Enter');
