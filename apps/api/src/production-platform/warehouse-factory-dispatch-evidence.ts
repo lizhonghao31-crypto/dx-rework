@@ -30,12 +30,13 @@ export async function warehouseFactoryDispatchEvidence(db:Pick<PoolClient,'query
  return {...approval,cuts};
 }
 
-type DispatchScopeRow=CutScope&{factId:string;productionId:string;factoryDecisionId:string|null;dispatchedAt:Date};
+type DispatchScopeRow=CutScope&{orderId:string;factId:string;productionId:string;factoryDecisionId:string|null;dispatchedAt:Date};
 /** For already-authorized masters, resolve an actual dispatch through its
  * captured decision and execution, not a later approval or replacement factory.
  * The original execution has a real production ID and a native null change ID. */
-export async function readWarehouseFactoryDispatchScopes(db:Pick<PoolClient,'query'>,orderId:string){
- const rows=(await db.query<DispatchScopeRow>(`SELECT f.fact_id AS "factId",f.occurred_at AS "dispatchedAt",
+export async function readWarehouseFactoryDispatchScopesForOrders(db:Pick<PoolClient,'query'>,orderIds:readonly string[]){
+ if(!orderIds.length)return [];
+ const rows=(await db.query<DispatchScopeRow>(`SELECT route.production_order_id AS "orderId",f.fact_id AS "factId",f.occurred_at AS "dispatchedAt",
   execution.production_order_id AS "productionId",execution.factory_decision_id AS "factoryDecisionId",
   cut.cutting_order_id AS "cuttingOrderId",po.line_id AS "lineId",(lot->>'quantity')::int AS quantity
   FROM digital_factory_routes route JOIN digital_factory_facts f USING(preparation_id)
@@ -52,7 +53,11 @@ export async function readWarehouseFactoryDispatchScopes(db:Pick<PoolClient,'que
   JOIN cutting_orders cut ON cut.sourcing_case_id=execution.sourcing_case_id AND cut.cutting_order_id::text=lot->>'cuttingOrderId'
   JOIN digital_production_child_lines allocation ON allocation.module='production' AND allocation.child_id=execution.production_order_id
    AND allocation.production_order_id=route.production_order_id AND allocation.line_id=po.line_id AND allocation.child_line_key=cut.sourcing_line_position::text
-  WHERE route.production_order_id=$1 AND f.kind='仓库实际发厂' AND f.occurred_at IS NOT NULL
-  ORDER BY f.sequence,po.position`,[orderId])).rows;
- return rows.map(row=>({...row,orderId,dispatchedAt:row.dispatchedAt.toISOString()}));
+  WHERE route.production_order_id=ANY($1::uuid[]) AND f.kind='仓库实际发厂' AND f.occurred_at IS NOT NULL
+  ORDER BY route.production_order_id,f.sequence,po.position`,[[...new Set(orderIds)]])).rows;
+ return rows.map(row=>({...row,dispatchedAt:row.dispatchedAt.toISOString()}));
+}
+
+export async function readWarehouseFactoryDispatchScopes(db:Pick<PoolClient,'query'>,orderId:string){
+ return readWarehouseFactoryDispatchScopesForOrders(db,[orderId]);
 }
