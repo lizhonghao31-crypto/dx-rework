@@ -78,6 +78,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toEqual([]);
    expect(await pendingReceivingView(f.db,[r.id],{page:1,search:'',status:'open'})).toEqual({page:1,total:0,items:[]});
    await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST native complete dispatch'},randomUUID());
+   const assignedQc=f.people.qc!,qcTask=(await flow.read(f.root,r.id)).tasks.find(task=>task.taskKind==='factory_production_qc')!;
+   await new DigitalProductionTaskService(f.db).reassign(f.root,qcTask.taskId,assignedQc.actorId,randomUUID());
    const production=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id;
    const reports=new ProductionReportingService(f.db),day='2026-11-21';await reports.report(f.root,production,{position:1,businessDate:day,quantity:10},randomUUID());
    expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{factoryDecisionId:null,expectedQuantity:10,
@@ -99,7 +101,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     factoryShipmentRecorded:true,balance:{remaining:8}}]});
    expect(await pendingReceivingView(f.db,[r.id],{page:2,search:view.items[0]!.poNumber!,status:'open'})).toEqual({page:2,total:1,items:[]});
    expect(await pendingReceivingView(f.db,[unrelated],{page:1,search:'',status:'all'})).toEqual({page:1,total:0,items:[]});
-   await new GarmentQualityService(f.db).record(f.root,r.id,{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:businessNow().toISOString(),qualifiedQuantity:2,problem:''},randomUUID());
+   const qc=new GarmentQualityService(f.db),inspection={receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:businessNow().toISOString(),qualifiedQuantity:2,problem:''};
+   const originalCheck=await qc.record(assignedQc,r.id,inspection,randomUUID());
    const before=(await f.db.query('SELECT * FROM receiving_receipts WHERE receipt_id=$1',[created.value.receiptId])).rows[0],closure=new OrderClosureService(f.db);
    const version=Number((await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[created.value.receivingBatchId])).rows[0].version);
    const root={...f.root,authorizationCapability:'receiving:correct',authorizationCapabilities:['receiving:correct']};
@@ -116,7 +119,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{balance:{status:'pending',received:0,remaining:10}}]);
    const restored=await receiving.correctReceipt(root,created.value.receiptId,{expectedVersion:corrected.version,documentQuantity:2,actualQuantity:2,defectiveQuantity:0});expect(restored.actualQuantity).toBe(2);
    expect((await closure.read(f.root,r.id)).factoryDeliveries?.[0]).toMatchObject({delivered:true,received:2});
+   // Even when the quantity returns to 2, the original inspection is historical. Same quantity is not same version.
+   const restoredQuality=(await garmentQuality(f.db,r.id)).find(item=>item.receiptId===quality.receiptId)!;
+   expect(restoredQuality).toMatchObject({quantity:2,inspected:false,priorInspection:true,eventId:originalCheck.eventId,packingReadyAt:null});
+   expect(restoredQuality.quantityVersion).not.toBe(inspection.quantityVersion);
+   await expect(qc.record(assignedQc,r.id,inspection,randomUUID())).rejects.toMatchObject({code:'GARMENT_QUALITY_CONFLICT',statusCode:409});
+   const rechecked=await qc.record(assignedQc,r.id,{...inspection,quantityVersion:restoredQuality.quantityVersion,timeMode:'now'},randomUUID());
    const repeated=await receiving.createRepeated(receiver,{receivingBatchId:created.value.receivingBatchId,cuttingOrderId:r.cuts[0]!.cutting_order_id,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID());
+   const inspections=await garmentQuality(f.db,r.id);
+   expect(inspections.find(item=>item.receiptId===quality.receiptId)).toMatchObject({inspected:true,eventId:rechecked.eventId});
+   const repeatedQuality=inspections.find(item=>item.receiptId===repeated.value.receiptId)!;
+   expect(repeatedQuality).toMatchObject({quantity:1,inspected:false,packingReadyAt:null});
+   await expect(qc.record(assignedQc,r.id,{receiptId:repeatedQuality.receiptId,quantityVersion:restoredQuality.quantityVersion,qualifiedQuantity:1,timeMode:'now',problem:''},randomUUID())).rejects.toMatchObject({code:'GARMENT_QUALITY_CONFLICT',statusCode:409});
+   expect((await f.db.query("SELECT count(*)::int AS count FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[r.id])).rows[0].count).toBe(2);
    const repeatedVersion=Number((await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[repeated.value.receivingBatchId])).rows[0].version);
    await expect(receiving.correctBatch(root,created.value.receivingBatchId,{expectedVersion:repeatedVersion,styleNo:created.value.styleNo,documentQuantity:2,actualQuantity:0,defectiveQuantity:0})).rejects.toThrow('多笔收货');
    const raced=await Promise.allSettled([0,1].map(actualQuantity=>receiving.correctReceipt({...root,requestId:randomUUID()},repeated.value.receiptId,{expectedVersion:repeatedVersion,documentQuantity:2,actualQuantity,defectiveQuantity:0})));
