@@ -434,11 +434,6 @@ export function Shell({
     });
   }
   if(cockpitNavigation.length)globalNavigation.push({name:'供应链总看板',description:'供应链进度与交付',href:cockpitNavigation[0]!.href,expandOnly:true,children:cockpitNavigation});
-  if (isRoot || IE_PROCESSING_ROLES.some(hasRole)) globalNavigation.push({
-    name: "IE 报价与核价中心",
-    description: "办理产品加工报价、外发核价与返工复核",
-    href: "/ui/ie-processing",
-  });
   globalNavigation.push({
     name: "订单回货",
     label: "订单回货看板",
@@ -568,6 +563,11 @@ export function Shell({
     ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),
     ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
+    ...(isRoot || IE_PROCESSING_ROLES.some(hasRole) ? [{
+      name: "IE 报价与核价中心",
+      description: "办理外发加工报价、外发加工核价与返工复核",
+      href: "/ui/ie-processing?directory=unified",
+    }] : []),
   ];
   const preparationNavigation: NavigationEntry[] = isRoot || ["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","pmc","owner_group"].some(hasRole) ? [{name:"客户报价协作",description:"按分工填写用量与价格，记录客户确认",href:"/ui/digital-quotation"}] : [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];

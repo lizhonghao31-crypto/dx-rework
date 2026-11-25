@@ -8,6 +8,7 @@ import {ApplicationError} from '../platform/errors.js';
 import type {DigitalIdentityDependencies} from './identity-routes.js';
 import type {DigitalQuotationService} from './quotation-service.js';
 export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentityDependencies,service:DigitalQuotationService){
+ const attachments=deps.developmentAttachments;
  const parse=<T>(schema:z.ZodType<T>,input:unknown)=>{const result=schema.safeParse(input);if(!result.success)throw new ApplicationError('VALIDATION_ERROR',result.error.issues[0]?.message??'请检查报价输入',400);return result.data;};
  const actor=async(request:FastifyRequest)=>{const token=request.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith('dx_rework_session='))?.slice(18);return businessActor(deps.root,await deps.authenticate(token),request.id,'digital_production:view');};
  const resource=(request:FastifyRequest)=>{const p=request.params as {kind:string;id:string};if(!['orders','sources'].includes(p.kind))throw new ApplicationError('NOT_FOUND','报价来源不存在',404);return parse(QuotationResourceSchema,{kind:p.kind==='orders'?'order':'source',id:p.id});};
@@ -23,6 +24,18 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
   const {items}=await service.ieProcessingDirectory(await actor(request),{page:1,search:'',state:'all'},target);
   if(items.length!==1)throw new ApplicationError('NOT_FOUND','当前账号无法查看所选报价行',404);
   return items[0];
+ });
+ const supportedStyleImage=(mime:string)=>/^image\/(?:jpeg|png|webp|gif)$/.test(mime);
+ if(attachments)app.get('/digital-production/quotations/ie-processing/:quoteId/:rowId/style-image/:attachmentId',async(request,reply)=>{
+  const {quoteId,rowId,attachmentId}=parse(z.object({quoteId:z.uuid(),rowId:z.uuid(),attachmentId:z.uuid()}).strict(),request.params);
+  const {documentVersion}=parse(z.object({documentVersion:z.coerce.number().int().positive()}).strict(),request.query);
+  const trusted=await actor(request),{items}=await service.ieProcessingDirectory(trusted,{page:1,search:'',state:'all'},{quoteId,rowId});
+  const image=items[0]?.basis?.styleImage;
+  if(!image||image.attachmentId!==attachmentId||image.documentVersion!==documentVersion)
+   throw new ApplicationError('NOT_FOUND','本报价行所用版本没有此款图',404);
+  const grant=await attachments.createDownloadIntent(trusted,attachmentId,async file=>
+   file.entityType==='digital_development'&&file.entityId===image.sourceId&&supportedStyleImage(file.mimeType),'inline');
+  return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
  });
  app.get('/digital-production/secondary-craft-quotations',async(request,reply)=>{
   reply.header('cache-control','private, no-store');
@@ -52,7 +65,6 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
   reply.header('cache-control','private, no-store');
   return service.readSecondaryCraft(await actor(request),resource(request),craftRow(request),query);
  });
- const attachments=deps.developmentAttachments;
  if(attachments)app.get(`${craftBase}/attachments/:attachmentId`,async(request,reply)=>{
   const trusted=await actor(request);
   const attachmentId=parse(z.uuid(),(request.params as {attachmentId:string}).attachmentId);
@@ -63,6 +75,17 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
    throw new ApplicationError('NOT_FOUND','工艺附件不存在',404);
   const grant=await attachments.createDownloadIntent(trusted,attachmentId,async file=>
    file.entityType==='digital_development'&&file.entityId===target.scopeId,'inline');
+  return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+ });
+ if(attachments)app.get(`${craftBase}/style-image/:attachmentId`,async(request,reply)=>{
+  const trusted=await actor(request),attachmentId=parse(z.uuid(),(request.params as {attachmentId:string}).attachmentId);
+  const {version,documentVersion}=parse(z.object({version:craftVersion,documentVersion:z.coerce.number().int().positive()}).strict(),request.query);
+  const detail=await service.readSecondaryCraft(trusted,resource(request),craftRow(request),{version});
+  const image='display' in detail?detail.display?.styleImage:null;
+  if(!image||image.attachmentId!==attachmentId||image.documentVersion!==documentVersion)
+   throw new ApplicationError('NOT_FOUND','本工艺版本没有此款图',404);
+  const grant=await attachments.createDownloadIntent(trusted,attachmentId,async file=>
+   file.entityType==='digital_development'&&file.entityId===image.sourceId&&supportedStyleImage(file.mimeType),'inline');
   return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
  });
  app.put(`${craftBase}/draft`,async request=>service.writeSecondaryCraft(await actor(request),resource(request),craftRow(request),

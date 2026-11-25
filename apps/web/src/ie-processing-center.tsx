@@ -1,12 +1,15 @@
 import {lazy,useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Link} from '@astryxdesign/core/Link';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Stack} from '@astryxdesign/core/Stack';
 import {Table,type TableColumn} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {z} from 'zod';
+import {formatBusinessDecimal} from '@dx-rework/contracts/business-display';
 import {IeProcessingDirectorySchema,IeProcessingEntrySchema,IeProcessingQuerySchema,IeProcessingStateSchema,QuotationResourceSchema,QuotationRowInputSchema,
+ UnifiedIeDirectoryPageSchema,UnifiedIeDirectoryQuerySchema,type UnifiedIeDirectoryEntry,type UnifiedIeDirectoryQuery,
  type IeProcessingEntry,type IeProcessingQuery} from '@dx-rework/contracts/digital-quotation';
 import type {ManagementReworkRow} from '@dx-rework/contracts/reporting';
 import type {SourcingCaseSummary} from '@dx-rework/contracts';
@@ -18,6 +21,8 @@ import {designerAstryxCss} from './designer-astryx.js';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {quotationRequest} from './digital-quotation-panel.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {QuotationBasisImage} from './quotation-basis-image.js';
+import './quotation-basis.css';
 import {useForegroundWait} from './foreground-loading.js';
 import {navigateInternalPage} from './internal-navigation.js';
 import {loadReworkQueue} from './reporting/reporting-client.js';
@@ -26,9 +31,15 @@ import {SubmissionRequestError} from './submission-validation.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {useForegroundRead} from './use-foreground-read.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
+import {useLiveSearch} from './use-live-search.js';
+import {parseUnifiedIeLocation,unifiedIeEntryKey,unifiedIeHref,unifiedIeListLabel,unifiedIeOriginalHref,unifiedIeStateLabel,type UnifiedIeLocation} from './ie-unified-directory-routes.js';
+import {readUnifiedIeDirectory,type UnifiedDirectoryLoad} from './ie-unified-directory-source.js';
 
 const urls=createWebUrls(import.meta.env.BASE_URL);
 const entryRoute='ui/ie-processing';
+const unifiedPaths={directory:urls.pageUrl(entryRoute),reworkProcess:urls.pageUrl('ui/process-configuration'),
+ reworkReporting:urls.pageUrl('ui/work-reporting')};
+const processingQuoteLabel='外发加工报价';
 const entryIdentity=z.object({resource:QuotationResourceSchema,quoteId:z.string().uuid(),rowId:z.string().uuid()});
 const stateNames={all:'全部状态',needs_assignment:'待指派',waiting:'等待业务前置',awaiting_price:'待核价',priced:'已核价'};
 const detailKeys=['kind','id','quoteId','rowId'] as const;
@@ -93,8 +104,10 @@ export function IeReworkReturn(){
  if(target.origin!==location.origin||target.pathname!==urls.pageUrl(entryRoute)||target.hash)return null;
  if([...target.searchParams.keys()].some(key=>target.searchParams.getAll(key).length!==1))return null;
  const parsed=reworkQuery.safeParse(Object.fromEntries(target.searchParams));
- return parsed.success?<div className="dx-designer-astryx">
-  <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><Link href={reworkHref(parsed.data)}>返回 IE 报价与核价中心</Link>
+ const unified=parseUnifiedIeLocation(target.searchParams);
+ const href=parsed.success?reworkHref(parsed.data):unified&&!unified.detail?unifiedIeHref(unifiedPaths.directory,unified,{focus:unified.focus}):null;
+ return href?<div className="dx-designer-astryx">
+  <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><Link href={href}>返回 IE 报价与核价中心</Link>
  </div>:null;
 }
 
@@ -106,13 +119,19 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   if(identityKey(directoryEntry)!==target)throw Error('当前账号无法查看所选报价行，请返回列表重新选择。');
   const sheet=await quotationRequest(base,resource);
   if(sheet.version!==directoryEntry.version||sheet.quoteId!==quoteId||!sheet.rows.some(row=>row.rowId===rowId))throw Error('报价行已更新，请重新读取。');
-  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush};
+  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush,basis:directoryEntry.basis,priceReview:directoryEntry.priceReview};
  },[base,resource,quoteId,rowId,target]);
  const read=useForegroundRead(resource.id,target,load);
  useForegroundWait(read.foregroundKey);
  const [draft,setDraft]=useState<string|null>(null),[busy,setBusy]=useState(false),[fieldError,setFieldError]=useState(''),[receipt,setReceipt]=useState<number|null>(null);
+ const [resent,setResent]=useState(false);
  const saving=useRef(false),feedback=useSubmissionFeedback(setBusy);
  const sheet=read.value?.sheet,row=sheet?.rows.find(row=>row.rowId===rowId),canEdit=Boolean(read.value?.canEdit&&row?.canEditPrice);
+ const basis=read.value?.basis,photo=basis?.styleImage;
+ const review=read.value?.priceReview;
+ const sizeColumns:TableColumn<NonNullable<typeof basis>['measurements'][number]>[]=basis?[
+  {key:'name',header:`尺寸项（${basis.sizeUnit}）`},...basis.sizes.map((size,index)=>({key:`size-${index}`,header:size,renderCell:(measure:NonNullable<typeof basis>['measurements'][number])=>measure.values[index]||'—'})),
+ ]:[];
  const price=receipt===null?(row?.unitPrice??''):(draft??row?.unitPrice??'');
  const changed=draft!==null&&draft!==(row?.unitPrice??'')&&receipt===null;
  useDigitalDetailNavigationGuard(changed||feedback.uncertain,busy,saving,'本行报价仍有未保存内容或待核回执，确定离开？');
@@ -135,11 +154,47 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
    }finally{saving.current=false;}
   });
  };
- return <section aria-label="产品加工报价">
+ const resubmit=()=>{
+  const requested=review?.resubmitFieldVersion;
+  if(saving.current||busy||changed||feedback.uncertain||read.waiting||!canEdit||resent||!review?.canResubmit||!requested||!sheet)return;
+  const key=createClientRequestId(),actor=sessionCacheVersion();
+  const body={action:'resubmit',reviewId:review.reviewId,expectedFieldVersion:requested};
+  void feedback.run(async()=>{
+   if(actor!==sessionCacheVersion())throw new SubmissionRequestError('登录身份已变化，请回到原账号核对。','FORBIDDEN',403);
+   saving.current=true;
+   try{
+    const reply=await digitalRequest<unknown>(`${base}/workbench-review`,'POST',body,key);
+    const checked=z.object({resource:QuotationResourceSchema,quoteId:z.uuid(),version:z.number().int(),
+     commandReceipt:z.object({action:z.literal('workbench-review:resubmit'),appliedVersion:z.number().int().positive()})}).safeParse(reply);
+    if(actor!==sessionCacheVersion()||!checked.success||checked.data.quoteId!==quoteId||checked.data.resource.id!==resource.id
+     ||checked.data.resource.kind!==resource.kind||checked.data.commandReceipt.appliedVersion<sheet.version
+     ||checked.data.version<checked.data.commandReceipt.appliedVersion)throw Error('未收到本行重报的原命令回执。');
+    feedback.confirmed();setResent(true);read.refreshSilently();
+   }catch(reason){
+    if(reason instanceof DigitalRequestError&&!reason.resultUnknown&&reason.status!==null)throw new SubmissionRequestError(reason.message,reason.code,reason.status);
+    throw reason;
+   }finally{saving.current=false;}
+  });
+ };
+ return <section aria-label={processingQuoteLabel}>
   <Link href={back}>返回报价列表</Link>
   {read.error&&<p role="alert">{receipt!==null?'报价已保存，重新读取失败。 ':''}{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
   {sheet&&row&&<>
-   <h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/> · 产品加工报价</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
+   <h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/> · {processingQuoteLabel}</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
+   {basis&&<section aria-label="本行核价依据" className="quotation-basis">
+    <h3>本行核价依据</h3>
+    {photo?<QuotationBasisImage key={photo.attachmentId} label="本版款图" href={urls.apiUrl(`digital-production/quotations/ie-processing/${quoteId}/${rowId}/style-image/${photo.attachmentId}?documentVersion=${photo.documentVersion}`)}/>:<p>本版未登记款图。</p>}
+    <p>{basis.developmentType} · {basis.template} · 资料 v{basis.sourceVersion}{basis.technicalVersion!==null&&` · 采用技术成果 v${basis.technicalVersion}`}</p>
+    <dl><dt>制作要求</dt><dd>{basis.instructions||'—'}</dd><dt>工艺 / 洗水</dt><dd>{basis.craft} / {basis.washing}</dd>
+     <dt>样衣数量</dt><dd>{basis.quantity??'—'}</dd><dt>PO</dt><dd>{basis.formalPoNos.join('、')||'—'}</dd>
+     <dt>材料</dt><dd>{basis.materials.map(item=>[item.category,item.name,item.specification].filter(Boolean).join(' · ')).join('；')||'—'}</dd></dl>
+    {basis.measurements.length>0&&<div className="development-table-scroll"><Table columns={sizeColumns} data={basis.measurements} idKey={measure=>measure.name} aria-label="核价尺寸依据" density="compact"/></div>}
+   </section>}
+   {review&&<div aria-label="本行退回重核">
+    <p>{review.status==='resubmitted'||resent?'已重报，待复核':'退回重核'} · {review.reason}</p>
+    {review.status==='returned'&&!resent&&(review.canResubmit?<Button label="重报本行核价" isDisabled={busy||changed||feedback.uncertain||read.waiting} onClick={resubmit}/>
+     :<p>请先保存本行的新单价，再重报。</p>)}
+   </div>}
    <form onSubmit={event=>{event.preventDefault();save();}}>
     <Stack gap={2} maxWidth={480}>
      <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
@@ -153,6 +208,7 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   {feedback.notice&&<p role="status">{feedback.notice}</p>}
   {feedback.uncertain&&<Button label="核对上次提交结果" isDisabled={busy} onClick={()=>void feedback.retry()}/>}
   {receipt!==null&&<p role="status">本行报价已保存 · v{receipt}</p>}
+  {resent&&<p role="status">本行核价已重报，等待复核。</p>}
  </section>;
 }
 
@@ -176,10 +232,10 @@ function ProcessingDirectory({query,focus}:{query:IeProcessingQuery;focus?:strin
   {key:'assignee',header:'负责人',renderCell:row=>row.assigneeName??'待指派'},
   {key:'state',header:'状态',renderCell:row=>stateNames[row.state]},
  ];
- return <section aria-label="产品加工报价列表">
+ return <section aria-label={`${processingQuoteLabel}列表`}>
   <form id="ie-center-search" onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
    onSubmit={event=>{event.preventDefault();if(!composing.current&&search.trim()!==query.search&&search.trim().length<=100)change({...query,page:1,search:search.trim()});}}>
-   <TextInput label="搜索款号或客户" value={search} onChange={setSearch}
+   <TextInput label="搜索订单ID、款号、PO或客户" value={search} onChange={setSearch}
     onKeyDown={event=>{if(event.key==='Enter'&&(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229))event.preventDefault();}}/>
    <Button label="搜索" type="submit" isDisabled={search.trim().length>100||search.trim()===query.search}/>
    <Selector label="报价状态" value={query.state} options={Object.entries(stateNames).map(([value,label])=>({value,label}))}
@@ -187,8 +243,8 @@ function ProcessingDirectory({query,focus}:{query:IeProcessingQuery;focus?:strin
   </form>
   {read.error&&<p role="alert">{read.error.message} <Button label="重新读取报价列表" onClick={read.retry}/></p>}
   {read.value?.items.length?<div className="development-table-scroll"><Table columns={columns} data={read.value.items} idKey={identityKey} density="compact"/></div>:null}
-  {read.value&&!read.value.items.length&&<p>{read.value.total?'本页没有已授权报价，请回到有效页。':'暂无该条件下的产品加工报价。'}</p>}
-  {read.value&&<AstryxPageControls page={query.page} total={read.value.total} pageSize={read.value.pageSize} label="产品加工报价分页" onPageChange={page=>change({...query,page})}/>}
+  {read.value&&!read.value.items.length&&<p>{read.value.total?'本页没有已授权报价，请回到有效页。':`暂无该条件下的${processingQuoteLabel}。`}</p>}
+  {read.value&&<AstryxPageControls page={query.page} total={read.value.total} pageSize={read.value.pageSize} label={`${processingQuoteLabel}分页`} onPageChange={page=>change({...query,page})}/>}
  </section>;
 }
 
@@ -263,8 +319,69 @@ function SourcingDirectory({query}:{query:SourcingQuery}){
  </section>;
 }
 
+function UnifiedIeDirectory({location,readDirectory}:{location:UnifiedIeLocation;readDirectory:UnifiedDirectoryLoad}){
+ const {kind,page,search,state='all'}=location;
+ const query={kind,page,search,state};
+ const [draft,setDraft]=useState(search);
+ useEffect(()=>setDraft(search),[search]);
+ const change=(next:UnifiedIeDirectoryQuery,replace=false)=>void navigateInternalPage(unifiedIeHref(unifiedPaths.directory,next),{replace});
+ const live=useLiveSearch(draft.length<=100?draft:search,search,value=>change({...query,search:value,page:1},true));
+ const key=unifiedIeHref(unifiedPaths.directory,query);
+ const load=useCallback(async(signal:AbortSignal)=>{
+  const result=UnifiedIeDirectoryPageSchema.parse(await readDirectory({kind,page,search,state},signal));
+  if(result.page!==page||result.items.some(row=>kind!=='all'&&row.kind!==kind||state!=='all'&&row.state!==state))throw Error('读取的 IE 报价目录与当前选择不一致。');
+  return result;
+ },[kind,page,search,state,readDirectory]);
+ const read=useForegroundRead('unified-ie',key,load);
+ useForegroundWait(read.foregroundKey);
+ useDirectoryReturn(read.value!==null,location.focus);
+ const columns:TableColumn<UnifiedIeDirectoryEntry>[]=[
+  {key:'orderId',header:'订单 ID／款号',renderCell:row=>{
+   const href=unifiedIeOriginalHref(unifiedPaths,query,row),label=row.orderId??row.styleNo??'查看原记录';
+   return href?<><Link id={resultLinkId(unifiedIeEntryKey(row))} href={href}>{label}</Link><OrderRushBadge value={row.orderRush}/></>:label;
+  }},
+  {key:'customerCode',header:'客户',renderCell:row=>row.customerCode??'—'},
+  {key:'kind',header:'报价类型',renderCell:row=>unifiedIeListLabel[row.kind]},
+  {key:'pricing',header:'报价 / 单位',renderCell:row=>row.pricing?.kind==='multiple'?'多项价格':row.pricing?.kind==='single'
+   ?<span title={`${row.pricing.amount} 元 / ${row.pricing.unit}`}>{formatBusinessDecimal(row.pricing.amount,1)} 元 / {row.pricing.unit}{row.state==='returned'?'（上次）':''}</span>:'—'},
+  {key:'version',header:'轮次／版本',renderCell:row=>row.round===null?`v${row.version}`:`第 ${row.round} 轮 · v${row.version}`},
+  {key:'assigneeName',header:'负责人',renderCell:row=>row.assigneeName??'—'},
+  {key:'state',header:'状态',renderCell:row=><Badge label={unifiedIeStateLabel[row.state]} variant={row.state==='priced'?'success':row.state==='not_started'?'neutral':'error'}/>},
+  {key:'nativeStatus',header:'当前办理',renderCell:row=>row.kind==='rework_review'&&Object.hasOwn(reworkQueues,row.nativeStatus)
+   ?reworkQueues[row.nativeStatus as keyof typeof reworkQueues]:row.kind==='sourcing_review'&&row.nativeStatus==='pending_ie_quote'?'待核价':'—'},
+ ];
+ return <section aria-label="IE 报价与核价目录">
+  <Stack id="ie-center-search" direction="horizontal" gap={3} wrap="wrap">
+   <div onCompositionStart={live.onCompositionStart} onCompositionEnd={live.onCompositionEnd}>
+    <TextInput label="搜索订单 ID、原款号、PO 或客户" value={draft} onChange={setDraft}
+     {...(draft.length>100?{status:{type:'error',message:'请输入不超过 100 字的搜索内容'}}:{})}/>
+   </div>
+   <Selector label="报价状态" value={state} options={Object.entries(unifiedIeStateLabel).map(([value,label])=>({value,label}))}
+    onChange={value=>{const next=UnifiedIeDirectoryQuerySchema.safeParse({kind,state:value,search,page:1});if(next.success&&next.data.state!==state)change(next.data);}}/>
+   <Selector label="报价类型" value={kind} options={Object.entries(unifiedIeListLabel).map(([value,label])=>({value,label}))}
+    onChange={value=>{const next=UnifiedIeDirectoryQuerySchema.safeParse({kind:value,state,search,page:1});if(next.success&&next.data.kind!==kind)change(next.data);}}/>
+  </Stack>
+  {read.error&&<p role="alert">{read.error.message} <Button label="重新读取目录" onClick={read.retry}/></p>}
+  {read.value?.items.length?<div className="development-table-scroll"><Table columns={columns} data={read.value.items} idKey={unifiedIeEntryKey} density="compact"/></div>:null}
+  {read.value&&!read.value.items.length&&<p>{read.value.total?'本页没有匹配记录，请回到有效页。':'没有匹配的已授权报价或核价记录。'}</p>}
+  {read.value&&<AstryxPageControls page={page} total={read.value.total} pageSize={read.value.pageSize} label="IE 报价与核价分页"
+   busy={read.waiting||live.pending||draft.length>100} onPageChange={next=>change({...query,page:next})}/>}
+ </section>;
+}
+
 export function IeProcessingCenter({search}:{search:string}){
  const values=new URLSearchParams(search),query=IeProcessingQuerySchema.safeParse(Object.fromEntries([...values].filter(([key])=>['page','search','state'].includes(key))));
+ const unified=parseUnifiedIeLocation(values);
+ if(values.get('directory')==='unified'&&!unified)return <p role="alert">IE 报价目录链接无效。</p>;
+ if(unified){
+  const pick=unified.detail,back=unifiedIeHref(unifiedPaths.directory,unified,{focus:unified.focus});
+  return <div className="development-workspace digital-production dx-designer-astryx">
+   <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><h1>IE 报价与核价中心</h1>
+   {pick?.type==='processing_quote'?<ProcessingPriceDetail key={pick.rowId} selection={{resource:{kind:pick.resourceKind,id:pick.id},quoteId:pick.quoteId,rowId:pick.rowId}} back={back}/>
+    :pick?.type==='sourcing_review'?<SourcingIeCenterDetail key={pick.caseId} sourcingCaseId={pick.caseId} back={back}/>
+    :<UnifiedIeDirectory location={unified} readDirectory={readUnifiedIeDirectory}/>}
+  </div>;
+ }
  const selected=entryIdentity.safeParse({resource:{kind:values.get('kind'),id:values.get('id')},quoteId:values.get('quoteId'),rowId:values.get('rowId')});
  const detail=detailKeys.some(key=>values.has(key));
  const channel=values.get('channel');
@@ -277,7 +394,7 @@ export function IeProcessingCenter({search}:{search:string}){
  return <div className="development-workspace digital-production dx-designer-astryx">
   <style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><h1>IE 报价与核价中心</h1>
   <nav aria-label="报价来源"><Stack direction="horizontal" gap={3} wrap="wrap">
-   <Link href={urls.pageUrl(entryRoute)} hasUnderline={!channel} aria-current={!channel?'page':undefined}>产品加工报价</Link>
+   <Link href={urls.pageUrl(entryRoute)} hasUnderline={!channel} aria-current={!channel?'page':undefined}>{processingQuoteLabel}</Link>
    <Link href={sourcingHref({channel:'sourcing',search:'',page:1})} hasUnderline={Boolean(sourcing?.success)} aria-current={sourcing?.success?'page':undefined}>外发加工核价</Link>
    <Link href={reworkHref({channel:'rework',queue:'pending_ie_review',search:'',page:1})} hasUnderline={Boolean(rework?.success)} aria-current={rework?.success?'page':undefined}>返工核价与复核</Link>
   </Stack></nav>

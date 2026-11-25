@@ -20,7 +20,6 @@ import {PostgresAuthStore} from '../../apps/api/src/auth/postgres-store.js';
 import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from '../../apps/api/src/auth/acceptance-provider.js';
 import {registerAuthRoutes} from '../../apps/api/src/auth/routes.js';
 import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
-import type {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {DeliveryCalendarQuery} from '../../apps/api/src/production-platform/delivery-calendar-query.js';
 import {registerDigitalIdentityRoutes} from '../../apps/api/src/production-platform/identity-routes.js';
@@ -49,10 +48,16 @@ import {ProductionReadinessService} from '../../apps/api/src/production-platform
 import {AuxiliaryCatalogService} from '../../apps/api/src/access/auxiliary-catalog-service.js';
 import {registerAuxiliaryCatalogRoutes} from '../../apps/api/src/access/auxiliary-catalog-routes.js';
 import {registerAccessRoutes} from '../../apps/api/src/access/routes.js';
+import {registerSourcingRoutes} from '../../apps/api/src/sourcing/sourcing-routes.js';
+import {registerProcessConfigurationRoutes} from '../../apps/api/src/rework/process-configuration-routes.js';
+import {ProcessConfigurationService} from '../../apps/api/src/rework/process-configuration-service.js';
+import {ProcessWorkerPlanService} from '../../apps/api/src/rework/process-worker-plan-service.js';
+import type {ApplicationError} from '../../apps/api/src/platform/errors.js';
+import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/ie-directory-reader.js';
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean;readPath?:string;afterWriteRead?:string};
 /** Original full App, original auth routes/store/membership and actual native
  * services. Only DingTalk and named transport faults are TEST adapters. */
-export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean;accessCatalog?:boolean;workbenchNumberedCreation?:boolean;throughVersion?:string}){
+export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean;accessCatalog?:boolean;workbenchNumberedCreation?:boolean;throughVersion?:string;unifiedIeDirectory?:boolean}){
  const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url,options?.throughVersion?{throughVersion:options.throughVersion}:undefined),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
@@ -63,17 +68,23 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   registerAuthRoutes(app,auth,{secureCookie:false,ttlSeconds:3600,appBasePath:'/',corpId:'anchor-test',mobileClientId:'TEST',webClientId:'TEST',qrRedirectUri:'https://acceptance.invalid/auth/qr/callback',isRootUser:id=>root.isRootUser(id)});
   if(options?.auxiliaryCatalog)registerAuxiliaryCatalogRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new AuxiliaryCatalogService(db,root)});
   if(options?.accessCatalog)registerAccessRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:f.access});
+  if(options?.unifiedIeDirectory){
+   const authenticate=(token:string|undefined)=>auth.authenticate(token);
+   registerSourcingRoutes(app,{authenticate,root,service:f.sourcing,contracts:f.contracts});
+   registerProcessConfigurationRoutes(app,{authenticate,root,service:new ProcessConfigurationService(db),workerPlan:new ProcessWorkerPlanService(db)});
+  }
   app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(error instanceof AuthDeniedError?401:e.statusCode??500).send({error:{code:e.code,message:e.message}});});
   const notifications=options?.orderTimeFlow?new DigitalProductionNotificationService(db):undefined,todos=notifications?new TodoService(db,undefined,undefined,undefined,notifications):undefined,patternOrders=todos?new PatternRoomOrderService(db,new TodoProjectionService(todos),{ordersEnabled:true}):undefined;
   const orderTimeRequests=options?.orderTimeFlow?new OrderTimeRequestService(db,orderTimeNativeExecutor(db,true,patternOrders)):undefined;
   let controlToken:string|undefined;
   if(options?.orderTimeFlow){registerAcceptanceClockRoutes(app,f.runtime,auth,root);controlToken=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));registerPatternRoomPriceRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new PatternRoomPriceService(db)});registerTodoRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:todos!});}
   registerProductionClosureRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new ProductionClosureService(db,root)});
-  registerDigitalIdentityRoutes(app,{bulkWashing:options?.fullApp?new BulkWashingService(db):undefined,service:new DigitalProductionIdentityService(db,true),quotationService:options?.fullApp?new DigitalQuotationService(db,true):undefined,budgetService:options?.fullApp?new DigitalBudgetService(db,true):undefined,creationEnabled:true,...(options?.workbenchNumberedCreation?{workbenchNumberedCreation:true}:{}),root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(db),journeys:new DigitalJourneyQuery(db),...(options?.fullApp?{closureService:new OrderClosureService(db),deliveryCalendar:new DeliveryCalendarQuery(db),factoryFlowService:new FactoryFlowService(db),bulkPreparationService:new BulkPreparationService(db)}:{}),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
+  registerDigitalIdentityRoutes(app,{...(options?.unifiedIeDirectory?{readIeDirectory:(actors,input)=>readIntegratedIeDirectory(db,actors,input)}:{}),bulkWashing:options?.fullApp?new BulkWashingService(db):undefined,service:new DigitalProductionIdentityService(db,true),quotationService:options?.fullApp?new DigitalQuotationService(db,true):undefined,budgetService:options?.fullApp?new DigitalBudgetService(db,true):undefined,creationEnabled:true,...(options?.workbenchNumberedCreation?{workbenchNumberedCreation:true}:{}),root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(db),journeys:new DigitalJourneyQuery(db),...(options?.fullApp?{closureService:new OrderClosureService(db),deliveryCalendar:new DeliveryCalendarQuery(db),factoryFlowService:new FactoryFlowService(db),bulkPreparationService:new BulkPreparationService(db)}:{}),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
   // Unrelated navigation indicator is a clearly labelled TEST response.
   if(!options?.orderTimeFlow)app.get('/todos/mine/indicator',async(request,reply)=>{const user=await auth.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18));reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
   await app.ready();
-  await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve(options?.fullApp?'tests/fixtures/m01-cockpit-home-native-ui.tsx':'tests/fixtures/m01-settings-native-ui.tsx'),name:'NativeSettingsUi',formats:['iife']}}});
+  await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},
+   build:{outDir:out,lib:{entry:resolve(options?.fullApp?'tests/fixtures/m01-cockpit-home-native-ui.tsx':'tests/fixtures/m01-settings-native-ui.tsx'),name:'NativeSettingsUi',formats:['iife']}}});
   const files=await readdir(out),js=await readFile(join(out,files.find(p=>p.endsWith('.js'))!),'utf8'),css=await readFile(join(out,files.find(p=>p.endsWith('.css'))!),'utf8');
   const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
   server=createServer(async(req,res)=>{

@@ -1,0 +1,24 @@
+.dx-designer-astryx .quotation-basis-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 20rem);
+  max-height: 15rem;
+  object-fit: contain;
+}
+
+.dx-designer-astryx .quotation-basis dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--spacing-2, 0.5rem);
+}
+
+.dx-designer-astryx .quotation-basis dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dx-designer-astryx .quotation-basis-instructions {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

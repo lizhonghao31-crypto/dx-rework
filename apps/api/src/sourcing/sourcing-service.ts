@@ -1,6 +1,7 @@
 import {readSourcingOwnerApprovalBasis,requireSourcingOwnerApproval,sourcingOwnerExpectation} from "./sourcing-owner-approval-basis.js";
 import type {RootAuthority} from "../access/root-authority.js";
 import {readSourcingCase,readSourcingCaseList,sourcingCaseStages,type SourcingCaseHistory,type SourcingCaseStage} from "./sourcing-case-read.js";
+import {mayReadSourcing,sourcingReadCapability as READ_CAPABILITY} from "./sourcing-ie-directory.js";
 import {toSourcingIso as toIso,SOURCING_LANE_KEY as LANE_KEY} from "./sourcing-case-mapping.js";
 export {canViewSourcingDaxingPrice} from "./sourcing-case-mapping.js";
 import {workflowStateRejection} from "../platform/business-rejection-guidance.js";
@@ -81,7 +82,6 @@ const FACTORY_CHANGE_VERIFY_CAPABILITY = "sourcing:factory_change:verify";
 const FINANCE_RECONCILE_CAPABILITY = "sourcing:finance:reconcile";
 const EXCEPTION_VERIFY_CAPABILITY = "sourcing:exception:verify";
 const CASE_DELETE_CAPABILITY = "sourcing:delete";
-const READ_CAPABILITY = "sourcing:view";
 const ROOT_ROLE = "root_superuser";
 const IMAGE_SUPPLEMENT_CAPABILITY = "tools:user";
 const CASE_CREATE_ROLE = "order_merchandiser";
@@ -226,13 +226,7 @@ export class SourcingService {
   }
 
   private assertReader(actor: TrustedActorContext): void {
-    if (
-      actor.authorizationCapability !== READ_CAPABILITY
-      || (
-        !actor.actorRoles.includes(ROOT_ROLE)
-        && !(actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)
-      )
-    ) {
+    if (!mayReadSourcing(actor)) {
       fail("无权查看报价选厂数据", 403, "FORBIDDEN");
     }
   }

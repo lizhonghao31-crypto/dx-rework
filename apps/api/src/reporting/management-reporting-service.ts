@@ -7,14 +7,15 @@ import type { BasicReworkQuery } from "@dx-rework/contracts/reporting";
 import { wageSelection, wageSelectionValues } from "./wage-report-selection.js";
 import {readWorkflowAnalysis} from "./workflow-analysis.js";
 import type { DashboardQuery, ManagementDashboardResponse, ManagementReworkPage, ManagementReworkQuery, ManagementReworkQueue, ManagementReworkQueueQuery, ReportPreviewResponse, ReportQuery, ReportType, SiteDashboardResponse, WorkflowQueueStatus } from "@dx-rework/contracts/reporting";
-import type { Pool } from "pg";
+import type { Pool,PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { capabilities, fail, nodeMeta, number, reportStatusValues, TIMEZONE, type CountRow, type Queryable, type Range, type ReportData } from "./management-reporting-shared.js";
 import { currentExceptionCount, financial as loadFinancial } from "./management-reporting-financial.js";
 import { exceptions as loadExceptions } from "./management-reporting-exceptions.js";
-import { fetchFacts, fetchQueueCounts, type ReworkFactOptions } from "./management-reporting-orders.js";
+import { fetchFacts, fetchQueueCounts, relatedReworkOrderPredicate, type ReworkFactOptions } from "./management-reporting-orders.js";
+import type {IeAuthorizedCandidates} from "../production-platform/ie-authorized-directory.js";
 import { factDto } from "./management-reporting-dto.js";
 import { reportData } from "./management-reporting-report-core.js";
 import { recalculateDisplayedTotals } from "./management-reporting-report-exceptions.js";
@@ -37,6 +38,62 @@ function reworkListAccess(actor: TrustedActorContext) {
   const relatedOrderScoped = !broadCapability && currentCapabilities.includes("rework:related_orders:view");
   const capabilityForStatus = (status: string) => workflowCapabilitiesByStatus[status]?.find(capability => currentCapabilities.includes(capability));
   return { currentCapabilities, broadCapability, relatedOrderScoped, capabilityForStatus };
+}
+
+async function requireReportingAuthority(source:Queryable,actor:TrustedActorContext,capability:string){
+ if(!capabilities(actor).includes(capability))fail(`缺少 ${capability} 能力`);
+ await source.query('SELECT access_authorized_actor_roles($1,$2)',[actor.actorId,capability]);
+}
+
+export function isReworkWorkflowAuthorityDenial(error:unknown){
+ const denied=error as {code?:string;message?:string}|null;
+ return denied?.code==='42501'&&(denied.message?.startsWith('actor is not authorized for capability ')||denied.message==='PMC is business read-only');
+}
+
+async function authorizedReworkQueues(client:Pick<PoolClient,'query'>,actor:TrustedActorContext,
+ access:ReturnType<typeof reworkListAccess>,requested:readonly WorkflowQueueStatus[],
+ denied:(error:unknown)=>boolean=error=>(error as {code?:string}|null)?.code==='42501'){
+ const shared=access.broadCapability??(access.relatedOrderScoped?'rework:related_orders:view':undefined);
+ if(shared){await requireReportingAuthority(client,actor,shared);return [...requested];}
+ const available:WorkflowQueueStatus[]=[],checked=new Map<string,boolean>();
+ for(const status of requested){
+  const needed=access.capabilityForStatus(status);
+  if(!needed)continue;
+  if(!checked.has(needed)){
+   await client.query('SAVEPOINT rework_queue_authority');
+   try{await requireReportingAuthority(client,actor,needed);checked.set(needed,true);}
+   catch(error){
+    if(!denied(error))throw error;
+    await client.query('ROLLBACK TO SAVEPOINT rework_queue_authority');checked.set(needed,false);
+   }
+   await client.query('RELEASE SAVEPOINT rework_queue_authority');
+  }
+  if(checked.get(needed))available.push(status);
+ }
+ return available;
+}
+
+const ieReworkQueues=['pending_ie_review','pending_final_quantity_ie_review','pending_quantity_adjustment_ie_review'] as const;
+
+/** Only the existing IE workflow queues participate. Read authorization remains that of the original queue. */
+export async function reworkIeCandidates(client:Pick<PoolClient,'query'>,actor:TrustedActorContext):Promise<IeAuthorizedCandidates['rework_review']>{
+ const access=reworkListAccess(actor);
+ const available=await authorizedReworkQueues(client,actor,access,ieReworkQueues,isReworkWorkflowAuthorityDenial);
+ if(!available.length)return undefined;
+ return ({bind,search})=>{
+  const scopes=bind(available);
+  const related=access.relatedOrderScoped?`AND ${relatedReworkOrderPredicate(bind(actor.actorId))}`:'';
+  return `SELECT order_record.rework_order_id AS object_id,order_record.rework_order_id AS entry_id,order_record.rework_order_id AS resource_id,
+    order_record.order_no AS order_id,order_record.style_no,NULL::text AS customer_code,order_record.version,
+    NULL::int AS round,order_record.status AS native_status,order_record.updated_at AS sort_at,
+    NULL::text AS assignee_name,NULL::json AS pricing,'awaiting_price'::text AS state
+   FROM rework_orders order_record WHERE order_record.status=ANY(${scopes}::text[])
+    ${related}
+    AND (${search}::text='' OR position(lower(${search}) in lower(order_record.rework_no))>0
+     OR position(lower(${search}) in lower(order_record.order_no))>0
+     OR position(lower(${search}) in lower(order_record.style_no))>0
+     OR position(lower(${search}) in order_record.rework_order_id::text)>0)`;
+ };
 }
 
 function reworkListFacts(actor: TrustedActorContext, query: ManagementReworkQuery, access: ReturnType<typeof reworkListAccess>, queueStatuses?: readonly string[]): ReworkFactOptions {
@@ -251,36 +308,12 @@ export class ManagementReportingService {
 
   async listReworkQueue(actor: TrustedActorContext, query: ManagementReworkQueueQuery): Promise<ManagementReworkQueue> {
     const access = reworkListAccess(actor);
-    const sharedCapability = access.broadCapability ?? (access.relatedOrderScoped ? "rework:related_orders:view" : undefined);
     const requested = [...new Set(query.statuses)];
     const canReadWages = await this.mayReadWageFields(actor);
     const client = await this.db.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const available: WorkflowQueueStatus[] = [];
-      if (sharedCapability) {
-        await this.require(actor, sharedCapability, client);
-        available.push(...requested);
-      } else {
-        const checked = new Map<string, boolean>();
-        for (const status of requested) {
-          const needed = access.capabilityForStatus(status);
-          if (!needed) continue;
-          if (!checked.has(needed)) {
-            await client.query("SAVEPOINT rework_queue_authority");
-            try {
-              await this.require(actor, needed, client);
-              checked.set(needed, true);
-            } catch (error) {
-              if ((error as {code?:string}).code !== "42501") throw error;
-              await client.query("ROLLBACK TO SAVEPOINT rework_queue_authority");
-              checked.set(needed, false);
-            }
-            await client.query("RELEASE SAVEPOINT rework_queue_authority");
-          }
-          if (checked.get(needed)) available.push(status);
-        }
-      }
+      const available=await authorizedReworkQueues(client,actor,access,requested);
       const selected = available.includes(query.status) ? query.status : available[0];
       if (!selected) throw new ApplicationError("FORBIDDEN", "当前账号没有可进入的节点队列", 403);
       const pageQuery = {...query, status: selected, page: selected === query.status ? query.page : 1};
@@ -417,8 +450,7 @@ export class ManagementReportingService {
   }
 
   private async require(actor: TrustedActorContext, capability: string, source: Queryable = this.db): Promise<void> {
-    if (!capabilities(actor).includes(capability)) fail(`缺少 ${capability} 能力`);
-    await source.query("SELECT access_authorized_actor_roles($1,$2)", [actor.actorId, capability]);
+    return requireReportingAuthority(source,actor,capability);
   }
 
   private async range(query: DashboardQuery, source: Queryable = this.db): Promise<Range> {

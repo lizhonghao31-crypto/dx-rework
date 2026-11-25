@@ -8,6 +8,7 @@ import {currentFactoryPagePoLines,factoryPoLines,factoryProposals} from "../prod
 import {assertContractReturnCaseClocks,assertContractReturnListClock,contractReturnClock} from "./contract-return-clock.js";
 import type {ContractReturnFilter} from "./contract-return-state.js";
 import {mapSourcingCase as mapCase,toSourcingIso as toIso,type SourcingCaseRow} from "./sourcing-case-mapping.js";
+import {sourcingIeHistoryAll,sourcingIeHistoryPredicate} from "./sourcing-ie-directory.js";
 
 const SOURCING_LIST_PAGE_SIZE=15;
 const fail=(message:string,status=400,code="VALIDATION_ERROR"):never=>{throw new ApplicationError(code,message,status);};
@@ -315,11 +316,7 @@ export async function readSourcingCaseList(database:Pool,actor:TrustedActorConte
          AND (
            $3::text='all'
            OR ($3::text='ie' AND case_view.status='pending_ie_quote')
-           ${ieHistory?`OR (case_view.status<>'pending_ie_quote' AND EXISTS (
-             SELECT 1 FROM sourcing_ie_quotes history_quote
-             WHERE history_quote.sourcing_case_id=case_view.sourcing_case_id
-               AND ($9::boolean OR history_quote.quoted_by=$8::uuid)
-           ))`:''}
+           ${ieHistory?`OR ${sourcingIeHistoryPredicate('$8','$9')}`:''}
            OR ($3::text='management' AND case_view.status='pending_management_decision')
            OR ($3::text='owner' AND case_view.status='pending_owner_approval')
            OR ($3::text='finance' AND case_view.status IN ('pending_contract','pending_finance_reconciliation'))
@@ -543,7 +540,7 @@ export async function readSourcingCaseList(database:Pool,actor:TrustedActorConte
         normalizedStyleName,
         contractReturn,
         offset,
-        ...(ieHistory?[actor.actorId,actor.actorRoles.some(role=>role==='root_superuser'||role==='production_management'||role==='owner_group')]:[]),
+        ...(ieHistory?[actor.actorId,sourcingIeHistoryAll(actor)]:[]),
       ],
     );
     const pageRows = result.rows.filter(row => row.sourcing_case_id != null);

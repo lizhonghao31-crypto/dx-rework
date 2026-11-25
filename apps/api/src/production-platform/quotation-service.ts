@@ -19,7 +19,9 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalNotFound,digitalForbidden} from './access-policy.js';
 import {designerQuotationPolicy,ensureQuotationBudget,workbenchCommercialOrderPolicy} from './quotation-budget-basis.js';
 import {shareApprovedDesignVersions} from './development-electronic-handover.js';
-import {readIeProcessingDirectory} from './ie-processing-directory.js';
+import {ieProcessingViewer,readIeProcessingDirectory,readIeProcessingPriceReview} from './ie-processing-directory.js';
+import {readIeProcessingBasis,quotationStyleImage} from './quotation-display-basis.js';
+import {developmentDocumentSnapshot} from './development-document-snapshot.js';
 import {readDevelopmentOrderRush,type RushIdentity} from './development-order-rush.js';
 import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
 import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
@@ -91,6 +93,14 @@ export class DigitalQuotationService{
    const context=await this.context(db,actor,resource,true);
    const result=await secondaryCraftDetail(db,actor,context.quote??digitalNotFound(),context.roles,rowId,query,
     context.designerId===actor.actorId&&context.roles.has('sample_designer'));
+   if('target' in result&&result.target){
+    const target=result.target;
+    const ownSource=target.stage==='development'&&target.scopeId===context.sourceId?context.sourceId:null;
+    const snapshot=ownSource?await developmentDocumentSnapshot(db,ownSource,target.round,target.sourceVersion,true):undefined;
+    await db.query('COMMIT');
+    return {...result,display:{orderNumber:context.row.design_style_no??context.row.temporary_style_no??'',customerCode:context.customerCode,
+     styleImage:snapshot?quotationStyleImage(snapshot.sourceId,snapshot.documentVersion,snapshot.document):null}};
+   }
    await db.query('COMMIT');
    return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
@@ -270,11 +280,13 @@ export class DigitalQuotationService{
   const db=await this.database.connect();
   try{
    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-   const active=await quotationRoles(db,actor,['ie_reviewer','production_management','owner_group']);
-   const root=isRootActor(actor),canPrice=active.has('ie_reviewer');
-   const canReadAll=root||active.has('production_management')||active.has('owner_group');
-   if(!canReadAll&&!canPrice)digitalForbidden();
-   const result=await readIeProcessingDirectory(db,this.database,input,{id:actor.actorId,canPrice,canReadAll,isRoot:root},target);
+   const viewer=await ieProcessingViewer(db,actor)??digitalForbidden();
+   const result=await readIeProcessingDirectory(db,this.database,input,viewer,target);
+   if(target&&result.items.length===1){
+    await acceptanceBusinessContext()?.assertScope(result.items[0]!.resource);
+    result.items[0]!.basis=await readIeProcessingBasis(db,result.items[0]!);
+    result.items[0]!.priceReview=await readIeProcessingPriceReview(db,result.items[0]!,viewer);
+   }
    await db.query('COMMIT');return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }

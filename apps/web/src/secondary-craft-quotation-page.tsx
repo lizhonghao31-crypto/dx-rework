@@ -1,12 +1,14 @@
-import {useCallback,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {Selector} from '@astryxdesign/core/Selector';
+import {Table,type TableColumn} from '@astryxdesign/core/Table';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Surface} from '@dx-rework/ui';
+import {formatBusinessDecimal} from '@dx-rework/contracts/business-display';
 import {QuotationResourceSchema,type QuotationResource} from '@dx-rework/contracts/digital-quotation';
 import {
  SecondaryCraftDecisionSchema,SecondaryCraftDetailSchema,SecondaryCraftDraftSchema,SecondaryCraftListSchema,
- SecondaryCraftReceiptSchema,SecondaryCraftSubmissionSchema,SecondaryCraftSuppliersSchema,type SecondaryCraftDetail,
+ SecondaryCraftReceiptSchema,SecondaryCraftSubmissionSchema,SecondaryCraftSuppliersSchema,type SecondaryCraftDetail,type SecondaryCraftList,
 } from '@dx-rework/contracts/secondary-craft-quotation';
 import {createWebUrls} from '../url-contract.js';
 import {createClientRequestId} from './client-request-id.js';
@@ -14,52 +16,88 @@ import {designerAstryxCss} from './designer-astryx.js';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {DocumentTableScroll} from './document-editor.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {QuotationBasisImage} from './quotation-basis-image.js';
+import './quotation-basis.css';
 import {useForegroundWait} from './foreground-loading.js';
 import {unknownWriteResult} from './request-response-feedback.js';
 import {SUBMISSION_RECOVERY_WINDOW_MS} from './submission-attempt.js';
 import {useForegroundRead} from './use-foreground-read.js';
+import {ListPagination} from './list-pagination.js';
+import {useDebouncedValue} from './use-debounced-value.js';
+import {craftDirectoryRowKey,pageAuthorizedCraftDirectory,readCraftDirectoryView,writeCraftDirectoryView,type CraftDirectoryView} from './secondary-craft-directory-view.js';
 
 const urls=createWebUrls(import.meta.env.BASE_URL);
 const labels={pending:'待填写',draft:'草稿',submitted:'待审批',approved:'已批准',returned:'已退回'};
 const stageLabel={development:'开发',bulk:'大货'};
 const modes=[{value:'in_house',label:'内做'},{value:'outsourced',label:'外发'}];
 const pathFor=(row:QuotationResource)=>`${row.kind==='order'?'orders':'sources'}/${row.id}/quotation`;
-export const secondaryCraftHref=(row?:QuotationResource,rowId?:string)=>urls.pageUrl(row&&rowId
- ?`ui/secondary-craft-quotation?kind=${row.kind}&id=${row.id}&craft=${rowId}`
- :'ui/secondary-craft-quotation');
+export const secondaryCraftHref=(row?:QuotationResource,rowId?:string,browse?:CraftDirectoryView)=>{
+ const params=browse?writeCraftDirectoryView(browse):new URLSearchParams();
+ if(row&&rowId){params.set('kind',row.kind);params.set('id',row.id);params.set('craft',rowId);}
+ return urls.pageUrl(`ui/secondary-craft-quotation${params.size?'?'+params:''}`);
+};
 const list=(signal:AbortSignal)=>digitalRequest('secondary-craft-quotations','GET',undefined,undefined,{signal}).then(SecondaryCraftListSchema.parse);
 
 export function SecondaryCraftQuotationPage(){
  const search=new URLSearchParams(location.search),rowId=search.get('craft');
  const resource=QuotationResourceSchema.safeParse({kind:search.get('kind'),id:search.get('id')});
  const version=search.get('version')??'';
+ const browse=readCraftDirectoryView(search);
  return <div className="dx-designer-astryx" lang="zh-CN">
   <style>{designerAstryxCss}</style>
   {rowId?(resource.success&&/^[0-9a-f-]{36}$/i.test(rowId)&&(!version||/^[1-9]\d*$/.test(version))
-   ?<CraftDetail resource={resource.data} rowId={rowId} version={version}/>
-   :<Surface><p role="alert">工艺编号无效，请从原报价进入。</p></Surface>):<CraftDirectory/>}
+   ?<CraftDetail resource={resource.data} rowId={rowId} version={version} browse={browse}/>
+   :<Surface><p role="alert">工艺编号无效，请从原报价进入。</p></Surface>):<CraftDirectory initial={browse}/>}
  </div>;
 }
 
-function CraftDirectory(){
+function CraftDirectory({initial}:{initial:CraftDirectoryView}){
  const read=useForegroundRead('secondary-craft-directory','mine',list);
  useForegroundWait(read.foregroundKey);
  const items=read.value?.items??[];
+ const [view,setView]=useState(initial),[searchInput,setSearchInput]=useState(initial.search),search=useDebouncedValue(view.search,250),composing=useRef(false),focus=useRef(initial.focus);
+ const change=(patch:Partial<CraftDirectoryView>)=>setView(current=>{const next={...current,...patch};delete next.focus;return next;});
+ const current=searchInput===view.search&&view.search===search&&!read.waiting&&!read.error;
+ const page=pageAuthorizedCraftDirectory(items,{...view,search});
+ const craftOptions=[...new Set(items.map(item=>item.label))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+ const focusId=(value:string)=>`secondary-craft-directory-${value}`;
+ const ready=Boolean(read.value?.ready);
+ useEffect(()=>{
+  const id=focus.current;if(!id||!ready)return;
+  const frame=requestAnimationFrame(()=>{focus.current=undefined;
+   if(document.activeElement!==document.body)return;
+   const target=document.getElementById(focusId(id));
+   (target??document.querySelector<HTMLInputElement>('#secondary-craft-directory-search'))?.focus({preventScroll:true});
+   target?.scrollIntoView({block:'nearest'});
+  });
+  return ()=>cancelAnimationFrame(frame);
+ },[ready]);
+ useEffect(()=>{if(current&&ready)history.replaceState(history.state,'',secondaryCraftHref(undefined,undefined,{...view,page:page.page}));},[current,ready,view,page.page]);
+ const columns:TableColumn<SecondaryCraftList['items'][number]>[]=[
+  {key:'styleNo',header:'款号 / 工艺',renderCell:item=>{const id=craftDirectoryRowKey(item);return <><a id={focusId(id)} href={secondaryCraftHref(item.resource,item.rowId,{...view,search,page:page.page,focus:id})}>{item.styleNo} · {item.label}</a><OrderRushBadge value={item.orderRush}/></>;}},
+  {key:'customerCode',header:'客户',renderCell:item=>item.customerCode??'—'},
+  {key:'stage',header:'阶段与资料',renderCell:item=>`${stageLabel[item.stage]} · 第 ${item.round} 轮 · 资料 v${item.sourceVersion}`},
+  {key:'authorName',header:'报价人',renderCell:item=>item.authorName??'—'},
+  {key:'supplier',header:'加工厂',renderCell:item=>item.savedPricing?.mode==='in_house'?'本厂':item.supplier?.name??'—'},
+  {key:'savedPricing',header:'价格 / 单位',renderCell:item=>item.savedPricing?.amount&&item.savedPricing.unit?<span title={`${item.savedPricing.amount} 元 / ${item.savedPricing.unit}`}>{formatBusinessDecimal(item.savedPricing.amount,1)} 元 / {item.savedPricing.unit}</span>:'—'},
+  {key:'state',header:'状态',renderCell:item=>`${labels[item.state]}${item.note?` · ${item.note}`:''}`},
+ ];
  return <Surface><h1>二次工艺报价与选厂</h1>
+  <div className="budget-heading" aria-label="二次工艺目录筛选">
+   <TextInput id="secondary-craft-directory-search" label="搜索订单 ID、PO、客户或工艺" value={searchInput} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={event=>{composing.current=false;const next=(event.target instanceof HTMLInputElement?event.target.value:searchInput).slice(0,100);setSearchInput(next);change({search:next,page:1});}} onChange={value=>{const next=value.slice(0,100);setSearchInput(next);if(!composing.current)change({search:next,page:1});}}/>
+   <Selector label="报价 / 审批状态" value={view.state} options={[{value:'all',label:'全部状态'},...Object.entries(labels).map(([value,label])=>({value,label}))]} onChange={value=>{if(value==='all'||Object.hasOwn(labels,value))change({state:value as CraftDirectoryView['state'],page:1});}}/>
+   <Selector label="工艺项目" value={view.craft} options={[{value:'',label:'全部工艺'},...craftOptions.map(value=>({value,label:value}))]} onChange={craft=>change({craft,page:1})}/>
+  </div>
   {read.error&&<p role="alert">{read.error.message} <Button label="重试读取" onClick={read.retry}/></p>}
   {read.value?.ready===false&&<p>联合报价流程尚未就绪。</p>}
   {read.value?.ready&&items.length===0&&<p>暂无分配给您的工艺报价或待审批工艺。</p>}
-  {items.length>0&&<DocumentTableScroll><table><thead><tr><th>款号 / 工艺</th><th>阶段与资料</th><th>报价人</th><th>加工厂</th><th>状态</th></tr></thead>
-   <tbody>{items.map(item=><tr key={item.rowId}>
-    <td><a href={secondaryCraftHref(item.resource,item.rowId)}>{item.styleNo} · {item.label}</a><OrderRushBadge value={item.orderRush}/></td>
-    <td>{stageLabel[item.stage]} · 第 {item.round} 轮 · 资料 v{item.sourceVersion}</td>
-    <td>{item.authorName??'—'}</td><td>{item.supplier?.name??'—'}</td>
-    <td>{labels[item.state]}{item.note&&` · ${item.note}`}</td>
-   </tr>)}</tbody></table></DocumentTableScroll>}
+  {ready&&current&&items.length>0&&!page.total&&<p>没有符合条件的工艺报价。</p>}
+  {page.items.length>0&&<DocumentTableScroll scrollLabel="二次工艺报价目录"><Table columns={columns} data={page.items} idKey={craftDirectoryRowKey} aria-label="二次工艺报价目录" density="compact"/></DocumentTableScroll>}
+  {ready&&<ListPagination page={page.page} totalPages={current?page.totalPages:null} total={current?page.total:null} busy={!current} ariaLabel="二次工艺报价分页" onPageChange={target=>change({page:target})}/>}
  </Surface>;
 }
 
-function CraftDetail({resource,rowId,version}:{resource:QuotationResource;rowId:string;version:string}){
+function CraftDetail({resource,rowId,version,browse}:{resource:QuotationResource;rowId:string;version:string;browse:CraftDirectoryView}){
  const path=`${pathFor(resource)}/secondary-craft/${rowId}`;
  const query=version?`?version=${version}`:'';
  const load=useCallback(async(signal:AbortSignal)=>{
@@ -69,9 +107,9 @@ function CraftDetail({resource,rowId,version}:{resource:QuotationResource;rowId:
  },[path,query,rowId,version]);
  const read=useForegroundRead('secondary-craft-detail',path+query,load);
  useForegroundWait(read.foregroundKey);
- return <Surface><a href={secondaryCraftHref()}>返回二次工艺报价列表</a>
+ return <Surface><a href={secondaryCraftHref(undefined,undefined,browse)}>返回二次工艺报价列表</a>
   {read.error&&<p role="alert">{read.error.message} <Button label="重试读取" onClick={read.retry}/></p>}
-  {read.value&&<CraftForm key={path+query} original={read.value} path={path} href={secondaryCraftHref(resource,rowId)} version={version}/>}
+  {read.value&&<CraftForm key={path+query} original={read.value} path={path} href={secondaryCraftHref(resource,rowId,browse)} version={version}/>}
  </Surface>;
 }
 
@@ -90,6 +128,8 @@ function CraftForm({original,path,href,version}:{original:SecondaryCraftDetail;p
  const values=factories.value?.items??[];
  const initialSupplier=item.supplier&&current.supplierId===item.supplier.supplierId&&!values.some(value=>value.supplierId===item.supplier?.supplierId)?[item.supplier]:[];
  const disabled=busy||uncertain!==null;
+ const photo=original.display?.styleImage;
+ const originalVersion=original.historical?`&version=${original.version}`:'';
  const send=async(attempt:Attempt)=>{
   if(writing.current)return;
   if(Date.now()-attempt.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError('已超过安全重试期限，请先核对本项最新版本。');return;}
@@ -116,12 +156,14 @@ function CraftForm({original,path,href,version}:{original:SecondaryCraftDetail;p
  };
  return <>
   <h1>{item.target.label}报价</h1>
+  {original.display&&<p>{[original.display.orderNumber,original.display.customerCode].filter(Boolean).join(' · ')}</p>}
   <p>{stageLabel[item.target.stage]} · 第 {item.target.round} 轮 · 资料 v{item.target.sourceVersion} · {labels[item.state]}{item.version>0&&` · 报价 v${item.version}`}</p>
-  {item.target.instructions&&<p>{item.target.instructions}</p>}
+  {photo&&<QuotationBasisImage key={photo.attachmentId} label="本版款图" href={urls.apiUrl(`digital-production/${path}/style-image/${photo.attachmentId}?documentVersion=${photo.documentVersion}${originalVersion}`)}/>}
+  {item.target.instructions&&<p className="quotation-basis-instructions">{item.target.instructions}</p>}
   {item.versions.length>0&&<Selector label="原报价版本" value={version} isDisabled={disabled||edited!==null}
    options={[{value:'',label:'当前工艺报价'},...item.versions.map(saved=>({value:String(saved),label:`报价 v${saved}`}))]}
    onChange={value=>{location.assign(value?`${href}&version=${value}`:href);}}/>}
-  {item.target.attachmentIds.map((id,index)=><p key={id}><a href={urls.apiUrl(`digital-production/${path}/attachments/${id}`)+(item.historical?`?version=${item.version}`:'')}>查看本项工艺要求附件 {index+1}</a></p>)}
+  {item.target.attachmentIds.map((id,index)=><div key={id}><QuotationBasisImage label={`本项工艺图 ${index+1}`} href={urls.apiUrl(`digital-production/${path}/attachments/${id}`)+(item.historical?`?version=${item.version}`:'')}/></div>)}
   {item.note&&<p>退回原因：{item.note}</p>}
   {item.state==='approved'&&item.draft?.unit!==item.target.pricingUnit&&<p>本版已批准，缺少客户报价所用单位的换算依据。</p>}
   {item.canEdit?<div className="budget-heading">
