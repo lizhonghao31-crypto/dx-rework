@@ -1,6 +1,6 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
-import {AuxiliaryQuerySchema,AuxiliaryHistoryQuerySchema,ChangeAuxiliaryReferencePricingSchema,CreateAuxiliarySchema,RenameAuxiliarySchema,DisableAuxiliarySchema,MergeAuxiliarySchema} from '@dx-rework/contracts/auxiliary-catalog';
+import {AuxiliaryQuerySchema,AuxiliaryHistoryQuerySchema,ChangeAuxiliaryReferencePricingSchema,CreateAuxiliarySchema,RenameAuxiliarySchema,DisableAuxiliarySchema} from '@dx-rework/contracts/auxiliary-catalog';
 import {IdempotencyKeySchema} from '@dx-rework/contracts';
 import {requestValidationMessage} from '@dx-rework/contracts/validation-language';
 import type {AuthUser} from '../auth/service.js';
@@ -22,5 +22,5 @@ export function registerAuxiliaryCatalogRoutes(app:FastifyInstance,dependencies:
  app.post(`${path}/:id/versions`,async request=>dependencies.service.rename(await actor(request,true),id(request),parse(RenameAuxiliarySchema,request.body),key(request)));
  app.post(`${path}/:id/reference-pricing`,async request=>dependencies.service.changeReferencePricing(await actor(request,true),id(request),parse(ChangeAuxiliaryReferencePricingSchema,request.body),key(request)));
  app.post(`${path}/:id/disable`,async request=>dependencies.service.disable(await actor(request,true),id(request),parse(DisableAuxiliarySchema,request.body),key(request)));
- app.post(`${path}/:id/merge`,async request=>dependencies.service.merge(await actor(request,true),id(request),parse(MergeAuxiliarySchema,request.body),key(request)));
+ // New merge writes are retired. Existing merge receipts and version history stay readable above.
 }

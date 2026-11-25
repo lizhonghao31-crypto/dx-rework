@@ -562,7 +562,7 @@ export function Shell({
       {name:"创建开发单",description:"新建、继续草稿或恢复原提交",href:"/ui/digital-production?workspace=designer&section=create",activeKey:"digital-designer-create"},
       {name:"开发工作区",description:"查订单与本单办事",href:"/ui/digital-production?workspace=designer&section=workspace",activeKey:"digital-designer"},
     ]:[]),
-    ...(currentUser&&canManageAuxiliaryCatalog(currentUser)?[{name:"共享辅料目录",description:"新增、改名、合并重复项及停用",href:"/ui/auxiliary-catalog"}]:[]),
+    ...(currentUser&&canManageAuxiliaryCatalog(currentUser)?[{name:"共享辅料目录",description:"新增、改名、修改参考价及停用",href:"/ui/auxiliary-catalog"}]:[]),
   ];
   const developmentNavigation: NavigationEntry[] = [
     ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),

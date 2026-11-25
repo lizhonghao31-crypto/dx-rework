@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {Page} from 'playwright-core';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
+import {AuxiliaryCatalogService} from '../../apps/api/src/access/auxiliary-catalog-service.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
@@ -12,8 +13,8 @@ import type {AuxiliaryItem} from '@dx-rework/contracts/auxiliary-catalog';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 async function createFromPage(page:Page,name:string,price?:{amount:string;unit:string}){
- await page.getByRole('button',{name:'直接新增辅料',exact:true}).click();
- const dialog=page.getByRole('dialog',{name:'直接新增共享辅料',exact:true});
+ await page.getByRole('button',{name:'新增辅料',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'新增辅料',exact:true});
  await dialog.getByRole('textbox',{name:'辅料品名',exact:true}).fill(name);
  await dialog.getByRole('textbox',{name:'规格',exact:true}).fill('TEST 原规格');
  await dialog.getByRole('textbox',{name:'供应方',exact:true}).fill('TEST 原供应方');
@@ -38,7 +39,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    const tab=await h.open(h.f.people[alias]!.actorId,1165,{},'/ui/auxiliary-catalog');
    try{
     await tab.page.getByRole('heading',{name:'共享辅料目录',exact:true,level:1}).waitFor();
-    await tab.page.getByRole('button',{name:'直接新增辅料',exact:true}).waitFor({state:'visible'});
+    await tab.page.getByRole('button',{name:'新增辅料',exact:true}).waitFor({state:'visible'});
     expect(await tab.page.getByRole('table',{name:'共享辅料目录',exact:true}).count()).toBe(1);
     expect(await tab.page.getByRole('button',{name:'打开共享辅料目录',exact:true}).count()).toBe(0);
     expect(await tab.page.getByRole('dialog').count()).toBe(0);
@@ -71,11 +72,23 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    return {...created,materialId,saved};
   };
   try{
-   old=await createFromPage(tab.page,'TEST-旧目录-'+randomUUID(),{amount:'0',unit:'套'});
+   old=await createFromPage(tab.page,'TEST-旧目录中文长名称用于验证辅料品名不被截断和操作仍按两行展示-'+randomUUID(),{amount:'0',unit:'套'});
    const original=await source('TEST-目录旧快照-'+randomUUID(),old);
    const adopted=await source('TEST-已发布的目录采用依据-'+randomUUID(),old,true);
    await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
    const row=tab.page.getByRole('row').filter({hasText:old.name});
+   await row.getByRole('cell',{name:'0 元 / 套',exact:true}).waitFor();
+   const table=tab.page.getByRole('table',{name:'共享辅料目录',exact:true});
+   expect(await table.getByRole('columnheader').allTextContents()).toEqual(['名称','种类','规格','参考价 / 单位','版本','状态','操作']);
+   for(const viewport of [{width:1165,height:747},{width:1440,height:900}]){
+    await tab.page.setViewportSize(viewport);
+    const positions=await Promise.all(['改名','修改参考价','停用','版本历史'].map(name=>row.getByRole('button',{name,exact:true}).boundingBox()));
+    const [rename,price,disable,history]=positions.map(box=>{expect(box).not.toBeNull();return box!;});
+    expect(rename.y).toBeCloseTo(price.y,1);expect(disable.y).toBeCloseTo(history.y,1);
+    expect(rename.x).toBeCloseTo(disable.x,1);expect(price.x).toBeCloseTo(history.x,1);expect(disable.y).toBeGreaterThan(rename.y);
+    expect(await tab.page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    await tab.page.screenshot({path:join(h.evidence,`catalog-table-${viewport.width}.png`)});
+   }
    await row.getByRole('button',{name:'改名',exact:true}).click();
    const editor=tab.page.getByRole('dialog',{name:'改名',exact:true});
    await editor.getByRole('textbox',{name:'辅料品名',exact:true}).fill('TEST-新目录-'+randomUUID());
@@ -93,6 +106,7 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    const confirmed=await priced;expect(confirmed.status(),await confirmed.text()).toBe(200);current=await confirmed.json();
    expect(current.referencePricing).toEqual({amount:'2.35',unit:'枚'});
    await pricing.waitFor({state:'hidden'});
+   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('cell',{name:'2.4 元 / 枚',exact:true}).waitFor();
    const directory=await tab.page.evaluate(async name=>{const r=await fetch('/api/master-data/auxiliaries?'+new URLSearchParams({q:name}));if(!r.ok)throw Error('Directory read failed '+r.status);return r.json();},old.name);
    expect(directory.items).toEqual([current]);
    const adoptedTab=await h.open(designer.actorId,1165,{},'/ui/digital-production?'+new URLSearchParams({
@@ -198,22 +212,34 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    }finally{await newTab.close();}
    const keeper=await createFromPage(tab.page,'TEST-保留目录-'+randomUUID());
    await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
-   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('button',{name:'合并重复项',exact:true}).click();
-   const merge=tab.page.getByRole('dialog',{name:'合并重复项',exact:true});
-   await merge.getByRole('textbox',{name:'搜索合并目标',exact:true}).fill(keeper.name);
-   await merge.getByRole('row').filter({hasText:keeper.name}).getByRole('button',{name:'作为合并目标',exact:true}).click();
-   await merge.getByRole('textbox',{name:'本次变更原因',exact:true}).fill('TEST 合并真实重复项');
-   const merged=tab.page.waitForResponse(response=>new URL(response.url()).pathname===`/api/master-data/auxiliaries/${current.id}/merge`&&response.request().method()==='POST');
-   await merge.getByRole('button',{name:'保存共享目录',exact:true}).click();
-   const mergeResponse=await merged;expect(mergeResponse.status(),await mergeResponse.text()).toBe(200);expect(await mergeResponse.json()).toMatchObject({id:current.id,version:current.version+1,active:false,mergedInto:keeper.id});await merge.waitFor({state:'hidden'});
+   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('button',{name:'版本历史',exact:true}).waitFor();
+   expect(await tab.page.getByRole('button',{name:'合并重复项',exact:true}).count()).toBe(0);
+   const mergeInput={expectedVersion:current.version,targetId:keeper.id,expectedTargetVersion:keeper.version,reason:'TEST 历史合并'};
+   const deniedMerge=await tab.page.evaluate(async({id,body})=>(await fetch(`/api/master-data/auxiliaries/${id}/merge`,{method:'POST',headers:{'content-type':'application/json','idempotency-key':crypto.randomUUID()},body:JSON.stringify(body)})).status,{id:current.id,body:mergeInput});
+   expect(deniedMerge).toBe(404);
+   expect((await h.db.query('SELECT version,active,merged_into FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[current.id])).rows[0]).toEqual({version:current.version,active:true,merged_into:null});
+   // Arrange a pre-existing merge with its original command, never through a newly reachable HTTP action.
+   const historicalService=new AuxiliaryCatalogService(h.db,{isRootUser:async()=>false}),mergeKey=randomUUID();
+   const commercialCapabilities=(await h.db.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='sample_designer'")).rows.map(row=>row.capability);
+   const historical=await historicalService.merge({...designer,authorizationCapability:'auxiliary_catalog:write',authorizationCapabilities:commercialCapabilities},current.id,mergeInput,mergeKey);
+   expect(historical).toMatchObject({id:current.id,version:current.version+1,active:false,mergedInto:keeper.id});
+   const historicalReceipt=await tab.page.evaluate(async key=>{const r=await fetch(`/api/master-data/auxiliaries/receipt?action=merge&key=${key}`);if(!r.ok)throw Error('Legacy receipt failed '+r.status);return (await r.json()).receipt;},mergeKey);
+   expect(historicalReceipt).toEqual(historical);
    expect((await forms.read(designer,original.sourceId)).document).toEqual(original.saved.document);
-   await tab.page.getByRole('textbox',{name:'搜索品名、规格或供应方',exact:true}).fill(old.name);
+   await tab.page.getByRole('checkbox',{name:'显示停用及已合并记录',exact:true}).check();
+   await tab.page.getByRole('row').filter({hasText:current.name}).getByRole('cell',{name:'已合并',exact:true}).waitFor();
+   await tab.page.getByRole('checkbox',{name:'显示停用及已合并记录',exact:true}).uncheck();
    const keeperRow=tab.page.getByRole('row').filter({hasText:keeper.name});
    await keeperRow.getByRole('button',{name:'停用',exact:true}).click();
    const disable=tab.page.getByRole('dialog',{name:'停用',exact:true});
    await disable.getByRole('textbox',{name:'本次变更原因',exact:true}).fill('TEST 保留旧资料后停用');
+   await disable.getByRole('button',{name:'保存共享目录',exact:true}).click();
+   const confirmDisable=tab.page.getByRole('alertdialog',{name:'确认停用辅料',exact:true});
+   await confirmDisable.getByRole('button',{name:'继续编辑',exact:true}).click();
+   expect((await h.db.query('SELECT active FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[keeper.id])).rows[0].active).toBe(true);
    const disabled=tab.page.waitForResponse(response=>new URL(response.url()).pathname===`/api/master-data/auxiliaries/${keeper.id}/disable`&&response.request().method()==='POST');
    await disable.getByRole('button',{name:'保存共享目录',exact:true}).click();
+   await confirmDisable.getByRole('button',{name:'确认停用',exact:true}).click();
    const disableResponse=await disabled;expect(disableResponse.status(),await disableResponse.text()).toBe(200);expect(await disableResponse.json()).toMatchObject({id:keeper.id,version:2,active:false});await disable.waitFor({state:'hidden'});
    await tab.page.getByText('没有匹配的辅料。',{exact:false}).waitFor();
    expect((await forms.read(designer,original.sourceId)).document).toEqual(original.saved.document);
@@ -265,11 +291,11 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
   const designer=h.f.people['sample-designer']!,tab=await h.open(designer.actorId,1165,{failRead:true,readPath:'/api/master-data/auxiliaries?q=&page=1&includeInactive=false',losePath:'/api/master-data/auxiliaries'},'/ui/auxiliary-catalog');
   try{
    const page=tab.page;await page.getByRole('button',{name:'重新读取目录',exact:true}).click();
-   await page.getByRole('button',{name:'直接新增辅料',exact:true}).click();
-   const editor=page.getByRole('dialog',{name:'直接新增共享辅料',exact:true}),name='TEST-目录回执-'+randomUUID();
+   await page.getByRole('button',{name:'新增辅料',exact:true}).click();
+   const editor=page.getByRole('dialog',{name:'新增辅料',exact:true}),name='TEST-目录回执-'+randomUUID();
    await editor.getByRole('textbox',{name:'辅料品名',exact:true}).fill(name);
    await editor.getByRole('button',{name:'取消本次编辑',exact:true}).click();
-   const confirmation=page.getByRole('dialog').filter({hasText:'目录资料尚未保存'});
+   const confirmation=page.getByRole('alertdialog').filter({hasText:'目录资料尚未保存'});
    await confirmation.getByRole('button',{name:'取消',exact:true}).click();
    expect(await editor.getByRole('textbox',{name:'辅料品名',exact:true}).inputValue()).toBe(name);
    await editor.getByRole('button',{name:'保存共享目录',exact:true}).click();
