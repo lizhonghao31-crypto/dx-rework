@@ -3,6 +3,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import sharp from 'sharp';
+import type {BrowserContext} from 'playwright';
+import type {FakeObjectStorage} from '../../apps/api/src/tools/storage.js';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
@@ -44,6 +46,20 @@ import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObjectStorage){
+ await context.route('https://private.example.test/',async route=>{
+  const request=route.request();
+  if(request.method()!=='POST')return route.abort();
+  const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
+  const key=String(form.get('key')),file=form.get('file') as File,bytes=new Uint8Array(await file.arrayBuffer());
+  const sha256=createHash('sha256').update(bytes).digest('hex');
+  expect(storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);
+  expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+  await storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});
+  await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+ });
+ return {name:'TEST quality.png',mimeType:'image/png',buffer:await sharp({create:{width:25,height:25,channels:3,background:'blue'}}).png().toBuffer()};
+}
 (url?describe.sequential:describe.skip)('frozen double-special factory supervision through original App',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-factory-supervision-app-')),{fullApp:true,workbenchNumberedCreation:true,originalCraftRework:true});configureTimelineAdoption(h.f.db,'fixed_v2');});
@@ -186,21 +202,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await inspect.getByLabel('检查时间',{exact:true}).selectOption('now');
    await inspect.getByLabel('本批合格数量',{exact:true}).fill('250');
    await inspect.getByLabel('质量问题／处理说明',{exact:true}).fill('TEST original QC report for twenty affected garments');
-   await tab.context.route('https://private.example.test/',async route=>{
-    const request=route.request();
-    if(request.method()!=='POST')return route.abort();
-    // The synthetic object store alone is intercepted. Intent, finalization,
-    // ownership and report binding all use the original authenticated API.
-    const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
-    const key=String(form.get('key')),file=form.get('file') as File,bytes=new Uint8Array(await file.arrayBuffer());
-    const sha256=createHash('sha256').update(bytes).digest('hex');
-    expect(f.storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);
-    expect(sha256).toBe(form.get('x-oss-meta-sha256'));
-    await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});
-    await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
-   });
-   const photoBytes=await sharp({create:{width:25,height:25,channels:3,background:'blue'}}).png().toBuffer();
-   await inspect.getByLabel('质检报告图片（选填）',{exact:true}).setInputFiles({name:'TEST original QC.png',mimeType:'image/png',buffer:photoBytes});
+   await inspect.getByLabel('质检报告图片（选填）',{exact:true}).setInputFiles(await routeIsolatedQualityPhotos(tab.context,f.storage));
    await inspect.getByText(/文件已就绪，尚未登记检查/).waitFor();
    const reportRecorded=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/orders/${original.id}/closure/quality`));
    await inspect.getByRole('button',{name:'保存到仓质检',exact:true}).click();
@@ -279,8 +281,41 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    state=await flow.read(f.root,ready.id);await verify();const send=state.facts.filter(fact=>fact.kind==='工艺发出'&&fact.payload.stepRef===step.stepId).at(-1)!;
    await flow.logistics(f.root,ready.id,{expectedRevision:state.revision,stepRef:step.stepId,kind:'工艺回仓',occurredAt:businessNow().toISOString(),supplier:'TEST',note:'TEST',sendFactId:send.factId,lines:[{lineId,quantity:100}]},randomUUID());
    state=await flow.read(f.root,ready.id);prior=state.facts.filter(fact=>fact.kind==='工艺回仓'&&fact.payload.stepRef===step.stepId).at(-1)!.factId;
-   const attachmentId=await f.image(f.root);qcPhotos.push({stepRef:step.stepId,returnFactId:prior,attachmentId});
-   await flow.qc(f.root,ready.id,{expectedRevision:state.revision,stepRef:step.stepId,returnFactId:prior,note:'TEST real original QC',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[attachmentId]}]},randomUUID());
+   if(step.sequence===1){
+    const attachmentId=await f.image(f.root);qcPhotos.push({stepRef:step.stepId,returnFactId:prior,attachmentId});
+    await flow.qc(f.root,ready.id,{expectedRevision:state.revision,stepRef:step.stepId,returnFactId:prior,note:'TEST real original QC',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[attachmentId]}]},randomUUID());
+   }else{
+    const task=state.tasks.find(row=>row.taskKind==='bulk_qc'&&row.stepRef===step.stepId)!;
+    const qc=f.people.qc!;
+    const qualityTasks=new DigitalProductionTaskService(f.db);
+    await qualityTasks.reassign(f.root,task.taskId,qc.actorId,randomUUID());
+    const fullDetail=vi.spyOn(FactoryFlowService.prototype,'read');
+    try{
+     const options={kind:'craft' as const,status:'open' as const,page:1,search:''};
+     const normal=await qualityTasks.qualityDirectory(qc,'craft',options);
+     expect(normal.items).toEqual(expect.arrayContaining([expect.objectContaining({source:{kind:'craft',lineId,taskId:task.taskId,returnFactId:prior,stepRef:step.stepId}})]));
+     expect(await qualityTasks.qualityDirectory(qc,'craft',{...options,search:'no matching '+randomUUID()})).toEqual({page:1,total:0,items:[]});
+     expect(await qualityTasks.qualityDirectory(qc,'craft',{...options,page:100})).toEqual({page:100,total:normal.total,items:[]});
+     expect(fullDetail).not.toHaveBeenCalled();
+    }finally{fullDetail.mockRestore();}
+    const legacy=await h.open(qc.actorId,1165,{},`/ui/digital-production?workspace=quality&kind=craft`);
+    try{
+     await legacy.page.locator(`a[href*="qualityReturn=${prior}"]`).filter({hasText:'办理本批检查'}).click();
+     const panel=legacy.page.getByRole('region',{name:'本批原工艺检查',exact:true});
+     await panel.getByRole('group',{name:'本批检查与放行',exact:true}).waitFor();
+     expect(await panel.getByRole('textbox',{name:'本次实际检查片数',exact:true}).count()).toBe(0);
+     await panel.getByRole('combobox',{name:/^检查结论/}).selectOption('合格');
+     await panel.getByLabel('检查照片（可选）',{exact:true}).setInputFiles(await routeIsolatedQualityPhotos(legacy.context,f.storage));
+     await panel.getByRole('img',{name:'待提交的检查照片',exact:true}).waitFor();
+     const response=legacy.page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith(`/orders/${ready.id}/factory-flow/qc`));
+     await panel.getByRole('button',{name:'保存本批检查',exact:true}).click();
+     const saved=await response;expect(saved.status(),await saved.text()).toBe(200);
+     const body=saved.request().postDataJSON();
+     expect(body).toMatchObject({stepRef:step.stepId,returnFactId:prior,checks:[{lineId,result:'合格'}]});
+     expect(body.checks[0]).not.toHaveProperty('quantityScope');
+     qcPhotos.push({stepRef:step.stepId,returnFactId:prior,attachmentId:body.checks[0].attachmentIds[0]});
+    }finally{await legacy.close();}
+   }
    state=await flow.read(f.root,ready.id);await verify();
   }
   const {detail}=await verify(),tab=await h.open(f.root.actorId,1165,{},'/ui/digital-cockpit?selected='+ready.id);
@@ -406,42 +441,59 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await flow.read(f.root,ready.id)).inTransit).toBe(false);
   expect(await count()).toBe(before+3);
   const firstInspected=firstSecondReturn-oldOccupied;
-  const firstInspection=await flow.qc(f.root,ready.id,{expectedRevision:(await flow.read(f.root,ready.id)).revision,stepRef:second!.stepId,returnFactId:in3.factId,note:'TEST exact partial QC release',checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[],
-   quantityScope:{inspectedQuantity:firstInspected,qualifiedQuantity:firstInspected,problemQuantity:0,unit:'片'}}]},randomUUID());
-  const firstCheck=firstInspection.checks.find(check=>check.returnFactId===in3.factId)!;
-  occupiedOrigin=in3.factId;
-  const dispatch={expectedRevision:(await flow.read(f.root,ready.id)).revision,returnFactId:in3.factId,supplierId:f.supplierId,occurredAt:businessNow().toISOString(),note:'TEST final accepted physical dispatch'};
-  await expect(flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:firstSecondReturn-oldOccupied+1}]},randomUUID())).rejects.toMatchObject({statusCode:409});
-  expect(await count()).toBe(before+3);
-  const result=await flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:firstSecondReturn-oldOccupied}]},randomUUID());
-  expect(result.facts.filter(row=>row.kind==='仓库实际发厂')).toEqual([expect.objectContaining({payload:expect.objectContaining({returnFactId:in3.factId,lines:[{lineId,quantity:firstSecondReturn-oldOccupied}]})})]);
   const qc=f.people.qc!,qcTask=(await f.db.query(`SELECT p.task_id FROM digital_timeline_task_positions p
    JOIN digital_production_task_access a USING(task_id) WHERE p.route_ref=$1 AND p.step_id=$2 AND a.task_kind='bulk_qc'`,[ready.preparationId,second!.stepId])).rows[0];
   const taskService=new DigitalProductionTaskService(f.db);
   await taskService.reassign(f.root,qcTask.task_id,qc.actorId,randomUUID());
-  const qualityQuery={kind:'craft' as const,status:'open' as const,page:1,search:''};
-  const partialDirectory=await taskService.qualityDirectory(qc,'craft',qualityQuery),pendingRow=partialDirectory.items.find(item=>item.source.kind==='craft'&&item.source.returnFactId===in3.factId)!;
-  expect(pendingRow).toMatchObject({inspected:false,qualifiedQuantity:firstInspected,source:{returnFactId:in3.factId,taskId:qcTask.task_id}});
-  const partialState=await live.read(qc,ready.id),continued={expectedRevision:partialState.revision,stepRef:second!.stepId,returnFactId:in3.factId,note:'TEST inspect only remaining pieces',checks:[{lineId,result:'合格' as const,problem:'',treatment:'',attachmentIds:[],
-   quantityScope:{inspectedQuantity:oldOccupied+1,qualifiedQuantity:oldOccupied+1,problemQuantity:0,unit:'片' as const}}]};
-  expect(partialState.batches?.find(row=>row.factId===in3.factId)?.rows[0]).toMatchObject({sent:firstInspected,uninspectedQuantity:oldOccupied,releasedAvailable:0});
-  await expect(live.qc(qc,ready.id,continued,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('未检查')});
-  await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by,checked_at,quantity_scope)
-   VALUES($1,$2,$3,$4,'合格','','','{}',$5,now(),$6)`,[randomUUID(),ready.preparationId,in3.factId,lineId,qc.actorId,continued.checks[0]!.quantityScope])).rejects.toMatchObject({code:'23514',message:expect.stringContaining('uninspected')});
-  const continuation=await h.open(qc.actorId,1165,{},`/ui/digital-production?workspace=quality&kind=craft`);
+  const qualityStyle=(await f.db.query('SELECT design_style_no FROM digital_production_orders WHERE production_order_id=$1',[ready.id])).rows[0].design_style_no as string;
+  const qualityQuery={kind:'craft' as const,status:'open' as const,page:1,search:qualityStyle};
+  const continuation=await h.open(qc.actorId,1165,{},'/ui/digital-production?workspace=quality&kind=craft');
+  let dispatch:{expectedRevision:number;returnFactId:string;supplierId:string;occurredAt:string;note:string};
+  occupiedOrigin=in3.factId;
   try{
-   const open=continuation.page.locator(`a[href*="qualityReturn=${in3.factId}"]`).filter({hasText:'办理本批检查'});
-   await open.click();
+   await continuation.page.locator('a[href*="qualityReturn='+in3.factId+'"]').filter({hasText:'办理本批检查'}).click();
    const panel=continuation.page.getByRole('region',{name:'本批原工艺检查',exact:true});
-   await panel.getByText(`本批还有 ${oldOccupied} 片未检查`,{exact:true}).waitFor();
-   await panel.getByRole('textbox',{name:'本次实际检查片数',exact:true}).fill(String(oldOccupied));
-   await panel.getByRole('textbox',{name:'本次实际合格片数',exact:true}).fill(String(oldOccupied));
-   const response=continuation.page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith(`/orders/${ready.id}/factory-flow/qc`));
-   await panel.getByRole('button',{name:'保存本批检查',exact:true}).click();
-   const saved=await response;expect(saved.status(),await saved.text()).toBe(200);
+   const runCheck=async(quantity:number)=>{
+    await panel.getByRole('textbox',{name:'本次实际检查片数',exact:true}).fill(String(quantity));
+    await panel.getByRole('textbox',{name:'本次实际合格片数',exact:true}).fill(String(quantity));
+    const response=continuation.page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith('/orders/'+ready.id+'/factory-flow/qc'));
+    await panel.getByRole('button',{name:'保存本批检查',exact:true}).click();
+    const saved=await response;expect(saved.status(),await saved.text()).toBe(200);return saved;
+   };
+   const photo=await routeIsolatedQualityPhotos(continuation.context,f.storage);
+   await panel.getByLabel('上传质检报告图片',{exact:true}).setInputFiles(photo);
+   await panel.getByRole('img',{name:'待提交质检报告 1',exact:true}).waitFor();
+   const firstResponse=await runCheck(firstInspected),firstPayload=firstResponse.request().postDataJSON();
+   expect(firstPayload.checks[0].attachmentIds).toHaveLength(1);
+   const firstInspection=await firstResponse.json(),firstCheck=firstInspection.checks.find((check:{returnFactId:string})=>check.returnFactId===in3.factId)!;
+   const firstPhoto=firstPayload.checks[0].attachmentIds[0] as string;
+   await panel.getByRole('img',{name:'待提交质检报告 1',exact:true}).waitFor({state:'hidden'});
+   await panel.getByRole('link',{name:'查看原检查图片 1',exact:true}).waitFor();
+   dispatch={expectedRevision:firstInspection.revision,returnFactId:in3.factId,supplierId:f.supplierId,occurredAt:businessNow().toISOString(),note:'TEST final accepted physical dispatch'};
+   await expect(flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:firstInspected+1}]},randomUUID())).rejects.toMatchObject({statusCode:409});
+   expect(await count()).toBe(before+3);
+   const result=await flow.dispatch(warehouse,ready.id,{...dispatch,lines:[{lineId,quantity:firstInspected}]},randomUUID());
+   expect(result.facts.filter(row=>row.kind==='仓库实际发厂')).toEqual([expect.objectContaining({payload:expect.objectContaining({returnFactId:in3.factId,lines:[{lineId,quantity:firstInspected}]})})]);
+   const partialDirectory=await taskService.qualityDirectory(qc,'craft',qualityQuery),pendingRow=partialDirectory.items.find(item=>item.source.kind==='craft'&&item.source.returnFactId===in3.factId)!;
+   expect(pendingRow).toMatchObject({inspected:false,qualifiedQuantity:firstInspected,source:{returnFactId:in3.factId,taskId:qcTask.task_id}});
+   const partialState=await live.read(qc,ready.id),continued={expectedRevision:partialState.revision,stepRef:second!.stepId,returnFactId:in3.factId,note:'TEST inspect only remaining pieces',checks:[{lineId,result:'合格' as const,problem:'',treatment:'',attachmentIds:[],
+    quantityScope:{inspectedQuantity:oldOccupied+1,qualifiedQuantity:oldOccupied+1,problemQuantity:0,unit:'片' as const}}]};
+   expect(partialState.batches?.find(row=>row.factId===in3.factId)?.rows[0]).toMatchObject({sent:firstInspected,uninspectedQuantity:oldOccupied,releasedAvailable:0});
+   await expect(live.qc(qc,ready.id,continued,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('未检查')});
+   await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by,checked_at,quantity_scope)
+    VALUES($1,$2,$3,$4,'合格','','','{}',$5,now(),$6)`,[randomUUID(),ready.preparationId,in3.factId,lineId,qc.actorId,continued.checks[0]!.quantityScope])).rejects.toMatchObject({code:'23514',message:expect.stringContaining('uninspected')});
+   // The component survives this native read refresh. A remount would also
+   // erase the broken draft and would not prove scoped acknowledgement.
+   const refreshed=continuation.page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname.endsWith('/orders/'+ready.id+'/factory-flow'));
+   await continuation.page.getByRole('button',{name:'刷新原检查',exact:true}).click();
+   expect((await refreshed).status()).toBe(200);
+   await panel.getByText('本批还有 '+oldOccupied+' 片未检查',{exact:true}).waitFor();
+   const saved=await runCheck(oldOccupied);
+   expect(saved.request().postDataJSON().checks[0].attachmentIds).toEqual([]);
    const after=await saved.json();
    expect(after.checks.filter((entry:{returnFactId:string})=>entry.returnFactId===in3.factId)).toEqual([firstCheck,expect.objectContaining({
     quantityScope:{inspectedQuantity:oldOccupied,qualifiedQuantity:oldOccupied,problemQuantity:0,unit:'片'}})]);
+   expect((await f.db.query('SELECT entity_id FROM attachments WHERE attachment_id=$1',[firstPhoto])).rows[0]?.entity_id).toBe(firstCheck.checkId);
    expect(after.batches.find((batch:{factId:string})=>batch.factId===in3.factId).rows[0]).toMatchObject({
     sent:firstInspected,uninspectedQuantity:0,available:oldOccupied,releasedAvailable:oldOccupied});
    const responseKey=saved.request().headers()['idempotency-key']!;
@@ -453,7 +505,6 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(qualityWork).toMatchObject({page:1,items:[{source:{taskId:qcTask.task_id,returnFactId:in4.factId}}],total:1});
   expect(await taskService.qualityDirectory(qc,'craft',{...qualityQuery,page:2})).toEqual({page:2,items:[],total:1});
   await expect(taskService.qualityDirectory(warehouse,'craft',qualityQuery)).rejects.toMatchObject({statusCode:403});
-  const qualityStyle=(await f.db.query('SELECT design_style_no FROM digital_production_orders WHERE production_order_id=$1',[ready.id])).rows[0].design_style_no as string;
   const qualityTab=await h.open(qc.actorId,1165,{},`/ui/digital-production?workspace=quality&kind=craft&search=${encodeURIComponent(qualityStyle)}`);
   try{
    await qualityTab.page.getByRole('heading',{name:'质量中心',exact:true}).waitFor();

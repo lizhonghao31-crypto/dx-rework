@@ -10,6 +10,7 @@ import {digitalDetailReturnUrl} from './digital-detail-route.js';
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
+import {FactoryBatchPanel} from './factory-batch-panel.js';
 import type {qualityRecordTarget} from './quality-workbench-route.js';
 
 type Target=Extract<ReturnType<typeof qualityRecordTarget>,{kind:'craft'}>;
@@ -23,6 +24,10 @@ export function CraftOriginalQuality({sheet,target,busy,paused,save,upload,image
  const batch=sheet.batches?.find(row=>row.factId===target.returnFactId&&(row.stepRef??null)===target.stepRef);
  const line=sheet.lines.find(row=>row.lineId===target.lineId),actual=batch?.rows.find(row=>row.lineId===target.lineId);
  const original=sheet.facts.find(row=>row.kind==='工艺回仓'&&row.factId===target.returnFactId);
+ const outgoing=sheet.facts.find(row=>row.kind==='工艺发出'&&row.factId===original?.payload.sendFactId);
+ const factory=(original?.payload.warehouseMotion as {factoryId?:string}|undefined)?.factoryId;
+ const canCount=Boolean(target.stepRef&&original?.payload.stepRef===target.stepRef&&outgoing?.payload.stepRef===target.stepRef&&factory&&
+  (outgoing?.payload.warehouseMotion as {factoryId?:string}|undefined)?.factoryId===factory);
  const history=sheet.checks.filter(row=>row.returnFactId===target.returnFactId&&row.lineId===target.lineId);
  const replaced=new Set(history.flatMap(row=>row.supersedesCheckId?[row.supersedesCheckId]:[]));
  const problems=history.filter(row=>row.quantityScope?.problemQuantity&&!replaced.has(row.checkId));
@@ -87,7 +92,7 @@ export function CraftOriginalQuality({sheet,target,busy,paused,save,upload,image
   {problems.length>1&&<Selector label="原问题检查范围" value={latest?.checkId??''} isDisabled={posting||unknown}
    options={problems.map(row=>({value:row.checkId,label:`第 ${history.indexOf(row)+1} 次检查 · ${row.quantityScope!.problemQuantity} 片问题`}))}
    onChange={value=>{setSelectedCheckId(value);setAmount('');setLocalError('');}}/>}
-  {canWrite&&remaining>0&&target.stepRef&&<form onSubmit={event=>{
+  {canWrite&&canCount&&remaining>0&&target.stepRef&&<form onSubmit={event=>{
    event.preventDefault();if(failed.length)return;setLocalError('');const total=Number(inspected),passed=Number(qualified);
    if(!inspected||!qualified||!Number.isInteger(total)||!Number.isInteger(passed)||total<=0||total>remaining||passed<0||passed>total||total>passed&&!problem.trim()){
     setLocalError('请填写实际检查片数、合格片数及问题说明，不能超过本批未检查的实际片数。');return;
@@ -105,7 +110,8 @@ export function CraftOriginalQuality({sheet,target,busy,paused,save,upload,image
     <Button type="button" label="移除失败图片" variant="secondary" onClick={()=>clearFailed(photoKey)}/></div>}
    <Button type="submit" label="保存本批检查" isDisabled={failed.length>0}/>
   </fieldset></form>}
-  {!target.stepRef&&<a href={urls.pageUrl('ui/digital-production')+'?'+new URLSearchParams({factory:sheet.orderId,factoryAction:'qc',line:line.lineId,...(back?{returnTo:back}:{})})}>打开原工艺检查</a>}
+  {canWrite&&!canCount&&<FactoryBatchPanel sheet={sheet} busy={busy} paused={paused} action="qc" save={save} upload={upload} images={images} previews={previews}
+   qcSource={{stepRef:target.stepRef,returnFactId:target.returnFactId,lineId:target.lineId}}/>}
   {eligible&&!reworkId&&<form onSubmit={event=>{event.preventDefault();void create();}}><fieldset disabled={posting}>
    <legend>按本次已核实问题发起原返工</legend><p>原问题范围 {max} 片，开草稿不占用或放行实物。</p>
    <Selector label="返工办理方" value={mode} isDisabled={unknown} options={[{value:'factory',label:'原工艺厂返修'},{value:'internal',label:'本厂尾部返工'}]} onChange={value=>{if(value==='factory'||value==='internal')setMode(value);}}/>
