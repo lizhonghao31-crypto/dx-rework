@@ -1,10 +1,11 @@
 import {afterAll,beforeAll,describe,expect,it,vi} from "vitest";
-import {randomUUID} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import {createServer,type Server} from "node:http";
 import {mkdtemp,mkdir,readFile,writeFile,rm} from "node:fs/promises";
 import {join,resolve,extname} from "node:path";
 import {tmpdir} from "node:os";
 import {build} from "vite";
+import sharp from "sharp";
 import type {Browser,Page,chromium as Chromium} from "playwright-core";
 import {loadConfig} from "@dx-rework/config";
 import {buildApp} from "../../apps/api/src/app.js";
@@ -23,11 +24,12 @@ import {ProcessWorkerPlanService} from "../../apps/api/src/rework/process-worker
 import {TodoService} from "../../apps/api/src/todos/service.js";
 import {TodoProjectionService} from "../../apps/api/src/todos/projection-service.js";
 import {businessAnchorFixture} from "../helpers/business-anchor-fixture.js";
+import {decideSeenSourcingOwner} from "../helpers/sourcing-owner-approval-fixture.js";
 import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("architecture C sourcing through production App and native signed TEST identity",()=>{
- let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string,token:string,ieToken:string,ownerToken:string,approvalService:SourcingService;
+ let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string,token:string,ieToken:string,ownerToken:string,merchToken:string,approvalService:SourcingService;
  const ids:string[]=[],styles:string[]=[],evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"sourcing-detail");
  const open=async(index:number,width=1165)=>{
   const context=await browser.newContext({viewport:{width,height:1003}});await context.addCookies([{name:"dx_rework_session",value:token,url:base}]);
@@ -54,7 +56,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   approvalService=new SourcingService(f.db,undefined,undefined,new TodoProjectionService(todos),f.contracts,undefined,root);
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},
    sourcing:{authenticate,root,service:f.sourcing,contracts:f.contracts,production:new SourcingProductionService(f.db),contractReturns:new SourcingContractReturnService(f.db)},
-   todos:{authenticate,root,service:todos},
+   todos:{authenticate,root,service:todos,merchandiserWorkbench:true},
    reporting:{authenticate,root,service:reporting,exportService:new ReportExportService(reporting,f.db,"TEST-ie-center")},
    processConfiguration:{authenticate,root,service:new ProcessConfigurationService(f.db),workerPlan:new ProcessWorkerPlanService(f.db)},
    tools:{authenticate,isRootUser:id=>root.isRootUser(id),attachments:f.attachments,exports:new ExportJobService(f.db),
@@ -71,6 +73,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const ownerIdentity=(await f.db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[f.people.owner!.actorId])).rows[0]?.provider_user_id;
   expect(ownerIdentity).toMatch(/^uat-/);
   ownerToken=(await auth.loginMobile(mintAcceptanceLoginCode(ownerIdentity.slice(4),secret))).token;
+  const merchIdentity=(await f.db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[f.people.merchandiser!.actorId])).rows[0]?.provider_user_id;
+  expect(merchIdentity).toMatch(/^uat-/);
+  merchToken=(await auth.loginMobile(mintAcceptanceLoginCode(merchIdentity.slice(4),secret))).token;
   for(let index=0;index<3;index++){
    const style="TEST-ARCH-C-"+index+"-"+randomUUID();styles.push(style);
    const created=await f.sourcing.createCase(f.people.merchandiser!,{gender:"男装",styleName:"TEST详情隔离",deliveryDate:"2026-12-20",estimatedCutPieceSendDate:"2026-11-10",daxingUnitPrice:"5",attachmentIds:[await f.image(f.people.merchandiser!)],lineItems:[{styleNo:style,color:"黑",quantity:10}]},randomUUID());
@@ -102,6 +107,68 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {chromium}:{chromium:typeof Chromium}=await import(process.env.PLAYWRIGHT_IMPORT??"playwright-core");browser=await chromium.launch({headless:true,...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{}),args:["--no-sandbox"]});await mkdir(evidence,{recursive:true});
  });
  afterAll(async()=>{await browser?.close();if(server){server.closeAllConnections();await new Promise<void>(done=>server.close(()=>done()));}await app?.close();await f?.dispose();if(output)await rm(output,{recursive:true,force:true});});
+ it("uses the original versioned contract receipt from the signed merchandiser workbench and retries the same write",async()=>{
+  const previous=process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+  process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT='2020-01-01T00:00:00Z';
+  const merch=f.people.merchandiser!,manager=f.people['production-management']!,owner=f.people.owner!,style=`TEST-X6-${randomUUID()}`;
+  const context=await browser.newContext({viewport:{width:1165,height:747}});
+  await context.addCookies([{name:'dx_rework_session',value:merchToken,url:base}]);
+  try{
+   const craft=(await f.access.ensureCrafts(manager,{craftNames:['TEST X6 industrial sewing']}))[0]!,prices=[{position:1,unitPrice:'5'}];
+   const order=await approvalService.createCase(merch,{gender:'男装',styleName:'TEST X6 original contract',deliveryDate:'2026-12-20',
+    estimatedCutPieceSendDate:'2026-11-10',daxingUnitPrice:'5',lineItems:[{styleNo:style,color:'黑',quantity:10}]},randomUUID());
+   const id=order.value.sourcingCaseId;
+   await approvalService.quoteIePrice(f.people.ie!,id,{linePrices:prices},randomUUID());
+   await approvalService.recordManagementDecision(manager,id,{linePrices:prices,craftIds:[craft.craftId],supplierId:f.supplierId,cuttingProcess:'in_house'},randomUUID());
+   await decideSeenSourcingOwner(approvalService,owner,id,{decision:'approved'},randomUUID());
+   const path=`/api/sourcing/cases/${id}/contract-return`;
+   const page=await context.newPage();page.setDefaultTimeout(12000);
+   const state=await context.request.get(base+path);expect(state.status(),await state.text()).toBe(200);
+   const before=await state.json();expect(before).toMatchObject({canUpload:true,currentContractReturned:false,currentContractDocumentId:expect.any(String)});
+   const documentId=before.currentContractDocumentId;
+   let transfers=0;
+   await page.route('https://private.example.test/',async route=>{
+    const body=route.request().postDataBuffer()!,type=route.request().headers()['content-type']!;
+    const form=await new Response(new Uint8Array(body),{headers:{'content-type':type}}).formData(),file=form.get('file'),key=form.get('key');
+    if(!(file instanceof Blob)||typeof key!=='string')throw Error('Expected the real signed attachment form');
+    const bytes=new Uint8Array(await file.arrayBuffer()),sha256=createHash('sha256').update(bytes).digest('hex');
+    expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+    await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});transfers++;
+    await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+   });
+   const attempts:Array<{body:unknown;key:string|undefined}>=[];
+   await page.route('**'+path,async route=>{
+    if(route.request().method()!=='POST')return route.continue();
+    attempts.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']});
+    if(attempts.length!==1)return route.continue();
+    const accepted=await route.fetch();expect(accepted.status(),await accepted.text()).toBe(200);await route.abort('failed');
+   });
+   const home=`${base}/ui/digital-production?workspace=merchandiser&kind=sourcing&search=${encodeURIComponent(style)}`;
+   await page.goto(home);const list=page.getByRole('region',{name:'待我办理',exact:true});
+   await list.getByRole('button',{name:'办理本单回签',exact:true}).click();
+   const panel=page.getByRole('region',{name:'本单合同回传',exact:true});
+   await panel.getByRole('link',{name:'下载本版合同',exact:true}).waitFor();
+   expect(new URL(page.url()).searchParams.get('search')).toBe(style);
+   const image=await sharp({create:{width:2,height:2,channels:3,background:'#164e63'}}).png().toBuffer();
+   await panel.locator('input[type=file]').setInputFiles({name:'TEST original X6 signing.png',mimeType:'image/png',buffer:image});
+   await panel.getByRole('alert').waitFor();
+   expect(attempts,`transfers=${transfers}; ${await panel.getByRole('alert').innerText()}`).toHaveLength(1);
+   await panel.getByRole('button',{name:'核对同一次回签',exact:true}).click();
+   await panel.getByRole('status').filter({hasText:'本版回签已保存。'}).waitFor();
+   expect(attempts).toHaveLength(2);expect(attempts[0]).toEqual(attempts[1]);expect(transfers).toBe(1);
+   expect(attempts[0]?.body).toMatchObject({expectedContractDocumentId:documentId,attachmentIds:[expect.any(String)]});
+   const stored=await (await context.request.get(base+path)).json();
+   expect(stored).toMatchObject({currentContractDocumentId:documentId,currentContractReturned:true,uploadedFileCount:1,
+    versions:[{revision:1,signedContractDocumentId:documentId,attachments:[{filename:'TEST original X6 signing.png'}]}]});
+   await panel.getByRole('button',{name:'返回跟单列表',exact:true}).click();
+   await list.getByText('没有符合当前授权及筛选的原跟单事项。',{exact:true}).waitFor();
+   await expect.poll(()=>page.evaluate(()=>document.activeElement?.textContent)).toBe('待我办理');
+   expect(new URL(page.url()).searchParams.get('search')).toBe(style);
+   await page.goto(base+`/ui/sourcing/orders/${id}?section=contract-return`);
+   await page.getByRole('link',{name:'查看 V1 回签合同',exact:true}).waitFor();
+   expect((await (await context.request.get(base+path)).json()).contractReturnedAt).toBe(stored.contractReturnedAt);
+  }finally{await context.close();if(previous===undefined)delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;}
+ });
  it("shows authorized sourcing facts while records are pending or failed, then recovers without writes",async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});
   await context.addCookies([{name:"dx_rework_session",value:token,url:base}]);

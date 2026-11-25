@@ -365,7 +365,7 @@ export class TodoService {
 
   /** Request-local directory of current original actions. Order details are
    * supplemental and may never widen a task or contract recipient's scope. */
-  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind'];search:string;page:number}){
+  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind']|undefined;search:string;page:number}){
     const actions=await this.merchandiserActionSources(actor),db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -387,7 +387,7 @@ export class TodoService {
           customer:order?.customer_code??null,poNumbers:order?.po_numbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key))};
       });
       await db.query('COMMIT');
-      return merchandiserWorkPage(rows,{...filter,state:'mine'});
+      return merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state:'mine'});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 

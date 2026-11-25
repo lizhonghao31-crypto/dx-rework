@@ -22,7 +22,7 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('preorder material investment on the original signed App',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
- beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-preorder-investment-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true});await prepareRewashSettings(h.f);});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-preorder-investment-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true,merchandiserWorkbench:true});await prepareRewashSettings(h.f);});
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
  it('lets the actual merchandiser enter from My Tasks, save real procurement and keep the draft unpublished and untimed',async()=>{
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,style='TEST-PREORDER-'+randomUUID();
@@ -123,6 +123,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByText('已保存原业务记录',{exact:true}).waitFor();
    expect(await orderTimeCreated(h.db,{kind:'source',id:diagnosis.sourceId})).toBeNull();
   }finally{await creation.context.close();}
+  const newPath=`/ui/digital-production?workspace=merchandiser&kind=preparation&search=${encodeURIComponent(style)}`;
+  const work=await h.open(merch.actorId,1165,{},newPath);
+  try{
+   const queue=work.page.getByRole('region',{name:'待我办理',exact:true}),row=queue.getByRole('row').filter({hasText:style});
+   const original=row.getByRole('link',{name:'打开原办理',exact:true});
+   expect(new URL((await original.getAttribute('href'))!,work.page.url()).searchParams.get('materialSource')).toBe(diagnosis.sourceId);
+   await original.click();
+   await work.page.getByRole('group',{name:'投面辅料',exact:true}).waitFor();
+   await work.page.getByRole('button',{name:'返回来源',exact:true}).click();await original.waitFor();
+   expect(new URL(work.page.url()).searchParams.get('search')).toBe(style);
+  }finally{await work.close();}
   const tab=await h.open(merch.actorId,1165,{},'/ui/my-tasks?q='+encodeURIComponent(style));
   try{
    const page=tab.page,task=page.locator('a.my-todo-row').filter({hasText:'投面辅料'});
@@ -151,6 +162,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect.poll(()=>page.locator('a.my-todo-row').filter({hasText:'投面辅料'}).count()).toBe(0);
    expect(await orderTimeCreated(h.db,{kind:'source',id:diagnosis.sourceId})).toBeNull();
    expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[diagnosis.sourceId])).rowCount).toBe(0);
+   await page.goto(h.base+newPath);
+   await page.getByText('没有符合当前授权及筛选的原跟单事项。',{exact:true}).waitFor();
   }finally{await tab.context.close();}
  });
  it('converts the original preorder in the wizard and keeps its handover, procurement, attachments and time',async()=>{
