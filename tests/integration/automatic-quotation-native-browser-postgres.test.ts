@@ -722,12 +722,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      body:{...published.body,consumptionRows:[{materialId,unit:'米',consumption:'1.5'}]}},randomUUID());
     await d.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
     await expect.poll(()=>d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).isEnabled()).toBe(true);
-    await expect.poll(()=>d.page.locator('#quote-cost-reference').innerText()).toContain('成本合计 40.00 元/件');
+    await expect.poll(()=>d.page.locator('#quote-cost-reference').innerText()).toContain('成本合计 40 元/件');
     const rate=d.page.getByLabel('报价倍率（%）',{exact:true}),price=d.page.getByLabel('客户单件报价（元/件）',{exact:true});
     await rate.fill('130');
-    expect(await price.inputValue()).toBe('52.00');
+    expect(await price.inputValue()).toBe('52');
     await price.fill('49.123456');
+    expect(await rate.inputValue()).toBe('122.8');
+    expect(await price.inputValue()).toBe('49.123456');
+    await rate.focus();
     expect(await rate.inputValue()).toBe('122.8086');
+    expect(await price.inputValue()).toBe('49.1');
+    await price.focus();
     expect(await price.inputValue()).toBe('49.123456');
     expect(await d.page.getByLabel('客户确认金额',{exact:true}).inputValue()).toBe('');
     expect((await i.page.request.get(previewRead)).status()).toBe(404);
@@ -735,8 +740,25 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(served.status()).toBe(200);
     expect(served.headers()['cache-control']).toBe('no-store');
     expect((await quotes.read(designer,resource)).confirmedVersion).toBeNull();
-    expect(await served.json()).toMatchObject({unitCost:'40',saved:null,confirmation:'joint_release_ready'});
+    const preview=await served.json();
+    expect(preview).toMatchObject({unitCost:'40',saved:null,confirmation:'joint_release_ready'});
     const panel=d.page.locator('#quote-cost-reference');
+    const [savePrice]=await Promise.all([d.page.waitForResponse(response=>response.url()===previewRead&&response.request().method()==='PUT'),
+     panel.getByRole('button',{name:'保存报价测算',exact:true}).click()]);
+    expect(savePrice.status()).toBe(200);
+    const pricingKey=savePrice.request().headers()['idempotency-key']!;
+    const pricing={expectedVersion:preview.version,input:{field:'customerUnitPrice' as const,value:'49.123456'}};
+    expect(pricingKey).toBeTruthy();
+    expect(savePrice.request().postDataJSON()).toEqual(pricing);
+    expect(await savePrice.json()).toMatchObject({resource,quoteId:preview.quoteId,version:preview.version,commandReceipt:{action:'workbench-pricing-draft',appliedVersion:preview.version}});
+    await panel.getByText('已保存报价测算，尚未记录客户确认。',{exact:true}).waitFor();
+    await quotes.saveWorkbenchPricingDraft(designer,resource,pricing,pricingKey);
+    await d.page.reload();
+    await panel.getByText('测算不等于客户确认',{exact:false}).waitFor();
+    await price.focus();
+    expect(await price.inputValue()).toBe('49.123456');
+    expect(await d.page.getByLabel('客户确认金额',{exact:true}).inputValue()).toBe('');
+    expect((await quotes.read(designer,resource)).confirmedVersion).toBeNull();
     for(const width of [1165,390]){
      await d.page.setViewportSize({width,height:960});
      expect(await panel.evaluate(node=>{
