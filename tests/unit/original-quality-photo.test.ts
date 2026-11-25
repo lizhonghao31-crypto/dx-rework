@@ -65,7 +65,8 @@ describe('exact original quality evidence photos',()=>{
     const legacy={...craft,stepRef:null}, {db}=fixture(legacy),read=actor('production_management');
     await expect(canReadExactOriginalQualityPhoto(db,read,legacy)).resolves.toBe(true);
     await expect(canReadExactOriginalQualityPhoto(db,read,{...legacy,stepRef:id(6)})).resolves.toBe(false);
-    const {stepRef:_omitted,...incomplete}=legacy;
+    const {stepRef:removedStep,...incomplete}=legacy;
+    expect(removedStep).toBeNull();
     await expect(canReadExactOriginalQualityPhoto(db,read,incomplete as typeof legacy)).resolves.toBe(false);
   });
 
@@ -77,7 +78,8 @@ describe('exact original quality evidence photos',()=>{
       {...archived,revision:3},{...archived,scopeRevision:'b'.repeat(64)}]) {
       await expect(canReadExactOriginalQualityPhoto(db,read,wrong)).resolves.toBe(false);
     }
-    const {factoryDecisionId:_omitted,...incomplete}=archived;
+    const {factoryDecisionId:removedDecision,...incomplete}=archived;
+    expect(removedDecision).toBeNull();
     await expect(canReadExactOriginalQualityPhoto(db,read,incomplete as typeof archived)).resolves.toBe(false);
   });
 
