@@ -2,20 +2,20 @@
   "version": 1,
   "base": "65717a188b3ab4dec6a8f02802d8a813f9e9117c",
   "risk": "full",
-  "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
+  "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
   "checks": [
     {
       "id": "native",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-final-native.json tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/receiving-board-native-browser-postgres.test.ts tests/unit/pending-receiving-scope.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-board-scope-native.json tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/receiving-board-native-browser-postgres.test.ts tests/unit/pending-receiving-scope.test.ts",
       "context": "Exact X4 source. Isolated native PostgreSQL with the CI dual routing and two workers, signed real Chromium using the production build. The test object uploader is isolated; receipt and factory operations use their original services.",
-      "startedAt": "2026-11-25T14:56:42.032Z",
-      "endedAt": "2026-11-25T14:57:32.240Z",
+      "startedAt": "2026-11-25T15:17:18.506Z",
+      "endedAt": "2026-11-25T15:18:09.740Z",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
-      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
-      "log": "/workspace/dx-v115-x4-evidence/x4-final-native.log",
-      "logSha256": "b3862939c2f57a7bd9ff956e5f6f29569fb12e05951298879f640d3e9ba8245a",
+      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
+      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
+      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-native.log",
+      "logSha256": "a52f15d6f8051daf3df52961d23360e35c2e1992c219c7b2892b137c9d4aaa51",
       "kind": "tests",
       "passed": 33,
       "failed": 0,
@@ -23,30 +23,30 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c1691d7fdb76914605538beb1221b7dbc0cc0caf538a856a06e6c16e41034bf0"
+          "sha256": "2bb77d1c6fdde7cdb7856043465ec87944d6ff9c6afc03cab1788d601c8f5747"
         }
       ]
     },
     {
       "id": "receiving-nondb",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-final-nondb.json tests/unit/pending-receiving-scope.test.ts tests/unit/receiving-*.test.ts tests/unit/order-board-*.test.ts tests/unit/factory-production-facts.test.ts",
-      "context": "Exact X4 source without any DB URL; tests cover the original receiving and order-board layout, authorization contracts and quantity/receipt UI.",
-      "startedAt": "2026-11-25T14:56:39.552Z",
-      "endedAt": "2026-11-25T14:56:41.840Z",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x4-evidence/x4-board-scope-nondb.json tests/unit/pending-receiving-scope.test.ts tests/unit/receiving-*.test.ts tests/unit/order-board-*.test.ts tests/unit/factory-production-facts.test.ts tests/unit/rework-v2-pr08-information-display.test.ts",
+      "context": "Exact X4 source without any DB URL; tests cover the original receiving and order-board layout, authorization contracts and quantity/receipt UI, including the original range KPIs and search view.",
+      "startedAt": "2026-11-25T15:17:16.067Z",
+      "endedAt": "2026-11-25T15:17:18.277Z",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
-      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
-      "log": "/workspace/dx-v115-x4-evidence/x4-final-nondb.log",
-      "logSha256": "e180d6600ecdc68b2d16e76ae27a54e3cd4fb294a9c6e744f4f03f4d1cf29730",
+      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
+      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
+      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-nondb.log",
+      "logSha256": "597d215c90669291e1cf5137099d673257c71396409c846df980a537f4da72ea",
       "kind": "tests",
-      "passed": 78,
+      "passed": 80,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cafb8d12c9adbc48637a81ac21ce2fea92fa1ba70820c30673350149ad8a9eb3"
+          "sha256": "dc6efb133cbd50565f4a91a137780628aacc80f4ece92d4faaf5c1e7672baec5"
         }
       ]
     },
@@ -54,13 +54,13 @@
       "id": "packages",
       "command": "npm run build:packages",
       "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T14:55:40.258Z",
-      "endedAt": "2026-11-25T14:55:48.305Z",
+      "startedAt": "2026-11-25T15:16:16.411Z",
+      "endedAt": "2026-11-25T15:16:24.376Z",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
-      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
-      "log": "/workspace/dx-v115-x4-evidence/x4-final-packages.log",
+      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
+      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
+      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-packages.log",
       "logSha256": "a8c320e2397cda70c4b959cad7754744d59731af921c5dc23ef05b7368ae82c1",
       "kind": "command"
     },
@@ -68,13 +68,13 @@
       "id": "typecheck",
       "command": "npm run typecheck",
       "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T14:55:48.309Z",
-      "endedAt": "2026-11-25T14:56:31.216Z",
+      "startedAt": "2026-11-25T15:16:24.380Z",
+      "endedAt": "2026-11-25T15:17:07.877Z",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
-      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
-      "log": "/workspace/dx-v115-x4-evidence/x4-final-typecheck.log",
+      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
+      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
+      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-typecheck.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
       "kind": "command"
     },
@@ -82,13 +82,13 @@
       "id": "lint",
       "command": "bash -o pipefail -c git\\ diff\\ --name-only\\ -z\\ \\\"\\$1\\\"\\ --\\ \\\"\\*.ts\\\"\\ \\\"\\*.tsx\\\"\\ \\|\\ xargs\\ -0\\ node\\ node_modules/eslint/bin/eslint.js\\ --max-warnings=0 _ 65717a188b3ab4dec6a8f02802d8a813f9e9117c",
       "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T14:56:31.220Z",
-      "endedAt": "2026-11-25T14:56:32.834Z",
+      "startedAt": "2026-11-25T15:17:07.881Z",
+      "endedAt": "2026-11-25T15:17:09.390Z",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
-      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
-      "log": "/workspace/dx-v115-x4-evidence/x4-final-lint.log",
+      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
+      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
+      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "kind": "command"
     },
@@ -96,14 +96,14 @@
       "id": "preflight",
       "command": "npm run test:preflight",
       "context": "Exact X4 scope on clean source after rebuilding workspace packages from the same candidate.",
-      "startedAt": "2026-11-25T14:56:32.838Z",
-      "endedAt": "2026-11-25T14:56:39.317Z",
+      "startedAt": "2026-11-25T15:17:09.395Z",
+      "endedAt": "2026-11-25T15:17:15.868Z",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "43bb1a1102d6e747d272ab6604ef41c581790b13",
-      "sourceFingerprint": "61b576ecc3702eb41f91420e90851431a71fccfe5edafd59417ea746cdc366b2",
-      "log": "/workspace/dx-v115-x4-evidence/x4-final-preflight.log",
-      "logSha256": "0d702e81c560984fdfaa4be2f545884c6ec713e01515d4e614e0252078a3cf94",
+      "testedHead": "b26eb4d9e93fa948f58e005a47f2f10f2ca6c537",
+      "sourceFingerprint": "09b61ada1312adda0e452184bdb8fc519168745444e4a8f40297c35be72adc5d",
+      "log": "/workspace/dx-v115-x4-evidence/x4-board-scope-preflight.log",
+      "logSha256": "372b6567298453dc0cc6834ef23ca511ade82d048606787ffd37c46cff3fafd2",
       "kind": "command"
     }
   ],
@@ -168,6 +168,7 @@
         "apps/web/src/pending-receiving-board.tsx",
         "apps/web/src/pending-receiving-entry.ts",
         "apps/web/src/receiving-page.tsx",
+        "tests/unit/rework-v2-pr08-information-display.test.ts",
         "tests/integration/receiving-board-native-browser-postgres.test.ts"
       ],
       "reads": [
@@ -176,7 +177,8 @@
         "apps/api/src/receiving/receiving-routes.ts"
       ],
       "oldTests": [
-        "tests/integration/receiving-board-native-browser-postgres.test.ts"
+        "tests/integration/receiving-board-native-browser-postgres.test.ts",
+        "tests/unit/rework-v2-pr08-information-display.test.ts"
       ],
       "initialization": "由原仓管菜单打开同一个收货域，旧入口、返工和本厂做尾继续可用。",
       "dateAndPermission": "选择、提交与回到原行不改变能力、角色或业务日期；真实状态不凭计划。",
