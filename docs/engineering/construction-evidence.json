@@ -2,58 +2,58 @@
   "version": 1,
   "base": "686b2607eed56e6900ee5c8ca122384e8b838291",
   "risk": "full",
-  "sourceFingerprint": "2b6d82ddee9767a1092d072c071ae372e64b87e673420077df8da309e36c9802",
+  "sourceFingerprint": "680249600a712c6a01daa53e59a260d9129380c5fe81f928555ee42eb0cc83d5",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-current-fixed-scope-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-final-inventory-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7284dd6e8e03ebd5339e373866bba3ec3828ee85",
-      "sourceFingerprint": "2b6d82ddee9767a1092d072c071ae372e64b87e673420077df8da309e36c9802",
+      "testedHead": "3a4e042130fde219c5181b94ee7be889e4fec130",
+      "sourceFingerprint": "680249600a712c6a01daa53e59a260d9129380c5fe81f928555ee42eb0cc83d5",
       "context": "Original authenticated Chromium UI with TEST actors and isolated PostgreSQL using CI dual database routing and two explicit workers and original object intent, finalization and report commands. Only synthetic storage responses use a fixture.",
-      "startedAt": "2026-11-25T17:34:33.881Z",
-      "endedAt": "2026-11-25T17:36:09.739Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-current-fixed-scope-native.log",
-      "logSha256": "bf85adc8a440b28f37cc88d9c85c2c65a931f2e83fa63e488e70d2b3fcdd3cd6",
+      "startedAt": "2026-11-25T17:52:18.818Z",
+      "endedAt": "2026-11-25T17:53:42.274Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-final-inventory-native.log",
+      "logSha256": "54e997346c7578ab60ef2b0bf0f98fcc3ceae01b8b6fc064a77bbe789c7a6bfb",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b5cef6f5014ff6e08787bec44de948a023d517d4f3ed6623103b6e0759e7efaf"
+          "sha256": "c8f8ef42b2ff465de2d5aaa1a7369c77e56495ea170d8dc505ef865e11807cdc"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-current-scope-consumers.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/factory-production-facts.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/rework-v2*test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x5-progress/x5-final-inventory-consumers.json tests/unit/factory-step-ledger.test.ts tests/unit/original-quality-photo.test.ts tests/unit/quality-craft-problem-scope.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/factory-production-facts.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/fixed-factory-dispatch-windows.test.ts tests/unit/rework-v2*test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 93,
+      "passed": 96,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "7284dd6e8e03ebd5339e373866bba3ec3828ee85",
-      "sourceFingerprint": "2b6d82ddee9767a1092d072c071ae372e64b87e673420077df8da309e36c9802",
+      "testedHead": "3a4e042130fde219c5181b94ee7be889e4fec130",
+      "sourceFingerprint": "680249600a712c6a01daa53e59a260d9129380c5fe81f928555ee42eb0cc83d5",
       "context": "Current candidate targeted non-database contract and original consumer checks, fixed two-worker configuration.",
-      "startedAt": "2026-11-25T17:34:15.799Z",
-      "endedAt": "2026-11-25T17:34:17.411Z",
-      "log": "/workspace/dx-v115-x5-progress/x5-current-scope-consumers.log",
-      "logSha256": "56718cd9db40aeccad3564a26b6051543109a24696beefb49911d9977b0b7465",
+      "startedAt": "2026-11-25T17:50:26.616Z",
+      "endedAt": "2026-11-25T17:50:28.370Z",
+      "log": "/workspace/dx-v115-x5-progress/x5-final-inventory-consumers.log",
+      "logSha256": "9368b574e24b235ca79c4722e362ff7b98a72f697e9d62bb296a593fe8c5c77a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9ccdd585a60452f3add662e0ed52c1d144fddc7842382000519c54c47f7d2a2d"
+          "sha256": "d705a6044b992bcb7d4acf91584004bca52e08c5d5e5639678e0912b01ea1a86"
         }
       ]
     }
   ],
   "rules": [
     {
-      "rule": "六份增量迁移只增加X5真实问题来源、原报告、数量和返工规则，不改历史数据或部署流程。",
+      "rule": "七份增量迁移只增加X5真实问题来源、原报告、数量和返工规则，不改历史数据或部署流程。",
       "source": "v11.5 §11.2–11.6、N26/N27/G4",
       "writes": [
         "apps/api/migrations/0307_craft_quality_quantity_scope.sql",
@@ -62,6 +62,7 @@
         "apps/api/migrations/0310_original_external_craft_final_quantity.sql",
         "apps/api/migrations/0311_internal_craft_quality_reinspection.sql",
         "apps/api/migrations/0312_original_garment_quality_rework.sql",
+        "apps/api/migrations/0313_external_craft_repair_continuation.sql",
         "apps/api/src/platform/migration-manifest.json",
         "scripts/deploy/acceptance-migration-requirements.json"
       ],
@@ -193,7 +194,7 @@
       ],
       "initialization": "真实回仓范围和检查问题量固定原来源；复用返工单、责任和下游账本。",
       "dateAndPermission": "现有权限下才能进入N01至N09，原整查、IE与工资仅按真实原数据产生。",
-      "expectation": "300片中20片问题，实物回仓前不记完成，外部无虚假工资，原内部真报工及复检仍适用。",
+      "expectation": "300片中20片问题，外厂按10片+10片分两笔续办，原实物回仓前不能续办或记完成，外部无虚假工资，原内部真报工及复检仍适用。",
       "checks": [
         "native",
         "unit"
@@ -208,6 +209,7 @@
         "apps/api/src/production-platform/factory-flow-service.ts",
         "apps/api/src/production-platform/factory-step-ledger.ts",
         "apps/api/src/production-platform/fixed-factory-dispatch.ts",
+        "apps/api/src/production-platform/fixed-factory-timing.ts",
         "apps/api/src/production-platform/quality-warehouse-craft-occupation.ts",
         "apps/api/src/production-platform/task-routes.ts",
         "apps/api/src/production-platform/task-service.ts",
@@ -223,6 +225,7 @@
         "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
         "tests/integration/production-facts-consistency-postgres.test.ts",
         "tests/unit/factory-step-ledger.test.ts",
+        "tests/unit/fixed-factory-dispatch-windows.test.ts",
         "tests/unit/warehouse-craft-rework-return.test.ts"
       ],
       "reads": [
