@@ -5,7 +5,15 @@ import type {DigitalTask} from './digital-production-tasks.js';
 export type FactoryReturnLogisticsWindow=NonNullable<FactoryFlowSheet['returnLogistics']>[number];
 const base={expectedRevision:z.number().int().nonnegative(),note:z.string().trim().max(2000).default('')};
 export const FactoryScopeSchema=z.array(z.object({lineId:z.string().uuid(),quantity:z.number().int().positive().max(10000000)}).strict()).min(1).max(100);
-export const FactoryLogisticsSchema=z.object({...base,stepRef:z.string().uuid().optional(),kind:z.enum(['工艺发出','工艺回仓','工艺沟通']),lines:FactoryScopeSchema.optional(),sendFactId:z.string().uuid().optional(),fromReturnId:z.string().uuid().optional(),occurredAt:z.iso.datetime({offset:true}).nullable(),supplier:z.string().trim().max(200).default('')}).strict();
+export const FactoryLogisticsSchema=z.object({...base,stepRef:z.string().uuid().optional(),kind:z.enum(['工艺发出','工艺回仓','工艺沟通']),lines:FactoryScopeSchema.optional(),sendFactId:z.string().uuid().optional(),fromReturnId:z.string().uuid().optional(),occurredAt:z.iso.datetime({offset:true}).nullable(),supplier:z.string().trim().max(200).default(''),
+ warehouse:z.object({taskId:z.uuid(),preparationId:z.uuid(),factoryId:z.uuid(),reworkId:z.uuid().optional()}).strict().optional(),
+}).strict().superRefine((input,ctx)=>{
+ if(input.warehouse&&(input.kind==='工艺沟通'||!input.stepRef||!input.lines||!input.occurredAt||
+   (input.kind==='工艺发出'&&(input.sendFactId||input.warehouse.reworkId&&!input.fromReturnId))||
+   (input.kind==='工艺回仓'&&(!input.sendFactId||input.fromReturnId)))){
+  ctx.addIssue({code:'custom',path:['warehouse'],message:'原仓库实际收发须引用真实任务、工艺及本批范围'});
+ }
+});
 const craftCheckCount=z.number().int().nonnegative().max(10000000);
 export const CraftCheckQuantityScopeSchema=z.object({inspectedQuantity:craftCheckCount.positive(),qualifiedQuantity:craftCheckCount,
  problemQuantity:craftCheckCount,unit:z.literal('片')}).strict();

@@ -12,6 +12,7 @@ import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journe
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {CreateResponsibilityDraftSchema,CreateSupplierSchema} from '@dx-rework/contracts';
+import {FactoryLogisticsSchema} from '@dx-rework/contracts/factory-flow';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
@@ -267,8 +268,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await committed.json()).toMatchObject({reworkStatus:'in_progress',externalCraftOnly:true,configuration:{status:'approved',items:[{executionKind:'external_craft',plannedQuantity:2,unitPrice:null}]}});
   }finally{await tailTab.close();}
   const activated=await configuration.get(tail,draftId);
-  const outboundRepair=await flow.warehouseCraftRepair(warehouse,ready.id,
-   {...await command(second!.stepId,factories[1]!,'send',in4.factId,2),reworkId:draftId},randomUUID());
+  const nativeFlow=new FactoryFlowService(f.db,readQualityWarehouseCraftOccupation);
+  const outsideSent={...await command(second!.stepId,factories[1]!,'send',in4.factId,2),reworkId:draftId};
+  const originalLogistics=(movement:typeof outsideSent)=>FactoryLogisticsSchema.parse({
+   expectedRevision:movement.expectedRevision,kind:movement.kind==='send'?'工艺发出':'工艺回仓',
+   stepRef:movement.stepRef,lines:movement.lines,occurredAt:movement.occurredAt,note:movement.note,
+   ...(movement.kind==='send'?{fromReturnId:movement.sourceFactId}:{sendFactId:movement.sourceFactId}),
+   warehouse:{taskId:movement.taskId,preparationId:movement.preparationId,factoryId:movement.factoryId,reworkId:movement.reworkId},
+  });
+  const repairKey=randomUUID(),outboundRepair=await nativeFlow.logistics(warehouse,ready.id,originalLogistics(outsideSent),repairKey);
+  expect(await nativeFlow.warehouseCraftRepair(warehouse,ready.id,outsideSent,repairKey)).toEqual(outboundRepair);
   const sentRepair=outboundRepair.facts.at(-1)!;
   expect(sentRepair.payload).toMatchObject({stepRef:second!.stepId,fromReturnId:in4.factId,
    warehouseMotion:{reworkId:draftId,checkId:current.checkId,factoryId:factories[1]}});
@@ -277,8 +286,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const repairScope={reworkId:draftId,originalReturnFactId:in4.factId,stepRef:second!.stepId,lineId,factoryId:factories[1]!,quantity:2};
   const repairProgress=(sheet:typeof outboundRepair)=>externalCraftRepairProgress(repairScope,
    sheet.facts.map(item=>({fact_id:item.factId,kind:item.kind,occurred_at:item.occurredAt,payload:item.payload})));
-  const recordReturn=async()=>flow.warehouseCraftRepair(warehouse,ready.id,
-   {...await command(second!.stepId,factories[1]!,'return',sentRepair.factId,1),reworkId:draftId},randomUUID());
+  const recordReturn=async()=>nativeFlow.logistics(warehouse,ready.id,originalLogistics({
+   ...await command(second!.stepId,factories[1]!,'return',sentRepair.factId,1),reworkId:draftId,
+  }),randomUUID());
   const firstRepairReturn=await recordReturn();
   expect(repairProgress(firstRepairReturn)).toMatchObject({sent:2,returned:1,remainingToReturn:1,physicalCompletedAt:null});
   const followUp=(revision:number,returnFactId:string)=>({expectedRevision:revision,stepRef:second!.stepId,returnFactId,

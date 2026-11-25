@@ -36,6 +36,13 @@ const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
 const ROOT='root_superuser';
 type WarehouseCraftCommand=Omit<WarehouseCraftMotion,'scope'|'lines'>&{expectedRevision:number;taskId:string;preparationId:string;stepRef:string;lines:FactoryScope[];note:string};
 type WarehouseCraftRepairCommand=WarehouseCraftCommand&{reworkId:string};
+// The original route and the internal entry share the original receipt key.
+// Canonicalize wire-key order only for these new commands, not legacy hashes.
+const warehouseCraftPayload=(input:WarehouseCraftCommand,reworkId?:string)=>({
+ expectedRevision:input.expectedRevision,taskId:input.taskId,preparationId:input.preparationId,stepRef:input.stepRef,
+ kind:input.kind,sourceFactId:input.sourceFactId,factoryId:input.factoryId,occurredAt:input.occurredAt,note:input.note,
+ lines:input.lines.map(line=>({lineId:line.lineId,quantity:line.quantity})),...(reworkId?{reworkId}:{}),
+});
 export class FactoryFlowService{
  constructor(private readonly database:Pool,private readonly readWarehouseCraftOccupation?:WarehouseCraftOccupationReader){}
  private tasks(){return new DigitalProductionTaskService(this.database);}
@@ -179,7 +186,15 @@ export class FactoryFlowService{
    contractDocumentId:contract.sourcing_contract_document_id},lines);
   return dispatchEvidence?{dispatchEvidence}:{};
  }
- async logistics(actor:TrustedActorContext,id:string,input:FactoryLogistics,key:string){return this.command(actor,id,'logistics',input,key,async(db,s)=>{
+ async logistics(actor:TrustedActorContext,id:string,input:FactoryLogistics,key:string){
+  if(input.warehouse){
+   if(input.kind==='工艺沟通'||!input.stepRef||!input.occurredAt||!input.lines)return fail('原仓库实际收发须引用真实工艺及本批范围');
+   const {reworkId,...warehouse}=input.warehouse,kind=input.kind==='工艺发出'?'send':'return';
+   const native={...warehouse,kind,stepRef:input.stepRef,occurredAt:input.occurredAt,lines:input.lines,expectedRevision:input.expectedRevision,note:input.note,
+    sourceFactId:(kind==='send'?input.fromReturnId:input.sendFactId)??null} as const;
+   return reworkId?this.warehouseCraftRepair(actor,id,{...native,reworkId},key):this.warehouseCraftMotion(actor,id,native,key);
+  }
+  return this.command(actor,id,'logistics',input,key,async(db,s)=>{
   if(this.readWarehouseCraftOccupation&&s.stepLedger&&input.kind!=='工艺沟通')fail('本单独立工艺实物请从原任务的仓库收发办理');
   if(!await this.authorized(db,actor,s,'process_logistics',input.stepRef))digitalForbidden();if(s.batch)return this.batchLogistics(db,actor,s,input);if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'process_logistics'));
   if(input.kind==='工艺沟通'&&!input.note.trim())fail('请填写沟通记录');
@@ -200,7 +215,7 @@ export class FactoryFlowService{
  async warehouseCraftMotion(actor:TrustedActorContext,id:string,input:WarehouseCraftCommand,key:string){
   const readOccupation=this.readWarehouseCraftOccupation;
   if(!readOccupation)return fail('仓库工艺收发尚无有效质检返工占用依据');
-  return this.command(actor,id,'logistics',input,key,async(db,s)=>{
+  return this.command(actor,id,'logistics',warehouseCraftPayload(input),key,async(db,s)=>{
    const step=s.stepLedger?.steps.find(value=>value.step.stepId===input.stepRef);
    if(!step||s.route.preparation_id!==input.preparationId||!s.tasks.some(task=>task.task_id===input.taskId&&task.task_kind==='process_logistics'&&
     task.step_id===input.stepRef&&task.state==='ready'))return fail('仓库收发须引用本单当前独立工艺的原任务');
@@ -232,7 +247,7 @@ export class FactoryFlowService{
  }
  async warehouseCraftRepair(actor:TrustedActorContext,id:string,input:WarehouseCraftRepairCommand,key:string){
   if(!this.readWarehouseCraftOccupation)return fail('仓库返工收发尚无有效质检返工占用依据');
-  return this.command(actor,id,'logistics',input,key,async(db,s)=>{
+  return this.command(actor,id,'logistics',warehouseCraftPayload(input,input.reworkId),key,async(db,s)=>{
    const exact=await lockExternalCraftRepair(db,id,input.reworkId),step=s.stepLedger?.steps.find(item=>item.step.stepId===input.stepRef);
    if(!exact||!step||!input.sourceFactId||!['send','return'].includes(input.kind)||s.route.preparation_id!==exact.preparationId
     ||input.preparationId!==exact.preparationId||input.stepRef!==exact.stepRef||input.factoryId!==exact.factoryId
