@@ -11,7 +11,7 @@ import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
-import {CreateSupplierSchema} from '@dx-rework/contracts';
+import {CreateResponsibilityDraftSchema,CreateSupplierSchema} from '@dx-rework/contracts';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
@@ -27,13 +27,17 @@ import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
 import {ReworkV2SubmissionService} from '../../apps/api/src/rework/v2-submission-service.js';
 import {ensureWithinSourceReceivingActualQuantity} from '../../apps/api/src/rework/receiving-quantity-ceiling.js';
 import {ProcessConfigurationService} from '../../apps/api/src/rework/process-configuration-service.js';
+import {WorkReportingService} from '../../apps/api/src/rework/work-reporting-service.js';
+import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
+import {AuthorizedResponsibilityDeterminationService} from '../../apps/api/src/rework/responsibility-determination-authorized-service.js';
 import {externalCraftRepairProgress} from '../../apps/api/src/production-platform/warehouse-craft-rework-return.js';
+import {readQualityWarehouseCraftOccupation} from '../../apps/api/src/production-platform/quality-warehouse-craft-occupation.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('frozen double-special factory supervision through original App',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
- beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-factory-supervision-app-')),{fullApp:true,workbenchNumberedCreation:true});configureTimelineAdoption(h.f.db,'fixed_v2');});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-factory-supervision-app-')),{fullApp:true,workbenchNumberedCreation:true,originalCraftRework:true});configureTimelineAdoption(h.f.db,'fixed_v2');});
  afterAll(async()=>{if(h){configureTimelineAdoption(h.f.db,'legacy');await h.writeEvidence();await h.dispose();}});
  it('reads before/after cutting and keeps each process/QC window through Journey, selector rebuild and authenticated rendering',async()=>{
   const f=h.f,steps:CraftStepChoice[]=[],library=new SpecialCraftLibraryService(f.db);
@@ -202,6 +206,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const counted=await flow.qc(qc,ready.id,inspected,randomUUID()),current=counted.checks.find(check=>check.returnFactId===in4.factId)!;
   expect(counted.batches?.find(batch=>batch.factId===in4.factId)?.rows).toMatchObject([{lineId,available:15,releasedAvailable:9}]);
   const locate={orderId:ready.id,preparationId:ready.preparationId,stepRef:second!.stepId,returnFactId:in4.factId,lineId,checkId:current.checkId};
+  const disposition={orderId:ready.id,preparationId:ready.preparationId,stepRef:second!.stepId,sourceFactId:in4.factId};
+  const dispositionClient=await f.db.connect();
+  try{
+   await expect(readQualityWarehouseCraftOccupation(dispositionClient,disposition)).resolves.toEqual({...disposition,lines:[{lineId,quantity:6}]});
+   await expect(readQualityWarehouseCraftOccupation(dispositionClient,{...disposition,stepRef:first!.stepId})).resolves.toBeNull();
+  }finally{dispositionClient.release();}
   await expect(readCurrentCraftProblem(f.db,locate)).resolves.toMatchObject({problemQuantity:2,qualifiedQuantity:9,actualReturned:15,sourceSendFactId:out2.factId,factoryId:factories[1]});
   await expect(readCurrentCraftProblem(f.db,{...locate,stepRef:first!.stepId})).resolves.toBeNull();
   const sourceTx=await f.db.connect();
@@ -246,8 +256,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tail={...f.people['tail-supervisor']!,authorizationCapability:'process:configure',authorizationCapabilities:['process:configure']},
    configuration=new ProcessConfigurationService(f.db),configuredFrom={expectedOrderVersion:submitted.value.version};
   await expect(configuration.activateExternalCraft(qaActor,draftId,configuredFrom,randomUUID())).rejects.toMatchObject({statusCode:403});
-  const activated=await configuration.activateExternalCraft(tail,draftId,configuredFrom,randomUUID());
-  expect(activated.value).toMatchObject({reworkStatus:'in_progress',configuration:{status:'approved',items:[{executionKind:'external_craft',plannedQuantity:2,unitPrice:null}]}});
+  const tailTab=await h.open(tail.actorId,1165,{},`/ui/tasks/${draftId}?node=process_configuration`);
+  try{
+   const button=tailTab.page.getByRole('button',{name:'确认原外厂返修',exact:true});
+   await button.click();
+   const response=tailTab.page.waitForResponse(result=>result.request().method()==='POST'&&result.url().includes(`/rework-orders/${draftId}/process-configuration/external-activate`));
+   await tailTab.page.getByRole('button',{name:'确认',exact:true}).click();
+   const committed=await response;
+   expect(committed.status()).toBe(200);
+   expect(await committed.json()).toMatchObject({reworkStatus:'in_progress',externalCraftOnly:true,configuration:{status:'approved',items:[{executionKind:'external_craft',plannedQuantity:2,unitPrice:null}]}});
+  }finally{await tailTab.close();}
+  const activated=await configuration.get(tail,draftId);
   const outboundRepair=await flow.warehouseCraftRepair(warehouse,ready.id,
    {...await command(second!.stepId,factories[1]!,'send',in4.factId,2),reworkId:draftId},randomUUID());
   const sentRepair=outboundRepair.facts.at(-1)!;
@@ -262,9 +281,96 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    {...await command(second!.stepId,factories[1]!,'return',sentRepair.factId,1),reworkId:draftId},randomUUID());
   const firstRepairReturn=await recordReturn();
   expect(repairProgress(firstRepairReturn)).toMatchObject({sent:2,returned:1,remainingToReturn:1,physicalCompletedAt:null});
+  const followUp=(revision:number,returnFactId:string)=>({expectedRevision:revision,stepRef:second!.stepId,returnFactId,
+   note:'TEST original repair reinspection',checks:[{lineId,result:'合格' as const,problem:'',treatment:'',attachmentIds:[],
+    quantityScope:{inspectedQuantity:1,qualifiedQuantity:1,problemQuantity:0,unit:'片' as const}}]});
+  const firstFact=firstRepairReturn.facts.at(-1)!;
+  await expect(flow.qc(qc,ready.id,followUp(firstRepairReturn.revision,firstFact.factId),randomUUID())).rejects.toThrow('须同一范围全部实际回仓');
+  const execution=new WorkReportingService(f.db),assigner={...tail,authorizationCapability:'work:assign',authorizationCapabilities:['work:assign']};
+  const active=(await execution.list(assigner,draftId));
+  expect(active).toMatchObject({reworkStatus:'in_progress',tasks:[],externalRepair:{requiredQuantity:2,returnedQuantity:1,physicalCompletedAt:null}});
+  await expect(execution.completeExecution(assigner,draftId,{expectedOrderVersion:active.orderVersion},randomUUID())).rejects.toThrow('尚未全部实际回仓');
   const lastRepairReturn=await recordReturn(),lastFact=lastRepairReturn.facts.at(-1)!;
   expect(repairProgress(lastRepairReturn)).toMatchObject({sent:2,returned:2,remainingToReturn:0,physicalCompletedAt:lastFact.occurredAt});
   expect(lastRepairReturn.batches?.find(batch=>batch.factId===lastFact.factId)?.rows).toMatchObject([{lineId,available:1,allowDispatch:false}]);
+  await expect(execution.completeExecution(qaActor,draftId,{expectedOrderVersion:active.orderVersion},randomUUID())).rejects.toMatchObject({statusCode:403});
+  const completedTab=await h.open(tail.actorId,1165,{},`/ui/tasks/${draftId}?node=work_reporting`);
+  let n04Version:number;
+  try{
+   const result=completedTab.page.waitForResponse(response=>response.request().method()==='POST'&&response.url().includes(`/rework-orders/${draftId}/work-tasks/complete`));
+   await completedTab.page.getByRole('button',{name:'全部完成，进入节点05',exact:true}).click();
+   const completed=await result,n04=await completed.json();
+   expect(completed.status()).toBe(200);
+   expect(n04).toMatchObject({reworkStatus:'pending_order_review',tasks:[],externalRepair:{requiredQuantity:2,returnedQuantity:2,physicalCompletedAt:lastFact.occurredAt}});
+   n04Version=n04.orderVersion;
+   const replay=await completedTab.context.request.post(`${h.base}/api/rework-orders/${draftId}/work-tasks/complete`,{
+    headers:{'idempotency-key':completed.request().headers()['idempotency-key']!},data:{expectedOrderVersion:active.orderVersion},
+   });
+   expect(replay.headers()['idempotency-replayed']).toBe('true');
+   expect(await replay.json()).toEqual(n04);
+  }finally{await completedTab.close();}
+  const review=new WholeOrderReviewService(f.db),tailReviewer={...tail,authorizationCapability:'submission:audit',authorizationCapabilities:['submission:audit']},
+   ie={...f.people.ie!,authorizationCapability:'process:review',authorizationCapabilities:['process:review']};
+  const approval={expectedOrderVersion:n04Version,temporaryCoefficients:[]};
+  await expect(review.approve(ie,draftId,approval,randomUUID())).rejects.toMatchObject({statusCode:403});
+  await expect(review.approve(tailReviewer,draftId,{...approval,processPrices:[{configurationItemId:activated.configuration!.items[0]!.configurationItemId,unitPrice:1}]},randomUUID())).rejects.toThrow('不包含本厂工序单价');
+  const physical={requiredQuantity:2,returnedQuantity:2,physicalCompletedAt:lastFact.occurredAt};
+  const confirmTab=await h.open(tail.actorId,1165,{},`/ui/tasks/${draftId}?node=whole_order_review`);
+  let n05Version:number;
+  try{
+   await confirmTab.page.getByText('实际回仓 2 / 2 片，无本厂计件工资。',{exact:true}).waitFor();
+   await confirmTab.page.getByRole('button',{name:'确认数量并提交 IE',exact:true}).click();
+   const result=confirmTab.page.waitForResponse(response=>response.request().method()==='POST'&&response.url().includes(`/rework-orders/${draftId}/whole-order-review/approve`));
+   await confirmTab.page.getByRole('button',{name:'确认',exact:true}).click();
+   const saved=await result;
+   expect(saved.status()).toBe(200);
+   const payload=await saved.json();
+   expect(payload).toMatchObject({reworkStatus:'pending_final_quantity_ie_review',externalRepair:physical,
+    finalConfirmation:{confirmationVersion:1,externalRepair:physical,prices:[],quantities:[]},reports:[]});
+   n05Version=payload.orderVersion;
+  }finally{await confirmTab.close();}
+  await expect(review.reviewFinalQuantity(tailReviewer,draftId,{expectedOrderVersion:n05Version,decision:'approved'},randomUUID())).rejects.toMatchObject({statusCode:403});
+  const returnedByIe=await review.reviewFinalQuantity(ie,draftId,{expectedOrderVersion:n05Version,decision:'rejected',reason:'TEST recheck exact outside count'},randomUUID());
+  expect(returnedByIe.value).toMatchObject({reworkStatus:'pending_order_review',finalConfirmation:{status:'rejected',confirmationVersion:1,externalRepair:physical}});
+  const again=await review.approve(tailReviewer,draftId,{...approval,expectedOrderVersion:returnedByIe.value.orderVersion},randomUUID());
+  const ieTab=await h.open(ie.actorId,1165,{},`/ui/tasks/${draftId}?node=final_quantity_ie_review`);
+  try{
+   await ieTab.page.getByText('实际回仓 2 / 2 片，无本厂计件工资。',{exact:true}).waitFor();
+   expect((await review.get(ie,draftId)).orderVersion).toBe(again.value.orderVersion);
+   await ieTab.page.getByRole('button',{name:'通过',exact:true}).click();
+   const result=ieTab.page.waitForResponse(response=>response.request().method()==='POST'&&response.url().includes(`/rework-orders/${draftId}/whole-order-review/ie-review`));
+   await ieTab.page.getByRole('button',{name:'确认',exact:true}).click();
+   const ieApproved=await result;
+   expect(ieApproved.status()).toBe(200);
+   expect(await ieApproved.json()).toMatchObject({reworkStatus:'pending_responsibility_determination',finalConfirmation:{status:'approved',confirmationVersion:2,externalRepair:physical,prices:[],quantities:[]}});
+  }finally{await ieTab.close();}
+  expect((await f.db.query(`SELECT (SELECT count(*)::int FROM rework_work_reports WHERE rework_order_id=$1) AS reports,
+    (SELECT count(*)::int FROM rework_wage_items WHERE rework_order_id=$1) AS wages`,[draftId])).rows[0]).toEqual({reports:0,wages:0});
+  const latestRepairSheet=await flow.read(qc,ready.id),dispatchRepair={...dispatch,expectedRevision:latestRepairSheet.revision,
+   returnFactId:lastFact.factId,occurredAt:businessNow().toISOString(),lines:[{lineId,quantity:1}]};
+  await expect(flow.dispatch(warehouse,ready.id,dispatchRepair,randomUUID())).rejects.toMatchObject({statusCode:409});
+  const rechecked=await flow.qc(qc,ready.id,followUp(latestRepairSheet.revision,lastFact.factId),randomUUID());
+  expect(rechecked.batches?.find(batch=>batch.factId===lastFact.factId)?.rows).toMatchObject([{lineId,available:1,releasedAvailable:1}]);
+  expect(rechecked.batches?.find(batch=>batch.factId===firstFact.factId)?.rows).toMatchObject([{lineId,available:1,allowDispatch:false}]);
+  const sentAfterQc=await flow.dispatch(warehouse,ready.id,{...dispatchRepair,expectedRevision:rechecked.revision,occurredAt:businessNow().toISOString()},randomUUID());
+  expect(sentAfterQc.facts.at(-1)).toMatchObject({kind:'仓库实际发厂',payload:{returnFactId:lastFact.factId,lines:[{lineId,quantity:1}]}});
+  const responsibility=new AuthorizedResponsibilityDeterminationService(f.db),responsibilityHandler={...manager,
+   authorizationCapability:'responsibility:determine',authorizationCapabilities:['responsibility:determine']};
+  const target=await responsibility.get(responsibilityHandler,draftId);
+  expect(target).toMatchObject({reworkStatus:'pending_responsibility_determination',canDetermine:true,sourceProcesses:[
+   {configurationItemId:activated.configuration!.items[0]!.configurationItemId,executionKind:'external_craft',includedInResponsibility:true},
+  ]});
+  expect(Number(target.sourceProcesses[0]!.baseAmount)).toBe(0);
+  const determination=await responsibility.saveDraft(responsibilityHandler,draftId,CreateResponsibilityDraftSchema.parse({
+   expectedOrderVersion:target.orderVersion,expectedCurrentDeterminationVersion:null,handlerUserId:responsibilityHandler.actorId,
+   reason:'TEST processing supplier responsibility without recorded charge',processes:[{configurationItemId:target.sourceProcesses[0]!.configurationItemId,multiplier:'1.000',
+    allocations:[{responsibilityType:'processing_factory',shareBps:10000,multiplier:'1.200',supplierId:factories[1]}]}],
+  }),randomUUID());
+  expect(Number(determination.value.determination?.calculationTotal)).toBe(0);
+  const finalResponsibility=await responsibility.finalize(responsibilityHandler,draftId,{expectedOrderVersion:determination.value.orderVersion,
+   expectedCurrentDeterminationVersion:determination.value.determination!.version},randomUUID());
+  expect(finalResponsibility.value).toMatchObject({reworkStatus:'completed',determination:{stage:'finalized'}});
+  expect(Number(finalResponsibility.value.determination?.calculationTotal)).toBe(0);
   expect((await f.db.query("SELECT count(*)::int AS count FROM rework_work_tasks WHERE rework_order_id=$1",[draftId])).rows[0].count).toBe(0);
  });
  it('counts appended preshrink once and binds the actual current task through the additional group handoff',async()=>{

@@ -18,6 +18,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
+import { readExternalCraftRepairProof } from "../production-platform/warehouse-craft-rework-return.js";
 import { ensureWithinSourceReceivingActualQuantity, sourceReceivingQuantityCeilingError } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
@@ -30,6 +31,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type OrderRow = Readonly<{
   rework_order_id: string; rework_no: string | null; status: string; version: number;
+  craft_rework_execution?: "factory" | "inhouse" | null;
   rework_kind: "qc_rework" | "inhouse_finishing";
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
@@ -72,6 +74,7 @@ type FinalConfirmationRow = Readonly<{
   workflow_stage: "approved" | "pending_ie_review"; price_snapshot_required: boolean;
   decision: "approved" | "rejected" | null;
   reviewed_by: string | null; reviewed_at: Date | null; review_reason: string | null;
+  external_repair?: Awaited<ReturnType<typeof readExternalCraftRepairProof>>;
 }>;
 type FinalQuantityRow = Readonly<{
   configuration_item_id: string; worker_reported_quantity: string;
@@ -88,6 +91,9 @@ const error = (message: string, status = 409, code = "CONFLICT"): never => {
   throw new ApplicationError(code, message, status);
 };
 const iso = (value: Date | null): string | null => value?.toISOString() ?? null;
+const physicalProgress = (proof: NonNullable<FinalConfirmationRow["external_repair"]>) => ({
+  requiredQuantity: proof.requiredQuantity, returnedQuantity: proof.returnedQuantity, physicalCompletedAt: proof.physicalCompletedAt,
+});
 
 export class WholeOrderReviewService {
   constructor(
@@ -125,9 +131,16 @@ export class WholeOrderReviewService {
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
       if (order.status !== "pending_order_review") error("本单尚未进入尾部最终数量确认；请尾部在本单执行进度核对原返工与整查任务，前序办理完成后再核量", 409, "INVALID_STATE_TRANSITION");
+      const externalRepair = order.craft_rework_execution === "factory" ? await readExternalCraftRepairProof(client, reworkOrderId) : null;
+      if (order.craft_rework_execution === "factory" && !externalRepair?.physicalCompletedAt) {
+        error("原外厂返修范围尚未得到完整实际回仓依据", 409, "INVALID_STATE_TRANSITION");
+      }
       const plans = await this.plans(client, reworkOrderId);
-      if (plans.length === 0 || plans.some((plan) => plan.unit_price === null)) {
+      if (!externalRepair && (plans.length === 0 || plans.some((plan) => plan.unit_price === null))) {
         error("每道工序必须完成 IE 核价后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
+      }
+      if (externalRepair && (plans.length || input.processPrices?.length || input.temporaryCoefficients.length)) {
+        error("原纯外厂返修不包含本厂工序单价或临时工工资", 409, "INVALID_STATE_TRANSITION");
       }
       const submittedPrices = input.processPrices ?? plans.map((plan) => ({
         configurationItemId: plan.configuration_item_id,
@@ -181,6 +194,7 @@ export class WholeOrderReviewService {
           ...this.orderAudit(order, "pending_final_quantity_ie_review", order.version + 1),
           confirmationId, confirmationVersion, finalQuantities, finalPrices,
           temporaryCoefficients: input.temporaryCoefficients,
+          ...(externalRepair ? { externalRepair } : {}),
         },
       });
       await this.context(client, eventId, actor.requestId, "whole_order_review");
@@ -188,8 +202,8 @@ export class WholeOrderReviewService {
         `INSERT INTO rework_tail_completion_confirmations(
            confirmation_id,rework_order_id,confirmation_version,workflow_stage,price_snapshot_required,
            confirmed_by,operation_event_id,request_id
-         ) VALUES($1,$2,$3,'pending_ie_review',true,$4,$5,$6)`,
-        [confirmationId, reworkOrderId, confirmationVersion, actor.actorId, eventId, actor.requestId],
+         ) VALUES($1,$2,$3,'pending_ie_review',$4,$5,$6,$7)`,
+        [confirmationId, reworkOrderId, confirmationVersion, !externalRepair, actor.actorId, eventId, actor.requestId],
       );
       for (const price of finalPrices) {
         await client.query(
@@ -251,6 +265,15 @@ export class WholeOrderReviewService {
       const confirmation = await this.currentConfirmation(client, reworkOrderId, true);
       const pendingConfirmation = confirmation ?? error("没有等待 IE 复核的最终数量确认版本", 409, "CONFLICT");
       if (pendingConfirmation.decision !== null) error("该最终数量确认版本已经完成 IE 复核", 409, "CONFLICT");
+      if (order.craft_rework_execution === "factory") {
+        const current = await readExternalCraftRepairProof(client, reworkOrderId), saved = pendingConfirmation.external_repair;
+        if (!current?.physicalCompletedAt || !saved?.physicalCompletedAt || pendingConfirmation.price_snapshot_required
+          || current.requiredQuantity !== saved.requiredQuantity || current.returnedQuantity !== saved.returnedQuantity
+          || current.physicalCompletedAt !== saved.physicalCompletedAt || !Array.isArray(saved.returnFactIds)
+          || current.returnFactIds.join("|") !== saved.returnFactIds.join("|")) {
+          error("本版最终数量已不对应原外厂回仓事实，请重新读取本单核对", 409, "CONFLICT");
+        }
+      }
       const finalPrices = await this.confirmationPrices(client, pendingConfirmation.confirmation_id);
       if (pendingConfirmation.price_snapshot_required && finalPrices.length === 0) {
         error("最终价格快照不完整，不能进行 IE 复核", 409, "CONFLICT");
@@ -319,7 +342,7 @@ export class WholeOrderReviewService {
           [pendingConfirmation.confirmation_id],
         );
       }
-      await client.query(
+      if (!pendingConfirmation.external_repair) await client.query(
         `WITH raw_amounts AS (
            SELECT share.work_report_id,share.person_id,
                   rework_work_report_effective_quantity(report.work_report_id)*item.unit_price*
@@ -358,7 +381,7 @@ export class WholeOrderReviewService {
          FROM amounts WHERE share.work_report_id=amounts.work_report_id AND share.person_id=amounts.person_id`,
         [pendingConfirmation.confirmation_id, reworkOrderId],
       );
-      await client.query(
+      if (!pendingConfirmation.external_repair) await client.query(
         `WITH amounts AS (
            SELECT report.work_report_id,rework_work_report_effective_quantity(report.work_report_id) settlement_quantity,
                   sum(share.amount) group_amount
@@ -1061,6 +1084,8 @@ export class WholeOrderReviewService {
       this.unifiedExecutionRequired(client, order.rework_order_id),
       configurationItemId ? Promise.resolve(null) : this.finalQuantityReviewAvailable(client).then((available) => available ? this.currentConfirmation(client, order.rework_order_id, false) : null),
     ]);
+    const externalRepair = !configurationItemId && order.craft_rework_execution === "factory"
+      ? await readExternalCraftRepairProof(client, order.rework_order_id) : undefined;
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
       ...permissions, unifiedExecutionRequired, tailInspectionRequired: order.tail_inspection_required,
@@ -1084,6 +1109,7 @@ export class WholeOrderReviewService {
       temporaryWorkers: temporaryWorkers.map((worker) => ({ configurationItemId: worker.configuration_item_id, processName: worker.process_name, personId: worker.person_id, displayName: worker.display_name, multiplier: numberValue(worker.multiplier ?? "1"), reason: worker.reason })),
       reviewId: reviews.rows[0]?.order_review_id ?? null,
       finalConfirmation: finalConfirmation ? await this.confirmationDto(client, finalConfirmation) : null,
+      ...(externalRepair === undefined ? {} : { externalRepair: externalRepair ? physicalProgress(externalRepair) : null }),
     };
   }
 
@@ -1104,8 +1130,10 @@ export class WholeOrderReviewService {
     const result = await client.query<FinalConfirmationRow>(
       `SELECT confirmation.confirmation_id,confirmation.confirmation_version,confirmation.confirmed_by,confirmation.confirmed_at,
               confirmation.workflow_stage,confirmation.price_snapshot_required,
-              review.decision,review.reviewed_by,review.reviewed_at,review.reason AS review_reason
+              review.decision,review.reviewed_by,review.reviewed_at,review.reason AS review_reason,
+              event.after_state->'externalRepair' AS external_repair
        FROM rework_tail_completion_confirmations confirmation
+       JOIN operation_events event ON event.event_id=confirmation.operation_event_id
        LEFT JOIN rework_tail_completion_reviews review ON review.confirmation_id=confirmation.confirmation_id
        WHERE confirmation.rework_order_id=$1
        ORDER BY confirmation.confirmation_version DESC
@@ -1131,6 +1159,7 @@ export class WholeOrderReviewService {
       reviewedBy: confirmation.reviewed_by,
       reviewedAt: iso(confirmation.reviewed_at),
       reviewReason: confirmation.review_reason,
+      ...(confirmation.external_repair ? { externalRepair: physicalProgress(confirmation.external_repair) } : {}),
       prices: prices.map((price) => ({
         configurationItemId: price.configuration_item_id,
         originalUnitPrice: numberValue(price.original_unit_price),
@@ -1625,7 +1654,7 @@ export class WholeOrderReviewService {
 
   private async order(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked: boolean): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
-      `SELECT rework_order_id,rework_no,status,version,rework_kind,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,tail_inspection_required,special_process_type,other_craft_description FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
+      `SELECT rework_order_id,rework_no,status,version,rework_kind,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,tail_inspection_required,special_process_type,other_craft_description,to_jsonb(rework_orders)->>'craft_rework_execution' AS craft_rework_execution FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
       [reworkOrderId],
     );
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");

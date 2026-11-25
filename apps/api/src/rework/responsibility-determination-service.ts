@@ -136,7 +136,7 @@ type SourceProcessRow = Readonly<{
   configuration_item_id: string;
   process_name: string;
   pricing_unit: PricingUnit;
-  execution_kind: "worker" | "tail_inspection";
+  execution_kind: "worker" | "tail_inspection" | "external_craft";
   base_amount: string;
 }>;
 
@@ -144,7 +144,7 @@ type ApprovedProcessRow = Readonly<{
   configuration_item_id: string;
   process_name: string;
   pricing_unit: PricingUnit;
-  execution_kind: "worker" | "tail_inspection";
+  execution_kind: "worker" | "tail_inspection" | "external_craft";
 }>;
 
 type WorkReportShareRow = Readonly<{
@@ -363,7 +363,7 @@ export class ResponsibilityDeterminationService {
             AND wage.invalidated_at IS NULL
            WHERE configuration.rework_order_id=$1
              AND configuration.status='approved'
-             AND item.execution_kind IN ('worker','tail_inspection')
+             AND item.execution_kind IN ('worker','tail_inspection','external_craft')
            GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit,item.execution_kind
            ORDER BY item.configuration_item_id`
         : `SELECT item.configuration_item_id,item.process_name,item.pricing_unit,
@@ -382,7 +382,7 @@ export class ResponsibilityDeterminationService {
            LEFT JOIN rework_work_report_member_shares share USING(work_report_id)
            WHERE configuration.rework_order_id=$1
              AND configuration.status='approved'
-             AND item.execution_kind IN ('worker','tail_inspection')
+             AND item.execution_kind IN ('worker','tail_inspection','external_craft')
            GROUP BY item.configuration_item_id,item.process_name,item.pricing_unit,item.execution_kind
            ORDER BY item.configuration_item_id`,
       [orderId],
@@ -422,7 +422,7 @@ export class ResponsibilityDeterminationService {
         processName: row.process_name,
         pricingUnit: row.pricing_unit,
         executionKind: row.execution_kind,
-        includedInResponsibility: row.execution_kind === "worker"
+        includedInResponsibility: row.execution_kind !== "tail_inspection"
           || order.tail_inspection_cost_bearer !== null,
         baseAmount: row.base_amount,
       })),
@@ -748,7 +748,7 @@ export class ResponsibilityDeterminationService {
        WHERE configuration.rework_order_id=$1
          AND configuration.status='approved'
          AND (
-           item.execution_kind='worker'
+           item.execution_kind IN ('worker','external_craft')
            OR (item.execution_kind='tail_inspection' AND $2 IN ('own_factory','processing_factory'))
          )`,
       [orderId, targetTailCostBearer],

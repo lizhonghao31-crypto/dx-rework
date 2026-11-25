@@ -104,6 +104,8 @@ export function WholeOrderReviewPanel({
   const formatUnitPrice = (value:number|null) => value === null ? "—" : `¥${formatBusinessDecimal(value, history ? 2 : 3)}`;
   const [moduleWritable, setModuleWritable] = useState(false);
   const [data, setData] = useState<WholeOrderReviewResponse | null>(history?.data ?? null);
+  const externalRepair = data?.finalConfirmation?.externalRepair ?? data?.externalRepair;
+  const externalMode = data?.externalRepair !== undefined || data?.finalConfirmation?.externalRepair !== undefined;
   const specialLabel = specialProcessLabel(data ?? {});
   const [tailData, setTailData] = useState<TailInspectionResponse | null>(history?.tail ?? null);
   const [message, setMessage] = useState(history ? historyMessage : "正在加载数量确认状态…");
@@ -333,7 +335,7 @@ export function WholeOrderReviewPanel({
   const confirmQuantities = async () => {
     if (!data || busy) return;
     if (!allComplete) {
-      const issue = data.tailInspectionRequired
+      const issue = externalMode ? "等待原外厂返修范围全部实际回仓。" : data.tailInspectionRequired
         ? "请先补齐有效报数并处理工序超数。"
         : "请等待全部返工报数完成。";
       setMessage(issue);
@@ -368,7 +370,7 @@ export function WholeOrderReviewPanel({
       await alertInApp(issue, { title: "数量暂不能提交 IE", confirmLabel: "知道了" });
       return;
     }
-    if (!(await confirmInApp(data.tailInspectionRequired
+    if (!(await confirmInApp(externalMode ? "确认原外厂实回数量无误，并提交 IE 复核？" : data.tailInspectionRequired
       ? `确认各工序有效数量均未超过${specialLabel}，且最终价格无误，并提交 IE 复核？`
       : "确认各工序工人有效数量与最终价格无误，并提交 IE 复核？"))) return;
     try {
@@ -390,7 +392,7 @@ export function WholeOrderReviewPanel({
         },
         applyOverview,
       );
-      setMessage("系统已锁定本版最终数量与价格提案，等待 IE 复核。");
+      setMessage(externalMode ? "原外厂回仓数量已提交 IE 复核。" : "系统已锁定本版最终数量与价格提案，等待 IE 复核。");
     } catch (cause) {
       const failure = describeRequestFailure(cause, "数量提交失败");
       setMessage(failure);
@@ -419,7 +421,7 @@ export function WholeOrderReviewPanel({
         : "请填写退回尾部主管的原因")
       : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
-    if (decision === "approved" && !(await confirmInApp("确认数量与价格提案无误？通过后按批准的有效数量和最终价格生成工资。"))) return;
+    if (decision === "approved" && !(await confirmInApp(externalMode ? "确认本版原外厂实际回仓数量无误？此项不产生本厂计件工资。" : "确认数量与价格提案无误？通过后按批准的有效数量和最终价格生成工资。"))) return;
     try {
       await call(
         "rework-orders/" + reworkOrderId + "/whole-order-review/ie-review",
@@ -428,7 +430,7 @@ export function WholeOrderReviewPanel({
         applyOverview,
       );
       setMessage(decision === "approved"
-        ? "IE 复核已通过，工资已按批准的有效数量和最终价格锁定并进入责任判定。"
+        ? externalMode ? "IE 已复核本版实回数量，进入原责任判定。" : "IE 复核已通过，工资已按批准的有效数量和最终价格锁定并进入责任判定。"
         : "已退回尾部最终数量确认。");
     } catch (cause) {
       const failure = describeRequestFailure(cause, "IE 复核失败");
@@ -441,7 +443,7 @@ export function WholeOrderReviewPanel({
   if (["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
   const tailStage = history ? history.node === "whole_order_review" : data.reworkStatus === "pending_order_review";
   const ieStage = history ? history.node === "final_quantity_ie_review" : data.reworkStatus === "pending_final_quantity_ie_review";
-  const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
+  const allComplete = externalMode ? Boolean(externalRepair?.physicalCompletedAt) : data.processes.length > 0 && data.processes.every((process) => process.complete);
   const changedPriceIds = ieStage
     ? data.finalConfirmation?.prices.filter((price) => price.changed).map((price) => price.configurationItemId) ?? []
     : [];
@@ -467,7 +469,7 @@ export function WholeOrderReviewPanel({
   });
   const ready = allComplete && !priceIssue && !coefficientIssue;
   const readinessIssues = [
-    ...(!allComplete ? [data.tailInspectionRequired
+    ...(!allComplete ? [externalMode ? "等待原外厂返修实际回仓" : data.tailInspectionRequired
       ? "补齐有效报数并处理工序超数"
       : "等待全部返工报数"] : []),
     ...(priceIssue ? ["填写每个工序有效的最终单价"] : []),
@@ -541,8 +543,8 @@ export function WholeOrderReviewPanel({
     <Surface>
       <div className="quantity-review-heading">
         <div>
-          <h2>按工序核对</h2>
-          <p>{tailStage ? "主管可修正个人有效数量并调整最终单价；原始上数和 N03 价格始终保留。" : "IE 只读核对系统锁定的数量事实与价格提案。"}</p>
+          <h2>{externalMode ? "核对原外厂实回数量" : "按工序核对"}</h2>
+          <p>{externalMode ? externalRepair ? `实际回仓 ${formatBusinessDecimal(externalRepair.returnedQuantity)} / ${formatBusinessDecimal(externalRepair.requiredQuantity)} 片，无本厂计件工资。` : "本轮回仓依据待核。" : tailStage ? "主管可修正个人有效数量并调整最终单价；原始上数和 N03 价格始终保留。" : "IE 只读核对系统锁定的数量事实与价格提案。"}</p>
         </div>
         <StatusBadge tone={ready ? "success" : "warning"}>
           {ready ? "全部可确认" : "存在异常"}
@@ -770,7 +772,7 @@ export function WholeOrderReviewPanel({
       <div className="quantity-submit-row">
         <div>
           <h2>提交 IE 复核</h2>
-          <p>{data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。" : `本单无需${specialLabel}；工人有效数量与价格提案一并交 IE 复核。`}</p>
+          <p>{externalMode ? "系统按本轮真实外厂回仓生成最终数量，不录计件价格。" : data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。" : `本单无需${specialLabel}；工人有效数量与价格提案一并交 IE 复核。`}</p>
         </div>
         <Button variant="primary" data-ready={ready ? "true" : "false"} onClick={() => void confirmQuantities()} disabled={busy || Boolean(history)}>
           {busy ? "提交中…" : data.tailInspectionRequired ? "确认数量并提交 IE" : "确认数量并提交 IE"}
@@ -783,7 +785,7 @@ export function WholeOrderReviewPanel({
       <div className="quantity-submit-row">
         <div>
           <h2>IE 复核决定</h2>
-          <p>通过后按批准的有效数量和最终价格生成工资；退回后原价格不变并保留本版审计记录。</p>
+          <p>{externalMode ? "通过后进入原责任判定，不产生本厂计件工资。退回仍保留本版数量和审计记录。" : "通过后按批准的有效数量和最终价格生成工资；退回后原价格不变并保留本版审计记录。"}</p>
         </div>
         <div className="quantity-review-actions">
           {changedPriceIds.length > 0 ? <Button

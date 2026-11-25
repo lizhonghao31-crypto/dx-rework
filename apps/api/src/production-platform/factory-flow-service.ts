@@ -29,7 +29,7 @@ import {readWarehouseCraftFactoryBasis} from './warehouse-craft-factory-basis.js
 import {availableWarehouseCraftQuantities,qualifyWarehouseCraftMovement,type WarehouseCraftMotion,type WarehouseCraftOccupationReader} from './warehouse-craft-movement.js';
 import {canReadExactOriginalQualityPhoto,exactUnboundQualityPhotos,factoryInspectionQualityAttachment,type OriginalQualityPhotoReference} from './original-quality-photo.js';
 import {countedCraftCheck} from './quality-craft-problem-scope.js';
-import {checkedExternalCraftRepairFact,lockExternalCraftRepair} from './warehouse-craft-rework-return.js';
+import {checkedExternalCraftRepairFact,lockExternalCraftRepair,readExternalCraftRepairProof} from './warehouse-craft-rework-return.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);};
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
@@ -326,12 +326,21 @@ export class FactoryFlowService{
   if(s.dispatched||!batch||s.tasks.find(t=>t.task_kind==='bulk_qc'&&(!step||t.step_id===step.step.stepId))?.state!=='ready')fail('请在本单选择该工艺可检查的实际回仓批次');
   this.checkTime(checkedAt,this.latestTime(s.route.cutting_completed_at,batch!.occurredAt));
   if(new Set(input.checks.map(c=>c.lineId)).size!==input.checks.length)fail('同批检查PO不可重复');
+  const nativeReturn=s.facts.find(fact=>fact.fact_id===batch!.factId);
+  const externalReworkId=nativeReturn?.payload.warehouseMotion?.reworkId;
+  if(externalReworkId){
+   const exact=await lockExternalCraftRepair(db,s.route.production_order_id,externalReworkId);
+   const physical=exact?await readExternalCraftRepairProof(db,exact.reworkId):null;
+   if(!exact||exact.status==='cancelled'||!physical?.physicalCompletedAt||!physical.returnFactIds.includes(batch!.factId)||
+    input.checks.some(check=>check.lineId!==exact.lineId||!check.quantityScope))
+    fail('原外厂返修须同一范围全部实际回仓，再按实际回仓批次分量复检；财务状态不代替复检');
+  }
   for(const check of input.checks){
    const row=batch!.rows.find(l=>l.lineId===check.lineId);if(!row||row.available<=0)fail('本批PO已发完或已重新发工艺，不可覆盖检查');
    const prior=s.checks.filter(c=>c.return_fact_id===batch!.factId&&c.line_id===check.lineId).at(-1);
    const counted=check.quantityScope&&row?countedCraftCheck(check.quantityScope,row.returned):null;
    if(check.quantityScope){
-    const original=s.facts.find(fact=>fact.fact_id===batch!.factId);
+    const original=nativeReturn;
     const outgoing=original?.payload.sendFactId?s.facts.find(fact=>fact.fact_id===original.payload.sendFactId&&fact.kind==='工艺发出'):null;
     if(!counted||!step||!this.readWarehouseCraftOccupation||input.returnFactId!==batch!.factId||
       original?.payload.stepRef!==step.step.stepId||outgoing?.payload.stepRef!==step.step.stepId||

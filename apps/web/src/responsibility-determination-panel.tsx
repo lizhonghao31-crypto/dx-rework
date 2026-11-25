@@ -31,7 +31,7 @@ const responsibilityTypes: ReadonlyArray<{
   { value: "fabric_supplier", label: "面料商承担", supplierType: "fabric" },
 ];
 type AllocationForm = { responsibilityType: ResponsibilityType; sharePercent: string; multiplier: string; supplierId: string };
-type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; executionKind: "worker" | "tail_inspection"; baseAmount: string; allocations: AllocationForm[] };
+type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; executionKind: "worker" | "tail_inspection" | "external_craft"; baseAmount: string; allocations: AllocationForm[] };
 
 const defaultBatchAllocation = (): AllocationForm => ({
   responsibilityType: "own_factory",
@@ -112,7 +112,7 @@ const formsFromResponse = (
 ): ProcessForm[] => {
   const persisted = response.determination?.processes ?? [];
   return response.sourceProcesses
-    .filter((source) => source.executionKind === "worker" || tailCostBearer !== null)
+    .filter((source) => source.executionKind !== "tail_inspection" || tailCostBearer !== null)
     .map((source) => {
       const current = persisted.find((process) => process.configurationItemId === source.configurationItemId);
       const tailAllocation: AllocationForm = {

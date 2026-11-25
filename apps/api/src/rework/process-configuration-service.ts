@@ -279,6 +279,9 @@ export class ProcessConfigurationService {
       if (order.status !== "pending_process_configuration") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "当前返工单不允许保存工序配置", 409);
       }
+      if (order.craft_rework_execution === "factory") {
+        throw new ApplicationError("INVALID_STATE_TRANSITION", "纯外厂返修须确认原外厂执行，不可登记本厂工人和计件工序", 409);
+      }
       const kind = "initial" as const;
       if (input.changeReason) {
         throw new ApplicationError("VALIDATION_ERROR", "初次配置不能伪造为变更单", 400);
@@ -812,6 +815,7 @@ export class ProcessConfigurationService {
       reworkStatus: order.status,
       orderVersion: order.version,
       tailInspectionRequired: order.tail_inspection_required,
+      ...(order.craft_rework_execution === "factory" ? { externalCraftOnly: true } : {}),
       specialProcessType: order.special_process_type ?? null,
       otherCraftDescription: order.other_craft_description ?? null,
       configuration: configuration ? {

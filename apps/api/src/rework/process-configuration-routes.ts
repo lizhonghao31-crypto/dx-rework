@@ -1,4 +1,5 @@
 import {
+  ConfirmWorkAssignmentsSchema,
   IdempotencyKeySchema,
   ProcessConfigurationOptionsResponseSchema,
   ProcessConfigurationParamsSchema,
@@ -142,6 +143,17 @@ export function registerProcessConfigurationRoutes(
       await actor(request, "read"),
       parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
     )),
+  );
+
+  app.post<{ Params: { reworkOrderId: string } }>(
+    "/rework-orders/:reworkOrderId/process-configuration/external-activate",
+    async (request, reply) => {
+      const result = await dependencies.service.activateExternalCraft(await actor(request, "configure"),
+        parse(ProcessConfigurationParamsSchema, request.params).reworkOrderId,
+        parse(ConfirmWorkAssignmentsSchema, request.body), idempotencyKey(request));
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return ProcessConfigurationResponseSchema.parse(result.value);
+    },
   );
 
   if (dependencies.workerPlan) {

@@ -20,6 +20,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
+import { readExternalCraftRepairProof } from "../production-platform/warehouse-craft-rework-return.js";
 import { ensureWithinSourceReceivingActualQuantity } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
@@ -40,6 +41,7 @@ type ReturnedReportRow = Readonly<{
 }>;
 type OrderRow = Readonly<{
   rework_order_id: string; rework_no: string | null; status: string; version: number;
+  craft_rework_execution?: "factory" | "inhouse" | null;
   special_process_type?: "none" | "inspection" | "other_craft" | null; other_craft_description?: string | null;
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
@@ -131,7 +133,15 @@ export class WorkReportingService {
   async list(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkWorkTasksResponse> {
     const order = await this.order(this.database, reworkOrderId, false);
     const tasks = await this.tasks(this.database, reworkOrderId, actor);
-    return { reworkOrderId, reworkStatus: order.status as ReworkWorkTasksResponse["reworkStatus"], orderVersion: order.version, specialProcessType: order.special_process_type ?? null, otherCraftDescription: order.other_craft_description ?? null, tasks };
+    const externalRepair = order.craft_rework_execution === "factory" && this.canReadOrderWideExecution(actor)
+      ? await readExternalCraftRepairProof(this.database, reworkOrderId) : undefined;
+    return { reworkOrderId, reworkStatus: order.status as ReworkWorkTasksResponse["reworkStatus"], orderVersion: order.version, specialProcessType: order.special_process_type ?? null, otherCraftDescription: order.other_craft_description ?? null, tasks,
+      ...(externalRepair === undefined ? {} : { externalRepair: externalRepair ? this.physicalProgress(externalRepair) : null }),
+    };
+  }
+
+  private physicalProgress(proof: NonNullable<Awaited<ReturnType<typeof readExternalCraftRepairProof>>>) {
+    return { requiredQuantity: proof.requiredQuantity, returnedQuantity: proof.returnedQuantity, physicalCompletedAt: proof.physicalCompletedAt };
   }
 
   async listFrontlineTasks(actor: TrustedActorContext, kind: FrontlineTaskKind): Promise<FrontlineTasksResponse> {
@@ -559,7 +569,13 @@ export class WorkReportingService {
       const order = await this.order(client, reworkOrderId, true);
       if (order.status !== "in_progress") error("当前返工单不在返工执行节点", 409, "INVALID_STATE_TRANSITION");
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
-      if (!await this.readyForWholeOrderReview(client, reworkOrderId, [], true)) {
+      const externalRepair = order.craft_rework_execution === "factory"
+        ? await readExternalCraftRepairProof(client, reworkOrderId)
+        : null;
+      if (order.craft_rework_execution === "factory" && !externalRepair?.physicalCompletedAt) {
+        error("原外厂返修范围尚未全部实际回仓，不能进入最终数量确认", 409, "INVALID_STATE_TRANSITION");
+      }
+      if (order.craft_rework_execution !== "factory" && !await this.readyForWholeOrderReview(client, reworkOrderId, [], true)) {
         error("仍有返工人员或整查任务未完成，不能进入最终数量确认；请尾部在本单执行进度逐项核对，由各任务办理人完成原上数或整查后再核量", 409, "INVALID_STATE_TRANSITION");
       }
       const eventId = await this.events.append(client, actor, {
@@ -569,9 +585,9 @@ export class WorkReportingService {
         before: this.orderAuditState(order, order.status, order.version),
         after: {
           ...this.orderAuditState(order, "pending_order_review", order.version + 1),
-          completionRecoveredFromEffectiveReports: true,
+          ...(externalRepair ? { externalRepair } : { completionRecoveredFromEffectiveReports: true }),
         },
-        reason: "全部有效返工与整查任务已完成，恢复进入最终数量确认",
+        reason: externalRepair ? "原外厂返修已按同一事实范围全部回仓，进入原最终数量确认" : "全部有效返工与整查任务已完成，恢复进入最终数量确认",
       });
       await this.context(client, eventId, actor.requestId);
       await client.query(
@@ -595,6 +611,7 @@ export class WorkReportingService {
         reworkStatus: "pending_order_review",
         orderVersion: order.version + 1,
         tasks: await this.tasks(client, reworkOrderId, actor),
+        ...(externalRepair ? { externalRepair: this.physicalProgress(externalRepair) } : {}),
       };
     });
   }
@@ -1070,7 +1087,7 @@ export class WorkReportingService {
   }
 
   private async order(client: Pick<Pool, "query"> | PoolClient, id: string, locked: boolean): Promise<OrderRow> {
-    const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,special_process_type,other_craft_description FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`, [id]);
+    const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,special_process_type,other_craft_description,to_jsonb(rework_orders)->>'craft_rework_execution' AS craft_rework_execution FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`, [id]);
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");
   }
 
@@ -1290,7 +1307,7 @@ export class WorkReportingService {
   }
 
   private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> {
-    const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor) || this.isIeExecutionReader(actor);
+    const manager = this.canReadOrderWideExecution(actor);
     const filters: string[] = [];
     const values: string[] = [orderId];
     if (this.isWorker(actor)) {
@@ -1312,6 +1329,10 @@ export class WorkReportingService {
       manager ? [orderId] : values,
     );
     return this.projectAuthorizedTasks(client, result.rows, actor);
+  }
+
+  private canReadOrderWideExecution(actor: TrustedActorContext): boolean {
+    return this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor) || this.isIeExecutionReader(actor);
   }
 
   private async mutate<T>(actor: TrustedActorContext, action: string, key: string, payload: unknown, statusCode: number, work: (client: PoolClient) => Promise<T>): Promise<Result<T>> { const client = await this.database.connect(); try { await client.query("BEGIN"); const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key, requestHash: hash(action, payload), expiresAt: new Date(Date.now()+24*60*60*1000) }, async () => ({ statusCode, response: await work(client) })); await client.query("COMMIT"); return { value: outcome.response, reused: outcome.reused }; } catch (cause) { await client.query("ROLLBACK"); throw cause; } finally { client.release(); } }

@@ -714,6 +714,7 @@ export const ProcessConfigurationResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   tailInspectionRequired: z.boolean().default(true),
+  externalCraftOnly: z.boolean().optional(),
   specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
   otherCraftDescription: OtherCraftDescriptionSchema,
   configuration: z.object({
@@ -907,6 +908,11 @@ export const WorkReportsBatchResponseSchema = z.object({
   orderVersion: z.number().int().positive(),
   reports: z.array(WorkReportResponseSchema).min(1).max(200),
 }).strict();
+const ExternalCraftPhysicalProgressSchema = z.object({
+  requiredQuantity: z.number().int().positive(),
+  returnedQuantity: z.number().int().nonnegative(),
+  physicalCompletedAt: z.string().datetime().nullable(),
+}).strict();
 export const ReworkWorkTasksResponseSchema = z.object({
   specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
   otherCraftDescription: OtherCraftDescriptionSchema,
@@ -914,6 +920,7 @@ export const ReworkWorkTasksResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   tasks: z.array(WorkTaskResponseSchema),
+  externalRepair: ExternalCraftPhysicalProgressSchema.nullable().optional(),
 });
 export type CreateWorkTask = z.infer<typeof CreateWorkTaskSchema>;
 export type AddActiveWorkTaskMembers = z.infer<typeof AddActiveWorkTaskMembersSchema>;
@@ -1103,6 +1110,7 @@ export const WholeOrderReviewResponseSchema = z.object({
     reason: z.string().nullable(),
   }).strict()),
   reviewId: IdSchema.nullable(),
+  externalRepair: ExternalCraftPhysicalProgressSchema.nullable().optional(),
   finalConfirmation: z.object({
     confirmationId: IdSchema,
     confirmationVersion: z.number().int().positive(),
@@ -1112,6 +1120,7 @@ export const WholeOrderReviewResponseSchema = z.object({
     reviewedBy: IdSchema.nullable(),
     reviewedAt: z.string().datetime().nullable(),
     reviewReason: z.string().nullable(),
+    externalRepair: ExternalCraftPhysicalProgressSchema.optional(),
     prices: z.array(z.object({
       configurationItemId: IdSchema,
       originalUnitPrice: z.number().positive(),
