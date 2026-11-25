@@ -16,7 +16,7 @@ import { DigitalProductionAccessPolicy } from "../production-platform/access-pol
 import { isRootActor } from "../access/business-authority.js";
 import {merchandiserWorkCandidate,merchandiserWorkPage,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories,type AuthorizedMerchandiserWorkItem} from '../production-platform/merchandiser-work-candidates.js';
 import {readMerchandiserTaskProgress} from '../production-platform/merchandiser-task-progress.js';
-import {readMerchandiserOriginalOrders} from '../production-platform/merchandiser-original-orders.js';
+import {readMerchandiserFactoryNames,readMerchandiserOriginalOrders} from '../production-platform/merchandiser-original-orders.js';
 import type {MerchandiserCraftCommunication} from '@dx-rework/contracts';
 import { randomUUID } from "node:crypto";
 import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
@@ -412,13 +412,15 @@ export class TodoService {
       const byId=new Map(deep.map(row=>[row.id,row]));
       const authorized=[...deep.map(row=>({orderId:row.id,sourceId:row.source_id})),...actions.flatMap(row=>row.identity&&!row.identity.orderId?[row.identity]:[])];
       const rush=await readDevelopmentOrderRush(db,authorized);
+      const factories=await readMerchandiserFactoryNames(db,actor,deep.map(row=>row.id));
       const responsibleName=actions.length?(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[actor.actorId])).rows[0]?.display_name??null:null;
       const rows=actions.filter(row=>row.candidate.craftCommunication?roles.craft:roles.order).map((row):AuthorizedMerchandiserWorkItem=>{
         const {candidate,todo,identity}=row,order=byId.get(parent(row)??'');
         const context=todo.orderContext,key=order?'order:'+order.id:identity&&developmentRushKey(identity);
         return {...candidate,state:todo.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.issued_number??context?.orderNo??null,
           styleNo:order?.style_no??context?.styleNo??null,...(order?{originalOrderId:order.id}:{}),
-          customer:order?.customer_code??null,poNumbers:order?.po_numbers??context?.poNumbers??[],factory:context?.supplierName??null,urgent:Boolean(key&&rush.has(key)),responsibleName};
+          customer:order?.customer_code??null,poNumbers:order?.po_numbers??context?.poNumbers??[],
+          factory:context?.supplierName??(order&&factories.get(order.id)?.join('、')||null),urgent:Boolean(key&&rush.has(key)),responsibleName};
       });
       await db.query('COMMIT');
       return {...merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state}),...audience};

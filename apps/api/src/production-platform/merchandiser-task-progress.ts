@@ -4,6 +4,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {readDevelopmentOrderRush} from './development-order-rush.js';
 import {readJourneySelectionAccess,readTaskAccessForPage} from './journey-selection-access.js';
 import {originalMerchandiserTaskKind,originalMerchandiserTaskKinds,type AuthorizedMerchandiserWorkItem} from './merchandiser-work-candidates.js';
+import {readMerchandiserFactoryNames} from './merchandiser-original-orders.js';
 
 const collaboratingTasks={bulk_pattern:'preparation',warehouse_preshrink:'preparation',warehouse_dispatch:'delivery',
  bulk_qc:'exceptions',process_logistics:'delivery'} as const;
@@ -43,13 +44,15 @@ export async function readMerchandiserTaskProgress(db:PoolClient,actor:TrustedAc
  const visible=rows.filter(row=>native.get(row.task_id)?.technical&&native.get(row.task_id)?.parentTechnical);
  const {resources}=await readJourneySelectionAccess(db,actor,[...new Set(visible.map(row=>row.order_id))].map(id=>({kind:'order' as const,id})));
  const canReadOrder=(id:string)=>resources.get(businessScopeKey({kind:'order',id}))?.fullOrder===true;
- const rush=await readDevelopmentOrderRush(db,visible.flatMap(row=>canReadOrder(row.order_id)?[{orderId:row.order_id,sourceId:row.source_id}]:[]));
+ const orderRows=visible.filter(row=>canReadOrder(row.order_id));
+ const rush=await readDevelopmentOrderRush(db,orderRows.map(row=>({orderId:row.order_id,sourceId:row.source_id})));
+ const factories=await readMerchandiserFactoryNames(db,actor,[...new Set(orderRows.map(row=>row.order_id))]);
  return visible.flatMap((row):AuthorizedMerchandiserWorkItem[]=>{
   const kind=state==='completed'?originalMerchandiserTaskKind(row.task_kind):collaboratingTasks[row.task_kind as keyof typeof collaboratingTasks];
   const order=canReadOrder(row.order_id)?row:null;
   return kind?[{itemId:row.task_id,state,kind,title:row.label,route:{routeName:'digital_production_task',entityId:row.task_id,todoId:row.task_id},
    dueAt:row.due_at?.toISOString()??null,orderNumber:order?.issued_number??null,styleNo:order?.style_no??null,customer:order?.customer??null,
    poNumbers:order?.po_numbers??[],...(order?{originalOrderId:order.order_id}:{}),
-   factory:null,urgent:rush.has('order:'+row.order_id),responsibleName:row.handler}]:[];
+   factory:factories.get(row.order_id)?.join('、')||null,urgent:rush.has('order:'+row.order_id),responsibleName:row.handler}]:[];
  });
 }

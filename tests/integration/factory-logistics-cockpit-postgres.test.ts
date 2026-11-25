@@ -97,6 +97,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(before.context.graph.anchors[`${lineId}/factory_production_finished`]).toBeUndefined();expect(before.current.rows.find(n=>n.id===`${lineId}/factory_finished`)!.end.at).toBeNull();
   const timeline=await nativeFactoryTimeline(f.db,sundayReady.id);
   expect(timeline).toHaveLength(1);expect(timeline[0]).toMatchObject({lineId,completedDate:null,completionTransitionRef:null});
+  const factoryName=(await f.db.query('SELECT supplier_name_snapshot FROM sourcing_production_factory_orders WHERE production_order_id=$1',[sundayReady.productionId])).rows[0]?.supplier_name_snapshot;
+  expect(factoryName).toEqual(expect.any(String));
+  const merch={...f.people.merchandiser!,authorizationCapability:'todo:view',authorizationCapabilities:['todo:view','sourcing:view']};
+  const orders=new TodoService(f.db);
+  expect(await orders.merchandiserOrderPage(merch,{search:factoryName,page:1})).toMatchObject({total:1,items:[{id:sundayReady.id,factories:[factoryName]}]});
+  expect(await orders.merchandiserOrderPage({...merch,authorizationCapabilities:['todo:view']},{search:factoryName,page:1})).toEqual({items:[],page:1,total:0});
  }));
  const ship=async(r:{productionId:string;day:string},factoryDecisionId:string|null=null,quantities=[10])=>{
   const reports=new ProductionReportingService(f.db);

@@ -11,6 +11,15 @@ import {issuedOrderNumber} from './order-number-repository.js';
 type Original={id:string;source_id:string|null;design_style_no:string;temporary_style_no:string|null;customer:string;
  number_source_id:string|null;number_source_style:string|null;workbench_generated_number:boolean|null;po_numbers:string[]};
 
+/** The caller supplies only whole-order authorized IDs. Existing reporting
+ * visibility still limits the factory names shown or searchable for this role. */
+export async function readMerchandiserFactoryNames(db:PoolClient,actor:TrustedActorContext,ids:readonly string[]){
+ if(!ids.length)return new Map<string,string[]>();
+ const asOf=acceptanceBusinessContext()?.time.now??(await db.query<{now:Date}>('SELECT CURRENT_TIMESTAMP AS now')).rows[0]!.now.toISOString();
+ const scopes=await readCockpitFactoryScopes(db,actor,ids.map(id=>({id,asOf})));
+ return new Map(ids.map(id=>[id,[...new Set((scopes.get(id)??[]).filter(row=>row.visible&&row.status).map(row=>row.factoryName))].sort()]));
+}
+
 /** The original order is accessible independently of todos. An assigned row is
  * not an authorization grant: apply the original full-order read before facts,
  * search, totals or pagination. Always require the workbench's own relationship
@@ -25,9 +34,7 @@ export async function readMerchandiserOriginalOrders(db:PoolClient,actor:Trusted
  const {resources}=await readJourneySelectionAccess(db,actor,candidates.map(({id})=>({kind:'order',id})));
  const ids=candidates.flatMap(row=>resources.get(businessScopeKey({kind:'order',id:row.id}))?.fullOrder?[row.id]:[]);
  if(!ids.length)return {items:[],page:filter.page,total:0};
- const asOf=context?.time.now??(await db.query<{now:Date}>('SELECT CURRENT_TIMESTAMP AS now')).rows[0]!.now.toISOString();
- const scopes=await readCockpitFactoryScopes(db,actor,ids.map(id=>({id,asOf})));
- const factories=new Map(ids.map(id=>[id,[...new Set((scopes.get(id)??[]).filter(row=>row.visible&&row.status).map(row=>row.factoryName))].sort()]));
+ const factories=await readMerchandiserFactoryNames(db,actor,ids);
  const originals=(await db.query<Original>(`SELECT o.production_order_id AS id,o.source_id,o.design_style_no,o.temporary_style_no,o.customer_code AS customer,
    s.source_id AS number_source_id,s.design_style_no AS number_source_style,s.workbench_generated_number,
    ARRAY(SELECT po.po_number FROM digital_production_po_lines po WHERE po.production_order_id=o.production_order_id AND po.po_number IS NOT NULL ORDER BY po.position,po.line_id) AS po_numbers
