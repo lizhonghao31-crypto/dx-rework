@@ -7,7 +7,8 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
 import type {AssembledQuotation} from './quotation-assembly.js';
-import {approvedSecondaryCraftRows,requiredCraftRows,secondaryCraftReady} from './secondary-craft-quotation.js';
+import {approvedSecondaryCraftRows,hasUnmappedSecondaryCraft,requiredCraftRows,secondaryCraftReady} from './secondary-craft-quotation.js';
+import {secondaryCraftDecisionAuthorityReady} from './secondary-craft-approval-authority.js';
 
 const conflict=(message:string):never=>{throw new ApplicationError('QUOTATION_CONFLICT',message,409);};
 
@@ -76,10 +77,13 @@ export async function readWorkbenchQuotation(db:PoolClient,quote:AssembledQuotat
   }));
   // A review of a retired row is retained for history. It cannot be resolved against another row.
   const result=quotationDraftReviewSummary(states);
+  const releaseReady=ready&&await secondaryCraftDecisionAuthorityReady(db);
+  const unmapped=await hasUnmappedSecondaryCraft(db,quote);
   const unitCost=audited.every(value=>value.complete)?calculateQuotationUnitCost(quote.document):null;
   return {resource,quoteId:quote.quote_id,version:quote.version,unitCost,...result,
+    ...(unmapped&&result.status==='awaiting_customer_confirmation'?{status:'awaiting_craft_approval' as const}:{}),
     saved:draft?{input:QuotationPricingInputSchema.parse(draft.pricing.input),version:draft.quote_version}:null,reviews:visibleReviews,
-    confirmation:ready?'joint_release_ready' as const:'awaiting_joint_release' as const};
+    confirmation:releaseReady?'joint_release_ready' as const:'awaiting_joint_release' as const};
 }
 
 export async function assertNoOpenQuotationReviews(db:PoolClient,quote:AssembledQuotation){

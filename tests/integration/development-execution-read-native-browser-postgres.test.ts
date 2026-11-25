@@ -1311,7 +1311,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const confirmed=await quotes.confirm(designer,resource,QuotationConfirmationSchema.parse({
    expectedVersion:priced.version,customerCode:'PD',customerConfirmedTotal:'20',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',
    taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',
-   evidenceNote:'TEST 真实业务确认入口及签名',confirmedAt:'2026-11-08T00:00:00Z',
+   evidenceNote:'TEST 真实业务确认入口及签名',workbenchPricing:{field:'customerUnitPrice',value:'20'},confirmedAt:'2026-11-08T00:00:00Z',
   }),randomUUID());
   expect((await view()).electronic[2]).toMatchObject({kind:'quotation',state:'shared',version:confirmed.confirmedVersion,receipt:{recipientId:recipient.actorId}});
   const history=await events();expect(history).toHaveLength(2);

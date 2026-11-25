@@ -68,6 +68,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   const makerPage=sessions.find(session=>session.page.request===makerSession)!.page;
   const makerTab=sessions.find(session=>session.page.request===makerSession)!;
   const ownerPage=sessions.find(session=>session.page.request===approvalSession)!.page;
+  const rootPage=sessions.find(session=>session.page.request===rootSession)!.page;
   const base=`${h.base}/api/digital-production/orders/${resource.id}`,quotation=base+'/quotation',budget=base+'/budget';
   const craft=(rowId:string)=>`${quotation}/secondary-craft/${rowId}`;
   const center=h.base+'/ui/secondary-craft-quotation';
@@ -82,9 +83,9 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
    expect(result.status(),await result.text()).toBe(status);
    return result.json();
   };
-  const confirm=async(status:number,extra:object={})=>{
+  const confirm=async(status:number,extra:object={},request=designSession)=>{
    const latest=await quotes.read(designer,resource);
-   return write(designSession,status,quotation+'/confirm',{expectedVersion:latest.version,customerCode:'PD',
+   return write(request,status,quotation+'/confirm',{expectedVersion:latest.version,customerCode:'PD',
     customerConfirmedTotal:'20',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',
     taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',
     templateVersion:'online-quotation-v1',evidenceNote:'TEST 客户确认',confirmedAt:new Date().toISOString(),...extra});
@@ -96,6 +97,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect(factories).toContainEqual(expect.objectContaining({supplierId:f.supplierId}));
   expect(Object.keys(factories[0]).sort()).toEqual(['code','name','supplierId']);
   expect(await currentDirectory(approvalSession)).toEqual([]);
+  expect(await currentDirectory(rootSession)).toEqual([]);
   const makerDirectory=await currentDirectory(makerSession);
   expect(new Set(makerDirectory.map((item:{rowId:string})=>item.rowId))).toEqual(new Set([embroidery.rowId,printing.rowId]));
   expect(makerDirectory).toMatchObject([{resource,orderRush:true},{resource,orderRush:true}]);
@@ -160,7 +162,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   await write(budgetSession,409,budget,{expectedVersion:0,document:sheet.document},key(),'PUT');
   await write(makerSession,400,internal+'/submit',{...terms,mode:'in_house',attachmentIds:[]});
   h.faults.get(makerTab.session)!.losePath=new URL(external+'/submit').pathname;
-  await makerPage.getByRole('button',{name:'提交伍云峰审批'}).click();
+  await makerPage.getByRole('button',{name:'提交工艺报价审批'}).click();
   await makerPage.getByRole('button',{name:'重试原请求'}).waitFor();
   const recovered=makerPage.waitForResponse(response=>response.url()===external+'/submit'&&response.status()===200);
   await makerPage.getByRole('button',{name:'重试原请求'}).click();
@@ -172,6 +174,8 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect(sends[0]?.bodyHash).toBe(sends[1]?.bodyHash);
   const approvalItem=(await currentDirectory(approvalSession))[0];
   expect(approvalItem).toMatchObject({resource,rowId:embroidery.rowId,version:2,canDecide:true,state:'submitted',orderRush:true,savedPricing:{mode:'outsourced',amount:'2.125',unit:'件'}});
+  expect(await currentDirectory(rootSession)).toMatchObject([{resource,rowId:embroidery.rowId,version:2,canDecide:true,approvalTodoId:null}]);
+  expect((await rootSession.get(external+'?supplierSearch=')).status()).toBe(403);
   expect(await currentDirectory(otherSession)).toEqual([]);
   const notice=await db.query(`SELECT e.todo_id,r.recipient_id FROM digital_production_notification_events e
    JOIN digital_production_notification_receipts r USING(event_id) WHERE event_kind='secondary_craft_approval'`);
@@ -183,7 +187,7 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect(todo.status(),await todo.text()).toBe(200);
   expect((await otherSession.get(h.base+`/api/todos/mine/${approvalItem.approvalTodoId}`)).status()).toBe(404);
   await write(makerSession,200,internal+'/submit',{...terms,mode:'in_house',supplierId:null,attachmentIds:[],unitPrice:'3'});
-  for(const no of [makerSession,rootSession,otherSession])await write(no,403,external+'/decision',{decision:'approved',expectedVersion:2});
+  for(const no of [makerSession,otherSession])await write(no,403,external+'/decision',{decision:'approved',expectedVersion:2});
   await write(approvalSession,409,external+'/decision',{decision:'approved',expectedVersion:1});
   await expect(db.query(`INSERT INTO digital_secondary_craft_quote_decisions(decision_id,quote_id,row_id,revision,actor_id,decision,reason,decided_at)
    VALUES($1,$2,$3,2,$4,'approved','',CURRENT_TIMESTAMP)`,[key(),sheet.quoteId,embroidery.rowId,otherOwner.id]))
@@ -193,23 +197,49 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   expect(await ownerPage.getByText('2.1 元 / 件',{exact:true}).getAttribute('title')).toBe('2.125 元 / 件');
   await ownerPage.getByRole('link',{name:/ · 绣花$/}).click();
   await ownerPage.getByRole('heading',{name:'绣花报价',exact:true}).waitFor();
-  expect(await ownerPage.getByRole('button',{name:'提交伍云峰审批'}).count()).toBe(0);
+  expect(await ownerPage.getByRole('button',{name:'提交工艺报价审批'}).count()).toBe(0);
   const decision=ownerPage.waitForResponse(response=>response.url()===external+'/decision'&&response.request().method()==='POST');
   await ownerPage.getByRole('button',{name:'批准本版工艺报价'}).click();
   const decisionResult=await decision;
   expect(decisionResult.status(),await decisionResult.text()).toBe(200);
   expect(await decisionResult.json()).toMatchObject({state:'approved',receipt:{action:'decision',appliedVersion:2}});
-  await write(approvalSession,200,internal+'/decision',{decision:'returned',expectedVersion:1,reason:'核对原要求'});
-  await confirm(409);
+  await write(rootSession,409,external+'/decision',{decision:'approved',expectedVersion:2});
+  const returning={decision:'returned',expectedVersion:1,reason:'核对原要求'};
+  const simultaneous=await Promise.all([approvalSession,rootSession].map(request=>request.post(internal+'/decision',{
+   headers:{'idempotency-key':key()},data:returning,
+  })));
+  expect(simultaneous.map(result=>result.status()).sort()).toEqual([200,409]);
+  expect((await db.query('SELECT actor_id,decision FROM digital_secondary_craft_quote_decisions WHERE quote_id=$1 AND row_id=$2 AND revision=1',[sheet.quoteId,printing.rowId])).rows)
+   .toEqual([{actor_id:simultaneous[0]!.status()===200?wu.actorId:f.root.actorId,decision:'returned'}]);
+  const pricing={field:'customerUnitPrice',value:'20.000000'} as const;
+  await confirm(409,{workbenchPricing:pricing});
   await write(makerSession,200,internal+'/submit',{...terms,expectedVersion:1,mode:'in_house',supplierId:null,attachmentIds:[],unitPrice:'3'});
-  await write(approvalSession,200,internal+'/decision',{decision:'approved',expectedVersion:2});
+  await rootPage.goto(center);
+  await rootPage.getByRole('link',{name:/ · 印花$/}).click();
+  await rootPage.getByRole('heading',{name:'印花报价',exact:true}).waitFor();
+  const [rootDecision]=await Promise.all([rootPage.waitForResponse(response=>response.url()===internal+'/decision'&&response.request().method()==='POST'),
+   rootPage.getByRole('button',{name:'批准本版工艺报价'}).click()]);
+  expect(rootDecision.status(),await rootDecision.text()).toBe(200);
+  await write(approvalSession,409,internal+'/decision',{decision:'approved',expectedVersion:2});
+  expect((await db.query('SELECT row_id,actor_id,approval_authority FROM digital_secondary_craft_quote_decisions WHERE quote_id=$1 AND revision=2',[sheet.quoteId])).rows)
+   .toEqual(expect.arrayContaining([
+    {row_id:embroidery.rowId,actor_id:wu.actorId,approval_authority:'bound_wu_yunfeng'},
+    {row_id:printing.rowId,actor_id:f.root.actorId,approval_authority:'root_superuser'},
+   ]));
+  const noBypass=await confirm(409);
+  expect(JSON.stringify(noBypass)).toContain('采用本报价当前成本测算');
+  expect((await db.query('SELECT 1 FROM digital_quotation_versions WHERE quote_id=$1',[sheet.quoteId])).rowCount).toBe(0);
+  await confirm(403,{workbenchPricing:pricing},rootSession);
+  await confirm(403,{workbenchPricing:pricing},budgetSession);
+  const exactSheet=await quotes.read(designer,resource);
+  await confirm(409,{expectedVersion:exactSheet.version-1,workbenchPricing:pricing});
   await confirm(400,{secondaryCraftApprovals:[key()]});
   await confirm(409,{workbenchPricing:{field:'customerUnitPrice',value:'19'}});
-  await confirm(200,{workbenchPricing:{field:'customerUnitPrice',value:'20.000000'}});
+  await confirm(200,{workbenchPricing:pricing});
   const frozen=(await db.query('SELECT secondary_craft_approvals,workbench_pricing FROM digital_quotation_versions WHERE quote_id=$1',[sheet.quoteId])).rows[0];
   expect(frozen.secondary_craft_approvals).toEqual(expect.arrayContaining([
    expect.objectContaining({rowId:embroidery.rowId,revision:2,actorId:wu.actorId}),
-   expect.objectContaining({rowId:printing.rowId,revision:2,actorId:wu.actorId}),
+   expect.objectContaining({rowId:printing.rowId,revision:2,actorId:f.root.actorId}),
   ]));
   expect(frozen.workbench_pricing.customerUnitPrice).toBe('20.000000');
   const bud=await budgetSession.get(budget);expect(bud.status(),await bud.text()).toBe(200);
@@ -250,7 +280,8 @@ check('enforces the joint R4/R6 workflow on actual signed roles and original con
   await write(approvalSession,200,manualCraft+'/decision',{expectedVersion:1,decision:'approved'});
   manualQuote=await quotes.read(designer,manualResource);
   expect(manualQuote.rows).toEqual(expect.arrayContaining([expect.objectContaining({rowId:manualRow,unit:'米',unitPrice:'7',consumption:'1.5'})]));
-  await write(designSession,200,manualBase+'/confirm',{...manualConfirmation,expectedVersion:manualQuote.version});
+  await write(designSession,200,manualBase+'/confirm',{...manualConfirmation,expectedVersion:manualQuote.version,
+   workbenchPricing:{field:'customerUnitPrice',value:'30'}});
   expect((await db.query('SELECT secondary_craft_approvals FROM digital_quotation_versions WHERE quote_id=$1',[manualQuote.quoteId])).rows[0])
    .toMatchObject({secondary_craft_approvals:[{rowId:manualRow,revision:1,actorId:wu.actorId}]});
  }finally{

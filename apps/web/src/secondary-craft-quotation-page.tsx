@@ -183,7 +183,7 @@ function CraftForm({original,path,href,version}:{original:SecondaryCraftDetail;p
    <TextInput label="适用数量" value={current.applicableQuantity??''} onChange={value=>edit({applicableQuantity:value||null})} isDisabled={disabled}/>
    <TextInput label="报价说明" value={current.note} onChange={value=>edit({note:value})} isDisabled={disabled}/>
    <Button label="保存工艺报价草稿" variant="secondary" isDisabled={disabled} onClick={()=>submit('draft')}/>
-   <Button label="提交伍云峰审批" isDisabled={disabled} onClick={()=>submit('submit')}/>
+   <Button label="提交工艺报价审批" isDisabled={disabled} onClick={()=>submit('submit')}/>
   </div>:item.draft&&<p>{item.draft.mode==='in_house'?'内做':item.supplier?.name??'加工厂待核'} · {item.draft.unitPrice} 元/{item.draft.unit}
    {item.draft.applicableQuantity&&` · 适用数量 ${item.draft.applicableQuantity}`}{item.draft.note&&` · ${item.draft.note}`}</p>}
   {item.canDecide&&<div className="budget-heading">

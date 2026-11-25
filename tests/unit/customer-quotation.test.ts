@@ -50,13 +50,21 @@ describe('Workbench pricing calculation',()=>{
   const multiplier={field:'multiplier',value:'130'} as const;
   expect(calculateQuotationPricing('100',multiplier)).toMatchObject({status:'calculated',customerUnitPrice:'130',multiplierPercent:'130'});
   expect(calculateQuotationPricing('90',multiplier)).toMatchObject({status:'calculated',customerUnitPrice:'117',multiplierPercent:'130'});
+  expect(calculateQuotationPricing('100',{field:'customerUnitPrice',value:'80'})).toMatchObject({status:'calculated',customerUnitPrice:'80',multiplierPercent:'80'});
   const price={field:'customerUnitPrice',value:'125.000001'} as const;
   expect(calculateQuotationPricing('100',price)).toMatchObject({status:'calculated',customerUnitPrice:price.value,multiplierPercent:'125'});
   expect(calculateQuotationPricing('90',price)).toMatchObject({status:'calculated',customerUnitPrice:price.value,multiplierPercent:'138.8889'});
  });
- it('rounds a generated price once and keeps the exact ratio for a manually entered price',()=>{
-  expect(calculateQuotationPricing('0.005',{field:'multiplier',value:'100'}).customerUnitPrice).toBe('0.01');
-  expect(calculateQuotationPricing('0.004999999999',{field:'multiplier',value:'100'}).customerUnitPrice).toBe('0');
+ it('rounds a generated price once at the existing confirmation precision, not at cents',()=>{
+  const fullRate={field:'multiplier',value:'100'} as const;
+  expect(calculateQuotationPricing('0.005',fullRate).customerUnitPrice).toBe('0.005');
+  expect(calculateQuotationPricing('0.000000499999',fullRate).customerUnitPrice).toBe('0');
+  expect(calculateQuotationPricing('0.0000005',fullRate).customerUnitPrice).toBe('0.000001');
+  expect(calculateQuotationPricing('1.23456789',{field:'multiplier',value:'137.5'})).toMatchObject({
+   status:'calculated',customerUnitPrice:'1.697531',multiplierPercent:'137.5',
+  });
+ });
+ it('keeps the exact ratio and original input for a manually entered price',()=>{
   const result=calculateQuotationPricing('3',{field:'customerUnitPrice',value:'1.000000'});
   expect(result).toMatchObject({customerUnitPrice:'1.000000',multiplierPercent:'33.3333'});
   const ratio=result.exactMultiplierPercent!;

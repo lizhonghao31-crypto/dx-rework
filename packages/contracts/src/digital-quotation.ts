@@ -73,6 +73,7 @@ export type UnifiedIeDirectoryEntry=z.infer<typeof UnifiedIeDirectoryEntrySchema
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;
+  requiresWorkbenchPricing?:true;
   craftApprovalState?:'waiting'|'complete';
   complete?:boolean;
   technicalConsumptionOptions?:Array<{artifactSetId:string;artifactVersion:number;materialId:string;name:string;unit:string;consumption:string}>;
@@ -92,6 +93,9 @@ export type BudgetQuoteComparison={
   baseline:BudgetDocument|null;confirmation:QuotationConfirmation|null;
 };
 const SCALE=1_000_000_000_000n;
+// The existing confirmation contract accepts six fractional digits. This
+// storage precision is independent of the presentation's display rounding.
+const QUOTATION_INPUT_SCALE=1_000_000n;
 export function quotationExact(value:string):bigint{
   if(!/^\d+(?:\.\d{1,12})?$/.test(value))throw new Error('金额口径无效');
   const [whole,fraction='']=value.split('.');return BigInt(whole!)*SCALE+BigInt(fraction.padEnd(12,'0'));
@@ -146,9 +150,11 @@ export function calculateQuotationPricing(cost: string | null, rawInput: Quotati
 
   const value = quotationExact(input.value);
   if (multiplierInput) {
-    // The percentage divisor and conversion to cents cancel. Round the final price once.
-    const priceInCents = (costExact * value + SCALE * SCALE / 2n) / (SCALE * SCALE);
-    const price = quotationAmount(priceInCents * (SCALE / 100n));
+    // Keep the entire fixed-point product. Round once, only when the result
+    // is represented as an amount in the existing six-digit contract.
+    const divisor = SCALE * SCALE * 100n / QUOTATION_INPUT_SCALE;
+    const priceInMillionths = (costExact * value + divisor / 2n) / divisor;
+    const price = quotationAmount(priceInMillionths * (SCALE / QUOTATION_INPUT_SCALE));
     if (!QuotationDecimalSchema.safeParse(price).success) return { ...pending, status: 'price_out_of_range' };
     return { ...pending, status: 'calculated', customerUnitPrice: price, multiplierPercent: input.value };
   }

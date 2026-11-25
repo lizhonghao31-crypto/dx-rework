@@ -1,11 +1,12 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
-import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import {developmentCraftOptions,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import {craftStepIdentity} from '@dx-rework/contracts/digital-craft';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
 import type {SecondaryCraftQuoteInput,SecondaryCraftDecision,SecondaryCraftDetail,SecondaryCraftList} from '@dx-rework/contracts/secondary-craft-quotation';
 import type {QuotationResource} from '@dx-rework/contracts/digital-quotation';
 import {acceptanceBusinessContext,acceptanceIncludesNative,businessNow} from '../acceptance-clock/business-time.js';
+import {isRootActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
@@ -13,7 +14,7 @@ import {developmentDocumentRow} from './development-round-repository.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {assembleQuotation,type AssembledQuotation} from './quotation-assembly.js';
 import {secondaryCraftDevelopmentBasis} from './secondary-craft-development-basis.js';
-import {lockSecondaryCraftApprover,readSecondaryCraftApprover} from './secondary-craft-approval-authority.js';
+import {lockSecondaryCraftApprover,readSecondaryCraftApprover,readSecondaryCraftRoot} from './secondary-craft-approval-authority.js';
 import {lockSecondaryCraftSupplier,readSecondaryCraftSupplierOptions} from './secondary-craft-suppliers.js';
 
 const conflict=(message:string):never=>{throw new ApplicationError('SECONDARY_CRAFT_CONFLICT',message,409);};
@@ -25,6 +26,7 @@ type Revision={
  submitted:boolean;approver_id:string|null;supplier_id:string|null;supplier_version:number|null;payload:NonNullable<SecondaryCraftDetail['draft']>;
  requirement:{label:string;instructions:string;attachmentIds:string[];pricingUnit:string};
  decision_id:string|null;decision:'approved'|'returned'|null;reason:string|null;decision_actor:string|null;
+ decision_authority:string|null;root_recipient:boolean;
  supplier_code:string|null;supplier_name:string|null;
 };
 export type SecondaryCraftApprovalRef={rowId:string;revision:number;decisionId:string;actorId:string};
@@ -57,7 +59,22 @@ export async function releasedCraftRows(db:Pick<PoolClient,'query'>,quote:Assemb
 }
 
 export async function hasUnmappedSecondaryCraft(db:Pick<PoolClient,'query'>,quote:AssembledQuotation){
- return !quote.assembly&&hasPublishedSecondaryCraft(db,quote.source_id);
+ if(!quote.assembly)return hasPublishedSecondaryCraft(db,quote.source_id);
+ if(!quote.source_id)return true;
+ const source=await developmentDocumentRow(db,quote.source_id);
+ if(source?.status!=='published'||(source.round_number??1)!==quote.assembly.roundNumber)return true;
+ const document=source.document as DevelopmentDocument;
+ const refs=requiredCraftRows(quote).map(row=>quote.assembly!.rows[row.rowId]!);
+ const development=new Set(refs.filter(ref=>ref.stage==='development').map(ref=>ref.craftRef?`${ref.sourceRef}:${ref.craftRef.libraryVersion}`:ref.sourceRef));
+ const publishedBulk=quote.production_order_id?(await db.query<{document:InstructionDocument}>(`SELECT v.document
+  FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version
+  WHERE d.production_order_id=$1`,[quote.production_order_id])).rows[0]?.document:null;
+ // Published bulk instructions replace development special-craft terms, even
+ // when the current instruction explicitly removes all those special crafts.
+ const steps=developmentCraftOptions(document).filter(step=>!publishedBulk||!step.key.startsWith('special:'));
+ if(steps.some(step=>!development.has(`craft:${step.key}`))||document.washing!=='免洗'&&!development.has(`craft:${document.washing}`))return true;
+ return Boolean(publishedBulk?.craftSteps?.some(step=>step.craftKind==='special'&&!refs.some(ref=>ref.stage==='bulk'
+  &&ref.sourceRef===`craft:bulk:${craftStepIdentity(step)}`&&ref.craftRef?.libraryVersion===step.specialCraft?.version)));
 }
 
 export async function hasPublishedSecondaryCraft(db:Pick<PoolClient,'query'>,sourceId:string|null){
@@ -120,6 +137,8 @@ async function targets(db:Pick<PoolClient,'query'>,quote:AssembledQuotation):Pro
 }
 
 const revisionFields=`r.*,d.decision_id,d.decision,d.reason,d.actor_id decision_actor,
+  to_jsonb(d)->>'approval_authority' decision_authority,
+  EXISTS(SELECT 1 FROM owner_bootstrap_consumptions root WHERE root.singleton AND root.user_id=r.approver_id) root_recipient,
   i.supplier_code,s.supplier_name
   FROM digital_secondary_craft_quote_revisions r LEFT JOIN digital_secondary_craft_quote_decisions d
    USING(quote_id,row_id,revision)
@@ -135,9 +154,16 @@ async function latest(db:Pick<PoolClient,'query'>,quoteId:string){
 const current=(target:Target,row:Revision|undefined):row is Revision=>Boolean(row&&row.basis===target.basis
  &&row.round_number===target.round&&row.stage===target.stage&&row.scope_id===target.scopeId&&row.author_id===target.authorId);
 
-function detailFor(actor:TrustedActorContext,roles:ReadonlySet<string>,approver:boolean,target:Target,row:Revision|undefined):SecondaryCraftDetail|null{
+async function approvalAuthority(db:Pick<PoolClient,'query'>,actor:TrustedActorContext,roles:ReadonlySet<string>,lock=false){
+ if(isRootActor(actor))return await readSecondaryCraftRoot(db,lock)===actor.actorId?'root':null;
+ return roles.has('owner_group')&&await (lock?lockSecondaryCraftApprover(db):readSecondaryCraftApprover(db))===actor.actorId?'wu':null;
+}
+const canReview=(authority:Awaited<ReturnType<typeof approvalAuthority>>,actorId:string,row:Revision)=>
+ row.submitted&&(authority==='root'||authority==='wu'&&(row.approver_id===actorId||row.root_recipient));
+
+function detailFor(actor:TrustedActorContext,roles:ReadonlySet<string>,approver:Awaited<ReturnType<typeof approvalAuthority>>,target:Target,row:Revision|undefined):SecondaryCraftDetail|null{
  const maker=target.authorId===actor.actorId&&roles.has(target.role);
- const approvalView=approver&&current(target,row)&&row.submitted&&row.approver_id===actor.actorId;
+ const approvalView=current(target,row)&&canReview(approver,actor.actorId,row);
  if(!maker&&!approvalView)return null;
  const active=current(target,row)?row:null;
  return {target:{rowId:target.rowId,scopeId:target.scopeId,label:target.label,round:target.round,stage:target.stage,sourceVersion:target.sourceVersion,
@@ -153,7 +179,7 @@ export async function secondaryCraftDetail(db:PoolClient,actor:TrustedActorConte
  if(!await secondaryCraftReady(db))conflict('联合报价流程尚未就绪');
  const target=(await targets(db,quote)).find(item=>item.rowId===rowId);
  const maker=target?.authorId===actor.actorId&&roles.has(target.role);
- const approver=roles.has('owner_group')&&await readSecondaryCraftApprover(db)===actor.actorId;
+ const approver=await approvalAuthority(db,actor,roles);
  if(!maker&&!approver&&!designerHistory)digitalNotFound();
  if(query.supplierSearch!==undefined){
   if(!maker)digitalForbidden();
@@ -161,7 +187,7 @@ export async function secondaryCraftDetail(db:PoolClient,actor:TrustedActorConte
  }
  const {rows:history}=await db.query<Revision>(`SELECT ${revisionFields}
   WHERE r.quote_id=$1 AND r.row_id=$2 ORDER BY r.revision DESC`,[quote.quote_id,rowId]);
- const readable=history.filter(row=>maker&&row.author_id===actor.actorId||row.submitted&&(designerHistory||approver&&row.approver_id===actor.actorId));
+ const readable=history.filter(row=>maker&&row.author_id===actor.actorId||row.submitted&&designerHistory||canReview(approver,actor.actorId,row));
  const versions=readable.map(row=>row.revision);
  if(query.version===undefined){
   const detail=target?detailFor(actor,roles,approver,target,history[0]):null;
@@ -182,7 +208,7 @@ type DirectoryQuote=AssembledQuotation&{style_no:string;people:Record<string,str
 export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:TrustedActorContext,roles:ReadonlySet<string>):Promise<SecondaryCraftList>{
  if(!await secondaryCraftReady(db))return {ready:false,items:[]};
  const makerRoles=['pattern_room_worker','embroidery_washing_merchandiser'].filter(role=>roles.has(role));
- const approver=roles.has('owner_group')&&await readSecondaryCraftApprover(db)===actor.actorId;
+ const approver=await approvalAuthority(db,actor,roles);
  if(!makerRoles.length&&!approver)return {ready:true,items:[]};
  const {rows}=await db.query<DirectoryQuote>(`SELECT q.*,coalesce(o.design_style_no,s.design_style_no) style_no,
   coalesce(o.customer_code,s.customer_code) customer_code,
@@ -202,8 +228,9 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
   AND (EXISTS (SELECT 1 FROM jsonb_array_elements(q.assignments) a
     WHERE a->>'priceAssigneeId'=$1::uuid::text AND a->>'priceRole'=ANY($2::text[])
      AND (q.assembly IS NULL OR q.assembly->'rows'->(a->>'rowId')->>'kind'='craft'))
-   OR ($3::boolean AND EXISTS (SELECT 1 FROM digital_secondary_craft_quote_revisions r
-    WHERE r.quote_id=q.quote_id AND r.approver_id=$1::uuid AND r.submitted
+   OR ($3::text IS NOT NULL AND EXISTS (SELECT 1 FROM digital_secondary_craft_quote_revisions r
+    WHERE r.quote_id=q.quote_id AND r.submitted AND ($3='root' OR r.approver_id=$1::uuid OR EXISTS(
+     SELECT 1 FROM owner_bootstrap_consumptions root WHERE root.singleton AND root.user_id=r.approver_id))
      AND NOT EXISTS (SELECT 1 FROM digital_secondary_craft_quote_revisions n
        WHERE n.quote_id=r.quote_id AND n.row_id=r.row_id AND n.revision>r.revision))))
   ORDER BY q.updated_at DESC,q.quote_id`,[actor.actorId,makerRoles,approver]);
@@ -224,8 +251,8 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
     sourceVersion:target.sourceVersion,version:item.version,state:item.state,authorName:target.authorId?quote.people?.[target.authorId]??null:null,
     supplier:item.supplier,note:item.note,canDecide:item.canDecide,
     savedPricing:item.draft?{mode:item.draft.mode,amount:item.draft.unitPrice,unit:item.draft.unit}:null,
-    approvalTodoId:item.canDecide?revision?.revision_id??null:null,
-    submittedAt:item.canDecide&&revision?new Date(revision.recorded_at).toISOString():null};
+    approvalTodoId:item.canDecide&&revision?.approver_id===actor.actorId?revision.revision_id:null,
+    submittedAt:item.canDecide&&revision?.approver_id===actor.actorId?new Date(revision.recorded_at).toISOString():null};
    items.push(entry);
    if(item.canDecide)action.set(entry,`${target.stage}:approval`);
    else if(item.canEdit&&['pending','draft','returned'].includes(item.state))action.set(entry,`${target.stage}:${target.role}:quote`);
@@ -244,7 +271,7 @@ export async function saveSecondaryCraft(db:PoolClient,actor:TrustedActorContext
  const row=(await latest(db,quote.quote_id)).get(rowId);
  if(input.expectedVersion!==(row?.revision??0))conflict('工艺报价版本已变，请重新核对');
  if(input.attachmentIds.some(id=>!target.attachmentIds.includes(id)))digitalForbidden();
- const approver=submit?await lockSecondaryCraftApprover(db):null;
+ const approver=submit?(await lockSecondaryCraftApprover(db)??await readSecondaryCraftRoot(db,true)):null;
  if(submit&&!approver)conflict('审批人待配置');
  const supplier=input.supplierId?await lockSecondaryCraftSupplier(db,input.supplierId):null;
  if(input.supplierId&&!supplier)conflict('请选择当前有效的加工厂');
@@ -268,10 +295,11 @@ export async function saveSecondaryCraft(db:PoolClient,actor:TrustedActorContext
 
 export async function decideSecondaryCraft(db:PoolClient,actor:TrustedActorContext,quote:AssembledQuotation,roles:ReadonlySet<string>,rowId:string,input:SecondaryCraftDecision){
  if(!await secondaryCraftReady(db))conflict('联合报价流程尚未就绪');
- if(!roles.has('owner_group')||await lockSecondaryCraftApprover(db)!==actor.actorId)digitalForbidden();
+ const approver=await approvalAuthority(db,actor,roles,true);
+ if(!approver)digitalForbidden();
  const target=(await targets(db,quote)).find(item=>item.rowId===rowId)??digitalNotFound();
  const row=(await latest(db,quote.quote_id)).get(rowId);
- if(!current(target,row)||row.revision!==input.expectedVersion||!row.submitted||row.decision||row.approver_id!==actor.actorId)
+ if(!current(target,row)||row.revision!==input.expectedVersion||row.decision||!canReview(approver,actor.actorId,row))
   return conflict('工艺报价已变或已处理，请重新核对');
  if(!target.authorId||!await new DigitalProductionAccessPolicy(db).lockActiveRole(target.authorId,target.role))conflict('原报价师傅已失权，请重新指派');
  if(input.decision==='approved'&&row.supplier_id&&(await lockSecondaryCraftSupplier(db,row.supplier_id))?.version!==row.supplier_version)
@@ -295,21 +323,25 @@ export async function approvedSecondaryCraftRows(db:Pick<PoolClient,'query'>,quo
  const confirmed=new Map<string,SecondaryCraftApprovalRef>();
  if(!required.length)return {required,confirmed};
  const selected=await targets(db,quote),rows=await latest(db,quote.quote_id);
- const approver=lock?await lockSecondaryCraftApprover(db):await readSecondaryCraftApprover(db);
- if(!approver)return {required,confirmed};
+ const wu=[...rows.values()].some(row=>row.decision==='approved'&&row.decision_authority!=='root_superuser')
+  ?await (lock?lockSecondaryCraftApprover(db):readSecondaryCraftApprover(db)):null;
+ const root=[...rows.values()].some(row=>row.decision==='approved'&&row.decision_authority==='root_superuser')
+  ?await readSecondaryCraftRoot(db,lock):null;
  const access=new DigitalProductionAccessPolicy(db);
  for(const target of selected.sort((a,b)=>a.rowId.localeCompare(b.rowId))){
   const row=rows.get(target.rowId);
-  if(!current(target,row)||!row.submitted||row.decision!=='approved'||row.decision_actor!==approver||!row.decision_id||
+  if(!current(target,row)||!row.submitted||row.decision!=='approved'||!row.decision_actor||!row.decision_id||
    row.payload.unit!==target.pricingUnit||quote.price_sources[target.rowId]?.secondaryCraftDecisionId!==row.decision_id||
    required.find(value=>value.rowId===target.rowId)?.unitPrice!==row.payload.unitPrice||!target.authorId)continue;
+  const approver=row.decision_authority==='root_superuser'?root:wu;
+  if(row.decision_actor!==approver||(approver===wu&&row.approver_id!==wu&&!row.root_recipient))continue;
   if(!await (lock?access.lockActiveRole(target.authorId,target.role):access.activeRole(target.authorId,target.role)))continue;
   if(row.supplier_id){
    const supplier=lock?await lockSecondaryCraftSupplier(db,row.supplier_id):(await db.query(
     "SELECT version FROM current_supplier_catalog WHERE supplier_id=$1 AND supplier_type='factory' AND active=true",[row.supplier_id])).rows[0];
    if(supplier?.version!==row.supplier_version)continue;
   }
-  confirmed.set(target.rowId,{rowId:target.rowId,revision:row.revision,decisionId:row.decision_id,actorId:approver});
+  confirmed.set(target.rowId,{rowId:target.rowId,revision:row.revision,decisionId:row.decision_id,actorId:row.decision_actor});
  }
  return {required,confirmed};
 }

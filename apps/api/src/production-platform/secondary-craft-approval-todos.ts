@@ -2,14 +2,16 @@ import type {Pool} from 'pg';
 import type {TodoResponse} from '@dx-rework/contracts';
 import type {DigitalNotification} from '@dx-rework/contracts/digital-production-notifications';
 import type {TrustedActorContext} from '../tools/repositories.js';
+import {isRootActor} from '../access/business-authority.js';
 import {appendSelectedTodo,type TodoProjection,type TodoSelectionKey} from '../todos/selection.js';
 import {todoContentToken} from '../todos/content-reads.js';
 import {secondaryCraftDirectory} from './secondary-craft-quotation.js';
 
 export async function secondaryCraftApprovalTodos(db:Pick<Pool,'query'>,actor:TrustedActorContext,projection?:TodoProjection){
- if(!actor.actorRoles.includes('owner_group'))return [];
+ const root=isRootActor(actor);
+ if(!root&&!actor.actorRoles.includes('owner_group'))return [];
  const result:TodoResponse[]=[];
- const directory=await secondaryCraftDirectory(db,actor,new Set(['owner_group']));
+ const directory=await secondaryCraftDirectory(db,actor,new Set(root?[]:['owner_group']));
  for(const item of directory.items){
   const todoId=item.approvalTodoId,at=item.submittedAt;
   if(!todoId||!at||projection?.todoId&&projection.todoId!==todoId)continue;
@@ -20,7 +22,7 @@ export async function secondaryCraftApprovalTodos(db:Pick<Pool,'query'>,actor:Tr
    recipientUserId:actor.actorId,route,dueAt:null,status:'pending',
    orderContext:{reworkNo:null,orderNo:null,styleNo:item.styleNo,supplierName:item.supplier?.name??null,status:'待审批',updatedAt:at},unread:true,createdAt:at};
   appendSelectedTodo(result,projection,selected,()=>({...selected,sourceEventId:todoId,entityType:'secondary_craft_quotation',
-   entityId:item.rowId,requiredRole:'owner_group',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:item.version,updatedAt:at}),{sourceId:item.resource.kind==='source'?item.resource.id:null,orderId:item.resource.kind==='order'?item.resource.id:null});
+   entityId:item.rowId,requiredRole:root?'root_superuser':'owner_group',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:item.version,updatedAt:at}),{sourceId:item.resource.kind==='source'?item.resource.id:null,orderId:item.resource.kind==='order'?item.resource.id:null});
  }
  return result;
 }

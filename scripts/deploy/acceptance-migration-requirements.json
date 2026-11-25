@@ -2465,5 +2465,25 @@
       "guard_development_draft_discard"
     ],
     "sequences": []
+  },
+  "0305_secondary_craft_decision_authority": {
+    "checksum": "61b95671c30399e24607976bfd6482c89f2f4c0d054e2ceed1af06449025721d",
+    "tables": [
+      "digital_secondary_craft_quote_decisions"
+    ],
+    "functions": [
+      "guard_secondary_craft_approver"
+    ],
+    "references": [
+      "digital_secondary_craft_quote_revisions",
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_secondary_craft_approver"
+    ],
+    "sequences": []
   }
 }
