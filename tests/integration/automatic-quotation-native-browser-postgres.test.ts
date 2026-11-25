@@ -743,12 +743,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const preview=await served.json();
     expect(preview).toMatchObject({unitCost:'40',saved:null,confirmation:'joint_release_ready'});
     const panel=d.page.locator('#quote-cost-reference');
-    const [savePrice]=await Promise.all([d.page.waitForResponse(response=>response.url()===previewRead&&response.request().method()==='PUT'),
+    await d.page.route(previewRead,async route=>{
+     if(route.request().method()!=='PUT'){await route.continue();return;}
+     const actual=await route.fetch({maxRedirects:0});
+     expect(actual.status()).toBe(200);
+     await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_COMMITTED_RECEIPT_LOST',message:'TEST 已保存，回执未送达'}})});
+    },{times:1});
+    const [lostSave]=await Promise.all([d.page.waitForResponse(response=>response.url()===previewRead&&response.request().method()==='PUT'),
      panel.getByRole('button',{name:'保存报价测算',exact:true}).click()]);
-    expect(savePrice.status()).toBe(200);
-    const pricingKey=savePrice.request().headers()['idempotency-key']!;
+    expect(lostSave.status()).toBe(503);
+    const pricingKey=lostSave.request().headers()['idempotency-key']!;
     const pricing={expectedVersion:preview.version,input:{field:'customerUnitPrice' as const,value:'49.123456'}};
     expect(pricingKey).toBeTruthy();
+    const receiptDialog=d.page.getByRole('dialog',{name:'提交结果待确认',exact:true});
+    await receiptDialog.getByRole('button',{name:'知道了',exact:true}).click();
+    expect((await (await d.page.request.get(previewRead)).json()).saved).toMatchObject({version:preview.version,input:pricing.input});
+    expect(await panel.getByRole('button',{name:'保存报价测算',exact:true}).getAttribute('aria-disabled')).toBe('true');
+    const [savePrice]=await Promise.all([d.page.waitForResponse(response=>response.url()===previewRead&&response.request().method()==='PUT'),
+     panel.getByRole('button',{name:'核对原报价测算保存结果',exact:true}).click()]);
+    expect(savePrice.status()).toBe(200);
+    expect(savePrice.request().headers()['idempotency-key']).toBe(pricingKey);
+    expect(lostSave.request().postDataJSON()).toEqual(pricing);
     expect(savePrice.request().postDataJSON()).toEqual(pricing);
     expect(await savePrice.json()).toMatchObject({resource,quoteId:preview.quoteId,version:preview.version,commandReceipt:{action:'workbench-pricing-draft',appliedVersion:preview.version}});
     await panel.getByText('已保存报价测算，尚未记录客户确认。',{exact:true}).waitFor();
