@@ -13,6 +13,8 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {readWorkbenchFactoryCommunication} from '../../apps/api/src/production-platform/workbench-factory-communication.js';
 import {nativeFactoryTimeline} from '../../apps/api/src/production-platform/factory-production-facts.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
@@ -49,6 +51,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  let sundayScene:string,sundayReady:Awaited<ReturnType<typeof prepare>>;
  beforeAll(async()=>{sundayScene=await f.scene('2026-12-06T05:00:00.000Z');sundayReady=await prepare(work=>f.runtime.run(sundayScene,f.root,work));},120000);
+ it('reads the exact assigned process communication in the workbench without moving any cut pieces',async()=>{
+  const scene=await f.scene('2026-11-20T05:00:00Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const original=await f.bulkReady('印花'),cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[original.caseId])).rows[0]!;
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   await original.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),existing=await flow.read(f.root,original.id),task=existing.tasks.find(row=>row.taskKind==='process_logistics')!;
+   const operator=Object.values(f.people).find(person=>person.actorId!==f.root.actorId&&person.actorRoles.includes(task.requiredRole))!;
+   await new DigitalProductionTaskService(f.db).reassign(f.root,task.taskId,operator.actorId,randomUUID());
+   const scope={orderId:original.id,preparationId:existing.preparationId!,taskId:task.taskId,stepRef:task.stepRef??null};
+   const before=await readWorkbenchFactoryCommunication(flow,operator,scope);expect(before).toMatchObject({canRecord:true,facts:[]});
+   const note='TEST 实际工艺沟通，不产生实物出入库',at=businessNow().toISOString();
+   await flow.logistics(operator,original.id,{expectedRevision:before.expectedRevision,kind:'工艺沟通',note,occurredAt:at,supplier:'TEST 工艺厂',
+    ...(scope.stepRef?{stepRef:scope.stepRef}:{})},randomUUID());
+   const result=await readWorkbenchFactoryCommunication(flow,operator,scope);
+   expect(result).toMatchObject({scope,facts:[{note,occurredAt:at,supplier:'TEST 工艺厂'}]});
+   await expect(readWorkbenchFactoryCommunication(flow,operator,{...scope,taskId:randomUUID()})).rejects.toMatchObject({statusCode:404});
+   await expect(readWorkbenchFactoryCommunication(flow,operator,{...scope,preparationId:randomUUID()})).rejects.toMatchObject({statusCode:404});
+   expect((await flow.read(operator,original.id)).facts.map(row=>row.kind)).toEqual(['工艺沟通']);
+  });
+ });
  it('does not treat earlier native factory QC as production completion',async()=>f.runtime.run(sundayScene,f.root,async()=>{
   const factory=new FactoryFlowService(f.db),dispatched=await factory.read(f.root,sundayReady.id),lineId=dispatched.batchTotals![0]!.lineId;
   await factory.productionQc(f.root,sundayReady.id,{expectedRevision:dispatched.revision,factoryDecisionId:null,occurredAt:businessNow().toISOString(),checks:[{lineId,result:'合格',problem:''}],note:'TEST QC before native production completion'},randomUUID());

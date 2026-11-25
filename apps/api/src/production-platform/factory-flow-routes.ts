@@ -7,6 +7,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
 import type { DigitalIdentityDependencies } from "./identity-routes.js";
 import type { FactoryFlowService } from "./factory-flow-service.js";
+import {readWorkbenchFactoryCommunication} from './workbench-factory-communication.js';
 export function registerFactoryFlowRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies, service: FactoryFlowService, attachments: AttachmentService) {
   const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR",result.error.issues[0]?.message??"请检查裁后办理",400); return result.data; };
   const actor = async (request: FastifyRequest) => businessActor(dependencies.root,await dependencies.authenticate(request.headers.cookie?.split(";").map(v=>v.trim()).find(v=>v.startsWith("dx_rework_session="))?.slice(18)),request.id,"digital_production:view");
@@ -14,6 +15,12 @@ export function registerFactoryFlowRoutes(app: FastifyInstance, dependencies: Di
   const key=(request:FastifyRequest)=>typeof request.headers["idempotency-key"]==="string"?request.headers["idempotency-key"]:"";
   const base="/digital-production/orders/:orderId/factory-flow";
   app.get(base,async request=>service.read(await actor(request),id(request,"orderId")));
+  app.get(`${base}/workbench-communication`,async(request,reply)=>{
+    const trusted=await actor(request);
+    const {preparationId,taskId,stepRef}=parse(z.object({preparationId:z.uuid(),taskId:z.uuid(),stepRef:z.uuid().optional()}).strict(),request.query);
+    reply.header('Cache-Control','no-store');
+    return readWorkbenchFactoryCommunication(service,trusted,{orderId:id(request,'orderId'),preparationId,taskId,stepRef:stepRef??null});
+  });
   app.post(`${base}/logistics`,async request=>service.logistics(await actor(request),id(request,"orderId"),parse(FactoryLogisticsSchema,request.body),key(request)));
   app.post(`${base}/production-qc`,async request=>service.productionQc(await actor(request),id(request,"orderId"),parse(FactoryProductionQcSchema,request.body),key(request)));
   app.post(`${base}/qc`,async request=>service.qc(await actor(request),id(request,"orderId"),parse(FactoryQcSchema,request.body),key(request)));
